@@ -40,14 +40,14 @@ Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-c
 
 ### Batch B — Macro depth + scoring (after Batch A)
 
-1. Call `macro_analyst` for the country without component (summary), then with "monetary" and "tactical".
+1. Call `macro_analyst` for the country without component (summary), then with "macro_indicators" and "tactical".
 2. For top N universe results (default 5): call `get_peer_snapshot` (parallel).
 3. For top 3: call `get_score_analysis` with 26 weeks (parallel).
 
 ## Output Format
 
 - **Country Overview** (macro summary, regime context)
-- **Economic Indicators** (monetary, fiscal, tactical highlights)
+- **Economic Indicators** (macro_indicators, fixed_income, tactical highlights)
 - **Equity Coverage** (how many scored stocks, key sectors)
 - **Top Opportunities** (table: symbol, name, sector, total score, key factor strengths)
 - **Score Trends** (which top picks are improving vs. declining)

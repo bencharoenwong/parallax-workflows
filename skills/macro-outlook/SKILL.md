@@ -10,7 +10,7 @@ negative-triggers:
 gotchas:
   - list_macro_countries shows available coverage — check before querying a country
   - check_macro_health verifies data freshness — run first to avoid stale analysis
-  - macro_analyst without component gives summary; with component gives detail (monetary, fiscal, tactical, etc.)
+  - macro_analyst without component gives summary; with component gives detail (macro_indicators, tactical, fixed_income, currency, sectors, etc.)
   - get_telemetry shows how macro regime affects the scoring engine
   - Smaller/EM markets may have fewer scored equities — set expectations
 ---
@@ -42,7 +42,7 @@ Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-c
 
 ### Batch B — Macro depth (after Batch A)
 
-1. Call `macro_analyst` for the target country without component (summary), then with monetary, fiscal, tactical.
+1. Call `macro_analyst` for the target country without component (summary), then with macro_indicators, tactical, fixed_income.
 2. Call `get_score_analysis` for a representative ETF or index for factor trends in this regime.
 3. If multiple countries: repeat for each and compare.
 
@@ -54,7 +54,7 @@ If requested: call `build_stock_universe` with "[country] equities". For top 5: 
 
 - **Regime Status** (current regime tag, key signals, headline)
 - **Macro Summary** (country-level economic overview)
-- **Deep Dive** (monetary, fiscal, tactical components as requested)
+- **Deep Dive** (macro indicators, fixed income, tactical components as requested)
 - **Factor Regime Interaction** (which factors are favored/disfavored in this environment)
 - **Positioning Implications** (what this means for portfolio construction)
 - **Top Equity Opportunities** (if equity screening included: table with symbol, name, sector, score, trend)
