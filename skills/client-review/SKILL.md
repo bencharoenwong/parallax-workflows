@@ -6,7 +6,7 @@ negative-triggers:
   - Fund manager morning brief → use /parallax-morning-brief
   - Single stock analysis → use /parallax-should-i-buy
 gotchas:
-  - JIT-load _shared/parallax-conventions.md for fallback patterns and parallel execution
+  - JIT-load _parallax/parallax-conventions.md for fallback patterns and parallel execution
   - JIT-load references/recommendation-matrix.md for priority classification and drill-down criteria
   - Holdings in RIC format, weights sum to ~1.0
   - analyze_portfolio called twice — once with lens "performance", once with "concentration"
@@ -28,7 +28,7 @@ Presentation-ready portfolio review with health flags and prioritized recommenda
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_shared/parallax-conventions.md` for execution mode, fallback patterns, and macro reasoning. JIT-load `references/recommendation-matrix.md` for priority system.
+Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, fallback patterns, and macro reasoning. JIT-load `references/recommendation-matrix.md` for priority system.
 
 ### Batch A — Portfolio-level analysis (parallel)
 

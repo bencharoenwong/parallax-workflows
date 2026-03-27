@@ -1,14 +1,14 @@
 ---
 name: parallax-should-i-buy
-description: "Quick stock evaluation: company overview, Parallax factor scores, financial health, score trends, macro context, dividends, news, and analyst outlook. Plain language output. Accepts plain ticker (AAPL) or RIC (AAPL.O). NOT for portfolio analysis (use /parallax-morning-brief), not for full due diligence (use /parallax-due-diligence), not for backtesting (use /backtest)."
+description: "Quick stock evaluation: company overview, Parallax factor scores, financial health, score trends, macro context, dividends, news, and analyst outlook. Plain language output. Accepts plain ticker (AAPL) or RIC (AAPL.O). NOT for portfolio analysis (use /parallax-morning-brief), not for full due diligence (use /parallax-due-diligence), not for backtesting."
 user-invocable: true
 negative-triggers:
   - Portfolio-level analysis → use /parallax-morning-brief
   - Full research report → use /parallax-due-diligence
-  - Running backtests → use /backtest
+  - Running backtests → not covered by this workflow set
   - Peer comparison deep dive → use /parallax-peer-comparison
 gotchas:
-  - JIT-load _shared/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
+  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
   - get_stock_outlook supports 4 aspects — analyst_targets, recommendations, risk_return, dividends
   - explain_methodology is free/instant — use it for any notably high or low score
   - For non-US tickers, consult the exchange suffix table in shared conventions
@@ -31,7 +31,7 @@ Accepts plain tickers (auto-converts to RIC) or RIC format directly.
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_shared/parallax-conventions.md` for execution mode, RIC resolution, fallback patterns, and HK ambiguity protocol.
+Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, fallback patterns, and HK ambiguity protocol.
 
 ### Step 1 — Resolve Ticker
 

@@ -1,14 +1,14 @@
 ---
 name: parallax-morning-brief
-description: "Fund manager morning brief: market regime, macro outlook, portfolio health, and key holding news via Parallax MCP tools. Provide portfolio as [{symbol, weight}] in RIC format. NOT for individual stock analysis (use /parallax-should-i-buy), not for backtesting (use /backtest)."
+description: "Fund manager morning brief: market regime, macro outlook, portfolio health, and key holding news via Parallax MCP tools. Provide portfolio as [{symbol, weight}] in RIC format. NOT for individual stock analysis (use /parallax-should-i-buy), not for backtesting."
 user-invocable: true
 negative-triggers:
   - Single stock analysis → use /parallax-should-i-buy or /parallax-deep-dive
-  - Running backtests → use /backtest
+  - Running backtests → not covered by this workflow set
   - Client portfolio review → use /parallax-client-review
   - Thematic screening → use /parallax-thematic-screen
 gotchas:
-  - JIT-load _shared/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
+  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
   - get_telemetry and macro_analyst are free/instant; get_news_synthesis may take 30-90s per holding
   - If regime suggests stress, also pull macro tactical component
   - Health flags (from parallax-portfolio-checkup/references/health-flags.md) apply here too — flag portfolios needing attention
@@ -28,7 +28,7 @@ Optional: append `market=Japan` or `top_n=5` after the portfolio JSON.
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_shared/parallax-conventions.md` for execution mode, RIC resolution, and fallback patterns.
+Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, and fallback patterns.
 
 ### Batch A — Market context + portfolio scoring (parallel)
 

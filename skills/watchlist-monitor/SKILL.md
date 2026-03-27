@@ -7,7 +7,7 @@ negative-triggers:
   - Portfolio with weights → use /parallax-morning-brief or /parallax-client-review
   - Building a portfolio → use /parallax-portfolio-builder
 gotchas:
-  - JIT-load _shared/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
+  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
   - This is a surveillance skill — optimized for breadth over depth
   - get_score_analysis with 4-8 weeks is sufficient for detecting recent changes — fire all in parallel
   - Only call get_news_synthesis for names with significant score changes (saves API calls)

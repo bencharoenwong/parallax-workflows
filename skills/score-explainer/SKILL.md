@@ -7,7 +7,7 @@ negative-triggers:
   - Full position analysis → use /parallax-deep-dive
   - Portfolio diagnostics → use /parallax-portfolio-checkup
 gotchas:
-  - JIT-load _shared/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
+  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
   - explain_methodology takes a topic string — be specific (e.g., "quality score", "momentum factor")
   - get_docs and list_docs access the full methodology documentation
   - get_score_analysis shows trajectory — useful for explaining "why did this change"

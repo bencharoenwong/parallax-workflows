@@ -7,7 +7,7 @@ negative-triggers:
   - Portfolio construction → use /parallax-portfolio-builder
   - Non-compliance screening → use /parallax-earnings-quality
 gotchas:
-  - JIT-load _shared/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
+  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
   - explain_methodology with "shariah" or "halal" retrieves Parallax's Shariah screening documentation
   - get_financial_analysis (Palepu framework) is async ~2-5 min — warn user before calling
   - Financial ratios from get_financials help verify debt/revenue compliance thresholds

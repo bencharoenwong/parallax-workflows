@@ -7,22 +7,21 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "Installing Parallax workflows to $SKILLS_DIR"
 
-# Check if Claude Code skills directory exists
+# Create skills directory if it doesn't exist
 if [ ! -d "$SKILLS_DIR" ]; then
-    echo "Error: Skills directory not found at $SKILLS_DIR"
-    echo "Set CLAUDE_SKILLS_DIR to your Claude Code skills path"
-    exit 1
+    echo "  Creating $SKILLS_DIR"
+    mkdir -p "$SKILLS_DIR"
 fi
 
 # Copy shared conventions
-mkdir -p "$SKILLS_DIR/_shared"
-cp "$SCRIPT_DIR/skills/_shared/parallax-conventions.md" "$SKILLS_DIR/_shared/parallax-conventions.md"
+mkdir -p "$SKILLS_DIR/_parallax"
+cp "$SCRIPT_DIR/skills/_parallax/parallax-conventions.md" "$SKILLS_DIR/_parallax/parallax-conventions.md"
 echo "  Copied shared conventions"
 
 # Copy each skill with parallax- prefix
 for skill_dir in "$SCRIPT_DIR"/skills/*/; do
     skill_name=$(basename "$skill_dir")
-    [ "$skill_name" = "_shared" ] && continue
+    [ "$skill_name" = "_parallax" ] && continue
 
     target="$SKILLS_DIR/parallax-$skill_name"
     mkdir -p "$target"
@@ -31,5 +30,5 @@ for skill_dir in "$SCRIPT_DIR"/skills/*/; do
 done
 
 echo ""
-echo "Done! $(ls -d "$SCRIPT_DIR"/skills/*/ | grep -v _shared | wc -l | tr -d ' ') workflows installed."
+echo "Done! $(ls -d "$SCRIPT_DIR"/skills/*/ | grep -v _parallax | wc -l | tr -d ' ') workflows installed."
 echo "Try: /parallax-should-i-buy AAPL"

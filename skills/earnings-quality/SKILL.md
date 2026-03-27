@@ -7,7 +7,7 @@ negative-triggers:
   - Full due diligence → use /parallax-due-diligence
   - Quick stock check → use /parallax-should-i-buy
 gotchas:
-  - JIT-load _shared/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
+  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
   - get_financial_analysis (Palepu framework) is async ~2-5 min — this is the core of the forensic analysis
   - Quality score of 10 doesn't mean no risk — dig into sub-components
   - Cross-reference news for context on any red flags found
@@ -27,7 +27,7 @@ Forensic-focused earnings quality and hidden risk detection.
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_shared/parallax-conventions.md` for execution mode, RIC resolution, and fallback patterns.
+Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, and fallback patterns.
 
 ### Batch A — Data gathering (parallel)
 

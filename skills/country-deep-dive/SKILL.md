@@ -7,7 +7,7 @@ negative-triggers:
   - Thematic screening across all markets → use /parallax-thematic-screen
   - Single stock analysis → use /parallax-deep-dive
 gotchas:
-  - JIT-load _shared/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
+  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
   - list_macro_countries first to confirm the country is covered
   - build_stock_universe can filter by geography via natural language
   - Not all 40+ markets have full macro coverage — check_macro_health confirms
@@ -28,7 +28,7 @@ Macro + equity opportunity analysis for a specific country or region.
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_shared/parallax-conventions.md` for execution mode and fallback patterns.
+Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode and fallback patterns.
 
 ### Batch A — Coverage + macro + universe (parallel)
 

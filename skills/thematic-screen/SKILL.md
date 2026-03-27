@@ -7,7 +7,7 @@ negative-triggers:
   - Portfolio review → use /parallax-client-review
   - Peer comparison of known stock → use /parallax-peer-comparison
 gotchas:
-  - JIT-load _shared/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
+  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
   - build_stock_universe searches ~65K company descriptions by semantic similarity
   - Default top_n is 5 — adjust for broader or narrower screens
   - get_peer_snapshot called once per top pick (N calls) — fire in parallel
@@ -28,7 +28,7 @@ Discover investment opportunities by theme using Parallax's semantic universe bu
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_shared/parallax-conventions.md` for execution mode and fallback patterns.
+Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode and fallback patterns.
 
 1. **Build Universe** — Call `build_stock_universe` with the theme query. Returns stocks ranked by relevance from ~65K company descriptions.
 2. **Score Top Picks** — For the top N results, call `get_peer_snapshot` for each to get factor scores.

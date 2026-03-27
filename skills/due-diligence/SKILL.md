@@ -7,7 +7,7 @@ negative-triggers:
   - Position deep dive (no Palepu) → use /parallax-deep-dive
   - Peer comparison only → use /parallax-peer-comparison
 gotchas:
-  - JIT-load _shared/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
+  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
   - get_financial_analysis (Palepu) is async ~2-5 min
   - get_stock_report is async ~1-2 min and is a PAID endpoint
   - Wait for each async step before proceeding
@@ -26,7 +26,7 @@ Comprehensive analyst-grade due diligence using all available Parallax tools.
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_shared/parallax-conventions.md` for execution mode, RIC resolution, and fallback patterns.
+Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, and fallback patterns.
 
 ### Batch A — All instant + async data calls (parallel)
 

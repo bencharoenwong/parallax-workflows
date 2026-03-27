@@ -7,7 +7,7 @@ negative-triggers:
   - Client portfolio review (RIA) → use /parallax-client-review
   - Single stock analysis → use /parallax-should-i-buy
 gotchas:
-  - JIT-load _shared/parallax-conventions.md for fallback patterns and parallel execution
+  - JIT-load _parallax/parallax-conventions.md for fallback patterns and parallel execution
   - JIT-load references/health-flags.md for the 5-flag health system, thresholds, and mixed-exchange fallback
   - Holdings must be in RIC format with weights summing to ~1.0
   - Mixed-exchange portfolios may have partial scoring coverage — apply split-and-merge fallback
@@ -26,7 +26,7 @@ Plain-language portfolio health check with health flags for individual investors
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_shared/parallax-conventions.md` for execution mode and fallback patterns. JIT-load `references/health-flags.md` for the health flag system.
+Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode and fallback patterns. JIT-load `references/health-flags.md` for the health flag system.
 
 ### Batch A — Fire scoring + macro calls in parallel
 

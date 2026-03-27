@@ -115,3 +115,11 @@ When analyzing a single stock or portfolio, determine relevant macro markets:
 4. Cap at **3 markets** for single-stock, **3 unique markets** for portfolios (to manage latency).
 
 If no covered markets are relevant, return `"macro": "unavailable"` — don't force irrelevant context.
+
+---
+
+## 7. Disclaimer
+
+Every workflow output must end with a disclaimer. Use the exact wording from the skill's Output Format section if one is specified, otherwise use:
+
+*"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*

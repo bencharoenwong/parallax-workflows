@@ -8,8 +8,8 @@ negative-triggers:
   - Full due diligence with Palepu → use /parallax-due-diligence
   - Peer comparison only → use /parallax-peer-comparison
 gotchas:
-  - JIT-load _shared/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
-  - get_assessment is async and uses Perplexity — may take 30-90s
+  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
+  - get_assessment is async — may take 30-90s
   - get_assessment prompt should incorporate macro context, score trends, and dividend profile alongside existing data
   - For non-US symbols, apply HK ambiguity cross-check from shared conventions
 ---
@@ -29,7 +29,7 @@ Accepts RIC format. For plain tickers, resolve per shared conventions.
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_shared/parallax-conventions.md` for execution mode, RIC resolution, fallback patterns, and HK ambiguity protocol.
+Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, fallback patterns, and HK ambiguity protocol.
 
 ### Batch A — Fire all data calls in parallel
 

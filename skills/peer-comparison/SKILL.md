@@ -7,7 +7,7 @@ negative-triggers:
   - Portfolio analysis → use /parallax-morning-brief
   - Full due diligence → use /parallax-due-diligence
 gotchas:
-  - JIT-load _shared/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
+  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
   - Identifies top 2 peers automatically from get_peer_snapshot
   - Makes 3 calls each for score trends and price series (primary + 2 peers)
   - export_peer_comparison and export_price_series return structured JSON
@@ -26,7 +26,7 @@ Structured peer comparison analysis for research analysts.
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_shared/parallax-conventions.md` for execution mode, RIC resolution, and fallback patterns.
+Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, and fallback patterns.
 
 ### Batch A — Peer identification
 

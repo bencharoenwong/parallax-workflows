@@ -8,7 +8,7 @@ negative-triggers:
   - Single stock analysis → use /parallax-deep-dive
   - Portfolio rebalancing without a trigger event → use /parallax-rebalance
 gotchas:
-  - JIT-load _shared/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
+  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
   - get_assessment with a scenario-focused prompt is the core analytical engine — feed it everything from prior steps
   - get_news_synthesis may already surface the event — check before assuming the user's framing is complete
   - Score changes haven't happened yet if the event is breaking — use get_assessment for forward-looking analysis
@@ -30,7 +30,7 @@ Something happened (or might happen). What's exposed? What shifts? What do I do?
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_shared/parallax-conventions.md` for execution mode, RIC resolution, and fallback patterns.
+Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, and fallback patterns.
 
 ### Phase 1: Understand the Event (parallel)
 

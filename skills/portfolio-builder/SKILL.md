@@ -8,7 +8,7 @@ negative-triggers:
   - Single stock analysis → use /parallax-should-i-buy
   - Rebalancing existing portfolio → use /parallax-rebalance
 gotchas:
-  - JIT-load _shared/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
+  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
   - build_stock_universe returns relevance-ranked results — re-rank by factor scores for quality
   - Run redundancy check BEFORE finalizing allocation to avoid sector concentration
   - Weights should sum to ~1.0 in final output
@@ -29,7 +29,7 @@ Construct a portfolio from a plain-English investment thesis using Parallax MCP 
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_shared/parallax-conventions.md` for execution mode and fallback patterns.
+Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode and fallback patterns.
 
 1. **Build Universe** — Call `build_stock_universe` with the thesis as query. Get relevance-ranked candidates.
 2. **Score Top Picks** — For the top N results (default 10), call `get_peer_snapshot` for each to get factor scores.
