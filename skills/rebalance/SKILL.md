@@ -8,7 +8,7 @@ negative-triggers:
   - Single stock analysis → use /parallax-should-i-buy
 gotchas:
   - JIT-load _shared/parallax-conventions.md for fallback patterns and parallel execution
-  - JIT-load client-review/references/recommendation-matrix.md for priority classification. If missing, use inline fallback: High=3+ flags (trim/exit), Medium=2 flags (investigate/trim), Low=1 flag (monitor/hold)
+  - JIT-load parallax-client-review/references/recommendation-matrix.md for priority classification. If missing, use inline fallback: High=3+ flags (trim/exit), Medium=2 flags (investigate/trim), Low=1 flag (monitor/hold)
   - Health flags feed directly into trade action determination — High priority = strong trim/exit
   - analyze_portfolio with lens "performance" and "concentration" gives the full diagnostic
   - build_stock_universe can find replacement candidates for positions being trimmed
@@ -30,7 +30,7 @@ Generate prioritized trade recommendations using health flags, macro context, an
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_shared/parallax-conventions.md` for execution mode, fallback patterns, and macro reasoning. JIT-load `client-review/references/recommendation-matrix.md` for the priority system.
+Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_shared/parallax-conventions.md` for execution mode, fallback patterns, and macro reasoning. JIT-load `parallax-client-review/references/recommendation-matrix.md` for the priority system.
 
 ### Batch A — Current state (parallel)
 
