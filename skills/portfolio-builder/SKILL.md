@@ -13,6 +13,8 @@ gotchas:
   - Run redundancy check BEFORE finalizing allocation to avoid sector concentration
   - Weights should sum to ~1.0 in final output
   - Include both the allocation table AND the factor rationale for each pick
+  - If build_stock_universe returns <3 results, broaden the query and retry once
+  - If check_portfolio_redundancy finds all picks overlap, suggest diversifying across sectors
 ---
 
 # Portfolio Builder
@@ -46,3 +48,5 @@ Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-c
 - **Portfolio Factor Profile** (VALUE, QUALITY, MOMENTUM, DEFENSIVE scores)
 - **Redundancy Notes** (any overlap flagged and how it was resolved)
 - **Implementation Notes** (liquidity, position sizing, suggested rebalance frequency)
+
+Always end with: *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*

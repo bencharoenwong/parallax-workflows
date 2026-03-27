@@ -52,3 +52,5 @@ Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-c
 - **Top Opportunities** (table: symbol, name, sector, total score, key factor strengths)
 - **Score Trends** (which top picks are improving vs. declining)
 - **Investment Thesis** (synthesis: why this market, what factors favor it, key risks)
+
+Always end with: *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*

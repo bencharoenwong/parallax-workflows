@@ -82,4 +82,4 @@ Then call `get_assessment` with a prompt that:
 - **What to Watch** (2-3 signals that would confirm or invalidate this thesis)
 - **Confidence & Caveats** (how certain is this analysis, what could go wrong with the rotation)
 
-*"This is scenario-based analysis, not investment advice. Forward-looking assessments are inherently uncertain."*
+Always end with: *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*

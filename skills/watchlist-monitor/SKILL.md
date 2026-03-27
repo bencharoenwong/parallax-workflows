@@ -12,6 +12,8 @@ gotchas:
   - get_score_analysis with 4-8 weeks is sufficient for detecting recent changes — fire all in parallel
   - Only call get_news_synthesis for names with significant score changes (saves API calls)
   - Rank output by magnitude of change — most-changed at top
+  - If get_score_analysis returns insufficient history (<4 weeks), note "Limited history" and skip trend analysis for that symbol
+  - If no symbols trigger any flags, report "All watchlist symbols stable — no action items"
 ---
 
 # Watchlist Monitor
@@ -44,3 +46,5 @@ Execute using `mcp__claude_ai_Parallax__*` tools:
 - **Recommended Actions** (which names warrant a deeper look via /parallax-deep-dive)
 
 Keep it scannable. Lead with what changed.
+
+Always end with: *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*

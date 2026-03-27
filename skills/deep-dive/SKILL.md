@@ -73,3 +73,5 @@ Apply graceful fallback patterns from shared conventions for any missing data.
 - **News Catalyst Watch** (material items only)
 - **Assessment** (AI deep-research synthesis — includes macro + trend data)
 - **Risk Factors** (what could go wrong)
+
+Always end with: *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*

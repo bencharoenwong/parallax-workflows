@@ -4,6 +4,12 @@ Shared patterns for all `parallax-*` skills. JIT-load from any skill that calls 
 
 ---
 
+## 0. MCP Tool Loading
+
+Parallax tools (`mcp__claude_ai_Parallax__*`) are deferred MCP tools. Before the first Parallax tool call in any session, call `ToolSearch` with query `"+Parallax"` to load the tool schemas. Without this step, tool calls will fail with "tool not found."
+
+---
+
 ## 1. RIC Resolution
 
 Parallax tools require Reuters Instrument Codes (RICs). When the user provides a plain ticker:

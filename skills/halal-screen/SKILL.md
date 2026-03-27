@@ -50,3 +50,5 @@ Screen stocks and portfolios for Shariah compliance using Parallax methodology.
 - **Purification Amount** (if applicable — percentage of dividends requiring purification)
 - **Alternatives** (for non-compliant holdings: scored Shariah-compliant replacements in same sector)
 - **Compliant Portfolio** (if portfolio mode: restructured allocation with only halal holdings)
+
+Always end with: *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*

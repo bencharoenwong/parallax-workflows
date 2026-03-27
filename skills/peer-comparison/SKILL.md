@@ -11,6 +11,8 @@ gotchas:
   - Identifies top 2 peers automatically from get_peer_snapshot
   - Makes 3 calls each for score trends and price series (primary + 2 peers)
   - export_peer_comparison and export_price_series return structured JSON
+  - get_peer_snapshot may return wrong target company (Convention #2) — extract queried stock from peer list
+  - If export_price_series returns empty data, note "Price data unavailable" and skip relative performance section
 ---
 
 # Peer Comparison
@@ -46,3 +48,5 @@ Fire all 6 calls simultaneously:
 - **Score Trajectory** (which stock is improving/deteriorating fastest per factor)
 - **Relative Price Performance** (comparative returns)
 - **Differentiation** (strengths and weaknesses vs peers)
+
+Always end with: *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*

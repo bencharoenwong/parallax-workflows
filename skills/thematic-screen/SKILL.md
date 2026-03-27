@@ -12,6 +12,8 @@ gotchas:
   - Default top_n is 5 — adjust for broader or narrower screens
   - get_peer_snapshot called once per top pick (N calls) — fire in parallel
   - get_financials called for top 3 only
+  - If build_stock_universe returns zero results, suggest rephrasing the theme with broader sector terms
+  - Use sector-level queries ("US large cap [sector]") rather than abstract concepts for better results
 ---
 
 # Thematic Screen
@@ -43,3 +45,5 @@ Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-c
 - **Comparison Matrix** (peer comparison for lead candidate)
 - **Financial Snapshot** (revenue, margins, growth for top 3)
 - **Implementation Notes** (liquidity considerations, position sizing guidance)
+
+Always end with: *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*

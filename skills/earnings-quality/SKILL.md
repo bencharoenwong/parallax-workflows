@@ -55,3 +55,5 @@ Call `get_assessment` with a prompt focused on: earnings quality concerns, reven
 - **News Context** (any accounting-related developments)
 - **AI Assessment** (synthesized risk opinion)
 - **Recommended Actions** (what to monitor, what warrants deeper investigation)
+
+Always end with: *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*

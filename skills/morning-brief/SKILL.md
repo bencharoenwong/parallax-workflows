@@ -12,6 +12,7 @@ gotchas:
   - get_telemetry and macro_analyst are free/instant; get_news_synthesis may take 30-90s per holding
   - If regime suggests stress, also pull macro tactical component
   - Health flags (from portfolio-checkup/references/health-flags.md) apply here too — flag portfolios needing attention
+  - If quick_portfolio_scores coverage <50%, fall back to get_score_analysis per holding (more reliable for niche portfolios)
 ---
 
 # Morning Brief
@@ -57,3 +58,5 @@ Present as a structured morning brief, under 800 words:
 - **Action Items** (what deserves attention today)
 
 Lead with what matters.
+
+Always end with: *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*

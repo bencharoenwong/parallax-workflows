@@ -77,4 +77,4 @@ Call `quick_portfolio_scores` on the proposed new allocation to verify improveme
 - **Before/After Comparison** (factor scores: current vs. proposed)
 - **Implementation Notes** (suggested execution order, liquidity considerations)
 
-*"These are analytical recommendations based on Parallax factor scores, not investment advice."*
+Always end with: *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
