@@ -67,6 +67,19 @@ All portfolio workflows accept holdings as JSON:
 
 Symbols use Reuters Instrument Code (RIC) format. See `skills/_parallax/parallax-conventions.md` for the exchange suffix table.
 
+## Token Costs
+
+Each Parallax API call consumes tokens. See `skills/_parallax/token-costs.md` for the full breakdown. Quick reference:
+
+| Workflow type | Token range | Example |
+|---|---|---|
+| Quick stock check | 2-24 | `/parallax-should-i-buy` = ~24 tokens |
+| Deep analysis | 31-45 | `/parallax-due-diligence` = ~31 tokens |
+| Portfolio health (10 holdings) | 36-50 | `/parallax-portfolio-checkup` = ~36 tokens |
+| Full portfolio review (10 holdings) | 68-105 | `/parallax-client-review` = ~105 tokens |
+
+Standard plan: $2,000/month with 2,000 included tokens. Overage: $0.20/token. Contact Chicago Global for pricing details.
+
 ## Shared Conventions
 
 All workflows reference `skills/_parallax/parallax-conventions.md` for:
