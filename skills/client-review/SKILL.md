@@ -1,6 +1,6 @@
 ---
 name: parallax-client-review
-description: "RIA/wealth advisor client portfolio review: full analysis, redundancy, health flags, macro context, per-holding drill-down, prioritized recommendations, and AI assessment via Parallax MCP tools. Holdings as [{symbol, weight}]. NOT for fund manager briefs (use /parallax-morning-brief), not for quick stock checks (use /parallax-should-i-buy)."
+description: "RIA/wealth advisor client portfolio review and meeting prep: full analysis, redundancy, health flags, macro context, per-holding drill-down, prioritized recommendations with talk tracks, anticipated client questions, and suggested meeting agenda via Parallax MCP tools. Holdings as [{symbol, weight}]. NOT for fund manager briefs (use /parallax-morning-brief), not for quick stock checks (use /parallax-should-i-buy)."
 user-invocable: true
 negative-triggers:
   - Fund manager morning brief → use /parallax-morning-brief
@@ -12,8 +12,10 @@ gotchas:
   - analyze_portfolio called twice — once with lens "performance", once with "concentration"
   - Per-holding drill-down capped at 8 holdings to manage latency
   - Mixed-exchange portfolios may need split scoring (see shared conventions)
-  - Output should be presentation-ready for client meetings
+  - Output should be presentation-ready for client meetings — the RM reads this before walking into the room
   - get_assessment prompt should incorporate all findings including macro, flags, and recommendations
+  - Frame every recommendation as a talk track the RM can say out loud, not just an analytical finding
+  - If client context is provided (e.g., "conservative retiree, income focus"), tailor language and anticipated questions to that persona
 ---
 
 # Client Portfolio Review
@@ -64,7 +66,7 @@ News (selective, async): `get_news_synthesis` for holdings >10% weight AND flagg
 ### Batch D — Recommendations + Assessment (after A + B + C)
 
 1. Per `references/recommendation-matrix.md`, assign each flagged holding a priority (High/Medium/Low) and action type (trim/exit/hold/investigate/reweight). Every recommendation must cite a specific finding.
-2. Call `get_assessment` with comprehensive prompt incorporating: portfolio composition, factor scores, health flags, macro context, per-holding drill-down findings, recommendations, and client context.
+2. Call `get_assessment` with comprehensive prompt incorporating: portfolio composition, factor scores, health flags, macro context, per-holding drill-down findings, recommendations, client context, and meeting preparation framing.
 
 ## Output Format
 
@@ -77,4 +79,9 @@ Client-ready report:
 - **Per-Holding Analysis** (for drill-down holdings: score trend, risk profile, flags, news highlights)
 - **Suitability Assessment** (alignment with client goals)
 - **Recommended Actions** (prioritized High/Medium/Low per recommendation-matrix.md, with specific action types)
+- **Talk Tracks** (for each recommendation: 2-3 sentences the RM can say to the client explaining the rationale in plain language. Frame as "what to say" not "what to do." Adapt tone to client context if provided — e.g., conservative retiree vs aggressive growth mandate.)
+- **Anticipated Questions** (3-5 questions the client is likely to ask based on current market conditions, portfolio performance, and news. For each: the question, a concise suggested response, and which data point supports it. Think: "Why is my portfolio underperforming the S&P?", "Should I be worried about tariffs?", "Why aren't we in AI stocks?")
+- **Meeting Agenda** (suggested 30-minute conversation flow: open with portfolio health summary, walk through key changes, present recommendations, address anticipated concerns, close with outlook and next steps. Adjust if client context suggests a different emphasis.)
 - **Appendix: Methodology** (brief Parallax scoring note)
+
+Always end with: *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*

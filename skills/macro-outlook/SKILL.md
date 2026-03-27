@@ -43,12 +43,12 @@ Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-c
 ### Batch B — Macro depth (after Batch A)
 
 1. Call `macro_analyst` for the target country without component (summary), then with macro_indicators, tactical, fixed_income.
-2. Call `get_score_analysis` for a representative ETF or index for factor trends in this regime.
+2. Call `get_score_analysis` for a representative large-cap stock to observe factor trends in this regime. ETFs are not in the scoring universe. Use a market bellwether: US → AAPL.O, Japan → 7203.T, UK → SHEL.L, Germany → SAP.DE, China → 0700.HK.
 3. If multiple countries: repeat for each and compare.
 
 ### Batch C — Equity opportunities (optional, after Batch B)
 
-If requested: call `build_stock_universe` with "[country] equities". For top 5: `get_peer_snapshot` (parallel). For top 3: `get_score_analysis` 26 weeks (parallel).
+If requested: call `build_stock_universe` with a sector-level query, not abstract macro concepts. Good: "[country] large cap [sector]" (e.g., "US large cap consumer staples", "Japan large cap industrials"). Bad: "pricing power in stagflation" (returns keyword matches, not macro-aware results). For top 5: `get_peer_snapshot` (parallel). For top 3: `get_score_analysis` 26 weeks (parallel).
 
 ## Output Format
 
@@ -59,3 +59,5 @@ If requested: call `build_stock_universe` with "[country] equities". For top 5: 
 - **Positioning Implications** (what this means for portfolio construction)
 - **Top Equity Opportunities** (if equity screening included: table with symbol, name, sector, score, trend)
 - **Data Freshness** (when macro data was last updated)
+
+Always end with: *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*

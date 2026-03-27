@@ -21,6 +21,7 @@ Parallax uses token-based pricing. All tools consume the same number of tokens w
 | `get_score_analysis` | Historical factor score trajectory |
 | `export_price_series` | Daily price data export |
 | `list_macro_countries` | Available macro market coverage |
+| `get_telemetry` | Market regime signals and divergences |
 
 ### 1 token per holding (fan-out)
 | Tool | Description | 10-holding portfolio |
@@ -39,8 +40,7 @@ Parallax uses token-based pricing. All tools consume the same number of tokens w
 | `get_financial_analysis` | Palepu framework analysis (async, 2-5 min) |
 | `analyze_portfolio` | Portfolio risk/concentration analysis (flat fee) |
 | `macro_analyst` | Country macro analysis |
-| `get_telemetry` | Market regime signals |
-| `check_macro_health` | Macro data freshness check |
+| `check_macro_health` | Macro data freshness check (known bug: routes through macro-report endpoint instead of a dedicated 0-token health endpoint) |
 
 ### 10 tokens each
 | Tool | Description |
@@ -66,7 +66,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 | `/parallax-due-diligence` | **31** | 4 financials + Palepu + stock report (10) |
 | `/parallax-country-deep-dive` | **34** | 3 macro calls + universe build + 5 peer snapshots |
 | `/parallax-deep-dive` | **45** | Assessment (10) + technicals (5) + 3 macro markets |
-| `/parallax-macro-outlook` | **45** | 4 macro calls + telemetry; less without equities (32) |
+| `/parallax-macro-outlook` | **41** | 4 macro calls + telemetry (1); less without equities (28) |
 
 ### Portfolio Workflows (10 holdings)
 
@@ -77,6 +77,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 | `/parallax-portfolio-checkup` | **36** | 2x fan-out (20) + 3 macro markets (15) |
 | `/parallax-morning-brief` | **50** | Telemetry + macro + 2x fan-out + 3 news |
 | `/parallax-watchlist-monitor` | **54** | 10 score scans + news/tech/analyst for ~4 flagged |
+| `/parallax-explain-portfolio` | **60** | 10 price series + 10 score trends + telemetry + 2 macro + 3 news + 3 snapshots |
 | `/parallax-scenario-analysis` | **68** | 2x assessment (20) + 10 score scans + universe |
 | `/parallax-rebalance` | **76** | 10 score trends + replacements + validation re-score |
 | `/parallax-client-review` | **105** | 8 drill-downs + 5 news + assessment + 2x analyze |

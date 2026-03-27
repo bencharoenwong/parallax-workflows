@@ -31,15 +31,19 @@ Only escalate to the user if resolution fails after 2 attempts with the most lik
 
 ---
 
-## 2. HK Stock Ambiguity Protocol
+## 2. Symbol Cross-Validation
 
-Hong Kong uses numeric codes that can collide across H-shares, red chips, and local listings. After any scoring call (`get_peer_snapshot`, `get_score_analysis`, `quick_portfolio_scores`) on a `.HK` symbol:
+Scoring tools (`get_peer_snapshot`, `get_score_analysis`, `quick_portfolio_scores`) may occasionally return data for a different company than intended — especially for numeric codes (`.HK`, `.T`, `.TW`, `.KS`) but also for alphabetic tickers on any exchange.
 
-1. Cross-check the `name` field returned by the scoring tool against `get_company_info` result.
+**After any scoring call:**
+
+1. Cross-check the `name` field returned by the scoring tool against the `get_company_info` result for the same symbol.
 2. If names diverge, warn the user clearly and treat `get_company_info` as the source of truth.
 3. Do not present scores from a mismatched company as belonging to the intended security.
 
-This also applies to any exchange where numeric codes are used (`.T`, `.TW`, `.KS`).
+**For portfolio workflows (`quick_portfolio_scores`):** Cross-check company names for each holding in the response. If any holding maps to the wrong company, re-score that holding individually via `get_peer_snapshot` and note the discrepancy.
+
+**Hong Kong / numeric codes require extra caution:** HK uses numeric codes that can collide across H-shares, red chips, and local listings. Always cross-validate `.HK`, `.T`, `.TW`, `.KS` symbols.
 
 ---
 

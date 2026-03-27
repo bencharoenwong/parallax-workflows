@@ -11,7 +11,7 @@ gotchas:
   - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
   - get_telemetry and macro_analyst are free/instant; get_news_synthesis may take 30-90s per holding
   - If regime suggests stress, also pull macro tactical component
-  - Health flags (from parallax-portfolio-checkup/references/health-flags.md) apply here too — flag portfolios needing attention
+  - Health flags (from portfolio-checkup/references/health-flags.md) apply here too — flag portfolios needing attention
 ---
 
 # Morning Brief
