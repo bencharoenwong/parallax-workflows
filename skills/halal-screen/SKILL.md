@@ -8,7 +8,7 @@ negative-triggers:
   - Non-compliance screening → use /parallax-earnings-quality
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
-  - explain_methodology with "shariah" or "halal" retrieves Parallax's Shariah screening documentation
+  - explain_methodology does NOT support "shariah" or "halal" — use list_docs + get_docs("methodology/shariah-screening") instead
   - get_financial_analysis (Palepu framework) is async ~2-5 min — warn user before calling
   - Financial ratios from get_financials help verify debt/revenue compliance thresholds
   - Not all markets may have Shariah screening data — check documentation first
@@ -29,7 +29,7 @@ Screen stocks and portfolios for Shariah compliance using Parallax methodology.
 ## Workflow
 
 **For single stock compliance check:**
-1. Call `explain_methodology` with "shariah compliant screening" to retrieve criteria.
+1. Call `list_docs` to find Shariah screening documentation, then call `get_docs("methodology/shariah-screening")` to retrieve criteria.
 2. Call `get_financials` with statement "ratios" and "balance_sheet" to check debt ratios, interest income, and non-compliant revenue streams.
 3. Call `get_financial_analysis` for deeper profitability decomposition.
 4. Call `get_score_analysis` for quality trajectory.

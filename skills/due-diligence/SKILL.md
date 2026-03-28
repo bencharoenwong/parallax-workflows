@@ -41,6 +41,10 @@ Fire all simultaneously:
 | `get_financials` | `symbol`, statement="ratios", periods=4 | Key ratios |
 | `get_technical_analysis` | `symbol` | Trend, momentum, support/resistance |
 | `get_score_analysis` | `symbol`, weeks=52 | Factor score trajectory |
+| `get_stock_outlook` | `symbol`, aspect="analyst_targets" | Price targets |
+| `get_stock_outlook` | `symbol`, aspect="recommendations" | Buy/hold/sell distribution |
+| `get_stock_outlook` | `symbol`, aspect="risk_return" | Risk/return vs peers |
+| `get_stock_outlook` | `symbol`, aspect="dividends", limit=8 | Dividend history |
 | `get_news_synthesis` | `symbol` | Async — don't block output |
 | `get_financial_analysis` | `symbol` | Async ~2-5 min — Palepu framework |
 
@@ -60,6 +64,7 @@ Analyst-grade research report. Precision over brevity. Include raw data tables.
 - **Palepu Framework** (profitability decomposition, accruals quality, solvency assessment)
 - **Technical Stance** (trend, momentum, support/resistance, volume)
 - **News Intelligence** (material developments only)
+- **Analyst Consensus & Outlook** (price targets, recommendations distribution, dividend profile)
 - **Factor Score Trajectory** (52-week trend: which factors improving/declining)
 - **CG Research Report** (link to PDF/HTML from get_stock_report)
 - **Synthesis & Key Risks** (bull case, bear case, key uncertainties)

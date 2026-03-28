@@ -35,6 +35,7 @@ Fire all simultaneously:
 
 | Tool | Parameters | Notes |
 |---|---|---|
+| `get_company_info` | `symbol` | For symbol cross-validation per Convention #2 |
 | `get_score_analysis` | `symbol`, weeks=52 | Quality score trajectory |
 | `get_financials` | `symbol`, statement="income", periods=4 | Revenue/margin trends |
 | `get_financials` | `symbol`, statement="cash_flow", periods=4 | Cash conversion |
