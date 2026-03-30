@@ -1,7 +1,6 @@
 ---
 name: parallax-explain-portfolio
 description: "Reactive portfolio performance attribution: decompose a drawdown into market/regime, factor/thematic, and stock-specific components. Uses score-vs-price divergence to determine if the loss is fundamental or transient, then gives conditional advice. Triggered when a client asks 'why am I down X%?'. Holdings as [{symbol, weight}]. NOT for proactive health checks (use /parallax-portfolio-checkup), not for forward-looking reviews (use /parallax-client-review), not for hypothetical scenarios (use /parallax-scenario-analysis)."
-user-invocable: true
 negative-triggers:
   - Proactive portfolio health check → use /parallax-portfolio-checkup
   - Scheduled client meeting prep → use /parallax-client-review

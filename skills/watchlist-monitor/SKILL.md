@@ -1,7 +1,6 @@
 ---
 name: parallax-watchlist-monitor
 description: "Monitor a watchlist of tickers: flag score changes, news alerts, technical shifts, and analyst updates via Parallax MCP tools. Provide list of symbols. NOT for single stock analysis (use /parallax-deep-dive), not for portfolio diagnostics (use /parallax-morning-brief)."
-user-invocable: true
 negative-triggers:
   - Single stock deep dive → use /parallax-deep-dive
   - Portfolio with weights → use /parallax-morning-brief or /parallax-client-review
@@ -12,8 +11,6 @@ gotchas:
   - get_score_analysis with 4-8 weeks is sufficient for detecting recent changes — fire all in parallel
   - Only call get_news_synthesis for names with significant score changes (saves API calls)
   - Rank output by magnitude of change — most-changed at top
-  - If get_score_analysis returns insufficient history (<4 weeks), note "Limited history" and skip trend analysis for that symbol
-  - If no symbols trigger any flags, report "All watchlist symbols stable — no action items"
 ---
 
 # Watchlist Monitor
@@ -47,4 +44,4 @@ Execute using `mcp__claude_ai_Parallax__*` tools:
 
 Keep it scannable. Lead with what changed.
 
-Always end with: *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
+> These are analytical outputs based on Parallax factor scores, not investment advice.

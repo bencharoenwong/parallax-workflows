@@ -35,6 +35,8 @@ Parallax tools require Reuters Instrument Codes (RICs). When the user provides a
 
 Only escalate to the user if resolution fails after 2 attempts with the most likely suffixes.
 
+**Peer symbol RIC resolution:** Peer symbols from `get_peer_snapshot` may lack exchange suffixes (e.g., `GM` instead of `GM.N`). Resolve them using the exchange suffix table above before passing to downstream tools.
+
 ---
 
 ## 2. Symbol Cross-Validation
@@ -94,7 +96,15 @@ If `quick_portfolio_scores` covers **<50% of holdings by weight**, execute mixed
 3. Merge into portfolio-weighted result.
 4. Note: "Scoring used split-and-merge due to partial coverage."
 
+If `quick_portfolio_scores` returns **"Could not score any holdings"** for ALL positions (not just partial coverage), fall back to individual `get_peer_snapshot` calls per holding to get current factor scores. Report degraded coverage — trend data will be unavailable.
+
 If `check_portfolio_redundancy` covers **<60% of holdings**, flag redundancy results as **"Low confidence — limited coverage."**
+
+### Concentration flag caveat
+For portfolios with fewer than 7 holdings, concentration flags (>15% single, >45% top-3) are structural and reflect portfolio size, not poor diversification. Note them but don't alarm.
+
+### Empty-output handling
+If any tool returns successfully but with no output content (not an error, just empty), treat as a failure and apply standard retry logic. Do not treat empty-but-successful as valid data.
 
 ---
 
@@ -125,6 +135,8 @@ When analyzing a single stock or portfolio, determine relevant macro markets:
 4. Cap at **3 markets** for single-stock, **3 unique markets** for portfolios (to manage latency).
 
 If no covered markets are relevant, return `"macro": "unavailable"` — don't force irrelevant context.
+
+**Macro fallback from RIC suffixes:** If `list_macro_countries` fails, derive home market(s) from RIC suffixes: `.O`/`.N`/`.K` = United States, `.T` = Japan, `.HK` = Hong Kong, `.L` = United Kingdom, `.SI` = Singapore, `.DE` = Germany. Use the exchange suffix table in Section 1.
 
 ---
 

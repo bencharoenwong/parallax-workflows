@@ -1,7 +1,6 @@
 ---
 name: parallax-country-deep-dive
 description: "Country or region deep dive: macro environment, available equity coverage, top-scoring stocks, and investment opportunities via Parallax MCP tools. NOT for US-centric analysis (use /parallax-macro-outlook), not for thematic screening (use /parallax-thematic-screen)."
-user-invocable: true
 negative-triggers:
   - US macro analysis → use /parallax-macro-outlook
   - Thematic screening across all markets → use /parallax-thematic-screen
@@ -40,7 +39,7 @@ Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-c
 
 ### Batch B — Macro depth + scoring (after Batch A)
 
-1. Call `macro_analyst` for the country without component (summary), then with "macro_indicators" and "tactical".
+1. Call `macro_analyst` for the country without component parameter (summary mode). The summary call returns all components inline (macro_indicators, tactical, fixed_income, currency, sectors, etc.). Do not make separate per-component calls — they return identical content and waste tokens.
 2. For top N universe results (default 5): call `get_peer_snapshot` (parallel).
 3. For top 3: call `get_score_analysis` with 26 weeks (parallel).
 
@@ -53,4 +52,4 @@ Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-c
 - **Score Trends** (which top picks are improving vs. declining)
 - **Investment Thesis** (synthesis: why this market, what factors favor it, key risks)
 
-Always end with: *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
+> These are analytical outputs based on Parallax factor scores, not investment advice.

@@ -1,7 +1,6 @@
 ---
 name: parallax-deep-dive
 description: "Deep dive on a single position: company profile, peer comparison, financials, score trends, macro context, technicals, dividends, news, and AI assessment via Parallax MCP tools. Symbol in RIC format. NOT for quick stock checks (use /parallax-should-i-buy), not for portfolio-level analysis (use /parallax-morning-brief)."
-user-invocable: true
 negative-triggers:
   - Quick stock check → use /parallax-should-i-buy
   - Portfolio analysis → use /parallax-morning-brief
@@ -9,7 +8,7 @@ negative-triggers:
   - Peer comparison only → use /parallax-peer-comparison
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
-  - get_assessment is async — may take 30-90s
+  - get_assessment is async and uses Perplexity — may take 30-90s
   - get_assessment prompt should incorporate macro context, score trends, and dividend profile alongside existing data
   - For non-US symbols, apply HK ambiguity cross-check from shared conventions
 ---
@@ -74,4 +73,4 @@ Apply graceful fallback patterns from shared conventions for any missing data.
 - **Assessment** (AI deep-research synthesis — includes macro + trend data)
 - **Risk Factors** (what could go wrong)
 
-Always end with: *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
+> These are analytical outputs based on Parallax factor scores, not investment advice.

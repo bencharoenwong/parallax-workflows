@@ -1,7 +1,6 @@
 ---
 name: parallax-scenario-analysis
 description: "React to a news event or scenario: assess portfolio exposure, macro regime shift, sector impact, identify most-exposed holdings, find rotation candidates, and output a concrete action plan via Parallax MCP tools. Requires a portfolio and a scenario description. NOT for routine morning briefs (use /parallax-morning-brief), not for macro outlook without a triggering event (use /parallax-macro-outlook)."
-user-invocable: true
 negative-triggers:
   - Routine morning brief → use /parallax-morning-brief
   - General macro outlook → use /parallax-macro-outlook
@@ -48,7 +47,7 @@ Fire 4-5 simultaneously:
 
 | Tool | Parameters | Notes |
 |---|---|---|
-| `analyze_portfolio` | holdings, lens "concentration" | Sector/factor exposures |
+| `analyze_portfolio` | holdings, lens "concentration" | Sector/factor exposures. WARNING: may exceed 180K chars — fall back to `check_portfolio_redundancy` if truncated |
 | `get_score_analysis` | each holding, 4-8 weeks | Current trajectories |
 
 Then call `get_assessment` with a prompt that:
@@ -82,4 +81,4 @@ Then call `get_assessment` with a prompt that:
 - **What to Watch** (2-3 signals that would confirm or invalidate this thesis)
 - **Confidence & Caveats** (how certain is this analysis, what could go wrong with the rotation)
 
-Always end with: *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
+*"This is scenario-based analysis, not investment advice. Forward-looking assessments are inherently uncertain."*

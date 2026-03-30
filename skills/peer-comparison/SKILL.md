@@ -1,7 +1,6 @@
 ---
 name: parallax-peer-comparison
 description: "Research analyst peer comparison: peer snapshot, exported data, score trend analysis, and relative price performance via Parallax MCP tools. Symbol in RIC format. NOT for single stock analysis (use /parallax-deep-dive), not for portfolio analysis (use /parallax-morning-brief)."
-user-invocable: true
 negative-triggers:
   - Single stock deep dive → use /parallax-deep-dive
   - Portfolio analysis → use /parallax-morning-brief
@@ -9,10 +8,9 @@ negative-triggers:
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
   - Identifies top 2 peers automatically from get_peer_snapshot
+  - "Peer symbols from get_peer_snapshot may lack RIC suffixes. Before passing to Batch B tools, resolve each peer symbol to RIC format using the exchange suffix table in parallax-conventions.md (e.g., GM → GM.N, F → F.N). Single-letter symbols will fail without the suffix."
   - Makes 3 calls each for score trends and price series (primary + 2 peers)
   - export_peer_comparison and export_price_series return structured JSON
-  - get_peer_snapshot may return wrong target company (Convention #2) — extract queried stock from peer list
-  - If export_price_series returns empty data, note "Price data unavailable" and skip relative performance section
 ---
 
 # Peer Comparison
@@ -35,6 +33,10 @@ Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-c
 1. Call `get_peer_snapshot`. Identify the peer group and top 2 most relevant peers.
 2. Call `export_peer_comparison` with format "json".
 
+### RIC Resolution — Resolve peer symbols before Batch B
+
+Peer symbols from `get_peer_snapshot` may lack exchange suffixes (e.g., `GM` instead of `GM.N`). Before proceeding, resolve each peer symbol to RIC format using the exchange suffix table in `parallax-conventions.md`. Single-letter tickers like `F` will trigger "Symbol too short" errors without the suffix.
+
 ### Batch B — Trends + price series (parallel, after Batch A identifies peers)
 
 Fire all 6 calls simultaneously:
@@ -49,4 +51,4 @@ Fire all 6 calls simultaneously:
 - **Relative Price Performance** (comparative returns)
 - **Differentiation** (strengths and weaknesses vs peers)
 
-Always end with: *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
+> These are analytical outputs based on Parallax factor scores, not investment advice.
