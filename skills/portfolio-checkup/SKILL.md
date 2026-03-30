@@ -1,7 +1,6 @@
 ---
 name: parallax-portfolio-checkup
 description: "Individual investor portfolio checkup: health flags, factor scores, redundancy, macro context, and plain-language recommendations via Parallax MCP tools. Holdings as [{symbol, weight}]. NOT for fund manager briefs (use /parallax-morning-brief), not for client reviews (use /parallax-client-review)."
-user-invocable: true
 negative-triggers:
   - Fund manager morning brief → use /parallax-morning-brief
   - Client portfolio review (RIA) → use /parallax-client-review
@@ -36,17 +35,9 @@ Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-c
 | `check_portfolio_redundancy` | `holdings` | Overlap detection |
 | `list_macro_countries` | — | Check which markets are covered |
 
-### Batch A.1 — Cross-validate scoring (after Batch A)
-
-Cross-check company names from `quick_portfolio_scores` against `get_company_info` for each holding. If any name mismatches (scoring tool returned a different company), re-score that holding individually via `get_peer_snapshot` and flag the discrepancy. See Convention #2 (Symbol Cross-Validation).
-
-### Batch B — Macro context (after Batch A.1)
+### Batch B — Macro context (after Batch A)
 
 Derive home markets from RIC suffixes across holdings. Call `macro_analyst` with component="tactical" for each unique covered market (cap at 3).
-
-### Batch B.1 — Sector concentration supplement
-
-If `check_portfolio_redundancy` returns no issues but holdings share the same sector (from `get_company_info` results), calculate sector weight concentration manually and flag if any sector exceeds 40% of portfolio weight. The redundancy tool checks pair-level overlap but may miss sector-level concentration.
 
 ### Batch C — Health flag evaluation
 
@@ -82,6 +73,4 @@ Explain scores and flags in plain terms:
 
 Keep tone friendly and educational.
 
-**Note on small portfolios (<8 holdings):** The concentration flag (>15% single holding, >45% top-3) will almost always trigger. When it does, frame it as a portfolio size observation rather than a warning: "With X holdings, concentration is expected — this flag is more meaningful for larger portfolios."
-
-Always end with: *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
+> These are analytical outputs based on Parallax factor scores, not investment advice.

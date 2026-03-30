@@ -1,7 +1,6 @@
 ---
 name: parallax-score-explainer
 description: "Explain Parallax scores, factors, and methodology in plain language. Why does a stock score this way? What would change it? Uses methodology docs and score data. NOT for stock analysis (use /parallax-should-i-buy), not for deep dives (use /parallax-deep-dive)."
-user-invocable: true
 negative-triggers:
   - Stock analysis with buy/sell framing → use /parallax-should-i-buy
   - Full position analysis → use /parallax-deep-dive
@@ -12,8 +11,6 @@ gotchas:
   - get_docs and list_docs access the full methodology documentation
   - get_score_analysis shows trajectory — useful for explaining "why did this change"
   - Output must be accessible to non-technical clients and compliance teams
-  - If explain_methodology returns empty for a factor, fall back to get_docs with path "methodology/[factor]"
-  - If both fail, explain the factor concept from general finance knowledge and note "Detailed methodology documentation unavailable"
 ---
 
 # Score Explainer
@@ -59,4 +56,4 @@ Execute using `mcp__claude_ai_Parallax__*` tools based on query type:
 - **What Would Change It** (concrete conditions that would improve/worsen the score)
 - **Methodology Reference** (brief citation of the scoring methodology for credibility)
 
-Always end with: *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
+> These are analytical outputs based on Parallax factor scores, not investment advice.

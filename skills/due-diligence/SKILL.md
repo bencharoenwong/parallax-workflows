@@ -1,7 +1,6 @@
 ---
 name: parallax-due-diligence
 description: "Full research analyst due diligence: all financial statements, Palepu framework, technicals, news, score trends, and full CG research report via Parallax MCP tools. Symbol in RIC format. NOT for quick checks (use /parallax-should-i-buy), not for position deep dives without Palepu (use /parallax-deep-dive)."
-user-invocable: true
 negative-triggers:
   - Quick stock evaluation → use /parallax-should-i-buy
   - Position deep dive (no Palepu) → use /parallax-deep-dive
@@ -41,10 +40,6 @@ Fire all simultaneously:
 | `get_financials` | `symbol`, statement="ratios", periods=4 | Key ratios |
 | `get_technical_analysis` | `symbol` | Trend, momentum, support/resistance |
 | `get_score_analysis` | `symbol`, weeks=52 | Factor score trajectory |
-| `get_stock_outlook` | `symbol`, aspect="analyst_targets" | Price targets |
-| `get_stock_outlook` | `symbol`, aspect="recommendations" | Buy/hold/sell distribution |
-| `get_stock_outlook` | `symbol`, aspect="risk_return" | Risk/return vs peers |
-| `get_stock_outlook` | `symbol`, aspect="dividends", limit=8 | Dividend history |
 | `get_news_synthesis` | `symbol` | Async — don't block output |
 | `get_financial_analysis` | `symbol` | Async ~2-5 min — Palepu framework |
 
@@ -64,11 +59,10 @@ Analyst-grade research report. Precision over brevity. Include raw data tables.
 - **Palepu Framework** (profitability decomposition, accruals quality, solvency assessment)
 - **Technical Stance** (trend, momentum, support/resistance, volume)
 - **News Intelligence** (material developments only)
-- **Analyst Consensus & Outlook** (price targets, recommendations distribution, dividend profile)
 - **Factor Score Trajectory** (52-week trend: which factors improving/declining)
 - **CG Research Report** (link to PDF/HTML from get_stock_report)
 - **Synthesis & Key Risks** (bull case, bear case, key uncertainties)
 
 Note: `get_financial_analysis` (~2-5 min) and `get_stock_report` (~1-2 min, paid) are async. Begin assembling output from instant tools while async calls resolve.
 
-Always end with: *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
+> These are analytical outputs based on Parallax factor scores, not investment advice.

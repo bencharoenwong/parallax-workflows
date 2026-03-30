@@ -1,18 +1,16 @@
 ---
 name: parallax-morning-brief
-description: "Fund manager morning brief: market regime, macro outlook, portfolio health, and key holding news via Parallax MCP tools. Provide portfolio as [{symbol, weight}] in RIC format. NOT for individual stock analysis (use /parallax-should-i-buy), not for backtesting."
-user-invocable: true
+description: "Fund manager morning brief: market regime, macro outlook, portfolio health, and key holding news via Parallax MCP tools. Provide portfolio as [{symbol, weight}] in RIC format. NOT for individual stock analysis (use /parallax-should-i-buy), not for backtesting (use /backtest)."
 negative-triggers:
   - Single stock analysis → use /parallax-should-i-buy or /parallax-deep-dive
-  - Running backtests → not covered by this workflow set
+  - Running backtests → use /backtest
   - Client portfolio review → use /parallax-client-review
   - Thematic screening → use /parallax-thematic-screen
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
   - get_telemetry and macro_analyst are free/instant; get_news_synthesis may take 30-90s per holding
-  - If regime suggests stress, also pull macro tactical component
+  - The macro_analyst summary call returns all components inline including tactical — do not make separate per-component calls
   - Health flags (from portfolio-checkup/references/health-flags.md) apply here too — flag portfolios needing attention
-  - If quick_portfolio_scores coverage <50%, fall back to get_score_analysis per holding (more reliable for niche portfolios)
 ---
 
 # Morning Brief
@@ -36,15 +34,14 @@ Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-c
 | Tool | Parameters | Notes |
 |---|---|---|
 | `get_telemetry` | fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences | Market regime |
-| `macro_analyst` | market (default: US), no component | Macro summary |
+| `macro_analyst` | market (default: US), no component | Macro summary (returns all components inline including tactical — do not make separate per-component calls) |
 | `quick_portfolio_scores` | `holdings` | Factor scores |
 | `check_portfolio_redundancy` | `holdings` | Overlap detection |
 
 ### Batch B — Conditional + news (after Batch A)
 
-1. If regime suggests stress: call `macro_analyst` with component "tactical".
-2. Evaluate health flags: Low Score (overall ≤5.0), Concentration (>15% single / >45% top-3), Redundancy (≥2 pairs), Value Trap (value ≤3.0).
-3. For top N holdings by weight (default 3): call `get_news_synthesis` (async — don't block output).
+1. Evaluate health flags: Low Score (overall ≤5.0), Concentration (>15% single / >45% top-3), Redundancy (≥2 pairs), Value Trap (value ≤3.0).
+2. For top N holdings by weight (default 3): call `get_news_synthesis` (async — don't block output).
 
 ## Output Format
 
@@ -59,4 +56,4 @@ Present as a structured morning brief, under 800 words:
 
 Lead with what matters.
 
-Always end with: *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
+> These are analytical outputs based on Parallax factor scores, not investment advice.

@@ -1,11 +1,10 @@
 ---
 name: parallax-should-i-buy
-description: "Quick stock evaluation: company overview, Parallax factor scores, financial health, score trends, macro context, dividends, news, and analyst outlook. Plain language output. Accepts plain ticker (AAPL) or RIC (AAPL.O). NOT for portfolio analysis (use /parallax-morning-brief), not for full due diligence (use /parallax-due-diligence), not for backtesting."
-user-invocable: true
+description: "Quick stock evaluation: company overview, Parallax factor scores, financial health, score trends, macro context, dividends, news, and analyst outlook. Plain language output. Accepts plain ticker (AAPL) or RIC (AAPL.O). NOT for portfolio analysis (use /parallax-morning-brief), not for full due diligence (use /parallax-due-diligence), not for backtesting (use /backtest)."
 negative-triggers:
   - Portfolio-level analysis → use /parallax-morning-brief
   - Full research report → use /parallax-due-diligence
-  - Running backtests → not covered by this workflow set
+  - Running backtests → use /backtest
   - Peer comparison deep dive → use /parallax-peer-comparison
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
