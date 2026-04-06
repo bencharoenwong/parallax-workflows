@@ -28,7 +28,7 @@ All five skills:
 - Are **standalone but share a thin core** at `skills/_parallax/AI-profiles/` for the profile spec format and the output template.
 - Map cleanly to MAS Project MindForge's seven GenAI risk dimensions; full mapping in §7.
 
-**Hard pre-launch dependency (out of band):** CG counsel sign-off on right-of-publicity, MAS FAA, and SEC IA Act exposure for living-investor profiles. Out of band per user direction; not gated in CI but documented as a launch checklist item.
+**Legal posture:** Profiles are *not* gated on a legal review before invocation. The disclaimer and naming conventions (AI prefix, -style suffix, mandatory citation, "not financial advice", "consult a qualified financial advisor") do the legal work at runtime. Counsel review is an ongoing quality process that may tighten wording but does not block the skills from running. See §6.1.
 
 ---
 
@@ -120,8 +120,8 @@ tool_sequence:
   - explain_methodology               # for any factor used
 required_factors_present: [quality, value, momentum, defensive]
 owner: cg-quant-team
-last_legal_review: PENDING                  # ISO date when counsel signs off
-last_anchor_test: PENDING                   # ISO date of last BRK.B sanity test
+last_legal_review: PENDING                  # ISO date of last counsel review — informational, does not gate invocation
+last_anchor_test: PENDING                   # ISO date of last BRK.B sanity test — gates active status if stale/failed
 ---
 
 # Buffett-style profile
@@ -132,7 +132,7 @@ no qualitative moat assessment beyond Quality factor), and how to interpret
 output. ~300-500 words.]
 ```
 
-The `status: active` field is what the dispatcher checks before running; `draft` profiles cannot be invoked by end users. The `last_legal_review` and `last_anchor_test` fields are surfaced in every output footer (so users can see when legal/quant last reviewed), and the meta-skill consensus calculation excludes any profile where these are `PENDING` from the production unanimity matrix.
+The `status` field (`active` | `draft` | `retired`) is informational for the registry but does NOT gate invocation — profiles in any status can be invoked, with the disclaimer doing the legal work. The `status` field DOES gate automated anchor-test failure handling: if a quarterly anchor test fails, the profile flips to `retired` and the dispatcher surfaces a strong warning in the output (the skill still runs, the user still gets output, but they see that the rubric failed its last sanity check). The `last_legal_review` and `last_anchor_test` fields are surfaced in every output footer for transparency.
 
 ### 2.4 Skill dispatcher pattern
 
@@ -185,7 +185,9 @@ Methodology footer + non-advice disclaimer (see §6.2).
 
 **Anchor:** Soros, *The Alchemy of Finance* (1987); Drobny, *Inside the House of Money* (2006). Soros's own published book is the primary source — most defensible non-Buffett profile precisely because the investor wrote down his own approach.
 
-**Workflow (top-down, multi-step):**
+**Two modes: basket (primary) and single-ticker (inferred exposure).**
+
+**Basket / screening mode (no ticker or multi-ticker input):**
 1. `list_macro_countries` to confirm coverage.
 2. `macro_analyst(component=tactical)` for top 3-5 covered markets in parallel.
 3. `get_telemetry` for cross-market regime divergence signals.
@@ -194,11 +196,30 @@ Methodology footer + non-advice disclaimer (see §6.2).
 6. For top 3-5 names per universe, call `get_peer_snapshot` to filter for momentum + macro sensitivity.
 7. Render as ranked trade-idea list with regime thesis.
 
-**Token cost:** ~25-35 tokens (5 macro × 5 + telemetry 1 + universe 5 + 5 snapshots × 1 = 36; lower if fewer regimes are tactically interesting).
+**Single-ticker mode (when invoked with one ticker, e.g., `/parallax-AI-soros AAPL.O`):**
+1. Run the same macro workflow: `list_macro_countries` → `macro_analyst` × top markets → `get_telemetry`.
+2. `get_company_info` for the ticker to retrieve its sector and industry classification.
+3. `build_stock_universe` for themes surfaced by the current regime analysis (as above) — the "industry-exposure channel."
+4. **Check the ticker against TWO independent exposure channels:**
+   - **(a) Industry-exposure channel:** does the ticker appear in any surfaced theme's `build_stock_universe` output (either directly, or via its sector/industry classification)?
+   - **(b) Telemetry basket theme channel:** does the ticker fall into any of the basket themes surfaced by `get_telemetry` regime signals (e.g., "growth-over-value rotation," "defensive quality," "dollar regime beneficiaries")?
+5. Map the combined result to a verdict:
+   - **`match`** — ticker is flagged by BOTH channels (industry-exposure AND a telemetry basket theme)
+   - **`partial_match`** — ticker is flagged by ONE of the two channels
+   - **`no_match`** — ticker is flagged by NEITHER channel
+6. Render with regime thesis paragraph + per-channel explanation ("industry exposure: <detail>, telemetry basket: <detail>") + combined verdict.
 
-**Output shape:** `trade_ideas`. Format: regime thesis paragraph, then ranked idea list with rationale per idea. Multi-asset is signaled by including currency/rate context per regime, not by trading FX directly (Parallax is equity-centric).
+This is explicitly a *partial signal* on single tickers: the Soros profile is fundamentally top-down, so single-ticker mode answers "does the current regime analysis and telemetry signal agree that this stock is in a themed area?" — not "does this stock individually match a bottom-up quality/value profile?" The dual-channel check (industry AND telemetry) is what distinguishes a genuine thematic exposure from incidental sector membership. The output makes this scoping explicit so users don't over-interpret.
 
-**Why this is the most defensible non-Buffett profile:** Reflexivity is Soros's *own published framework*. He wrote a book about it. Citing the book and applying its methodology to Parallax data is reporting on a public source, not impersonation. The output never says "Soros would buy X" — it says "A reflexivity-style top-down lens applied to today's macro signals identifies regime Y; under that regime, the framework typically targets industry Z."
+**Token cost:**
+- Basket/screening mode: ~25-35 tokens (5 macro × 5 + telemetry 1 + universe 5 + 5 snapshots × 1 = 36)
+- Single-ticker mode: ~25-30 tokens (same macro + telemetry + universe; one `get_company_info` + 1-2 `get_peer_snapshot` for exposed names)
+
+**Output shapes:**
+- Basket/screening mode: `trade_ideas` — regime thesis paragraph, ranked idea list with rationale per idea. Multi-asset is signaled by including currency/rate context per regime, not by trading FX directly (Parallax is equity-centric).
+- Single-ticker mode: `inferred_exposure_verdict` — regime thesis paragraph, then ticker-to-theme mapping + match/partial/no-match verdict.
+
+**Why this is the most defensible non-Buffett profile:** Reflexivity is Soros's *own published framework*. He wrote a book about it. Citing the book and applying its methodology to Parallax data is reporting on a public source, not impersonation. The output never says "Soros would buy X" — it says "A reflexivity-style top-down lens applied to today's macro signals identifies regime Y; under that regime, the framework typically targets industry Z, and <ticker> is/isn't exposed to industry Z."
 
 ### 3.3 `parallax-AI-greenblatt`
 
@@ -235,39 +256,58 @@ Methodology footer + non-advice disclaimer (see §6.2).
 **Purpose:** Cross-profile agreement is the high-conviction signal. This skill exists because no single profile is reliable in isolation, but agreement across structurally different profiles is informative.
 
 **Workflow:**
-1. Accept a ticker (or small basket — capped at 5 tickers per call).
-2. For each installed `active`-status AI profile, run its `tool_sequence` against the ticker.
-3. Collect each profile's verdict as a structured tag: `match` / `partial_match` / `no_match` (or `skipped` if the profile is non-applicable, e.g., Soros on a single ticker — Soros runs as `skipped` on single-ticker mode, only contributes when run in basket-screening mode).
-4. Compute a unanimity score: % of applicable profiles that returned `match`.
+1. Accept a ticker or short basket — capped at **5 tickers per call** to control token cost.
+2. For each installed AI profile, run its `tool_sequence` against the ticker (single-ticker mode) or basket (screening mode). All v1 profiles are applicable in both modes — Soros runs its single-ticker inferred-exposure mode on single-ticker input.
+3. Collect each profile's verdict as a structured tag: `match` / `partial_match` / `no_match`. A profile only returns `skipped` if the tool sequence actually fails (e.g., Parallax outage, unrecognized ticker, cross-validation failure). Successful runs always return a match tag.
+4. **Collect factor-level agreement detail:** for every matching profile, record which specific factors or criteria drove the match (e.g., Buffett matched on Quality + Defensive; Greenblatt matched on ROC + earnings yield). This is surfaced in the output — see §3.5.1.
 5. **Super-majority threshold and minimum applicable count** (configurable in `_parallax/AI-profiles/consensus-config.md`):
    - Default super-majority threshold: **75%** of applicable profiles return `match`
    - Default minimum applicable count: **3** profiles (consensus is meaningless with fewer)
    - Rounding rule: **ceiling** — required matches = `ceil(threshold × applicable_count)`
-   - Worked: 4 applicable → need 3 matches (75% of 4 = 3.0). 3 applicable → need 3 matches (75% of 3 = 2.25 → ceil 3, i.e., effectively unanimous). 2 applicable → fails minimum applicable check; consensus signal returns `INSUFFICIENT_PROFILES`.
-6. Render the consensus matrix and the super-majority verdict.
+   - Worked: 4 applicable → need 3 matches (75% of 4 = 3.0). 3 applicable → need 3 matches (75% of 3 = 2.25 → ceil 3, effectively unanimous). 2 applicable → fails minimum applicable check; consensus signal returns `INSUFFICIENT_PROFILES`.
+6. Render the consensus matrix, the factor-level agreement summary, and the super-majority verdict.
 
-The minimum-applicable floor exists because cross-profile consensus is only informative when enough structurally different profiles ran. With v1's 4 profiles and Soros routinely `skipped` in single-ticker mode, single-ticker queries see 3 applicable profiles → the threshold collapses to unanimity for that mode. Basket-screening mode keeps Soros applicable, so it sees 4 applicable → super-majority (3 of 4) becomes meaningful.
+With Soros running single-ticker inferred-exposure mode, v1 single-ticker consensus queries see 4 applicable profiles and super-majority = 3 of 4. Basket/screening mode also sees 4 applicable profiles.
 
-**Output shape:**
+#### 3.5.1 Factor-level agreement surfacing
+
+When two or more profiles return `match` or `partial_match`, the consensus output includes a "shared factor signal" section listing the factors or criteria flagged by multiple profiles. This is the highest-value signal in the output — it tells the user not just that the profiles agreed, but *on what dimension*.
+
+Example: "3 of 4 matching profiles flagged Quality as strong (Buffett, Greenblatt, Klarman). All 3 matching profiles noted low debt / strong balance sheet. Value was flagged by 2 of 4 (Greenblatt, Klarman). Momentum was NOT flagged by any matching profile — this stock is not a momentum trade under any of the cited frameworks."
+
+This is pedagogy by construction: the user learns which factor dimensions the cited academic/biographical sources consider decisive, and sees cross-source convergence on the dimensions where it exists.
+
+**Output shape (single-ticker example):**
 ```
 Parallax AI Investor Profiles — Consensus matrix for AAPL.O
 
-| Profile               | Verdict       | Notes                              |
-|-----------------------|---------------|------------------------------------|
-| AI-buffett            | partial_match | 2 of 4 factor criteria met         |
-| AI-greenblatt         | match         | Top-decile ROC + earnings yield    |
-| AI-klarman            | no_match      | No margin of safety at current val |
-| AI-soros              | skipped       | (top-down profile, basket mode req)|
+| Profile               | Verdict       | Driving factors/criteria                  |
+|-----------------------|---------------|-------------------------------------------|
+| AI-buffett            | partial_match | Quality ✓, Defensive ✓, Value ✗, Mom ✗    |
+| AI-greenblatt         | match         | ROC top decile, earnings yield top decile |
+| AI-klarman            | no_match      | No margin of safety at current valuation  |
+| AI-soros              | partial_match | In theme: "AI infrastructure / mega-cap"  |
 
-Applicable profiles: 3 (minimum for consensus: 3)
-Matches: 1 of 3 applicable profiles returned full match (33%)
-Super-majority threshold: 75% → required matches = ceil(0.75 × 3) = 3
-Consensus signal: NO — 1 match falls short of required 3
+Applicable profiles: 4 (minimum for consensus: 3)
+Matches: 1 full match + 2 partial matches = 1 of 4 full (25%)
+Super-majority threshold: 75% → required matches = ceil(0.75 × 4) = 3
+Consensus signal: NO — 1 full match falls short of required 3
+
+Shared factor signal (across matching + partially-matching profiles):
+  - Quality: flagged by 2 of 3 (Buffett, Greenblatt)
+  - ROC / profitability: flagged by 2 of 3 (Greenblatt, Buffett via Quality)
+  - Value: flagged by 1 of 3 (Greenblatt)
+  - Momentum: NOT flagged by any profile
+  - Balance sheet / margin of safety: flagged by 0 of 3 (Klarman explicitly no)
+  - Macro theme exposure: flagged by 1 of 3 (Soros)
+
+Interpretation: profiles converge on profitability/Quality but diverge on
+valuation and margin of safety. No profile found a momentum case.
 
 Methodology + disclaimer footer.
 ```
 
-**Why this matters:** This is the marketing hook. "Stocks where Parallax AI Investor Profiles unanimously agree today" becomes a content engine and a defensible discovery surface for the retail MCP — defensible because the user can see exactly which profiles agreed and on what factor basis, with citations all the way down.
+**Why this matters:** The consensus matrix is the marketing hook — "stocks where Parallax AI Investor Profiles agree today" — but the factor-level agreement section is where retail users actually learn. It gives them a framework for building their own views: they see which factor dimensions the cited sources consider decisive, where the sources converge, and where they diverge. Parallax's own house view emerges from this same data, so the consensus output naturally complements the broader Parallax product without duplicating or exposing proprietary endpoints.
 
 ---
 
@@ -281,9 +321,9 @@ Defined in `_parallax/AI-profiles/output-template.md`. Every profile output MUST
 4. **Data table:** Factor / target / actual / trend / match.
 5. **Verdict:** match / partial_match / no_match. **Never** uses words like "buy", "sell", "recommend", "would buy", "endorses".
 6. **Methodology footer:** "Workflow derived from <citation>. Last anchor-tested <date>. Last legal review <date>."
-7. **Standard disclaimer:** *"This output applies a published characterization of [Investor]'s historical approach to current Parallax data. It is an AI-generated interpretation produced by the Parallax AI Investor Profiles framework. It is not endorsed by [Investor] or their representatives, not personalized financial advice, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance."*
+7. **Standard disclaimer:** *"This output is an AI-inferred interpretation of [Investor]'s approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is **not financial advice**, not personalized, not endorsed by [Investor] or their representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. **Please consult a qualified financial advisor before making investment decisions.**"*
 
-The disclaimer language is **the same across every profile** so it can be reviewed once by counsel and not re-litigated per profile.
+The disclaimer language is **the same across every profile** so it can be reviewed once by counsel and not re-litigated per profile. The key phrases — "AI-inferred," "solely from publicly available information," "not financial advice," and "consult a qualified financial advisor" — are load-bearing and cannot be removed or softened in any profile's output.
 
 ---
 
@@ -303,19 +343,21 @@ The `AI-` infix in the skill name is the visible, non-removable signal that this
 
 ## 6. Risks and mitigations
 
-### 6.1 Right-of-publicity / false endorsement (legal — out of band)
+### 6.1 Right-of-publicity / false endorsement (legal — out of band, no invocation gate)
 
 **Risk:** Using a living investor's name on financial content can be construed as false endorsement under NY Civil Rights §50-51, similar statutes in other US states, and Singapore passing-off doctrine.
 
 **Mitigations baked into design:**
-- "AI-" prefix in every public-facing handle
-- "-style" suffix in every output
-- Mandatory citation of public source on every output
-- No first-person impersonation
-- Standard non-endorsement disclaimer
-- Cited source must be the investor's own publication OR a peer-reviewed paper that the investor cannot credibly object to
+- "AI-" prefix in every public-facing handle — clearly flags every output as AI-inferred, not authored or endorsed by the named investor
+- "-style" suffix in every output ("Buffett-style", never "Buffett says")
+- Mandatory citation of a public source on every output — the inference is tethered to a specific published document the investor cannot credibly disavow
+- No first-person impersonation anywhere in the output
+- Standard disclaimer (see §4) that explicitly states: "AI-inferred," "solely from publicly available information," "not financial advice," "not endorsed by [Investor]," "consult a qualified financial advisor"
+- Cited source must be the investor's own publication OR a peer-reviewed paper — not interview clips, tweets, or third-party speculation
 
-**Out-of-band gate:** CG counsel reviews each profile against right-of-publicity exposure before that profile flips to `status: active`. Profiles ship as `status: draft` and are not invokable until counsel signs the legal review and the spec's `last_legal_review` field is updated to a real date. **Per user direction, this gate is documented but not enforced in CI.**
+**Legal review is continuous, not a gate.** Per user direction, profiles are *not* gated on a legal review before invocation. The disclaimer and naming conventions do the legal work at runtime; counsel review is an ongoing quality process that may surface improvements (e.g., tightened disclaimer wording, additional mitigations) but does not block the skills from running. The spec's `last_legal_review` field is retained as an informational audit trail (so users and counsel can see when a profile was last reviewed) but its value does not affect whether the skill is invokable.
+
+The rationale: a gate-based model creates a false sense of binary safety ("signed off → safe forever"), whereas a disclaimer-based model acknowledges that the mitigation IS the disclaimer + naming + citation, and that these mitigations are present in every output regardless of when counsel last looked.
 
 ### 6.2 MAS FAA / SEC IA Act / FINRA 2210 — personalized advice line
 
@@ -379,7 +421,7 @@ MAS Project MindForge Phase 1 (concluded November 2025) defines seven GenAI risk
 | 2 | Monitoring and Stability | Output is deterministic (no LLM in the rendering loop, no temperature drift). Quarterly anchor test against namesake holdings. Quarterly check that cited paper is not retracted. Drift > threshold → profile flips to `status: draft`. |
 | 3 | Transparency and Explainability | Every output shows: citation, factor loadings used, actual factor scores pulled, threshold tests, match decision, methodology footer. `explain_methodology` is called in-workflow for any factor used so users see Parallax's definition next to the cited source's definition. |
 | 4 | Fairness and Bias | No user profiling, no personalization, identical output for identical ticker query. Each profile's narrative explicitly publishes what it CANNOT see (e.g., "Buffett-style profile cannot evaluate growth-stage no-dividend companies; Soros-style cannot catch bottom-up stories") so absence is not confused with negative signal. |
-| 5 | Legal and Regulatory | "AI-" prefix + "-style" suffix + mandatory citation + standard non-advice disclaimer + no buy/sell language + no portfolio ingestion in public version. Out-of-band counsel review gate for each profile (right-of-publicity, MAS FAA, SEC IA Act, FINRA 2210). |
+| 5 | Legal and Regulatory | "AI-" prefix + "-style" suffix + mandatory citation + standard disclaimer language (AI-inferred, public-information-only, not financial advice, consult a qualified advisor — see §4) + no buy/sell language + no portfolio ingestion in public version. Legal review is continuous (not a gate) — the disclaimer and naming do the legal work at runtime; counsel review is an ongoing quality process that may tighten wording but does not block invocation. |
 | 6 | Ethics and Impact | Pedagogy-first framing — output teaches the WHY of factor exposures, not just the WHAT. Right-of-correction policy: if a named investor or estate requests changes to characterization, honored within 5 business days. Policy publicly disclosed on the product page. |
 | 7 | Cyber and Data Security | Existing Parallax MCP security baseline (RLS, rate limiting, CORS allowlist, ticker-symbol input sanitization). Profiles do not store user inputs. |
 | + | Proportionality | Risk class: medium-high (public-facing + financial domain + named third parties). Governance proportional to risk: legal sign-off + monitoring + versioning + correction policy, but not full FI-grade controls. |
@@ -406,23 +448,19 @@ Per CLAUDE.md "Programmatic verification, not LLM eyeballing": each step has an 
 
 ---
 
-## 9. Open questions for the spec review
+## 9. Open questions — RESOLVED
 
-These are the questions that remained ambiguous after brainstorming and council. User: please answer on review.
+All five questions were answered by the user during spec review and locked into the design.
 
-1. **Soros single-ticker mode.** When a user runs `parallax-AI-soros AAPL.O` directly (not via consensus), what should the skill do? Options:
-   - (a) Refuse with "Soros-style is a top-down profile; run via `parallax-AI-consensus` or in basket mode."
-   - (b) Run the macro+regime workflow and report whether AAPL.O is in any of the surfaced industries, as a partial signal.
-   - (c) Render as `skipped` with a clear explanation.
-   **Recommendation:** (c). Less surprising to users; doesn't pretend a top-down lens can do bottom-up evaluation.
+1. **Soros single-ticker mode → Option B.** Soros runs the full macro+telemetry workflow on single-ticker input and reports whether the ticker is exposed to current regime themes via two independent channels: industry-exposure (`build_stock_universe` theme membership) AND telemetry basket themes (`get_telemetry` regime signals). Dual-channel match = `match`; single-channel = `partial_match`; neither = `no_match`. Soros is therefore applicable in BOTH single-ticker and basket consensus modes. See §3.2 for full workflow.
 
-2. **Consensus skill scope.** Single ticker only, or short baskets? Recommendation: both, capped at 5 tickers per call to control token cost.
+2. **Consensus skill scope → both modes.** Single ticker or short basket, capped at 5 tickers per call. See §3.5.
 
-3. **`status: draft` user-visibility.** When a profile is `draft`, should the slash command exist but refuse to run, or should the slash command not be installed at all? Recommendation: command exists, refuses to run with a clear "in legal review" message — easier to add then enable than to add later.
+3. **Draft-status visibility → no invocation gate.** Profiles are invokable regardless of legal review status. The disclaimer in §4 does the legal work at runtime. Required disclaimer language includes: "not financial advice," "AI-inferred from publicly available information," and "please consult a qualified financial advisor before making investment decisions." See §4, §6.1.
 
-4. **Monitoring cadence — quarterly enough?** For anchor tests and citation-retraction checks. Recommendation: quarterly for v1, monthly if any production incident occurs.
+4. **Monitoring cadence → quarterly.** Confirmed — anchor tests and citation-retraction checks run quarterly. Not over-engineered into monthly or real-time. See §6.3.
 
-5. **What goes in the consensus output for a single-ticker query?** The matrix is clear, but should we also surface the specific factors on which profiles agreed (e.g., "All matching profiles flagged Quality")? Recommendation: yes, this is the highest-value signal in the consensus output.
+5. **Factor-level agreement surfacing in consensus output → yes.** The consensus output includes a "shared factor signal" section enumerating which factors/criteria drove agreement across matching profiles, which diverged, and which were not flagged by any profile. This gives users a framework for building their own views — and complements Parallax's own house view without duplicating proprietary endpoints. See §3.5.1.
 
 ---
 
