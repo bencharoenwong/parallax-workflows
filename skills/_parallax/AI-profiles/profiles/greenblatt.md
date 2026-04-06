@@ -36,7 +36,8 @@ thresholds:
   combined_rank_percentile_for_partial: "top 25% but outside top 10%"
 owner: cg-quant-team
 last_legal_review: PENDING
-last_anchor_test: PENDING
+last_anchor_test: 2026-04-06
+anchor_test_notes: "Formula computation verified on CSCO.O (ROIC 11.06%, EY 4.14%), MSFT.O (ROIC 23.55%, EY 3.46%), NVDA.O (ROIC 89.54%, EY 2.89%). Parallax ROIC accessible via get_financials(ratios); EY = 1/enterprise_value_ebit reciprocal. Full universe-mode anchor test deferred — build_stock_universe timed out during initial test, requires longer timeout in production. Mega-cap tech exhibits low EY (2.89-4.14%) due to 21st-century premium multiples — same intangibles-era issue as Buffett profile, Lev-Srivastava 2022 caveat applies."
 ---
 
 # Greenblatt-style profile
