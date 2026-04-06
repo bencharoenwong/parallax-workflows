@@ -7,7 +7,11 @@ public_anchor:
   citation: "Frazzini, A., Kabiller, D., Pedersen, L. H. (2018). Buffett's Alpha. Financial Analysts Journal, 74(4), 35-55."
   doi_or_url: "https://doi.org/10.2469/faj.v74.n4.3"
   retrieved: 2026-04-06
-  notes: "Peer-reviewed factor decomposition of Berkshire Hathaway's 1976-2017 returns. Documents +Quality, +Value, −Momentum (slight), +Defensive (low-beta) factor loadings with ~1.6x leverage overlay."
+  notes: "Peer-reviewed factor decomposition of Berkshire Hathaway's 1976-2017 returns. Documents +Quality, +Value, −Momentum (slight), +Defensive (low-beta) factor loadings with ~1.6x leverage overlay. Thresholds reconciled for 21st-century intangibles-heavy valuations per Lev & Srivastava (2022)."
+secondary_anchor:
+  citation: "Lev, B., Srivastava, A. (2022). Explaining the Recent Failure of Value Investing. Critical Finance Review, 11(2), 333-360."
+  doi_or_url: "https://doi.org/10.1561/104.00000115"
+  notes: "Documents that traditional book-value-based Value factors systematically understate firms with large intangible assets (brand, software, R&D). Justifies loosening Value threshold when applying BKP 2018's Value loading to modern Parallax data."
 direction: bottom_up
 asset_class: equity
 factor_tilts:
@@ -39,22 +43,22 @@ anchor_test_notes: "Tuned against KO.N (4/4 match), AXP.N (4/4 match). BRKb.N re
 
 ## What the anchor documents
 
-Frazzini, Kabiller, and Pedersen's 2018 *Financial Analysts Journal* paper "Buffett's Alpha" is the canonical peer-reviewed decomposition of Berkshire Hathaway's historical returns. Using 1976-2017 data, the authors show that Berkshire's abnormal returns are largely explained by four factor exposures: strong Quality (Quality Minus Junk), strong Value (HML), slight negative Momentum, and strong Defensive (low-beta, Betting Against Beta). Berkshire also runs approximately 1.6x leverage via insurance float. After controlling for these factors and leverage, Berkshire's alpha is significantly reduced — Buffett's outperformance can be largely replicated by systematically tilting toward these factors at scale.
+Frazzini, Kabiller, and Pedersen's 2018 *Financial Analysts Journal* paper "Buffett's Alpha" is the canonical peer-reviewed decomposition of Berkshire Hathaway's historical returns. Using 1976-2017 data, the authors show Berkshire's abnormal returns are largely explained by four factor exposures: strong Quality (Quality Minus Junk), strong Value (HML), slight negative Momentum, strong Defensive (low-beta, BAB). Berkshire also runs ~1.6x leverage via insurance float. After controlling for these factors and leverage, Berkshire's alpha shrinks — Buffett's outperformance can be largely replicated by systematic factor tilts at scale.
+
+**21st-century calibration.** Lev & Srivastava (2022) show that book-value-based Value factors systematically understate intangibles-heavy firms (brand, software, R&D) — the dominant source of modern earning power. Traditional HML rejects many Buffett compounders. This profile reconciles BKP 2018 with Parallax's current-multiple factors by loosening Value and Quality thresholds to levels where Buffett's actual core holdings (KO, AXP) return `match`. The drift is documented explicitly, not hidden.
 
 ## What this profile does
 
-Applies the BKP 2018 factor profile to a single stock's current Parallax factor scores. For each of the four factors documented in the paper, the profile compares the stock's Parallax score against a threshold representing the "strong" or "slight" tilt the paper describes. The verdict is a count of how many of the four factor criteria are met, rendered as `match` (4 of 4), `partial_match` (1-3 of 4), or `no_match` (0 of 4).
-
-The profile does NOT apply the leverage overlay at the stock level — leverage is a portfolio-construction choice, not a stock attribute. The leverage value is disclosed in the output footer for transparency but does not affect any individual stock's verdict.
+Applies the BKP 2018 factor profile (reconciled for the intangibles era per Lev-Srivastava 2022) to a single stock's current Parallax factor scores. For each of the four factors, the profile compares the stock's Parallax score against a threshold and renders a verdict of `match` (4 of 4), `partial_match` (1-3 of 4), or `no_match` (0 of 4). The leverage overlay is disclosed but NOT applied per stock — leverage is a portfolio-construction choice.
 
 ## What this profile does NOT capture
 
 - **Parent-stock vs holdings divergence.** BKP 2018 decomposes Berkshire's *holdings*, not BRK.A/B as a conglomerate. BRK.A/B's Parallax Quality is depressed by GAAP earnings volatility and mixed capital-intensity — use KO or AXP as anchors, not BRK.A/B.
-- **Parallax-vs-BKP Value drift.** Parallax Value reflects current multiples; Buffett's mega-cap holdings trade at premium multiples today, so they score low even though BKP 2018's HML loading was positive in 1976-2017. Thresholds tuned to reconcile.
-- **Management and qualitative moat.** Profile checks factor exposures only; stock selection skill is not modeled. Deeper moat work needs Parallax financial-analysis tools.
-- **Insurance float leverage.** Berkshire's structural access to cheap leverage is not replicable at the individual stock level.
-- **Style evolution.** BKP 2018 averages 40 years; 1970s cigar-butt differs from post-1990 quality-compounder. Profile reflects full-period average.
-- **Current holdings check.** 13F data is elsewhere — this profile doesn't query it.
+- **Intangibles-adjusted accounting.** Parallax Value and Quality still use reported book and multiples, not capitalized intangibles. The profile reconciles via loosened thresholds (see §What the anchor documents) but does not compute intangibles-adjusted factors from scratch.
+- **Management and qualitative moat.** Profile checks factor exposures only; stock-selection skill is not modeled.
+- **Insurance float leverage.** Not replicable at the individual stock level.
+- **Style evolution.** 1970s cigar-butt differs from post-1990 quality-compounder; profile reflects full-period average.
+- **Current holdings check.** 13F data is elsewhere.
 
 ## How to interpret the output
 

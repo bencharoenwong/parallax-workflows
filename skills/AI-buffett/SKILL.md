@@ -1,6 +1,6 @@
 ---
 name: parallax-AI-buffett
-description: "Applies the Buffett-style factor profile (per Frazzini-Kabiller-Pedersen 2018, 'Buffett's Alpha', FAJ) to a single stock's current Parallax factor scores. Returns a match/partial/no-match verdict based on Quality, Value, Momentum, and Defensive factor criteria. Third-person framing, academic citation, AI-inferred from public information. NOT financial advice. NOT personalized. Accepts plain tickers or RIC format."
+description: "Applies the Buffett-style factor profile (per Frazzini-Kabiller-Pedersen 2018, 'Buffett's Alpha', FAJ), reconciled for 21st-century intangibles-heavy valuations per Lev-Srivastava 2022, to a single stock's current Parallax factor scores. Returns a match/partial/no-match verdict based on Quality, Value, Momentum, and Defensive factor criteria. Third-person framing, academic citation, AI-inferred from public information. NOT financial advice. NOT personalized. Accepts plain tickers or RIC format."
 negative-triggers:
   - Portfolio-level analysis → use /parallax-morning-brief or /parallax-portfolio-checkup
   - Full due diligence → use /parallax-due-diligence
@@ -17,7 +17,8 @@ gotchas:
   - Cross-validation gate (spec §6.4) is NON-BYPASSABLE — refuse to render on name mismatch
   - Disclaimer language is verbatim — do NOT paraphrase "not financial advice," "AI-inferred," or "consult a qualified financial advisor"
   - NEVER use first-person impersonation of Buffett (no "Buffett would buy," "Buffett likes," etc.)
-  - Profile is derived from public academic source only (BKP 2018) — no private data, no get_assessment
+  - Profile is derived from public academic sources only (BKP 2018 + Lev-Srivastava 2022) — no private data, no get_assessment
+  - Thresholds are calibrated for 21st-century intangibles-heavy valuations — KO/AXP return match, BRK parent and AAPL return partial (documented)
 ---
 
 # Parallax AI Buffett Profile
