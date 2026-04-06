@@ -25,13 +25,14 @@ tool_sequence:
   - explain_methodology
 required_factors_present: [quality, value, momentum, defensive]
 thresholds:
-  quality: ">= 7"
-  value: ">= 6"
+  quality: ">= 5"
+  value: ">= 4"
   momentum: "<= 6"
-  defensive: ">= 6"
+  defensive: ">= 7"
 owner: cg-quant-team
 last_legal_review: PENDING
-last_anchor_test: PENDING
+last_anchor_test: 2026-04-06
+anchor_test_notes: "Tuned against KO.N (4/4 match), AXP.N (4/4 match). BRKb.N returns 3/4 partial (Quality fails) — expected, see narrative. AAPL.O returns 3/4 partial (Value fails at current multiples). NVDA.O (negative control) returns 2/4 partial."
 ---
 
 # Buffett-style profile
@@ -48,11 +49,12 @@ The profile does NOT apply the leverage overlay at the stock level — leverage 
 
 ## What this profile does NOT capture
 
-- **Qualitative moat depth.** Parallax's Quality sub-score is a close analog to QMJ but may not capture every dimension of moat quality Buffett discusses in shareholder letters. Cross-reference with Parallax's financial-analysis tools for deeper moat work.
-- **Management quality.** BKP 2018 implicitly attributes some alpha to stock selection skill within the factor framework. This profile checks factor exposures only — selection skill is not modeled.
-- **Insurance float advantage.** Berkshire's structural access to cheap leverage via insurance float is not replicable at the individual stock level.
-- **Buffett's evolving style.** BKP 2018 decomposes returns over a 40-year window. The 1970s cigar-butt style differs from the post-1990 quality-compounder approach; the profile reflects the full-period average, which leans toward the latter.
-- **Current Berkshire holdings.** The profile does not check whether a stock is currently held by Berkshire. 13F data is available elsewhere.
+- **Parent-stock vs holdings divergence.** BKP 2018 decomposes Berkshire's *holdings*, not BRK.A/B as a conglomerate. BRK.A/B's Parallax Quality is depressed by GAAP earnings volatility and mixed capital-intensity — use KO or AXP as anchors, not BRK.A/B.
+- **Parallax-vs-BKP Value drift.** Parallax Value reflects current multiples; Buffett's mega-cap holdings trade at premium multiples today, so they score low even though BKP 2018's HML loading was positive in 1976-2017. Thresholds tuned to reconcile.
+- **Management and qualitative moat.** Profile checks factor exposures only; stock selection skill is not modeled. Deeper moat work needs Parallax financial-analysis tools.
+- **Insurance float leverage.** Berkshire's structural access to cheap leverage is not replicable at the individual stock level.
+- **Style evolution.** BKP 2018 averages 40 years; 1970s cigar-butt differs from post-1990 quality-compounder. Profile reflects full-period average.
+- **Current holdings check.** 13F data is elsewhere — this profile doesn't query it.
 
 ## How to interpret the output
 
@@ -62,11 +64,21 @@ A `partial_match` is informative — users should look at *which* factors matche
 
 A `no_match` on Berkshire-like stocks (e.g., KO, AXP) would be a signal that the profile thresholds are wrong or Parallax's factor definitions have drifted from BKP 2018's constructs — trigger an anchor test.
 
-## Thresholds (initial, tuned during anchor test)
+## Thresholds (tuned 2026-04-06 from anchor test)
 
-- **Quality ≥ 7** — "strong" quality tilt per BKP 2018
-- **Value ≥ 6** — "strong" value tilt (slightly lower threshold than Quality because Buffett's valuation discipline varies by era)
-- **Momentum ≤ 6** — "slight negative" momentum tilt (threshold is an inverted "not-too-high" constraint)
-- **Defensive ≥ 6** — "strong" low-beta tilt per BKP 2018's BAB loading
+- **Quality ≥ 5** — Parallax Quality is calibrated differently from BKP 2018's QMJ. A threshold of 5 ("above average") catches Buffett-style stocks like KO (8) and AXP (5) while filtering out low-quality speculative names.
+- **Value ≥ 4** — Parallax Value reflects current multiples; Buffett's mega-cap holdings look expensive on this measure. A threshold of 4 ("slightly above the lowest quartile") preserves valuation discipline without being so strict it fails every Buffett holding. AAPL fails at 2; NVDA fails at 2.5.
+- **Momentum ≤ 6** — "slight negative" momentum tilt per BKP 2018. NVDA (7.2) fails; Buffett core holdings (KO 4.8, AXP 4.5, BRKb 3.0) pass.
+- **Defensive ≥ 7** — "strong" low-beta tilt per BKP 2018's BAB loading. KO (10), AXP (8), BRKb (10), AAPL (9.5) pass; NVDA (7.5) passes narrowly; high-beta growth names fail.
 
-These thresholds are initial guesses based on a 0-10 Parallax score scale. Task 8 (anchor test) tunes them by running the profile against known Berkshire core holdings (BRK.B, KO, AXP) and adjusting until those names return `match` or strong `partial_match`.
+### Anchor test results (2026-04-06)
+
+| Stock | Role | Q | V | M | D | Verdict |
+|---|---|---|---|---|---|---|
+| KO.N | Buffett core holding | 8 | 4 | 4.83 | 10 | **match (4/4)** ✓ |
+| AXP.N | Buffett core holding | 5 | 5.5 | 4.54 | 8 | **match (4/4)** ✓ |
+| BRKb.N | Berkshire parent | 4 | 7 | 2.97 | 10 | partial (3/4) — Quality drag from conglomerate structure |
+| AAPL.O | Largest current holding | 10 | 2 | 5.90 | 9.5 | partial (3/4) — fails Value at premium multiple |
+| NVDA.O | Negative control | 10 | 2.5 | 7.22 | 7.5 | partial (2/4) — fails Value + Momentum |
+
+The profile discriminates: core Buffett holdings return full match; parent-stock and current-valuation-stretched holdings return partial; growth tech returns weaker partial.
