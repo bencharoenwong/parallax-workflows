@@ -316,7 +316,7 @@ Also verify the validation checklist is present:
 grep -c '^- \[ \]' skills/_parallax/AI-profiles/profile-schema.md
 ```
 
-Expected: `8` (eight checklist items in §3).
+Expected: `9` (nine checklist items in §3).
 
 - [ ] **Step 3: Commit**
 
