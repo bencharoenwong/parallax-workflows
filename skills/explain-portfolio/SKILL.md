@@ -62,7 +62,7 @@ If `quick_portfolio_scores` fails or returns <50% coverage, don't retry — Step
 
 ### Step 3 — Attribution layer 2: Factor and thematic
 
-Call `get_score_analysis` for each holding (parallel), weeks=13 (roughly the lookback window). This is the **primary factor data source** — more reliable than `quick_portfolio_scores` for score trend analysis.
+Call `get_score_analysis` for each holding (parallel) with `weeks` as int 13 (lookback window, non-default — see conventions §0.1). This is the **primary factor data source** — more reliable than `quick_portfolio_scores` for score trend analysis.
 
 Analyze:
 - Which factor scores changed most across the portfolio? (e.g., momentum collapsed across the board → factor rotation)

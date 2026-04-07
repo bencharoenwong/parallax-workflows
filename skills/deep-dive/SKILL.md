@@ -36,14 +36,14 @@ Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-c
 |---|---|---|
 | `get_company_info` | `symbol` | Sector, market cap, description |
 | `get_peer_snapshot` | `symbol` | Factor scores + peer ranking |
-| `get_financials` | `symbol`, statement="summary" | Revenue/income narrative |
-| `get_financials` | `symbol`, statement="ratios", periods=1 | Key ratios: margins, ROE, P/E |
-| `get_score_analysis` | `symbol`, weeks=52 | 52-week factor trend |
+| `get_financials` | `symbol`, `statement="summary"` | Revenue/income narrative |
+| `get_financials` | `symbol`, `statement="ratios"`, `periods` as int 1 (latest period only, non-default — see conventions §0.1) | Key ratios: margins, ROE, P/E |
+| `get_score_analysis` | `symbol` | 52-week factor trend (server default) |
 | `get_technical_analysis` | `symbol` | Trend, momentum, support/resistance |
-| `get_stock_outlook` | `symbol`, aspect="analyst_targets" | Price targets |
-| `get_stock_outlook` | `symbol`, aspect="recommendations" | Buy/hold/sell |
-| `get_stock_outlook` | `symbol`, aspect="risk_return" | Risk/return vs peers |
-| `get_stock_outlook` | `symbol`, aspect="dividends", limit=8 | Dividend history |
+| `get_stock_outlook` | `symbol`, `aspect="analyst_targets"` | Price targets |
+| `get_stock_outlook` | `symbol`, `aspect="recommendations"` | Buy/hold/sell |
+| `get_stock_outlook` | `symbol`, `aspect="risk_return"` | Risk/return vs peers |
+| `get_stock_outlook` | `symbol`, `aspect="dividends"`, `limit` as int 8 (non-default; default is 20 — see conventions §0.1) | Dividend history |
 | `get_news_synthesis` | `symbol` | Async — don't block output |
 
 ### Batch B — Macro context (after Batch A)

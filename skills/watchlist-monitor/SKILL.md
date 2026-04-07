@@ -6,9 +6,9 @@ negative-triggers:
   - Portfolio with weights → use /parallax-morning-brief or /parallax-client-review
   - Building a portfolio → use /parallax-portfolio-builder
 gotchas:
-  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
+  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallback patterns, and the §0.1 integer-param serialization caveat
   - This is a surveillance skill — optimized for breadth over depth
-  - get_score_analysis with 4-8 weeks is sufficient for detecting recent changes — fire all in parallel
+  - get_score_analysis with 4-8 weeks is sufficient for detecting recent changes — fire all in parallel. `weeks` is non-default here and must be passed as a typed integer at the call site (see conventions §0.1)
   - Only call get_news_synthesis for names with significant score changes (saves API calls)
   - Rank output by magnitude of change — most-changed at top
 ---
@@ -28,11 +28,11 @@ Surveillance scan across a list of tickers — flag what's changed, what needs a
 
 Execute using `mcp__claude_ai_Parallax__*` tools:
 
-1. **Score Scan** — For each symbol, call `get_score_analysis` with 4-8 weeks of history. Compute change in total score over the period.
+1. **Score Scan** — For each symbol, call `get_score_analysis` with `weeks` as int N, where N is the user-supplied value from the invocation (e.g., `weeks=8`) or 8 if none provided. This is non-default (server default is 52) — see conventions §0.1 for the serialization caveat. Compute change in total score over the period.
 2. **Flag Movers** — Identify symbols with significant score changes (>1 point total score change or any factor moving >2 points).
 3. **News Check** — For flagged symbols only, call `get_news_synthesis` to identify catalysts.
 4. **Technical Check** — For flagged symbols, call `get_technical_analysis` for trend changes.
-5. **Analyst Check** — For flagged symbols, call `get_stock_outlook` with aspect "recommendations" for consensus shifts.
+5. **Analyst Check** — For flagged symbols, call `get_stock_outlook` with `aspect="recommendations"` for consensus shifts.
 
 ## Output Format
 

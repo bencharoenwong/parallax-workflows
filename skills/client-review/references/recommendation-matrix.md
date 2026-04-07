@@ -49,8 +49,8 @@ When deciding which holdings to analyze in detail:
 
 | Tool | Parameters | Purpose |
 |---|---|---|
-| `get_score_analysis` | `symbol`, weeks=26 | Score trend — improving or deteriorating? |
-| `get_stock_outlook` | `symbol`, aspect="risk_return" | Risk profile vs peers |
+| `get_score_analysis` | `symbol`, `weeks` as int 26 (26-week lookback, non-default — see conventions §0.1) | Score trend — improving or deteriorating? |
+| `get_stock_outlook` | `symbol`, `aspect="risk_return"` | Risk profile vs peers |
 | `get_peer_snapshot` | `symbol` | Current factor scores + peer context |
 
 ### News (selective)

@@ -31,7 +31,7 @@ Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-c
 ### Batch A — Peer identification
 
 1. Call `get_peer_snapshot`. Identify the peer group and top 2 most relevant peers.
-2. Call `export_peer_comparison` with format "json".
+2. Call `export_peer_comparison` with `format="json"`.
 
 ### RIC Resolution — Resolve peer symbols before Batch B
 
@@ -40,8 +40,8 @@ Peer symbols from `get_peer_snapshot` may lack exchange suffixes (e.g., `GM` ins
 ### Batch B — Trends + price series (parallel, after Batch A identifies peers)
 
 Fire all 6 calls simultaneously:
-- `get_score_analysis` for primary + top 2 peers (3 calls)
-- `export_price_series` for primary + top 2 peers (3 calls, 100 days, format "json")
+- `get_score_analysis` for primary + top 2 peers (3 calls). If the user supplied `weeks=N` in the invocation, pass it as `weeks` as int N (non-default — see conventions §0.1); otherwise rely on the server default of 52.
+- `export_price_series` for primary + top 2 peers (3 calls) with `format="json"`. Rely on the server default for `days` (100); if a custom window is needed, pass `days` as int N per conventions §0.1.
 
 ## Output Format
 

@@ -34,7 +34,7 @@ thresholds:
   value: ">= 4"
   momentum: "<= 6"
   defensive: ">= 7"
-owner: cg-quant-team
+owner: parallax-workflows
 last_legal_review: PENDING
 last_anchor_test: 2026-04-06
 anchor_test_notes: "Tuned against KO.N (4/4 match), AXP.N (4/4 match). BRKb.N returns 3/4 partial (Quality fails) — expected, see narrative. AAPL.O returns 3/4 partial (Value fails at current multiples). NVDA.O (negative control) returns 2/4 partial."

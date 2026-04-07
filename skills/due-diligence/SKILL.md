@@ -1,6 +1,6 @@
 ---
 name: parallax-due-diligence
-description: "Full research analyst due diligence: all financial statements, Palepu framework, technicals, news, score trends, and full CG research report via Parallax MCP tools. Symbol in RIC format. NOT for quick checks (use /parallax-should-i-buy), not for position deep dives without Palepu (use /parallax-deep-dive)."
+description: "Full research analyst due diligence: all financial statements, Palepu framework, technicals, news, score trends, and full Parallax research report via Parallax MCP tools. Symbol in RIC format. NOT for quick checks (use /parallax-should-i-buy), not for position deep dives without Palepu (use /parallax-deep-dive)."
 negative-triggers:
   - Quick stock evaluation → use /parallax-should-i-buy
   - Position deep dive (no Palepu) → use /parallax-deep-dive
@@ -34,18 +34,18 @@ Fire all simultaneously:
 | Tool | Parameters | Notes |
 |---|---|---|
 | `get_company_info` | `symbol` | Company profile |
-| `get_financials` | `symbol`, statement="income", periods=4 | Income statement |
-| `get_financials` | `symbol`, statement="balance_sheet", periods=4 | Balance sheet |
-| `get_financials` | `symbol`, statement="cash_flow", periods=4 | Cash flow |
-| `get_financials` | `symbol`, statement="ratios", periods=4 | Key ratios |
+| `get_financials` | `symbol`, `statement="income"` | Income statement (default 4 periods) |
+| `get_financials` | `symbol`, `statement="balance_sheet"` | Balance sheet (default 4 periods) |
+| `get_financials` | `symbol`, `statement="cash_flow"` | Cash flow (default 4 periods) |
+| `get_financials` | `symbol`, `statement="ratios"` | Key ratios (default 4 periods) |
 | `get_technical_analysis` | `symbol` | Trend, momentum, support/resistance |
-| `get_score_analysis` | `symbol`, weeks=52 | Factor score trajectory |
+| `get_score_analysis` | `symbol` | 52-week factor score trajectory (server default) |
 | `get_news_synthesis` | `symbol` | Async — don't block output |
 | `get_financial_analysis` | `symbol` | Async ~2-5 min — Palepu framework |
 
 ### Batch B — Full report (after Batch A, user confirmation recommended)
 
-Call `get_stock_report` for comprehensive CG research report with PDF/HTML links. This is a **PAID endpoint** (~1-2 min async).
+Call `get_stock_report` for comprehensive Parallax research report with PDF/HTML links. This is a **PAID endpoint** (~1-2 min async).
 
 ## Output Format
 
@@ -60,7 +60,7 @@ Analyst-grade research report. Precision over brevity. Include raw data tables.
 - **Technical Stance** (trend, momentum, support/resistance, volume)
 - **News Intelligence** (material developments only)
 - **Factor Score Trajectory** (52-week trend: which factors improving/declining)
-- **CG Research Report** (link to PDF/HTML from get_stock_report)
+- **Parallax Research Report** (link to PDF/HTML from get_stock_report)
 - **Synthesis & Key Risks** (bull case, bear case, key uncertainties)
 
 Note: `get_financial_analysis` (~2-5 min) and `get_stock_report` (~1-2 min, paid) are async. Begin assembling output from instant tools while async calls resolve.

@@ -8,7 +8,8 @@ negative-triggers:
   - Thematic screening → use /parallax-thematic-screen
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
-  - get_telemetry and macro_analyst are free/instant; get_news_synthesis may take 30-90s per holding
+  - get_telemetry and macro_analyst are fast-response (low latency) but not free — macro_analyst costs 5 tokens; get_news_synthesis may take 30-90s per holding
+  - macro_analyst parameter is `market` (not `country`); e.g., `macro_analyst(market="United States")`
   - The macro_analyst summary call returns all components inline including tactical — do not make separate per-component calls
   - Health flags (from portfolio-checkup/references/health-flags.md) apply here too — flag portfolios needing attention
 ---

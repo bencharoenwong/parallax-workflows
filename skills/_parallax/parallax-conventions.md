@@ -10,6 +10,26 @@ Parallax tools (`mcp__claude_ai_Parallax__*`) are deferred MCP tools. Before the
 
 ---
 
+## 0.1 Tool Parameter Reference
+
+Parameter names that commonly trip up skill authors (and LLMs guessing from prose). Use the exact names below when calling these tools:
+
+| Tool | Parameter | Type | Notes |
+|---|---|---|---|
+| `macro_analyst` | `market` (not `country`) | string | e.g., `"United States"`, `"Japan"`. Matches names returned by `list_macro_countries`. |
+| `macro_analyst` | `component` | string | e.g., `"tactical"`, `"sectors"`, `"factors"`. See `list_macro_countries` next_steps for others. |
+| `build_stock_universe` | `query` (not `description`) | string | Free-text sector-scoped query, e.g., `"US large-cap technology software"`. Broad/abstract queries time out. |
+| `get_financials` | `statement` | string | `"summary"`, `"balance_sheet"`, `"cash_flow"`, `"ratios"`. Defaults to `"summary"`. |
+| `get_financials` | `periods` | integer | Defaults to 4. **Do NOT pass as string via `:periods=4` syntax** — MCP serializes it as a string and fails validation. Rely on server default or pass as typed integer at call site. |
+| `get_score_analysis` | `weeks` | integer | Defaults to 52. Same serialization caveat as `periods`. |
+| `get_stock_outlook` | `limit` | integer | Defaults to 20 (applies to `dividends` aspect, range 1-100). Same serialization caveat as `periods`. |
+| `export_price_series` | `days` | integer | Defaults to 100 (range 1-365). Same serialization caveat as `periods`. |
+| `get_peer_snapshot` | N/A | — | Symbol only; company-identity field in response is `target_company` (top-level), NOT `name` (which refers to individual peer rows). |
+
+Any skill calling `macro_analyst` or `build_stock_universe` with `country=` or `description=` will fail with an MCP parameter validation error. Skills should always use the names in this table.
+
+---
+
 ## 1. RIC Resolution
 
 Parallax tools require Reuters Instrument Codes (RICs). When the user provides a plain ticker:
@@ -74,10 +94,12 @@ Batch C (after B):  get_assessment (synthesis prompt with all data)
 
 ## 4. Graceful Fallback Patterns
 
-### Instant tools
+### Fast-response tools
 `get_company_info`, `get_peer_snapshot`, `get_score_analysis`, `get_financials`, `get_stock_outlook`, `explain_methodology`, `list_macro_countries`, `macro_analyst`
 
 → Retry once on failure. If second attempt fails, mark section as **"Data unavailable"** and continue.
+
+Note: "fast-response" refers to latency, not token cost. Token costs vary per tool — see `token-costs.md` for the full table. In particular, `macro_analyst` returns quickly but costs 5 tokens per call.
 
 ### Async tools
 `get_news_synthesis` (~30-90s), `get_assessment` (~30-90s), `get_technical_analysis`, `get_financial_analysis` (~2-5min), `get_stock_report` (~1-2min)

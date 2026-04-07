@@ -29,14 +29,15 @@ cd parallax-workflows
 ./install.sh
 ```
 
-This copies all 18 workflows and shared conventions into `~/.claude/skills/`. Restart Claude Code after installing.
+This copies all workflows and shared conventions into `~/.claude/skills/`. Restart Claude Code after installing.
 
 To install a single workflow:
 ```bash
 cp -r skills/should-i-buy ~/.claude/skills/parallax-should-i-buy
-mkdir -p ~/.claude/skills/_parallax
-cp skills/_parallax/parallax-conventions.md ~/.claude/skills/_parallax/parallax-conventions.md
+cp -r skills/_parallax ~/.claude/skills/_parallax
 ```
+
+The `_parallax` directory contains shared conventions, token-cost reference, and the AI-profiles framework (required by the `AI-*` skills). Always copy it alongside any individual workflow.
 
 ### 3. Verify
 
@@ -54,7 +55,7 @@ If you see "tool not found" errors, the MCP server is not connected.
 |---|---|
 | `/parallax-should-i-buy AAPL` | Quick evaluation — scores, macro, dividends, news, outlook |
 | `/parallax-deep-dive AAPL.O` | Full analysis with technicals and AI assessment |
-| `/parallax-due-diligence AAPL.O` | All financials, Palepu framework, CG research report |
+| `/parallax-due-diligence AAPL.O` | All financials, Palepu framework, Parallax research report |
 | `/parallax-earnings-quality AAPL.O` | Accruals, revenue quality, manipulation risk |
 | `/parallax-score-explainer AAPL.O "why is value low?"` | Plain-language methodology explanation |
 | `/parallax-peer-comparison AAPL.O` | Factor scores and price performance vs peers |
@@ -101,7 +102,6 @@ A family of standalone skills that apply famous investors' workflow shapes (not 
 - AI-inferred from publicly available information only — no proprietary endpoints
 - Not financial advice, not personalized, not endorsed by any named investor
 - See `skills/_parallax/AI-profiles/README.md` for inclusion criteria, v2 candidates, and design rationale
-- Design spec: `docs/superpowers/specs/2026-04-06-parallax-AI-investor-profiles-design.md`
 
 ### Symbol Format
 
@@ -134,9 +134,10 @@ Full breakdown in `skills/_parallax/token-costs.md`.
 
 ```
 skills/
-├── _parallax/                  # Shared conventions and token costs
+├── _parallax/                  # Shared conventions, token costs, AI profile framework
 │   ├── parallax-conventions.md # RIC resolution, parallel execution, fallbacks
-│   └── token-costs.md          # Per-tool and per-workflow token estimates
+│   ├── token-costs.md          # Per-tool and per-workflow token estimates
+│   └── AI-profiles/            # Schema, output template, and profile specs for AI-* skills
 ├── should-i-buy/               # Quick stock evaluation
 │   └── SKILL.md
 ├── deep-dive/                  # Full single-stock analysis
@@ -149,7 +150,11 @@ skills/
 │   ├── SKILL.md
 │   └── references/
 │       └── health-flags.md
-└── ... (14 more workflows)
+├── AI-buffett/                 # Buffett-style factor profile dispatcher
+│   └── SKILL.md
+├── AI-consensus/               # Multi-profile super-majority meta-skill
+│   └── SKILL.md
+└── ... (18 more workflows)
 ```
 
 Each `SKILL.md` is a self-contained instruction set. Claude reads it when you invoke the command, then orchestrates the Parallax MCP tools accordingly. No code execution — just structured API orchestration.

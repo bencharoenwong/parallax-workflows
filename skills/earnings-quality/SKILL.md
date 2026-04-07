@@ -34,10 +34,10 @@ Fire all simultaneously:
 
 | Tool | Parameters | Notes |
 |---|---|---|
-| `get_score_analysis` | `symbol`, weeks=52 | Quality score trajectory |
-| `get_financials` | `symbol`, statement="income", periods=4 | Revenue/margin trends |
-| `get_financials` | `symbol`, statement="cash_flow", periods=4 | Cash conversion |
-| `get_financials` | `symbol`, statement="ratios" | Accrual ratios |
+| `get_score_analysis` | `symbol` | Quality score trajectory (default 52-week lookback) |
+| `get_financials` | `symbol`, `statement="income"` | Revenue/margin trends (default 4 periods) |
+| `get_financials` | `symbol`, `statement="cash_flow"` | Cash conversion (default 4 periods) |
+| `get_financials` | `symbol`, `statement="ratios"` | Accrual ratios |
 | `get_financial_analysis` | `symbol` | Async ~2-5 min — Palepu forensic analysis |
 | `get_news_synthesis` | `symbol` | Async — accounting news, auditor changes |
 
