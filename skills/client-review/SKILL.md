@@ -54,8 +54,8 @@ For each drill-down holding (parallel):
 
 | Tool | Parameters |
 |---|---|
-| `get_score_analysis` | `symbol`, weeks=26 |
-| `get_stock_outlook` | `symbol`, aspect="risk_return" |
+| `get_score_analysis` | `symbol`, `weeks` as int 26 (26-week lookback, non-default — see conventions §0.1) |
+| `get_stock_outlook` | `symbol`, `aspect="risk_return"` |
 | `get_peer_snapshot` | `symbol` |
 
 News (selective, async): `get_news_synthesis` for holdings >10% weight AND flagged, or in sectors with active macro developments. Cap at 5.

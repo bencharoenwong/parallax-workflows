@@ -30,7 +30,7 @@ thresholds:
   fcf_positive_periods: ">= 3 of 4"
   pe_discount_to_peers: "<= peer median × 1.0"
   value_score_backup: ">= 4"
-owner: cg-quant-team
+owner: parallax-workflows
 last_legal_review: PENDING
 last_anchor_test: 2026-04-07
 anchor_test_notes: "Tested against BRKb.N (parent conglomerate) and NVDA.O (negative control). BRKb: 2 of 4 partial — PASS on D/E 0.18 and FCF stability (4/4 periods positive); FAIL on net cash (−21% due to BNSF/BHE consolidated debt) and valuation (P/E 15.38 vs insurance peer median ~11.58, 33% premium). NVDA: 3 of 4 partial — PASS on net cash (+$54B), D/E 0.054, FCF stability (4/4); FAIL on valuation (P/E 36 vs semis median ~38, at-peer). NVDA falls to partial_match because Value backup (2.5) falls below ≥4 threshold. Framework discriminates qualitatively: BRKb fails on balance sheet (parent problem per Buffett profile caveat), NVDA fails on valuation (intangibles era per Lev-Srivastava 2022). Examining WHICH checks failed is the actionable signal."

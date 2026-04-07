@@ -13,11 +13,10 @@ if [ ! -d "$SKILLS_DIR" ]; then
     mkdir -p "$SKILLS_DIR"
 fi
 
-# Copy shared conventions and token costs
-mkdir -p "$SKILLS_DIR/_parallax"
-cp "$SCRIPT_DIR/skills/_parallax/parallax-conventions.md" "$SKILLS_DIR/_parallax/parallax-conventions.md"
-cp "$SCRIPT_DIR/skills/_parallax/token-costs.md" "$SKILLS_DIR/_parallax/token-costs.md"
-echo "  Copied shared conventions + token costs"
+# Copy shared conventions, token costs, and AI profile framework
+rm -rf "$SKILLS_DIR/_parallax"
+cp -r "$SCRIPT_DIR/skills/_parallax" "$SKILLS_DIR/_parallax"
+echo "  Copied shared conventions, token costs, and AI-profiles framework"
 
 # Copy each skill with parallax- prefix
 for skill_dir in "$SCRIPT_DIR"/skills/*/; do

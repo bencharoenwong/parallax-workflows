@@ -12,8 +12,15 @@ def validate(filepath: str) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []
 
-    with open(filepath) as f:
-        data = json.load(f)
+    try:
+        with open(filepath) as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        errors.append(f"[FATAL] File not found: {filepath}")
+        return errors, warnings
+    except json.JSONDecodeError as exc:
+        errors.append(f"[FATAL] Invalid JSON in {filepath}: {exc}")
+        return errors, warnings
 
     sections = data.get("sections", data)
 
@@ -27,8 +34,13 @@ def validate(filepath: str) -> tuple[list[str], list[str]]:
 
         # --- ERRORS ---
 
-        # Doubled consecutive Thai words (2+ chars)
-        for m in re.finditer(r"(\b\w{2,}\b) \1", text):
+        # Doubled consecutive Thai words (2+ chars).
+        # Note: Python's \w does NOT match Thai vowel diacritic marks (sara u ุ, sara i ิ, etc.),
+        # so \w-based patterns silently miss Thai text. Use the Thai Unicode block explicitly.
+        for m in re.finditer(r"([\u0E00-\u0E7F]{2,}) \1", text):
+            errors.append(f"[{key}] Doubled Thai word: '{m.group()}'")
+        # Also catch doubled ASCII words (for mixed-language content)
+        for m in re.finditer(r"\b([A-Za-z]{2,})\b \1\b", text):
             errors.append(f"[{key}] Doubled word: '{m.group()}'")
 
         # ECL/ES confusion

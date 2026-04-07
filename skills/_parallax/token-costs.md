@@ -45,7 +45,7 @@ Parallax uses token-based pricing. All tools consume the same number of tokens w
 ### 10 tokens each
 | Tool | Description |
 |---|---|
-| `get_stock_report` | Full CG research report with PDF (async, 1-2 min) |
+| `get_stock_report` | Full Parallax research report with PDF (async, 1-2 min) |
 | `get_assessment` | AI deep-research synthesis (MCP uses deep model) |
 
 ---

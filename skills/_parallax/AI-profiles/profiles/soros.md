@@ -39,7 +39,7 @@ thresholds:
   themes_surfaced_max: 3
   exposure_channels_for_match: 2
   exposure_channels_for_partial: 1
-owner: cg-quant-team
+owner: parallax-workflows
 last_legal_review: PENDING
 last_anchor_test: 2026-04-07
 anchor_test_notes: "Workflow tools verified: list_macro_countries returns 12 covered markets (US, JP, UK, DE, FR, CN, IN, KR, SG, MY, CA, Global) ✓; macro_analyst(United States, tactical) returns substantive bond-overweight/equity-caution thesis dated 2026-03-26 (PCE upgraded to 2.7%, easing cycle narrative dead, Hormuz/Iran as invalidation) ✓; build_stock_universe is async ~15-40s and tends to time out in single-call tests (see Greenblatt anchor test); get_telemetry returned 'Admin org not configured' in this MCP session — Channel B of dual-channel logic unavailable in current environment, graceful fallback per dispatcher kicks in (single-ticker mode falls back to industry-exposure-only). Both basket and single-ticker modes are mechanically operable in production with sufficient timeout budget; the documented fallbacks handle the two environmental limitations correctly."

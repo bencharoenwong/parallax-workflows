@@ -110,11 +110,14 @@ Cannot render Klarman-style profile — possible wrong-company mapping (see para
 
 ### Step 5 — Compute verdict
 
-- **≥ 3 of 4 checks PASS AND Value ≥ 4 → `match`**
-- **2 of 4 PASS → `partial_match`**
-- **0-1 of 4 PASS → `no_match`**
+Let `N` be the count of PASSing balance-sheet checks (0-4).
 
-If verdict is `no_match` AND Value < 4, append the distinctive footer: *"No position warranted on this ticker per margin-of-safety principles. Cash is a valid stance."*
+- **N ≥ 3 AND Value ≥ 4 → `match`**
+- **N ≥ 3 AND Value < 4 → `partial_match`** — balance sheet qualifies but Parallax Value backup fails. Flag in output: "strong balance sheet but absolute Parallax Value below backup threshold — intangibles-era calibration caveat applies."
+- **N = 2 → `partial_match`**
+- **N ≤ 1 → `no_match`**
+
+If **N = 0** AND Value < 4, append the distinctive footer: *"No position warranted on this ticker per margin-of-safety principles. Cash is a valid stance."* (This is the explicit "do nothing" output from the profile body.)
 
 ### Step 6 — Render through output template
 

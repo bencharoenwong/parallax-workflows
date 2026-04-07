@@ -17,14 +17,16 @@ When a user invokes `/parallax-<workflow>`, read the corresponding `skills/<work
 
 ```
 skills/
-├── _parallax/           # Shared: conventions, token costs
+├── _parallax/           # Shared: conventions, token costs, AI profile framework
 ├── should-i-buy/        # Quick stock eval (accepts plain tickers)
 ├── deep-dive/           # Full analysis + AI assessment
-├── due-diligence/       # Financials + Palepu + CG report
+├── due-diligence/       # Financials + Palepu + Parallax research report
 ├── client-review/       # RM meeting prep with talk tracks
 ├── portfolio-checkup/   # Individual investor health check
 ├── morning-brief/       # Fund manager daily brief
-└── ... (12 more)
+├── AI-buffett/          # Buffett-style factor profile
+├── AI-consensus/        # Multi-profile meta-skill
+└── ... (16 more)
 ```
 
 ## Prerequisites

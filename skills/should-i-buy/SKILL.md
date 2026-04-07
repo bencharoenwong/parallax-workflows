@@ -43,12 +43,12 @@ Once RIC is confirmed, call **all of the following simultaneously**:
 | Tool | Parameters | Notes |
 |---|---|---|
 | `get_peer_snapshot` | `symbol` | Factor scores + peer ranking |
-| `get_financials` | `symbol`, statement="summary" | Revenue/income narrative |
-| `get_score_analysis` | `symbol`, weeks=52 | 52-week factor trend |
-| `get_stock_outlook` | `symbol`, aspect="analyst_targets" | Price targets |
-| `get_stock_outlook` | `symbol`, aspect="recommendations" | Buy/hold/sell |
-| `get_stock_outlook` | `symbol`, aspect="risk_return" | Risk/return vs peers |
-| `get_stock_outlook` | `symbol`, aspect="dividends", limit=8 | Dividend history |
+| `get_financials` | `symbol`, `statement="summary"` | Revenue/income narrative |
+| `get_score_analysis` | `symbol` | 52-week factor trend (server default) |
+| `get_stock_outlook` | `symbol`, `aspect="analyst_targets"` | Price targets |
+| `get_stock_outlook` | `symbol`, `aspect="recommendations"` | Buy/hold/sell |
+| `get_stock_outlook` | `symbol`, `aspect="risk_return"` | Risk/return vs peers |
+| `get_stock_outlook` | `symbol`, `aspect="dividends"`, `limit` as int 8 (non-default; default is 20 — see conventions §0.1) | Dividend history |
 | `get_news_synthesis` | `symbol` | Async — don't block output |
 
 ### Step 3 — Macro context
