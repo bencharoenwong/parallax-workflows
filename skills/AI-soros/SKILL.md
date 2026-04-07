@@ -14,7 +14,7 @@ gotchas:
   - list_macro_countries is 1 token; macro_analyst is 5 tokens per market — cap at 5 markets
   - get_telemetry is 1 token but distinctive — it's the second exposure channel for single-ticker mode
   - Single-ticker mode requires BOTH the macro workflow AND a ticker-exposure check via 2 independent channels
-  - DO NOT say "Soros would buy"; always "Soros-style" or "reflexivity lens identifies"
+  - NEVER use first-person impersonation of Soros — always frame as "Soros-style" or "reflexivity lens identifies"
   - The dual-channel logic is load-bearing — single-channel flag is partial, not full match
   - Disclaimer verbatim per output-template.md, substituting "George Soros" for [Investor]
   - build_stock_universe is async (~15-40s) and may time out — fallback per conventions §4
