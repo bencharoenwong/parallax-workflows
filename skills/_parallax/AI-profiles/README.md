@@ -15,14 +15,28 @@ A profile can ship ONLY if:
 3. **Parallax tool coverage:** The workflow's data requirements can be satisfied by Parallax's public tools (no `get_assessment`, no `score_total`, no `get_stock_report`).
 4. **Defensibility test:** If the named investor saw this profile, could they reasonably object that it misrepresents their approach? If yes, the profile is not ready. If the anchor is the investor's own book, this test is automatically passed.
 
-## In-scope profiles (v1 launch set)
+## In-scope profiles (v1 — SHIPPED)
 
-| Profile | Anchor | Workflow shape |
-|---|---|---|
-| `buffett` | Frazzini, Kabiller, Pedersen, "Buffett's Alpha", *Financial Analysts Journal* 2018 | Bottom-up single-stock; +Quality +Value −Momentum +Defensive |
-| `soros` | Soros, *The Alchemy of Finance* (1987); Drobny, *Inside the House of Money* (2006) | Top-down macro → regime themes → ticker exposure (dual-channel) |
-| `greenblatt` | Greenblatt, *The Little Book That Beats the Market* (2006); Gray & Carlisle, *Quantitative Value* (2012) | Mechanical screen: ROC + earnings yield → top-decile basket |
-| `klarman` | Klarman, *Margin of Safety* (1991) | Bottom-up special situations: balance sheet + cash rationality |
+| Profile | Status | Anchor | Workflow shape |
+|---|---|---|---|
+| `buffett` | **SHIPPED** (Phase 1) | Frazzini, Kabiller, Pedersen, "Buffett's Alpha", *FAJ* 2018; reconciled for 21st-century intangibles via Lev & Srivastava (2022) | Bottom-up single-stock; +Quality +Value −Momentum +Defensive |
+| `greenblatt` | **SHIPPED** (Phase 2) | Greenblatt, *The Little Book That Beats the Market* (2006); Gray & Carlisle, *Quantitative Value* (2012) | Mechanical screen: ROC + earnings yield → top-decile basket |
+| `klarman` | **SHIPPED** (Phase 2) | Klarman, *Margin of Safety* (1991) | Bottom-up special situations: balance sheet + cash rationality |
+| `soros` | **SHIPPED** (Phase 2) | Soros, *The Alchemy of Finance* (1987); Drobny, *Inside the House of Money* (2006) | Top-down macro → regime themes → dual-channel ticker exposure |
+| `AI-consensus` | **SHIPPED** (Phase 3) | Meta-skill | Runs all 4 profiles in parallel; surfaces super-majority signal + factor-level agreement |
+
+## v1 token cost summary
+
+| Skill | Typical cost per invocation |
+|---|---|
+| `parallax-AI-buffett` | ~4 tokens |
+| `parallax-AI-greenblatt` (ticker-check) | ~10-15 tokens |
+| `parallax-AI-greenblatt` (universe mode) | ~15-30 tokens |
+| `parallax-AI-klarman` | ~5-7 tokens |
+| `parallax-AI-soros` (single-ticker) | ~25-30 tokens |
+| `parallax-AI-soros` (basket mode) | ~30-40 tokens |
+| `parallax-AI-consensus` (single ticker) | ~45-55 tokens |
+| `parallax-AI-consensus` (basket of 5) | ~150-200 tokens |
 
 ## In-scope v2 candidates (not implemented in v1)
 

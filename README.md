@@ -83,6 +83,26 @@ All portfolio workflows take holdings as JSON: `[{"symbol":"AAPL.O","weight":0.2
 | `/parallax-watchlist-monitor AAPL.O MSFT.O NVDA.O` | Flag score changes across a list |
 | `/parallax-halal-screen AAPL.O` | Shariah compliance check |
 
+### Parallax AI Investor Profiles
+
+A family of standalone skills that apply famous investors' workflow shapes (not just rubric thresholds) to current Parallax data, each anchored in published academic or biographical sources. Output is third-person ("Buffett-style"), always cites the source, and uses only public information.
+
+| Command | Workflow | Anchor |
+|---|---|---|
+| `/parallax-AI-buffett <ticker>` | Bottom-up single-stock; Quality + Value + Defensive factor profile | Frazzini-Kabiller-Pedersen (2018), *FAJ*; reconciled for 21st-century intangibles via Lev-Srivastava (2022) |
+| `/parallax-AI-greenblatt [ticker]` | Magic Formula: ROC + earnings yield → top-decile basket | Greenblatt (2006); Gray-Carlisle (2012) |
+| `/parallax-AI-klarman <ticker>` | Balance-sheet-first margin-of-safety checks (incl. "no position warranted; cash is valid") | Klarman, *Margin of Safety* (1991) |
+| `/parallax-AI-soros [ticker]` | Top-down macro → regime themes → dual-channel ticker exposure | Soros, *Alchemy of Finance* (1987); Drobny (2006) |
+| `/parallax-AI-consensus <ticker or basket>` | Runs all 4 profiles in parallel; surfaces super-majority + factor-level agreement | Meta-skill |
+
+**Framing and legal posture:**
+- All profiles framed in third person ("Buffett-style," never "Buffett says")
+- Each output cites its academic/book source and includes a mandatory non-advice disclaimer
+- AI-inferred from publicly available information only — no proprietary endpoints
+- Not financial advice, not personalized, not endorsed by any named investor
+- See `skills/_parallax/AI-profiles/README.md` for inclusion criteria, v2 candidates, and design rationale
+- Design spec: `docs/superpowers/specs/2026-04-06-parallax-AI-investor-profiles-design.md`
+
 ### Symbol Format
 
 Symbols use Reuters Instrument Code (RIC) format. `/parallax-should-i-buy` auto-resolves plain tickers (AAPL); other workflows require RIC format (AAPL.O).
