@@ -56,25 +56,36 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 
 ### Step 2 — Universe mode workflow
 
-1. Call `build_stock_universe` with the query (default: "US large-cap and mid-cap equities excluding financials and utilities"). Cost: 5 tokens.
-2. For each candidate in the returned universe, call `get_financials(statement=ratios)` in parallel batches to pull ROC and earnings yield. Substitute Parallax's return-on-invested-capital if direct ROC is not available. Cost: 1 token per name.
-3. Rank each candidate on ROC and earnings yield independently. Sum the two ranks. Sort by combined rank ascending.
-4. Take the top 10% as the Magic Formula basket.
-5. For the top 5 basket members, call `get_peer_snapshot` (1 token each) to surface Parallax factor scores as pedagogy.
+**IMPORTANT — query scoping:** `build_stock_universe` is async and broad queries consistently time out in practice (e.g., "US large-cap equities with high ROIC" — confirmed timeout). The default query MUST be sector-scoped or otherwise narrow. Valid defaults:
+
+- `"US large-cap consumer staples"` ← DEFAULT if no theme provided
+- `"US large-cap industrials"`
+- `"US large-cap healthcare"`
+- User-provided theme passed via `--universe "<theme>"`
+
+Do NOT pass broad queries like "US large-cap and mid-cap equities excluding financials and utilities" — they time out. If a user requests a broad screen, execute sector-by-sector and merge the rankings.
+
+1. Call `build_stock_universe` with the sector-scoped query. Cost: 5 tokens. If the call times out, retry ONCE with a narrower query (e.g., drop "large-cap and mid-cap" → "large-cap"). If the retry also times out, return `INSUFFICIENT_UNIVERSE` and decline to render a verdict.
+2. **Cap the universe at top 30 names** by `composite_score` from the `build_stock_universe` response (which already ranks candidates internally). This bounds the token cost for Step 3.
+3. For each candidate in the top-30 cap, call `get_financials(statement=ratios)` in parallel batches to pull ROC and earnings yield. Substitute Parallax's `return_on_invested_capital` if direct ROC is not available. Derive earnings yield as `1 / enterprise_value_ebit`. Cost: 1 token per name, so ~30 tokens max.
+4. Rank each candidate on ROC and earnings yield independently. Sum the two ranks. Sort by combined rank ascending.
+5. Take the top 10% as the Magic Formula basket (top 3 names out of 30).
+6. For the top 3 basket members, call `get_peer_snapshot` (1 token each) to surface Parallax factor scores as pedagogy.
 
 ### Step 3 — Ticker-check mode workflow
 
 1. Resolve ticker per shared conventions.
 2. Call `get_company_info` to identify the ticker's sector/industry.
-3. Call `build_stock_universe` with a sector-based peer universe query.
-4. Run Step 2 sub-steps 2-4 on the peer universe.
-5. Check where the target ticker ranks in the combined distribution.
+3. Call `build_stock_universe` with a sector-based peer universe query derived from the ticker's sector (e.g., if AAPL is in "Technology Hardware," query `"US large-cap technology hardware"`). Sector-scoped queries succeed where broad queries time out.
+4. Cap the peer universe at top 30 names by `composite_score`.
+5. Run Step 2 sub-steps 3-4 on the capped peer universe.
+6. Check where the target ticker ranks in the combined distribution.
 
 ### Step 4 — Cross-validation gate
 
-For ticker-check mode, after `get_peer_snapshot` on the target ticker, cross-check `name` against `get_company_info`. Refuse to render on mismatch per `profile-schema.md §2 Step 2`.
+For ticker-check mode, after `get_peer_snapshot` on the target ticker, cross-check `target_company` (the top-level field — NOT `name` on individual peer rows) against `get_company_info`'s `name`. Refuse to render on mismatch per `profile-schema.md §2 Step 2`.
 
-For universe mode, cross-validation is per-name on the top-5 basket members that get `get_peer_snapshot` calls.
+For universe mode, cross-validation is per-name on the top-3 basket members that get `get_peer_snapshot` calls.
 
 ### Step 5 — Compute verdict (ticker-check mode only)
 

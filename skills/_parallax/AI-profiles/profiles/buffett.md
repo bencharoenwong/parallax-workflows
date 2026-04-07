@@ -24,9 +24,10 @@ output_shape: single_stock_verdict
 tool_sequence:
   - get_company_info
   - get_peer_snapshot
-  - get_financials:statement=summary
-  - get_score_analysis:weeks=52
+  - get_financials
+  - get_score_analysis
   - explain_methodology
+tool_sequence_notes: "get_financials called with statement=summary (default); get_score_analysis called with default weeks=52. Numeric parameters are NOT embedded in tool_sequence strings because the MCP transport serializes them as strings, causing validation errors. Use server defaults or pass as typed params at call site."
 required_factors_present: [quality, value, momentum, defensive]
 thresholds:
   quality: ">= 5"

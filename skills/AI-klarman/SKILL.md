@@ -58,18 +58,20 @@ Per shared conventions (RIC suffix table in `parallax-conventions.md §1`).
 |---|---|---|
 | `get_company_info` | `symbol` | Sector, market cap, for peer group selection |
 | `get_peer_snapshot` | `symbol` | Factor sub-scores (Value used as backup check) |
-| `get_financials` | `symbol`, `statement=balance_sheet`, `periods=4` | Cash, total debt, equity |
-| `get_financials` | `symbol`, `statement=cash_flow`, `periods=4` | FCF across 4 periods |
-| `get_financials` | `symbol`, `statement=ratios`, `periods=4` | D/E, P/E, peer medians where available |
+| `get_financials` | `symbol`, `statement=balance_sheet` | Cash, total debt, equity (4 periods default) |
+| `get_financials` | `symbol`, `statement=cash_flow` | FCF across 4 periods (default) |
+| `get_financials` | `symbol`, `statement=ratios` | D/E, P/E, peer medians where available (4 periods default) |
+
+**IMPORTANT — MCP parameter serialization:** Do NOT pass numeric parameters like `periods=4` as explicit arguments via the `:periods=4` syntax — the MCP transport serializes them as strings, causing "Expected number, received string" validation errors. The server default is 4 periods; rely on it or pass as a properly-typed integer at the individual tool-call site.
 
 ### Step 3 — Pre-render cross-validation gate (MANDATORY per spec §6.4)
 
-After `get_peer_snapshot` returns, cross-check its `name` field against `get_company_info`'s `name`. On mismatch, refuse to render and emit:
+After `get_peer_snapshot` returns, cross-check its `target_company` field (NOT `name` — that field on individual peer rows refers to each peer, not the target) against `get_company_info`'s `name`. On mismatch, refuse to render and emit:
 
 ```
 Error: Symbol cross-validation failed for <ticker>.
   get_company_info returned: "<name_a>"
-  get_peer_snapshot returned:   "<name_b>"
+  get_peer_snapshot target_company: "<name_b>"
 Cannot render Klarman-style profile — possible wrong-company mapping (see parallax-conventions.md §2).
 ```
 
