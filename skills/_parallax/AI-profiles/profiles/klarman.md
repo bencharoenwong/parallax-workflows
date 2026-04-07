@@ -19,9 +19,10 @@ output_shape: single_stock_verdict
 tool_sequence:
   - get_company_info
   - get_peer_snapshot
-  - get_financials:statement=balance_sheet,periods=4
-  - get_financials:statement=cash_flow,periods=4
-  - get_financials:statement=ratios,periods=4
+  - get_financials:statement=balance_sheet
+  - get_financials:statement=cash_flow
+  - get_financials:statement=ratios
+tool_sequence_notes: "get_financials defaults to periods=4. Numeric parameters (periods=4) are NOT embedded in tool_sequence strings because the MCP transport serializes them as strings, causing validation errors. Rely on server defaults or pass as typed params at call site."
 required_factors_present: []
 thresholds:
   net_cash_to_market_cap: ">= -0.2"

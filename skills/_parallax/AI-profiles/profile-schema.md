@@ -73,12 +73,21 @@ Accept a ticker (or short basket for profiles whose `output_shape` is `ranked_ba
 
 ### Step 2: Pre-render cross-validation gate (spec §6.4)
 
-After any scoring tool call (`get_peer_snapshot`, `get_score_analysis`, `quick_portfolio_scores`), cross-check the `name` field returned by the scoring tool against the `name` field returned by `get_company_info` for the same symbol. If names diverge, the dispatcher MUST refuse to render and emit exactly this error:
+After any scoring tool call (`get_peer_snapshot`, `get_score_analysis`, `quick_portfolio_scores`), cross-check the company-identity field returned by the scoring tool against the `name` field returned by `get_company_info` for the same symbol. **Field names differ per tool** — use the correct one for each:
+
+| Tool | Company-identity field to read | Notes |
+|---|---|---|
+| `get_company_info` | `name` | The target symbol's company name |
+| `get_peer_snapshot` | `target_company` (top-level) | NOT the `name` field on individual peer rows — those refer to each peer |
+| `get_score_analysis` | Verify `data[0].symbol` matches the requested RIC; also cross-check company name via `get_company_info` |
+| `quick_portfolio_scores` | `name` per holding row | Cross-check each holding separately |
+
+If names diverge, the dispatcher MUST refuse to render and emit exactly this error:
 
 ```
 Error: Symbol cross-validation failed for <ticker>.
   get_company_info returned: "<name_a>"
-  <scoring_tool> returned:   "<name_b>"
+  <scoring_tool> <field>: "<name_b>"
 Cannot render <display_name> profile — possible wrong-company mapping (see parallax-conventions.md §2).
 ```
 

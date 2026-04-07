@@ -61,19 +61,21 @@ Once the RIC is confirmed, call all of the following simultaneously (per convent
 | Tool | Parameters | Purpose |
 |---|---|---|
 | `get_peer_snapshot` | `symbol` | Factor sub-scores: quality, value, momentum, defensive |
-| `get_financials` | `symbol`, `statement="summary"` | Revenue/income narrative for context |
-| `get_score_analysis` | `symbol`, `weeks=52` | 52-week factor trend direction |
+| `get_financials` | `symbol` (statement defaults to "summary") | Revenue/income narrative for context |
+| `get_score_analysis` | `symbol` (weeks defaults to 52) | 52-week factor trend direction |
+
+**IMPORTANT — MCP parameter serialization:** Do NOT pass numeric parameters like `weeks` or `periods` as explicit arguments via the `:weeks=52` or `:periods=4` syntax — the MCP transport serializes them as strings, causing "Expected number, received string" validation errors. Rely on server defaults (52 weeks, 4 periods) or pass them as properly-typed integer arguments at the individual tool-call site.
 
 ### Step 3 — Pre-render cross-validation gate (MANDATORY per spec §6.4)
 
-After `get_peer_snapshot` returns, cross-check the `name` field returned by `get_peer_snapshot` against the `name` field returned by `get_company_info` for the same symbol.
+After `get_peer_snapshot` returns, cross-check the `target_company` field returned by `get_peer_snapshot` against the `name` field returned by `get_company_info` for the same symbol. (Note: the peer snapshot tool uses `target_company`, not `name`, for the queried stock; the `name` field on individual peer entries refers to each peer.)
 
 **If names diverge:** refuse to render and emit exactly:
 
 ```
 Error: Symbol cross-validation failed for <ticker>.
   get_company_info returned: "<name_a>"
-  get_peer_snapshot returned:   "<name_b>"
+  get_peer_snapshot target_company: "<name_b>"
 Cannot render Buffett-style profile — possible wrong-company mapping (see parallax-conventions.md §2).
 ```
 

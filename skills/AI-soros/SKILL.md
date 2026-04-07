@@ -66,34 +66,39 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 
 ### Step 3 — Basket mode completion (skip if single-ticker)
 
-1. For each identified theme, call `build_stock_universe` with a thematic query (5 tokens each, async).
-2. For top 3-5 names per theme, call `get_peer_snapshot` (1 token each).
-3. Apply cross-validation gate per `profile-schema.md §2 Step 2` for each ticker surfaced.
-4. Rank names within each theme by momentum + macro sensitivity.
-5. Render as `trade_ideas` output (Step 5).
+**IMPORTANT — thematic query scoping:** `build_stock_universe` is async and broad queries time out. Thematic queries MUST be sector-scoped and ideally size-bounded. Good: `"US energy exporters benefiting from dollar weakness"`. Bad: `"companies benefiting from current macro regime"`.
+
+1. For each identified theme, call `build_stock_universe` with a sector-scoped thematic query (5 tokens each, async). If any theme's universe times out, retry ONCE with a narrower version of the query; if it still times out, skip that theme and proceed with remaining themes.
+2. **Cap each theme's candidate list at top 20 names** by `composite_score` from the universe response to bound token cost and avoid excess peer snapshots.
+3. For top 3-5 names per theme (ranked by `composite_score`), call `get_peer_snapshot` (1 token each).
+4. Apply cross-validation gate per `profile-schema.md §2 Step 2` for each ticker surfaced (`target_company` field from peer snapshot).
+5. Rank names within each theme by momentum + macro sensitivity.
+6. Render as `trade_ideas` output (Step 5).
 
 ### Step 4 — Single-ticker mode completion (skip if basket)
 
 1. Call `get_company_info` on the input ticker (1 token) — retrieve sector, industry.
-2. For each identified theme, call `build_stock_universe` with the theme's query (5 tokens each).
-3. **Dual-channel exposure check:**
+2. For each identified theme, call `build_stock_universe` with the theme's sector-scoped query (5 tokens each). Apply the same retry-once-narrower fallback as Step 3.
+3. **Dual-channel exposure check — Channel A has TWO independent sub-paths that are evaluated independently:**
 
-   **Channel A — Industry exposure:**
-   - Does the ticker appear directly in any theme's `build_stock_universe` result?
-   - OR does the ticker's sector/industry classification match a theme's target industry (e.g., ticker is Energy, theme is "Energy benefiting from dollar weakness")?
-   - Output: `FLAGGED` or `NOT_FLAGGED` for channel A.
+   **Channel A — Industry exposure (two sub-paths; either is sufficient to FLAG):**
+   - **Sub-path A1 — Universe membership (requires `build_stock_universe`):** Does the ticker appear directly in any theme's `build_stock_universe` result? If `build_stock_universe` times out or returns empty, A1 is `NOT_FLAGGED` but Channel A is not yet resolved — continue to A2.
+   - **Sub-path A2 — Sector/industry classification match (does NOT require `build_stock_universe`):** Does the ticker's sector/industry classification from `get_company_info` match a theme's target industry or sector? (e.g., ticker is Energy sector, theme is "Energy benefiting from dollar weakness" → MATCH; ticker is Consumer Staples, theme is "Cyclicals benefiting from rate cuts" → NO MATCH.)
+   - **Channel A result:** `FLAGGED` if EITHER A1 OR A2 matches. `NOT_FLAGGED` only if BOTH are negative. A2 is evaluable independently of A1 and does not require the universe build to succeed.
 
    **Channel B — Telemetry basket theme:**
    - Does the ticker fall into any regime basket surfaced by `get_telemetry`?
    - Telemetry baskets are typically named (e.g., "growth-over-value rotation," "dollar regime beneficiaries").
-   - Output: `FLAGGED` or `NOT_FLAGGED` for channel B.
+   - If `get_telemetry` fails (e.g., "Admin org not configured"), Channel B is `UNAVAILABLE` (not `NOT_FLAGGED`). This distinction matters for verdict computation.
+   - Output: `FLAGGED`, `NOT_FLAGGED`, or `UNAVAILABLE` for channel B.
 
-4. Cross-validation gate: after `get_peer_snapshot` (if called during universe resolution), cross-check name per conventions.
+4. Cross-validation gate: after `get_peer_snapshot` (if called during universe resolution), cross-check `target_company` (the top-level field — NOT `name` on individual peer rows) against `get_company_info`'s `name` per conventions.
 
-5. Combine:
+5. Combine verdicts:
    - Both channels `FLAGGED` → verdict `match`
-   - Exactly one channel `FLAGGED` → verdict `partial_match`
-   - Neither flagged → verdict `no_match`
+   - Exactly one channel `FLAGGED`, the other `NOT_FLAGGED` or `UNAVAILABLE` → verdict `partial_match`
+   - Neither flagged (both `NOT_FLAGGED`, or one `NOT_FLAGGED` and one `UNAVAILABLE`) → verdict `no_match`
+   - **Verdict `match` is NEVER reached when Channel B is `UNAVAILABLE`** — maximum single-channel verdict is `partial_match`
 
 ### Step 5 — Render through output template
 
@@ -174,6 +179,6 @@ If `list_macro_countries` fails, derive covered markets from RIC suffix defaults
 
 If `macro_analyst` fails for a subset of markets, proceed with remaining markets as long as ≥2 succeeded.
 
-If `get_telemetry` fails, single-ticker mode cannot perform Channel B. Fall back to industry-exposure-only: verdict becomes `match` (channel A only, noted as "telemetry unavailable"), `partial_match`, or `no_match`. Document the degradation in the output.
+If `get_telemetry` fails (e.g., "Admin org not configured"), single-ticker mode cannot perform Channel B. Fall back to industry-exposure-only evaluation on Channel A. **In this fallback state, maximum verdict is `partial_match`** — a single-channel `FLAGGED` result can never be `match` because `match` requires BOTH channels. Note "Channel B: UNAVAILABLE (telemetry env)" in the output.
 
-If `build_stock_universe` returns no names or times out for any theme, the themes are still surfaced without names. For basket mode, report themes without rankings. For single-ticker mode, channel A is `NOT_FLAGGED`.
+If `build_stock_universe` returns no names or times out for any theme: for basket mode, report themes without rankings. For single-ticker mode, Channel A sub-path A1 (universe membership) is `NOT_FLAGGED`, but sub-path A2 (sector/industry classification match) must STILL be evaluated independently from `get_company_info` data. Channel A overall is `NOT_FLAGGED` only if A2 also fails to match. This is the critical non-regression: a `build_stock_universe` timeout does NOT automatically collapse Channel A to `NOT_FLAGGED`.

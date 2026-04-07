@@ -58,10 +58,13 @@ Unlike other v1 profiles, Soros operates top-down in two distinct modes:
 **Basket / screening mode (no ticker):** Run `list_macro_countries` → `macro_analyst(tactical)` on 3-5 markets in parallel → `get_telemetry` for cross-market regime divergence signals → identify 1-3 regime themes where macro and telemetry agree on direction → `build_stock_universe` for each theme → rank top names per theme. Output: ranked trade-idea list with regime thesis.
 
 **Single-ticker mode (one ticker):** Run the same macro workflow, then check the input ticker against TWO independent exposure channels:
-- **Channel A — Industry exposure:** does the ticker's sector/industry appear in any theme's `build_stock_universe` output?
-- **Channel B — Telemetry basket theme:** does the ticker fall into any of the regime baskets surfaced by `get_telemetry`?
+- **Channel A — Industry exposure (two sub-paths, either sufficient to flag):**
+  - **A1 — Universe membership:** does the ticker appear in any theme's `build_stock_universe` result? (Requires the universe build to succeed.)
+  - **A2 — Sector/industry classification match:** does the ticker's sector/industry from `get_company_info` match a theme's target industry? (Does NOT require the universe build.)
+  - Channel A is flagged if EITHER A1 OR A2 matches. A2 is evaluated independently so a `build_stock_universe` timeout does not collapse Channel A.
+- **Channel B — Telemetry basket theme:** does the ticker fall into any of the regime baskets surfaced by `get_telemetry`? If telemetry is unavailable (e.g., "Admin org not configured" in current env), Channel B is `UNAVAILABLE` (not `NOT_FLAGGED`).
 
-Combined verdict: both channels flagged → `match`; one channel only → `partial_match`; neither → `no_match`.
+Combined verdict: both channels flagged → `match`; one channel only → `partial_match`; neither → `no_match`. **Verdict `match` is never reached when Channel B is `UNAVAILABLE`** — maximum single-channel verdict is `partial_match`.
 
 ## What this profile does NOT capture
 

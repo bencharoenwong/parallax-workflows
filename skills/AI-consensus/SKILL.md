@@ -60,10 +60,12 @@ Call `ToolSearch` with query `"+Parallax"` to load deferred MCP tool schemas bef
 
 For each installed profile, execute its workflow per its dispatcher:
 
-- **Buffett** — `get_company_info` + `get_peer_snapshot` + `get_financials(summary)` + `get_score_analysis(52w)` + apply 4 factor thresholds
-- **Greenblatt** — `get_company_info` + `build_stock_universe` (peer universe) + `get_financials(ratios)` for peers + rank
-- **Klarman** — `get_company_info` + `get_peer_snapshot` + `get_financials(balance_sheet/cash_flow/ratios, 4 periods)` + 4 balance-sheet checks
-- **Soros** — `list_macro_countries` + `macro_analyst(tactical) × N` + `get_telemetry` + `get_company_info` + `build_stock_universe` per theme + dual-channel exposure check
+- **Buffett** — `get_company_info` + `get_peer_snapshot` + `get_financials(statement=summary)` + `get_score_analysis` + apply 4 factor thresholds. DO NOT pass `weeks=52` explicitly — server default is correct; explicit numeric parameters fail with MCP serialization errors.
+- **Greenblatt** — `get_company_info` + `build_stock_universe` (sector-scoped peer universe) + `get_financials(statement=ratios)` for top-30 peers + rank. Universe query MUST be sector-scoped (broad queries time out).
+- **Klarman** — `get_company_info` + `get_peer_snapshot` + `get_financials(statement=balance_sheet)` + `get_financials(statement=cash_flow)` + `get_financials(statement=ratios)` + 4 balance-sheet checks. DO NOT pass `periods=4` explicitly — server default is correct.
+- **Soros** — `list_macro_countries` + `macro_analyst(component=tactical) × N` + `get_telemetry` + `get_company_info` + `build_stock_universe` per theme + dual-channel exposure check (Channel A has two sub-paths: universe membership OR sector/industry match; `get_telemetry` may return `UNAVAILABLE` in current env).
+
+**Cross-validation gate — use the correct field name per tool:** `get_peer_snapshot` returns the target company as `target_company` (top-level), NOT `name`. Cross-check against `get_company_info`'s `name` field.
 
 Profiles run IN PARALLEL where their tool sequences don't share dependencies. Do NOT sequentialize — the whole point is independent cross-profile execution.
 
