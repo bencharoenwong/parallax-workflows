@@ -16,7 +16,7 @@ gotchas:
   - JIT-load _parallax/AI-profiles/profiles/buffett.md for the profile spec (frontmatter + narrative)
   - Cross-validation gate (spec §6.4) is NON-BYPASSABLE — refuse to render on name mismatch
   - Disclaimer language is verbatim — do NOT paraphrase "not financial advice," "AI-inferred," or "consult a qualified financial advisor"
-  - NEVER use first-person impersonation of Buffett (no "Buffett would buy," "Buffett likes," etc.)
+  - NEVER use first-person impersonation of Buffett — always frame as "Buffett-style" or "the BKP 2018 factor profile"
   - Profile is derived from public academic sources only (BKP 2018 + Lev-Srivastava 2022) — no private data, no get_assessment
   - Thresholds are calibrated for 21st-century intangibles-heavy valuations — KO/AXP return match, BRK parent and AAPL return partial (documented)
 ---
