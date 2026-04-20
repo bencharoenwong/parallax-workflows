@@ -49,6 +49,12 @@ If you see "tool not found" errors, the MCP server is not connected.
 
 ## Workflows
 
+### Concierge
+
+| Command | What it does |
+|---|---|
+| `Hi Parallax` (case-insensitive) | Friendly concierge that asks 1-2 questions and routes you to the right `/parallax-*` workflow. The magic front door for everyday users. |
+
 ### Single Stock
 
 | Command | What it does |
