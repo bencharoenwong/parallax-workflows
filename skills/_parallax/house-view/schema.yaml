@@ -59,6 +59,8 @@ tilts:
     china: 0
     uk: 0
     apac_ex_japan: 0
+    taiwan: 0                              # added 2026-04-21 — AI/semi views frequently target TW directly
+    south_korea: 0                         # added 2026-04-21 — AI/semi + nearshoring views target KR directly
 
   # Parallax factor scores. Loader applies as composite-weight multipliers.
   factors:
@@ -86,6 +88,7 @@ tilts:
     energy_transition: 0
     defense: 0
     obesity_drugs: 0
+    reshoring: 0                           # added 2026-04-21 — recurring across reflationary/AI/China-skeptic views
 
   # Hard excludes. Always honored, including over explicit user requests
   # (loader surfaces a block message with the exclusion reason).
@@ -101,13 +104,17 @@ tilts:
     - "Sanctions compliance"
     - "Sanctions compliance"
 
-  # Macro regime view. At ingest, loader maps these to factor tilts and surfaces the mapping
-  # to the uploader for confirmation. See loader.md §"Macro regime mapping".
+  # Macro regime view. OPTIONAL — some views (mandate-driven ESG, geopolitical theses)
+  # don't speak in macro-regime terms. When omitted or any sub-field set to null, loader.md §3
+  # "Macro regime mapping" skips the auto-tilt row for that dimension. Do NOT default to
+  # neutral+neutral when the source is silent — that misrepresents the uploader's thesis.
+  # At ingest, loader maps these to factor tilts and surfaces the mapping to the uploader
+  # for confirmation. See loader.md §"Macro regime mapping".
   macro_regime:
-    growth: neutral                          # one of: expansion | reflationary | neutral | slowing | recessionary
-    inflation: sticky                        # one of: disinflation | benign | sticky | accelerating
-    rates: holding                           # one of: cutting | holding | hiking
-    risk_appetite: neutral                   # one of: risk_on | neutral | risk_off
+    growth: null                             # one of: expansion | reflationary | neutral | slowing | recessionary | null
+    inflation: null                          # one of: disinflation | benign | sticky | accelerating | null
+    rates: null                              # one of: cutting | holding | hiking | null
+    risk_appetite: null                      # one of: risk_on | neutral | risk_off | null
 
 # ---------------------------------------------------------------------------
 # PROSE — verbatim CIO narrative, paired by hash.

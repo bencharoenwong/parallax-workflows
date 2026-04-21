@@ -93,6 +93,8 @@ where `w_x = factor_tilt_multiplier(x)`. Re-rank by composite.
 
 ### Macro regime mapping (auto-applied at ingest, surfaced for confirmation)
 
+**Absent or null sub-fields are not defaulted to neutral.** If `macro_regime` is absent from the view, OR if `macro_regime.growth` is null, skip the auto-tilt row for that dimension entirely — no delta applied, no rationale shown. Mandate-driven (ESG) and geopolitical views typically have no macro regime; forcing `neutral+neutral` would misrepresent the uploader's thesis.
+
 | `macro_regime.growth` + `inflation` | Auto-tilt deltas applied | Rationale shown to uploader |
 |---|---|---|
 | `recessionary` + any | `factors.defensive` +2, `factors.momentum` -1 | "Recessionary regime → overweight defensive factor, underweight momentum within equity." |
@@ -100,6 +102,7 @@ where `w_x = factor_tilt_multiplier(x)`. Re-rank by composite.
 | `reflationary` + any | `factors.value` +1, `factors.momentum` +1 | "Reflationary regime → value + momentum bias." |
 | `expansion` + `benign` | `factors.momentum` +1 | "Healthy expansion → momentum bias." |
 | `neutral` + `neutral` | no auto-tilt | "Neutral regime → factor tilts left to explicit settings." |
+| `null` / absent | no auto-tilt | "Source did not frame a macro regime — factor tilts left to explicit settings." |
 
 These deltas STACK with explicit factor tilts — uploader can override at confirmation gate.
 
@@ -147,10 +150,14 @@ When an active view is loaded and applied, every consumer skill MUST:
 
 2. **Conflict banners** — render inline at the section where the conflict arose (e.g., universe selection, allocation), not bundled at the end.
 
-3. **View-aware disclaimer** (bottom — replaces the standard parallax-conventions §7 disclaimer):
+3. **Ground-truth panel** (REQUIRED when any per-holding score is rendered): next to every factor score, show the company name that the scoring tool actually returned (from `get_peer_snapshot.target_company` or `quick_portfolio_scores.holdings_analyzed[].company_name`) and the input ticker. If the returned name does not match the `get_company_info` name-of-record for the input ticker, flag the row **loudly** (e.g., `⚠ MISMATCH: score attributed to <X>, expected <Y>`). Never display scores as authoritative when the name-mismatch is present — the score belongs to a different company.
+
+4. **Divergence assertion on universe composition** (REQUIRED for skills that call `build_stock_universe` with multi-sector or multi-theme tilts): after the call returns, compute the sector distribution of the result. If the caller requested N≥2 sectors/themes in the tilt-prepended query and the returned distribution has `max_sector_share / total > 0.6`, emit a **fail-loud warning** and either (a) refuse to render the portfolio, or (b) re-issue the call as N parallel per-sector queries and merge. Do not silently proceed. This does NOT apply to legitimately concentrated tilts where only 1 sector/theme was requested (e.g., "100% energy" from a pure-energy view).
+
+5. **View-aware disclaimer** (bottom — replaces the standard parallax-conventions §7 disclaimer):
    > *"This analysis reflects active house view '[view_name]' uploaded by [uploader_role] on [upload_date], effective [effective_date]. Tilts and excludes per the loaded view; conflicts with explicit user scope are flagged inline. Outputs should be reviewed against client suitability before any action."*
 
-When NO active view is loaded, skills run as today — standard output, no preamble, standard disclaimer.
+When NO active view is loaded, skills run as today — standard output, no preamble, standard disclaimer. Rules 3 and 4 (ground-truth panel and divergence assertion) apply whether or not a view is active — they are data-integrity requirements, not view-specific features.
 
 ---
 
