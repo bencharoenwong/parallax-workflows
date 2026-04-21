@@ -104,6 +104,15 @@ tilts:
     - "Sanctions compliance"
     - "Sanctions compliance"
 
+  # Free-form excludes. Category-style exclusions that don't map to a sector/region/theme/RIC
+  # key — e.g., "pre-revenue biotech", "AI-washing", "SPACs", "entity list", "CCP-affiliated SOEs".
+  # Loader applies as post-universe case-insensitive substring filters against each candidate's
+  # company_name + description + sector string from get_company_info. Uploader confirms pattern
+  # breadth at the ingest confirmation gate (over-broad patterns like "tech" flagged as warning).
+  # See loader.md §3 "Free-form excludes handling". Included in view_hash computation.
+  excludes_freeform: []                      # e.g., ["spacs", "pre-revenue biotech", "entity list"]
+  exclude_reasons_freeform: []               # parallel array — same length as excludes_freeform
+
   # Macro regime view. OPTIONAL — some views (mandate-driven ESG, geopolitical theses)
   # don't speak in macro-regime terms. When omitted or any sub-field set to null, loader.md §3
   # "Macro regime mapping" skips the auto-tilt row for that dimension. Do NOT default to
@@ -156,11 +165,17 @@ extraction:
 # ===========================================================================
 # view_hash computation
 # ===========================================================================
-# canonical_yaml_body = the `tilts` and `excludes` sections only,
-#   serialized with sorted keys and stripped of comments + empty fields.
+# canonical_yaml_body = the entire `tilts` block only (all sub-keys: sectors,
+#   regions, factors, styles, themes, excludes, exclude_reasons, excludes_freeform,
+#   exclude_reasons_freeform, macro_regime), serialized with sorted keys and
+#   stripped of comments. Empty arrays and null scalars are PRESERVED (they
+#   convey intent: "no freeform excludes" vs "freeform excludes not considered").
 # view_hash = sha256(canonical_yaml_body, encoding=utf-8).hexdigest()
 #
 # The hash deliberately excludes metadata/extraction/prose so that:
 # - Re-saving the same view (different upload_timestamp) preserves the hash.
 # - Prose edits do not invalidate the pairing UNLESS the YAML body actually changed.
 # - Phase 1 Supabase storage can de-duplicate views by view_hash across orgs.
+#
+# Two views that differ ONLY in `excludes_freeform` content WILL produce different
+# hashes — freeform excludes are load-bearing for mandate-driven / geopolitical views.
