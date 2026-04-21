@@ -168,7 +168,7 @@ entries:
     view_family: mandate-driven
     expected:
       metadata:
-        view_name_contains: ["sustainable", "ESG"]
+        view_name_contains: ["sustainable"]         # source title: "Sustainable Equity Mandate" — "ESG" is category, not title
         effective_date: "2026-04-01"
         valid_through: "2026-06-30"
       tilts:

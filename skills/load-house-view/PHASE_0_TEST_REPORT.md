@@ -156,9 +156,11 @@ Blocked by Q-A and Q-B findings. Q-D requires a trustworthy universe (Q-A) AND t
 - Mean confidence ≥ 0.6 on real PDFs
 - No critical-tilt field (sectors, excludes, macro_regime) below 0.5
 
-**Status:** ☐ Not yet run | ☐ GREEN | **☒ YELLOW** (markdown samples clear pass criteria, but `macro_regime` dips below 0.5 on 2 of 5 samples) | ☐ RED
+**Status (initial pass, pre-schema-fix):** ☐ Not yet run | ☐ GREEN | ☒ YELLOW (markdown samples clear pass criteria, but `macro_regime` dips below 0.5 on 2 of 5 samples) | ☐ RED
 
-**Findings per sample:**
+**Status (re-run 2026-04-21 after schema loosening + regression corpus):** **☒ GREEN** — all 5 markdown samples pass at mean-of-means 0.87.
+
+**Findings per sample — initial pass (pre-fix):**
 
 | Sample | Mean confidence | Lowest field | Notes |
 |---|---|---|---|
@@ -167,10 +169,22 @@ Blocked by Q-A and Q-B findings. Q-D requires a trustworthy universe (Q-A) AND t
 | AI-concentrated.md | 0.81 | excludes (0.55) | Thematic view — `themes.ai_infrastructure +2` is trivially high confidence. Region mapping awkward: Taiwan/Korea collapse into `apac_ex_japan` even though they're the explicit target (no schema key for Taiwan-only). "AI-washing" exclude is a qualitative screen, not a schema-compatible exclude. Macro regime not explicit — inferred expansion + benign from pro-cyclical framing. |
 | ESG-screened.md | 0.73 | macro_regime (0.40), styles (0.40) | Mandate-driven view: excludes are long and explicit (0.90 confidence) but many entries (tar sands, Arctic O&G, thermal coal, adult entertainment, for-profit detention, Norges Bank list) are non-standard schema keys. **Macro regime absent from source** — the view is compliance/thematic, not macro. Extraction must default to neutral; schema should treat macro_regime as optional. |
 | China-skeptic.md | 0.67 | macro_regime (0.30) | Geopolitical view — strongest region tilts of any sample (China -2, India +2, Mexico +2, Japan +1, Vietnam/Indonesia/Malaysia +1). Excludes: US Entity List Chinese names + HK CCP SOEs don't fit the current schema (they're dynamic lists, not static RIC entries). **Macro regime entirely absent from source** — this is a geopolitical thesis, not a macro regime call. Schema rigidity forces false extraction here. |
-| Real PDF #1: _name_ | _to be filled_ | _to be filled_ | _to be filled_ |
-| Real PDF #2: _name_ | _to be filled_ | _to be filled_ | _to be filled_ |
 
-**Aggregate:** mean-of-means across 5 markdown samples = **0.77** (above 0.7 pass threshold). However, 2 of 5 samples dip below 0.5 on `macro_regime` because the CIO source doesn't speak in macro-regime terms (ESG-screened is mandate-driven, China-skeptic is geopolitical). **This violates the "no critical-tilt field below 0.5" criterion.**
+**Aggregate (pre-fix):** mean-of-means across 5 markdown samples = **0.77** (above 0.7 pass threshold). However, 2 of 5 samples dipped below 0.5 on `macro_regime` because the CIO source doesn't speak in macro-regime terms (ESG-screened is mandate-driven, China-skeptic is geopolitical). **This violated the "no critical-tilt field below 0.5" criterion.**
+
+**Findings per sample — re-run (2026-04-21 post-fix, via regression-corpus runner):**
+
+| Sample | Mean confidence | Lowest field | Notes |
+|---|---|---|---|
+| 2026-reflationary.md | 0.87 | regions (0.80) | Unchanged — already passing. |
+| recession-defensive.md | 0.88 | regions (0.80) | themes confidence moved from 0.50 → 0.95 (high-confidence zero, no thematic language in source) under new schema discipline that allows confidence to reflect "correctly extracted as zero" rather than "forced to zero due to absent key." |
+| AI-concentrated.md | 0.84 | macro_regime (0.70) | Taiwan / South Korea now captured directly via new region keys (was 0.85 previously; now at 0.90). Macro regime partial (expansion+benign+risk_on explicit, rates null). |
+| ESG-screened.md | **0.90** | regions (0.80) | **macro_regime: 0.40 → 0.92** under new schema — extractor produces `null` sub-fields with high confidence that null is the correct extraction. Canonical Q-E fix validation. |
+| China-skeptic.md | **0.88** | sectors (0.75) | **macro_regime: 0.30 → 0.92.** `reshoring` theme now captured directly via new schema key. |
+| Real PDF #1: _name_ | _to be filled_ | _to be filled_ | _Deferred to Phase 1 promotion gate_ |
+| Real PDF #2: _name_ | _to be filled_ | _to be filled_ | _Deferred to Phase 1 promotion gate_ |
+
+**Aggregate (post-fix):** mean-of-means = **0.87** (up from 0.77). All 5 markdown samples pass regression corpus: 5/5 PASS / 0 FAIL. macro_regime minimum now 0.70 (AI-concentrated partial) — no field below 0.5 on any sample. Q-E criterion "no critical-tilt field below 0.5" now satisfied.
 
 **Action if RED:** Revise the extraction prompt in `load-house-view/SKILL.md` Step 2. If confidence is structurally low after prompt iteration, the schema is too rigid for prose input — consider relaxing to allow free-form tilts with optional structured fields, or require uploaders to fill a template. **Concrete recommendations:**
 1. Make `tilts.macro_regime` optional — when source is mandate-driven or geopolitical, skip rather than force a neutral default that misrepresents the uploader's thesis. Update loader.md §3 to treat missing `macro_regime` as "no auto-tilt applied" (not as `neutral+neutral`).

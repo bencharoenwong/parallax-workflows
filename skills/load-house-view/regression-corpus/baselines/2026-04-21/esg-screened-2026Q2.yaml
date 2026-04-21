@@ -1,0 +1,73 @@
+# Baseline extraction for regression-corpus entry: esg-screened-2026Q2
+# Source: skills/load-house-view/samples/ESG-screened.md
+# Produced by: claude-opus-4-7 (manual Step-2 extraction per SKILL.md)
+# Produced at: 2026-04-21
+# Schema version: post-2026-04-21 (macro_regime nullable — CRITICAL for this entry)
+
+entry_id: esg-screened-2026Q2
+
+metadata:
+  view_name: "Sustainable Equity Mandate — Q2 2026 Positioning"
+  uploader_role: CIO                         # mandate-level view; CIO + CCO approval cited
+  effective_date: "2026-04-01"
+  valid_through: "2026-06-30"
+
+tilts:
+  sectors:
+    information_technology: 1                # "overweight technology — large-cap screens well"
+    health_care: 1
+    energy: -1                               # eligible universe only; stranded-asset concern
+    financials: -1                           # CRE transition risk
+
+  regions:
+    europe: 1
+    us: 0
+    em_ex_china: -1                          # "except select renewable infra plays in Brazil/India/SA"
+
+  factors:
+    quality: 1
+    defensive: 1
+    momentum: 0                              # explicit "neutral momentum, neutral value"
+    value: 0
+
+  themes:
+    energy_transition: 2                     # "overweight clean energy infrastructure"
+
+  styles: {}
+
+  # CRITICAL: This view is mandate-driven, not macro-framed. Post-2026-04-21 schema allows
+  # null sub-fields; loader.md §3 skips auto-tilt on null. Previously extractor forced
+  # neutral+neutral default → 0.40 confidence. Now produces null → high confidence.
+  macro_regime:
+    growth: null
+    inflation: null
+    rates: null
+    risk_appetite: null
+
+  excludes: [tobacco, weapons, firearms]
+  excludes_freeform:
+    - "tar sands and Arctic oil & gas (>5% revenue)"
+    - "thermal coal mining/generation/services (>5% revenue)"
+    - "adult entertainment (material revenue)"
+    - "for-profit detention / private prisons / immigration detention contractors"
+    - "controversial weapons (cluster munitions, mines, bio/chem, nuclear per UN Convention)"
+    - "civilian firearms manufacturers and primary distributors"
+    - "Norges Bank divestment list (active/unresolved)"
+
+extraction_confidence:
+  sectors: 0.85
+  regions: 0.80
+  factors: 0.92                              # factor neutrals are explicit in source
+  styles: 0.95                               # high-conf zero
+  themes: 0.88
+  excludes: 0.95                             # long explicit list
+  macro_regime: 0.92                         # HIGH confidence that it's null (mandate-driven view)
+
+extraction_notes: |
+  Mandate-driven view. Source is entirely compliance / ESG / thematic — contains zero macro
+  regime language. Under post-2026-04-21 schema, macro_regime.* = null produces 0.92
+  confidence (high confidence that null is the correct extraction) vs. prior 0.40 forcing
+  neutral values. This is the canonical test case for Q-E schema loosening.
+  em_ex_china hedged ("except select renewable infra plays") captured as -1 with confidence
+  reduction. Extensive excludes_freeform list — this entry tests schema tolerance for
+  non-standard ESG categories.
