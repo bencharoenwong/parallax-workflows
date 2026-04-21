@@ -7,6 +7,8 @@ negative-triggers:
   - Single stock analysis → use /parallax-should-i-buy
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for fallback patterns and parallel execution
+  - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §3 (multipliers), §4 (conflict resolution), §5 (output rendering), §6 (audit). Tilts in the view become trade-direction signals: rebalancing should move portfolio toward view-tilted weights.
+  - When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
   - JIT-load ../client-review/references/recommendation-matrix.md for priority classification. If missing, use inline fallback: High=3+ flags (trim/exit), Medium=2 flags (investigate/trim), Low=1 flag (monitor/hold)
   - Health flags feed directly into trade action determination — High priority = strong trim/exit
   - analyze_portfolio with lens "performance" and "concentration" gives the full diagnostic. WARNING: responses often exceed 180K chars (daily time series). If output is truncated or too large, fall back to `check_portfolio_redundancy` (concentration) + `quick_portfolio_scores` (factor tilt)
@@ -29,7 +31,11 @@ Generate prioritized trade recommendations using health flags, macro context, an
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, fallback patterns, and macro reasoning. JIT-load `../client-review/references/recommendation-matrix.md` for the priority system.
+Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, fallback patterns, and macro reasoning. JIT-load `_parallax/house-view/loader.md` for active-view validation and tilt application. JIT-load `../client-review/references/recommendation-matrix.md` for the priority system.
+
+### Batch 0 — Load Active House View (before Batch A)
+
+Per `loader.md` §1-§2: read view if present, validate hash and expiry. If view present, capture tilt vector + excludes. The view's tilts define **direction of rebalance** — current weights that diverge from view-tilted weights become rebalance candidates beyond the standard health-flag triggers. If validation fails or no view present, run rebalance using only health flags + macro context.
 
 ### Batch A — Current state (parallel)
 
@@ -49,31 +55,35 @@ Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-c
 ### Batch C — Health flags + trade decisions
 
 1. Evaluate 5 health flags per holding: Low Score (≤5.0), Concentration (>15%), Redundancy (≥2 pairs), Value Trap (value ≤3.0), Macro Misalignment.
-2. Assign priority per recommendation-matrix.md:
-   - **High** (3+ flags): Strong trim/exit candidate
+2. **House-view alignment check** (if view active): for each holding, compute view-tilted target weight using loader.md §3 multipliers; flag holdings >25% off target as "View Misalignment." For holdings on `tilts.excludes`, flag as "View Excluded — must trim."
+3. Assign priority per recommendation-matrix.md (count View Misalignment / View Excluded as flags):
+   - **High** (3+ flags or View Excluded): Strong trim/exit candidate
    - **Medium** (2 flags): Investigate + potential trim
    - **Low** (1 flag): Monitor, hold unless constraints violated
-3. Determine actions combining flags + score trends + macro:
-   - **Trim/Exit:** High priority holdings, or declining scores + any flag
-   - **Hold:** Stable/improving scores, no flags
-   - **Reweight:** Concentration flag only, scores otherwise healthy
+4. Determine actions combining flags + score trends + macro + view tilts:
+   - **Trim/Exit:** High priority holdings, View Excluded, or declining scores + any flag
+   - **Hold:** Stable/improving scores, no flags, view-aligned
+   - **Reweight:** Concentration flag only, OR view-tilted toward different weight than current
    - **Investigate:** Medium priority but ambiguous signal (suggest `/parallax-deep-dive`)
-4. For trim candidates: call `build_stock_universe` with a theme matching the portfolio's factor profile. Score candidates with `get_peer_snapshot`.
+5. For trim candidates: call `build_stock_universe` with a theme matching the portfolio's factor profile AND view tilts (e.g., "high-quality defensive names" if view tilts +2 quality / +2 defensive). Score candidates with `get_peer_snapshot`. Filter against `tilts.excludes`.
 
 ### Batch D — Validation
 
-Call `quick_portfolio_scores` on the proposed new allocation to verify improvement.
+Call `quick_portfolio_scores` on the proposed new allocation to verify improvement. If view active, verify proposed allocation aligns with view tilts within 10% per sector. Append audit log entry per loader.md §6.
 
 ## Output Format
 
-- **Current Portfolio Assessment** (factor scores, concentration issues, redundancy)
+- **House View Preamble** (only if view active) — render per loader.md §5
+- **Current Portfolio Assessment** (factor scores, concentration issues, redundancy; if view active, current alignment vs view-tilted target)
 - **Health Status** (Healthy/Monitor/Attention badge with flag summary)
-- **Health Flags** (table: each triggered flag per holding with priority level)
+- **Health Flags** (table: each triggered flag per holding with priority level; View Misalignment / View Excluded shown as their own flag types)
 - **Macro Context** (relevant market outlook, sector tilt implications for rebalancing)
 - **Score Momentum** (table: each holding's score trend — improving/stable/declining)
-- **Trade Recommendations** (table: Priority | Action | Symbol | Current Weight | Target Weight | Rationale — every recommendation cites a specific flag or finding)
-- **Replacement Candidates** (if trimming, scored alternatives)
-- **Before/After Comparison** (factor scores: current vs. proposed)
+- **Trade Recommendations** (table: Priority | Action | Symbol | Current Weight | Target Weight | Rationale — every recommendation cites a specific flag or finding; if view active, "Rationale" includes view-tilt direction)
+- **Replacement Candidates** (if trimming, scored alternatives; filtered against tilts.excludes if view active)
+- **Before/After Comparison** (factor scores: current vs. proposed; if view active, alignment-to-view metric included)
 - **Implementation Notes** (suggested execution order, liquidity considerations)
+
+If active view: use the view-aware disclaimer per loader.md §5. Otherwise:
 
 > These are analytical outputs based on Parallax factor scores, not investment advice.
