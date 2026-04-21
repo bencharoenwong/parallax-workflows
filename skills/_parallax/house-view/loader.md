@@ -66,7 +66,13 @@ Run these checks in order. On any failure, behave per "Failure handling" below �
 | **-1** (UW) | De-rank | 0.75× | |
 | **-2** (Big UW) | Exclude unless explicitly named by user | 0.50× | |
 
-**Application:** when calling `build_stock_universe`, prepend tilt context to query (e.g., "exclude tech, overweight defensive sectors and small-cap utilities"). After candidates return, re-rank by `score × tilt_multiplier(holding's sector/region/theme)`.
+**Application (Legacy/V1):** when calling `build_stock_universe`, prepend tilt context to query (e.g., "exclude tech, overweight defensive sectors and small-cap utilities"). After candidates return, re-rank by `score × tilt_multiplier(holding's sector/region/theme)`.
+
+**Application (`PARALLAX_LOADER_V2=1`):** 
+1. **Decompose tilts**: For a view with $N$ non-zero sector/theme tilts, issue $N$ parallel `build_stock_universe` calls with single-scope queries (e.g., if tilts are +1 energy, +2 financials, query 1 = "energy [user_thesis]", query 2 = "financials [user_thesis]").
+2. **Merge & Dedupe**: Merge the $N$ result sets by RIC.
+3. **Re-rank**: For each merged candidate, apply the composite `multiplier = m_sector × m_region × m_theme` and re-rank the final deduplicated list.
+This pattern prevents "universe collapse" where the upstream tool only returns names from one of the requested sectors.
 
 ### Factor tilts (re-weight Parallax composite)
 
@@ -78,11 +84,18 @@ Run these checks in order. On any failure, behave per "Failure handling" below �
 | **-1** | 0.50× |
 | **-2** | 0.25× |
 
-**Application:** For each candidate's factor scores from `get_peer_snapshot` or `quick_portfolio_scores`, compute weighted composite:
+**Application (Legacy/V1):** For each candidate's factor scores from `get_peer_snapshot` or `quick_portfolio_scores`, compute weighted composite:
 ```
 composite = (w_v × value + w_q × quality + w_m × momentum + w_d × defensive) / (w_v + w_q + w_m + w_d)
 ```
 where `w_x = factor_tilt_multiplier(x)`. Re-rank by composite.
+
+**Application (`PARALLAX_LOADER_V2=1`):** 
+Always prefer per-holding `get_peer_snapshot` aggregation over batch `quick_portfolio_scores`. 
+1. For each holding, call `get_peer_snapshot(symbol)` and `get_company_info(symbol)` in parallel.
+2. Cross-validate `target_company` (from snapshot) vs `name` (from info).
+3. If mismatch, flag row as ⚠ MISMATCH and exclude from aggregate calculations.
+4. Compute `portfolio_factor[f] = Σ(weight_i × snapshot_i.factor[f]) / Σ(weight_i)` across valid rows.
 
 ### Style semantics (per dimension)
 
@@ -108,6 +121,18 @@ These deltas STACK with explicit factor tilts — uploader can override at confi
 
 **Equity-only scope note (always shown at ingest):**
 > "This system applies house view within equity portfolios only. Macro regime signals are interpreted as within-equity factor tilts (e.g., recession → overweight DEFENSIVE). Cross-asset allocation instructions (cash, bonds, alternatives) are outside scope."
+
+### Free-form excludes handling
+
+`tilts.excludes_freeform` captures category-style exclusions that don't map to a sector / region / theme / RIC key — common in mandate-driven (ESG, "no SPACs", "no pre-revenue biotech") and geopolitical views (Entity List, CCP-affiliated SOEs, "speculative-grade refinancing risk").
+
+**Application:** After universe construction (`build_stock_universe` or any other candidate source), for each candidate call `get_company_info` and test whether any freeform pattern appears as a **case-insensitive substring** in the concatenation of `company_name + description + sector + industry`. If any pattern matches, drop the candidate and surface the block message with the paired `exclude_reasons_freeform` entry:
+
+> "Excluded [SYMBOL]: matched freeform pattern '[pattern]' — [reason]. Override requires editing the view."
+
+**Over-broad patterns:** At ingest, the confirmation gate warns if any freeform pattern is shorter than 4 characters or matches >20% of a sample universe (over-broad risk). Uploader can acknowledge and proceed.
+
+**Precedence:** Freeform excludes run after `tilts.excludes` (RIC/sector/region/theme blocks) and before tilt-multiplier ranking. A candidate blocked by either is not scored, not ranked, not rendered — only surfaced in the block message.
 
 ---
 

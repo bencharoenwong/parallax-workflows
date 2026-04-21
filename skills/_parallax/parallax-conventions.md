@@ -4,7 +4,19 @@ Shared patterns for all `parallax-*` skills. JIT-load from any skill that calls 
 
 ---
 
-## 0. MCP Tool Loading
+## 0. Feature Flags
+
+Gemini CLI uses feature flags to roll out architectural changes. These can be set via environment variables or documented at the session start.
+
+- **`PARALLAX_LOADER_V2=1`** (Phase 0 rewrite):
+  - **Universe Construction**: Replaces single-shot tilt-prepended `build_stock_universe` calls with N parallel per-tilt calls + client-side merge/dedupe. Required for multi-sector/multi-theme views to prevent universe collapse (Q-A).
+  - **Portfolio Scoring**: Replaces batch `quick_portfolio_scores` with per-holding `get_peer_snapshot` aggregation + `get_company_info` cross-validation. Required to bypass upstream symbol-mapping bugs (Q-B).
+  - **Active House View**: When a house view is active, V2 patterns are MANDATORY to ensure tilt integrity.
+
+---
+
+## 0.1 MCP Tool Loading
+
 
 Parallax tools (`mcp__claude_ai_Parallax__*`) are deferred MCP tools. Before the first Parallax tool call in any session, call `ToolSearch` with query `"+Parallax"` to load the tool schemas. Without this step, tool calls will fail with "tool not found."
 
@@ -69,7 +81,9 @@ Scoring tools (`get_peer_snapshot`, `get_score_analysis`, `quick_portfolio_score
 2. If names diverge, warn the user clearly and treat `get_company_info` as the source of truth.
 3. Do not present scores from a mismatched company as belonging to the intended security.
 
-**For portfolio workflows (`quick_portfolio_scores`):** Cross-check company names for each holding in the response. If any holding maps to the wrong company, re-score that holding individually via `get_peer_snapshot` and note the discrepancy.
+**For portfolio workflows (`PARALLAX_LOADER_V2=1`):** Use per-holding `get_peer_snapshot` aggregation in parallel with `get_company_info` cross-validation. This is the **primary robust path**. Do NOT rely on `quick_portfolio_scores` for portfolio factor profiling when a house view is active.
+
+**For portfolio workflows (Legacy/V1):** Cross-check company names for each holding in the `quick_portfolio_scores` response. If any holding maps to the wrong company, re-score that holding individually via `get_peer_snapshot` and note the discrepancy.
 
 **Hong Kong / numeric codes require extra caution:** HK uses numeric codes that can collide across H-shares, red chips, and local listings. Always cross-validate `.HK`, `.T`, `.TW`, `.KS` symbols.
 
@@ -112,13 +126,13 @@ Note: "fast-response" refers to latency, not token cost. Token costs vary per to
 - **0-1 aspects return data** → Flag: "Insight card may be materially incomplete for this security."
 
 ### Portfolio scoring coverage
-If `quick_portfolio_scores` covers **<50% of holdings by weight**, execute mixed-exchange fallback:
+If `quick_portfolio_scores` (Legacy/V1) covers **<50% of holdings by weight**, execute mixed-exchange fallback:
 1. Split holdings by exchange suffix.
 2. Score each exchange group separately.
 3. Merge into portfolio-weighted result.
 4. Note: "Scoring used split-and-merge due to partial coverage."
 
-If `quick_portfolio_scores` returns **"Could not score any holdings"** for ALL positions (not just partial coverage), fall back to individual `get_peer_snapshot` calls per holding to get current factor scores. Report degraded coverage — trend data will be unavailable.
+**For `PARALLAX_LOADER_V2=1` (Preferred path):** Always use parallel per-holding `get_peer_snapshot` aggregation. If a specific holding returns "No scores available," retry once. If it still fails, skip the holding's contribution to the weighted average and report degraded coverage.
 
 If `check_portfolio_redundancy` covers **<60% of holdings**, flag redundancy results as **"Low confidence — limited coverage."**
 

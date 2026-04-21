@@ -10,7 +10,7 @@ negative-triggers:
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks
   - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §5 (output rendering), §6 (audit). For attribution, the view provides additional context: a drawdown in a view-tilted-overweight sector is "expected pain from view exposure"; a drawdown in a view-tilted-underweight sector raises "why was this still held?" — surface in the verdict.
-  - When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
+  - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
   - Holdings must be in RIC format with weights summing to ~1.0
   - export_price_series returns daily OHLCV — use close prices for return calculation
   - get_telemetry regime_tag and mechanism fields are the key attribution inputs
@@ -60,7 +60,11 @@ Compare computed return against the client's stated figure. If they diverge sign
 |---|---|---|
 | `get_telemetry` | fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences | Current market regime — is the whole market down? |
 | `list_macro_countries` | — | Check coverage for home markets |
-| `quick_portfolio_scores` | `holdings` | Current factor profile (may fail for niche portfolios — not blocking) |
+| `get_peer_snapshot` | per holding | **Primary scoring source** for `PARALLAX_LOADER_V2=1`. Aggregate scores client-side per `loader.md` §3b. |
+| `get_company_info` | per holding (parallel) | **Ground-truth oracle** per loader.md §5 rule 3 (required universally). Records `expected_name` for mismatch check. |
+| `quick_portfolio_scores` | `holdings` | **Legacy/V1 path only**. Do NOT use if `PARALLAX_LOADER_V2=1` and view active. |
+
+**After Step 2**: cross-check returned names against `get_company_info` names per loader.md §5 rule 3. For `PARALLAX_LOADER_V2=1`, any mismatch in `get_peer_snapshot` is flagged ⚠ MISMATCH and excluded from aggregate calculations. For V1, any mismatch in `quick_portfolio_scores` is re-scored individually.
 
 After Batch: call `macro_analyst` with component="tactical" for each home market (cap at 2). This establishes the macro backdrop: is this a market-wide drawdown, sector rotation, or idiosyncratic?
 
@@ -124,7 +128,7 @@ Based on the verdict:
 
 ## Output Format
 
-- **House View Preamble** (only if view active) — render per loader.md §5
+- **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (preamble)
 - **What Happened** (computed portfolio return over the period, compared to client's stated figure; 1-sentence summary of the loss magnitude)
 - **Performance Attribution** (table: each holding with return, weighted contribution, and primary driver tag — Market / Factor / Stock-Specific; if view active, add "View Exposure" tag — OW / Neutral / UW per the view)
 - **Market & Regime Context** (regime tag, mechanism, 2-3 sentences on what's driving markets; is the broad market down too?)
@@ -137,6 +141,6 @@ Append audit log entry per loader.md §6.
 
 Keep tone calm and explanatory. The client is worried — the output should reduce anxiety with clarity, not amplify it with jargon.
 
-If active view: end with the view-aware disclaimer per loader.md §5. Otherwise:
+If active view: end with the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
 
 > *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
