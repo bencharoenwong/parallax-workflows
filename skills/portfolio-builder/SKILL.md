@@ -35,20 +35,21 @@ Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-c
 
 0. **Load Active House View** — Per `loader.md` §1-§2: read view if present, validate hash and expiry, capture tilt vector + excludes + extraction-confidence warnings. If validation fails, run without view per loader.md §2 "Failure handling." If no view present, proceed normally.
 1. **Build Universe** — Resolve user thesis vs. view per loader.md §4. If view present, prepend tilt context to the query (e.g., "exclude tech, overweight defensive sectors"). Call `build_stock_universe`. Force-include any sectors/themes with view tilt = +2 if absent from initial candidates.
-2. **Score Top Picks** — For top N (default 10), call `get_peer_snapshot` per candidate.
+1a. **Divergence assertion** (per loader.md §5 rule 4) — if the tilt-prepended query named N≥2 sectors/themes, compute `max_sector_share / total` in returned candidates. If > 0.6, emit fail-loud warning: "universe collapsed to single sector despite multi-sector request." Do NOT proceed with a collapsed universe — either (a) refuse to render and surface the warning to the user, or (b) re-issue as N parallel per-sector `build_stock_universe` calls and merge/dedupe. Known upstream limitation until loader-pattern rewrite lands.
+2. **Score Top Picks** — For top N (default 10), call `get_peer_snapshot` per candidate. **Prefer per-holding `get_peer_snapshot` aggregation over batch `quick_portfolio_scores`** for portfolio factor profile — the batch tool has a symbol-mapping bug (see parallax-conventions.md §2) that mis-attributes scores to the wrong company for most non-US tickers. Only use `quick_portfolio_scores` after every returned `company_name` has been cross-validated against `get_company_info`.
 3. **Rank & Select** — If view present, re-rank by `composite × multiplier(holding's sector/region/theme)` per loader.md §3 multiplier tables. Apply factor tilt re-weighting per loader.md §3 "Factor tilts." Drop candidates that match `tilts.excludes` (surface block message per loader.md §4 exception). Select top holdings (default 5-8).
-4. **Redundancy Check** — Call `check_portfolio_redundancy` with proposed equal-weight allocation.
-5. **Optimize Weights** — Adjust weights based on scores, redundancy flags, sector balance, AND tilt multipliers. Cap any single sector at 2× its neutral exposure when view is +2 (loader.md §3 cap rule). Call `quick_portfolio_scores` to verify final factor profile.
+4. **Redundancy Check** — Call `check_portfolio_redundancy` with proposed equal-weight allocation. **Sanity-check the response**: if the portfolio has >60% concentration in a single sector but `sector_concentration: {}` is empty and `"well-diversified"` is returned, the tool's concentration detection has silently failed — fall back to computing concentration client-side from per-holding sectors and flag the tool bug in output.
+5. **Optimize Weights** — Adjust weights based on scores, redundancy flags, sector balance, AND tilt multipliers. Cap any single sector at 2× its neutral exposure when view is +2 (loader.md §3 cap rule). For factor profile verification, aggregate per-holding `get_peer_snapshot` scores weighted by portfolio weight (do NOT rely on `quick_portfolio_scores` unless all company names validated).
 6. **Validate** — Call `analyze_portfolio` on the final allocation. Append audit log entry per loader.md §6.
 
 ## Output Format
 
 - **House View Preamble** (only if view active) — render per loader.md §5
 - **Investment Thesis** (restate and refine the user's intent; note any view-vs-thesis conflicts inline per loader.md §4)
-- **Universe Built** (how many candidates, key sectors; note force-includes from +2 tilts and excludes applied)
-- **Selected Holdings** (table: symbol, name, sector, total score, weight, key factor strengths; if view active, include a "Tilt Effect" column showing the multiplier applied to each holding)
-- **Portfolio Factor Profile** (VALUE, QUALITY, MOMENTUM, DEFENSIVE scores)
-- **Redundancy Notes** (any overlap flagged and how it was resolved)
+- **Universe Built** (how many candidates, key sectors; note force-includes from +2 tilts and excludes applied; surface divergence-assertion result per loader.md §5 rule 4)
+- **Selected Holdings** (table: `input_ticker`, `returned_name` (from scoring-tool response), `expected_name` (from get_company_info), sector, total score, weight, key factor strengths; if view active, include a "Tilt Effect" column showing the multiplier applied to each holding. **Flag any row where `returned_name ≠ expected_name` with ⚠ MISMATCH and do not treat that row's scores as authoritative** — per loader.md §5 rule 3.)
+- **Portfolio Factor Profile** (VALUE, QUALITY, MOMENTUM, DEFENSIVE scores — computed as weighted aggregate of per-holding `get_peer_snapshot` scores; note `quick_portfolio_scores` batch output only if all names cross-validated)
+- **Redundancy Notes** (any overlap flagged and how it was resolved; include client-computed sector concentration if `check_portfolio_redundancy` returned an empty concentration map on a clearly-concentrated portfolio)
 - **Implementation Notes** (liquidity, position sizing, suggested rebalance frequency)
 
 If active view: use the view-aware disclaimer per loader.md §5. Otherwise:
