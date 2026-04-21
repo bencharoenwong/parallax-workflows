@@ -24,9 +24,17 @@ for skill_dir in "$SCRIPT_DIR"/skills/*/; do
     [ "$skill_name" = "_parallax" ] && continue
 
     target="$SKILLS_DIR/parallax-$skill_name"
+
+    # If the target is already a symlink pointing at this repo's skill dir,
+    # skip — edits in the repo propagate automatically. Avoids `cp`-into-self errors.
+    if [ -L "$target" ] && [ "$(readlink "$target")" = "${skill_dir%/}" ]; then
+        echo "  Symlinked  parallax-$skill_name (dev mode — edits live from repo)"
+        continue
+    fi
+
     mkdir -p "$target"
     cp -r "$skill_dir"* "$target/"
-    echo "  Installed parallax-$skill_name"
+    echo "  Installed  parallax-$skill_name"
 done
 
 echo ""

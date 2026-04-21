@@ -8,6 +8,8 @@ negative-triggers:
   - Peer comparison deep dive → use /parallax-peer-comparison
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
+  - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §7 (single-stock conflict surfacing), §6 (audit). Do NOT apply tilts — single-stock skills surface conflicts only.
+  - When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
   - get_stock_outlook supports 4 aspects — analyst_targets, recommendations, risk_return, dividends
   - explain_methodology is free/instant — use it for any notably high or low score
   - For non-US tickers, consult the exchange suffix table in shared conventions
@@ -30,7 +32,11 @@ Accepts plain tickers (auto-converts to RIC) or RIC format directly.
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, fallback patterns, and HK ambiguity protocol.
+Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, fallback patterns, and HK ambiguity protocol. JIT-load `_parallax/house-view/loader.md` for active-view validation and single-stock conflict surfacing.
+
+### Step 0 — Load Active House View
+
+Per `loader.md` §1-§2 + §7. If view present, capture tilt vector + excludes. Do NOT apply tilts to scoring. After producing the standard output, check whether the stock's sector / region / themes conflict with view tilts and surface the §7 closing flag if so.
 
 ### Step 1 — Resolve Ticker
 
@@ -80,5 +86,10 @@ Present as a friendly, structured report:
 - **Recent News** (bullets)
 - **Analyst View** (price target range, consensus)
 - **Bottom Line** (balanced 2-sentence summary — pros and cons, not a recommendation)
+- **House View Note** (only if view active and stock conflicts with view) — render per loader.md §7
 
-Always end with: *"This is informational analysis, not investment advice."*
+Append audit log entry per loader.md §6.
+
+If active view: use the view-aware disclaimer per loader.md §5. Otherwise:
+
+> *"This is informational analysis, not investment advice."*

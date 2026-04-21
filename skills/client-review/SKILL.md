@@ -6,6 +6,8 @@ negative-triggers:
   - Single stock analysis → use /parallax-should-i-buy
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for fallback patterns and parallel execution
+  - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §3 (multipliers), §4 (conflict resolution), §5 (output rendering), §6 (audit). The view shapes the suitability assessment AND the recommendations: holdings misaligned with view get higher priority for trimming, view-aligned holdings get implicit support.
+  - When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
   - JIT-load references/recommendation-matrix.md for priority classification and drill-down criteria
   - Holdings in RIC format, weights sum to ~1.0
   - analyze_portfolio called twice — once with lens "performance", once with "concentration". WARNING: responses often exceed 180K chars (daily time series). If output is truncated or too large, fall back to `check_portfolio_redundancy` (concentration) + `quick_portfolio_scores` (factor tilt) + individual `get_stock_outlook` with aspect "risk_return" (performance)
@@ -27,7 +29,11 @@ Presentation-ready portfolio review with health flags and prioritized recommenda
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, fallback patterns, and macro reasoning. JIT-load `references/recommendation-matrix.md` for priority system.
+Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, fallback patterns, and macro reasoning. JIT-load `_parallax/house-view/loader.md` for active-view validation and integration. JIT-load `references/recommendation-matrix.md` for priority system.
+
+### Batch 0 — Load Active House View (before Batch A)
+
+Per `loader.md` §1-§2. If view present, capture tilt vector, excludes, basis_statement (used to frame Suitability Assessment in firm voice). The view's tilts become an additional layer of recommendation justification: when trimming, "view tilts UW [sector]" is cited alongside health flags. If validation fails or no view present, run review without view.
 
 ### Batch A — Portfolio-level analysis (parallel)
 
@@ -46,9 +52,10 @@ Derive home markets from RIC suffixes. Call `macro_analyst` with component="tact
 ### Batch C — Health flags + drill-down (after A + B)
 
 1. Evaluate 5 health flags per holding: Low Score (≤5.0), Concentration (>15%), Redundancy (≥2 pairs), Value Trap (value ≤3.0), Macro Misalignment.
-2. Flag redundancy as low-confidence if coverage <60%.
-3. Assign health status: **Healthy** (0) · **Monitor** (1-2) · **Attention** (3+).
-4. Select up to 8 holdings for drill-down per `references/recommendation-matrix.md`: weight >10%, any flag, or macro-misaligned. Prioritize by flag count then weight.
+2. **House-view alignment** (if view active): add View Misalignment (>25% off view-tilted target) and View Excluded (on tilts.excludes) as additional flags. Surface a portfolio-level "view alignment score" (% of weight in view-aligned positions).
+3. Flag redundancy as low-confidence if coverage <60%.
+4. Assign health status: **Healthy** (0) · **Monitor** (1-2) · **Attention** (3+). View Excluded counts as Attention regardless of other flags.
+5. Select up to 8 holdings for drill-down per `references/recommendation-matrix.md`: weight >10%, any flag (including View flags), or macro-misaligned. Prioritize by flag count then weight.
 
 For each drill-down holding (parallel):
 
@@ -62,20 +69,25 @@ News (selective, async): `get_news_synthesis` for holdings >10% weight AND flagg
 
 ### Batch D — Recommendations + Assessment (after A + B + C)
 
-1. Per `references/recommendation-matrix.md`, assign each flagged holding a priority (High/Medium/Low) and action type (trim/exit/hold/investigate/reweight). Every recommendation must cite a specific finding.
-2. Call `get_assessment` with comprehensive prompt incorporating: portfolio composition, factor scores, health flags, macro context, per-holding drill-down findings, recommendations, and client context.
+1. Per `references/recommendation-matrix.md`, assign each flagged holding a priority (High/Medium/Low) and action type (trim/exit/hold/investigate/reweight). Every recommendation must cite a specific finding. View Excluded → Exit (priority High). View Misalignment → Trim or Reweight (priority Medium unless paired with other flags).
+2. Call `get_assessment` with comprehensive prompt incorporating: portfolio composition, factor scores, health flags (including View flags), macro context, per-holding drill-down findings, recommendations, client context, AND active house view (basis_statement + tilt vector + excludes if present).
+3. Append audit log entry per loader.md §6.
 
 ## Output Format
 
 Client-ready report:
-- **Portfolio Summary** (AUM breakdown, sector allocation, top 5 holdings)
+- **House View Preamble** (only if view active) — render per loader.md §5
+- **Portfolio Summary** (AUM breakdown, sector allocation, top 5 holdings; if view active, view-alignment score)
 - **Health Status** (Healthy/Monitor/Attention badge with flag summary)
 - **Performance vs Benchmark** (key metrics)
-- **Factor Analysis** (scores with macro context interpretation for this client type)
+- **Factor Analysis** (scores with macro context interpretation for this client type; if view active, compare against view-target factor)
 - **Concentration & Redundancy** (flagged issues; coverage reliability note if applicable)
-- **Per-Holding Analysis** (for drill-down holdings: score trend, risk profile, flags, news highlights)
-- **Suitability Assessment** (alignment with client goals)
-- **Recommended Actions** (prioritized High/Medium/Low per recommendation-matrix.md, with specific action types)
+- **House View Alignment** (only if view active) — table of view tilt direction vs current portfolio exposure per sector/region/factor; flagged misalignments
+- **Per-Holding Analysis** (for drill-down holdings: score trend, risk profile, flags, news highlights; view conflicts called out)
+- **Suitability Assessment** (alignment with client goals AND with active house view if present; cite basis_statement)
+- **Recommended Actions** (prioritized High/Medium/Low per recommendation-matrix.md, with specific action types; rationale cites view tilts where applicable)
 - **Appendix: Methodology** (brief Parallax scoring note)
+
+If active view: use the view-aware disclaimer per loader.md §5. Otherwise:
 
 > These are analytical outputs based on Parallax factor scores, not investment advice.

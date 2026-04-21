@@ -1,0 +1,166 @@
+# Parallax House View — Canonical Schema
+#
+# This file is the single source of truth for the house-view YAML structure.
+# JIT-loaded by skills/load-house-view/SKILL.md (writer) and skills/_parallax/house-view/loader.md (consumers).
+#
+# Phase 0: stored on disk at ~/.parallax/active-house-view/view.yaml + prose.md.
+# Phase 1: same shape, persisted in Supabase keyed by org_id.
+#
+# All metadata fields are REQUIRED at ingest. Tilts are sparse — only declare what the CIO actually has a view on.
+# Omitted tilt fields default to neutral (0).
+
+metadata:
+  view_id: <uuid v4>                         # generated at ingest, immutable for life of view family
+  view_name: "Q2 2026 House View"            # human-readable, shown in banners
+  uploaded_by: "cio@firm.example"            # email or stable user id
+  uploader_role: CIO                         # one of: CIO | PM | Investment Committee | Strategist | Other
+  upload_timestamp: "2026-04-01T09:30:00Z"   # ISO 8601, when ingest completed
+  effective_date: "2026-04-01"               # ISO 8601 date; tilts do not apply before this
+  valid_through: "2026-06-30"                # ISO 8601 date or null; if null, auto_expire_days governs
+  auto_expire_days: 90                       # int; only used when valid_through is null
+  basis_statement: |                         # free text — required for institutional ingest
+    Q2 view derived from internal IC meeting 2026-03-28. Reflects committee
+    consensus on growth deceleration in DM ex-US, sticky core inflation, and
+    re-acceleration in EM ex-China.
+  source_documents:                          # list of files / URLs view was extracted from
+    - "Q2-2026-house-view.pdf"
+  version_id: <uuid v4>                      # generated per save; changes on every update
+  parent_version_id: null                    # uuid of immediate predecessor; null for first version
+  view_hash: <sha256 of canonical tilts body>  # see "view_hash computation" below
+
+# ---------------------------------------------------------------------------
+# TILTS — sparse, integer scale -2 to +2.
+# Multiplier mapping is in loader.md §"Multiplier mapping". Don't duplicate here.
+# ---------------------------------------------------------------------------
+
+tilts:
+
+  # 11 GICS sectors. Use the exact strings below — loader matches by string.
+  sectors:
+    energy: 0
+    materials: 0
+    industrials: 0
+    consumer_discretionary: 0
+    consumer_staples: 0
+    health_care: 0
+    financials: 0
+    information_technology: 0
+    communication_services: 0
+    utilities: 0
+    real_estate: 0
+
+  # Regions. Loader maps RIC suffix → region per parallax-conventions.md §1.
+  # Free-form keys allowed beyond the canonical set; loader warns on unknown keys.
+  regions:
+    us: 0
+    europe: 0
+    japan: 0
+    em_ex_china: 0
+    china: 0
+    uk: 0
+    apac_ex_japan: 0
+    taiwan: 0                              # added 2026-04-21 — AI/semi views frequently target TW directly
+    south_korea: 0                         # added 2026-04-21 — AI/semi + nearshoring views target KR directly
+
+  # Parallax factor scores. Loader applies as composite-weight multipliers.
+  factors:
+    value: 0
+    quality: 0
+    momentum: 0
+    defensive: 0
+
+  # Style tilts. Each dimension has different semantics — see loader.md §"Style semantics".
+  styles:
+    cap_size:                                 # universe-filter semantics
+      large: 0
+      mid: 0
+      small: 0
+    # growth_value collapses into the factors.value tilt at consume time —
+    # set EITHER factors.value OR styles.growth_value, not both. Loader warns on conflict.
+    growth_value:
+      growth: 0
+      value: 0
+
+  # Named themes. Free-form string keys; loader treats as universe + weight tilt per multiplier table.
+  # Aim for themes Parallax can resolve via build_stock_universe queries.
+  themes:
+    ai_infrastructure: 0
+    energy_transition: 0
+    defense: 0
+    obesity_drugs: 0
+    reshoring: 0                           # added 2026-04-21 — recurring across reflationary/AI/China-skeptic views
+
+  # Hard excludes. Always honored, including over explicit user requests
+  # (loader surfaces a block message with the exclusion reason).
+  # Each entry is a string matching a sector key, region key, RIC, or theme key.
+  excludes:
+    - tobacco                                # theme/category
+    - weapons
+    - "GAZP.MM"                              # specific RIC
+    - russia                                 # region
+  exclude_reasons:                           # parallel array — same length as excludes
+    - "ESG mandate"
+    - "ESG mandate"
+    - "Sanctions compliance"
+    - "Sanctions compliance"
+
+  # Macro regime view. OPTIONAL — some views (mandate-driven ESG, geopolitical theses)
+  # don't speak in macro-regime terms. When omitted or any sub-field set to null, loader.md §3
+  # "Macro regime mapping" skips the auto-tilt row for that dimension. Do NOT default to
+  # neutral+neutral when the source is silent — that misrepresents the uploader's thesis.
+  # At ingest, loader maps these to factor tilts and surfaces the mapping to the uploader
+  # for confirmation. See loader.md §"Macro regime mapping".
+  macro_regime:
+    growth: null                             # one of: expansion | reflationary | neutral | slowing | recessionary | null
+    inflation: null                          # one of: disinflation | benign | sticky | accelerating | null
+    rates: null                              # one of: cutting | holding | hiking | null
+    risk_appetite: null                      # one of: risk_on | neutral | risk_off | null
+
+# ---------------------------------------------------------------------------
+# PROSE — verbatim CIO narrative, paired by hash.
+# Stored in a sibling prose.md file in Phase 0; same dir as view.yaml.
+# Schema below documents the pairing field that lives in prose.md frontmatter.
+# ---------------------------------------------------------------------------
+
+# prose.md structure (separate file):
+# ---
+# paired_yaml_hash: <sha256 — must match view_hash above>
+# view_id: <uuid — must match metadata.view_id>
+# version_id: <uuid — must match metadata.version_id>
+# ---
+# <verbatim CIO narrative as markdown>
+
+# ---------------------------------------------------------------------------
+# EXTRACTION — provenance + confidence.
+# Records how the YAML was produced from source. Loader uses extraction_confidence
+# to decide whether to surface field-level warnings.
+# ---------------------------------------------------------------------------
+
+extraction:
+  source_type: pdf                           # pdf | text | url | manual
+  extraction_method: "claude-opus-4-7"       # model id used; "manual" if uploader hand-edited
+  extracted_at: "2026-04-01T09:28:00Z"
+  extraction_confidence:                     # per-field 0.0-1.0; loader warns on any < 0.6
+    sectors: 0.92
+    regions: 0.85
+    factors: 0.78
+    styles: 0.72
+    themes: 0.68
+    excludes: 0.95
+    macro_regime: 0.81
+  extraction_notes: |                        # free text — what the extractor was uncertain about
+    "Cautious on tech but selective in semis" interpreted as info_tech: -1 with
+    ai_infrastructure: +1 to capture the semi exception. Confirm with uploader.
+  uploader_confirmed: true                   # required true at save; loader refuses if false
+
+# ===========================================================================
+# view_hash computation
+# ===========================================================================
+# canonical_yaml_body = the `tilts` and `excludes` sections only,
+#   serialized with sorted keys and stripped of comments + empty fields.
+# view_hash = sha256(canonical_yaml_body, encoding=utf-8).hexdigest()
+#
+# The hash deliberately excludes metadata/extraction/prose so that:
+# - Re-saving the same view (different upload_timestamp) preserves the hash.
+# - Prose edits do not invalidate the pairing UNLESS the YAML body actually changed.
+# - Phase 1 Supabase storage can de-duplicate views by view_hash across orgs.
