@@ -9,7 +9,7 @@ negative-triggers:
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
   - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §3 (multipliers), §4 (conflict resolution), §5 (output rendering), §6 (audit). Morning brief uses the view to (a) frame the macro snapshot in view-language, (b) flag holdings misaligned with view tilts, (c) prioritize action items toward view rebalance direction.
-  - When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
+  - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
   - get_telemetry and macro_analyst are fast-response (low latency) but not free — macro_analyst costs 5 tokens; get_news_synthesis may take 30-90s per holding
   - macro_analyst parameter is `market` (not `country`); e.g., `macro_analyst(market="United States")`
   - The macro_analyst summary call returns all components inline including tactical — do not make separate per-component calls
@@ -42,8 +42,12 @@ Per `loader.md` §1-§2. If view present, capture tilt vector, excludes, prose e
 |---|---|---|
 | `get_telemetry` | fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences | Market regime |
 | `macro_analyst` | market (default: US), no component | Macro summary (returns all components inline including tactical — do not make separate per-component calls) |
-| `quick_portfolio_scores` | `holdings` | Factor scores |
+| `get_peer_snapshot` | per holding | **Primary scoring source** for `PARALLAX_LOADER_V2=1`. Aggregate scores client-side per `loader.md` §3b. |
+| `get_company_info` | per holding (parallel) | **Ground-truth panel oracle** per loader.md §5 rule 3 (required universally, view or no view). Records `expected_name` to cross-check against `get_peer_snapshot.target_company`. |
 | `check_portfolio_redundancy` | `holdings` | Overlap detection |
+| `quick_portfolio_scores` | `holdings` | **Legacy/V1 path only**. Do NOT use if `PARALLAX_LOADER_V2=1` and view active. |
+
+**After Batch A**: per loader.md §5 rule 3, cross-reference returned names against the corresponding `get_company_info` name. For `PARALLAX_LOADER_V2=1`, any mismatch in `get_peer_snapshot` is flagged ⚠ MISMATCH and excluded from aggregate calculations. For V1, any mismatch in `quick_portfolio_scores` is re-scored individually.
 
 ### Batch B — Conditional + news (after Batch A)
 
@@ -56,16 +60,17 @@ Per `loader.md` §1-§2. If view present, capture tilt vector, excludes, prose e
 
 Present as a structured morning brief, under 800 words:
 
-- **House View Preamble** (only if view active) — 1-line summary per loader.md §5
+- **House View Preamble** (only if view active) — 1-line summary per loader.md §5 rule 1 (preamble)
 - **Market Regime & Signals** (2-3 sentences; if view active, note alignment/divergence with view's regime call)
 - **Macro Snapshot** (bullet points)
-- **Portfolio Factor Tilt** (table: VALUE, QUALITY, MOMENTUM, DEFENSIVE scores; if view active, add column showing view-target factor)
+- **Ground-truth Integrity** (only render if any mismatch detected — table: `input_ticker`, `returned_name`, `expected_name`, status. Mismatched holdings had scores re-derived via `get_peer_snapshot` — per loader.md §5 rule 3.)
+- **Portfolio Factor Tilt** (table: VALUE, QUALITY, MOMENTUM, DEFENSIVE scores aggregated over TRUSTED holdings only; mismatched holdings' re-derived scores included when available; if view active, add column showing view-target factor)
 - **Redundancy & Alignment Alerts** (only if flagged; include View Misalignment / View Excluded if view active)
 - **Holding News** (one paragraph per holding)
 - **Action Items** (what deserves attention today; if view active, prioritize toward view rebalance direction)
 
 Lead with what matters.
 
-If active view: use the view-aware disclaimer per loader.md §5. Otherwise:
+If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
 
 > These are analytical outputs based on Parallax factor scores, not investment advice.

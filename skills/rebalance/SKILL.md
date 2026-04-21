@@ -8,7 +8,7 @@ negative-triggers:
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for fallback patterns and parallel execution
   - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §3 (multipliers), §4 (conflict resolution), §5 (output rendering), §6 (audit). Tilts in the view become trade-direction signals: rebalancing should move portfolio toward view-tilted weights.
-  - When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
+  - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
   - JIT-load ../client-review/references/recommendation-matrix.md for priority classification. If missing, use inline fallback: High=3+ flags (trim/exit), Medium=2 flags (investigate/trim), Low=1 flag (monitor/hold)
   - Health flags feed directly into trade action determination — High priority = strong trim/exit
   - analyze_portfolio with lens "performance" and "concentration" gives the full diagnostic. WARNING: responses often exceed 180K chars (daily time series). If output is truncated or too large, fall back to `check_portfolio_redundancy` (concentration) + `quick_portfolio_scores` (factor tilt)
@@ -43,9 +43,13 @@ Per `loader.md` §1-§2: read view if present, validate hash and expiry. If view
 |---|---|---|
 | `analyze_portfolio` | `holdings`, lens="performance" | Returns/risk metrics |
 | `analyze_portfolio` | `holdings`, lens="concentration" | Concentration analysis |
-| `quick_portfolio_scores` | `holdings` | Factor scores (apply mixed-exchange fallback if needed) |
+| `get_peer_snapshot` | per holding | **Primary scoring source** for `PARALLAX_LOADER_V2=1`. Aggregate scores client-side per `loader.md` §3b. |
+| `get_company_info` | per holding | **Ground-truth panel oracle** per loader.md §5 rule 3 — records `expected_name` for mismatch check against `get_peer_snapshot.target_company`. |
 | `check_portfolio_redundancy` | `holdings` | Overlap detection |
 | `list_macro_countries` | — | Check market coverage |
+| `quick_portfolio_scores`| `holdings` | **Legacy/V1 path only**. Do NOT use if `PARALLAX_LOADER_V2=1` and view active. |
+
+**After Batch A**: cross-check returned names against `get_company_info` names per loader.md §5 rule 3. For `PARALLAX_LOADER_V2=1`, any mismatch in `get_peer_snapshot` is flagged ⚠ MISMATCH and excluded from aggregate calculations. For V1, any mismatch in `quick_portfolio_scores` is re-scored individually.
 
 ### Batch B — Macro + score trends (after Batch A)
 
@@ -65,25 +69,29 @@ Per `loader.md` §1-§2: read view if present, validate hash and expiry. If view
    - **Hold:** Stable/improving scores, no flags, view-aligned
    - **Reweight:** Concentration flag only, OR view-tilted toward different weight than current
    - **Investigate:** Medium priority but ambiguous signal (suggest `/parallax-deep-dive`)
-5. For trim candidates: call `build_stock_universe` with a theme matching the portfolio's factor profile AND view tilts (e.g., "high-quality defensive names" if view tilts +2 quality / +2 defensive). Score candidates with `get_peer_snapshot`. Filter against `tilts.excludes`.
+5. For trim candidates: Resolve user thesis vs. view per loader.md §4. If `PARALLAX_LOADER_V2=1` and view active, follow `loader.md` §3 "Application (V2)": decompose replacement theme into parallel per-sector calls, merge, and dedupe. If V1, prepend tilt context and call `build_stock_universe` once.
+   - **Divergence assertion** (per loader.md §5 rule 4 — required universally): REQUIRED for V1 paths. If the query named N≥2 sectors/themes, compute `max_sector_share/total` in returned candidates. If > 0.6, emit fail-loud warning. If `PARALLAX_LOADER_V2=1`, use to verify merge quality.
+   - **Ground-truth check per candidate** (per loader.md §5 rule 3): call `get_peer_snapshot` AND `get_company_info` in parallel. Drop any candidate where `returned_name ≠ expected_name` from the replacement pool (flag ⚠ MISMATCH, do not rank).
+   - Filter remaining trusted candidates against `tilts.excludes` and `tilts.excludes_freeform`.
 
 ### Batch D — Validation
 
-Call `quick_portfolio_scores` on the proposed new allocation to verify improvement. If view active, verify proposed allocation aligns with view tilts within 10% per sector. Append audit log entry per loader.md §6.
+If `PARALLAX_LOADER_V2=1`, follow `loader.md` §3b: aggregate per-holding `get_peer_snapshot` scores for the proposed new allocation. If V1, call `quick_portfolio_scores`. If view active, verify proposed allocation aligns with view tilts within 10% per sector. Append audit log entry per loader.md §6.
 
 ## Output Format
 
-- **House View Preamble** (only if view active) — render per loader.md §5
+- **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (preamble)
 - **Current Portfolio Assessment** (factor scores, concentration issues, redundancy; if view active, current alignment vs view-tilted target)
 - **Health Status** (Healthy/Monitor/Attention badge with flag summary)
 - **Health Flags** (table: each triggered flag per holding with priority level; View Misalignment / View Excluded shown as their own flag types)
 - **Macro Context** (relevant market outlook, sector tilt implications for rebalancing)
 - **Score Momentum** (table: each holding's score trend — improving/stable/declining)
-- **Trade Recommendations** (table: Priority | Action | Symbol | Current Weight | Target Weight | Rationale — every recommendation cites a specific flag or finding; if view active, "Rationale" includes view-tilt direction)
-- **Replacement Candidates** (if trimming, scored alternatives; filtered against tilts.excludes if view active)
+- **Ground-truth Integrity** (table: `input_ticker`, `returned_name`, `expected_name`, match status per holding. ⚠ MISMATCH rows are re-scored individually and flagged — scores not trusted from `quick_portfolio_scores` — per loader.md §5 rule 3.)
+- **Trade Recommendations** (table: Priority | Action | Symbol | Current Weight | Target Weight | Rationale — every recommendation cites a specific flag or finding; if view active, "Rationale" includes view-tilt direction; any recommendation on a ⚠ MISMATCH holding must note scores were re-derived via `get_peer_snapshot` directly)
+- **Replacement Candidates** (if trimming, scored alternatives; filtered against tilts.excludes + tilts.excludes_freeform if view active; all candidates ground-truth-validated per loader.md §5 rule 3; divergence-assertion result for replacement universe per loader.md §5 rule 4)
 - **Before/After Comparison** (factor scores: current vs. proposed; if view active, alignment-to-view metric included)
 - **Implementation Notes** (suggested execution order, liquidity considerations)
 
-If active view: use the view-aware disclaimer per loader.md §5. Otherwise:
+If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
 
 > These are analytical outputs based on Parallax factor scores, not investment advice.
