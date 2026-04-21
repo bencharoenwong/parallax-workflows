@@ -170,6 +170,9 @@ extraction:
 #   exclude_reasons_freeform, macro_regime), serialized with sorted keys and
 #   stripped of comments. Empty arrays and null scalars are PRESERVED (they
 #   convey intent: "no freeform excludes" vs "freeform excludes not considered").
+#   Array elements in `excludes`, `excludes_freeform`, and their parallel reasons
+#   arrays are SORTED ALPHABETICALLY BY VALUE before serialization — these are
+#   sets, not sequences, and uploader-order is not semantically meaningful.
 # view_hash = sha256(canonical_yaml_body, encoding=utf-8).hexdigest()
 #
 # The hash deliberately excludes metadata/extraction/prose so that:

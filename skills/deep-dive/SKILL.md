@@ -43,13 +43,13 @@ Per `loader.md` §1-§2 + §7. If view present, capture tilt vector + excludes +
 | `get_company_info` | `symbol` | Sector, market cap, description |
 | `get_peer_snapshot` | `symbol` | Factor scores + peer ranking |
 | `get_financials` | `symbol`, `statement="summary"` | Revenue/income narrative |
-| `get_financials` | `symbol`, `statement="ratios"`, `periods` as int 1 (latest period only, non-default — see conventions §0.1) | Key ratios: margins, ROE, P/E |
+| `get_financials` | `symbol`, `statement="ratios"`, `periods` as int 1 (latest period only, non-default — see conventions §0.2) | Key ratios: margins, ROE, P/E |
 | `get_score_analysis` | `symbol` | 52-week factor trend (server default) |
 | `get_technical_analysis` | `symbol` | Trend, momentum, support/resistance |
 | `get_stock_outlook` | `symbol`, `aspect="analyst_targets"` | Price targets |
 | `get_stock_outlook` | `symbol`, `aspect="recommendations"` | Buy/hold/sell |
 | `get_stock_outlook` | `symbol`, `aspect="risk_return"` | Risk/return vs peers |
-| `get_stock_outlook` | `symbol`, `aspect="dividends"`, `limit` as int 8 (non-default; default is 20 — see conventions §0.1) | Dividend history |
+| `get_stock_outlook` | `symbol`, `aspect="dividends"`, `limit` as int 8 (non-default; default is 20 — see conventions §0.2) | Dividend history |
 | `get_news_synthesis` | `symbol` | Async — don't block output |
 
 **Ground-truth check after Batch A** (per loader.md §5 rule 3 — required universally): cross-reference `get_peer_snapshot.target_company` against `get_company_info.name`. If mismatch, flag ⚠ MISMATCH in output; extract this stock's scores from `get_peer_snapshot.peer_list[]` by RIC match rather than the target_company field, and note that the peer comparison may be against the wrong peer group. Proceed but surface the caveat loudly.

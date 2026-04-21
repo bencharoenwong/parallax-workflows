@@ -4,25 +4,38 @@ Shared patterns for all `parallax-*` skills. JIT-load from any skill that calls 
 
 ---
 
-## 0. Feature Flags
+## 0. Loader path selection (V1 vs V2)
 
-Gemini CLI uses feature flags to roll out architectural changes. These can be set via environment variables or documented at the session start.
+**Authoritative rule:** V2 is MANDATORY whenever an active house view is loaded, regardless of env-var state. V2 is the DEFAULT whenever the user query names ≥2 sectors/themes OR the workflow renders per-holding factor scores. V1 is the legacy path, permitted only for single-sector queries on no-view sessions.
 
-- **`PARALLAX_LOADER_V2=1`** (Phase 0 rewrite):
-  - **Universe Construction**: Replaces single-shot tilt-prepended `build_stock_universe` calls with N parallel per-tilt calls + client-side merge/dedupe. Required for multi-sector/multi-theme views to prevent universe collapse (Q-A).
-  - **Portfolio Scoring**: Replaces batch `quick_portfolio_scores` with per-holding `get_peer_snapshot` aggregation + `get_company_info` cross-validation. Required to bypass upstream symbol-mapping bugs (Q-B).
-  - **Active House View**: When a house view is active, V2 patterns are MANDATORY to ensure tilt integrity.
+**Selection logic a skill MUST follow** (in order):
+1. If an active house view loads successfully → **V2**. Do not check any env var.
+2. Else, if the query/tilt names ≥2 sectors/themes → **V2** (prevents Q-A universe collapse).
+3. Else, if the workflow renders per-holding factor scores (morning-brief, client-review, portfolio-checkup, etc.) → **V2** (prevents Q-B symbol mis-mapping).
+4. Else → V1 permitted.
+
+**Env-var `PARALLAX_LOADER_V2`** (override, optional):
+- Unset (default): follow the authoritative rule above.
+- `=1`: force V2 unconditionally.
+- `=0`: force V1. **If an active view is loaded AND `PARALLAX_LOADER_V2=0` is exported, skills MUST refuse to proceed** with: "Cannot run view-driven workflow with PARALLAX_LOADER_V2=0 — V2 is mandatory when a view is active. Unset the variable or export PARALLAX_LOADER_V2=1."
+
+**V2 behaviors** (applied whenever rule 1, 2, or 3 fires):
+- **Universe Construction**: N parallel per-tilt `build_stock_universe` calls + client-side merge/dedupe (per loader.md §3a V2 application).
+- **Portfolio Scoring**: Per-holding `get_peer_snapshot` aggregation + mandatory `get_company_info` cross-validation (per loader.md §3b V2 application).
+
+**Universal rules (apply regardless of path):**
+- **Ground-truth panel** (loader.md §5 rule 3) and **divergence assertion** (rule 4) apply to all skills, all paths, view or no view.
+- **Minimum coverage floor**: if fewer than 50% of holdings by weight produce trusted (non-MISMATCH, non-failure) scores, do NOT render a portfolio-level factor profile. Render per-holding scores only, with a portfolio-level note: "Insufficient coverage for aggregate profile."
 
 ---
 
 ## 0.1 MCP Tool Loading
 
-
 Parallax tools (`mcp__claude_ai_Parallax__*`) are deferred MCP tools. Before the first Parallax tool call in any session, call `ToolSearch` with query `"+Parallax"` to load the tool schemas. Without this step, tool calls will fail with "tool not found."
 
 ---
 
-## 0.1 Tool Parameter Reference
+## 0.2 Tool Parameter Reference
 
 Parameter names that commonly trip up skill authors (and LLMs guessing from prose). Use the exact names below when calling these tools:
 

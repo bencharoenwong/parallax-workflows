@@ -134,6 +134,10 @@ These deltas STACK with explicit factor tilts — uploader can override at confi
 
 **Precedence:** Freeform excludes run after `tilts.excludes` (RIC/sector/region/theme blocks) and before tilt-multiplier ranking. A candidate blocked by either is not scored, not ranked, not rendered — only surfaced in the block message.
 
+**Interaction with user-explicit holdings (analog of §4 hard-exclude exception):** Freeform excludes DO apply to user-named tickers. If the user explicitly requests "include NVDA.O" and a freeform pattern substring-matches NVDA's `get_company_info.description + sector + industry`, NVDA is blocked — same as hard excludes. Surface the block message: "Excluded [SYMBOL] per explicit user request: matched freeform pattern '[pattern]' — [reason]. Override requires editing the view via `/parallax-load-house-view --edit`." This is DELIBERATELY stricter than the sector-tilt exception in §4 because freeform patterns are typically mandate-driven (Entity List, ESG, regulatory) where uploader intent is prescriptive, not preferential.
+
+**Performance:** Freeform-exclude evaluation requires a `get_company_info` call per candidate. This call is REUSABLE — the ground-truth panel (§5 rule 3) also needs `get_company_info` per holding for `expected_name`. Skills SHOULD fetch once and reuse, not call twice.
+
 ---
 
 ## 4. Conflict resolution: user constraints vs. view tilts

@@ -42,10 +42,10 @@ Per `loader.md` §1-§2. If view present, capture tilt vector, excludes, basis_s
 | `analyze_portfolio` | `holdings`, lens="performance" | Returns/risk metrics |
 | `analyze_portfolio` | `holdings`, lens="concentration" | Concentration analysis |
 | `check_portfolio_redundancy` | `holdings` | Overlap detection |
-| `get_peer_snapshot` | per holding | **Primary scoring source** for `PARALLAX_LOADER_V2=1`. Aggregate scores client-side per `loader.md` §3b. |
+| `get_peer_snapshot` | per holding | **Primary scoring source** (V2 path — mandatory when view active, default for multi-sector queries, per conventions §0 selection logic). Aggregate scores client-side per loader.md §3b. |
 | `get_company_info` | per holding (parallel) | **Ground-truth oracle** per loader.md §5 rule 3 (required universally). Records `expected_name`. |
 | `list_macro_countries` | — | Check market coverage |
-| `quick_portfolio_scores` | `holdings` | **Legacy/V1 path only**. Do NOT use if `PARALLAX_LOADER_V2=1` and view active. |
+| `quick_portfolio_scores` | `holdings` | **Legacy/V1 path only**. Do NOT use when V2 selection logic (conventions §0) applies — i.e., any active view, multi-sector queries, or per-holding score rendering. |
 
 **After Batch A**: cross-check returned names against `get_company_info` names per loader.md §5 rule 3. For `PARALLAX_LOADER_V2=1`, any mismatch in `get_peer_snapshot` is flagged ⚠ MISMATCH and excluded from aggregate calculations. For V1, any mismatch in `quick_portfolio_scores` is re-scored individually and flagged as UNTRUSTED for the batch factor profile.
 
@@ -65,7 +65,7 @@ For each drill-down holding (parallel):
 
 | Tool | Parameters |
 |---|---|
-| `get_score_analysis` | `symbol`, `weeks` as int 26 (26-week lookback, non-default — see conventions §0.1) |
+| `get_score_analysis` | `symbol`, `weeks` as int 26 (26-week lookback, non-default — see conventions §0.2) |
 | `get_stock_outlook` | `symbol`, `aspect="risk_return"` |
 | `get_peer_snapshot` | `symbol` |
 

@@ -54,7 +54,7 @@ Once RIC is confirmed, call **all of the following simultaneously**:
 | `get_stock_outlook` | `symbol`, `aspect="analyst_targets"` | Price targets |
 | `get_stock_outlook` | `symbol`, `aspect="recommendations"` | Buy/hold/sell |
 | `get_stock_outlook` | `symbol`, `aspect="risk_return"` | Risk/return vs peers |
-| `get_stock_outlook` | `symbol`, `aspect="dividends"`, `limit` as int 8 (non-default; default is 20 — see conventions §0.1) | Dividend history |
+| `get_stock_outlook` | `symbol`, `aspect="dividends"`, `limit` as int 8 (non-default; default is 20 — see conventions §0.2) | Dividend history |
 | `get_news_synthesis` | `symbol` | Async — don't block output |
 
 **Ground-truth check after Step 2** (per loader.md §5 rule 3 — required universally): cross-reference `get_peer_snapshot.target_company` against the `get_company_info.name` resolved in Step 1. If mismatch, flag ⚠ MISMATCH in output; extract scores from `get_peer_snapshot.peer_list[]` by RIC match rather than the target_company field, and note that peer ranking may be against the wrong peer group.

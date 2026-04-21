@@ -9,7 +9,7 @@ gotchas:
   - JIT-load _parallax/parallax-conventions.md for fallback patterns and parallel execution
   - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §3 (multipliers), §4 (conflict resolution), §5 (output rendering), §6 (audit). Tilts in the view become trade-direction signals: rebalancing should move portfolio toward view-tilted weights.
   - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
-  - JIT-load ../client-review/references/recommendation-matrix.md for priority classification. If missing, use inline fallback: High=3+ flags (trim/exit), Medium=2 flags (investigate/trim), Low=1 flag (monitor/hold)
+  - JIT-load ../parallax-client-review/references/recommendation-matrix.md (post-install) / ../client-review/references/recommendation-matrix.md (repo) for priority classification. If missing, use inline fallback: High=3+ flags (trim/exit), Medium=2 flags (investigate/trim), Low=1 flag (monitor/hold)
   - Health flags feed directly into trade action determination — High priority = strong trim/exit
   - analyze_portfolio with lens "performance" and "concentration" gives the full diagnostic. WARNING: responses often exceed 180K chars (daily time series). If output is truncated or too large, fall back to `check_portfolio_redundancy` (concentration) + `quick_portfolio_scores` (factor tilt)
   - build_stock_universe can find replacement candidates for positions being trimmed
@@ -31,7 +31,7 @@ Generate prioritized trade recommendations using health flags, macro context, an
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, fallback patterns, and macro reasoning. JIT-load `_parallax/house-view/loader.md` for active-view validation and tilt application. JIT-load `../client-review/references/recommendation-matrix.md` for the priority system.
+Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, fallback patterns, and macro reasoning. JIT-load `_parallax/house-view/loader.md` for active-view validation and tilt application. JIT-load `../parallax-client-review/references/recommendation-matrix.md (post-install) / ../client-review/references/recommendation-matrix.md (repo)` for the priority system.
 
 ### Batch 0 — Load Active House View (before Batch A)
 
@@ -43,11 +43,11 @@ Per `loader.md` §1-§2: read view if present, validate hash and expiry. If view
 |---|---|---|
 | `analyze_portfolio` | `holdings`, lens="performance" | Returns/risk metrics |
 | `analyze_portfolio` | `holdings`, lens="concentration" | Concentration analysis |
-| `get_peer_snapshot` | per holding | **Primary scoring source** for `PARALLAX_LOADER_V2=1`. Aggregate scores client-side per `loader.md` §3b. |
+| `get_peer_snapshot` | per holding | **Primary scoring source** (V2 path — mandatory when view active, default for multi-sector queries, per conventions §0 selection logic). Aggregate scores client-side per loader.md §3b. |
 | `get_company_info` | per holding | **Ground-truth panel oracle** per loader.md §5 rule 3 — records `expected_name` for mismatch check against `get_peer_snapshot.target_company`. |
 | `check_portfolio_redundancy` | `holdings` | Overlap detection |
 | `list_macro_countries` | — | Check market coverage |
-| `quick_portfolio_scores`| `holdings` | **Legacy/V1 path only**. Do NOT use if `PARALLAX_LOADER_V2=1` and view active. |
+| `quick_portfolio_scores`| `holdings` | **Legacy/V1 path only**. Do NOT use when V2 selection logic (conventions §0) applies — i.e., any active view, multi-sector queries, or per-holding score rendering. |
 
 **After Batch A**: cross-check returned names against `get_company_info` names per loader.md §5 rule 3. For `PARALLAX_LOADER_V2=1`, any mismatch in `get_peer_snapshot` is flagged ⚠ MISMATCH and excluded from aggregate calculations. For V1, any mismatch in `quick_portfolio_scores` is re-scored individually.
 

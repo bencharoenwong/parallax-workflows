@@ -40,8 +40,8 @@ Peer symbols from `get_peer_snapshot` may lack exchange suffixes (e.g., `GM` ins
 ### Batch B — Trends + price series (parallel, after Batch A identifies peers)
 
 Fire all 6 calls simultaneously:
-- `get_score_analysis` for primary + top 2 peers (3 calls). If the user supplied `weeks=N` in the invocation, pass it as `weeks` as int N (non-default — see conventions §0.1); otherwise rely on the server default of 52.
-- `export_price_series` for primary + top 2 peers (3 calls) with `format="json"`. Rely on the server default for `days` (100); if a custom window is needed, pass `days` as int N per conventions §0.1.
+- `get_score_analysis` for primary + top 2 peers (3 calls). If the user supplied `weeks=N` in the invocation, pass it as `weeks` as int N (non-default — see conventions §0.2); otherwise rely on the server default of 52.
+- `export_price_series` for primary + top 2 peers (3 calls) with `format="json"`. Rely on the server default for `days` (100); if a custom window is needed, pass `days` as int N per conventions §0.2.
 
 ## Output Format
 

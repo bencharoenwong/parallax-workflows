@@ -13,7 +13,7 @@ gotchas:
   - get_telemetry and macro_analyst are fast-response (low latency) but not free — macro_analyst costs 5 tokens; get_news_synthesis may take 30-90s per holding
   - macro_analyst parameter is `market` (not `country`); e.g., `macro_analyst(market="United States")`
   - The macro_analyst summary call returns all components inline including tactical — do not make separate per-component calls
-  - Health flags (from portfolio-checkup/references/health-flags.md) apply here too — flag portfolios needing attention
+  - Health flags (from ../parallax-portfolio-checkup/references/health-flags.md (post-install) / ../portfolio-checkup/references/health-flags.md (repo)) apply here too — flag portfolios needing attention
 ---
 
 # Morning Brief
@@ -42,10 +42,10 @@ Per `loader.md` §1-§2. If view present, capture tilt vector, excludes, prose e
 |---|---|---|
 | `get_telemetry` | fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences | Market regime |
 | `macro_analyst` | market (default: US), no component | Macro summary (returns all components inline including tactical — do not make separate per-component calls) |
-| `get_peer_snapshot` | per holding | **Primary scoring source** for `PARALLAX_LOADER_V2=1`. Aggregate scores client-side per `loader.md` §3b. |
+| `get_peer_snapshot` | per holding | **Primary scoring source** (V2 path — mandatory when view active, default for multi-sector queries, per conventions §0 selection logic). Aggregate scores client-side per loader.md §3b. |
 | `get_company_info` | per holding (parallel) | **Ground-truth panel oracle** per loader.md §5 rule 3 (required universally, view or no view). Records `expected_name` to cross-check against `get_peer_snapshot.target_company`. |
 | `check_portfolio_redundancy` | `holdings` | Overlap detection |
-| `quick_portfolio_scores` | `holdings` | **Legacy/V1 path only**. Do NOT use if `PARALLAX_LOADER_V2=1` and view active. |
+| `quick_portfolio_scores` | `holdings` | **Legacy/V1 path only**. Do NOT use when V2 selection logic (conventions §0) applies — i.e., any active view, multi-sector queries, or per-holding score rendering. |
 
 **After Batch A**: per loader.md §5 rule 3, cross-reference returned names against the corresponding `get_company_info` name. For `PARALLAX_LOADER_V2=1`, any mismatch in `get_peer_snapshot` is flagged ⚠ MISMATCH and excluded from aggregate calculations. For V1, any mismatch in `quick_portfolio_scores` is re-scored individually.
 
