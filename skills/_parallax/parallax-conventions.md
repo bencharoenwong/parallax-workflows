@@ -94,7 +94,7 @@ Scoring tools (`get_peer_snapshot`, `get_score_analysis`, `quick_portfolio_score
 2. If names diverge, warn the user clearly and treat `get_company_info` as the source of truth.
 3. Do not present scores from a mismatched company as belonging to the intended security.
 
-**For portfolio workflows (`PARALLAX_LOADER_V2=1`):** Use per-holding `get_peer_snapshot` aggregation in parallel with `get_company_info` cross-validation. This is the **primary robust path**. Do NOT rely on `quick_portfolio_scores` for portfolio factor profiling when a house view is active.
+**For portfolio workflows on V2 path (per §0 selection logic):** Use per-holding `get_peer_snapshot` aggregation in parallel with `get_company_info` cross-validation. This is the **primary robust path**. Do NOT rely on `quick_portfolio_scores` for portfolio factor profiling when a house view is active.
 
 **For portfolio workflows (Legacy/V1):** Cross-check company names for each holding in the `quick_portfolio_scores` response. If any holding maps to the wrong company, re-score that holding individually via `get_peer_snapshot` and note the discrepancy.
 
@@ -145,7 +145,7 @@ If `quick_portfolio_scores` (Legacy/V1) covers **<50% of holdings by weight**, e
 3. Merge into portfolio-weighted result.
 4. Note: "Scoring used split-and-merge due to partial coverage."
 
-**For `PARALLAX_LOADER_V2=1` (Preferred path):** Always use parallel per-holding `get_peer_snapshot` aggregation. If a specific holding returns "No scores available," retry once. If it still fails, skip the holding's contribution to the weighted average and report degraded coverage.
+**For V2 path (per §0 selection logic — preferred):** Always use parallel per-holding `get_peer_snapshot` aggregation. If a specific holding returns "No scores available," retry once. If it still fails, skip the holding's contribution to the weighted average and report degraded coverage.
 
 If `check_portfolio_redundancy` covers **<60% of holdings**, flag redundancy results as **"Low confidence — limited coverage."**
 

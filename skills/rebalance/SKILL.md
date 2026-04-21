@@ -81,14 +81,14 @@ Path-specific calls:
    - **Hold:** Stable/improving scores, no flags, view-aligned
    - **Reweight:** Concentration flag only, OR view-tilted toward different weight than current
    - **Investigate:** Medium priority but ambiguous signal (suggest `/parallax-deep-dive`)
-5. For trim candidates: Resolve user thesis vs. view per loader.md §4. If `PARALLAX_LOADER_V2=1` and view active, follow `loader.md` §3 "Application (V2)": decompose replacement theme into parallel per-sector calls, merge, and dedupe. If V1, prepend tilt context and call `build_stock_universe` once.
-   - **Divergence assertion** (per loader.md §5 rule 4 — required universally): REQUIRED for V1 paths. If the query named N≥2 sectors/themes, compute `max_sector_share/total` in returned candidates. If > 0.6, emit fail-loud warning. If `PARALLAX_LOADER_V2=1`, use to verify merge quality.
+5. For trim candidates: Resolve user thesis vs. view per loader.md §4. On V2 path (per conventions §0), follow `loader.md` §3 "Application (V2)": decompose replacement theme into parallel per-sector calls, merge, and dedupe. On V1, prepend tilt context and call `build_stock_universe` once.
+   - **Divergence assertion** (per loader.md §5 rule 4 — required universally): REQUIRED on V1 paths. If the query named N≥2 sectors/themes, compute `max_sector_share/total` in returned candidates. If > 0.6, emit fail-loud warning. On V2, use the assertion to verify merge quality.
    - **Ground-truth check per candidate** (per loader.md §5 rule 3): call `get_peer_snapshot` AND `get_company_info` in parallel. Drop any candidate where `returned_name ≠ expected_name` from the replacement pool (flag ⚠ MISMATCH, do not rank).
    - Filter remaining trusted candidates against `tilts.excludes` and `tilts.excludes_freeform`.
 
 ### Batch D — Validation
 
-If `PARALLAX_LOADER_V2=1`, follow `loader.md` §3b: aggregate per-holding `get_peer_snapshot` scores for the proposed new allocation. If V1, call `quick_portfolio_scores`. If view active, verify proposed allocation aligns with view tilts within 10% per sector. Append audit log entry per loader.md §6.
+On V2 path (per conventions §0), follow `loader.md` §3b: aggregate per-holding `get_peer_snapshot` scores for the proposed new allocation. On V1, call `quick_portfolio_scores`. If view active, verify proposed allocation aligns with view tilts within 10% per sector. Append audit log entry per loader.md §6.
 
 ## Output Format
 
