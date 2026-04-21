@@ -53,7 +53,7 @@ If you see "tool not found" errors, the MCP server is not connected.
 
 | Command | What it does |
 |---|---|
-| `Hi Parallax` (case-insensitive) | Friendly concierge that asks 1-2 questions and routes you to the right `/parallax-*` workflow. The magic front door for everyday users. |
+| `Hi Parallax` or `/parallax-concierge` | Friendly concierge that opens a four-branch menu (Stock / Portfolio / Discovery / Investor profile), asks one clarifying question, then routes you to the right `/parallax-*` workflow. The magic front door for everyday users. Also triggers on "what can Parallax do" and similar exploratory phrasings. |
 
 ### Single Stock
 
