@@ -79,6 +79,21 @@ All portfolio workflows take holdings as JSON: `[{"symbol":"AAPL.O","weight":0.2
 | `/parallax-rebalance [holdings]` | Prioritized trades with health flags and score rationale |
 | `/parallax-scenario-analysis "event" portfolio=[holdings]` | Exposure assessment and rotation candidates |
 
+### House view (Phase 0 — internal)
+
+Load a CIO house view once; portfolio workflows automatically apply its tilts and excludes. Single-stock workflows surface conflict flags but do not apply tilts.
+
+| Command | What it does |
+|---|---|
+| `/parallax-load-house-view <pdf or .md or url>` | Ingest, extract structured tilts, confirm with uploader, save as active view |
+| `/parallax-load-house-view` | Wizard mode for guided manual entry |
+| `/parallax-load-house-view --status` | Show active view summary |
+| `/parallax-load-house-view --extend <date>` | Push valid_through forward |
+| `/parallax-load-house-view --re-pair` | Re-pair after manual prose edit |
+| `/parallax-load-house-view --clear` | Remove active view |
+
+Active view is consumed by: `portfolio-builder`, `rebalance`, `thematic-screen`, `morning-brief`, `client-review`, `explain-portfolio`. Conflict-flag-only by: `should-i-buy`, `deep-dive`. See `skills/load-house-view/samples/` for 5 sample CIO views and `skills/_parallax/house-view/loader.md` for the multiplier mapping and conflict-resolution rules.
+
 ### Market & Discovery
 
 | Command | What it does |

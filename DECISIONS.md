@@ -1,0 +1,6 @@
+# Decision Log
+
+## 2026-04-21: Phase 0 iteration path — schema-first week 1, loader-rewrite next sprint
+**Why:** Dogfooding found Q-E schema rigidity (macro_regime confidence 0.30-0.40 on ESG/geopolitical samples) forces schema change anyway; doing (b) loader-rewrite first wastes ~300 LoC against a dying contract. Advisor 5 + peer review confirmed (a) is 1 day / 40 LoC / 5 files vs (b) at 1 sprint / 300+ LoC / 8+ files.
+**Impact:** Week 1: optional macro_regime, add taiwan/korea regions, add reshoring theme, confirm free-form excludes, ship ground-truth panel + sector-count divergence assertion. Next sprint: per-tilt parallel universe calls + per-holding get_peer_snapshot aggregation. Phase 1 gate: 2 real CIO PDF stress-test. Upstream Parallax bugs (Q-B/Q-C) tracked separately; verdict flips if upstream ETA ≤10 business days.
+**Alternatives:** [DROP] (e) promote to Phase 1 with known-limits docs — rejected because an audit trail of silently-wrong scorings is a compliance liability, not an asset. [DROP] (c) upstream-first / wait — rejected because no Parallax-team ETA exists. (d) PDF stress-test first deferred to Phase 1 gate, not Phase 0 exit. (a)+(b) vs. prose+commitments re-architecture: keep as dissent-worth-hearing; if 2-PDF stress test after (a)+(b) shows schema fighting real prose, revisit.

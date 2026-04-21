@@ -8,6 +8,8 @@ negative-triggers:
   - Peer comparison only → use /parallax-peer-comparison
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
+  - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §7 (single-stock conflict surfacing), §6 (audit). Do NOT apply tilts — single-stock skills surface conflicts only. The get_assessment prompt should include the active view (basis_statement + relevant tilts) so the AI assessment can address view alignment.
+  - When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
   - get_assessment is async and uses Perplexity — may take 30-90s
   - get_assessment prompt should incorporate macro context, score trends, and dividend profile alongside existing data
   - For non-US symbols, apply HK ambiguity cross-check from shared conventions
@@ -28,7 +30,11 @@ Accepts RIC format. For plain tickers, resolve per shared conventions.
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, fallback patterns, and HK ambiguity protocol.
+Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, fallback patterns, and HK ambiguity protocol. JIT-load `_parallax/house-view/loader.md` for active-view validation and single-stock conflict surfacing.
+
+### Step 0 — Load Active House View
+
+Per `loader.md` §1-§2 + §7. If view present, capture tilt vector + excludes + basis_statement. Do NOT apply tilts to scoring. The Step 0 capture feeds Batch C's `get_assessment` prompt (so the AI can address view alignment) and the closing flag in Output.
 
 ### Batch A — Fire all data calls in parallel
 
@@ -56,7 +62,7 @@ Needs company info for market reasoning:
 
 ### Batch C — AI Assessment (after A + B)
 
-Call `get_assessment` with a comprehensive prompt incorporating **all** findings: factor scores, score trends, key ratios, technical stance, macro context, dividend profile, risk/return vs peers, and the user's specific question/thesis if provided.
+Call `get_assessment` with a comprehensive prompt incorporating **all** findings: factor scores, score trends, key ratios, technical stance, macro context, dividend profile, risk/return vs peers, the user's specific question/thesis if provided, AND the active house view if present (basis_statement + tilts on this stock's sector/region/themes). Ask the assessor to address whether the position aligns with the view.
 
 Apply graceful fallback patterns from shared conventions for any missing data.
 
@@ -70,7 +76,12 @@ Apply graceful fallback patterns from shared conventions for any missing data.
 - **Risk/Return Profile** (volatility, Sharpe context vs peers)
 - **Technical Stance** (trend, key levels, momentum)
 - **News Catalyst Watch** (material items only)
-- **Assessment** (AI deep-research synthesis — includes macro + trend data)
+- **Assessment** (AI deep-research synthesis — includes macro + trend data; if view active, includes view-alignment commentary)
 - **Risk Factors** (what could go wrong)
+- **House View Note** (only if view active and stock conflicts with view) — render per loader.md §7
+
+Append audit log entry per loader.md §6.
+
+If active view: use the view-aware disclaimer per loader.md §5. Otherwise:
 
 > These are analytical outputs based on Parallax factor scores, not investment advice.

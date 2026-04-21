@@ -9,6 +9,8 @@ negative-triggers:
   - Single stock analysis → use /parallax-should-i-buy
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks
+  - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §5 (output rendering), §6 (audit). For attribution, the view provides additional context: a drawdown in a view-tilted-overweight sector is "expected pain from view exposure"; a drawdown in a view-tilted-underweight sector raises "why was this still held?" — surface in the verdict.
+  - When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
   - Holdings must be in RIC format with weights summing to ~1.0
   - export_price_series returns daily OHLCV — use close prices for return calculation
   - get_telemetry regime_tag and mechanism fields are the key attribution inputs
@@ -34,7 +36,11 @@ The second argument is the client's stated concern — used to anchor the lookba
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, fallback patterns, and macro reasoning.
+Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, fallback patterns, and macro reasoning. JIT-load `_parallax/house-view/loader.md` for active-view validation and output rendering.
+
+### Step 0 — Load Active House View
+
+Per `loader.md` §1-§2. If view present, capture tilt vector. The view does NOT change attribution math (Steps 1-5) — it shapes the Step 6 verdict and the framing of Step 4 stock-specific findings. Specifically: when a top detractor is in a view-OW sector, the loss is "expected from view exposure"; when in a view-UW sector that wasn't trimmed, the loss raises a portfolio-management question.
 
 ### Step 1 — Measure actual performance
 
@@ -118,14 +124,19 @@ Based on the verdict:
 
 ## Output Format
 
+- **House View Preamble** (only if view active) — render per loader.md §5
 - **What Happened** (computed portfolio return over the period, compared to client's stated figure; 1-sentence summary of the loss magnitude)
-- **Performance Attribution** (table: each holding with return, weighted contribution, and primary driver tag — Market / Factor / Stock-Specific)
+- **Performance Attribution** (table: each holding with return, weighted contribution, and primary driver tag — Market / Factor / Stock-Specific; if view active, add "View Exposure" tag — OW / Neutral / UW per the view)
 - **Market & Regime Context** (regime tag, mechanism, 2-3 sentences on what's driving markets; is the broad market down too?)
-- **Factor Exposure** (which factor tilts helped/hurt; connection to the current regime)
-- **Top Detractors** (for each of top 3: what happened, why, and whether scores agree with the price move)
+- **Factor Exposure** (which factor tilts helped/hurt; connection to the current regime; if view active, note whether realized factor exposure matched view's intended tilts)
+- **Top Detractors** (for each of top 3: what happened, why, and whether scores agree with the price move; flag whether the holding's view-exposure tag means the loss was expected pain from the view)
 - **The Key Question: Noise or Signal?** (score-vs-price divergence summary — portfolio-level verdict with per-holding classification table)
-- **What To Do** (conditional advice based on the verdict; specific next steps framed as suggestions, not directives)
+- **What To Do** (conditional advice based on the verdict; if view active, separate "stay-the-course-per-view" actions from "view says trim anyway" actions)
+
+Append audit log entry per loader.md §6.
 
 Keep tone calm and explanatory. The client is worried — the output should reduce anxiety with clarity, not amplify it with jargon.
 
-Always end with: *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
+If active view: end with the view-aware disclaimer per loader.md §5. Otherwise:
+
+> *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*

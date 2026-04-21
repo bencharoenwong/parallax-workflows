@@ -1,0 +1,260 @@
+# House View Regression Corpus — v1 (seed)
+#
+# 5 seed entries drawn from the markdown samples in ../samples/.
+# Labels are human-authored expected extractions that any prompt/schema/loader change must re-pass.
+# See README.md for format, labeling discipline, and governance.
+
+version: 1
+seeded_at: "2026-04-21"
+seeded_by: bencharoenwong
+
+entries:
+
+  - entry_id: reflationary-2026Q2
+    source_file: samples/2026-reflationary.md
+    labeled_by: bencharoenwong
+    labeled_at: "2026-04-21"
+    view_family: macro-directional
+    expected:
+      metadata:
+        view_name_contains: ["reflationary"]
+        uploader_role: CIO
+        effective_date: "2026-04-01"
+        valid_through: "2026-06-30"
+      tilts:
+        sectors_nonzero:
+          financials: [1, 1]
+          industrials: [1, 1]
+          energy: [1, 1]
+          information_technology: [0, 1]     # hedged: "constructive on AI infra but selective on software"
+          consumer_staples: [-1, -1]
+          utilities: [-1, -1]
+        regions_nonzero:
+          us: [0, 1]                         # "maintain constructive" ambiguous between 0 and +1
+          em_ex_china: [2, 2]
+          japan: [-1, -1]
+          china: [-1, 0]                     # implicit from "EM ex-China" framing, not explicit
+        factors_nonzero:
+          value: [1, 1]
+          momentum: [1, 1]
+          defensive: [-1, -1]
+        themes_nonzero:
+          ai_infrastructure: [1, 2]
+          energy_transition: [2, 2]
+          defense: [1, 1]
+          obesity_drugs: [-1, 0]             # "NOT adding at current levels" — 0 acceptable, -1 acceptable
+        macro_regime:
+          growth: reflationary
+          inflation: [benign, disinflation]
+          rates: [holding, cutting]
+          risk_appetite: risk_on
+        excludes_contains: [tobacco, weapon, russia, belarus]
+        excludes_must_not_contain: [esg, climate, carbon]     # not an ESG-mandate view
+      extraction_confidence:
+        sectors_min: 0.75
+        regions_min: 0.70
+        factors_min: 0.85
+        themes_min: 0.70
+        macro_regime_min: 0.75
+    notes: |
+      Canonical reflationary CIO view. Clean structured prose. Stacked factor tilt: explicit (value +1,
+      momentum +1, defensive -1) plus macro-regime auto-tilt (value +1, momentum +1) → final stacked
+      (value +2, momentum +2, defensive -1). Test that +2 em_ex_china survives through portfolio
+      construction. Hedged IT language is the load-bearing confidence check.
+
+  - entry_id: recession-defensive-2026
+    source_file: samples/recession-defensive.md
+    labeled_by: bencharoenwong
+    labeled_at: "2026-04-21"
+    view_family: macro-directional
+    expected:
+      metadata:
+        view_name_contains: ["defensive", "late-cycle"]
+        uploader_role: CIO
+        effective_date: "2026-04-15"
+      tilts:
+        sectors_nonzero:
+          consumer_staples: [1, 1]
+          health_care: [1, 1]
+          utilities: [1, 1]
+          communication_services: [1, 1]
+          consumer_discretionary: [-1, -1]
+          industrials: [-1, -1]
+          financials: [-1, -1]
+          real_estate: [-1, -1]
+        regions_nonzero:
+          us: [1, 1]
+          europe: [-1, -1]
+          em_ex_china: [-1, 0]               # hedged: "except select staples names with pricing power"
+        factors_nonzero:
+          defensive: [2, 2]
+          quality: [1, 1]
+          momentum: [-1, -1]
+          value: [-1, -1]
+        styles:
+          cap_size_large: [1, 1]
+          cap_size_small: [-2, -1]           # "underweight small-cap broadly" — strong
+        macro_regime:
+          growth: slowing
+          inflation: [sticky, benign]
+          rates: [holding, cutting]
+          risk_appetite: risk_off
+        excludes_contains: [tobacco, weapon]
+        excludes_freeform_contains: [spac, "pre-revenue biotech", "speculative-grade"]
+      extraction_confidence:
+        sectors_min: 0.85
+        factors_min: 0.90
+        styles_min: 0.80
+        macro_regime_min: 0.80
+    notes: |
+      Opposite pole to reflationary. Tests that the extractor handles strong sector asymmetry (4 OW, 4 UW)
+      without smoothing. Non-standard excludes (SPACs, pre-revenue biotech, speculative-grade refi
+      dependents) require excludes_freeform to preserve uploader intent. No theme language in source —
+      themes should all be 0; extractor that invents `defense` or `ai_infrastructure` themes fails.
+
+  - entry_id: ai-concentrated-2026
+    source_file: samples/AI-concentrated.md
+    labeled_by: bencharoenwong
+    labeled_at: "2026-04-21"
+    view_family: thematic-conviction
+    expected:
+      metadata:
+        view_name_contains: ["AI", "infrastructure"]
+      tilts:
+        sectors_nonzero:
+          information_technology: [2, 2]
+          utilities: [0, 1]                  # "industrial power and grid operators" — modest OW acceptable
+          financials: [-2, -2]
+          consumer_discretionary: [-1, -1]
+          real_estate: [-2, -2]              # "office in particular"
+        regions_nonzero:
+          us: [1, 2]
+          taiwan: [1, 2]                     # REQUIRES new taiwan region key
+          south_korea: [1, 2]                # REQUIRES new south_korea region key
+          japan: [1, 1]                      # "modestly overweight Japan" on semicap
+          europe: [-1, -1]
+          em_ex_china: [-1, -1]
+        factors_nonzero:
+          momentum: [2, 2]
+          quality: [0, 1]                    # "quality matters but only insofar as..." — qualified
+          defensive: [-2, -2]
+          value: [-2, -2]
+        themes_nonzero:
+          ai_infrastructure: [2, 2]
+          energy_transition: [1, 1]          # industrial power for AI buildouts counts as transition theme
+        styles:
+          cap_size_large: [1, 2]             # "heavy US large-cap"
+        macro_regime:
+          growth: expansion
+          inflation: [benign, null]
+          risk_appetite: risk_on
+        excludes_freeform_contains: ["ai-washing", "pre-revenue"]
+      extraction_confidence:
+        sectors_min: 0.80
+        regions_min: 0.80
+        factors_min: 0.90
+        themes_min: 0.90                     # thematic view — themes should be very high confidence
+        macro_regime_min: 0.60               # not explicit — inferred from pro-cyclical framing
+    notes: |
+      Tests thematic-conviction view-family. Taiwan/South Korea are the EXPLICIT targets of this view —
+      collapsing them to apac_ex_japan is a regression. This entry will fail until schema adds
+      taiwan/south_korea region keys (done 2026-04-21). Qualified factor ("quality matters but only...")
+      is the load-bearing confidence check for hedged factor language.
+
+  - entry_id: esg-screened-2026Q2
+    source_file: samples/ESG-screened.md
+    labeled_by: bencharoenwong
+    labeled_at: "2026-04-21"
+    view_family: mandate-driven
+    expected:
+      metadata:
+        view_name_contains: ["sustainable"]         # source title: "Sustainable Equity Mandate" — "ESG" is category, not title
+        effective_date: "2026-04-01"
+        valid_through: "2026-06-30"
+      tilts:
+        sectors_nonzero:
+          information_technology: [1, 1]
+          health_care: [1, 1]
+          energy: [-1, -1]
+          financials: [-1, -1]
+        regions_nonzero:
+          europe: [1, 1]
+          us: [0, 0]
+          em_ex_china: [-1, -1]
+        factors_nonzero:
+          quality: [1, 1]
+          defensive: [1, 1]
+          momentum: [0, 0]                   # "neutral momentum, neutral value"
+          value: [0, 0]
+        themes_nonzero:
+          energy_transition: [2, 2]          # "overweight clean energy infrastructure"
+        macro_regime:
+          growth: null                       # MUST be null — source is mandate-driven, not macro-framed
+          inflation: null
+          rates: null
+          risk_appetite: null
+        excludes_contains: [tobacco, weapon, firearm]
+        excludes_freeform_contains:
+          - "tar sands"
+          - "arctic"
+          - "thermal coal"
+          - "adult entertainment"
+          - "for-profit detention"
+          - "norges bank"
+      extraction_confidence:
+        sectors_min: 0.80
+        factors_min: 0.85
+        themes_min: 0.80
+        excludes_min: 0.85
+        macro_regime_min: 0.85               # high confidence that it's null — not that a value is picked
+    notes: |
+      Tests mandate-driven view-family. The CRITICAL assertion: macro_regime MUST be null, not
+      neutral+neutral. An extractor that forces neutral values is misrepresenting the uploader's thesis.
+      This entry will fail until schema makes macro_regime sub-fields nullable (done 2026-04-21) and
+      loader.md §3 skips auto-tilt on null (done 2026-04-21). Long free-form exclude list tests schema
+      tolerance for non-standard ESG categories.
+
+  - entry_id: china-skeptic-2026
+    source_file: samples/China-skeptic.md
+    labeled_by: bencharoenwong
+    labeled_at: "2026-04-21"
+    view_family: geopolitical
+    expected:
+      metadata:
+        view_name_contains: ["china", "geopolitical"]
+        effective_date: "2026-04-01"
+        valid_through: "2026-09-30"
+      tilts:
+        sectors_nonzero:
+          industrials: [1, 1]                # US industrials with reshoring exposure
+        regions_nonzero:
+          china: [-2, -2]
+          em_ex_china: [1, 2]
+          japan: [1, 1]
+          us: [0, 1]                         # "US industrials with reshoring" — US modest/neutral
+        factors_nonzero:
+          quality: [1, 1]
+          defensive: [1, 1]
+          value: [0, 1]                      # "modest overweight value within EM ex-China"
+          momentum: [0, 0]                   # explicitly "neutral momentum at portfolio level"
+        themes_nonzero:
+          reshoring: [1, 2]                  # REQUIRES new reshoring theme key
+        macro_regime:
+          growth: null                       # geopolitical thesis, not macro-framed
+          inflation: null
+          rates: null
+          risk_appetite: null
+        excludes_contains: [russia, belarus]
+        excludes_freeform_contains: ["entity list", "ccp", "state enterprise"]
+      extraction_confidence:
+        regions_min: 0.90                    # strongest region tilts of any sample — should be high conf
+        factors_min: 0.85
+        themes_min: 0.80
+        macro_regime_min: 0.85               # high confidence it's null
+    notes: |
+      Tests geopolitical view-family. Reshoring is the explicit investment theme — collapsing to
+      "industrials" alone loses the intent. This entry fails until schema adds reshoring theme key
+      (done 2026-04-21). Extensive region list (India, Mexico, Japan, Vietnam, Indonesia, Malaysia)
+      tests whether extractor preserves the full reallocation map or truncates. Dynamic exclude lists
+      (Entity List, HK CCP SOEs) require excludes_freeform tolerance — they are category flags, not
+      static RIC entries.

@@ -1,0 +1,69 @@
+# Baseline extraction for regression-corpus entry: recession-defensive-2026
+# Source: skills/load-house-view/samples/recession-defensive.md
+# Produced by: claude-opus-4-7 (manual Step-2 extraction per SKILL.md)
+# Produced at: 2026-04-21
+# Schema version: post-2026-04-21
+
+entry_id: recession-defensive-2026
+
+metadata:
+  view_name: "House View — Late-Cycle Defensive Posture"
+  uploader_role: CIO
+  effective_date: "2026-04-15"
+  valid_through: null                        # "review monthly" — no fixed through date
+  auto_expire_days: 30                       # monthly review cadence
+
+tilts:
+  sectors:
+    consumer_staples: 1
+    health_care: 1
+    utilities: 1
+    communication_services: 1
+    consumer_discretionary: -1
+    industrials: -1
+    financials: -1
+    real_estate: -1
+
+  regions:
+    us: 1
+    europe: -1
+    em_ex_china: -1
+
+  factors:
+    defensive: 2
+    quality: 1
+    momentum: -1
+    value: -1
+
+  themes: {}
+
+  styles:
+    cap_size:
+      large: 1
+      small: -2
+
+  macro_regime:
+    growth: slowing
+    inflation: sticky
+    rates: holding
+    risk_appetite: risk_off
+
+  excludes: [tobacco, weapons]
+  excludes_freeform:
+    - "SPACs"
+    - "pre-revenue biotech"
+    - "speculative-grade refinancing dependents (18mo horizon)"
+
+extraction_confidence:
+  sectors: 0.90
+  regions: 0.80
+  factors: 0.92
+  styles: 0.88
+  themes: 0.95                               # high-conf zero — source has no thematic language
+  excludes: 0.85
+  macro_regime: 0.85
+
+extraction_notes: |
+  em_ex_china tilt is hedged ("except select staples names with pricing power"). Captured as
+  -1 with note. Non-standard excludes (SPACs, pre-revenue biotech, speculative-grade refi)
+  land in excludes_freeform — they are category-level, not schema-entry-level.
