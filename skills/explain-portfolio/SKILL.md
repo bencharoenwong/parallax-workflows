@@ -18,8 +18,8 @@ gotchas:
   - Score data is weekly (get_score_analysis) vs daily price data — there may be a ~7 day lag. Acknowledge this gap in the divergence analysis, especially if major news broke after the last score data point.
   - The client said a number ("down 4%") — verify it against actual computed returns before attributing
   - Cap news calls at top 3 detractors to manage token cost
-  - quick_portfolio_scores may fail for concentrated/niche portfolios — fall back to get_score_analysis (Step 3) as the primary factor source
-  - get_peer_snapshot may return a different company as target (see Convention #2) — extract the queried stock's scores from the peer list, not from the target_company field
+  - `PARALLAX_LOADER_V2=1` is MANDATORY when a house view is active: use per-holding `get_peer_snapshot` aggregation (§3b), not batch `quick_portfolio_scores`. V1 path (`quick_portfolio_scores` primary, `get_score_analysis` fallback) is only for no-view sessions and is NOT the primary factor source under V2.
+  - get_peer_snapshot may return a different company as target (see Convention #2 and loader.md §5 rule 3) — extract the queried stock's scores from the peer list, not from the target_company field. Under V2, mismatches are flagged ⚠ MISMATCH and excluded from aggregate calculations.
 ---
 
 # Explain Portfolio
@@ -68,7 +68,7 @@ Compare computed return against the client's stated figure. If they diverge sign
 
 After Batch: call `macro_analyst` with component="tactical" for each home market (cap at 2). This establishes the macro backdrop: is this a market-wide drawdown, sector rotation, or idiosyncratic?
 
-If `quick_portfolio_scores` fails or returns <50% coverage, don't retry — Step 3's `get_score_analysis` per holding is the more reliable factor source and will provide all needed score data.
+**V1-path only** (no active view, no `PARALLAX_LOADER_V2=1`): if `quick_portfolio_scores` fails or returns <50% coverage, don't retry — Step 3's `get_score_analysis` per holding is the more reliable factor source. Under V2, the per-holding `get_peer_snapshot` aggregation above is already the primary source; `get_score_analysis` in Step 3 adds the time-series trend, not a fallback factor source.
 
 ### Step 3 — Attribution layer 2: Factor and thematic
 

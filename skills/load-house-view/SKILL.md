@@ -108,6 +108,7 @@ factors:          <list of factor: tilt>      [auto-applied from macro_regime: <
 styles:           <list of style: tilt>
 themes:           <list of theme: tilt>
 excludes:         <list with reasons>
+excludes_freeform: <list with reasons; flag any pattern with len < 4 as ⚠ OVER-BROAD (will match too many candidates as substring) — uploader must acknowledge or edit>
 
 --- MACRO REGIME ---
 growth: <value>   inflation: <value>   rates: <value>   risk_appetite: <value>

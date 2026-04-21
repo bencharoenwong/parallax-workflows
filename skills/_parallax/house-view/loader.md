@@ -56,7 +56,7 @@ Run these checks in order. On any failure, behave per "Failure handling" below �
 
 ## 3. Multiplier mapping
 
-### Sector / region / theme tilts (universe + weight effect)
+### §3a. Sector / region / theme tilts (universe + weight effect)
 
 | Tilt | Universe effect | Weight multiplier | Notes |
 |---|---|---|---|
@@ -74,7 +74,7 @@ Run these checks in order. On any failure, behave per "Failure handling" below �
 3. **Re-rank**: For each merged candidate, apply the composite `multiplier = m_sector × m_region × m_theme` and re-rank the final deduplicated list.
 This pattern prevents "universe collapse" where the upstream tool only returns names from one of the requested sectors.
 
-### Factor tilts (re-weight Parallax composite)
+### §3b. Factor tilts (re-weight Parallax composite)
 
 | Tilt | Factor weight in composite re-rank |
 |---|---|
