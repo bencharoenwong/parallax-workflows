@@ -20,6 +20,7 @@ gotchas:
   - Cap news calls at top 3 detractors to manage token cost
   - `PARALLAX_LOADER_V2=1` is MANDATORY when a house view is active: use per-holding `get_peer_snapshot` aggregation (§3b), not batch `quick_portfolio_scores`. V1 path (`quick_portfolio_scores` primary, `get_score_analysis` fallback) is only for no-view sessions and is NOT the primary factor source under V2.
   - get_peer_snapshot may return a different company as target (see Convention #2 and loader.md §5 rule 3) — extract the queried stock's scores from the peer list, not from the target_company field. Under V2, mismatches are flagged ⚠ MISMATCH and excluded from aggregate calculations.
+  - Rules 3 (ground-truth panel) and 4 (divergence assertion) in loader.md §5 apply UNIVERSALLY to this skill — ground-truth panel in Step 2/Step 4, divergence assertion in Step 6 whenever rotation candidates are generated via `build_stock_universe`.
 ---
 
 # Explain Portfolio
@@ -56,15 +57,27 @@ Compare computed return against the client's stated figure. If they diverge sign
 
 ### Step 2 — Attribution layer 1: Market and regime (parallel)
 
+**Path selection first (per conventions §0 — choose exactly ONE scoring path, never fire both):**
+
+- **V2 path** (active view, multi-sector portfolio, or per-holding factor rendering — attribution renders per-holding tags, so V2 is typical): add `get_peer_snapshot` per holding + `get_company_info` per holding. Do NOT call `quick_portfolio_scores`.
+- **V1 path** (no view AND portfolio-level aggregate only): add `quick_portfolio_scores` once + `get_company_info` per holding. Do NOT call `get_peer_snapshot` here (Step 4 calls it ad-hoc for top detractors).
+
+Then fire Step 2 in parallel. Common calls (both paths):
+
 | Tool | Parameters | Purpose |
 |---|---|---|
 | `get_telemetry` | fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences | Current market regime — is the whole market down? |
 | `list_macro_countries` | — | Check coverage for home markets |
-| `get_peer_snapshot` | per holding | **Primary scoring source** (V2 path — mandatory when view active, default for multi-sector queries, per conventions §0 selection logic). Aggregate scores client-side per loader.md §3b. |
-| `get_company_info` | per holding (parallel) | **Ground-truth oracle** per loader.md §5 rule 3 (required universally). Records `expected_name` for mismatch check. |
-| `quick_portfolio_scores` | `holdings` | **Legacy/V1 path only**. Do NOT use when V2 selection logic (conventions §0) applies — i.e., any active view, multi-sector queries, or per-holding score rendering. |
 
-**After Step 2**: cross-check returned names against `get_company_info` names per loader.md §5 rule 3. For `PARALLAX_LOADER_V2=1`, any mismatch in `get_peer_snapshot` is flagged ⚠ MISMATCH and excluded from aggregate calculations. For V1, any mismatch in `quick_portfolio_scores` is re-scored individually.
+Path-specific calls:
+
+| Tool | Path | Parameters | Notes |
+|---|---|---|---|
+| `get_peer_snapshot` | **V2 only** | per holding | Aggregate client-side per loader.md §3b. |
+| `get_company_info` | V1 + V2 | per holding | Ground-truth oracle per loader.md §5 rule 3 — records `expected_name`. |
+| `quick_portfolio_scores` | **V1 only** | `holdings` | Legacy batch path. Forbidden when any V2 selection rule fires. |
+
+**After Step 2**: cross-check returned names against `get_company_info` names per loader.md §5 rule 3. On V2, any mismatch in `get_peer_snapshot` is flagged ⚠ MISMATCH and excluded from aggregates. On V1, any mismatch in `quick_portfolio_scores` is re-scored individually.
 
 After Batch: call `macro_analyst` with component="tactical" for each home market (cap at 2). This establishes the macro backdrop: is this a market-wide drawdown, sector rotation, or idiosyncratic?
 
@@ -122,6 +135,14 @@ Based on the verdict:
 **If fundamental (scores declining):**
 - Identify which holdings have deteriorating scores. For each, suggest: deeper analysis (`/parallax-deep-dive`), trim, or replacement.
 - If the factor tilt is the problem (e.g., heavy momentum in a mean-reversion regime), suggest rebalancing toward favored factors per the macro tactical outlook.
+
+**Rotation candidate generation (optional — only if the client asks for specific replacements inline rather than being redirected to `/parallax-rebalance`):**
+
+- **V2 path** (active view OR the replacement theme names ≥2 sectors/themes): decompose into N parallel `build_stock_universe` calls, one per sector/theme, merge by RIC, dedupe, re-rank by composite score — per loader.md §3a "Application (V2)". Do NOT issue a single `build_stock_universe` call spanning multiple sectors.
+- **V1 path** (no view AND single-sector replacement): one `build_stock_universe` call is acceptable.
+- **Divergence assertion** (required on both paths, per loader.md §5 rule 4): if the caller intent named N≥2 sectors/themes, compute `max_sector_share / total` on the returned (or merged) candidate set. If > 0.6, emit a fail-loud warning and either refuse or re-issue as parallel per-sector queries (V2 path already does this by construction).
+- **Ground-truth check per candidate** (per loader.md §5 rule 3): call `get_peer_snapshot` + `get_company_info` in parallel for each top-ranked candidate; drop any row where `returned_name ≠ expected_name`.
+- If an active view is loaded, filter candidates against `tilts.excludes` and `tilts.excludes_freeform` per loader.md §3.
 
 **If mixed:**
 - Separate the transient holdings (hold) from the fundamental ones (investigate). Prioritize by weighted contribution to the loss.

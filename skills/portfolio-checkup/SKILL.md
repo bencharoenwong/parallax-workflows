@@ -35,15 +35,27 @@ Per `loader.md` §1-§2. If view present, capture tilt vector + excludes. If val
 
 ### Batch A — Fire scoring + macro calls in parallel
 
+**Path selection first (per conventions §0 — choose exactly ONE scoring path, never fire both):**
+
+- **V2 path** (active view, multi-sector exposure, or per-holding rendering — checkup renders per-holding flags, so V2 is typical): add `get_peer_snapshot` per holding + `get_company_info` per holding. Do NOT call `quick_portfolio_scores`.
+- **V1 path** (no view AND portfolio-level aggregate only AND single-sector exposure): add `quick_portfolio_scores` once + `get_company_info` per holding. Do NOT call `get_peer_snapshot` on this path.
+
+Then fire Batch A in parallel. Common calls (both paths):
+
 | Tool | Parameters | Notes |
 |---|---|---|
-| `get_peer_snapshot` | per holding | **Primary scoring source** (V2 path — mandatory when view active, default for multi-sector queries, per conventions §0 selection logic). Aggregate scores client-side per loader.md §3b. |
-| `get_company_info` | per holding (parallel) | **Ground-truth panel oracle** per loader.md §5 rule 3 (required universally). Records `expected_name` to cross-check against scoring-tool company name. |
 | `check_portfolio_redundancy` | `holdings` | Overlap detection |
 | `list_macro_countries` | — | Check which markets are covered |
-| `quick_portfolio_scores` | `holdings` | **Legacy/V1 path only**. Do NOT use when V2 selection logic (conventions §0) applies — i.e., any active view, multi-sector queries, or per-holding score rendering. |
 
-**After Batch A**: per loader.md §5 rule 3, cross-reference returned names against `get_company_info` names. For `PARALLAX_LOADER_V2=1`, any mismatch in `get_peer_snapshot` is flagged ⚠ MISMATCH and excluded from aggregate calculations. For V1, any mismatch in `quick_portfolio_scores` is re-scored individually via `get_peer_snapshot`.
+Path-specific calls:
+
+| Tool | Path | Parameters | Notes |
+|---|---|---|---|
+| `get_peer_snapshot` | **V2 only** | per holding | Aggregate client-side per loader.md §3b. |
+| `get_company_info` | V1 + V2 | per holding | Ground-truth panel oracle per loader.md §5 rule 3 — records `expected_name`. |
+| `quick_portfolio_scores` | **V1 only** | `holdings` | Legacy batch path. Forbidden when any V2 selection rule fires. |
+
+**After Batch A**: per loader.md §5 rule 3, cross-reference returned names against `get_company_info` names. On V2, any mismatch in `get_peer_snapshot` is flagged ⚠ MISMATCH and excluded from aggregates. On V1, any mismatch in `quick_portfolio_scores` is re-scored individually via `get_peer_snapshot`.
 
 ### Batch B — Macro context (after Batch A)
 

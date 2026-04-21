@@ -12,10 +12,17 @@
 - **V2 Flag:** `PARALLAX_LOADER_V2=1`
 
 ## Expected MCP Sequence
+
+All calls fire in parallel (single tool-call batch):
+
 1. `mcp_parallax_get_peer_snapshot({ symbol: "AAPL.O" })`
 2. `mcp_parallax_get_peer_snapshot({ symbol: "0700.HK" })`
 3. `mcp_parallax_get_peer_snapshot({ symbol: "7203.T" })`
-4. `mcp_parallax_get_company_info({ symbol: "AAPL.O,0700.HK,7203.T" })` (or parallel individual calls)
+4. `mcp_parallax_get_company_info({ symbol: "AAPL.O" })`
+5. `mcp_parallax_get_company_info({ symbol: "0700.HK" })`
+6. `mcp_parallax_get_company_info({ symbol: "7203.T" })`
+
+The tool accepts a single `symbol` per call — do NOT pass a comma-concatenated string. Per-symbol calls are required so each response can be pair-validated against its matching `get_peer_snapshot.target_company`.
 
 ## Assertions
 - **Aggregation:** Portfolio scores must be weighted average of per-holding scores.
