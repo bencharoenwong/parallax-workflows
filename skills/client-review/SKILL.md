@@ -7,7 +7,7 @@ negative-triggers:
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for fallback patterns and parallel execution
   - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §3 (multipliers), §4 (conflict resolution), §5 (output rendering), §6 (audit). The view shapes the suitability assessment AND the recommendations: holdings misaligned with view get higher priority for trimming, view-aligned holdings get implicit support.
-  - When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
+  - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
   - JIT-load references/recommendation-matrix.md for priority classification and drill-down criteria
   - Holdings in RIC format, weights sum to ~1.0
   - analyze_portfolio called twice — once with lens "performance", once with "concentration". WARNING: responses often exceed 180K chars (daily time series). If output is truncated or too large, fall back to `check_portfolio_redundancy` (concentration) + `quick_portfolio_scores` (factor tilt) + individual `get_stock_outlook` with aspect "risk_return" (performance)
@@ -37,13 +37,29 @@ Per `loader.md` §1-§2. If view present, capture tilt vector, excludes, basis_s
 
 ### Batch A — Portfolio-level analysis (parallel)
 
+**Path selection first (per conventions §0 — choose exactly ONE scoring path, never fire both):**
+
+- **V2 path** (active view, multi-sector exposure, or per-holding drill-down — the client-review skill always drills down, so V2 is typical): add `get_peer_snapshot` per holding + `get_company_info` per holding. Do NOT call `quick_portfolio_scores`.
+- **V1 path** (no view AND portfolio-level aggregate only AND single-sector exposure): add `quick_portfolio_scores` once + `get_company_info` per holding. `get_peer_snapshot` is still called later in Batch C per drill-down holding.
+
+Then fire Batch A in parallel. Common calls (both paths):
+
 | Tool | Parameters | Notes |
 |---|---|---|
 | `analyze_portfolio` | `holdings`, lens="performance" | Returns/risk metrics |
 | `analyze_portfolio` | `holdings`, lens="concentration" | Concentration analysis |
 | `check_portfolio_redundancy` | `holdings` | Overlap detection |
-| `quick_portfolio_scores` | `holdings` | Factor scores (apply mixed-exchange fallback if coverage <50%) |
 | `list_macro_countries` | — | Check market coverage |
+
+Path-specific calls:
+
+| Tool | Path | Parameters | Notes |
+|---|---|---|---|
+| `get_peer_snapshot` | **V2 only** | per holding | Aggregate client-side per loader.md §3b. |
+| `get_company_info` | V1 + V2 | per holding | Ground-truth oracle per loader.md §5 rule 3 — records `expected_name`. |
+| `quick_portfolio_scores` | **V1 only** | `holdings` | Legacy batch path. Forbidden when any V2 selection rule fires. |
+
+**After Batch A**: cross-check returned names against `get_company_info` names per loader.md §5 rule 3. On V2, any mismatch in `get_peer_snapshot` is flagged ⚠ MISMATCH and excluded from aggregates. On V1, any mismatch in `quick_portfolio_scores` is re-scored individually via `get_peer_snapshot` and flagged as UNTRUSTED for the batch factor profile.
 
 ### Batch B — Macro context (after Batch A)
 
@@ -61,9 +77,11 @@ For each drill-down holding (parallel):
 
 | Tool | Parameters |
 |---|---|
-| `get_score_analysis` | `symbol`, `weeks` as int 26 (26-week lookback, non-default — see conventions §0.1) |
+| `get_score_analysis` | `symbol`, `weeks` as int 26 (26-week lookback, non-default — see conventions §0.2) |
 | `get_stock_outlook` | `symbol`, `aspect="risk_return"` |
 | `get_peer_snapshot` | `symbol` |
+
+**Ground-truth re-verification per drill-down holding** (per loader.md §5 rule 3): cross-check `get_peer_snapshot.target_company` against the `get_company_info.name` already captured in Batch A. If mismatch at drill-down time (can occur when the Batch A and Batch C queries bind differently), flag ⚠ MISMATCH and extract the queried stock's scores from `get_peer_snapshot.peer_list[]` by symbol match, not from the target_company field.
 
 News (selective, async): `get_news_synthesis` for holdings >10% weight AND flagged, or in sectors with active macro developments. Cap at 5.
 
@@ -76,7 +94,8 @@ News (selective, async): `get_news_synthesis` for holdings >10% weight AND flagg
 ## Output Format
 
 Client-ready report:
-- **House View Preamble** (only if view active) — render per loader.md §5
+- **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (preamble)
+- **Ground-truth Integrity** (only render if any mismatch detected — table: `input_ticker`, `returned_name`, `expected_name`, status. Mismatched holdings had scores re-derived via `get_peer_snapshot` symbol-match — per loader.md §5 rule 3.)
 - **Portfolio Summary** (AUM breakdown, sector allocation, top 5 holdings; if view active, view-alignment score)
 - **Health Status** (Healthy/Monitor/Attention badge with flag summary)
 - **Performance vs Benchmark** (key metrics)
@@ -88,6 +107,6 @@ Client-ready report:
 - **Recommended Actions** (prioritized High/Medium/Low per recommendation-matrix.md, with specific action types; rationale cites view tilts where applicable)
 - **Appendix: Methodology** (brief Parallax scoring note)
 
-If active view: use the view-aware disclaimer per loader.md §5. Otherwise:
+If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
 
 > These are analytical outputs based on Parallax factor scores, not investment advice.

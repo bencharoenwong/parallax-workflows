@@ -56,7 +56,7 @@ Run these checks in order. On any failure, behave per "Failure handling" below �
 
 ## 3. Multiplier mapping
 
-### Sector / region / theme tilts (universe + weight effect)
+### §3a. Sector / region / theme tilts (universe + weight effect)
 
 | Tilt | Universe effect | Weight multiplier | Notes |
 |---|---|---|---|
@@ -66,9 +66,15 @@ Run these checks in order. On any failure, behave per "Failure handling" below �
 | **-1** (UW) | De-rank | 0.75× | |
 | **-2** (Big UW) | Exclude unless explicitly named by user | 0.50× | |
 
-**Application:** when calling `build_stock_universe`, prepend tilt context to query (e.g., "exclude tech, overweight defensive sectors and small-cap utilities"). After candidates return, re-rank by `score × tilt_multiplier(holding's sector/region/theme)`.
+**Application (Legacy/V1):** when calling `build_stock_universe`, prepend tilt context to query (e.g., "exclude tech, overweight defensive sectors and small-cap utilities"). After candidates return, re-rank by `score × tilt_multiplier(holding's sector/region/theme)`.
 
-### Factor tilts (re-weight Parallax composite)
+**Application (`PARALLAX_LOADER_V2=1`):** 
+1. **Decompose tilts**: For a view with $N$ non-zero sector/theme tilts, issue $N$ parallel `build_stock_universe` calls with single-scope queries (e.g., if tilts are +1 energy, +2 financials, query 1 = "energy [user_thesis]", query 2 = "financials [user_thesis]").
+2. **Merge & Dedupe**: Merge the $N$ result sets by RIC.
+3. **Re-rank**: For each merged candidate, apply the composite `multiplier = m_sector × m_region × m_theme` and re-rank the final deduplicated list.
+This pattern prevents "universe collapse" where the upstream tool only returns names from one of the requested sectors.
+
+### §3b. Factor tilts (re-weight Parallax composite)
 
 | Tilt | Factor weight in composite re-rank |
 |---|---|
@@ -78,11 +84,18 @@ Run these checks in order. On any failure, behave per "Failure handling" below �
 | **-1** | 0.50× |
 | **-2** | 0.25× |
 
-**Application:** For each candidate's factor scores from `get_peer_snapshot` or `quick_portfolio_scores`, compute weighted composite:
+**Application (Legacy/V1):** For each candidate's factor scores from `get_peer_snapshot` or `quick_portfolio_scores`, compute weighted composite:
 ```
 composite = (w_v × value + w_q × quality + w_m × momentum + w_d × defensive) / (w_v + w_q + w_m + w_d)
 ```
 where `w_x = factor_tilt_multiplier(x)`. Re-rank by composite.
+
+**Application (`PARALLAX_LOADER_V2=1`):** 
+Always prefer per-holding `get_peer_snapshot` aggregation over batch `quick_portfolio_scores`. 
+1. For each holding, call `get_peer_snapshot(symbol)` and `get_company_info(symbol)` in parallel.
+2. Cross-validate `target_company` (from snapshot) vs `name` (from info).
+3. If mismatch, flag row as ⚠ MISMATCH and exclude from aggregate calculations.
+4. Compute `portfolio_factor[f] = Σ(weight_i × snapshot_i.factor[f]) / Σ(weight_i)` across valid rows.
 
 ### Style semantics (per dimension)
 
@@ -108,6 +121,22 @@ These deltas STACK with explicit factor tilts — uploader can override at confi
 
 **Equity-only scope note (always shown at ingest):**
 > "This system applies house view within equity portfolios only. Macro regime signals are interpreted as within-equity factor tilts (e.g., recession → overweight DEFENSIVE). Cross-asset allocation instructions (cash, bonds, alternatives) are outside scope."
+
+### Free-form excludes handling
+
+`tilts.excludes_freeform` captures category-style exclusions that don't map to a sector / region / theme / RIC key — common in mandate-driven (ESG, "no SPACs", "no pre-revenue biotech") and geopolitical views (Entity List, CCP-affiliated SOEs, "speculative-grade refinancing risk").
+
+**Application:** After universe construction (`build_stock_universe` or any other candidate source), for each candidate call `get_company_info` and test whether any freeform pattern appears as a **case-insensitive substring** in the concatenation of `company_name + description + sector + industry`. If any pattern matches, drop the candidate and surface the block message with the paired `exclude_reasons_freeform` entry:
+
+> "Excluded [SYMBOL]: matched freeform pattern '[pattern]' — [reason]. Override requires editing the view."
+
+**Over-broad patterns:** At ingest, the confirmation gate warns if any freeform pattern is shorter than 4 characters or matches >20% of a sample universe (over-broad risk). Uploader can acknowledge and proceed.
+
+**Precedence:** Freeform excludes run after `tilts.excludes` (RIC/sector/region/theme blocks) and before tilt-multiplier ranking. A candidate blocked by either is not scored, not ranked, not rendered — only surfaced in the block message.
+
+**Interaction with user-explicit holdings (analog of §4 hard-exclude exception):** Freeform excludes DO apply to user-named tickers. If the user explicitly requests "include NVDA.O" and a freeform pattern substring-matches NVDA's `get_company_info.description + sector + industry`, NVDA is blocked — same as hard excludes. Surface the block message: "Excluded [SYMBOL] per explicit user request: matched freeform pattern '[pattern]' — [reason]. Override requires editing the view via `/parallax-load-house-view --edit`." This is DELIBERATELY stricter than the sector-tilt exception in §4 because freeform patterns are typically mandate-driven (Entity List, ESG, regulatory) where uploader intent is prescriptive, not preferential.
+
+**Performance:** Freeform-exclude evaluation requires a `get_company_info` call per candidate. This call is REUSABLE — the ground-truth panel (§5 rule 3) also needs `get_company_info` per holding for `expected_name`. Skills SHOULD fetch once and reuse, not call twice.
 
 ---
 
@@ -150,9 +179,9 @@ When an active view is loaded and applied, every consumer skill MUST:
 
 2. **Conflict banners** — render inline at the section where the conflict arose (e.g., universe selection, allocation), not bundled at the end.
 
-3. **Ground-truth panel** (REQUIRED when any per-holding score is rendered): next to every factor score, show the company name that the scoring tool actually returned (from `get_peer_snapshot.target_company` or `quick_portfolio_scores.holdings_analyzed[].company_name`) and the input ticker. If the returned name does not match the `get_company_info` name-of-record for the input ticker, flag the row **loudly** (e.g., `⚠ MISMATCH: score attributed to <X>, expected <Y>`). Never display scores as authoritative when the name-mismatch is present — the score belongs to a different company.
+3. **Ground-truth panel** (REQUIRED when any per-holding score is rendered): next to every factor score, show the company name that the scoring tool actually returned (from `get_peer_snapshot.target_company` or `quick_portfolio_scores.holdings_analyzed[].company_name`) and the input ticker. If the returned name does not match the `get_company_info` name-of-record for the input ticker, flag the row **loudly** (e.g., `⚠ MISMATCH: score attributed to <X>, expected <Y>`). Never display scores as authoritative when the name-mismatch is present — the score belongs to a different company. **V2 Aggregation (per §3b)** is the preferred way to handle this when a view is active.
 
-4. **Divergence assertion on universe composition** (REQUIRED for skills that call `build_stock_universe` with multi-sector or multi-theme tilts): after the call returns, compute the sector distribution of the result. If the caller requested N≥2 sectors/themes in the tilt-prepended query and the returned distribution has `max_sector_share / total > 0.6`, emit a **fail-loud warning** and either (a) refuse to render the portfolio, or (b) re-issue the call as N parallel per-sector queries and merge. Do not silently proceed. This does NOT apply to legitimately concentrated tilts where only 1 sector/theme was requested (e.g., "100% energy" from a pure-energy view).
+4. **Divergence assertion on universe composition** (REQUIRED for skills that call `build_stock_universe` with multi-sector or multi-theme tilts): after the call returns, compute the sector distribution of the result. If the caller requested N≥2 sectors/themes in the tilt-prepended query and the returned distribution has `max_sector_share / total > 0.6`, emit a **fail-loud warning** and either (a) refuse to render the portfolio, or (b) re-issue the call as N parallel per-sector queries and merge. Do not silently proceed. This does NOT apply to legitimately concentrated tilts where only 1 sector/theme was requested (e.g., "100% energy" from a pure-energy view). **V2 Parallel Calls (per §3a)** resolve this by issuing per-tilt queries natively.
 
 5. **View-aware disclaimer** (bottom — replaces the standard parallax-conventions §7 disclaimer):
    > *"This analysis reflects active house view '[view_name]' uploaded by [uploader_role] on [upload_date], effective [effective_date]. Tilts and excludes per the loaded view; conflicts with explicit user scope are flagged inline. Outputs should be reviewed against client suitability before any action."*

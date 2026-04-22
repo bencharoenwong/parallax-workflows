@@ -7,8 +7,8 @@ negative-triggers:
   - Peer comparison of known stock → use /parallax-peer-comparison
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
-  - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §3 (multipliers), §4 (conflict resolution), §5 (output rendering), §6 (audit). The user-supplied theme is sovereign per §4 "Explicit user scope is sovereign" — render conflict banner if theme contradicts view tilts.
-  - When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
+  - JIT-load _parallax/house-view/loader.md FIRST. Rules 3 (ground-truth panel) and 4 (divergence assertion) in §5 apply UNIVERSALLY (view or no view — data-integrity requirements). Rules 1-2 and 5 apply when a view is active. Multi-sector theme queries can collapse to a single sector — divergence assertion must fire regardless of view. The user-supplied theme is sovereign per §4 — render conflict banner if theme contradicts view tilts.
+  - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
   - build_stock_universe searches ~65K company descriptions by semantic similarity
   - Default top_n is 5 — adjust for broader or narrower screens
   - get_peer_snapshot called once per top pick (N calls) — fire in parallel
@@ -32,21 +32,23 @@ Discover investment opportunities by theme using Parallax's semantic universe bu
 Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode and fallback patterns. JIT-load `_parallax/house-view/loader.md` for active-view validation and conflict resolution.
 
 0. **Load Active House View** — Per `loader.md` §1-§2. If view present, capture tilt vector + excludes. Resolve user theme vs view per §4: theme is sovereign, but conflicts surface as banners (e.g., theme="AI infrastructure" + view says `tech: -2` → screen runs as requested with "House view is UW tech; screen run per your explicit theme" banner).
-1. **Build Universe** — Call `build_stock_universe` with the theme query. If view active and theme is silent on a sector with view tilt = -2, append "exclude [sector]" to the query. Filter results against `tilts.excludes`.
-2. **Score Top Picks** — For the top N results, call `get_peer_snapshot` for each to get factor scores. If view active, re-rank by `composite × multiplier(holding's sector)` per loader.md §3 AND apply factor-tilt re-weighting per loader.md §3 "Factor tilts."
-3. **Compare Peers** — For the highest-scored stock, call `export_peer_comparison` with format "json".
-4. **Quick Financials** — For the top 3 picks, call `get_financials` with statement "summary". Append audit log entry per loader.md §6.
+1. **Build Universe** — Resolve user theme vs. view per loader.md §4. On V2 path (per conventions §0: view active, or multi-sector tilts), follow `loader.md` §3 "Application (V2)": decompose tilts into parallel per-sector calls, merge, and dedupe. On V1, prepend tilt context to the query and call `build_stock_universe` once. Filter results against `tilts.excludes`.
+2. **Divergence assertion** (per loader.md §5 rule 4 — required universally, view or no view) — REQUIRED on V1 paths. If the query named N≥2 sectors/themes, compute `max_sector_share / total` in returned candidates. If > 0.6, emit fail-loud warning: "universe collapsed to single sector despite multi-sector request." On V2, the assertion verifies merge quality but is less likely to trigger a hard failure.
+3. **Apply freeform excludes** — if view active and `tilts.excludes_freeform` non-empty (per loader.md §3 "Free-form excludes handling"), drop candidates matching any pattern against `get_company_info` name/description/sector.
+4. **Ground-truth check + Score Top Picks** (per loader.md §5 rule 3 — required universally) — For the top N results, call `get_peer_snapshot` AND `get_company_info` per candidate in parallel. Record `returned_name` (snapshot `target_company`) and `expected_name` (info `name`). Treat any row where `returned_name ≠ expected_name` as UNTRUSTED (do not rank, flag ⚠ MISMATCH). If view active, re-rank trusted rows by `composite × multiplier(holding's sector)` per loader.md §3.
+5. **Compare Peers** — For the highest-scored TRUSTED stock, call `export_peer_comparison` with format "json".
+6. **Quick Financials** — For the top 3 trusted picks, call `get_financials` with statement "summary". Append audit log entry per loader.md §6.
 
 ## Output Format
 
-- **House View Preamble** (only if view active) — render per loader.md §5
+- **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (preamble)
 - **Theme: [theme]** (brief investment thesis; note view conflict inline if applicable)
-- **Universe Built** (how many stocks found, key sectors; note any exclusions applied)
-- **Top Picks** (table: symbol, name, sector, overall score, key factor strengths; if view active, add "Tilt Effect" column)
+- **Universe Built** (how many stocks found, key sectors; note any exclusions applied; surface divergence-assertion result per loader.md §5 rule 4)
+- **Top Picks** (table: `input_ticker`, `returned_name` (from scoring tool), `expected_name` (from get_company_info), sector, overall score, key factor strengths; if view active, add "Tilt Effect" column. **Flag any row where `returned_name ≠ expected_name` with ⚠ MISMATCH and exclude its scores from ranking** — per loader.md §5 rule 3.)
 - **Comparison Matrix** (peer comparison for lead candidate)
-- **Financial Snapshot** (revenue, margins, growth for top 3)
+- **Financial Snapshot** (revenue, margins, growth for top 3 trusted picks)
 - **Implementation Notes** (liquidity considerations, position sizing guidance)
 
-If active view: use the view-aware disclaimer per loader.md §5. Otherwise:
+If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
 
 > These are analytical outputs based on Parallax factor scores, not investment advice.

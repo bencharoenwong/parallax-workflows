@@ -9,7 +9,7 @@ negative-triggers:
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
   - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §7 (single-stock conflict surfacing), §6 (audit). Do NOT apply tilts — single-stock skills surface conflicts only.
-  - When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
+  - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
   - get_stock_outlook supports 4 aspects — analyst_targets, recommendations, risk_return, dividends
   - explain_methodology is free/instant — use it for any notably high or low score
   - For non-US tickers, consult the exchange suffix table in shared conventions
@@ -54,8 +54,10 @@ Once RIC is confirmed, call **all of the following simultaneously**:
 | `get_stock_outlook` | `symbol`, `aspect="analyst_targets"` | Price targets |
 | `get_stock_outlook` | `symbol`, `aspect="recommendations"` | Buy/hold/sell |
 | `get_stock_outlook` | `symbol`, `aspect="risk_return"` | Risk/return vs peers |
-| `get_stock_outlook` | `symbol`, `aspect="dividends"`, `limit` as int 8 (non-default; default is 20 — see conventions §0.1) | Dividend history |
+| `get_stock_outlook` | `symbol`, `aspect="dividends"`, `limit` as int 8 (non-default; default is 20 — see conventions §0.2) | Dividend history |
 | `get_news_synthesis` | `symbol` | Async — don't block output |
+
+**Ground-truth check after Step 2** (per loader.md §5 rule 3 — required universally): cross-reference `get_peer_snapshot.target_company` against the `get_company_info.name` resolved in Step 1. If mismatch, flag ⚠ MISMATCH in output; extract scores from `get_peer_snapshot.peer_list[]` by RIC match rather than the target_company field, and note that peer ranking may be against the wrong peer group.
 
 ### Step 3 — Macro context
 
@@ -78,7 +80,8 @@ If no covered markets are relevant, skip macro section.
 Present as a friendly, structured report:
 
 - **The Company** (what they do, how big)
-- **The Scores** (simple table with plain-English interpretation; include 52-week trend direction — e.g., "Quality trending up from 5.8 to 7.2")
+- **Ground-truth Integrity** (only if mismatch: `input_ticker` vs `returned_name` vs `expected_name`, with ⚠ MISMATCH flag and note on peer-ranking caveat — per loader.md §5 rule 3.)
+- **The Scores** (simple table with plain-English interpretation; include 52-week trend direction — e.g., "Quality trending up from 5.8 to 7.2"; if ⚠ MISMATCH above, scores were extracted by RIC match from peer_list and peer rank should be treated as indicative only)
 - **Financial Health** (green/yellow/red traffic light metaphor)
 - **Macro Context** (2-3 sentences on the relevant economic environment — skip if no covered markets)
 - **Dividends** (yield, consistency, recent changes — or "Not a dividend payer" if none)
@@ -90,6 +93,6 @@ Present as a friendly, structured report:
 
 Append audit log entry per loader.md §6.
 
-If active view: use the view-aware disclaimer per loader.md §5. Otherwise:
+If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
 
 > *"This is informational analysis, not investment advice."*

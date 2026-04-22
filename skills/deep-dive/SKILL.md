@@ -9,7 +9,7 @@ negative-triggers:
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
   - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §7 (single-stock conflict surfacing), §6 (audit). Do NOT apply tilts — single-stock skills surface conflicts only. The get_assessment prompt should include the active view (basis_statement + relevant tilts) so the AI assessment can address view alignment.
-  - When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
+  - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
   - get_assessment is async and uses Perplexity — may take 30-90s
   - get_assessment prompt should incorporate macro context, score trends, and dividend profile alongside existing data
   - For non-US symbols, apply HK ambiguity cross-check from shared conventions
@@ -43,14 +43,16 @@ Per `loader.md` §1-§2 + §7. If view present, capture tilt vector + excludes +
 | `get_company_info` | `symbol` | Sector, market cap, description |
 | `get_peer_snapshot` | `symbol` | Factor scores + peer ranking |
 | `get_financials` | `symbol`, `statement="summary"` | Revenue/income narrative |
-| `get_financials` | `symbol`, `statement="ratios"`, `periods` as int 1 (latest period only, non-default — see conventions §0.1) | Key ratios: margins, ROE, P/E |
+| `get_financials` | `symbol`, `statement="ratios"`, `periods` as int 1 (latest period only, non-default — see conventions §0.2) | Key ratios: margins, ROE, P/E |
 | `get_score_analysis` | `symbol` | 52-week factor trend (server default) |
 | `get_technical_analysis` | `symbol` | Trend, momentum, support/resistance |
 | `get_stock_outlook` | `symbol`, `aspect="analyst_targets"` | Price targets |
 | `get_stock_outlook` | `symbol`, `aspect="recommendations"` | Buy/hold/sell |
 | `get_stock_outlook` | `symbol`, `aspect="risk_return"` | Risk/return vs peers |
-| `get_stock_outlook` | `symbol`, `aspect="dividends"`, `limit` as int 8 (non-default; default is 20 — see conventions §0.1) | Dividend history |
+| `get_stock_outlook` | `symbol`, `aspect="dividends"`, `limit` as int 8 (non-default; default is 20 — see conventions §0.2) | Dividend history |
 | `get_news_synthesis` | `symbol` | Async — don't block output |
+
+**Ground-truth check after Batch A** (per loader.md §5 rule 3 — required universally): cross-reference `get_peer_snapshot.target_company` against `get_company_info.name`. If mismatch, flag ⚠ MISMATCH in output; extract this stock's scores from `get_peer_snapshot.peer_list[]` by RIC match rather than the target_company field, and note that the peer comparison may be against the wrong peer group. Proceed but surface the caveat loudly.
 
 ### Batch B — Macro context (after Batch A)
 
@@ -69,8 +71,9 @@ Apply graceful fallback patterns from shared conventions for any missing data.
 ## Output Format
 
 - **Company Overview** (3 sentences)
+- **Ground-truth Integrity** (only if mismatch: `input_ticker` vs `returned_name` (from get_peer_snapshot.target_company) vs `expected_name` (from get_company_info.name), with ⚠ MISMATCH flag and note on score-extraction fallback — per loader.md §5 rule 3.)
 - **Macro Environment** (regime context for relevant markets, factor implications)
-- **Factor Profile** (table: each factor score with peer rank + 52-week trend direction)
+- **Factor Profile** (table: each factor score with peer rank + 52-week trend direction; if ⚠ MISMATCH above, scores extracted from peer_list by RIC — flag uncertainty on peer rank)
 - **Financial Highlights** (key ratios, trends)
 - **Dividend Profile** (yield, payout ratio, consistency — or "Not a dividend payer")
 - **Risk/Return Profile** (volatility, Sharpe context vs peers)
@@ -82,6 +85,6 @@ Apply graceful fallback patterns from shared conventions for any missing data.
 
 Append audit log entry per loader.md §6.
 
-If active view: use the view-aware disclaimer per loader.md §5. Otherwise:
+If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
 
 > These are analytical outputs based on Parallax factor scores, not investment advice.

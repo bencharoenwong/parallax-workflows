@@ -39,7 +39,7 @@ If any question fails (status RED), Phase 1 design changes materially. Do not pr
 
 Tested reflationary view × "diversified global equity, mid-cap focus":
 
-1. **Verbose tilt-context query timed out.** First attempt used the full view tilt description in natural language ("overweight EM ex-China... overweight financials, industrials, energy, AI infrastructure... underweight consumer staples, utilities... exclude tobacco, controversial weapons, Russia, Belarus"). `build_stock_universe` returned an MCP timeout. Consistent with parallax-conventions §0.1 warning that "broad/abstract queries time out" — tilt-prepended queries are structurally broad.
+1. **Verbose tilt-context query timed out.** First attempt used the full view tilt description in natural language ("overweight EM ex-China... overweight financials, industrials, energy, AI infrastructure... underweight consumer staples, utilities... exclude tobacco, controversial weapons, Russia, Belarus"). `build_stock_universe` returned an MCP timeout. Consistent with parallax-conventions §0.2 warning that "broad/abstract queries time out" — tilt-prepended queries are structurally broad.
 
 2. **Simplified multi-sector query succeeded but collapsed sector-wise.** Second attempt ("global mid-cap stocks across financials, industrials, energy, AI infrastructure; emphasize US and emerging markets ex-China (India, Mexico)") returned 100 candidates. **Distribution was ~95 Financials, 1 Industrials (CBZ), 0 Energy, 0 Information Technology, 0 AI infrastructure.** The tool latched onto the first sector in the comma-list and ignored the rest.
 

@@ -9,11 +9,11 @@ negative-triggers:
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
   - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §3 (multipliers), §4 (conflict resolution), §5 (output rendering), §6 (audit). Morning brief uses the view to (a) frame the macro snapshot in view-language, (b) flag holdings misaligned with view tilts, (c) prioritize action items toward view rebalance direction.
-  - When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
+  - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
   - get_telemetry and macro_analyst are fast-response (low latency) but not free — macro_analyst costs 5 tokens; get_news_synthesis may take 30-90s per holding
   - macro_analyst parameter is `market` (not `country`); e.g., `macro_analyst(market="United States")`
   - The macro_analyst summary call returns all components inline including tactical — do not make separate per-component calls
-  - Health flags (from portfolio-checkup/references/health-flags.md) apply here too — flag portfolios needing attention
+  - Health flags (from ../parallax-portfolio-checkup/references/health-flags.md (post-install) / ../portfolio-checkup/references/health-flags.md (repo)) apply here too — flag portfolios needing attention
 ---
 
 # Morning Brief
@@ -38,12 +38,28 @@ Per `loader.md` §1-§2. If view present, capture tilt vector, excludes, prose e
 
 ### Batch A — Market context + portfolio scoring (parallel)
 
+**Path selection first (per conventions §0 — choose exactly ONE scoring path, never fire both):**
+
+- **V2 path** (active view, multi-sector tilts, or per-holding rendering — morning-brief renders per-holding factor tilt by default, so V2 is typical): add `get_peer_snapshot` per holding + `get_company_info` per holding. Do NOT call `quick_portfolio_scores`.
+- **V1 path** (no view AND portfolio-level aggregate only): add `quick_portfolio_scores` once + `get_company_info` per holding. Do NOT call `get_peer_snapshot` on this path.
+
+Then fire Batch A in parallel. Common calls (both paths):
+
 | Tool | Parameters | Notes |
 |---|---|---|
 | `get_telemetry` | fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences | Market regime |
 | `macro_analyst` | market (default: US), no component | Macro summary (returns all components inline including tactical — do not make separate per-component calls) |
-| `quick_portfolio_scores` | `holdings` | Factor scores |
 | `check_portfolio_redundancy` | `holdings` | Overlap detection |
+
+Path-specific calls:
+
+| Tool | Path | Parameters | Notes |
+|---|---|---|---|
+| `get_peer_snapshot` | **V2 only** | per holding | Aggregate client-side per loader.md §3b. |
+| `get_company_info` | V1 + V2 | per holding | Ground-truth panel oracle per loader.md §5 rule 3 — records `expected_name`. |
+| `quick_portfolio_scores` | **V1 only** | `holdings` | Legacy batch path. Forbidden when any V2 selection rule fires. |
+
+**After Batch A**: per loader.md §5 rule 3, cross-reference returned names against the corresponding `get_company_info` name. On V2, any mismatch in `get_peer_snapshot` is flagged ⚠ MISMATCH and excluded from aggregates. On V1, any mismatch in `quick_portfolio_scores` is re-scored individually via `get_peer_snapshot`.
 
 ### Batch B — Conditional + news (after Batch A)
 
@@ -56,16 +72,17 @@ Per `loader.md` §1-§2. If view present, capture tilt vector, excludes, prose e
 
 Present as a structured morning brief, under 800 words:
 
-- **House View Preamble** (only if view active) — 1-line summary per loader.md §5
+- **House View Preamble** (only if view active) — 1-line summary per loader.md §5 rule 1 (preamble)
 - **Market Regime & Signals** (2-3 sentences; if view active, note alignment/divergence with view's regime call)
 - **Macro Snapshot** (bullet points)
-- **Portfolio Factor Tilt** (table: VALUE, QUALITY, MOMENTUM, DEFENSIVE scores; if view active, add column showing view-target factor)
+- **Ground-truth Integrity** (only render if any mismatch detected — table: `input_ticker`, `returned_name`, `expected_name`, status. Mismatched holdings had scores re-derived via `get_peer_snapshot` — per loader.md §5 rule 3.)
+- **Portfolio Factor Tilt** (table: VALUE, QUALITY, MOMENTUM, DEFENSIVE scores aggregated over TRUSTED holdings only; mismatched holdings' re-derived scores included when available; if view active, add column showing view-target factor)
 - **Redundancy & Alignment Alerts** (only if flagged; include View Misalignment / View Excluded if view active)
 - **Holding News** (one paragraph per holding)
 - **Action Items** (what deserves attention today; if view active, prioritize toward view rebalance direction)
 
 Lead with what matters.
 
-If active view: use the view-aware disclaimer per loader.md §5. Otherwise:
+If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
 
 > These are analytical outputs based on Parallax factor scores, not investment advice.

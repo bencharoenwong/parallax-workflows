@@ -108,6 +108,7 @@ factors:          <list of factor: tilt>      [auto-applied from macro_regime: <
 styles:           <list of style: tilt>
 themes:           <list of theme: tilt>
 excludes:         <list with reasons>
+excludes_freeform: <list with reasons; flag any pattern with len < 4 as ⚠ OVER-BROAD (will match too many candidates as substring) — uploader must acknowledge or edit>
 
 --- MACRO REGIME ---
 growth: <value>   inflation: <value>   rates: <value>   risk_appetite: <value>
@@ -138,12 +139,13 @@ If `Reject`: abandon, do not write.
 
 On `Confirm`:
 
-1. **Compute** `view_hash`:
-   - Take `tilts` and `excludes` sections only.
-   - Strip empty/zero fields.
-   - Serialize with sorted keys.
-   - `view_hash = sha256(canonical_body).hexdigest()`
-   - Use Python via Bash: `python3 -c "import hashlib, yaml, sys; data=yaml.safe_load(sys.stdin); ..."`
+1. **Compute** `view_hash` per `_parallax/house-view/schema.yaml` §"view_hash computation" (authoritative):
+   - Take the ENTIRE `tilts` block (all sub-keys: sectors, regions, factors, styles, themes, excludes, exclude_reasons, excludes_freeform, exclude_reasons_freeform, macro_regime).
+   - Serialize with sorted keys and stripped comments.
+   - **PRESERVE** empty arrays `[]` and null scalars — they convey intent ("uploader considered this dimension and declared no tilts") versus absence ("dimension unconsidered"). Do NOT strip zero-valued tilts — a declared 0 is a statement of neutrality.
+   - **Sort array element values alphabetically** before hashing (`excludes`, `excludes_freeform`, `exclude_reasons`, `exclude_reasons_freeform`) — these are sets, not sequences; ordering is not semantically meaningful.
+   - `view_hash = sha256(canonical_body.encode("utf-8")).hexdigest()`
+   - Reference implementation: `python3 -c "import hashlib, yaml, sys; data=yaml.safe_load(sys.stdin)['tilts']; canonical=yaml.safe_dump(data, sort_keys=True, default_flow_style=False); print(hashlib.sha256(canonical.encode()).hexdigest())"` (with pre-sort of list values).
 2. **Generate** `metadata.view_id` (uuid4) — reuse from existing view if updating same view family; new uuid for new family.
 3. **Generate** `metadata.version_id` (new uuid4 every save).
 4. **Set** `metadata.parent_version_id` to the previous `version_id` if a view existed before this save; null otherwise.

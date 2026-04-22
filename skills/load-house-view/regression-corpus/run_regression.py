@@ -204,16 +204,20 @@ def main():
     ap = argparse.ArgumentParser(description="Run regression corpus against baseline extractions.")
     ap.add_argument("--corpus", required=True, help="Path to corpus.yaml")
     ap.add_argument("--baselines", required=True, help="Directory containing <entry_id>.yaml extractions")
+    ap.add_argument("--scenarios", help="Directory containing .md test scenarios")
     ap.add_argument("--out", help="Optional output path for markdown report")
     args = ap.parse_args()
 
     corpus = load_yaml(Path(args.corpus))
     baselines_dir = Path(args.baselines)
+    scenarios_dir = Path(args.scenarios) if args.scenarios else None
 
     lines = []
     lines.append(f"# Regression Corpus Report\n")
     lines.append(f"**Corpus:** `{args.corpus}` (v{corpus.get('version', '?')}, seeded {corpus.get('seeded_at', '?')})")
     lines.append(f"**Baselines dir:** `{args.baselines}`\n")
+    if scenarios_dir:
+        lines.append(f"**Scenarios dir:** `{args.scenarios}`\n")
 
     n_pass, n_fail, n_skip = 0, 0, 0
     total_conf = []
@@ -252,6 +256,23 @@ def main():
                 lines.append(f"  - {f}")
             lines.append("")
             n_fail += 1
+
+    # Process Scenarios
+    if scenarios_dir and scenarios_dir.exists():
+        lines.append("## Behavior Scenarios (V2 Patterns)\n")
+        scenario_files = sorted(list(scenarios_dir.glob("*.md")))
+        for s_file in scenario_files:
+            lines.append(f"### {s_file.stem}")
+            content = s_file.read_text()
+            # Extract Description and ID
+            desc = "No description"
+            for line in content.splitlines():
+                if line.startswith("**Description:**") or line.startswith("Description:"):
+                    desc = line.split(":", 1)[1].strip().strip("*")
+            lines.append(f"- **Description:** {desc}")
+            lines.append(f"- **File:** `{s_file.name}`")
+            lines.append("- **Status:** ℹ️ MANUAL VERIFICATION REQUIRED (Needs MCP access)")
+            lines.append("")
 
     lines.append(f"## Summary")
     lines.append(f"- PASS: {n_pass}")

@@ -4,13 +4,38 @@ Shared patterns for all `parallax-*` skills. JIT-load from any skill that calls 
 
 ---
 
-## 0. MCP Tool Loading
+## 0. Loader path selection (V1 vs V2)
+
+**Authoritative rule:** V2 is MANDATORY whenever an active house view is loaded, regardless of env-var state. V2 is the DEFAULT whenever the user query names ≥2 sectors/themes OR the workflow renders per-holding factor scores. V1 is the legacy path, permitted only for single-sector queries on no-view sessions.
+
+**Selection logic a skill MUST follow** (in order):
+1. If an active house view loads successfully → **V2**. Do not check any env var.
+2. Else, if the query/tilt names ≥2 sectors/themes → **V2** (prevents Q-A universe collapse).
+3. Else, if the workflow renders per-holding factor scores (morning-brief, client-review, portfolio-checkup, etc.) → **V2** (prevents Q-B symbol mis-mapping).
+4. Else → V1 permitted.
+
+**Env-var `PARALLAX_LOADER_V2`** (override, optional):
+- Unset (default): follow the authoritative rule above.
+- `=1`: force V2 unconditionally.
+- `=0`: force V1. **If an active view is loaded AND `PARALLAX_LOADER_V2=0` is exported, skills MUST refuse to proceed** with: "Cannot run view-driven workflow with PARALLAX_LOADER_V2=0 — V2 is mandatory when a view is active. Unset the variable or export PARALLAX_LOADER_V2=1."
+
+**V2 behaviors** (applied whenever rule 1, 2, or 3 fires):
+- **Universe Construction**: N parallel per-tilt `build_stock_universe` calls + client-side merge/dedupe (per loader.md §3a V2 application).
+- **Portfolio Scoring**: Per-holding `get_peer_snapshot` aggregation + mandatory `get_company_info` cross-validation (per loader.md §3b V2 application).
+
+**Universal rules (apply regardless of path):**
+- **Ground-truth panel** (loader.md §5 rule 3) and **divergence assertion** (rule 4) apply to all skills, all paths, view or no view.
+- **Minimum coverage floor**: if fewer than 50% of holdings by weight produce trusted (non-MISMATCH, non-failure) scores, do NOT render a portfolio-level factor profile. Render per-holding scores only, with a portfolio-level note: "Insufficient coverage for aggregate profile."
+
+---
+
+## 0.1 MCP Tool Loading
 
 Parallax tools (`mcp__claude_ai_Parallax__*`) are deferred MCP tools. Before the first Parallax tool call in any session, call `ToolSearch` with query `"+Parallax"` to load the tool schemas. Without this step, tool calls will fail with "tool not found."
 
 ---
 
-## 0.1 Tool Parameter Reference
+## 0.2 Tool Parameter Reference
 
 Parameter names that commonly trip up skill authors (and LLMs guessing from prose). Use the exact names below when calling these tools:
 
@@ -69,7 +94,9 @@ Scoring tools (`get_peer_snapshot`, `get_score_analysis`, `quick_portfolio_score
 2. If names diverge, warn the user clearly and treat `get_company_info` as the source of truth.
 3. Do not present scores from a mismatched company as belonging to the intended security.
 
-**For portfolio workflows (`quick_portfolio_scores`):** Cross-check company names for each holding in the response. If any holding maps to the wrong company, re-score that holding individually via `get_peer_snapshot` and note the discrepancy.
+**For portfolio workflows on V2 path (per §0 selection logic):** Use per-holding `get_peer_snapshot` aggregation in parallel with `get_company_info` cross-validation. This is the **primary robust path**. Do NOT rely on `quick_portfolio_scores` for portfolio factor profiling when a house view is active.
+
+**For portfolio workflows (Legacy/V1):** Cross-check company names for each holding in the `quick_portfolio_scores` response. If any holding maps to the wrong company, re-score that holding individually via `get_peer_snapshot` and note the discrepancy.
 
 **Hong Kong / numeric codes require extra caution:** HK uses numeric codes that can collide across H-shares, red chips, and local listings. Always cross-validate `.HK`, `.T`, `.TW`, `.KS` symbols.
 
@@ -112,13 +139,13 @@ Note: "fast-response" refers to latency, not token cost. Token costs vary per to
 - **0-1 aspects return data** → Flag: "Insight card may be materially incomplete for this security."
 
 ### Portfolio scoring coverage
-If `quick_portfolio_scores` covers **<50% of holdings by weight**, execute mixed-exchange fallback:
+If `quick_portfolio_scores` (Legacy/V1) covers **<50% of holdings by weight**, execute mixed-exchange fallback:
 1. Split holdings by exchange suffix.
 2. Score each exchange group separately.
 3. Merge into portfolio-weighted result.
 4. Note: "Scoring used split-and-merge due to partial coverage."
 
-If `quick_portfolio_scores` returns **"Could not score any holdings"** for ALL positions (not just partial coverage), fall back to individual `get_peer_snapshot` calls per holding to get current factor scores. Report degraded coverage — trend data will be unavailable.
+**For V2 path (per §0 selection logic — preferred):** Always use parallel per-holding `get_peer_snapshot` aggregation. If a specific holding returns "No scores available," retry once. If it still fails, skip the holding's contribution to the weighted average and report degraded coverage.
 
 If `check_portfolio_redundancy` covers **<60% of holdings**, flag redundancy results as **"Low confidence — limited coverage."**
 
