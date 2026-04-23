@@ -9,3 +9,30 @@ node_modules/
 notes/
 docs/superpowers/
 LESSONS.md
+
+# ---------------------------------------------------------------
+# Internal artifacts kept local. Do not remove without review.
+# ---------------------------------------------------------------
+
+# Internal calibration manifest.
+skills/_parallax/house-view/tests/sensitivity_bands.yaml
+
+# Internal test fixtures.
+skills/_parallax/house-view/tests/fixtures/*-probe.yaml
+skills/_parallax/house-view/tests/fixtures/*-probe_candidates.yaml
+
+# Universe candidate fixtures — contain Parallax MCP output; not for public slicing.
+skills/_parallax/house-view/tests/fixtures/ai-concentrated-2026_candidates.yaml
+skills/_parallax/house-view/tests/fixtures/china-skeptic-2026_candidates.yaml
+skills/_parallax/house-view/tests/fixtures/esg-screened-2026Q2_candidates.yaml
+skills/_parallax/house-view/tests/fixtures/recession-defensive-2026_candidates.yaml
+skills/_parallax/house-view/tests/fixtures/reflationary-2026Q2_candidates.yaml
+
+# Reference runner — implementation detail; public spec is in tests/portfolio_diff_harness.md.
+skills/_parallax/house-view/tests/run_diff_harness.py
+
+# Internal regression baselines (second round).
+skills/load-house-view/regression-corpus/baselines/2026-04-22/
+
+# Planning docs — private by default.
+docs/plans/
