@@ -1,0 +1,32 @@
+# Canonicalization fixture for schema.yaml §view_hash computation.
+# ASSERT: `compute_view_hash(this_view)` == expected_view_hash below.
+# Any change that breaks the assertion is a breaking canonicalization change
+# and MUST bump audit.jsonl schema_version.
+
+tilts:
+  sectors:
+    information_technology: -1
+  regions:
+    us: 1
+  factors:
+    profitability: 2
+  pillars:
+    econometrics_phase: 0              # stripped (zero)
+  styles:
+    cap_size:
+      large: 0                         # stripped (zero), parent also becomes empty → stripped
+excludes: []
+
+# Canonical body after strip + sort (byte-exact):
+#
+#   excludes: []
+#   tilts:
+#     factors:
+#       profitability: 2
+#     regions:
+#       us: 1
+#     sectors:
+#       information_technology: -1
+#
+# Expected view_hash (sha256 hex, utf-8 encoded canonical body):
+expected_view_hash: "1629fba3f63d0b498ae69845460cf456f316acbdac239e4bef58e2fdd7b9cc69"
