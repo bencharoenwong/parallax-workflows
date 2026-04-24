@@ -225,21 +225,30 @@ tilts:
 #
 # Algorithm:
 #   1. Read the full prose.md file as bytes.
-#   2. Strip the leading frontmatter block: everything from the first `---\n`
-#      up to and including the second `---\n`. If no frontmatter, the body is
-#      the entire file.
-#   3. prose_body_hash = sha256(body_bytes).hexdigest()
+#   2. Normalize line endings: replace every `\r\n` with `\n`, then every
+#      remaining `\r` with `\n`. CRLF-only editors (Windows Notepad) and
+#      macOS classic-Mac tooling must not produce different hashes than LF.
+#      The writer side of the skill MUST write prose.md with LF line endings
+#      only; the reader side normalizes defensively to catch tooling drift.
+#   3. Strip the leading frontmatter block: everything from the first `---\n`
+#      up to and including the second `---\n`. If no frontmatter (file does
+#      not start with `---\n` after normalization), the body is the entire
+#      file.
+#   4. prose_body_hash = sha256(body_bytes).hexdigest()
 #
 # Reference Python snippet (self-contained, no yaml dependency):
 #
 #   import hashlib
 #   def compute_prose_body_hash(prose_text: str) -> str:
-#       data = prose_text.encode("utf-8")
+#       # Step 2: normalize line endings.
+#       data = prose_text.encode("utf-8").replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+#       # Step 3: strip frontmatter.
 #       marker = b"---\n"
 #       if data.startswith(marker):
 #           end = data.find(marker, len(marker))
 #           if end != -1:
 #               data = data[end + len(marker):]
+#       # Step 4: hash.
 #       return hashlib.sha256(data).hexdigest()
 #
 # Loader (§2 step 3a, added 2026-04-24):
@@ -304,13 +313,18 @@ extraction:
 #   Ignore everything else (metadata, extraction, exclude_reasons, comments).
 #
 # Rule 2 — Strip empty/zero recursively.
-#   A value is "empty" iff it is any of: None / null, 0 (int or float), ""
-#   (empty string), [] (empty sequence), or {} (empty map) AFTER its children
-#   have themselves been stripped.
-#   - Walk tilts + excludes depth-first; strip empties bottom-up.
-#   - "0" means the integer zero, NOT the string "0" and NOT False.
-#   - Booleans are NOT stripped (there are no bool-valued tilts today; this is
-#     future-proofing).
+#   A value is "empty" iff — AFTER its children have themselves been stripped
+#   AND it is NOT a boolean — it is any of: None / null, 0 (int or float), ""
+#   (empty string), [] (empty sequence), or {} (empty map).
+#   - Walk tilts AND excludes depth-first; strip empties bottom-up.
+#   - "0" means the numeric zero — int 0, float 0.0 — NOT the string "0" and
+#     NOT False. Booleans are explicitly excluded from the empty set to
+#     accommodate future bool-valued tilts; implementations MUST guard
+#     `isinstance(x, bool)` before comparing to 0 because in some languages
+#     (Python, JavaScript) `False == 0` is true.
+#   - A dict that becomes empty AFTER recursion IS stripped from its parent.
+#     A list element that becomes empty AFTER recursion IS stripped from the
+#     list. This means: ALWAYS recurse first, THEN decide whether to drop.
 #
 # Rule 3 — Serialize.
 #   Use PyYAML's `yaml.safe_dump` with:
@@ -328,23 +342,36 @@ extraction:
 # Reference Python implementation (must pass the fixture in Rule 5):
 #
 #   import hashlib, yaml
+#   def _is_empty(v):
+#       if isinstance(v, bool):           # Guard: False == 0 in Python.
+#           return False
+#       if v is None:
+#           return True
+#       if isinstance(v, (int, float)) and v == 0:
+#           return True
+#       return v == "" or v == [] or v == {}
 #   def _strip_empty(obj):
 #       if isinstance(obj, dict):
 #           out = {}
 #           for k, v in obj.items():
-#               v = _strip_empty(v)
-#               if v is None or v == 0 or v == "" or v == [] or v == {}:
+#               v = _strip_empty(v)       # Recurse first.
+#               if _is_empty(v):          # Then decide.
 #                   continue
 #               out[k] = v
 #           return out
 #       if isinstance(obj, list):
-#           return [_strip_empty(x) for x in obj
-#                   if x not in (None, 0, "", [], {})]
+#           result = []
+#           for x in obj:
+#               y = _strip_empty(x)       # Recurse first.
+#               if _is_empty(y):          # Then decide.
+#                   continue
+#               result.append(y)
+#           return result
 #       return obj
 #   def compute_view_hash(view: dict) -> str:
 #       body = {
 #           "tilts":    _strip_empty(view.get("tilts", {})),
-#           "excludes": view.get("excludes", []) or [],
+#           "excludes": _strip_empty(view.get("excludes", []) or []),
 #       }
 #       canonical = yaml.safe_dump(
 #           body, sort_keys=True, default_flow_style=False,
