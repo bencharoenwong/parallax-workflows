@@ -14,6 +14,10 @@ gotchas:
   - Always compute view_hash from the canonical tilts body per schema.yaml §"view_hash computation" — sorted keys, no comments, no empty fields
   - Ask uploader_role and basis_statement via AskUserQuestion — these are required-at-institutional fields and need explicit human input
   - Auto-applied macro_regime → factor tilts (loader.md §3) MUST be surfaced to the uploader at the gate, not silently applied
+  - Confirmation gate persists a pre-edit snapshot (Step 3a) when uploader chooses 'Edit specific fields' — writes extractor's pristine draft to `.archive/<version>/pre_edit.yaml` alongside the superseded view. No-edit confirmations skip this.
+  - Every extraction attempt (Step 3b) logs an `extraction_attempt` audit entry to `audit.jsonl` — whether or not it becomes a save. Capture disposition (confirmed/edited/re_extracted/rejected) + draft_yaml_hash per loader.md §6.2.
+  - Save (Step 4 step 10) computes a `version_diff` block vs `parent_version_id` and stashes it on the save audit entry. Only when this save supersedes a prior version.
+  - `--why <tilt-path>` is on-demand — does not write provenance to view.yaml. Reads prose.md + tilt value, produces a one-paragraph explanation with quoted spans. Use when auditing 'where did this tilt come from?'
 ---
 
 # Load House View
@@ -32,6 +36,9 @@ Ingest a CIO house view into the Parallax workflow system. Once loaded, every po
 /parallax-load-house-view --extend 2026-09-30      # push valid_through forward
 /parallax-load-house-view --re-pair                # re-pair after manual prose edit (drift)
 /parallax-load-house-view --edit                   # open YAML in editor; re-confirm on save
+/parallax-load-house-view --why tilts.factors.momentum   # on-demand: why is this tilt set to what it is?
+/parallax-load-house-view --why sectors.information_technology
+/parallax-load-house-view --version-history        # show parent chain + per-version diffs from audit.jsonl
 ```
 
 ## Where the view lives
@@ -156,9 +163,25 @@ Then ask via `AskUserQuestion`:
 > - **Re-extract with hint** — provide a hint to improve extraction
 > - **Reject** — abandon this ingest, no save
 
-If `Edit specific fields`: loop on `AskUserQuestion` per flagged field, then re-render the gate.
-If `Re-extract with hint`: ask for the hint, re-run Step 2 with the hint added to extraction context, re-render the gate.
-If `Reject`: abandon, do not write.
+If `Edit specific fields`: **FIRST snapshot the extractor's pre-edit draft** (see §3a below), then loop on `AskUserQuestion` per flagged field, then re-render the gate.
+If `Re-extract with hint`: log an `extraction_attempt` audit entry capturing the rejected draft and the hint (see §3b), ask for the hint, re-run Step 2 with the hint added to extraction context, re-render the gate.
+If `Reject`: log an `extraction_attempt` audit entry with disposition=rejected, abandon, do not write.
+
+#### Step 3a — Pre-edit snapshot (Layer 2)
+
+When the uploader chooses `Edit specific fields` (not `Confirm` on the pristine draft):
+
+1. Serialize the current pre-edit draft YAML (the extractor's output, pre-modification) to a holding buffer.
+2. After all edits land AND the uploader `Confirm`s the edited version, write the pre-edit snapshot to `~/.parallax/active-house-view/.archive/<new_view_id>-<new_version_id>/pre_edit.yaml`. (The directory is the SAME one Step 4 step 9 creates to archive the superseded view — both files share the slot.)
+3. Optionally ask the uploader (single question, skippable): "One line on what you changed and why? (optional — press Enter to skip)". If non-empty, save as `~/.parallax/active-house-view/.archive/<new_view_id>-<new_version_id>/edit_notes.md`.
+
+If the uploader confirms the pristine draft (no edits), skip Step 3a entirely — there's nothing to snapshot.
+
+#### Step 3b — Extraction attempt logging (Layer 5, folded into audit.jsonl)
+
+Every extraction attempt — including re-extracts and rejections that never become saves — appends one `action: "extraction_attempt"` entry to `audit.jsonl` per loader.md §6.1. Required fields: `schema_version`, `ts`, `skill`, `action`, `applied=false`. Conditional: `query_summary` (source file basename or URL), `disposition` (one of: `confirmed`, `edited`, `re_extracted`, `rejected`), `draft_yaml_hash` (sha256 of the draft the uploader saw; lets us correlate with a later save's `view_hash`), `extraction_duration_ms` (optional, wall-clock from extraction start to disposition), `hint` (when disposition=re_extracted, the hint text truncated to 200 chars).
+
+A successful `save` after a confirmed draft still emits its own `action: "save"` entry per Step 4 — the two actions are independent. An `extraction_attempt` with `disposition=confirmed` tells you "the uploader confirmed this draft"; the subsequent `save` tells you "this draft was persisted." Rejected or re-extracted drafts have no matching save.
 
 ### Step 4 — Compute hashes and write files
 
@@ -177,11 +200,15 @@ On `Confirm`:
    - Write new `view.yaml`.
    - Write new `prose.md` with frontmatter **four fields in this order**: `paired_yaml_hash`, `prose_body_hash`, `view_id`, `version_id`. Frontmatter is the only part of the file NOT covered by `prose_body_hash`.
    - If `audit.jsonl` does not exist, create it empty.
-10. **Append** an audit entry for the ingest itself:
+10. **Compute version-diff (Layer 3)** — only when `metadata.parent_version_id` is non-null (i.e., this save supersedes a prior version in the same view family):
+    1. Read the parent's archived `view.yaml` from `.archive/<parent_view_id>-<parent_version_id>/view.yaml`.
+    2. Compute a flat diff restricted to the `tilts` and `excludes` subtrees (same scope as `view_hash`). For each dotted path (`tilts.sectors.health_care`, `tilts.factors.momentum`, `excludes[0]`, etc.) that differs, record `{path: [old_value, new_value]}`. Use `null` for either side when the key is absent on that side. Cap output at 40 entries; if more, truncate and set `version_diff_truncated: true`.
+    3. Stash as `version_diff` on the save audit entry in step 11 below.
+11. **Append** an audit entry for the ingest itself:
     ```json
-    {"schema_version":1,"ts":"...","view_id":"...","version_id":"...","skill":"parallax-load-house-view","action":"save","applied":true}
+    {"schema_version":1,"ts":"...","view_id":"...","version_id":"...","skill":"parallax-load-house-view","action":"save","applied":true,"parent_version_id":"...","version_diff":{"tilts.factors.momentum":[null,-1]}}
     ```
-    Schema per loader.md §6. `schema_version` is required.
+    Schema per loader.md §6. `schema_version` is required. `parent_version_id` and `version_diff` are present only when this save supersedes a prior version.
 
 ### Step 5 — Confirmation summary
 
@@ -212,6 +239,8 @@ To check: /parallax-load-house-view --status
 | `--extend <date>` | Update `metadata.valid_through` only. Bump `version_id`. Re-pair (recompute view_hash — should be unchanged since tilts/excludes unmodified — and re-write `prose.md` frontmatter). |
 | `--re-pair` | Recompute `view_hash` from current `view.yaml` and `prose_body_hash` from current `prose.md` body. Update `prose.md` frontmatter `paired_yaml_hash` AND `prose_body_hash` to match. Use this after a manual prose edit (body or YAML) when the edit was intentional; the command re-anchors both hashes in one step. Note that re-pair intentionally blesses whatever is currently on disk — run only after you have reviewed the edit. |
 | `--edit` | Open `view.yaml` in `$EDITOR` (default: `vi`). On save, re-run Steps 3-4 (confirmation gate + write) using the edited content as the draft. |
+| `--why <tilt-path>` | On-demand provenance query. Takes a dotted path into the view (e.g., `tilts.factors.momentum`, `tilts.sectors.information_technology`, `tilts.macro_regime.growth`). Reads the tilt's value from `view.yaml` and the prose from `prose.md`, then runs a targeted LLM re-read: quote the spans of prose.md that support the tilt value (or note "no explicit support in prose — may be auto-applied per loader.md §3 macro_regime mapping"). Output format: one-paragraph answer citing page/line ref if available, the quoted spans verbatim, and an optional note when the tilt appears to be rule-derived rather than prose-extracted. Zero schema cost — runs against existing `prose.md`. If path is not a non-zero tilt in the active view, say so and exit. |
+| `--version-history` | Read `audit.jsonl`, filter `action="save"` entries in the current view family, and render a compact chain: `version_id → version_id` with the `version_diff` payload rendered as a short bullet list. If any save has `version_diff_truncated: true`, note that. Use this to audit how the view evolved. |
 
 ## Output Format
 
