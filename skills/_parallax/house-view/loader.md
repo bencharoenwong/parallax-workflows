@@ -8,10 +8,12 @@ JIT-loaded by every `parallax-*` skill that consumes the active house view. Defi
 
 ## 1. Locating the active view
 
-**Phase 0 path:** `~/.parallax/active-house-view/`
+**Phase 0 path:** `$PARALLAX_HOUSE_VIEW_DIR` if set, else `~/.parallax/active-house-view/`.
 - `view.yaml` — canonical structured tilts + metadata
 - `prose.md` — verbatim CIO narrative with `paired_yaml_hash` frontmatter
 - `audit.jsonl` — append-only log of consume events
+
+On successful load, the loader MUST emit an explicit log line: `"Active house view resolved from: <path>"`.
 
 **No active view:** if the directory or `view.yaml` is missing, behave as today — no tilts, no banners, standard disclaimer. Do not error; do not prompt the user.
 
@@ -113,7 +115,7 @@ where `w_x = factor_tilt_multiplier(x)`. Re-rank by composite.
 These deltas STACK with explicit factor tilts — uploader can override at confirmation gate.
 
 **Equity-only scope note (always shown at ingest):**
-> "This system applies house view within equity portfolios only. Macro regime signals are interpreted as within-equity factor tilts (e.g., recession → overweight DEFENSIVE). Cross-asset allocation instructions (cash, bonds, alternatives) are outside scope."
+> "This system applies house view within equity portfolios only. Macro regime signals are interpreted as within-equity factor tilts (e.g., recession → overweight DEFENSIVE). Cross-asset allocation (fixed income, FX, credit, commodities, alternatives) is deliberately outside scope. If the source document carries views on non-equity asset classes (full TAA workbooks typically do), those views are NOT captured by this schema and must be applied via a separate allocation layer."
 
 ---
 
