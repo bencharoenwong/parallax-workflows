@@ -32,6 +32,7 @@ Run these checks in order. On any failure, behave per "Failure handling" below �
    - Effective expiry = `metadata.valid_through` if non-null, else `metadata.effective_date + metadata.auto_expire_days`.
    - If `today > effective_expiry` → expired.
    - If `today < metadata.effective_date` → not yet effective.
+<!-- METHODOLOGY: sec-confidence-threshold — derivation of the 0.6 threshold is tracked internally. Do not tune without reviewing the internal note. -->
 7. **Surface low-confidence warnings**: any `extraction.extraction_confidence[field] < 0.6` → list in load preamble.
 
 ### Failure handling
@@ -47,6 +48,7 @@ Run these checks in order. On any failure, behave per "Failure handling" below �
 
 ### Soft-warning thresholds
 
+<!-- METHODOLOGY: sec-tilt-variance-threshold — derivation of the 0.5 threshold is tracked internally. Do not tune without reviewing the internal note. -->
 | Condition | Warning |
 |---|---|
 | `effective_expiry - today` ≤ 14 days | "House view expires in [N] days; consider updating." |
@@ -58,6 +60,7 @@ Run these checks in order. On any failure, behave per "Failure handling" below �
 
 ### Sector / region / theme tilts (universe + weight effect)
 
+<!-- METHODOLOGY: sec-pillar-multipliers — multiplier values (1.25× / 1.50× / 0.75× / 0.50×) and the 2× neutral cap are tracked internally. Do not change numbers without reviewing the internal note. -->
 | Tilt | Universe effect | Weight multiplier | Notes |
 |---|---|---|---|
 | **+2** (Big OW) | Force-include if absent from candidates | 1.50× | Cap final exposure at 2× neutral to prevent runaway |
@@ -70,6 +73,7 @@ Run these checks in order. On any failure, behave per "Failure handling" below �
 
 ### Factor tilts (re-weight Parallax composite)
 
+<!-- METHODOLOGY: sec-factor-multipliers — factor multiplier values and their wider spread vs. sector/region multipliers are tracked internally. Do not change numbers without reviewing the internal note. -->
 | Tilt | Factor weight in composite re-rank |
 |---|---|
 | **+2** | 2.00× |
@@ -92,6 +96,8 @@ where `w_x = factor_tilt_multiplier(x)`. Re-rank by composite.
 | `growth_value.{growth,value}` | Factor tilt | OW value → set `factors.value` += 1 (max +2). OW growth → set `factors.momentum` += 1 AND `factors.value` -= 1 (min -2). Loader warns on conflict if uploader set both `growth_value` and `factors.value` directly. |
 
 ### Macro regime mapping (auto-applied at ingest, surfaced for confirmation)
+
+<!-- METHODOLOGY: sec-macro-regime-deltas — per-regime factor delta magnitudes (±2, ±1) are tracked internally. Direction of each delta is well-supported by style-investing literature; magnitudes are heuristic pending a regime-conditional Sharpe-differential backtest. Do not change magnitudes without reviewing the internal note. -->
 
 **Absent or null sub-fields are not defaulted to neutral.** If `macro_regime` is absent from the view, OR if `macro_regime.growth` is null, skip the auto-tilt row for that dimension entirely — no delta applied, no rationale shown. Mandate-driven (ESG) and geopolitical views typically have no macro regime; forcing `neutral+neutral` would misrepresent the uploader's thesis.
 
