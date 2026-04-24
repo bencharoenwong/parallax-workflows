@@ -35,9 +35,10 @@ Run these checks in order. On any failure, behave per "Failure handling" below �
 4. **Verify** `metadata.version_id == prose.md frontmatter version_id`.
 5. **Verify** `extraction.uploader_confirmed == true`.
 6. **Check expiry**:
-   - Effective expiry = `metadata.valid_through` if non-null, else `metadata.effective_date + metadata.auto_expire_days`.
+   - **Guard first:** if `metadata.effective_date` is null/missing AND `metadata.valid_through` is also null/missing → malformed view. DO NOT apply tilts. Emit: "House view is missing both `effective_date` and `valid_through` — malformed. Run `/parallax-load-house-view --edit` to repair."
+   - Effective expiry = `metadata.valid_through` if non-null, else `metadata.effective_date + metadata.auto_expire_days`. (If `valid_through` is null, `effective_date` MUST be non-null here — the guard above catches the double-null case.)
    - If `today > effective_expiry` → expired.
-   - If `today < metadata.effective_date` → not yet effective.
+   - If `today < metadata.effective_date` → not yet effective. (Skip this sub-check if `effective_date` is null; the presence of `valid_through` alone is sufficient to establish a window boundary.)
 <!-- METHODOLOGY: sec-confidence-threshold — derivation of the 0.6 threshold is tracked internally. Do not tune without reviewing the internal note. -->
 7. **Surface low-confidence warnings**: any `extraction.extraction_confidence[field] < 0.6` → list in load preamble.
 
@@ -50,6 +51,7 @@ Run these checks in order. On any failure, behave per "Failure handling" below �
 | `uploader_confirmed = false` | DO NOT apply tilts. Emit: "House view extraction was never confirmed by uploader. Run `/parallax-load-house-view` to confirm." |
 | Expired | DO NOT apply tilts. Emit: "Active house view '[view_name]' expired [N] days ago. Falling back to neutral. Update via `/parallax-load-house-view --extend`." |
 | Not yet effective | DO NOT apply tilts. Emit: "House view '[view_name]' becomes effective on [date]. Running without view until then." |
+| Malformed window (both `effective_date` and `valid_through` null) | DO NOT apply tilts. Emit per §2 step 6 guard. |
 | Low-confidence fields | Apply tilts, but include in load preamble: "House view loaded with low extraction confidence on: [field list]. Verify before acting." |
 
 ### Soft-warning thresholds
@@ -250,13 +252,40 @@ Phase 1: same fields, persisted to Supabase `house_view_audit` table. Field name
 
 ## 7. Single-stock skills (read-only consumers)
 
-Skills like `parallax-should-i-buy` and `parallax-deep-dive` operate per-stock and do NOT apply tilts. They MUST still:
+Skills like `parallax-should-i-buy` and `parallax-deep-dive` operate per-stock and do NOT apply tilts (no rescoring, no rerank, no peer filtering). They MUST still:
 
 1. Load and validate the active view per §2.
 2. After producing their normal output, check whether the stock's sector / region / themes conflict with view tilts.
-3. Surface a single closing flag if so:
-   > **House view note:** Active view is UW [sector/theme] (set [date]). Recommendation above is for research purposes; evaluate against your active view before acting.
+3. Surface a closing flag if so (see §7.1). Surface inline tokens at specific surfaces per §7.2 and §7.3.
 4. Append the audit log entry per §6.
+
+**Rendering order.** Load preamble at the very top (per §5.1). In the main body, the House View Note (§7.1) is rendered **immediately after the scores/factor section** — NOT at the bottom of the output — so the reader sees the view lens before reading the rest. Inline tokens (§7.2, §7.3) appear at the surface where they arise. The bottom of the output carries only the AI-interaction disclosure and view-aware disclaimer.
+
+### §7.1 House View Note (blanket summary, rendered after The Scores section)
+
+> **House view note:** Active view is [UW/OW] [sector/theme] (set [date]). [N alignments / M conflicts]: [brief list]. Recommendation above is for research purposes; evaluate against your active view before acting.
+
+Use the canonical `render_view_conflict()` contract in `_parallax/house-view/render_helpers.md` — do not hand-construct the note string.
+
+### §7.2 Peer-suggest conflict token (inline, at Peers table)
+
+When the standard output includes a Parallax-surfaced peer suggestion (`get_peer_snapshot.suggestion`) whose **sector** is in a view-UW sector (tilt ≤ -1) or on the excludes list, render an inline line under the Peers table:
+
+> ⚠ Peer suggestion **[TICKER]** is in view-UW [sector] — flagged, not filtered.
+
+**Flag, do not filter.** The peer suggestion is NOT removed from the table — the reader sees it with the token attached. This preserves the §7 "read-only, no tilt application" invariant while closing the silent-disagreement gap. If the suggested peer sits outside the view's tilt surface entirely, no token is rendered.
+
+Use `render_view_conflict()` to construct the token string from `{peer_ticker, peer_sector, view_tilt_direction}`. One token per conflicting peer; multiple tokens stack vertically.
+
+### §7.3 Score-vs-view tension banner (inline, at The Scores section)
+
+When the primary stock's Parallax **total score ≥ 7** AND the stock's own **sector tilt ≤ -1** in the active view, render a one-line banner between the scores table and §7.1 note:
+
+> Parallax scores **[total]** but view is UW [sector] — score-view tension. Resolve at decision time.
+
+Threshold rationale (internal): 7.0 is the high-confidence band in the Parallax total score distribution; tilts of -1 or -2 are non-neutral conviction. Combining both makes the disagreement non-trivial. No banner when only one side is strong (e.g., score 7 in a neutral-sector view → no tension).
+
+Use `render_view_conflict()` for consistent phrasing.
 
 ---
 
