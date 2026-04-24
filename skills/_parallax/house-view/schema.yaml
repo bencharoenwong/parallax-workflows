@@ -31,9 +31,35 @@ metadata:
 # ---------------------------------------------------------------------------
 # TILTS — sparse, integer scale -2 to +2.
 # Multiplier mapping is in loader.md §"Multiplier mapping". Don't duplicate here.
+#
+# Scope: EQUITY PORTFOLIOS ONLY. Cross-asset allocation (fixed income, FX, credit,
+# commodities, alternatives) is deliberately out of scope. Full TAA workbooks carry
+# views across all asset classes — on ingest of such a workbook, non-equity views are
+# NOT captured by this schema and must be applied via a separate allocation layer.
+#
+# Pillar vocabulary follows a four-pillar quantum-factor decomposition:
+#   Ω Econometrics Phase       — macro backdrop (politics/econ/monetary/fiscal/inflation/curve)
+#   Φ Valuation State          — absolute and relative valuation
+#   Ξ Market Entropy           — vol, flows, technicals, information flow, issuance
+#   Ψ Psychological Wavelength — sentiment, greed/fear, risk-on/risk-off
+#   Parallax factors           — value, profitability, momentum, low-vol, trading signals
+#
+# This decomposition is not firm-specific; any multi-signal framework that separates
+# macro / valuation / technicals / sentiment has similar structure. Adopt the labels
+# that match your house's vocabulary — the loader reads the YAML keys, not the prose.
 # ---------------------------------------------------------------------------
 
 tilts:
+
+  # Quantum-factor pillar scores (coarse CIO-level take per pillar, -2 to +2).
+  # Pillar scores are ENCODING-ONLY in Phase 0 — stored for forward-compatibility
+  # but NOT auto-translated into factor multipliers or consumer-skill output.
+  # See loader.md §3 "Quantum-factor pillars" for the Phase 0 contract.
+  pillars:
+    econometrics_phase: 0           # Ω. +2 = constructive backdrop, -2 = recessionary/stress
+    valuation_state: 0              # Φ. +2 = very undervalued, -2 = highly overvalued
+    market_entropy: 0               # Ξ. +2 = low/ordered, -2 = high/disordered
+    psychological_wavelength: 0     # Ψ. +2 = very positive, -2 = very negative
 
   # 11 GICS sectors. Use the exact strings below — loader matches by string.
   sectors:
@@ -154,6 +180,7 @@ tilts:
   # attenuate the tilt multiplier — conviction is informational, not a math input.
   # Sparse: only populate for non-zero tilts where the uploader wanted to flag conviction.
   tilt_conviction:
+    pillars: {}                              # e.g., {valuation_state: 0.4}
     sectors: {}                              # e.g., {financials: 0.7}
     regions: {}
     factors: {}
@@ -197,6 +224,7 @@ extraction:
   extraction_method: "claude-opus-4-7"       # model id used; "manual" if uploader hand-edited
   extracted_at: "2026-04-01T09:28:00Z"
   extraction_confidence:                     # per-field 0.0-1.0; loader warns on any < 0.6
+    pillars: 0.75                            # added 2026-04-22 — quantum-factor pillar scores
     sectors: 0.92
     regions: 0.85
     factors: 0.78

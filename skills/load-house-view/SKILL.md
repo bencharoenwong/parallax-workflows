@@ -66,6 +66,17 @@ Use `AskUserQuestion` to walk the uploader through the schema interactively. Pre
 
 Produce a draft YAML conforming to `_parallax/house-view/schema.yaml`. For each field, also produce a `extraction_confidence` score (0.0-1.0) representing your confidence in the extraction.
 
+**Pillar extraction (quantum-factor decomposition).** Before extracting sector/region/factor tilts, read the source for pillar-level conviction and populate `tilts.pillars`:
+
+| Pillar | Look for | Map to |
+|---|---|---|
+| `econometrics_phase` (Ω) | Macro backdrop framing — "constructive on growth", "recessionary", "stagflation", "soft landing" | +2 very constructive → -2 recessionary/stress |
+| `valuation_state` (Φ) | Valuation commentary — "stretched multiples", "cheap vs history", "PE reasonable", "dispersion" | +2 very undervalued → -2 highly overvalued |
+| `market_entropy` (Ξ) | Technicals/vol/flows — "orderly rotation", "elevated VIX", "breadth deteriorating", "heavy issuance" | +2 low/ordered → -2 high/disordered |
+| `psychological_wavelength` (Ψ) | Sentiment/RORO — "risk-on backdrop", "frothy retail", "capitulation", "fear index elevated" | +2 very positive → -2 very negative |
+
+Pillars are usually coarse — a prose view rarely articulates sub-factor level. If the source is silent on a pillar, leave at 0 and flag `pillars` extraction_confidence ≤ 0.6. Pillar scores are encoding-only in Phase 0 (per loader.md §3): they are stored but do NOT auto-translate into factor multipliers.
+
 **Hedged or split-sector language is a known failure mode.** When the source uses phrases like:
 - "constructive on tech but selective in semis"
 - "modestly underweight financials"
@@ -106,6 +117,12 @@ uploader_role:    <captured>
 effective_date:   <captured>
 valid_through:    <captured or "computed: <date>">
 basis_statement:  <captured, truncated to 200 chars>
+
+--- PILLARS (quantum-factor decomposition) ---
+Ω econometrics_phase:        <value>
+Φ valuation_state:           <value>
+Ξ market_entropy:            <value>
+Ψ psychological_wavelength:  <value>
 
 --- TILTS (only non-zero shown) ---
 sectors:          <list of sector: tilt>
