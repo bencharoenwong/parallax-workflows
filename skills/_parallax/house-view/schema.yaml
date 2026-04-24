@@ -10,6 +10,8 @@
 # Omitted tilt fields default to neutral (0).
 
 metadata:
+  schema_version: 1                          # int, added 2026-04-24 for forward-compat legacy-view detection. v1 covers the schema in effect through Phase 0.5c. Loader gates optional-field reads on this.
+  calibration_status: heuristic_phase0       # enum: heuristic_phase0 | empirical_phase1. Until empirical calibration lands, every save writes "heuristic_phase0" and the load preamble (loader.md §5.1) emits the mandatory disclosure. Do NOT default a reader to empirical; missing field means heuristic_phase0.
   view_id: <uuid v4>                         # generated at ingest, immutable for life of view family
   view_name: "Q2 2026 House View"            # human-readable, shown in banners
   uploaded_by: "cio@firm.example"            # email or stable user id

@@ -25,7 +25,7 @@ On successful load, the loader MUST emit an explicit log line: `"Active house vi
 
 Run these checks in order. On any failure, behave per "Failure handling" below — do NOT silently apply a broken view.
 
-1. **Read** `view.yaml` and `prose.md`.
+1. **Read** `view.yaml` and `prose.md`. Note `metadata.schema_version` (int) — if absent, treat as `schema_version = 0` (legacy pre-0.5c view written before the field was mandatory). Gate optional-field reads (`calibration_status`, future additions) on schema version: v0 views get default values per each field's "absence-means" rule; v1 views MUST have all v1 fields present and the loader may fail-closed if they are missing.
 2. **Recompute** `view_hash = sha256(canonical_yaml_body)` per schema.yaml §"view_hash computation".
 3. **Verify** `prose.md` frontmatter `paired_yaml_hash == view_hash`. If mismatch → drift detected (YAML body changed without re-pairing).
 3a. **Verify prose body integrity** — recompute `prose_body_hash` per schema.yaml §"prose_body_hash computation" and compare to `prose.md` frontmatter `prose_body_hash`. If mismatch → drift detected (prose body changed without re-pairing). Two narrow backward-compat carve-outs apply when the frontmatter field is **missing**:
@@ -179,6 +179,16 @@ When an active view is loaded and applied, every consumer skill MUST:
    >
    > [Any low-confidence warnings from §2.]
    > [Any soft-warning thresholds from §2.]
+   >
+   > [Calibration disclosure from §5.1a — MANDATORY when `metadata.calibration_status == "heuristic_phase0"` or field is absent.]
+
+   ### §5.1a Calibration disclosure (mandatory, unconditional)
+
+   Any time an active view is loaded AND `metadata.calibration_status` is either `"heuristic_phase0"` OR absent (treat absence as heuristic_phase0), the load preamble MUST include this line verbatim:
+
+   > *Tilt multipliers are heuristic and uncalibrated (`calibration_status: heuristic_phase0`). Intended for directional research only — do not use for regulatory capital, fiduciary-grade portfolio construction, or client-facing recommendations.*
+
+   When `metadata.calibration_status == "empirical_phase1"` (Phase 1 only, after the calibration backtest lands), replace with a one-line pointer to calibration evidence. The disclosure is **not optional** — rationale tracked in `notes/` (XAI compliance; SR 11-7 conceptual-soundness; EU AI Act Art 13 transparency-by-design). No client-facing or regulated deployment is permitted while the `heuristic_phase0` disclosure is active.
 
 2. **Conflict banners** — render inline at the section where the conflict arose (e.g., universe selection, allocation), not bundled at the end.
 
@@ -222,6 +232,7 @@ Every consume event appends one JSONL line to `~/.parallax/active-house-view/aud
 |---|---|---|---|
 | `query_summary` | `action == "consume"` | string (≤200 chars) | First 200 chars of the user's input or a one-line summary. |
 | `failure_reason` | `applied == false` AND validation failed | string | Human-readable reason tied to a specific §2 failure row (drift / uploader_unconfirmed / expired / not_yet_effective). |
+| `attempted_version_id` | `applied == false` AND `failure_reason` is non-null | string (uuid v4) OR `null` | Version ID read from `view.yaml` before validation failed; `null` only when `view.yaml` was unreadable or missing. Lets auditors reconstruct "which version was in a broken state at this timestamp" when the top-level `version_id` had to be null. |
 | `applied_reason` | `applied == false` AND validation passed | string | Why tilts weren't applied despite a valid view. Typical values: `"single-stock consumer (loader.md §7.1/§7.2/§7.3)"`, `"divergence refusal (loader.md §5 rule 4)"`, `"operational action (no consume)"`. |
 | `parent_version_id` | `action == "save"` AND this save supersedes a prior version | string (uuid v4) | Immediate predecessor's `version_id`. |
 | `version_diff` | `action == "save"` AND `parent_version_id` is non-null | object | Flat diff of `tilts` + `excludes` subtrees vs parent, keyed by dotted path to `[old_value, new_value]`. Cap 40 entries. |
@@ -271,29 +282,21 @@ Skills like `parallax-should-i-buy` and `parallax-deep-dive` operate per-stock a
 
 ### §7.1 House View Note (blanket summary, rendered after The Scores section)
 
-> **House view note:** Active view is [UW/OW] [sector/theme] (set [date]). [N alignments / M conflicts]: [brief list]. Recommendation above is for research purposes; evaluate against your active view before acting.
-
-Use the canonical `render_view_conflict()` contract in `_parallax/house-view/render_helpers.md` — do not hand-construct the note string.
+Render via `render_view_conflict(kind="blanket", ...)` — see `_parallax/house-view/render_helpers.md` for the canonical template. **Do NOT reproduce the template here** — having the string in two places creates drift risk (runtime Claude may match the visible loader-side string rather than invoke the helper). The helper is the single source of truth.
 
 ### §7.2 Peer-suggest conflict token (inline, at Peers table)
 
-When the standard output includes a Parallax-surfaced peer suggestion (`get_peer_snapshot.suggestion`) whose **sector** is in a view-UW sector (tilt ≤ -1) or on the excludes list, render an inline line under the Peers table:
-
-> ⚠ Peer suggestion **[TICKER]** is in view-UW [sector] — flagged, not filtered.
+When the standard output includes a Parallax-surfaced peer suggestion (`get_peer_snapshot.suggestion`) whose **sector** is in a view-UW sector (tilt ≤ -1) or on the excludes list, render an inline token under the Peers table via `render_view_conflict(kind="peer_suggest", ...)` — see `render_helpers.md` for the canonical template.
 
 **Flag, do not filter.** The peer suggestion is NOT removed from the table — the reader sees it with the token attached. This preserves the §7 "read-only, no tilt application" invariant while closing the silent-disagreement gap. If the suggested peer sits outside the view's tilt surface entirely, no token is rendered.
 
-Use `render_view_conflict()` to construct the token string from `{peer_ticker, peer_sector, view_tilt_direction}`. One token per conflicting peer; multiple tokens stack vertically.
+One token per conflicting peer; multiple tokens stack vertically.
 
 ### §7.3 Score-vs-view tension banner (inline, at The Scores section)
 
-When the primary stock's Parallax **total score ≥ 7** AND the stock's own **sector tilt ≤ -1** in the active view, render a one-line banner between the scores table and §7.1 note:
-
-> Parallax scores **[total]** but view is UW [sector] — score-view tension. Resolve at decision time.
+When the primary stock's Parallax **total score ≥ 7** AND the stock's own **sector tilt ≤ -1** in the active view, render a one-line banner between the scores table and §7.1 note via `render_view_conflict(kind="score_tension", ...)` — see `render_helpers.md` for the canonical template.
 
 Threshold rationale (internal): 7.0 is the high-confidence band in the Parallax total score distribution; tilts of -1 or -2 are non-neutral conviction. Combining both makes the disagreement non-trivial. No banner when only one side is strong (e.g., score 7 in a neutral-sector view → no tension).
-
-Use `render_view_conflict()` for consistent phrasing.
 
 ---
 
