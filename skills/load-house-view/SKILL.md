@@ -74,7 +74,13 @@ Produce a draft YAML conforming to `_parallax/house-view/schema.yaml`. For each 
 
 …do not collapse to a single integer without recording uncertainty. Set the confidence to ≤ 0.7 and note the ambiguity in `extraction.extraction_notes`.
 
+**Factor canonical names.** Use `profitability` (not `quality`) and `low_volatility` (not `defensive`) when extracting fresh. The synonyms remain valid for backward compatibility but new extractions should use the canonical set: `value, profitability, momentum, low_volatility, trading_signals`.
+
+**Region granularity.** For prose that names specific countries (Mexico, Brazil, Indonesia, etc.), use the country-level region keys rather than collapsing into broad buckets (`em_ex_china`, `apac_ex_japan`). The full country list is in schema.yaml §`regions`. When the view speaks in broad terms ("EM ex-China overweight"), use the broad key. When specific ("overweight India and Mexico"), use per-country keys.
+
 **Macro regime auto-mapping** (per `loader.md` §3): if the source implies a macro regime, populate `tilts.macro_regime` AND compute the factor-tilt deltas. Show the uploader the raw regime + the resulting factor deltas at the gate so they can override.
+
+**Cross-asset views are out of scope.** If the source carries views on fixed income, FX, credit, commodities, or alternatives (common in full TAA workbooks), capture them in `extraction.extraction_notes` as "DROPPED (out of scope): <summary>" so the uploader knows what was lost. Do NOT silently discard.
 
 **Required uploader-supplied fields** (cannot be extracted from source — ask via `AskUserQuestion` after extraction):
 - `metadata.uploader_role` (single-select: CIO / PM / Investment Committee / Strategist / Other)
@@ -108,6 +114,9 @@ factors:          <list of factor: tilt>      [auto-applied from macro_regime: <
 styles:           <list of style: tilt>
 themes:           <list of theme: tilt>
 excludes:         <list with reasons>
+
+--- DROPPED (out of scope: cross-asset views) ---
+<list of non-equity views found in source, e.g., "FI: long EM LC sovereign", or "none">
 
 --- MACRO REGIME ---
 growth: <value>   inflation: <value>   rates: <value>   risk_appetite: <value>

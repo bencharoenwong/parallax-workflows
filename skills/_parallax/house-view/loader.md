@@ -60,6 +60,15 @@ Run these checks in order. On any failure, behave per "Failure handling" below �
 
 ## 3. Multiplier mapping
 
+### Factor aliases (canonical vs synonyms)
+
+| Canonical | Synonym | Collapse rule |
+|---|---|---|
+| `factors.profitability` | `factors.quality` | If both set, canonical wins; emit warning |
+| `factors.low_volatility` | `factors.defensive` | If both set, canonical wins; emit warning |
+
+On load, collapse `quality → profitability` and `defensive → low_volatility`. Downstream multiplier math and composite re-ranking should only reference the canonical names. Views written before 2026-04-22 (with only `quality`/`defensive`) continue to work — the loader maps them at read time.
+
 ### Sector / region / theme tilts (universe + weight effect)
 
 <!-- METHODOLOGY: sec-pillar-multipliers — multiplier values (1.25× / 1.50× / 0.75× / 0.50×) and the 2× neutral cap are tracked internally. Do not change numbers without reviewing the internal note. -->
@@ -84,11 +93,14 @@ Run these checks in order. On any failure, behave per "Failure handling" below �
 | **-1** | 0.50× |
 | **-2** | 0.25× |
 
-**Application:** For each candidate's factor scores from `get_peer_snapshot` or `quick_portfolio_scores`, compute weighted composite:
+**Application:** For each candidate's factor scores from `get_peer_snapshot` or `quick_portfolio_scores`, compute weighted composite using the canonical factor set (after alias collapse above):
 ```
-composite = (w_v × value + w_q × quality + w_m × momentum + w_d × defensive) / (w_v + w_q + w_m + w_d)
+composite = (w_v × value + w_p × profitability + w_m × momentum + w_lv × low_volatility + w_ts × trading_signals)
+          / (w_v + w_p + w_m + w_lv + w_ts)
 ```
 where `w_x = factor_tilt_multiplier(x)`. Re-rank by composite.
+
+**Factor-to-Parallax mapping:** Parallax tool outputs (from `get_peer_snapshot`, `quick_portfolio_scores`) may use either the canonical factor names (`profitability`, `low_volatility`) or the synonyms (`quality`, `defensive`). The alias rule bridges symmetrically — apply the same `quality↔profitability` / `defensive↔low_volatility` collapse to the Parallax response before matching to view tilts. If the view tilts `profitability` and Parallax returns `quality`, treat them as the same dimension; same for the reverse. `trading_signals` requires a short-horizon technical score — when Parallax does not expose one, fall back to the tool's `momentum` as a proxy and note this in the output so consumers see the substitution.
 
 ### Style semantics (per dimension)
 

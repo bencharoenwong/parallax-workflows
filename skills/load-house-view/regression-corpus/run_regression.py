@@ -48,9 +48,38 @@ def in_range(actual, rng):
     return lo <= actual <= hi
 
 
+# Factor aliases per loader.md §3. Collapse rule: if both canonical and synonym are set,
+# canonical wins; if only synonym is set, synonym wins. Expected-label lookups try both.
+FACTOR_ALIASES = {
+    "quality": "profitability",
+    "defensive": "low_volatility",
+}
+FACTOR_CANONICAL_TO_ALIAS = {v: k for k, v in FACTOR_ALIASES.items()}
+
+
 def tilt_actual(baseline_tilts: dict, category: str, key: str):
-    """Return the actual tilt value. Omitted = 0 (schema convention: omitted = neutral)."""
-    return baseline_tilts.get(category, {}).get(key, 0)
+    """Return the actual tilt value. Omitted = 0 (schema convention: omitted = neutral).
+
+    For factors, apply the alias collapse rule: if the requested key is a synonym
+    (e.g., 'quality') and the baseline uses the canonical name ('profitability'),
+    return the canonical value. Vice versa for new-schema labels referring to
+    canonical when baseline used the synonym.
+    """
+    cat = baseline_tilts.get(category, {}) or {}
+    if category == "factors":
+        canonical = FACTOR_ALIASES.get(key)            # key is a synonym → canonical exists
+        synonym = FACTOR_CANONICAL_TO_ALIAS.get(key)   # key is canonical → synonym exists
+        # Canonical wins on conflict per loader.md §3
+        if canonical and canonical in cat:
+            return cat[canonical]
+        if synonym and key in cat:
+            return cat[key]
+        if key in cat:
+            return cat[key]
+        if synonym and synonym in cat:
+            return cat[synonym]
+        return 0
+    return cat.get(key, 0)
 
 
 def style_actual(baseline_tilts: dict, flat_key: str):
