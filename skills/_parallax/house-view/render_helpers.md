@@ -26,9 +26,11 @@ render_view_conflict(kind, fields) -> str
 
 **Template:**
 
-> **House view note:** Active view is {direction} {subject} (set {effective_date}). {alignment_count} alignment{s} / {conflict_count} conflict{s} — {conflict_list}. {alignment_list_clause} Recommendation above is for research purposes; evaluate against your active view before acting.
+> **House view note:** Active view is {direction} {subject} (set {effective_date}). {alignment_count} alignment{s} / {conflict_count} conflict{s} — {conflict_list}. {alignment_list_clause} Recommendation above is for research purposes; evaluate against your active view before acting. (For tilt origin, run `/parallax-load-house-view --why tilts.<path>`.)
 
 Where `{alignment_list_clause}` = `"Alignments: " + alignment_list + "."` if `alignment_count > 0`, else empty string. `{s}` = `""` if count == 1 else `"s"`.
+
+The trailing `--why` pointer is MANDATORY while `metadata.calibration_status == "heuristic_phase0"` — it gives the reader a one-query path to tilt provenance (source prose vs. macro-regime rule). This is the Phase 0.5 bridge until Gap 4 ships `provenance.yaml` at ingest, at which point `render_view_conflict()` will gain an optional `source_type` field and the parenthetical can become richer (e.g., `(tilt source: prose-extracted | rule-derived | manual)`).
 
 ---
 

@@ -63,7 +63,14 @@ Needs company info for market reasoning:
 
 ### Batch C — AI Assessment (after A + B)
 
-Call `get_assessment` with a comprehensive prompt incorporating **all** findings: factor scores, score trends, key ratios, technical stance, macro context, dividend profile, risk/return vs peers, the user's specific question/thesis if provided, AND the active house view if present (basis_statement + tilts on this stock's sector/region/themes). Ask the assessor to address whether the position aligns with the view.
+Call `get_assessment` with a comprehensive prompt incorporating **all** findings: factor scores, score trends, key ratios, technical stance, macro context, dividend profile, risk/return vs peers, the user's specific question/thesis if provided, AND the active house view if present (basis_statement + tilts on this stock's sector/region/themes).
+
+**When a view is active, the assessor MUST produce a structured enumeration** — not a free-form "aligns well" paragraph. Require the assessor to end its output with three bullet lists:
+1. **Tilts that support this position** — enumerate each active tilt (sector, region, factor, theme) where this stock's profile materially aligns with the tilt direction. One line each.
+2. **Tilts that contradict this position** — enumerate each active tilt where this stock's profile materially disagrees. One line each.
+3. **Active tilts NOT incorporated into this assessment** — enumerate tilts the assessor chose to ignore (e.g., because the stock has no exposure to that sector/theme) and state the reason in one clause each.
+
+This decomposition is MANDATORY when a view is present (MAS FEAT P13/14, SR 11-7 traceability — the assessor's influence on a CIO decision must be auditable via the prose itself). If the assessor returns prose without the three enumerations, re-run with a stricter prompt before rendering.
 
 Apply graceful fallback patterns from shared conventions for any missing data.
 
@@ -80,7 +87,7 @@ Apply graceful fallback patterns from shared conventions for any missing data.
   - *If view active AND `get_peer_snapshot.suggestion` returned a peer:* check §7.2 condition (peer's sector tilt ≤ -1 in view, or peer ticker on excludes). If true, render inline token via `render_view_conflict(kind="peer_suggest", ...)` under the Risk/Return section. Flag, do not filter — the peer stays in the table.
 - **Technical Stance** (trend, key levels, momentum)
 - **News Catalyst Watch** (material items only)
-- **Assessment** (AI deep-research synthesis — includes macro + trend data; if view active, includes view-alignment commentary — this is deep-dive's primary alignment surface)
+- **Assessment** *(AI-generated — Perplexity deep-research synthesis)* — includes macro + trend data; if view active, MUST end with the three-bullet tilt decomposition per Batch C contract. This is deep-dive's primary alignment surface. Render the section header with the italic parenthetical verbatim — it's the contextual-proximity AI disclosure per HKMA/SFC Nov 2024 Circular; the document-level banner (§5 rule 6) is not sufficient for the Perplexity-backed non-deterministic content in this specific section.
 - **Risk Factors** (what could go wrong)
 
 Append audit log entry per loader.md §6.
