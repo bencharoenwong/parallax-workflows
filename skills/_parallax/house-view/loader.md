@@ -210,8 +210,8 @@ Every consume event appends one JSONL line to `~/.parallax/active-house-view/aud
 |---|---|---|
 | `schema_version` | int | Currently `1`. Bump on any breaking change to this table. |
 | `ts` | string (ISO 8601 UTC, ending `Z`) | Event timestamp. |
-| `view_id` | string (uuid v4) OR `null` | Null only when `applied=false` AND reason is `no_view`. |
-| `version_id` | string (uuid v4) OR `null` | Null under the same condition as `view_id`. |
+| `view_id` | string (uuid v4) OR `null` | Null when `applied=false` AND reason is `no_view`, OR when `action=="extraction_attempt"` (the draft has no assigned `view_id` until saved). |
+| `version_id` | string (uuid v4) OR `null` | Null under the same conditions as `view_id`. |
 | `skill` | string | `parallax-<name>` of the consuming skill. |
 | `action` | string (enum) | One of: `save`, `clear`, `extend`, `re-pair`, `edit`, `consume`, `extraction_attempt`. `consume` is the default for any consumer-skill invocation (portfolio-builder, should-i-buy, etc.). `extraction_attempt` (added Phase 0.5b) logs ingestion drafts whether or not they became saves — captures retries, edits, and rejects. The others are operational events from `parallax-load-house-view`. Consumers that encounter an unrecognized `action` value MUST skip the row (forward-compatibility). |
 | `applied` | bool | True if tilts were actually applied to the skill's output. False if validation failed, single-stock skill (conflict-flag only), or operational action. |

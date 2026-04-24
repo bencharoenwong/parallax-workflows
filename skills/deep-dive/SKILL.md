@@ -72,12 +72,12 @@ Apply graceful fallback patterns from shared conventions for any missing data.
 - **Company Overview** (3 sentences)
 - **Macro Environment** (regime context for relevant markets, factor implications)
 - **Factor Profile** (table: each factor score with peer rank + 52-week trend direction)
-  - *If view active:* check §7.3 tension condition; render banner via `render_view_conflict(kind="score_tension", ...)` directly below the factor table if triggered.
+  - *If view active:* check §7.3 tension condition (`total_score >= 7.0 AND view.tilts.sectors[stock_sector] <= -1`). If true, render banner via `render_view_conflict(kind="score_tension", ...)` directly below the factor table.
 - **House View Note** (only if view active and stock conflicts with view) — render via `render_view_conflict(kind="blanket", ...)` per loader.md §7.1. Rendered HERE — immediately after Factor Profile — so the view lens appears before the rest of the analysis. Not at the bottom.
 - **Financial Highlights** (key ratios, trends)
 - **Dividend Profile** (yield, payout ratio, consistency — or "Not a dividend payer")
 - **Risk/Return Profile** (volatility, Sharpe context vs peers)
-  - *If view active AND `get_peer_snapshot.suggestion` returned a peer:* check §7.2 condition; render inline token via `render_view_conflict(kind="peer_suggest", ...)` under the Risk/Return section. Flag, do not filter.
+  - *If view active AND `get_peer_snapshot.suggestion` returned a peer:* check §7.2 condition (peer's sector tilt ≤ -1 in view, or peer ticker on excludes). If true, render inline token via `render_view_conflict(kind="peer_suggest", ...)` under the Risk/Return section. Flag, do not filter — the peer stays in the table.
 - **Technical Stance** (trend, key levels, momentum)
 - **News Catalyst Watch** (material items only)
 - **Assessment** (AI deep-research synthesis — includes macro + trend data; if view active, includes view-alignment commentary — this is deep-dive's primary alignment surface)
