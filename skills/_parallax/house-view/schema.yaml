@@ -51,23 +51,66 @@ tilts:
 
   # Regions. Loader maps RIC suffix → region per parallax-conventions.md §1.
   # Free-form keys allowed beyond the canonical set; loader warns on unknown keys.
+  # Expanded 2026-04-22 to canonical 27-country equity coverage.
+  # BROAD buckets (europe, em_ex_china, apac_ex_japan, emea) are unions — prefer specific
+  # country keys when the view has granular conviction; loader.md §3 describes precedence.
   regions:
+    # --- Developed Markets ---
     us: 0
-    europe: 0
-    japan: 0
-    em_ex_china: 0
-    china: 0
+    canada: 0                              # added 2026-04-22
     uk: 0
-    apac_ex_japan: 0
-    taiwan: 0                              # added 2026-04-21 — AI/semi views frequently target TW directly
-    south_korea: 0                         # added 2026-04-21 — AI/semi + nearshoring views target KR directly
+    europe: 0                              # broad
+    germany: 0                             # added 2026-04-22
+    france: 0                              # added 2026-04-22
+    italy: 0                               # added 2026-04-22
+    spain: 0                               # added 2026-04-22
+    switzerland: 0                         # added 2026-04-22
+    japan: 0
+    australia: 0                           # added 2026-04-22
+
+    # --- Emerging / Frontier Asia ---
+    china: 0
+    hong_kong: 0                           # added 2026-04-22 (distinguishes from mainland A-shares)
+    taiwan: 0
+    south_korea: 0
+    india: 0
+    apac_ex_japan: 0                       # broad
+
+    # --- ASEAN ---
+    singapore: 0                           # added 2026-04-22
+    indonesia: 0                           # added 2026-04-22
+    philippines: 0                         # added 2026-04-22
+    thailand: 0                            # added 2026-04-22
+    vietnam: 0                             # added 2026-04-22
+    malaysia: 0                            # added 2026-04-22
+
+    # --- Latam ---
+    em_ex_china: 0                         # broad
+    mexico: 0                              # added 2026-04-22
+    brazil: 0                              # added 2026-04-22
+    chile: 0                               # added 2026-04-22
+
+    # --- EMEA / MENA ---
+    emea: 0                                # added 2026-04-22
+    mena: 0                                # added 2026-04-22
 
   # Parallax factor scores. Loader applies as composite-weight multipliers.
+  # Canonical set: value, profitability, momentum, low-volatility, trading-signals —
+  # all five are established academic/industry factors (Fama-French, Asness QMJ,
+  # Frazzini-Pedersen BAB, Jegadeesh-Titman momentum, short-horizon technical signals).
+  # `quality` and `defensive` are retained as backward-compat synonyms — loader.md §3
+  # "Factor aliases" defines the collapse rule (canonical wins on conflict, loader warns).
   factors:
+    # --- Canonical factor set ---
     value: 0
-    quality: 0
+    profitability: 0                       # added 2026-04-22 — canonical (was `quality`)
     momentum: 0
-    defensive: 0
+    low_volatility: 0                      # added 2026-04-22 — canonical (was `defensive`)
+    trading_signals: 0                     # added 2026-04-22 — short-term technical signals
+
+    # --- Backward-compatible synonyms ---
+    quality: 0                             # synonym of profitability; use profitability preferentially
+    defensive: 0                           # synonym of low_volatility; use low_volatility preferentially
 
   # Style tilts. Each dimension has different semantics — see loader.md §"Style semantics".
   styles:
@@ -103,6 +146,19 @@ tilts:
     - "ESG mandate"
     - "Sanctions compliance"
     - "Sanctions compliance"
+
+  # OPTIONAL: CIO conviction per non-zero tilt (0.0-1.0).
+  # Conviction is DISTINCT from extraction_confidence — the latter measures whether
+  # the extractor captured the view correctly; this measures how strongly the uploader
+  # believes the view. Loader surfaces low conviction in the preamble but does NOT
+  # attenuate the tilt multiplier — conviction is informational, not a math input.
+  # Sparse: only populate for non-zero tilts where the uploader wanted to flag conviction.
+  tilt_conviction:
+    sectors: {}                              # e.g., {financials: 0.7}
+    regions: {}
+    factors: {}
+    styles: {}
+    themes: {}
 
   # Macro regime view. OPTIONAL — some views (mandate-driven ESG, geopolitical theses)
   # don't speak in macro-regime terms. When omitted or any sub-field set to null, loader.md §3
