@@ -8,7 +8,8 @@ negative-triggers:
   - Peer comparison only → use /parallax-peer-comparison
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
-  - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §7 (single-stock conflict surfacing), §6 (audit). Do NOT apply tilts — single-stock skills surface conflicts only. The get_assessment prompt should include the active view (basis_statement + relevant tilts) so the AI assessment can address view alignment.
+  - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §7.1/§7.2/§7.3 (single-stock conflict surfacing — blanket note + peer-suggest token + score-tension banner), §6 (audit). Do NOT apply tilts — single-stock skills surface conflicts only; peer suggestions are flagged but never filtered. The get_assessment prompt should include the active view (basis_statement + relevant tilts) so the AI assessment can address view alignment in prose — that is deep-dive's primary alignment surface. §7.1/§7.2/§7.3 inline flags are additive polish on top.
+  - When rendering §7.1/§7.2/§7.3 flags, JIT-load _parallax/house-view/render_helpers.md and route every token through `render_view_conflict()`.
   - When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
   - get_assessment is async and uses Perplexity — may take 30-90s
   - get_assessment prompt should incorporate macro context, score trends, and dividend profile alongside existing data
@@ -34,7 +35,7 @@ Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-c
 
 ### Step 0 — Load Active House View
 
-Per `loader.md` §1-§2 + §7. If view present, capture tilt vector + excludes + basis_statement. Do NOT apply tilts to scoring. The Step 0 capture feeds Batch C's `get_assessment` prompt (so the AI can address view alignment) and the closing flag in Output.
+Per `loader.md` §1-§2 + §7.1/§7.2/§7.3. If view present, capture tilt vector + excludes + basis_statement. Do NOT apply tilts to scoring. The Step 0 capture feeds two surfaces: (a) Batch C's `get_assessment` prompt (AI addresses view alignment in prose — deep-dive's primary alignment surface), (b) the inline §7.1/§7.2/§7.3 flags in Output (blanket note after Factor Profile; peer-suggest token if triggered; tension banner if triggered).
 
 ### Batch A — Fire all data calls in parallel
 
@@ -71,14 +72,16 @@ Apply graceful fallback patterns from shared conventions for any missing data.
 - **Company Overview** (3 sentences)
 - **Macro Environment** (regime context for relevant markets, factor implications)
 - **Factor Profile** (table: each factor score with peer rank + 52-week trend direction)
+  - *If view active:* check §7.3 tension condition; render banner via `render_view_conflict(kind="score_tension", ...)` directly below the factor table if triggered.
+- **House View Note** (only if view active and stock conflicts with view) — render via `render_view_conflict(kind="blanket", ...)` per loader.md §7.1. Rendered HERE — immediately after Factor Profile — so the view lens appears before the rest of the analysis. Not at the bottom.
 - **Financial Highlights** (key ratios, trends)
 - **Dividend Profile** (yield, payout ratio, consistency — or "Not a dividend payer")
 - **Risk/Return Profile** (volatility, Sharpe context vs peers)
+  - *If view active AND `get_peer_snapshot.suggestion` returned a peer:* check §7.2 condition; render inline token via `render_view_conflict(kind="peer_suggest", ...)` under the Risk/Return section. Flag, do not filter.
 - **Technical Stance** (trend, key levels, momentum)
 - **News Catalyst Watch** (material items only)
-- **Assessment** (AI deep-research synthesis — includes macro + trend data; if view active, includes view-alignment commentary)
+- **Assessment** (AI deep-research synthesis — includes macro + trend data; if view active, includes view-alignment commentary — this is deep-dive's primary alignment surface)
 - **Risk Factors** (what could go wrong)
-- **House View Note** (only if view active and stock conflicts with view) — render per loader.md §7
 
 Append audit log entry per loader.md §6.
 
