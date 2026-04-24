@@ -27,7 +27,8 @@ Run these checks in order. On any failure, behave per "Failure handling" below �
 
 1. **Read** `view.yaml` and `prose.md`.
 2. **Recompute** `view_hash = sha256(canonical_yaml_body)` per schema.yaml §"view_hash computation".
-3. **Verify** `prose.md` frontmatter `paired_yaml_hash == view_hash`. If mismatch → drift detected.
+3. **Verify** `prose.md` frontmatter `paired_yaml_hash == view_hash`. If mismatch → drift detected (YAML body changed without re-pairing).
+3a. **Verify prose body integrity** — recompute `prose_body_hash` per schema.yaml §"prose_body_hash computation" and compare to `prose.md` frontmatter `prose_body_hash`. If mismatch → drift detected (prose body changed without re-pairing). If the frontmatter field is **missing** (view written before 2026-04-24), skip this check and surface a one-time soft warning: "Legacy view: prose body integrity not verified. Re-pair to enable."
 4. **Verify** `metadata.version_id == prose.md frontmatter version_id`.
 5. **Verify** `extraction.uploader_confirmed == true`.
 6. **Check expiry**:
@@ -178,26 +179,69 @@ When an active view is loaded and applied, every consumer skill MUST:
 
 3. **Ground-truth panel** (REQUIRED when any per-holding score is rendered): next to every factor score, show the company name that the scoring tool actually returned (from `get_peer_snapshot.target_company` or `quick_portfolio_scores.holdings_analyzed[].company_name`) and the input ticker. If the returned name does not match the `get_company_info` name-of-record for the input ticker, flag the row **loudly** (e.g., `⚠ MISMATCH: score attributed to <X>, expected <Y>`). Never display scores as authoritative when the name-mismatch is present — the score belongs to a different company.
 
-4. **Divergence assertion on universe composition** (REQUIRED for skills that call `build_stock_universe` with multi-sector or multi-theme tilts): after the call returns, compute the sector distribution of the result. If the caller requested N≥2 sectors/themes in the tilt-prepended query and the returned distribution has `max_sector_share / total > 0.6`, emit a **fail-loud warning** and either (a) refuse to render the portfolio, or (b) re-issue the call as N parallel per-sector queries and merge. Do not silently proceed. This does NOT apply to legitimately concentrated tilts where only 1 sector/theme was requested (e.g., "100% energy" from a pure-energy view).
+4. **Divergence assertion on universe composition** (REQUIRED for skills that call `build_stock_universe` with multi-sector or multi-theme tilts): after the call returns, compute the sector distribution of the result. If the caller requested N≥2 sectors/themes in the tilt-prepended query and the returned distribution has `max_sector_share / total > 0.6`, emit a **fail-loud warning** and **by default re-issue the call as N parallel per-sector (or per-theme) queries and merge the results** (deduplicating by symbol, keeping the highest rank). Only fall back to refusing to render the portfolio when the per-sector re-issue *also* produces skewed output (e.g., some sectors return zero results). Do not silently proceed. This does NOT apply to legitimately concentrated tilts where only 1 sector/theme was requested (e.g., "100% energy" from a pure-energy view). *Rationale: in practice the universal-universe query collapses to whichever sector the embedding-based matcher considers most prototypical for the tilt language ("defensive" → biotech-heavy Healthcare), so per-sector re-issue is the only path that actually reflects the view's multi-sector intent.*
 
 5. **View-aware disclaimer** (bottom — replaces the standard parallax-conventions §7 disclaimer):
    > *"This analysis reflects active house view '[view_name]' uploaded by [uploader_role] on [upload_date], effective [effective_date]. Tilts and excludes per the loaded view; conflicts with explicit user scope are flagged inline. Outputs should be reviewed against client suitability before any action."*
 
-When NO active view is loaded, skills run as today — standard output, no preamble, standard disclaimer. Rules 3 and 4 (ground-truth panel and divergence assertion) apply whether or not a view is active — they are data-integrity requirements, not view-specific features.
+6. **AI-interaction disclosure** (bottom, immediately above or below the view-aware disclaimer — REQUIRED whether or not a view is active; applies to every consumer skill output):
+   > *"This output was generated with the assistance of AI. Inputs, factor scores, and framing were produced by large-language-model analysis of structured data and prose. Review before acting. See methodology at [methodology_url]."*
+   >
+   > <!-- COUNSEL-TBD — wording pending HK SFC Nov-2024 circular alignment review per `notes/2026-04-24-compliance-jurisdiction-lookup.md` §7 item 5. Current text is a placeholder that satisfies the disclosure principle (AI involvement, scope of AI role, review obligation) but must be replaced with counsel-approved wording before v1 ship. Placement adjacent to the view-aware disclaimer ensures disclosure accompanies every piece of analysis; the pairing is intentional, not redundant. -->
+
+   `methodology_url` defaults to the Parallax public methodology page when unset. Skills SHOULD render this banner even when running without an active view — AI involvement in scoring and synthesis is independent of view state.
+
+When NO active view is loaded, skills run as today — standard output, no preamble, standard disclaimer. Rules 3 and 4 (ground-truth panel and divergence assertion) AND rule 6 (AI-interaction disclosure) apply whether or not a view is active — they are data-integrity / regulatory requirements, not view-specific features.
 
 ---
 
 ## 6. Audit logging
 
-Every consume event appends one JSONL line to `~/.parallax/active-house-view/audit.jsonl`:
+Every consume event appends one JSONL line to `~/.parallax/active-house-view/audit.jsonl`. The schema below is stable — Phase 1 promotes this to a Supabase `house_view_audit` table with identical field names and types, so any Phase 0 audit file can be bulk-loaded without transformation.
+
+### 6.1 Required fields (every line)
+
+| Field | Type | Notes |
+|---|---|---|
+| `schema_version` | int | Currently `1`. Bump on any breaking change to this table. |
+| `ts` | string (ISO 8601 UTC, ending `Z`) | Event timestamp. |
+| `view_id` | string (uuid v4) OR `null` | Null only when `applied=false` AND reason is `no_view`. |
+| `version_id` | string (uuid v4) OR `null` | Null under the same condition as `view_id`. |
+| `skill` | string | `parallax-<name>` of the consuming skill. |
+| `action` | string (enum) | One of: `save`, `clear`, `extend`, `re-pair`, `edit`, `consume`. `consume` is the default for any consumer-skill invocation (portfolio-builder, should-i-buy, etc.); the others are operational events from `parallax-load-house-view`. |
+| `applied` | bool | True if tilts were actually applied to the skill's output. False if validation failed, single-stock skill (conflict-flag only), or operational action. |
+
+### 6.2 Conditional fields
+
+| Field | Required when | Type | Notes |
+|---|---|---|---|
+| `query_summary` | `action == "consume"` | string (≤200 chars) | First 200 chars of the user's input or a one-line summary. |
+| `failure_reason` | `applied == false` AND validation failed | string | Human-readable reason tied to a specific §2 failure row (drift / uploader_unconfirmed / expired / not_yet_effective). |
+| `applied_reason` | `applied == false` AND validation passed | string | Why tilts weren't applied despite a valid view. Typical values: `"single-stock consumer (loader.md §7)"`, `"divergence refusal (loader.md §5 rule 4)"`, `"operational action (no consume)"`. |
+| `conflicts_count` | `action == "consume"` | int ≥ 0 | Number of user-scope vs. view-tilt conflicts surfaced inline. |
+| `conflicts_summary` | `conflicts_count > 0` | string | Compact per-conflict summary. |
+| `output_summary_hash` | `action == "consume"` AND output was rendered | string (sha256 hex) | sha256 of first 1000 chars of the skill's user-facing output. |
+| `ground_truth_mismatches` | `action == "consume"` AND any mismatch flagged per §5 rule 3 | int ≥ 0 | 0 if none. |
+| `ground_truth_mismatch_detail` | `ground_truth_mismatches > 0` | string | Specifics of each mismatch. |
+| `destination` | `action == "clear"` | string | Archive path the cleared view was moved to. |
+| `reason` | `action == "clear"` | string | Human-readable clear reason. |
+| `notes` | any | string | Optional free text for anything that doesn't fit a named field. Not relied upon by downstream queries. |
+
+### 6.3 Forbidden
+
+- **Skill-specific custom keys are not permitted.** If a new field is needed, add it to §6.2 as a conditional field with an explicit required-when rule. Drift here blocks Phase 1 migration.
+- **No PII.** `query_summary` is the only user-derived content; truncate at 200 chars and do not log account IDs, client names, or full holdings arrays.
+
+### 6.4 Minimal examples
 
 ```json
-{"ts":"<ISO 8601>","view_id":"<uuid>","version_id":"<uuid>","skill":"parallax-portfolio-builder","query_summary":"<first 200 chars of user input>","applied":true,"conflicts_count":0,"output_summary_hash":"<sha256 of output first 1000 chars>"}
+{"schema_version":1,"ts":"2026-04-24T06:00:00Z","view_id":"d6c4...","version_id":"e8fb...","skill":"parallax-load-house-view","action":"save","applied":true}
+{"schema_version":1,"ts":"2026-04-24T06:01:00Z","view_id":"d6c4...","version_id":"e8fb...","skill":"parallax-portfolio-builder","action":"consume","applied":true,"query_summary":"Build me a defensive US equity portfolio, 20 holdings","conflicts_count":0,"output_summary_hash":"abc123...","ground_truth_mismatches":0}
+{"schema_version":1,"ts":"2026-04-24T06:02:00Z","view_id":"d6c4...","version_id":"e8fb...","skill":"parallax-should-i-buy","action":"consume","applied":false,"applied_reason":"single-stock consumer (loader.md §7)","query_summary":"/parallax-should-i-buy AAPL.O","conflicts_count":1,"conflicts_summary":"info_tech UW vs AAPL sector","output_summary_hash":"def456..."}
+{"schema_version":1,"ts":"2026-04-24T06:03:00Z","view_id":null,"version_id":null,"skill":"parallax-portfolio-builder","action":"consume","applied":false,"failure_reason":"drift: prose.md frontmatter paired_yaml_hash != recomputed view_hash","query_summary":"<user input>"}
 ```
 
-`applied: false` when validation fails per §2 — still log the attempt with the failure reason in a `failure_reason` field.
-
-Phase 1: same fields, persisted to Supabase `house_view_audit` table.
+Phase 1: same fields, persisted to Supabase `house_view_audit` table. Field names, types, and required-when semantics carry forward unchanged. A backfill of Phase 0 audit files is a straight `COPY FROM` of the JSONL.
 
 ---
 

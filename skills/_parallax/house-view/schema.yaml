@@ -208,10 +208,50 @@ tilts:
 # prose.md structure (separate file):
 # ---
 # paired_yaml_hash: <sha256 — must match view_hash above>
+# prose_body_hash: <sha256 of the prose body (everything after the closing `---` of
+#                   this frontmatter), utf-8 encoded, computed per §prose_body_hash below>
 # view_id: <uuid — must match metadata.view_id>
 # version_id: <uuid — must match metadata.version_id>
 # ---
 # <verbatim CIO narrative as markdown>
+#
+# ===========================================================================
+# prose_body_hash computation
+# ===========================================================================
+# Purpose: detect tampering of the prose body after save. `paired_yaml_hash` only
+# protects the YAML body → prose frontmatter edge; a reader editing the prose
+# body without re-pairing would otherwise go undetected by loader.md §2. The
+# `prose_body_hash` closes that gap.
+#
+# Algorithm:
+#   1. Read the full prose.md file as bytes.
+#   2. Strip the leading frontmatter block: everything from the first `---\n`
+#      up to and including the second `---\n`. If no frontmatter, the body is
+#      the entire file.
+#   3. prose_body_hash = sha256(body_bytes).hexdigest()
+#
+# Reference Python snippet (self-contained, no yaml dependency):
+#
+#   import hashlib
+#   def compute_prose_body_hash(prose_text: str) -> str:
+#       data = prose_text.encode("utf-8")
+#       marker = b"---\n"
+#       if data.startswith(marker):
+#           end = data.find(marker, len(marker))
+#           if end != -1:
+#               data = data[end + len(marker):]
+#       return hashlib.sha256(data).hexdigest()
+#
+# Loader (§2 step 3a, added 2026-04-24):
+#   - Recompute prose_body_hash from the current prose.md file.
+#   - Compare to frontmatter `prose_body_hash`.
+#   - Mismatch → drift. Same failure message as paired_yaml_hash drift.
+#
+# Backward compatibility: views written before 2026-04-24 have no
+# `prose_body_hash` in frontmatter. Loader treats a MISSING field as "legacy
+# view, skip body-hash verification" rather than a drift failure. New saves
+# MUST include it. Re-running `/parallax-load-house-view --re-pair` on a legacy
+# view computes and injects the field.
 
 # ---------------------------------------------------------------------------
 # EXTRACTION — provenance + confidence.
@@ -248,3 +288,96 @@ extraction:
 # - Re-saving the same view (different upload_timestamp) preserves the hash.
 # - Prose edits do not invalidate the pairing UNLESS the YAML body actually changed.
 # - Phase 1 Supabase storage can de-duplicate views by view_hash across orgs.
+#
+# ---------------------------------------------------------------------------
+# Pinned canonicalization algorithm (added 2026-04-24).
+# ---------------------------------------------------------------------------
+# Previously under-specified; this block is now the binding contract. Any
+# implementation (Python, Node, Go, server-side Supabase function) that
+# follows these rules exactly produces byte-identical canonical output, and
+# therefore identical sha256 digests.
+#
+# Rule 1 — Scope.
+#   Take ONLY these two top-level keys from the view YAML document:
+#     - `tilts` (map)
+#     - `excludes` (sequence; use [] if absent)
+#   Ignore everything else (metadata, extraction, exclude_reasons, comments).
+#
+# Rule 2 — Strip empty/zero recursively.
+#   A value is "empty" iff it is any of: None / null, 0 (int or float), ""
+#   (empty string), [] (empty sequence), or {} (empty map) AFTER its children
+#   have themselves been stripped.
+#   - Walk tilts + excludes depth-first; strip empties bottom-up.
+#   - "0" means the integer zero, NOT the string "0" and NOT False.
+#   - Booleans are NOT stripped (there are no bool-valued tilts today; this is
+#     future-proofing).
+#
+# Rule 3 — Serialize.
+#   Use PyYAML's `yaml.safe_dump` with:
+#     sort_keys=True, default_flow_style=False, allow_unicode=True,
+#     width=1_000_000 (suppress line wrapping), indent=2.
+#   This matches the output of every PyYAML 5.x / 6.x release that ships
+#   `safe_dump`. Node `js-yaml` and Go `gopkg.in/yaml.v3` configured with
+#   equivalent settings (sorted keys, block style, no flow, no wrapping, UTF-8,
+#   2-space indent) produce identical bytes on the test fixture below.
+#
+# Rule 4 — Encode + hash.
+#   canonical_body_bytes = canonical_yaml_string.encode("utf-8")
+#   view_hash            = hashlib.sha256(canonical_body_bytes).hexdigest()
+#
+# Reference Python implementation (must pass the fixture in Rule 5):
+#
+#   import hashlib, yaml
+#   def _strip_empty(obj):
+#       if isinstance(obj, dict):
+#           out = {}
+#           for k, v in obj.items():
+#               v = _strip_empty(v)
+#               if v is None or v == 0 or v == "" or v == [] or v == {}:
+#                   continue
+#               out[k] = v
+#           return out
+#       if isinstance(obj, list):
+#           return [_strip_empty(x) for x in obj
+#                   if x not in (None, 0, "", [], {})]
+#       return obj
+#   def compute_view_hash(view: dict) -> str:
+#       body = {
+#           "tilts":    _strip_empty(view.get("tilts", {})),
+#           "excludes": view.get("excludes", []) or [],
+#       }
+#       canonical = yaml.safe_dump(
+#           body, sort_keys=True, default_flow_style=False,
+#           allow_unicode=True, width=1_000_000, indent=2,
+#       )
+#       return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+#
+# Rule 5 — Test fixture (any implementation MUST match this byte-for-byte).
+#   Input view (subset — only tilts + excludes matter):
+#     tilts:
+#       sectors: {information_technology: -1}
+#       regions: {us: 1}
+#       factors: {profitability: 2}
+#       pillars: {econometrics_phase: 0}    # stripped (zero)
+#       styles: {cap_size: {large: 0}}      # stripped (empty after inner strip)
+#     excludes: []
+#
+#   Expected canonical_yaml_body (exact bytes, terminal newline included):
+#     excludes: []
+#     tilts:
+#       factors:
+#         profitability: 2
+#       regions:
+#         us: 1
+#       sectors:
+#         information_technology: -1
+#
+#   Expected view_hash (sha256 hex): 1629fba3f63d0b498ae69845460cf456f316acbdac239e4bef58e2fdd7b9cc69
+#
+#   A runnable version of this fixture lives in
+#   `skills/_parallax/house-view/tests/fixtures/view_hash_fixture.yaml`;
+#   `tests/test_view_hash.py` asserts the digest matches on every release.
+#
+# If a future change requires the canonicalization to evolve (e.g., to include
+# new top-level keys), bump `schema_version` in audit.jsonl and emit a
+# migration note — never silently alter the byte output.

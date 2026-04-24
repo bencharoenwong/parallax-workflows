@@ -160,30 +160,28 @@ If `Edit specific fields`: loop on `AskUserQuestion` per flagged field, then re-
 If `Re-extract with hint`: ask for the hint, re-run Step 2 with the hint added to extraction context, re-render the gate.
 If `Reject`: abandon, do not write.
 
-### Step 4 — Compute view_hash and write files
+### Step 4 — Compute hashes and write files
 
 On `Confirm`:
 
-1. **Compute** `view_hash`:
-   - Take `tilts` and `excludes` sections only.
-   - Strip empty/zero fields.
-   - Serialize with sorted keys.
-   - `view_hash = sha256(canonical_body).hexdigest()`
-   - Use Python via Bash: `python3 -c "import hashlib, yaml, sys; data=yaml.safe_load(sys.stdin); ..."`
+1. **Compute** `view_hash` per schema.yaml §"view_hash computation" (pinned algorithm; the reference Python snippet is reproduced in `skills/_parallax/house-view/tests/test_view_hash.py`). Keep the implementation byte-identical to the reference — any deviation will break hash round-trip.
 2. **Generate** `metadata.view_id` (uuid4) — reuse from existing view if updating same view family; new uuid for new family.
 3. **Generate** `metadata.version_id` (new uuid4 every save).
 4. **Set** `metadata.parent_version_id` to the previous `version_id` if a view existed before this save; null otherwise.
 5. **Set** `extraction.uploader_confirmed = true`.
 6. **Set** `extraction.extracted_at` and `metadata.upload_timestamp` to now (ISO 8601 UTC).
-7. **Write**:
+7. **Construct the prose body** (the markdown that will live below the frontmatter — verbatim CIO narrative).
+8. **Compute** `prose_body_hash = sha256(prose_body_utf8).hexdigest()` per schema.yaml §"prose_body_hash computation". The hash is over the bytes that will appear AFTER the closing `---` of the frontmatter — not over the whole file. Compute on the finalized body before writing.
+9. **Write**:
    - Archive existing `~/.parallax/active-house-view/view.yaml` and `prose.md` (if present) to `~/.parallax/active-house-view/.archive/<old_view_id>-<old_version_id>/`.
    - Write new `view.yaml`.
-   - Write new `prose.md` with frontmatter `paired_yaml_hash`, `view_id`, `version_id`.
+   - Write new `prose.md` with frontmatter **four fields in this order**: `paired_yaml_hash`, `prose_body_hash`, `view_id`, `version_id`. Frontmatter is the only part of the file NOT covered by `prose_body_hash`.
    - If `audit.jsonl` does not exist, create it empty.
-8. **Append** an audit entry for the ingest itself:
-   ```json
-   {"ts":"...","view_id":"...","version_id":"...","skill":"parallax-load-house-view","action":"save","applied":true}
-   ```
+10. **Append** an audit entry for the ingest itself:
+    ```json
+    {"schema_version":1,"ts":"...","view_id":"...","version_id":"...","skill":"parallax-load-house-view","action":"save","applied":true}
+    ```
+    Schema per loader.md §6. `schema_version` is required.
 
 ### Step 5 — Confirmation summary
 
@@ -212,7 +210,7 @@ To check: /parallax-load-house-view --status
 | `--status` | Read `view.yaml`, validate per loader.md §2, print summary block. If no view, print "No active house view." |
 | `--clear` | Archive current view to `.archive/`, remove `view.yaml` and `prose.md`. Append audit entry `{"action":"clear"}`. |
 | `--extend <date>` | Update `metadata.valid_through` only. Bump `version_id`. Re-pair (recompute view_hash — should be unchanged since tilts/excludes unmodified — and re-write `prose.md` frontmatter). |
-| `--re-pair` | Recompute view_hash from current `view.yaml`. Update `prose.md` frontmatter `paired_yaml_hash` to match. Use this after a manual prose edit when no YAML change was intended. |
+| `--re-pair` | Recompute `view_hash` from current `view.yaml` and `prose_body_hash` from current `prose.md` body. Update `prose.md` frontmatter `paired_yaml_hash` AND `prose_body_hash` to match. Use this after a manual prose edit (body or YAML) when the edit was intentional; the command re-anchors both hashes in one step. Note that re-pair intentionally blesses whatever is currently on disk — run only after you have reviewed the edit. |
 | `--edit` | Open `view.yaml` in `$EDITOR` (default: `vi`). On save, re-run Steps 3-4 (confirmation gate + write) using the edited content as the draft. |
 
 ## Output Format
