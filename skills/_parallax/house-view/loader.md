@@ -28,7 +28,10 @@ Run these checks in order. On any failure, behave per "Failure handling" below �
 1. **Read** `view.yaml` and `prose.md`.
 2. **Recompute** `view_hash = sha256(canonical_yaml_body)` per schema.yaml §"view_hash computation".
 3. **Verify** `prose.md` frontmatter `paired_yaml_hash == view_hash`. If mismatch → drift detected (YAML body changed without re-pairing).
-3a. **Verify prose body integrity** — recompute `prose_body_hash` per schema.yaml §"prose_body_hash computation" and compare to `prose.md` frontmatter `prose_body_hash`. If mismatch → drift detected (prose body changed without re-pairing). If the frontmatter field is **missing** (view written before 2026-04-24), skip this check and surface a one-time soft warning: "Legacy view: prose body integrity not verified. Re-pair to enable."
+3a. **Verify prose body integrity** — recompute `prose_body_hash` per schema.yaml §"prose_body_hash computation" and compare to `prose.md` frontmatter `prose_body_hash`. If mismatch → drift detected (prose body changed without re-pairing). Two narrow backward-compat carve-outs apply when the frontmatter field is **missing**:
+
+    - If `metadata.upload_timestamp < 2026-04-24T00:00:00Z` → legacy view. Skip the check and surface a **visible warning in the load preamble** (not a silent one-time note): "Legacy view: prose body integrity not verified. Re-pair via `/parallax-load-house-view --re-pair` to enable." Do not allow downstream consumers to silently ignore — the warning MUST appear in rendered output alongside the view-active banner.
+    - If `metadata.upload_timestamp >= 2026-04-24T00:00:00Z` → **hard drift failure**. The field was required at save time for every post-2026-04-24 view; its absence means the frontmatter was tampered with or the writer skipped the step. Emit the standard drift message and refuse to apply the view. This closes the "legacy-view downgrade attack" where an adversary removes `prose_body_hash` from frontmatter to degrade the gate to a soft warning.
 4. **Verify** `metadata.version_id == prose.md frontmatter version_id`.
 5. **Verify** `extraction.uploader_confirmed == true`.
 6. **Check expiry**:
@@ -185,11 +188,11 @@ When an active view is loaded and applied, every consumer skill MUST:
    > *"This analysis reflects active house view '[view_name]' uploaded by [uploader_role] on [upload_date], effective [effective_date]. Tilts and excludes per the loaded view; conflicts with explicit user scope are flagged inline. Outputs should be reviewed against client suitability before any action."*
 
 6. **AI-interaction disclosure** (bottom, immediately above or below the view-aware disclaimer — REQUIRED whether or not a view is active; applies to every consumer skill output):
-   > *"This output was generated with the assistance of AI. Inputs, factor scores, and framing were produced by large-language-model analysis of structured data and prose. Review before acting. See methodology at [methodology_url]."*
+   > *"This output was generated with the assistance of AI. Inputs, factor scores, and framing were produced by large-language-model analysis of structured data and prose. Review before acting."*
    >
-   > <!-- COUNSEL-TBD — wording pending HK SFC Nov-2024 circular alignment review per `notes/2026-04-24-compliance-jurisdiction-lookup.md` §7 item 5. Current text is a placeholder that satisfies the disclosure principle (AI involvement, scope of AI role, review obligation) but must be replaced with counsel-approved wording before v1 ship. Placement adjacent to the view-aware disclaimer ensures disclosure accompanies every piece of analysis; the pairing is intentional, not redundant. -->
+   > <!-- COUNSEL-TBD — banner wording AND any methodology/provenance link are pending counsel review before v1 ship. The current text is a placeholder that satisfies the disclosure principle (AI involvement, scope of AI role, review obligation). Do not add a URL until counsel has signed off on both the destination and the phrasing; an unresolved `[methodology_url]` placeholder in client-facing output is worse than no link. Replace the whole banner wholesale with counsel-approved text at v1. -->
 
-   `methodology_url` defaults to the Parallax public methodology page when unset. Skills SHOULD render this banner even when running without an active view — AI involvement in scoring and synthesis is independent of view state.
+   Skills MUST render this banner even when running without an active view — AI involvement in scoring and synthesis is independent of view state.
 
 When NO active view is loaded, skills run as today — standard output, no preamble, standard disclaimer. Rules 3 and 4 (ground-truth panel and divergence assertion) AND rule 6 (AI-interaction disclosure) apply whether or not a view is active — they are data-integrity / regulatory requirements, not view-specific features.
 
