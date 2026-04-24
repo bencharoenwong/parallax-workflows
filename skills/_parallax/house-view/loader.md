@@ -60,6 +60,12 @@ Run these checks in order. On any failure, behave per "Failure handling" below �
 
 ## 3. Multiplier mapping
 
+### Quantum-factor pillars (Ω Φ Ξ Ψ)
+
+The four pillars (`econometrics_phase`, `valuation_state`, `market_entropy`, `psychological_wavelength`) are **encoding-only in Phase 0**. Extractors populate them at ingest from CIO prose (see `skills/load-house-view/SKILL.md`); they are stored in `view.yaml` for forward-compatibility but are NOT translated into factor multipliers, universe effects, or consumer-skill output in Phase 0.
+
+Rationale: MCP equity-only scope doesn't yet carry expected-return / volatility inputs needed for a full multi-pillar composite. Asset-class pillar weights are deployment-specific judgment calls that downstream users should calibrate themselves. Guessing at a partial formula risks silently miscalibrating portfolio math.
+
 ### Factor aliases (canonical vs synonyms)
 
 | Canonical | Synonym | Collapse rule |
