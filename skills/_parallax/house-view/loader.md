@@ -213,7 +213,7 @@ Every consume event appends one JSONL line to `~/.parallax/active-house-view/aud
 | `view_id` | string (uuid v4) OR `null` | Null only when `applied=false` AND reason is `no_view`. |
 | `version_id` | string (uuid v4) OR `null` | Null under the same condition as `view_id`. |
 | `skill` | string | `parallax-<name>` of the consuming skill. |
-| `action` | string (enum) | One of: `save`, `clear`, `extend`, `re-pair`, `edit`, `consume`. `consume` is the default for any consumer-skill invocation (portfolio-builder, should-i-buy, etc.); the others are operational events from `parallax-load-house-view`. |
+| `action` | string (enum) | One of: `save`, `clear`, `extend`, `re-pair`, `edit`, `consume`, `extraction_attempt`. `consume` is the default for any consumer-skill invocation (portfolio-builder, should-i-buy, etc.). `extraction_attempt` (added Phase 0.5b) logs ingestion drafts whether or not they became saves — captures retries, edits, and rejects. The others are operational events from `parallax-load-house-view`. Consumers that encounter an unrecognized `action` value MUST skip the row (forward-compatibility). |
 | `applied` | bool | True if tilts were actually applied to the skill's output. False if validation failed, single-stock skill (conflict-flag only), or operational action. |
 
 ### 6.2 Conditional fields
@@ -222,7 +222,14 @@ Every consume event appends one JSONL line to `~/.parallax/active-house-view/aud
 |---|---|---|---|
 | `query_summary` | `action == "consume"` | string (≤200 chars) | First 200 chars of the user's input or a one-line summary. |
 | `failure_reason` | `applied == false` AND validation failed | string | Human-readable reason tied to a specific §2 failure row (drift / uploader_unconfirmed / expired / not_yet_effective). |
-| `applied_reason` | `applied == false` AND validation passed | string | Why tilts weren't applied despite a valid view. Typical values: `"single-stock consumer (loader.md §7)"`, `"divergence refusal (loader.md §5 rule 4)"`, `"operational action (no consume)"`. |
+| `applied_reason` | `applied == false` AND validation passed | string | Why tilts weren't applied despite a valid view. Typical values: `"single-stock consumer (loader.md §7.1/§7.2/§7.3)"`, `"divergence refusal (loader.md §5 rule 4)"`, `"operational action (no consume)"`. |
+| `parent_version_id` | `action == "save"` AND this save supersedes a prior version | string (uuid v4) | Immediate predecessor's `version_id`. |
+| `version_diff` | `action == "save"` AND `parent_version_id` is non-null | object | Flat diff of `tilts` + `excludes` subtrees vs parent, keyed by dotted path to `[old_value, new_value]`. Cap 40 entries. |
+| `version_diff_truncated` | `version_diff` was truncated | bool | True if diff exceeded 40 entries. |
+| `disposition` | `action == "extraction_attempt"` | string (enum) | One of: `confirmed`, `edited`, `re_extracted`, `rejected`. |
+| `draft_yaml_hash` | `action == "extraction_attempt"` | string (sha256 hex) | Canonical hash of the draft the uploader saw (same algorithm as `view_hash`). Correlates to a `save`'s `view_hash` when disposition=confirmed/edited and a save actually landed. |
+| `extraction_duration_ms` | `action == "extraction_attempt"` (optional) | int ≥ 0 | Wall-clock from extraction start to disposition. |
+| `hint` | `action == "extraction_attempt"` AND `disposition == "re_extracted"` | string (≤200 chars) | Uploader's re-extraction hint. |
 | `conflicts_count` | `action == "consume"` | int ≥ 0 | Number of user-scope vs. view-tilt conflicts surfaced inline. |
 | `conflicts_summary` | `conflicts_count > 0` | string | Compact per-conflict summary. |
 | `output_summary_hash` | `action == "consume"` AND output was rendered | string (sha256 hex) | sha256 of first 1000 chars of the skill's user-facing output. |
@@ -240,9 +247,10 @@ Every consume event appends one JSONL line to `~/.parallax/active-house-view/aud
 ### 6.4 Minimal examples
 
 ```json
-{"schema_version":1,"ts":"2026-04-24T06:00:00Z","view_id":"d6c4...","version_id":"e8fb...","skill":"parallax-load-house-view","action":"save","applied":true}
+{"schema_version":1,"ts":"2026-04-24T05:47:00Z","skill":"parallax-load-house-view","action":"extraction_attempt","applied":false,"query_summary":"ubs_hv_monthly_letter_19_March_en_2.pdf","disposition":"edited","draft_yaml_hash":"9b8c7a...","extraction_duration_ms":47213}
+{"schema_version":1,"ts":"2026-04-24T06:00:00Z","view_id":"d6c4...","version_id":"e8fb...","skill":"parallax-load-house-view","action":"save","applied":true,"parent_version_id":"54c2...","version_diff":{"tilts.factors.momentum":[null,-1],"tilts.sectors.health_care":[0,1]}}
 {"schema_version":1,"ts":"2026-04-24T06:01:00Z","view_id":"d6c4...","version_id":"e8fb...","skill":"parallax-portfolio-builder","action":"consume","applied":true,"query_summary":"Build me a defensive US equity portfolio, 20 holdings","conflicts_count":0,"output_summary_hash":"abc123...","ground_truth_mismatches":0}
-{"schema_version":1,"ts":"2026-04-24T06:02:00Z","view_id":"d6c4...","version_id":"e8fb...","skill":"parallax-should-i-buy","action":"consume","applied":false,"applied_reason":"single-stock consumer (loader.md §7)","query_summary":"/parallax-should-i-buy AAPL.O","conflicts_count":1,"conflicts_summary":"info_tech UW vs AAPL sector","output_summary_hash":"def456..."}
+{"schema_version":1,"ts":"2026-04-24T06:02:00Z","view_id":"d6c4...","version_id":"e8fb...","skill":"parallax-should-i-buy","action":"consume","applied":false,"applied_reason":"single-stock consumer (loader.md §7.1/§7.2/§7.3)","query_summary":"/parallax-should-i-buy AAPL.O","conflicts_count":1,"conflicts_summary":"info_tech UW vs AAPL sector","output_summary_hash":"def456..."}
 {"schema_version":1,"ts":"2026-04-24T06:03:00Z","view_id":null,"version_id":null,"skill":"parallax-portfolio-builder","action":"consume","applied":false,"failure_reason":"drift: prose.md frontmatter paired_yaml_hash != recomputed view_hash","query_summary":"<user input>"}
 ```
 
