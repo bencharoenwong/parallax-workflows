@@ -31,6 +31,18 @@ skills/_parallax/house-view/tests/fixtures/reflationary-2026Q2_candidates.yaml
 # Reference runner — implementation detail; public spec is in tests/portfolio_diff_harness.md.
 skills/_parallax/house-view/tests/run_diff_harness.py
 
+# Calibration manifest — note: the verifier, trusted_keys.json, the
+# generator, the test signed fixture, AND the test signing key are all
+# PUBLIC. The test signing key is labeled `use: "test-only"` in
+# trusted_keys.json; trust binding is per-kid, so production deployments
+# (which will not include this kid) are unaffected. Public test artifacts
+# match the existing test_view_hash.py / view_hash_fixture.yaml precedent
+# and let auditors run a known-good round-trip on a fresh clone.
+#
+# Production signing keys (when Batch 2 generates them) MUST live outside
+# this repo entirely — the server side is in ~/parallax_mcp/, not here.
+# Nothing in this repo's tests/ directory is ever a production secret.
+
 # Internal regression baselines (second round).
 skills/load-house-view/regression-corpus/baselines/2026-04-22/
 
