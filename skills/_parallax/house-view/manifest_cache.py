@@ -404,7 +404,21 @@ def load_manifest(
                     f"not in trusted_keys.json and no cached manifest "
                     f"available for org_id={org_id!r}. Skill update required."
                 )
-            cached = cache.get(org_id, cv, now=effective_now)
+            try:
+                cached = cache.get(org_id, cv, now=effective_now)
+            except CacheCorrupt as e:
+                # Cached manifest exists but failed re-verification (tampered
+                # bytes, JSON decode failure, or its own signing key has
+                # rotated out of trusted_keys.json). For dead-state purposes
+                # this is the same as "no usable fallback" — auditors and
+                # operator runbooks branch on `key_id_unknown_no_fallback`,
+                # not on `cache_corrupt`, so emit the actionable code here.
+                raise DeadStateNoFallback(
+                    f"signing_key_id={fresh_manifest.get('signing_key_id')!r} "
+                    f"unknown and cached manifest "
+                    f"(org_id={org_id!r}, calibration_version={cv!r}) "
+                    f"failed re-verification: {e}. Skill update required."
+                ) from e
             if cached is None:
                 raise DeadStateNoFallback(
                     f"signing_key_id={fresh_manifest.get('signing_key_id')!r} "

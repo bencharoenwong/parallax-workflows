@@ -231,6 +231,57 @@ def test_dead_state_guard() -> None:
     raise AssertionError("dead-state guard did not fire; should have raised DeadStateNoFallback")
 
 
+def test_dead_state_guard_translates_cache_corrupt() -> None:
+    """Regression for code-reviewer Finding 1: when load_manifest's
+    fresh-manifest branch hits KeyIdUnknown and the cached manifest also
+    fails re-verification (e.g., its bytes were tampered post-cache), the
+    raised error MUST be DeadStateNoFallback (`key_id_unknown_no_fallback`)
+    so operator runbooks branch correctly. CacheCorrupt leaking through
+    would route to a different alert code and miss the "skill update
+    required" signal.
+    """
+    fixed_now = datetime(2026, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cache = _new_cache(Path(tmpdir))
+        valid_cached = _build_signed_manifest(calibration_version="test-2026-Q1.1")
+        cache_path = cache.put(valid_cached)
+        # Tamper with the cached file post-write so re-verification fails.
+        tampered = json.loads(cache_path.read_text())
+        tampered["values"]["sec-sensitivity-bands"]["warn_multiplier"] = 99.0
+        cache_path.write_text(json.dumps(tampered))
+        cache_path.chmod(0o600)
+        # Build a fresh manifest with an unknown kid to trigger A-3 path.
+        forger = SigningKey.generate()
+        body = {
+            "schema_version": "1.0.0",
+            "calibration_version": "test-2026-Q3.1",
+            "org_id": "parallax-default",
+            "issued_at": "2026-05-25T12:00:00Z",
+            "manifest_expires_at": "2026-09-01T00:00:00Z",
+            "signing_key_id": "test-rotated-out-deadbeef",
+            "values": {},
+        }
+        body["signature"] = {
+            "alg": "ed25519",
+            "value": base64.b64encode(
+                forger.sign(rfc8785.dumps(body)).signature
+            ).decode("ascii"),
+        }
+        try:
+            manifest_cache.load_manifest(
+                fresh_manifest=body, cache=cache, now=fixed_now
+            )
+        except manifest_cache.DeadStateNoFallback as e:
+            assert e.error_code == "key_id_unknown_no_fallback", (
+                f"expected key_id_unknown_no_fallback, got {e.error_code!r}"
+            )
+            print("PASS  test_dead_state_guard_translates_cache_corrupt")
+            return
+    raise AssertionError(
+        "tampered cache + unknown kid leaked CacheCorrupt instead of DeadStateNoFallback"
+    )
+
+
 def test_orchestrator_writes_new_version_to_cache() -> None:
     fixed_now = datetime(2026, 4, 26, 12, 0, 0, tzinfo=timezone.utc)
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -297,6 +348,7 @@ def main() -> int:
         test_expiry_boundary_strict,
         test_monotonicity_blocks_rollback,
         test_dead_state_guard,
+        test_dead_state_guard_translates_cache_corrupt,
         test_orchestrator_writes_new_version_to_cache,
         test_orchestrator_uses_cache_when_fresh_none,
         test_orchestrator_offline_expired_cache_warns_returns,

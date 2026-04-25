@@ -36,12 +36,18 @@ DEFAULT_CHAIN_DIR = chain_emit.DEFAULT_CHAIN_DIR
 
 
 def _parse_before(s: str) -> datetime:
-    """Parse YYYY-MM-DD as the END of that day in UTC.
+    """Parse YYYY-MM-DD as midnight UTC of that date.
 
-    Cutoff semantics: a chain dated 2026-04-25 is pruned by --before
-    2026-04-26. We use end-of-day so calling `--before 2026-04-25`
-    keeps chains FROM 2026-04-25 (matches operator intuition that
-    "before X" means "older than X, exclusive").
+    The returned datetime is the *exclusive upper bound* of the prune
+    window: chains with `mtime < cutoff` are pruned, chains with
+    `mtime >= cutoff` are kept. Concretely, `--before 2026-04-26`
+    prunes everything dated 2026-04-25 and earlier and keeps everything
+    from 2026-04-26 onward — which matches operator intuition that
+    "before X" means "strictly older than the start of X".
+
+    Companion tooling that re-implements this comparison MUST use the
+    same midnight-of-supplied-date semantics; treating the value as
+    end-of-day would shift the boundary by 24 hours.
     """
     try:
         d = datetime.strptime(s, "%Y-%m-%d")
@@ -155,7 +161,7 @@ def main(argv: list[str] | None = None) -> int:
     total_bytes = sum(b for _, b, _ in candidates)
     n = len(candidates)
     mode = "DELETE" if args.confirm else "DRY-RUN"
-    print(f"[{mode}] chain_dir={chain_dir} cutoff={args.before} (UTC end-of-day)")
+    print(f"[{mode}] chain_dir={chain_dir} cutoff={args.before} 00:00 UTC (exclusive)")
     if n == 0:
         print("  no chains older than cutoff.")
         return 0
