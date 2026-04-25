@@ -33,7 +33,7 @@ Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-c
 
 ### Batch 0 — Tool Loading & Active House View
 
-Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call. (before Batch A)
+Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
 
 Per `loader.md` §1-§2. If view present, capture tilt vector, excludes, basis_statement (used to frame Suitability Assessment in firm voice). The view's tilts become an additional layer of recommendation justification: when trimming, "view tilts UW [sector]" is cited alongside health flags. If validation fails or no view present, run review without view.
 
