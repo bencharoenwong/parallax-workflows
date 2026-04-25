@@ -28,6 +28,10 @@ Structured peer comparison analysis for research analysts.
 
 Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, and fallback patterns.
 
+### Batch 0 — Tool Loading
+
+Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
+
 ### Batch A — Peer identification
 
 1. Call `get_peer_snapshot`. Identify the peer group and top 2 most relevant peers.

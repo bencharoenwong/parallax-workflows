@@ -31,6 +31,10 @@ Deep macro regime analysis with optional equity opportunity screening. Covers an
 
 Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode and fallback patterns.
 
+### Batch 0 — Tool Loading
+
+Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
+
 ### Batch A — Coverage + regime (parallel)
 
 | Tool | Parameters | Notes |

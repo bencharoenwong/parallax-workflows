@@ -33,7 +33,9 @@ Accepts RIC format. For plain tickers, resolve per shared conventions.
 
 Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, fallback patterns, and HK ambiguity protocol. JIT-load `_parallax/house-view/loader.md` for active-view validation and single-stock conflict surfacing.
 
-### Step 0 — Load Active House View
+### Step 0 — Tool Loading & Active House View
+
+Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
 
 Per `loader.md` §1-§2 + §7.1/§7.2/§7.3. If view present, capture tilt vector + excludes + basis_statement. Do NOT apply tilts to scoring. The Step 0 capture feeds two surfaces: (a) Batch C's `get_assessment` prompt (AI addresses view alignment in prose — deep-dive's primary alignment surface), (b) the inline §7.1/§7.2/§7.3 flags in Output (blanket note after Factor Profile; peer-suggest token if triggered; tension banner if triggered).
 
