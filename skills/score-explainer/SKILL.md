@@ -28,7 +28,7 @@ Plain-language explanations of Parallax scores, factors, and methodology.
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools based on query type:
+Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call. Execute using `mcp__claude_ai_Parallax__*` tools based on query type:
 
 **For "why does X score this way?":**
 1. Call `get_score_analysis` for the symbol (52 weeks) to get current scores and trajectory.

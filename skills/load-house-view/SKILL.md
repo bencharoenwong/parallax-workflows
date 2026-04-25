@@ -54,20 +54,9 @@ If `~/.parallax/active-house-view/` does not exist, create it on first save.
 
 ## Workflow
 
-JIT-load `_parallax/house-view/schema.yaml` (canonical structure) and `_parallax/house-view/loader.md` (consumer expectations) before extraction.
+Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call. JIT-load `_parallax/house-view/schema.yaml` (canonical structure) and `_parallax/house-view/loader.md` (consumer expectations) before extraction.
 
 ### Step 1 — Detect mode and load source
-
-| Input | Action |
-|---|---|
-| Argument is a `.pdf` path | Use `Read` tool with `pages` parameter; for >10 pages, read in 10-page batches |
-| Argument is a `.txt`, `.md`, or other text path | Use `Read` tool |
-| Argument starts with `http://` / `https://` | Try `defuddle parse <url> --md` via Bash; fall back to `WebFetch` |
-| No argument | Wizard mode — see Step 1a |
-| `--status` / `--clear` / `--extend` / `--re-pair` / `--edit` | Skip to Step 6 (operational modes) |
-
-#### Step 1a — Wizard mode
-
 Use `AskUserQuestion` to walk the uploader through the schema interactively. Present sector/region/factor/style sliders as multi-select questions with -2/-1/0/+1/+2 options. Skip fields the uploader leaves at neutral. Capture excludes as a free-text follow-up.
 
 ### Step 2 — Extract structured tilts
