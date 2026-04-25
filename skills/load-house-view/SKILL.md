@@ -7,7 +7,7 @@ negative-triggers:
   - Single-stock evaluation → use /parallax-should-i-buy
 gotchas:
   - JIT-load _parallax/house-view/schema.yaml before extraction — it is the single source of truth for the YAML shape
-  - JIT-load _parallax/house-view/loader.md to see what consumer skills will validate (helps you produce a valid view first time)
+  - JIT-load _parallax/house-view/loader.md to see what consumer skills will validate (helps you produce a valid view first time). Note: loader.md §3 (Multiplier mapping) is a normative replay dependency per reasoning chain spec — changes to multiplier values, factor ordering, or composite formula MUST coincide with a `skill_version` bump and break replay byte-identity for chains pinned to prior versions.
   - PDF input — use the Read tool with `pages` parameter for >10 pages; do NOT defuddle PDFs (we want figure context)
   - URL input — use the defuddle skill if Bash is available, else WebFetch
   - Confirmation gate is REQUIRED — the uploader must explicitly confirm extracted YAML before save (uploader_confirmed=true). Saving without confirmation breaks downstream loaders.
@@ -184,7 +184,7 @@ On `Confirm`:
 5. **Set** `extraction.uploader_confirmed = true`.
 6. **Set** `extraction.extracted_at` and `metadata.upload_timestamp` to now (ISO 8601 UTC).
 6a. **Set** `metadata.schema_version = 1` (current schema version — see schema.yaml). Every new save writes this; legacy views without it read as v0 at load time.
-6b. **Set** `metadata.calibration_status = "heuristic_phase0"`. Do NOT default to `"empirical_phase1"`; that value is reserved for saves made after the Phase 1 calibration backtest lands and is gated on an explicit uploader confirmation of calibration evidence. Until then, every save — including re-pairs and extensions that preserve tilts — writes `heuristic_phase0`.
+6b. **Set** `metadata.calibration_status = "heuristic_phase0"`. Do NOT default to `"empirical_phase1"`; that value is reserved for saves made when an empirically-calibrated manifest is in force per the calibration manifest spec triad (Batch 3+) AND the uploader has explicitly confirmed the calibration evidence (`provenance.methodology_section` not `"GUESS"`, `provenance.backtest_ref` non-null). Until both conditions hold, every save — including re-pairs and extensions that preserve tilts — writes `heuristic_phase0` and triggers loader.md §5.1a's mandatory calibration disclosure.
 7. **Construct the prose body** (the markdown that will live below the frontmatter — verbatim CIO narrative).
 8. **Compute** `prose_body_hash = sha256(prose_body_utf8).hexdigest()` per schema.yaml §"prose_body_hash computation". The hash is over the bytes that will appear AFTER the closing `---` of the frontmatter — not over the whole file. Compute on the finalized body before writing.
 9. **Write**:
