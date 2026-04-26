@@ -17,12 +17,15 @@ gotchas:
   - Confirmation gate persists a pre-edit snapshot (Step 3a) when uploader chooses 'Edit specific fields' — writes extractor's pristine draft to `.archive/<version>/pre_edit.yaml` alongside the superseded view. No-edit confirmations skip this.
   - Every extraction attempt (Step 3b) logs an `extraction_attempt` audit entry to `audit.jsonl` — whether or not it becomes a save. Capture disposition (confirmed/edited/re_extracted/rejected) + draft_yaml_hash per loader.md §6.2.
   - Save (Step 4 step 10) computes a `version_diff` block vs `parent_version_id` and stashes it on the save audit entry. Only when this save supersedes a prior version.
-  - `--why <tilt-path>` is on-demand — does not write provenance to view.yaml. Reads prose.md + tilt value, produces a one-paragraph explanation with quoted spans. Use when auditing 'where did this tilt come from?'
+  - Phase 1 Manifest: Invoke `manifest_cache.load_manifest()` during Step 4 (Write Phase) to resolve active calibration. Handle `DeadStateNoFallback` or signature errors by logging a warning and falling back to Phase 0.
+  - Reasoning Chains: Every save MUST invoke `chain_emit.emit_chain()` (or `emit_phase_0_chain()`) to produce a compliance artifact at `~/.parallax/reasoning-chains/`.
+  - Compliance Export: Use `--export <view_id>` to generate a regulator-grade bundle. Validates hash-chain integrity before packaging.
+  - `--why <tilt-path>` is on-demand. Reads `provenance.yaml` first when present; the latest derivation entry for the leaf controls the answer. If type is `macro_regime_rule`, cite `rule_ref` + `trigger`. If type is `prose_extraction` or no `provenance.yaml` exists (legacy view), fall back to the prose.md targeted re-read. The saved house view never carries Parallax-derived overlays — augmentation happens just-in-time at consumer-skill use, with provenance recorded on the consuming portfolio/screen artifact, not on the view itself (see Phase 0.5f architectural pivot, notes/2026-04-26-step-2-5-validation.md).
 ---
 
 # Load House View
 
-Ingest a CIO house view into the Parallax workflow system. Once loaded, every portfolio-construction skill (`portfolio-builder`, `rebalance`, `thematic-screen`, `morning-brief`, `client-review`, `explain-portfolio`) silently applies the view's tilts, excludes, and macro regime mapping. Single-stock skills (`should-i-buy`, `deep-dive`) surface conflict flags but do not apply tilts.
+Ingest a CIO house view (PDF / text / URL / wizard) into the Parallax workflow system.
 
 ## Usage
 
@@ -36,6 +39,7 @@ Ingest a CIO house view into the Parallax workflow system. Once loaded, every po
 /parallax-load-house-view --extend 2026-09-30      # push valid_through forward
 /parallax-load-house-view --re-pair                # re-pair after manual prose edit (drift)
 /parallax-load-house-view --edit                   # open YAML in editor; re-confirm on save
+/parallax-load-house-view --export <view_id>        # export regulator-grade compliance bundle
 /parallax-load-house-view --why tilts.factors.momentum             # on-demand: why is this tilt set to what it is?
 /parallax-load-house-view --why tilts.sectors.information_technology
 /parallax-load-house-view --why factors.momentum                   # bare form — `tilts.` prefix auto-prepended
@@ -97,6 +101,8 @@ Pillars are usually coarse — a prose view rarely articulates sub-factor level.
 - `metadata.valid_through` OR `metadata.auto_expire_days` (date or int; default `auto_expire_days = 90`)
 
 ### Step 3 — Confirmation gate (REQUIRED before save)
+
+> **Architectural note (Phase 0.5f, 2026-04-26):** the previous Step 2.5 "gap-fill review" between Step 2 and Step 3 has been REMOVED. The saved house view is now PURE — it carries only what the source document said + what the uploader confirmed at this gate. Parallax-derived augmentation is deferred to **just-in-time** lookup at consumer-skill use (e.g., when `/parallax-portfolio-builder` detects the active view is silent on a dimension it needs for a specific portfolio decision). The augmentation provenance lives on the consuming portfolio/screen artifact, never on the saved house view. See `notes/2026-04-26-step-2-5-validation.md` for the validation that drove this pivot. The `gap_detect` and `gap_suggest` modules in `_parallax/house-view/` remain — they get JIT-loaded by consumer skills now, not by this ingest skill.
 
 Present the draft to the uploader in this format:
 
@@ -178,30 +184,46 @@ A successful `save` after a confirmed draft still emits its own `action: "save"`
 On `Confirm`:
 
 1. **Compute** `view_hash` per schema.yaml §"view_hash computation" (pinned algorithm; the reference Python snippet is reproduced in `skills/_parallax/house-view/tests/test_view_hash.py`). Keep the implementation byte-identical to the reference — any deviation will break hash round-trip.
+1a. **Load Calibration Manifest:** Call `manifest_cache.load_manifest(fresh_manifest=None)` to resolve the active manifest. Capture `manifest` and `status` (handle exceptions by falling back to `status="PHASE_0_FALLBACK"`).
+1b. **Generate Provenance:** Create a `provenance.yaml` artifact capturing the evidence for every non-neutral tilt.
+    - Classification (per schema.yaml §"Classification taxonomy"): `prose_extraction` (LLM-derived from CIO source), `macro_regime_rule` (auto-mapped per loader.md §3), or `manual_edit` (uploader edit at confirmation gate). The Phase-0.5d `parallax_data_fill` class is RETIRED at ingest scope per Phase 0.5f architectural pivot — Parallax-derived values are no longer folded into the saved view; consumer skills carry that provenance per portfolio/screen artifact at JIT use time.
+    - Per-class field tables in schema.yaml. Baseline fields shared by all classes: `confidence` (0.0-1.0), `rationale` (≤500 chars). Type-specific: `source_span` (prose_extraction), `rule_ref`+`trigger` (macro_regime_rule), `prior_value`+`edit_notes` (manual_edit).
+1c. **Compute Provenance Hash:** `provenance_hash = sha256(JCS(provenance_data))`.
 2. **Generate** `metadata.view_id` (uuid4) — reuse from existing view if updating same view family; new uuid for new family.
 3. **Generate** `metadata.version_id` (new uuid4 every save).
+3a. **Inject Hash:** Set `metadata.provenance_hash` in the draft `view.yaml` to the value computed in 1c.
 4. **Set** `metadata.parent_version_id` to the previous `version_id` if a view existed before this save; null otherwise.
 5. **Set** `extraction.uploader_confirmed = true`.
 6. **Set** `extraction.extracted_at` and `metadata.upload_timestamp` to now (ISO 8601 UTC).
 6a. **Set** `metadata.schema_version = 1` (current schema version — see schema.yaml). Every new save writes this; legacy views without it read as v0 at load time.
-6b. **Set** `metadata.calibration_status = "heuristic_phase0"`. Do NOT default to `"empirical_phase1"`; that value is reserved for saves made when an empirically-calibrated manifest is in force per the calibration manifest spec triad (Batch 3+) AND the uploader has explicitly confirmed the calibration evidence (`provenance.methodology_section` not `"GUESS"`, `provenance.backtest_ref` non-null). Until both conditions hold, every save — including re-pairs and extensions that preserve tilts — writes `heuristic_phase0` and triggers loader.md §5.1a's mandatory calibration disclosure.
+6b. **Set** `metadata.calibration_status`:
+    - If `status == "ACTIVE"` AND `manifest.provenance.methodology_section != "GUESS"` AND `manifest.provenance.backtest_ref` is non-null: set to `"empirical_phase1"`.
+    - Otherwise: set to `"heuristic_phase0"`.
 7. **Construct the prose body** (the markdown that will live below the frontmatter — verbatim CIO narrative).
 8. **Compute** `prose_body_hash = sha256(prose_body_utf8).hexdigest()` per schema.yaml §"prose_body_hash computation". The hash is over the bytes that will appear AFTER the closing `---` of the frontmatter — not over the whole file. Compute on the finalized body before writing.
 9. **Write**:
    - Archive existing `~/.parallax/active-house-view/view.yaml` and `prose.md` (if present) to `~/.parallax/active-house-view/.archive/<old_view_id>-<old_version_id>/`.
    - Write new `view.yaml`.
    - Write new `prose.md` with frontmatter **four fields in this order**: `paired_yaml_hash`, `prose_body_hash`, `view_id`, `version_id`. Frontmatter is the only part of the file NOT covered by `prose_body_hash`.
-   - If `audit.jsonl` does not exist, create it empty.
+   - Write new `provenance.yaml`, then **immediately `chmod 0o600`** (security audit Finding 6 — file carries source-extracted prose snippets; default umask perms would leave it world-readable on shared workstations). Also `chmod 0o700` the parent dir `~/.parallax/active-house-view/` if it was created in this run.
+   - If `audit.jsonl` does not exist, create it empty AND **`chmod 0o600` on creation** (security audit Finding 5 — closes the window between empty-file creation and the first `audit_chain.append_entry` that would otherwise apply the perm). The `audit_chain` module also re-enforces 0600 on every append as defense in depth.
 10. **Compute version-diff (Layer 3)** — only when `metadata.parent_version_id` is non-null (i.e., this save supersedes a prior version in the same view family):
     0. **Archive-missing guard.** If `.archive/<parent_view_id>-<parent_version_id>/view.yaml` does not exist (fresh install, manual deletion, or the parent was cleared before this update), skip sub-steps 1-2 and set `version_diff_truncated: true` with `notes: "parent_archive_missing: <parent_view_id>-<parent_version_id>"` on the save audit entry. Do not emit a `version_diff` field. Continue to save — the missing-archive case is survivable, not a save blocker.
     1. Read the parent's archived `view.yaml` from `.archive/<parent_view_id>-<parent_version_id>/view.yaml`.
     2. Compute a flat diff restricted to the `tilts` and `excludes` subtrees (same scope as `view_hash`). For each dotted path (`tilts.sectors.health_care`, `tilts.factors.momentum`, `excludes[0]`, etc.) that differs, record `{path: [old_value, new_value]}`. Use `null` for either side when the key is absent on that side. Cap output at 40 entries; if more, truncate and set `version_diff_truncated: true`.
     3. Stash as `version_diff` on the save audit entry in step 11 below.
-11. **Append** an audit entry for the ingest itself:
-    ```json
-    {"schema_version":1,"ts":"...","view_id":"...","version_id":"...","skill":"parallax-load-house-view","action":"save","applied":true,"parent_version_id":"...","version_diff":{"tilts.factors.momentum":[null,-1]}}
-    ```
-    Schema per loader.md §6. `schema_version` is required. `parent_version_id` and `version_diff` are present only when this save supersedes a prior version.
+11. **Append Hash-Chained Audit Entry:**
+    - Prepare entry payload:
+      ```json
+      {"schema_version":1,"ts":"...","view_id":"...","version_id":"...","view_hash":"...","skill":"parallax-load-house-view","action":"save","applied":true,"parent_version_id":"...","provenance_hash":"...","version_diff":{...}}
+      ```
+    - Invoke `audit_chain.append_entry(audit_path, entry_data)` to handle `prev_entry_hash` linking and RFC 8785 canonicalization.
+11a. **Emit Reasoning Chain:**
+    - Call `chain_emit.emit_chain()` (or `emit_phase_0_chain()`) to produce the reasoning chain.
+    - Since `load-house-view` produces a view rather than a portfolio, pass dummy values: `base_scores={"response_inline": {}, "response_hash": "0"*64}` and `final_portfolio={"weights": {}}`.
+    - Use `run_id = "01HZ..."` (generate a unique ULID/UUID) and `skill_version = "parallax-load-house-view@1.0.0"`.
+    - For `emit_chain` (ACTIVE status), also pass `manifest_dict=manifest`, `manifest_ref_hash`, and `signing_payload_hash` (from the manifest verification result).
+    - Artifact is written to `~/.parallax/reasoning-chains/<YYYY-MM>/<run_id>.yaml`.
 
 ### Step 5 — Confirmation summary
 
@@ -232,7 +254,8 @@ To check: /parallax-load-house-view --status
 | `--extend <date>` | Update `metadata.valid_through` only. Bump `version_id`. Re-pair (recompute view_hash — should be unchanged since tilts/excludes unmodified — and re-write `prose.md` frontmatter). |
 | `--re-pair` | Recompute `view_hash` from current `view.yaml` and `prose_body_hash` from current `prose.md` body. Update `prose.md` frontmatter `paired_yaml_hash` AND `prose_body_hash` to match. Use this after a manual prose edit (body or YAML) when the edit was intentional; the command re-anchors both hashes in one step. Note that re-pair intentionally blesses whatever is currently on disk — run only after you have reviewed the edit. |
 | `--edit` | Open `view.yaml` in `$EDITOR` (default: `vi`). On save, re-run Steps 3-4 (confirmation gate + write) using the edited content as the draft. |
-| `--why <tilt-path>` | On-demand provenance query. Takes a dotted path into the view (e.g., `tilts.factors.momentum`, `tilts.sectors.information_technology`, `tilts.macro_regime.growth`). **Path parsing:** if the caller omits the `tilts.` prefix (e.g., bare `factors.momentum`), prepend it automatically before lookup. The path MUST resolve to a leaf (a scalar value under `tilts`), not a parent map — if the caller passes a parent (e.g., `tilts.macro_regime` without a sub-field), emit `"--why requires a leaf path; <path> is a parent. Try one of: tilts.macro_regime.growth, tilts.macro_regime.inflation, ..."` and exit. Reads the tilt's value from `view.yaml` and the prose from `prose.md`, then runs a targeted LLM re-read: quote the spans of prose.md that support the tilt value (or note "no explicit support in prose — may be auto-applied per loader.md §3 macro_regime mapping"). Output format: one-paragraph answer citing page/line ref if available, the quoted spans verbatim, and an optional note when the tilt appears to be rule-derived rather than prose-extracted. Zero schema cost — runs against existing `prose.md`. If path is a valid leaf but the tilt value is zero (omitted or neutral), before exiting scan `extraction.extraction_notes` for any mention of the field name (e.g., "momentum" for `tilts.factors.momentum`, "information_technology" or "tech" for `tilts.sectors.information_technology`). If found, emit: `"Tilt is currently zero but extraction_notes mentions this field — may reflect an edit at the confirmation gate or a re-extraction that changed the value. Run `--version-history` to inspect prior values."` Then exit. If no mention, exit cleanly with `"Tilt is zero (neutral) — no active tilt to explain."` |
+| `--export <view_id>` | Call `audit_export.create_bundle()` to package view + narrative + provenance + full hash-chained audit trail into a tarball. Fails if audit chain is broken. |
+| `--why <tilt-path>` | On-demand provenance query. Takes a dotted path into the view (e.g., `tilts.factors.momentum`, `tilts.sectors.information_technology`, `tilts.macro_regime.growth`). **Path parsing:** if the caller omits the `tilts.` prefix (e.g., bare `factors.momentum`), prepend it automatically before lookup. The path MUST resolve to a leaf (a scalar value under `tilts`), not a parent map — if the caller passes a parent (e.g., `tilts.macro_regime` without a sub-field), emit `"--why requires a leaf path; <path> is a parent. Try one of: tilts.macro_regime.growth, tilts.macro_regime.inflation, ..."` and exit. **Provenance resolution order:** (1) Read `provenance.yaml` if present and look up the leaf's `derivation` list. The LAST entry in `derivation` is the effective source (later entries supersede earlier ones — e.g., a `manual_edit` after a `prose_extraction`). Branch on `type`: (a) `prose_extraction` → quote `source_span` verbatim and emit "Source: CIO prose, span '<source_span>' (confidence <c>)"; (b) `macro_regime_rule` → emit "Source: loader.md auto-mapping. Rule: <rule_ref>. Trigger: <trigger>. Confidence <c>."; (c) `manual_edit` → emit "Source: manual edit at confirmation gate. Prior value: <prior_value>. Notes: <edit_notes>." plus a recursive call to surface the entry BEFORE the edit (so the auditor sees both the original derivation and the override). The Phase-0.5d `parallax_data_fill` branch is removed at ingest scope per Phase 0.5f architectural pivot — Parallax-derived values no longer appear in saved-view provenance. (Legacy views written under Phase 0.5d may still carry `parallax_data_fill` entries; emit "Source: legacy Phase-0.5d Parallax gap-fill. Tool: <source_tool> with args <source_call_args>. Snippet: '<source_snippet>'. Data as of <data_as_of>. NOT from the uploaded document — captured at ingest, may have drifted." for back-compat reading.) (2) If `provenance.yaml` is absent or the leaf has no entry (legacy view, or zero-tilt path), fall back to the prose.md targeted re-read: quote the spans of prose.md that support the tilt value, or note "no explicit support in prose — may be auto-applied per loader.md §3 macro_regime mapping". Zero schema cost in the fallback path — runs against existing `prose.md`. If path is a valid leaf but the tilt value is zero (omitted or neutral), before exiting scan `extraction.extraction_notes` for any mention of the field name (e.g., "momentum" for `tilts.factors.momentum`, "information_technology" or "tech" for `tilts.sectors.information_technology`). If found, emit: `"Tilt is currently zero but extraction_notes mentions this field — may reflect an edit at the confirmation gate or a re-extraction that changed the value. Run `--version-history` to inspect prior values."` Then exit. If no mention, exit cleanly with `"Tilt is zero (neutral) — no active tilt to explain."` |
 | `--version-history` | Read `audit.jsonl`, filter `action="save"` entries in the current view family, and render a compact chain: `version_id → version_id` with the `version_diff` payload rendered as a short bullet list. If any save has `version_diff_truncated: true`, note that. Use this to audit how the view evolved. |
 
 ## Output Format
