@@ -1,0 +1,14 @@
+{
+  "report_date": "2026-04-24",
+  "market": "Canada",
+  "components": {
+    "macro_indicators": {
+      "content": "Canada's macro environment validates our equity overweight thesis through cycle momentum persistence despite emerging policy constraints. The CitiFX Inflation Surprise Index surge to +24.08 from -2.6 two months prior signals energy-linked inflation persistence that supports our cyclical sector positioning, while the Citi Economic Surprise Index deterioration to 49.7 confirms economic data is underperforming expectations—a divergence that reinforces selective positioning. The Bank of Canada faces an April 29 decision with 96.5% probability of holding rates at 2.25%, trapped between sticky energy inflation and 6.7% unemployment that prevents aggressive easing, creating the policy stasis that supports our duration underweight as term premiums remain insufficient compensation for inflation risk. The S.122 countermeasures delivering approximately 20 percentage point effective tariff relief through October 2025 provide the structural export competitiveness that distinguishes our Canada overweight from broader North American exposure, though implementation progress remains a key execution catalyst. This policy framework creates favorable conditions for cyclical positioning while constraining fixed income returns.",
+      "truncated": false
+    },
+    "tactical": {
+      "content": "Maintain overweight Canadian equities with conviction as the April 29 Bank of Canada (BoC) hold eliminates near-term rate-cut catalysts for bonds while energy price stabilization validates our cyclical sector leadership thesis. Duration positioning remains underweight given the 115 basis points (bps) term premium between the 2.25% policy rate and 10-year yields offers insufficient compensation for persistent energy inflation pressures, particularly as core fixed income scores remain negative and the policy bind prevents aggressive easing. The primary execution catalyst is the May Consumer Price Index (CPI) release confirming whether March's energy-linked inflation spike persists, which would validate our positioning against defensive assets that have been systematically abandoned as factor effectiveness collapsed by two-thirds.",
+      "truncated": false
+    }
+  }
+}
