@@ -51,7 +51,7 @@ ELIGIBLE_DIMENSIONS = ("macro_regime", "factors", "regions", "sectors")
 # Discovered via cross-doc gap-detect comparison of LO 2024 vs UBS Mar 2026:
 # 6 of 26 unique silent leaves were silent in BOTH banks. Adding leaves to
 # this set should be evidence-based — only after observing N>=2 banks both
-# silent on a given leaf. See notes/2026-04-26-step-2-5-validation.md OBS-13a.
+# silent on a given leaf.
 LOW_COVERAGE_REGIONS = frozenset({
     "apac_ex_japan",
     "chile",

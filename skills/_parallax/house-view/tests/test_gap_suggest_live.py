@@ -1,10 +1,9 @@
 """Regression tests for gap_suggest.py against captured live MCP responses.
 
 Bug class this catches: response-shape mismatch between unit-test fixtures
-and the actual Parallax MCP API. Discovered in the 2026-04-26 validation
-run (notes/2026-04-26-step-2-5-validation.md OBS-12) — the helpers passed
-74/76 tests against assumed-shape fixtures but produced ZERO suggestions
-when run against real MCP responses.
+and the actual Parallax MCP API — helpers passed unit tests against
+assumed-shape fixtures but produced ZERO suggestions when run against real
+MCP responses.
 
 Each fixture in tests/fixtures/ is a verbatim capture of an MCP call from
 2026-04-24. If the live API shape changes, refresh the fixtures and update
