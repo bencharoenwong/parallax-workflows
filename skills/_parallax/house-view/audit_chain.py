@@ -21,6 +21,7 @@ AUDIT_SCHEMA_VERSION = 1
 _AUDIT_FILE_MODE = 0o600
 _TAIL_READ_INITIAL_BYTES = 32 * 1024
 _TAIL_READ_MAX_BYTES = 4 * 1024 * 1024  # 4 MiB ceiling; raises beyond this
+_AUDIT_ENTRY_WARN_BYTES = 256 * 1024  # ~5x realistic max; warn before silent drift
 
 
 class AuditChainError(Exception):
@@ -224,6 +225,12 @@ def append_entry(
 
             # 2. Strict JCS write
             line_bytes = rfc8785.dumps(final_entry) + b"\n"
+            if len(line_bytes) > _AUDIT_ENTRY_WARN_BYTES:
+                logger.warning(
+                    "audit_entry_oversized: %d bytes (warn threshold %d, "
+                    "hard ceiling %d). Payload approaching tail-read ceiling.",
+                    len(line_bytes), _AUDIT_ENTRY_WARN_BYTES, _TAIL_READ_MAX_BYTES
+                )
             f.seek(0, 2) # Ensure at end
             f.write(line_bytes)
             f.flush()
