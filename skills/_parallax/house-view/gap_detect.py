@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Gap detection for house-view ingest (SKILL.md Step 2.5).
+"""Gap detection for house-view consumer skills.
 
-Identifies dimensions in the extracted draft view that are candidates for
-fill-in from the Parallax data-driven macro view. A "fillable gap" requires
-all three:
+JIT-loaded by downstream consumer skills (e.g. /parallax-portfolio-builder)
+when the active house view is silent on a dimension the consumer needs.
+Identifies dimensions in a draft view that are candidates for fill-in from
+the Parallax data-driven macro view. A "fillable gap" requires all three:
 
   1. Eligible dimension. macro_regime / factors / regions / sectors only.
      Pillars (Phase 0 encoding-only), themes (CIO judgment, free-form),
