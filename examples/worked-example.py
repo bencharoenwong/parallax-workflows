@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""End-to-end audit-trail worked example for Phase 0.5f.
+"""End-to-end audit-trail worked example.
 
 Demonstrates the consumer-side flow:
   1. Load active house view (saved view stays PURE — bank's view + uploader confirmation only).
@@ -231,10 +231,10 @@ audit_entry_hash = hashlib.sha256(audit_payload_canonical.encode("utf-8")).hexdi
 OUT = REPO / "examples" / "phase-0.5f-worked-example.md"
 
 md = []
-md.append("# Phase 0.5f — End-to-End Audit-Trail Worked Example\n")
+md.append("# End-to-End Audit-Trail Worked Example\n")
 md.append(f"**Generated:** 2026-04-27 (pinned for reproducibility — same inputs → byte-identical outputs).\n")
 md.append(f"**Thesis:** {THESIS}\n\n")
-md.append("> This artifact demonstrates the Phase 0.5f architectural pivot end-to-end: the saved house view stays PURE (bank's view + uploader confirmation only), and Parallax-derived augmentation happens at THIS portfolio's construction time, scoped to THIS decision, with explicit per-tilt source tags. A compliance officer reviewing this artifact can defensively reconstruct what came from the bank's view vs from Parallax data, with timestamps.\n\n")
+md.append("> Demonstrates the consumer-side architecture end-to-end: the saved house view stays PURE (bank's view + uploader confirmation only); current-data augmentation happens at THIS portfolio's construction time, scoped to THIS decision, with explicit per-tilt source tags. A compliance officer reviewing this artifact can defensively reconstruct what came from the bank's view vs from current data, with timestamps.\n\n")
 
 md.append("## Active house view (read-only inputs)\n")
 md.append(f"- `view_id`: `{ACTIVE_VIEW['metadata']['view_id']}`\n")
