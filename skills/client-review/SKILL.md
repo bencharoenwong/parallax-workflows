@@ -16,6 +16,7 @@ gotchas:
   - Output should be presentation-ready for client meetings
   - get_assessment prompt should incorporate all findings including macro, flags, and recommendations
   - Per Phase 0.5f architecture (notes/2026-04-26-step-2-5-validation.md): the saved house view never carries Parallax-derived overlays. When the active view is silent on a dimension THIS client review needs (client holds positions in regions/sectors not in view), EITHER (a) treat as neutral for alignment + suitability assessment [default — non-blocking, RM-fan-out-safe] OR (b) JIT-augment via --augment-silent flag with provenance tagged per holding [auditable]. Never fold augmentation back into the saved view. Compliance-critical for client-facing reports — every recommendation citing a tilt must trace back to either the bank's saved view or an explicitly-tagged JIT augmentation.
+  - **Operator verification:** see [examples/testing-posture.md](../../examples/testing-posture.md)
 ---
 
 # Client Portfolio Review
