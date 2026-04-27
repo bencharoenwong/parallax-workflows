@@ -112,6 +112,41 @@ def test_missing_link_detection(tmp_path: Path):
         assert "Missing prev_entry_hash" in str(e)
 
 
+def _worker_append(audit_path_str: str, idx: int) -> None:
+    """Worker entrypoint for concurrent-write test; module-level so fork can pickle."""
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.insert(0, str(_Path(__file__).parent.parent))
+    import audit_chain as _ac
+    _ac.append_entry(_Path(audit_path_str), {"action": "concurrent", "idx": idx})
+
+
+def test_concurrent_first_write_no_truncation(tmp_path: Path):
+    """Bug regression: 10 processes racing on a fresh audit path must
+    produce 10 entries, not silently lose entries to wb+ truncation."""
+    import multiprocessing
+    audit_path = tmp_path / "audit.jsonl"
+    n = 10
+    ctx = multiprocessing.get_context("fork")
+    procs = [
+        ctx.Process(target=_worker_append, args=(str(audit_path), i))
+        for i in range(n)
+    ]
+    for p in procs:
+        p.start()
+    for p in procs:
+        p.join(timeout=30)
+        assert p.exitcode == 0, f"worker exited with {p.exitcode}"
+
+    lines = [ln for ln in audit_path.read_text().splitlines() if ln.strip()]
+    assert len(lines) == n, f"expected {n} entries, got {len(lines)}"
+    entries = [json.loads(ln) for ln in lines]
+    seen_idx = sorted(e["idx"] for e in entries)
+    assert seen_idx == list(range(n))
+    # Chain must still verify after the race
+    audit_chain.verify_chain(audit_path)
+
+
 if __name__ == "__main__":
     # Manual run support
     import pytest
