@@ -13,10 +13,19 @@ if [ ! -d "$SKILLS_DIR" ]; then
     mkdir -p "$SKILLS_DIR"
 fi
 
-# Copy shared conventions, token costs, and AI profile framework
-rm -rf "$SKILLS_DIR/_parallax"
-cp -r "$SCRIPT_DIR/skills/_parallax" "$SKILLS_DIR/_parallax"
-echo "  Copied shared conventions, token costs, and AI-profiles framework"
+# Symlink shared conventions, token costs, and AI profile framework.
+# Symlinked (not copied) so edits to loader.md / schema.yaml / conventions
+# propagate live without requiring a re-install. Idempotent.
+PARALLAX_TARGET="$SKILLS_DIR/_parallax"
+PARALLAX_SOURCE="$SCRIPT_DIR/skills/_parallax"
+
+if [ -L "$PARALLAX_TARGET" ] && [ "$(readlink "$PARALLAX_TARGET")" = "$PARALLAX_SOURCE" ]; then
+    echo "  Symlinked  _parallax (already dev mode — edits live from repo)"
+else
+    rm -rf "$PARALLAX_TARGET"
+    ln -s "$PARALLAX_SOURCE" "$PARALLAX_TARGET"
+    echo "  Symlinked  _parallax (shared conventions + house-view loader/schema)"
+fi
 
 # Copy each skill with parallax- prefix
 for skill_dir in "$SCRIPT_DIR"/skills/*/; do

@@ -27,6 +27,10 @@ Comprehensive analyst-grade due diligence using all available Parallax tools.
 
 Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, and fallback patterns.
 
+### Batch 0 — Tool Loading
+
+Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
+
 ### Batch A — All instant + async data calls (parallel)
 
 Fire all simultaneously:
