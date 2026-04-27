@@ -225,15 +225,18 @@ def append_entry(
 
             # 2. Strict JCS write
             line_bytes = rfc8785.dumps(final_entry) + b"\n"
+            f.seek(0, 2) # Ensure at end
+            f.write(line_bytes)
+            f.flush()
+            # Warn AFTER successful flush — pre-write warns about phantom
+            # entries if the write fails (disk full, EINTR), which would
+            # weaken the audit trail's evidentiary value.
             if len(line_bytes) > _AUDIT_ENTRY_WARN_BYTES:
                 logger.warning(
                     "audit_entry_oversized: %d bytes (warn threshold %d, "
                     "hard ceiling %d). Payload approaching tail-read ceiling.",
                     len(line_bytes), _AUDIT_ENTRY_WARN_BYTES, _TAIL_READ_MAX_BYTES
                 )
-            f.seek(0, 2) # Ensure at end
-            f.write(line_bytes)
-            f.flush()
             
             # Set permissions on first write
             if f.tell() == len(line_bytes):
