@@ -21,6 +21,7 @@ gotchas:
   - quick_portfolio_scores may fail for concentrated/niche portfolios — fall back to get_score_analysis (Step 3) as the primary factor source
   - get_peer_snapshot may return a different company as target (see Convention #2) — extract the queried stock's scores from the peer list, not from the target_company field
   - Per Phase 0.5f architecture (notes/2026-04-26-step-2-5-validation.md): unlike forward-looking consumer skills (portfolio-builder, rebalance, thematic-screen, morning-brief, client-review), explain-portfolio does NOT support `--augment-silent`. Reasoning: attribution is backward-looking — JIT-injecting today's Parallax data into a past-loss explanation muddies the verdict (the question is what drove the historical drawdown, not what current data says about the affected sector now). When the saved view is silent on a holding's region/sector, the verdict simply cannot classify that holding's loss as expected vs unexpected per the view, and the output must say so explicitly. If RMs request "JIT context for silent dimensions in attribution" in a future iteration, the right surface is a separate `--current-context` flag that adds advisory commentary AFTER the attribution verdict — not before.
+  - **Operator verification:** see [examples/testing-posture.md](../../examples/testing-posture.md)
 ---
 
 # Explain Portfolio
