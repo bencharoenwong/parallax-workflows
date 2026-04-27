@@ -38,7 +38,9 @@ The second argument is the client's stated concern — used to anchor the lookba
 
 Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, fallback patterns, and macro reasoning. JIT-load `_parallax/house-view/loader.md` for active-view validation and output rendering.
 
-### Step 0 — Load Active House View
+### Step 0 — Tool Loading & Active House View
+
+Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
 
 Per `loader.md` §1-§2. If view present, capture tilt vector. The view does NOT change attribution math (Steps 1-5) — it shapes the Step 6 verdict and the framing of Step 4 stock-specific findings. Specifically: when a top detractor is in a view-OW sector, the loss is "expected from view exposure"; when in a view-UW sector that wasn't trimmed, the loss raises a portfolio-management question.
 

@@ -10,6 +10,8 @@
 # Omitted tilt fields default to neutral (0).
 
 metadata:
+  schema_version: 1                          # int, added 2026-04-24 for forward-compat legacy-view detection. v1 covers the schema in effect through Phase 0.5c. Loader gates optional-field reads on this.
+  calibration_status: heuristic_phase0       # enum: heuristic_phase0 | empirical_phase1. Until empirical calibration lands, every save writes "heuristic_phase0" and the load preamble (loader.md §5.1) emits the mandatory disclosure. Do NOT default a reader to empirical; missing field means heuristic_phase0.
   view_id: <uuid v4>                         # generated at ingest, immutable for life of view family
   view_name: "Q2 2026 House View"            # human-readable, shown in banners
   uploaded_by: "cio@firm.example"            # email or stable user id
@@ -31,9 +33,35 @@ metadata:
 # ---------------------------------------------------------------------------
 # TILTS — sparse, integer scale -2 to +2.
 # Multiplier mapping is in loader.md §"Multiplier mapping". Don't duplicate here.
+#
+# Scope: EQUITY PORTFOLIOS ONLY. Cross-asset allocation (fixed income, FX, credit,
+# commodities, alternatives) is deliberately out of scope. Full TAA workbooks carry
+# views across all asset classes — on ingest of such a workbook, non-equity views are
+# NOT captured by this schema and must be applied via a separate allocation layer.
+#
+# Pillar vocabulary follows a four-pillar quantum-factor decomposition:
+#   Ω Econometrics Phase       — macro backdrop (politics/econ/monetary/fiscal/inflation/curve)
+#   Φ Valuation State          — absolute and relative valuation
+#   Ξ Market Entropy           — vol, flows, technicals, information flow, issuance
+#   Ψ Psychological Wavelength — sentiment, greed/fear, risk-on/risk-off
+#   Parallax factors           — value, profitability, momentum, low-vol, trading signals
+#
+# This decomposition is not firm-specific; any multi-signal framework that separates
+# macro / valuation / technicals / sentiment has similar structure. Adopt the labels
+# that match your house's vocabulary — the loader reads the YAML keys, not the prose.
 # ---------------------------------------------------------------------------
 
 tilts:
+
+  # Quantum-factor pillar scores (coarse CIO-level take per pillar, -2 to +2).
+  # Pillar scores are ENCODING-ONLY in Phase 0 — stored for forward-compatibility
+  # but NOT auto-translated into factor multipliers or consumer-skill output.
+  # See loader.md §3 "Quantum-factor pillars" for the Phase 0 contract.
+  pillars:
+    econometrics_phase: 0           # Ω. +2 = constructive backdrop, -2 = recessionary/stress
+    valuation_state: 0              # Φ. +2 = very undervalued, -2 = highly overvalued
+    market_entropy: 0               # Ξ. +2 = low/ordered, -2 = high/disordered
+    psychological_wavelength: 0     # Ψ. +2 = very positive, -2 = very negative
 
   # 11 GICS sectors. Use the exact strings below — loader matches by string.
   sectors:
@@ -51,23 +79,66 @@ tilts:
 
   # Regions. Loader maps RIC suffix → region per parallax-conventions.md §1.
   # Free-form keys allowed beyond the canonical set; loader warns on unknown keys.
+  # Expanded 2026-04-22 to canonical 27-country equity coverage.
+  # BROAD buckets (europe, em_ex_china, apac_ex_japan, emea) are unions — prefer specific
+  # country keys when the view has granular conviction; loader.md §3 describes precedence.
   regions:
+    # --- Developed Markets ---
     us: 0
-    europe: 0
-    japan: 0
-    em_ex_china: 0
-    china: 0
+    canada: 0                              # added 2026-04-22
     uk: 0
-    apac_ex_japan: 0
-    taiwan: 0                              # added 2026-04-21 — AI/semi views frequently target TW directly
-    south_korea: 0                         # added 2026-04-21 — AI/semi + nearshoring views target KR directly
+    europe: 0                              # broad
+    germany: 0                             # added 2026-04-22
+    france: 0                              # added 2026-04-22
+    italy: 0                               # added 2026-04-22
+    spain: 0                               # added 2026-04-22
+    switzerland: 0                         # added 2026-04-22
+    japan: 0
+    australia: 0                           # added 2026-04-22
+
+    # --- Emerging / Frontier Asia ---
+    china: 0
+    hong_kong: 0                           # added 2026-04-22 (distinguishes from mainland A-shares)
+    taiwan: 0
+    south_korea: 0
+    india: 0
+    apac_ex_japan: 0                       # broad
+
+    # --- ASEAN ---
+    singapore: 0                           # added 2026-04-22
+    indonesia: 0                           # added 2026-04-22
+    philippines: 0                         # added 2026-04-22
+    thailand: 0                            # added 2026-04-22
+    vietnam: 0                             # added 2026-04-22
+    malaysia: 0                            # added 2026-04-22
+
+    # --- Latam ---
+    em_ex_china: 0                         # broad
+    mexico: 0                              # added 2026-04-22
+    brazil: 0                              # added 2026-04-22
+    chile: 0                               # added 2026-04-22
+
+    # --- EMEA / MENA ---
+    emea: 0                                # added 2026-04-22
+    mena: 0                                # added 2026-04-22
 
   # Parallax factor scores. Loader applies as composite-weight multipliers.
+  # Canonical set: value, profitability, momentum, low-volatility, trading-signals —
+  # all five are established academic/industry factors (Fama-French, Asness QMJ,
+  # Frazzini-Pedersen BAB, Jegadeesh-Titman momentum, short-horizon technical signals).
+  # `quality` and `defensive` are retained as backward-compat synonyms — loader.md §3
+  # "Factor aliases" defines the collapse rule (canonical wins on conflict, loader warns).
   factors:
+    # --- Canonical factor set ---
     value: 0
-    quality: 0
+    profitability: 0                       # added 2026-04-22 — canonical (was `quality`)
     momentum: 0
-    defensive: 0
+    low_volatility: 0                      # added 2026-04-22 — canonical (was `defensive`)
+    trading_signals: 0                     # added 2026-04-22 — short-term technical signals
+
+    # --- Backward-compatible synonyms ---
+    quality: 0                             # synonym of profitability; use profitability preferentially
+    defensive: 0                           # synonym of low_volatility; use low_volatility preferentially
 
   # Style tilts. Each dimension has different semantics — see loader.md §"Style semantics".
   styles:
@@ -104,14 +175,19 @@ tilts:
     - "Sanctions compliance"
     - "Sanctions compliance"
 
-  # Free-form excludes. Category-style exclusions that don't map to a sector/region/theme/RIC
-  # key — e.g., "pre-revenue biotech", "AI-washing", "SPACs", "entity list", "CCP-affiliated SOEs".
-  # Loader applies as post-universe case-insensitive substring filters against each candidate's
-  # company_name + description + sector string from get_company_info. Uploader confirms pattern
-  # breadth at the ingest confirmation gate (over-broad patterns like "tech" flagged as warning).
-  # See loader.md §3 "Free-form excludes handling". Included in view_hash computation.
-  excludes_freeform: []                      # e.g., ["spacs", "pre-revenue biotech", "entity list"]
-  exclude_reasons_freeform: []               # parallel array — same length as excludes_freeform
+  # OPTIONAL: CIO conviction per non-zero tilt (0.0-1.0).
+  # Conviction is DISTINCT from extraction_confidence — the latter measures whether
+  # the extractor captured the view correctly; this measures how strongly the uploader
+  # believes the view. Loader surfaces low conviction in the preamble but does NOT
+  # attenuate the tilt multiplier — conviction is informational, not a math input.
+  # Sparse: only populate for non-zero tilts where the uploader wanted to flag conviction.
+  tilt_conviction:
+    pillars: {}                              # e.g., {valuation_state: 0.4}
+    sectors: {}                              # e.g., {financials: 0.7}
+    regions: {}
+    factors: {}
+    styles: {}
+    themes: {}
 
   # Macro regime view. OPTIONAL — some views (mandate-driven ESG, geopolitical theses)
   # don't speak in macro-regime terms. When omitted or any sub-field set to null, loader.md §3
@@ -134,10 +210,59 @@ tilts:
 # prose.md structure (separate file):
 # ---
 # paired_yaml_hash: <sha256 — must match view_hash above>
+# prose_body_hash: <sha256 of the prose body (everything after the closing `---` of
+#                   this frontmatter), utf-8 encoded, computed per §prose_body_hash below>
 # view_id: <uuid — must match metadata.view_id>
 # version_id: <uuid — must match metadata.version_id>
 # ---
 # <verbatim CIO narrative as markdown>
+#
+# ===========================================================================
+# prose_body_hash computation
+# ===========================================================================
+# Purpose: detect tampering of the prose body after save. `paired_yaml_hash` only
+# protects the YAML body → prose frontmatter edge; a reader editing the prose
+# body without re-pairing would otherwise go undetected by loader.md §2. The
+# `prose_body_hash` closes that gap.
+#
+# Algorithm:
+#   1. Read the full prose.md file as bytes.
+#   2. Normalize line endings: replace every `\r\n` with `\n`, then every
+#      remaining `\r` with `\n`. CRLF-only editors (Windows Notepad) and
+#      macOS classic-Mac tooling must not produce different hashes than LF.
+#      The writer side of the skill MUST write prose.md with LF line endings
+#      only; the reader side normalizes defensively to catch tooling drift.
+#   3. Strip the leading frontmatter block: everything from the first `---\n`
+#      up to and including the second `---\n`. If no frontmatter (file does
+#      not start with `---\n` after normalization), the body is the entire
+#      file.
+#   4. prose_body_hash = sha256(body_bytes).hexdigest()
+#
+# Reference Python snippet (self-contained, no yaml dependency):
+#
+#   import hashlib
+#   def compute_prose_body_hash(prose_text: str) -> str:
+#       # Step 2: normalize line endings.
+#       data = prose_text.encode("utf-8").replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+#       # Step 3: strip frontmatter.
+#       marker = b"---\n"
+#       if data.startswith(marker):
+#           end = data.find(marker, len(marker))
+#           if end != -1:
+#               data = data[end + len(marker):]
+#       # Step 4: hash.
+#       return hashlib.sha256(data).hexdigest()
+#
+# Loader (§2 step 3a, added 2026-04-24):
+#   - Recompute prose_body_hash from the current prose.md file.
+#   - Compare to frontmatter `prose_body_hash`.
+#   - Mismatch → drift. Same failure message as paired_yaml_hash drift.
+#
+# Backward compatibility: views written before 2026-04-24 have no
+# `prose_body_hash` in frontmatter. Loader treats a MISSING field as "legacy
+# view, skip body-hash verification" rather than a drift failure. New saves
+# MUST include it. Re-running `/parallax-load-house-view --re-pair` on a legacy
+# view computes and injects the field.
 
 # ---------------------------------------------------------------------------
 # EXTRACTION — provenance + confidence.
@@ -150,6 +275,7 @@ extraction:
   extraction_method: "claude-opus-4-7"       # model id used; "manual" if uploader hand-edited
   extracted_at: "2026-04-01T09:28:00Z"
   extraction_confidence:                     # per-field 0.0-1.0; loader warns on any < 0.6
+    pillars: 0.75                            # added 2026-04-22 — quantum-factor pillar scores
     sectors: 0.92
     regions: 0.85
     factors: 0.78
@@ -165,11 +291,8 @@ extraction:
 # ===========================================================================
 # view_hash computation
 # ===========================================================================
-# canonical_yaml_body = the entire `tilts` block only (all sub-keys: sectors,
-#   regions, factors, styles, themes, excludes, exclude_reasons, excludes_freeform,
-#   exclude_reasons_freeform, macro_regime), serialized with sorted keys and
-#   stripped of comments. Empty arrays and null scalars are PRESERVED (they
-#   convey intent: "no freeform excludes" vs "freeform excludes not considered").
+# canonical_yaml_body = the `tilts` and `excludes` sections only,
+#   serialized with sorted keys and stripped of comments + empty fields.
 # view_hash = sha256(canonical_yaml_body, encoding=utf-8).hexdigest()
 #
 # The hash deliberately excludes metadata/extraction/prose so that:
@@ -177,5 +300,113 @@ extraction:
 # - Prose edits do not invalidate the pairing UNLESS the YAML body actually changed.
 # - Phase 1 Supabase storage can de-duplicate views by view_hash across orgs.
 #
-# Two views that differ ONLY in `excludes_freeform` content WILL produce different
-# hashes — freeform excludes are load-bearing for mandate-driven / geopolitical views.
+# ---------------------------------------------------------------------------
+# Pinned canonicalization algorithm (added 2026-04-24).
+# ---------------------------------------------------------------------------
+# Previously under-specified; this block is now the binding contract. Any
+# implementation (Python, Node, Go, server-side Supabase function) that
+# follows these rules exactly produces byte-identical canonical output, and
+# therefore identical sha256 digests.
+#
+# Rule 1 — Scope.
+#   Take ONLY these two top-level keys from the view YAML document:
+#     - `tilts` (map)
+#     - `excludes` (sequence; use [] if absent)
+#   Ignore everything else (metadata, extraction, exclude_reasons, comments).
+#
+# Rule 2 — Strip empty/zero recursively.
+#   A value is "empty" iff — AFTER its children have themselves been stripped
+#   AND it is NOT a boolean — it is any of: None / null, 0 (int or float), ""
+#   (empty string), [] (empty sequence), or {} (empty map).
+#   - Walk tilts AND excludes depth-first; strip empties bottom-up.
+#   - "0" means the numeric zero — int 0, float 0.0 — NOT the string "0" and
+#     NOT False. Booleans are explicitly excluded from the empty set to
+#     accommodate future bool-valued tilts; implementations MUST guard
+#     `isinstance(x, bool)` before comparing to 0 because in some languages
+#     (Python, JavaScript) `False == 0` is true.
+#   - A dict that becomes empty AFTER recursion IS stripped from its parent.
+#     A list element that becomes empty AFTER recursion IS stripped from the
+#     list. This means: ALWAYS recurse first, THEN decide whether to drop.
+#
+# Rule 3 — Serialize.
+#   Use PyYAML's `yaml.safe_dump` with:
+#     sort_keys=True, default_flow_style=False, allow_unicode=True,
+#     width=1_000_000 (suppress line wrapping), indent=2.
+#   This matches the output of every PyYAML 5.x / 6.x release that ships
+#   `safe_dump`. Node `js-yaml` and Go `gopkg.in/yaml.v3` configured with
+#   equivalent settings (sorted keys, block style, no flow, no wrapping, UTF-8,
+#   2-space indent) produce identical bytes on the test fixture below.
+#
+# Rule 4 — Encode + hash.
+#   canonical_body_bytes = canonical_yaml_string.encode("utf-8")
+#   view_hash            = hashlib.sha256(canonical_body_bytes).hexdigest()
+#
+# Reference Python implementation (must pass the fixture in Rule 5):
+#
+#   import hashlib, yaml
+#   def _is_empty(v):
+#       if isinstance(v, bool):           # Guard: False == 0 in Python.
+#           return False
+#       if v is None:
+#           return True
+#       if isinstance(v, (int, float)) and v == 0:
+#           return True
+#       return v == "" or v == [] or v == {}
+#   def _strip_empty(obj):
+#       if isinstance(obj, dict):
+#           out = {}
+#           for k, v in obj.items():
+#               v = _strip_empty(v)       # Recurse first.
+#               if _is_empty(v):          # Then decide.
+#                   continue
+#               out[k] = v
+#           return out
+#       if isinstance(obj, list):
+#           result = []
+#           for x in obj:
+#               y = _strip_empty(x)       # Recurse first.
+#               if _is_empty(y):          # Then decide.
+#                   continue
+#               result.append(y)
+#           return result
+#       return obj
+#   def compute_view_hash(view: dict) -> str:
+#       body = {
+#           "tilts":    _strip_empty(view.get("tilts", {})),
+#           "excludes": _strip_empty(view.get("excludes", []) or []),
+#       }
+#       canonical = yaml.safe_dump(
+#           body, sort_keys=True, default_flow_style=False,
+#           allow_unicode=True, width=1_000_000, indent=2,
+#       )
+#       return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+#
+# Rule 5 — Test fixture (any implementation MUST match this byte-for-byte).
+#   Input view (subset — only tilts + excludes matter):
+#     tilts:
+#       sectors: {information_technology: -1}
+#       regions: {us: 1}
+#       factors: {profitability: 2}
+#       pillars: {econometrics_phase: 0}    # stripped (zero)
+#       styles: {cap_size: {large: 0}}      # stripped (empty after inner strip)
+#     excludes: []
+#
+#   Expected canonical_yaml_body (exact bytes, terminal newline included):
+#     excludes: []
+#     tilts:
+#       factors:
+#         profitability: 2
+#       regions:
+#         us: 1
+#       sectors:
+#         information_technology: -1
+#
+#   Expected view_hash (sha256 hex): 1629fba3f63d0b498ae69845460cf456f316acbdac239e4bef58e2fdd7b9cc69
+#
+#   A runnable version of this fixture lives in
+#   `skills/_parallax/house-view/tests/fixtures/view_hash_fixture.yaml`;
+#   `tests/test_view_hash.py` asserts the digest matches on every release.
+#
+# If a future change requires the canonicalization to evolve (e.g., to include
+# new top-level keys), bump `schema_version` in audit.jsonl and emit a
+# migration note — never silently alter the byte output.

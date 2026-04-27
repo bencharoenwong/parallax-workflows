@@ -29,7 +29,7 @@ Discover investment opportunities by theme using Parallax's semantic universe bu
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode and fallback patterns. JIT-load `_parallax/house-view/loader.md` for active-view validation and conflict resolution.
+Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call. Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode and fallback patterns. JIT-load `_parallax/house-view/loader.md` for active-view validation and conflict resolution.
 
 0. **Load Active House View** — Per `loader.md` §1-§2. If view present, capture tilt vector + excludes. Resolve user theme vs view per §4: theme is sovereign, but conflicts surface as banners (e.g., theme="AI infrastructure" + view says `tech: -2` → screen runs as requested with "House view is UW tech; screen run per your explicit theme" banner).
 1. **Build Universe** — Resolve user theme vs. view per loader.md §4. If view present AND `PARALLAX_LOADER_V2=1`, follow `loader.md` §3 "Application (V2)": decompose tilts into parallel per-sector calls, merge, and dedupe. If V1, prepend tilt context to the query and call `build_stock_universe` once. Filter results against `tilts.excludes`.

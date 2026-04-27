@@ -29,6 +29,10 @@ Macro + equity opportunity analysis for a specific country or region.
 
 Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode and fallback patterns.
 
+### Batch 0 — Tool Loading
+
+Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
+
 ### Batch A — Coverage + macro + universe (parallel)
 
 | Tool | Parameters | Notes |

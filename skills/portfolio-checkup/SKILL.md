@@ -27,6 +27,10 @@ Plain-language portfolio health check with health flags for individual investors
 
 Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode and fallback patterns. JIT-load `references/health-flags.md` for the health flag system.
 
+### Batch 0 — Tool Loading
+
+Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
+
 ### Batch A — Fire scoring + macro calls in parallel
 
 | Tool | Parameters | Notes |

@@ -11,6 +11,15 @@ AI-powered equity research workflows for [Parallax](https://chicago.global/paral
 
 Run commands like `/parallax-should-i-buy AAPL` or `/parallax-client-review [holdings]` and get a structured research report. Each workflow orchestrates Parallax MCP tools in parallel — company data, factor scores, macro analysis, news — so you get comprehensive output from a single command.
 
+## What's in this repo
+
+The repo is open-source. Two layers:
+
+1. **Framework (free, public, MIT):** skill prompts, YAML schemas, validators, extraction logic, regression corpus. Includes the [house-view ingestion framework](skills/load-house-view/) — a schema + loader + extraction pipeline for codifying CIO investment views into structured tilts that any equity scoring engine can consume. Swap out the MCP layer and it works with any scoring provider.
+2. **Parallax MCP (paid, required for the workflows to return data):** the quantitative scoring engine — factor scores, peer comparisons, macro analysis, news synthesis. The framework above is the prompt/schema layer; Parallax is the data layer.
+
+You can run the framework's validation, regression tests, and schema tooling without a Parallax subscription. To get actual portfolio output, you need Parallax connected.
+
 ## Prerequisites
 
 These workflows require an active Parallax subscription from [Chicago Global Capital](https://chicago.global). API credentials and MCP connection details are provided to clients upon onboarding. If you are not yet a client, contact us at [chicago.global](https://chicago.global) to get started.

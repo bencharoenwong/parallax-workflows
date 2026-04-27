@@ -9,3 +9,42 @@ node_modules/
 notes/
 docs/superpowers/
 LESSONS.md
+
+# ---------------------------------------------------------------
+# Internal artifacts kept local. Do not remove without review.
+# ---------------------------------------------------------------
+
+# Internal calibration manifest.
+skills/_parallax/house-view/tests/sensitivity_bands.yaml
+
+# Internal test fixtures.
+skills/_parallax/house-view/tests/fixtures/*-probe.yaml
+skills/_parallax/house-view/tests/fixtures/*-probe_candidates.yaml
+
+# Universe candidate fixtures — contain Parallax MCP output; not for public slicing.
+skills/_parallax/house-view/tests/fixtures/ai-concentrated-2026_candidates.yaml
+skills/_parallax/house-view/tests/fixtures/china-skeptic-2026_candidates.yaml
+skills/_parallax/house-view/tests/fixtures/esg-screened-2026Q2_candidates.yaml
+skills/_parallax/house-view/tests/fixtures/recession-defensive-2026_candidates.yaml
+skills/_parallax/house-view/tests/fixtures/reflationary-2026Q2_candidates.yaml
+
+# Reference runner — implementation detail; public spec is in tests/portfolio_diff_harness.md.
+skills/_parallax/house-view/tests/run_diff_harness.py
+
+# Calibration manifest — note: the verifier, trusted_keys.json, the
+# generator, the test signed fixture, AND the test signing key are all
+# PUBLIC. The test signing key is labeled `use: "test-only"` in
+# trusted_keys.json; trust binding is per-kid, so production deployments
+# (which will not include this kid) are unaffected. Public test artifacts
+# match the existing test_view_hash.py / view_hash_fixture.yaml precedent
+# and let auditors run a known-good round-trip on a fresh clone.
+#
+# Production signing keys (when Batch 2 generates them) MUST live outside
+# this repo entirely — the server side is in ~/parallax_mcp/, not here.
+# Nothing in this repo's tests/ directory is ever a production secret.
+
+# Internal regression baselines (second round).
+skills/load-house-view/regression-corpus/baselines/2026-04-22/
+
+# Planning docs — private by default.
+docs/plans/

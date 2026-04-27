@@ -1,0 +1,14 @@
+{
+  "report_date": "2026-04-24",
+  "market": "India",
+  "components": {
+    "macro_indicators": {
+      "content": "India's macro framework operates under dual constraints from energy supply shocks and political uncertainty following June election results that stripped Modi's parliamentary majority. The $70 billion annual import bill increase from crude oil at $125.88 per barrel forces the Reserve Bank of India into a defensive holding pattern at 5.25% despite inflation projections doubling to 4.6% for FY27, creating a policy trap where neither easing nor tightening addresses underlying external pressure. Forex reserves declined $19 billion in two weeks as foreign portfolio investment outflows persist, while the rupee trades at 93.07–93.79 with extreme oversold conditions signaling structural weakness. The capital account deterioration accelerates precisely when coalition government constraints limit fiscal and monetary policy responses, creating a feedback loop where currency weakness increases external financing needs while political fragmentation reduces policy credibility. Emergency oil procurement activity through increased Russian imports and Iranian crude resumption provides partial stabilization but cannot fully offset the structural current account deficit that the RBI Governor explicitly warned will widen.",
+      "truncated": false
+    },
+    "tactical": {
+      "content": "The bond-equity allocation maintains the prescribed underweight equity stance (Quantum -0.263) as the June election shock validates the Phi -0.50 valuation overhang thesis. Modi's loss of parliamentary majority creates policy uncertainty that compounds energy supply shock pressures. Fixed income positioning remains Neutral rather than aggressively extending duration, as the Reserve Bank of India's constrained policy space—evidenced by held rates at 5.25% amid 4.6% inflation projections—prevents the accommodation that would typically support bond outperformance during growth slowdowns. Within the equity underweight, sector allocation favors Financials and Energy for their structural advantages from steeper yield curves and geopolitical premiums respectively, while avoiding Consumer Staples despite recent rank advancement due to margin compression from wholesale inflation peaks at 3.88%. The primary catalyst for positioning rotation requires sustained crude oil normalization below $90 per barrel combined with political stability that enables policy clarity—neither condition materialized with election results showing coalition government formation and continued energy market volatility.",
+      "truncated": false
+    }
+  }
+}
