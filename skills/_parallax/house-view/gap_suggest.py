@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-"""Parallax data-driven gap-fill sourcing for house-view ingest (Step 2.5).
+"""Parallax data-driven gap-fill sourcing for house-view consumer skills.
 
-Pairs with `gap_detect.py`. Given a list of detected Gaps, this module:
+JIT-loaded alongside `gap_detect.py` by downstream consumer skills (e.g.
+/parallax-portfolio-builder --augment-silent) to fill silent dimensions
+with current Parallax data, scoped per-portfolio. Pairs with `gap_detect`.
+Given a list of detected Gaps, this module:
 
   1. Plans the MCP calls that need to be made (`plan_calls`). One call per
      unique (tool, args) tuple — covered regions get one `macro_analyst`
