@@ -15,6 +15,7 @@ gotchas:
   - Mixed-exchange portfolios may need split scoring (see shared conventions)
   - Output should be presentation-ready for client meetings
   - get_assessment prompt should incorporate all findings including macro, flags, and recommendations
+  - Per Phase 0.5f architecture (notes/2026-04-26-step-2-5-validation.md): the saved house view never carries Parallax-derived overlays. When the active view is silent on a dimension THIS client review needs (client holds positions in regions/sectors not in view), EITHER (a) treat as neutral for alignment + suitability assessment [default — non-blocking, RM-fan-out-safe] OR (b) JIT-augment via --augment-silent flag with provenance tagged per holding [auditable]. Never fold augmentation back into the saved view. Compliance-critical for client-facing reports — every recommendation citing a tilt must trace back to either the bank's saved view or an explicitly-tagged JIT augmentation.
 ---
 
 # Client Portfolio Review
@@ -25,6 +26,7 @@ Presentation-ready portfolio review with health flags and prioritized recommenda
 
 ```
 /parallax-client-review [{"symbol":"AAPL.O","weight":0.25},{"symbol":"BRK-B.N","weight":0.20}] client="conservative retiree, income focus, 10yr horizon" benchmark=SPY.O
+/parallax-client-review [holdings] client="..." --augment-silent   # JIT-augment dimensions the active view is silent on (default: off)
 ```
 
 ## Workflow
@@ -55,6 +57,7 @@ Derive home markets from RIC suffixes. Call `macro_analyst` with component="tact
 
 1. Evaluate 5 health flags per holding: Low Score (≤5.0), Concentration (>15%), Redundancy (≥2 pairs), Value Trap (value ≤3.0), Macro Misalignment.
 2. **House-view alignment** (if view active): add View Misalignment (>25% off view-tilted target) and View Excluded (on tilts.excludes) as additional flags. Surface a portfolio-level "view alignment score" (% of weight in view-aligned positions).
+2b. **Phase 0.5f — JIT augmentation gate (opt-in)** — Identify holdings whose region/sector is silent in the saved view. **Default:** treat silent dimensions as neutral for alignment + suitability assessment; one-line note in output disclosing what was skipped + how to enable. **Opt-in `--augment-silent`:** JIT-load `_parallax/house-view/gap_detect` + `gap_suggest`. Use the holdings' regions and sectors as the relevant scope. Call `gap_detect.detect_gaps()`, `gap_suggest.plan_calls(gaps, available_markets=mcp__claude_ai_Parallax__list_macro_countries()["markets"])` (Batch A already pulled coverage; reuse), fire planned MCP calls in parallel. Apply Suggestions ONLY for THIS review's alignment / suitability — saved view never mutates. Tag each augmented dimension with `[parallax_jit, <tool>[<args>]@<data_as_of>]` for the House View Alignment table and the Per-Holding Analysis section. Per `examples/phase-0.5f-jit-policies.md`: enforce 7d/30d staleness gates on each Suggestion's `data_as_of`.
 3. Flag redundancy as low-confidence if coverage <60%.
 4. Assign health status: **Healthy** (0) · **Monitor** (1-2) · **Attention** (3+). View Excluded counts as Attention regardless of other flags.
 5. Select up to 8 holdings for drill-down per `references/recommendation-matrix.md`: weight >10%, any flag (including View flags), or macro-misaligned. Prioritize by flag count then weight.
@@ -73,7 +76,7 @@ News (selective, async): `get_news_synthesis` for holdings >10% weight AND flagg
 
 1. Per `references/recommendation-matrix.md`, assign each flagged holding a priority (High/Medium/Low) and action type (trim/exit/hold/investigate/reweight). Every recommendation must cite a specific finding. View Excluded → Exit (priority High). View Misalignment → Trim or Reweight (priority Medium unless paired with other flags).
 2. Call `get_assessment` with comprehensive prompt incorporating: portfolio composition, factor scores, health flags (including View flags), macro context, per-holding drill-down findings, recommendations, client context, AND active house view (basis_statement + tilt vector + excludes if present).
-3. Append audit log entry per loader.md §6.
+3. Append audit log entry per loader.md §6. **When `--augment-silent` was applied:** the entry MUST carry `augmented_dimensions: [{path, source_tool, source_call_args, data_as_of}]` and `augment_silent_flag: true`. When NOT applied but silent dimensions existed, log `silent_dimensions_skipped: [...]` and `augment_silent_flag: false`. This is compliance-load-bearing for client-facing reports: a regulator reviewing the audit chain must be able to trace every cited tilt back to its source (saved view, JIT augmentation, or neutral default).
 
 ## Output Format
 
@@ -84,7 +87,7 @@ Client-ready report:
 - **Performance vs Benchmark** (key metrics)
 - **Factor Analysis** (scores with macro context interpretation for this client type; if view active, compare against view-target factor)
 - **Concentration & Redundancy** (flagged issues; coverage reliability note if applicable)
-- **House View Alignment** (only if view active) — table of view tilt direction vs current portfolio exposure per sector/region/factor; flagged misalignments
+- **House View Alignment** (only if view active) — table of view tilt direction vs current portfolio exposure per sector/region/factor; flagged misalignments. Each row carries a "Tilt Source" tag: `[house_view]` (saved view tilt), `[parallax_jit, <tool>@<date>]` (JIT-augmented for THIS review only via `--augment-silent`), or `[neutral]` (silent + not augmented). For client-facing report integrity, the "Tilt Source" tag is what compliance reviews against — every recommendation citing a tilt must point to one of these three sources.
 - **Per-Holding Analysis** (for drill-down holdings: score trend, risk profile, flags, news highlights; view conflicts called out)
 - **Suitability Assessment** (alignment with client goals AND with active house view if present; cite basis_statement)
 - **Recommended Actions** (prioritized High/Medium/Low per recommendation-matrix.md, with specific action types; rationale cites view tilts where applicable)
