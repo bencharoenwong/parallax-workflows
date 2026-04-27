@@ -21,6 +21,7 @@ gotchas:
   - Reasoning Chains: Every save MUST invoke `chain_emit.emit_chain()` (or `emit_phase_0_chain()`) to produce a compliance artifact at `~/.parallax/reasoning-chains/`.
   - Compliance Export: Use `--export <view_id>` to generate a regulator-grade bundle. Validates hash-chain integrity before packaging.
   - `--why <tilt-path>` is on-demand. Reads `provenance.yaml` first when present; the latest derivation entry for the leaf controls the answer. If type is `macro_regime_rule`, cite `rule_ref` + `trigger`. If type is `prose_extraction` or no `provenance.yaml` exists (legacy view), fall back to the prose.md targeted re-read. The saved house view never carries Parallax-derived overlays — augmentation happens just-in-time at consumer-skill use, with provenance recorded on the consuming portfolio/screen artifact, not on the view itself (see Phase 0.5f architectural pivot, notes/2026-04-26-step-2-5-validation.md).
+  - **Operator verification:** see [examples/testing-posture.md](../../examples/testing-posture.md)
 ---
 
 # Load House View
