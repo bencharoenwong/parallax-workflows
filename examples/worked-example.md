@@ -1,8 +1,8 @@
-# Phase 0.5f — End-to-End Audit-Trail Worked Example
+# End-to-End Audit-Trail Worked Example
 **Generated:** 2026-04-27 (pinned for reproducibility — same inputs → byte-identical outputs).
 **Thesis:** EM-tilt balanced equity, focus on Latin America + ASEAN, ESG-aware, $1M target
 
-> This artifact demonstrates the Phase 0.5f architectural pivot end-to-end: the saved house view stays PURE (bank's view + uploader confirmation only), and Parallax-derived augmentation happens at THIS portfolio's construction time, scoped to THIS decision, with explicit per-tilt source tags. A compliance officer reviewing this artifact can defensively reconstruct what came from the bank's view vs from Parallax data, with timestamps.
+> Demonstrates the consumer-side architecture end-to-end: the saved house view stays PURE (bank's view + uploader confirmation only); current-data augmentation happens at THIS portfolio's construction time, scoped to THIS decision, with explicit per-tilt source tags. A compliance officer reviewing this artifact can defensively reconstruct what came from the bank's view vs from current data, with timestamps.
 
 ## Active house view (read-only inputs)
 - `view_id`: `086db6a9-9d0e-4c24-82bd-823cbda79eb3`
