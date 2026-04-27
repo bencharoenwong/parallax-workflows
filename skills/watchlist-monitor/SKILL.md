@@ -26,7 +26,7 @@ Surveillance scan across a list of tickers — flag what's changed, what needs a
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools:
+Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call. Execute using `mcp__claude_ai_Parallax__*` tools:
 
 1. **Score Scan** — For each symbol, call `get_score_analysis` with `weeks` as int N, where N is the user-supplied value from the invocation (e.g., `weeks=8`) or 8 if none provided. This is non-default (server default is 52) — see conventions §0.1 for the serialization caveat. Compute change in total score over the period.
 2. **Flag Movers** — Identify symbols with significant score changes (>1 point total score change or any factor moving >2 points).
