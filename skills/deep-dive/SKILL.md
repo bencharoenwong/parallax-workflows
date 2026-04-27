@@ -8,7 +8,8 @@ negative-triggers:
   - Peer comparison only → use /parallax-peer-comparison
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
-  - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §7 (single-stock conflict surfacing), §6 (audit). Do NOT apply tilts — single-stock skills surface conflicts only. The get_assessment prompt should include the active view (basis_statement + relevant tilts) so the AI assessment can address view alignment.
+  - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §7.1/§7.2/§7.3 (single-stock conflict surfacing — blanket note + peer-suggest token + score-tension banner), §6 (audit). Do NOT apply tilts — single-stock skills surface conflicts only; peer suggestions are flagged but never filtered. The get_assessment prompt should include the active view (basis_statement + relevant tilts) so the AI assessment can address view alignment in prose — that is deep-dive's primary alignment surface. §7.1/§7.2/§7.3 inline flags are additive polish on top.
+  - When rendering §7.1/§7.2/§7.3 flags, JIT-load _parallax/house-view/render_helpers.md and route every token through `render_view_conflict()`.
   - When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
   - get_assessment is async and uses Perplexity — may take 30-90s
   - get_assessment prompt should incorporate macro context, score trends, and dividend profile alongside existing data
@@ -32,9 +33,11 @@ Accepts RIC format. For plain tickers, resolve per shared conventions.
 
 Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, fallback patterns, and HK ambiguity protocol. JIT-load `_parallax/house-view/loader.md` for active-view validation and single-stock conflict surfacing.
 
-### Step 0 — Load Active House View
+### Step 0 — Tool Loading & Active House View
 
-Per `loader.md` §1-§2 + §7. If view present, capture tilt vector + excludes + basis_statement. Do NOT apply tilts to scoring. The Step 0 capture feeds Batch C's `get_assessment` prompt (so the AI can address view alignment) and the closing flag in Output.
+Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
+
+Per `loader.md` §1-§2 + §7.1/§7.2/§7.3. If view present, capture tilt vector + excludes + basis_statement. Do NOT apply tilts to scoring. The Step 0 capture feeds two surfaces: (a) Batch C's `get_assessment` prompt (AI addresses view alignment in prose — deep-dive's primary alignment surface), (b) the inline §7.1/§7.2/§7.3 flags in Output (blanket note after Factor Profile; peer-suggest token if triggered; tension banner if triggered).
 
 ### Batch A — Fire all data calls in parallel
 
@@ -62,7 +65,14 @@ Needs company info for market reasoning:
 
 ### Batch C — AI Assessment (after A + B)
 
-Call `get_assessment` with a comprehensive prompt incorporating **all** findings: factor scores, score trends, key ratios, technical stance, macro context, dividend profile, risk/return vs peers, the user's specific question/thesis if provided, AND the active house view if present (basis_statement + tilts on this stock's sector/region/themes). Ask the assessor to address whether the position aligns with the view.
+Call `get_assessment` with a comprehensive prompt incorporating **all** findings: factor scores, score trends, key ratios, technical stance, macro context, dividend profile, risk/return vs peers, the user's specific question/thesis if provided, AND the active house view if present (basis_statement + tilts on this stock's sector/region/themes).
+
+**When a view is active, the assessor MUST produce a structured enumeration** — not a free-form "aligns well" paragraph. Require the assessor to end its output with three bullet lists:
+1. **Tilts that support this position** — enumerate each active tilt (sector, region, factor, theme) where this stock's profile materially aligns with the tilt direction. One line each.
+2. **Tilts that contradict this position** — enumerate each active tilt where this stock's profile materially disagrees. One line each.
+3. **Active tilts NOT incorporated into this assessment** — enumerate tilts the assessor chose to ignore (e.g., because the stock has no exposure to that sector/theme) and state the reason in one clause each.
+
+This decomposition is MANDATORY when a view is present (MAS FEAT P13/14, SR 11-7 traceability — the assessor's influence on a CIO decision must be auditable via the prose itself). If the assessor returns prose without the three enumerations, re-run with a stricter prompt before rendering.
 
 Apply graceful fallback patterns from shared conventions for any missing data.
 
@@ -71,14 +81,16 @@ Apply graceful fallback patterns from shared conventions for any missing data.
 - **Company Overview** (3 sentences)
 - **Macro Environment** (regime context for relevant markets, factor implications)
 - **Factor Profile** (table: each factor score with peer rank + 52-week trend direction)
+  - *If view active:* check §7.3 tension condition (`total_score >= 7.0 AND view.tilts.sectors[stock_sector] <= -1`). If true, render banner via `render_view_conflict(kind="score_tension", ...)` directly below the factor table.
+- **House View Note** (only if view active and stock conflicts with view) — render via `render_view_conflict(kind="blanket", ...)` per loader.md §7.1. Rendered HERE — immediately after Factor Profile — so the view lens appears before the rest of the analysis. Not at the bottom.
 - **Financial Highlights** (key ratios, trends)
 - **Dividend Profile** (yield, payout ratio, consistency — or "Not a dividend payer")
 - **Risk/Return Profile** (volatility, Sharpe context vs peers)
+  - *If view active AND `get_peer_snapshot.suggestion` returned a peer:* check §7.2 condition (peer's sector tilt ≤ -1 in view, or peer ticker on excludes). If true, render inline token via `render_view_conflict(kind="peer_suggest", ...)` under the Risk/Return section. Flag, do not filter — the peer stays in the table.
 - **Technical Stance** (trend, key levels, momentum)
 - **News Catalyst Watch** (material items only)
-- **Assessment** (AI deep-research synthesis — includes macro + trend data; if view active, includes view-alignment commentary)
+- **Assessment** *(AI-generated — Perplexity deep-research synthesis)* — includes macro + trend data; if view active, MUST end with the three-bullet tilt decomposition per Batch C contract. This is deep-dive's primary alignment surface. Render the section header with the italic parenthetical verbatim — it's the contextual-proximity AI disclosure per HKMA/SFC Nov 2024 Circular; the document-level banner (§5 rule 6) is not sufficient for the Perplexity-backed non-deterministic content in this specific section.
 - **Risk Factors** (what could go wrong)
-- **House View Note** (only if view active and stock conflicts with view) — render per loader.md §7
 
 Append audit log entry per loader.md §6.
 

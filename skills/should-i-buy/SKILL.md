@@ -8,7 +8,8 @@ negative-triggers:
   - Peer comparison deep dive → use /parallax-peer-comparison
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
-  - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §7 (single-stock conflict surfacing), §6 (audit). Do NOT apply tilts — single-stock skills surface conflicts only.
+  - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §7.1/§7.2/§7.3 (single-stock conflict surfacing — blanket note + peer-suggest token + score-tension banner), §6 (audit). Do NOT apply tilts — single-stock skills surface conflicts only; peer suggestions are flagged but never filtered.
+  - When rendering §7.1/§7.2/§7.3 flags, JIT-load _parallax/house-view/render_helpers.md and route every token through `render_view_conflict()`. Do not hand-construct the string.
   - When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
   - get_stock_outlook supports 4 aspects — analyst_targets, recommendations, risk_return, dividends
   - explain_methodology is free/instant — use it for any notably high or low score
@@ -34,9 +35,11 @@ Accepts plain tickers (auto-converts to RIC) or RIC format directly.
 
 Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, fallback patterns, and HK ambiguity protocol. JIT-load `_parallax/house-view/loader.md` for active-view validation and single-stock conflict surfacing.
 
-### Step 0 — Load Active House View
+### Step 0 — Tool Loading & Active House View
 
-Per `loader.md` §1-§2 + §7. If view present, capture tilt vector + excludes. Do NOT apply tilts to scoring. After producing the standard output, check whether the stock's sector / region / themes conflict with view tilts and surface the §7 closing flag if so.
+Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
+
+Per `loader.md` §1-§2 + §7.1/§7.2/§7.3. If view present, capture tilt vector + excludes. Do NOT apply tilts to scoring. During output rendering (see Output Format below), surface: (a) the blanket House View Note immediately after The Scores (§7.1), (b) an inline peer-suggest token at the Risk vs Peers section if Parallax's peer-suggest sits on a view-UW sector or the excludes list (§7.2), (c) an inline tension banner at The Scores if `total_score ≥ 7` AND the stock's sector is UW in the view (§7.3). Flag, do not filter — peer suggestions stay in the table.
 
 ### Step 1 — Resolve Ticker
 
@@ -75,18 +78,20 @@ If no covered markets are relevant, skip macro section.
 
 ## Output Format
 
-Present as a friendly, structured report:
+Present as a friendly, structured report. When an active house view is loaded, JIT-load `_parallax/house-view/render_helpers.md` and route every §7 flag through `render_view_conflict()` — do not hand-construct the strings.
 
 - **The Company** (what they do, how big)
 - **The Scores** (simple table with plain-English interpretation; include 52-week trend direction — e.g., "Quality trending up from 5.8 to 7.2")
+  - *If view active:* check §7.3 tension condition (`total_score >= 7.0 AND view.tilts.sectors[stock_sector] <= -1`). If true, render the tension banner via `render_view_conflict(kind="score_tension", ...)` directly below the scores table.
+- **House View Note** (only if view active and stock conflicts with view) — render via `render_view_conflict(kind="blanket", ...)` per loader.md §7.1. This section appears HERE — immediately after The Scores — so the reader sees the view lens before reading the rest. Not at the bottom of the output.
 - **Financial Health** (green/yellow/red traffic light metaphor)
 - **Macro Context** (2-3 sentences on the relevant economic environment — skip if no covered markets)
 - **Dividends** (yield, consistency, recent changes — or "Not a dividend payer" if none)
 - **Risk vs Peers** (risk/return profile relative to peer group)
+  - *If view active AND `get_peer_snapshot.suggestion` returned a peer:* check §7.2 condition (peer's sector tilt ≤ -1 in view, or peer ticker on excludes). If true, render the inline token via `render_view_conflict(kind="peer_suggest", ...)` immediately under the Risk vs Peers section. Flag, do not filter — the peer stays in the table.
 - **Recent News** (bullets)
 - **Analyst View** (price target range, consensus)
 - **Bottom Line** (balanced 2-sentence summary — pros and cons, not a recommendation)
-- **House View Note** (only if view active and stock conflicts with view) — render per loader.md §7
 
 Append audit log entry per loader.md §6.
 

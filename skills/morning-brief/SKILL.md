@@ -32,7 +32,9 @@ Optional: append `market=Japan` or `top_n=5` after the portfolio JSON.
 
 Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, and fallback patterns. JIT-load `_parallax/house-view/loader.md` for active-view validation and integration.
 
-### Batch 0 — Load Active House View (before Batch A)
+### Batch 0 — Tool Loading & Active House View
+
+Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
 
 Per `loader.md` §1-§2. If view present, capture tilt vector, excludes, prose excerpt for narrative voice, and macro_regime. The brief's "Macro Snapshot" should explicitly reference the view's regime call where relevant ("Tactical macro shows X — consistent / divergent with active view's [regime] stance"). If validation fails or no view present, run brief without view.
 

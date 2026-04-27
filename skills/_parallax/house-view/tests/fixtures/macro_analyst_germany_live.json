@@ -1,0 +1,14 @@
+{
+  "report_date": "2026-04-24",
+  "market": "Germany",
+  "components": {
+    "macro_indicators": {
+      "content": "Germany's macro environment exhibits a dangerous disconnect between improving sentiment indicators and deteriorating structural fundamentals. The CitiFX Economic Surprise Index at 28.3, elevated from 24.4, signals data beating expectations yet masks critical margin compression as Manufacturing PMI at 51.7 conceals input cost inflation hitting October 2022 highs while output pricing remains constrained. Natural gas prices remain 25.3% higher year-over-year, creating systematic pressure on energy-intensive manufacturers and undermining the traditional export-led growth model. Debt brake relaxation will mechanically deteriorate the structural primary balance from -0.9% to -1.8% of GDP, creating sustained supply-demand imbalance in duration markets. Bund yields near 15-year highs reflect persistent inflationary expectations compounded by fiscal expansion, while EUR/USD at 1.17 represents tactical supply with resistance at 1.18 to 1.19. Germany's forward trajectory hinges on whether the European Central Bank can accommodate fiscal expansion without forcing sharper economic contraction.",
+      "truncated": false
+    },
+    "tactical": {
+      "content": "Maintain strategic underweight to German equities despite near-term fiscal support, as the deeply negative Parallax Factor (-0.90) overwhelms positive cycle momentum (Omega +0.40) and supportive valuation (Phi +0.375). Duration underweight in Bunds remains justified by mechanical supply pressure from debt brake relaxation creating 3.5% to 3.8% structural deficits in 2026, while credit positioning should rotate defensively toward investment-grade names with energy cost pass-through capability. The political calendar creates a narrow implementation window before September state elections, with execution risk on fiscal reforms limiting upside catalysts for equities. Within the constrained equity allocation, concentrate exposure on defense contractors benefiting from accelerated German defense spending with domestic procurement content, while avoiding energy-intensive industrials facing sustained margin compression from elevated natural gas prices. Currency positioning should maintain EUR cash defensively as a capital preservation vehicle, not a risk deployment vehicle.",
+      "truncated": false
+    }
+  }
+}
