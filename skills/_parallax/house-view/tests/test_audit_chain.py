@@ -147,6 +147,60 @@ def test_concurrent_first_write_no_truncation(tmp_path: Path):
     audit_chain.verify_chain(audit_path)
 
 
+def test_large_entry_tail_read(tmp_path: Path):
+    """Bug regression: an entry larger than the legacy 32KB tail buffer
+    must not cause the next append to lose the chain anchor and emit a
+    second chain_root."""
+    audit_path = tmp_path / "audit.jsonl"
+
+    # Root entry
+    audit_chain.append_entry(audit_path, {"action": "root"})
+
+    # Second entry with >32KB payload (well past the legacy bound)
+    big_blob = "x" * (64 * 1024)
+    r2 = audit_chain.append_entry(
+        audit_path, {"action": "big", "version_diff": {"payload": big_blob}}
+    )
+    assert "prev_entry_hash" in r2
+    assert "chain_root" not in r2
+
+    # Third entry — this is where the legacy bug manifested: tail read
+    # of the >32KB middle entry returned [], is_chained went False,
+    # append emitted a second chain_root.
+    r3 = audit_chain.append_entry(audit_path, {"action": "third"})
+    assert "prev_entry_hash" in r3
+    assert "chain_root" not in r3
+    assert r3["prev_entry_hash"] == audit_chain.compute_entry_hash(r2)
+
+    # Whole-file verification must succeed.
+    entries = audit_chain.verify_chain(audit_path)
+    assert len(entries) == 3
+    chain_roots = [e for e in entries if e.get("chain_root") is True]
+    assert len(chain_roots) == 1, "exactly one chain_root expected"
+
+
+def test_tail_read_ceiling_raises(tmp_path: Path, monkeypatch):
+    """Bug regression: oversized entry beyond ceiling raises
+    AuditTailReadFailed rather than silently corrupting the chain."""
+    audit_path = tmp_path / "audit.jsonl"
+    audit_chain.append_entry(audit_path, {"action": "root"})
+
+    monkeypatch.setattr(audit_chain, "_TAIL_READ_INITIAL_BYTES", 256)
+    monkeypatch.setattr(audit_chain, "_TAIL_READ_MAX_BYTES", 1024)
+
+    # Directly append an oversized line, bypassing append_entry
+    oversized = json.dumps({"action": "huge", "blob": "x" * 4096}) + "\n"
+    with open(audit_path, "ab") as f:
+        f.write(oversized.encode("utf-8"))
+
+    try:
+        audit_chain.append_entry(audit_path, {"action": "next"})
+    except audit_chain.AuditTailReadFailed as e:
+        assert "exceeded" in str(e).lower() or "ceiling" in str(e).lower()
+    else:
+        assert False, "expected AuditTailReadFailed"
+
+
 if __name__ == "__main__":
     # Manual run support
     import pytest
