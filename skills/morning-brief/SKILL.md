@@ -15,6 +15,7 @@ gotchas:
   - The macro_analyst summary call returns all components inline including tactical — do not make separate per-component calls
   - Health flags (from portfolio-checkup/references/health-flags.md) apply here too — flag portfolios needing attention
   - Per Phase 0.5f architecture (notes/2026-04-26-step-2-5-validation.md): the saved house view never carries Parallax-derived overlays. When the active view is silent on a dimension THIS brief needs (e.g., portfolio has Brazil/Mexico exposure but view silent), EITHER (a) treat as neutral for alignment computation [default — non-blocking, RM-fan-out-safe] OR (b) JIT-augment via --augment-silent flag with provenance tagged per holding [auditable]. Never fold augmentation back into the saved view.
+  - **Operator verification:** see [examples/testing-posture.md](../../examples/testing-posture.md)
 ---
 
 # Morning Brief
