@@ -16,6 +16,7 @@ gotchas:
   - Output must include specific buy/sell/trim quantities, not just vague suggestions
   - For portfolios with 10+ holdings, prioritize score trend scans for top/bottom 5 by weight to manage latency
   - Per Phase 0.5f architecture (notes/2026-04-26-step-2-5-validation.md): the saved house view never carries Parallax-derived overlays. When the active view is silent on a dimension THIS rebalance decision needs (replacement candidate's sector/region not in the view), EITHER (a) treat as neutral [default — non-blocking, RM-fan-out-safe] OR (b) JIT-augment via --augment-silent flag with provenance tagged per holding [auditable]. Never fold augmentation back into the saved view.
+  - **Operator verification:** see [examples/testing-posture.md](../../examples/testing-posture.md)
 ---
 
 # Portfolio Rebalance
