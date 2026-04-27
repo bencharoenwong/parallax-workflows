@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 AUDIT_SCHEMA_VERSION = 1
 _AUDIT_FILE_MODE = 0o600
+_TAIL_READ_INITIAL_BYTES = 32 * 1024
+_TAIL_READ_MAX_BYTES = 4 * 1024 * 1024  # 4 MiB ceiling; raises beyond this
 
 
 class AuditChainError(Exception):
@@ -31,6 +33,10 @@ class AuditChainBroken(AuditChainError):
 
 class AuditFileMalformed(AuditChainError):
     error_code = "audit_file_malformed"
+
+
+class AuditTailReadFailed(AuditChainError):
+    error_code = "audit_tail_read_failed"
 
 
 def compute_entry_hash(entry: dict[str, Any]) -> str:
@@ -101,41 +107,68 @@ def verify_chain(audit_path: Path) -> list[dict[str, Any]]:
 
 
 def _get_tail_entries(f: Any, n: int = 10) -> list[dict[str, Any]]:
-    """Efficiently read the last N entries from an open BINARY file handle."""
+    """Efficiently read the last N entries from an open BINARY file handle.
+
+    Adaptive: starts with _TAIL_READ_INITIAL_BYTES; if the buffer yields fewer
+    than n parseable lines AND we haven't read the whole file AND the buffer
+    cut mid-entry, doubles the read window and retries up to
+    _TAIL_READ_MAX_BYTES. Raises AuditTailReadFailed at the ceiling — silently
+    extending the chain after a tail-read failure would emit a second
+    chain_root and poison verification.
+    """
     f.seek(0, 2)
     file_size = f.tell()
     if file_size == 0:
         return []
 
-    # Read last 32KB
-    offset = min(file_size, 32 * 1024)
-    f.seek(file_size - offset)
-    chunk_bytes = f.read(offset)
-    try:
-        chunk = chunk_bytes.decode("utf-8")
-    except UnicodeDecodeError:
-        # If we hit a partial character at the start of the chunk, 
-        # try decoding from the first newline
-        first_nl = chunk_bytes.find(b"\n")
-        if first_nl != -1:
-            chunk = chunk_bytes[first_nl+1:].decode("utf-8")
-        else:
-            return []
-
-    lines = chunk.splitlines()
-
-    # The first line is partial IF we seeked into the middle of the file
-    valid_lines = lines[1:] if (offset < file_size and len(lines) > 1) else lines
-    
-    entries: list[dict[str, Any]] = []
-    for line in valid_lines:
-        if not line.strip():
-            continue
+    offset = min(file_size, _TAIL_READ_INITIAL_BYTES)
+    while True:
+        f.seek(file_size - offset)
+        chunk_bytes = f.read(offset)
         try:
-            entries.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return entries[-n:]
+            chunk = chunk_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            # Partial UTF-8 at the start: skip to first newline and retry decode
+            first_nl = chunk_bytes.find(b"\n")
+            if first_nl != -1:
+                chunk = chunk_bytes[first_nl + 1:].decode("utf-8")
+            else:
+                chunk = ""
+
+        lines = chunk.splitlines()
+        # The first line is partial IF we seeked into the middle of the file
+        valid_lines = lines[1:] if (offset < file_size and len(lines) > 1) else lines
+
+        entries: list[dict[str, Any]] = []
+        had_decode_error = False
+        for line in valid_lines:
+            if not line.strip():
+                continue
+            try:
+                entries.append(json.loads(line))
+            except json.JSONDecodeError:
+                had_decode_error = True
+                continue
+
+        # Success conditions:
+        #  - we got at least n entries (more than enough), OR
+        #  - we read the whole file (no more bytes upstream), OR
+        #  - we got >=1 entry AND no decode errors (clean parse on a small file)
+        enough = len(entries) >= n
+        whole_file = offset >= file_size
+        clean = bool(entries) and not had_decode_error
+        if enough or whole_file or clean:
+            return entries[-n:]
+
+        # Grow the window and retry
+        if offset >= _TAIL_READ_MAX_BYTES:
+            raise AuditTailReadFailed(
+                f"Tail read exceeded {_TAIL_READ_MAX_BYTES} bytes without "
+                f"producing a parseable entry (file_size={file_size}). "
+                "Likely a single audit entry larger than the buffer ceiling. "
+                "Investigate the audit file directly."
+            )
+        offset = min(file_size, offset * 2)
 
 
 def append_entry(
