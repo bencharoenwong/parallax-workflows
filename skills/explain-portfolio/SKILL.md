@@ -20,6 +20,7 @@ gotchas:
   - Cap news calls at top 3 detractors to manage token cost
   - quick_portfolio_scores may fail for concentrated/niche portfolios — fall back to get_score_analysis (Step 3) as the primary factor source
   - get_peer_snapshot may return a different company as target (see Convention #2) — extract the queried stock's scores from the peer list, not from the target_company field
+  - Per Phase 0.5f architecture (notes/2026-04-26-step-2-5-validation.md): unlike forward-looking consumer skills (portfolio-builder, rebalance, thematic-screen, morning-brief, client-review), explain-portfolio does NOT support `--augment-silent`. Reasoning: attribution is backward-looking — JIT-injecting today's Parallax data into a past-loss explanation muddies the verdict (the question is what drove the historical drawdown, not what current data says about the affected sector now). When the saved view is silent on a holding's region/sector, the verdict simply cannot classify that holding's loss as expected vs unexpected per the view, and the output must say so explicitly. If RMs request "JIT context for silent dimensions in attribution" in a future iteration, the right surface is a separate `--current-context` flag that adds advisory commentary AFTER the attribution verdict — not before.
 ---
 
 # Explain Portfolio
@@ -42,7 +43,7 @@ Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-c
 
 Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
 
-Per `loader.md` §1-§2. If view present, capture tilt vector. The view does NOT change attribution math (Steps 1-5) — it shapes the Step 6 verdict and the framing of Step 4 stock-specific findings. Specifically: when a top detractor is in a view-OW sector, the loss is "expected from view exposure"; when in a view-UW sector that wasn't trimmed, the loss raises a portfolio-management question.
+Per `loader.md` §1-§2. If view present, capture tilt vector. The view does NOT change attribution math (Steps 1-5) — it shapes the Step 6 verdict and the framing of Step 4 stock-specific findings. Specifically: when a top detractor is in a view-OW sector, the loss is "expected from view exposure"; when in a view-UW sector that wasn't trimmed, the loss raises a portfolio-management question. **Phase 0.5f silent-dimension handling:** when a top detractor is in a sector/region the saved view is silent on, the verdict says so explicitly: "Saved house view is silent on `tilts.<dim>.<leaf>` — this loss cannot be classified as expected/unexpected per the view." Tag the holding with `[neutral]` in the Performance Attribution table's View Exposure column. Do NOT JIT-augment for backward-looking attribution (see gotchas).
 
 ### Step 1 — Measure actual performance
 
@@ -128,14 +129,14 @@ Based on the verdict:
 
 - **House View Preamble** (only if view active) — render per loader.md §5
 - **What Happened** (computed portfolio return over the period, compared to client's stated figure; 1-sentence summary of the loss magnitude)
-- **Performance Attribution** (table: each holding with return, weighted contribution, and primary driver tag — Market / Factor / Stock-Specific; if view active, add "View Exposure" tag — OW / Neutral / UW per the view)
+- **Performance Attribution** (table: each holding with return, weighted contribution, and primary driver tag — Market / Factor / Stock-Specific; if view active, add "View Exposure" tag — OW / Neutral / UW per the view, OR `[neutral, view silent]` when the saved view has no tilt for that holding's sector/region. Per Phase 0.5f: explain-portfolio does NOT JIT-augment silent dimensions — backward-looking attribution surfaces the silence honestly rather than papering over it with current data.)
 - **Market & Regime Context** (regime tag, mechanism, 2-3 sentences on what's driving markets; is the broad market down too?)
 - **Factor Exposure** (which factor tilts helped/hurt; connection to the current regime; if view active, note whether realized factor exposure matched view's intended tilts)
 - **Top Detractors** (for each of top 3: what happened, why, and whether scores agree with the price move; flag whether the holding's view-exposure tag means the loss was expected pain from the view)
 - **The Key Question: Noise or Signal?** (score-vs-price divergence summary — portfolio-level verdict with per-holding classification table)
 - **What To Do** (conditional advice based on the verdict; if view active, separate "stay-the-course-per-view" actions from "view says trim anyway" actions)
 
-Append audit log entry per loader.md §6.
+Append audit log entry per loader.md §6. The entry MUST carry `silent_dimensions_in_attribution: [...]` listing any holdings whose region/sector was silent in the saved view (so a compliance reviewer can see which losses had no view-frame). `augment_silent_flag: false` is recorded explicitly to distinguish "this skill never augments" from "user did not pass the flag."
 
 Keep tone calm and explanatory. The client is worried — the output should reduce anxiety with clarity, not amplify it with jargon.
 
