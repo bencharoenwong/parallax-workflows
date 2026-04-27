@@ -15,6 +15,7 @@ gotchas:
   - build_stock_universe can find replacement candidates for positions being trimmed
   - Output must include specific buy/sell/trim quantities, not just vague suggestions
   - For portfolios with 10+ holdings, prioritize score trend scans for top/bottom 5 by weight to manage latency
+  - Per Phase 0.5f architecture (notes/2026-04-26-step-2-5-validation.md): the saved house view never carries Parallax-derived overlays. When the active view is silent on a dimension THIS rebalance decision needs (replacement candidate's sector/region not in the view), EITHER (a) treat as neutral [default — non-blocking, RM-fan-out-safe] OR (b) JIT-augment via --augment-silent flag with provenance tagged per holding [auditable]. Never fold augmentation back into the saved view.
 ---
 
 # Portfolio Rebalance
@@ -27,6 +28,7 @@ Generate prioritized trade recommendations using health flags, macro context, an
 /parallax-rebalance [{"symbol":"AAPL.O","weight":0.30},{"symbol":"MSFT.O","weight":0.25},{"symbol":"XOM.N","weight":0.20},{"symbol":"JNJ.N","weight":0.25}]
 /parallax-rebalance [holdings] target="reduce concentration, improve quality score"
 /parallax-rebalance [holdings] constraints="max 25% per position, no energy sector"
+/parallax-rebalance [holdings] target="EM tilt" --augment-silent   # JIT-augment dimensions the active view is silent on (default: off)
 ```
 
 ## Workflow
@@ -54,10 +56,14 @@ Per `loader.md` §1-§2: read view if present, validate hash and expiry. If view
 1. Call `macro_analyst` with component="tactical" for each unique covered market (cap 3).
 2. Call `get_score_analysis` for each holding (parallel within batch) to identify deteriorating vs. improving positions. For 10+ holdings, prioritize top/bottom 5 by weight.
 
+### Batch B-2 — Phase 0.5f JIT augmentation gate (opt-in, after Batch B)
+
+After macro + score trends land, identify dimensions THIS rebalance decision depends on but the active view is silent on. Scope: regions and sectors of (a) current holdings, and (b) any rebalance target/constraint dimensions the user specified. Examples: holdings include a Brazil position but view is silent on `tilts.regions.brazil`; user target says "EM tilt" but view is silent on em_ex_china and the LatAm/SEA countries. **Default behavior (non-blocking, RM-fan-out-safe):** treat silent dimensions as neutral, render a one-line note in output: `Active view is silent on <dim list>; using neutral. Run with --augment-silent to fill from Parallax data for THIS rebalance.` **Opt-in `--augment-silent`:** JIT-load `_parallax/house-view/gap_detect` + `gap_suggest`. Construct a synthetic draft view from the active view but with the rebalance-relevant silent dimensions enumerated. Call `gap_detect.detect_gaps()` scoped to those dimensions. Call `gap_suggest.plan_calls(gaps, available_markets=mcp__claude_ai_Parallax__list_macro_countries()["markets"])` (Batch A already cached this response — reuse). Fire the planned MCP calls in parallel. `gap_suggest.fold_responses()` → list of Suggestions. Apply each Suggestion as a tilt **only for THIS rebalance decision** — do NOT write back to `~/.parallax/active-house-view/`. Tag each augmented dimension with `[parallax_jit, <tool>[<args>]@<data_as_of>]` for the Trade Recommendations table's "Tilt Source" column. Per `examples/phase-0.5f-jit-policies.md`: enforce 7d/30d staleness gates on each Suggestion's `data_as_of`.
+
 ### Batch C — Health flags + trade decisions
 
 1. Evaluate 5 health flags per holding: Low Score (≤5.0), Concentration (>15%), Redundancy (≥2 pairs), Value Trap (value ≤3.0), Macro Misalignment.
-2. **House-view alignment check** (if view active): for each holding, compute view-tilted target weight using loader.md §3 multipliers; flag holdings >25% off target as "View Misalignment." For holdings on `tilts.excludes`, flag as "View Excluded — must trim."
+2. **House-view alignment check** (if view active): for each holding, compute view-tilted target weight using loader.md §3 multipliers (treating any JIT-augmented dimension from Batch B-2 as if it were a view tilt for THIS rebalance only); flag holdings >25% off target as "View Misalignment." For holdings on `tilts.excludes`, flag as "View Excluded — must trim."
 3. Assign priority per recommendation-matrix.md (count View Misalignment / View Excluded as flags):
    - **High** (3+ flags or View Excluded): Strong trim/exit candidate
    - **Medium** (2 flags): Investigate + potential trim
@@ -71,7 +77,7 @@ Per `loader.md` §1-§2: read view if present, validate hash and expiry. If view
 
 ### Batch D — Validation
 
-Call `quick_portfolio_scores` on the proposed new allocation to verify improvement. If view active, verify proposed allocation aligns with view tilts within 10% per sector. Append audit log entry per loader.md §6.
+Call `quick_portfolio_scores` on the proposed new allocation to verify improvement. If view active, verify proposed allocation aligns with view tilts within 10% per sector. Append audit log entry per loader.md §6. **When `--augment-silent` was applied:** the audit entry MUST carry `augmented_dimensions: [{path, source_tool, source_call_args, data_as_of}]` and `augment_silent_flag: true` so the per-rebalance JIT augmentation provenance is on the audit chain and recoverable for compliance review. When `--augment-silent` was NOT applied but silent dimensions existed, log `silent_dimensions_skipped: [...]` and `augment_silent_flag: false`.
 
 ## Output Format
 
@@ -81,7 +87,7 @@ Call `quick_portfolio_scores` on the proposed new allocation to verify improveme
 - **Health Flags** (table: each triggered flag per holding with priority level; View Misalignment / View Excluded shown as their own flag types)
 - **Macro Context** (relevant market outlook, sector tilt implications for rebalancing)
 - **Score Momentum** (table: each holding's score trend — improving/stable/declining)
-- **Trade Recommendations** (table: Priority | Action | Symbol | Current Weight | Target Weight | Rationale — every recommendation cites a specific flag or finding; if view active, "Rationale" includes view-tilt direction)
+- **Trade Recommendations** (table: Priority | Action | Symbol | Current Weight | Target Weight | Tilt Source | Rationale — every recommendation cites a specific flag or finding; "Tilt Source" tags the dimension's source: `[house_view]` when the multiplier comes from the saved view, `[parallax_jit, <tool>@<date>]` when from `--augment-silent` JIT lookup, `[neutral]` when silent + not augmented; if view active, "Rationale" includes view-tilt direction)
 - **Replacement Candidates** (if trimming, scored alternatives; filtered against tilts.excludes if view active)
 - **Before/After Comparison** (factor scores: current vs. proposed; if view active, alignment-to-view metric included)
 - **Implementation Notes** (suggested execution order, liquidity considerations)
