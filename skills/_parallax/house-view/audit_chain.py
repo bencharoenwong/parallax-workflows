@@ -9,6 +9,7 @@ import fcntl
 import hashlib
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -147,11 +148,13 @@ def append_entry(
     Atomic read-compute-append cycle using file locking (fcntl).
     Strict JCS serialization on disk.
     """
-    # Open in binary update mode (rb+) to allow tail read + atomic append
-    # If file doesn't exist, 'ab+' would create it.
-    mode = "rb+" if audit_path.exists() else "wb+"
-    
-    with open(audit_path, mode) as f:
+    # Race-free open: O_CREAT|O_RDWR atomically creates-or-opens, never
+    # truncates. The previous "wb+ if not exists else rb+" pattern raced
+    # between exists() and open(): two concurrent first-writers both saw
+    # not-exists, both opened "wb+", and the second open truncated the
+    # first writer's just-flushed entry (silent audit-log loss).
+    fd = os.open(str(audit_path), os.O_CREAT | os.O_RDWR, _AUDIT_FILE_MODE)
+    with os.fdopen(fd, "r+b") as f:
         # Acquire exclusive lock
         fcntl.flock(f.fileno(), fcntl.LOCK_EX)
         try:
