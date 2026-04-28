@@ -63,7 +63,21 @@ If `~/.parallax/active-house-view/` does not exist, create it on first save. Fil
 Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call. JIT-load `_parallax/house-view/schema.yaml` (canonical structure) and `_parallax/house-view/loader.md` (consumer expectations) before extraction.
 
 ### Step 1 — Detect mode and load source
-Use `AskUserQuestion` to walk the uploader through the schema interactively. Present sector/region/factor/style sliders as multi-select questions with -2/-1/0/+1/+2 options. Skip fields the uploader leaves at neutral. Capture excludes as a free-text follow-up.
+
+If a path or URL was given: read the source via the appropriate tool (`Read` with `pages` for PDFs >10 pages; `defuddle` or `WebFetch` for URLs). Skip the wizard and proceed to Step 2.
+
+If no source was given (wizard mode): walk the uploader through the schema interactively in the order below, using one `AskUserQuestion` invocation per numbered group (not eight separate prompts). Skip any dimension the uploader leaves neutral.
+
+1. **Identity:** view name, uploader role (CIO / PM / Investment Committee / Strategist / Other), basis statement, effective date, valid_through (or `auto_expire_days`).
+2. **Macro regime:** growth (slowing / steady / accelerating / null), inflation (disinflation / benign / sticky / accelerating / null), rates (cutting / holding / hiking / null), risk_appetite (risk_on / neutral / risk_off / null).
+3. **Pillars:** Ω econometrics_phase, Φ valuation_state, Ξ market_entropy, Ψ psychological_wavelength — each on -2 / -1 / 0 / +1 / +2.
+4. **Factors:** value, profitability, momentum, low_volatility, trading_signals — each on -2 / -1 / 0 / +1 / +2.
+5. **Sectors:** present GICS sector keys; uploader picks the ones with a view, then sets each on the same -2 to +2 scale.
+6. **Regions:** present broad keys (developed_markets, emerging_markets, etc.); offer per-country drill-down only if the uploader names specific countries.
+7. **Styles & themes:** offer a free-text follow-up for any thematic conviction.
+8. **Excludes:** free-text list; for each exclude, ask for a one-sentence reason.
+
+Default to multi-select where the schema allows. Capture `extraction_confidence` as 1.0 for wizard-supplied values (the uploader is the source).
 
 ### Step 2 — Extract structured tilts
 
@@ -142,7 +156,7 @@ excludes:         <list with reasons>
 
 --- MACRO REGIME ---
 growth: <value>   inflation: <value>   rates: <value>   risk_appetite: <value>
-Auto-mapped to factor tilts (see loader.md §3): <delta list>
+Implied factor tilts (override at confirmation if needed): <delta list>
 
 --- LOW-CONFIDENCE FIELDS (< 0.6) ---
 <list with extraction_notes excerpts>
@@ -243,25 +257,62 @@ Output to user:
 Active in: portfolio-builder, rebalance, thematic-screen, morning-brief, client-review, explain-portfolio.
 Conflict-flag only in: should-i-buy, deep-dive.
 
+Try it:
+  /parallax-portfolio-builder "<your thesis>"     # build a portfolio with this view applied
+  /parallax-rebalance [holdings]                  # rebalance against the active view
+
+Audit & inspect:
+  /parallax-load-house-view --status              # active view summary
+  /parallax-load-house-view --why <tilt-path>     # why is this tilt set to what it is?
+  /parallax-load-house-view --version-history     # how did this view evolve?
+  /parallax-load-house-view --export <view_id>    # regulator-grade compliance bundle
+
 To clear:  /parallax-load-house-view --clear
-To check: /parallax-load-house-view --status
 ```
 
 ### Step 6 — Operational modes
 
 | Flag | Behavior |
 |---|---|
-| `--status` | Read `view.yaml`, validate per loader.md §2, print summary block. If no view, print "No active house view." |
+| `--status` | Read `view.yaml`, validate per loader.md §2, render the status block defined in §"Status block" below. If no view, print "No active house view." |
 | `--clear` | Archive current view to `.archive/`, remove `view.yaml` and `prose.md`. Append audit entry `{"action":"clear"}`. |
 | `--extend <date>` | Update `metadata.valid_through` only. Bump `version_id`. Re-pair (recompute view_hash — should be unchanged since tilts/excludes unmodified — and re-write `prose.md` frontmatter). |
 | `--re-pair` | Recompute `view_hash` from current `view.yaml` and `prose_body_hash` from current `prose.md` body. Update `prose.md` frontmatter `paired_yaml_hash` AND `prose_body_hash` to match. Use this after a manual prose edit (body or YAML) when the edit was intentional; the command re-anchors both hashes in one step. Note that re-pair intentionally blesses whatever is currently on disk — run only after you have reviewed the edit. |
 | `--edit` | Open `view.yaml` in `$EDITOR` (default: `vi`). On save, re-run Steps 3-4 (confirmation gate + write) using the edited content as the draft. |
 | `--export <view_id>` | Call `audit_export.create_bundle()` to package view + narrative + provenance + full hash-chained audit trail into a tarball. Fails if audit chain is broken. |
-| `--why <tilt-path>` | On-demand provenance query. Takes a dotted path into the view (e.g., `tilts.factors.momentum`, `tilts.sectors.information_technology`, `tilts.macro_regime.growth`). **Path parsing:** if the caller omits the `tilts.` prefix (e.g., bare `factors.momentum`), prepend it automatically before lookup. The path MUST resolve to a leaf (a scalar value under `tilts`), not a parent map — if the caller passes a parent (e.g., `tilts.macro_regime` without a sub-field), emit `"--why requires a leaf path; <path> is a parent. Try one of: tilts.macro_regime.growth, tilts.macro_regime.inflation, ..."` and exit. **Provenance resolution order:** (1) Read `provenance.yaml` if present and look up the leaf's `derivation` list. The LAST entry in `derivation` is the effective source (later entries supersede earlier ones — e.g., a `manual_edit` after a `prose_extraction`). Branch on `type`: (a) `prose_extraction` → quote `source_span` verbatim and emit "Source: CIO prose, span '<source_span>' (confidence <c>)"; (b) `macro_regime_rule` → emit "Source: loader.md auto-mapping. Rule: <rule_ref>. Trigger: <trigger>. Confidence <c>."; (c) `manual_edit` → emit "Source: manual edit at confirmation gate. Prior value: <prior_value>. Notes: <edit_notes>." plus a recursive call to surface the entry BEFORE the edit (so the auditor sees both the original derivation and the override). The `parallax_data_fill` branch is not produced at ingest scope — Parallax-derived values no longer appear in saved-view provenance. (Legacy views from a deprecated ingest-time-augment design may still carry `parallax_data_fill` entries; emit "Source: legacy Parallax gap-fill. Tool: <source_tool> with args <source_call_args>. Snippet: '<source_snippet>'. Data as of <data_as_of>. NOT from the uploaded document — captured at ingest, may have drifted." for back-compat reading.) (2) If `provenance.yaml` is absent or the leaf has no entry (legacy view, or zero-tilt path), fall back to the prose.md targeted re-read: quote the spans of prose.md that support the tilt value, or note "no explicit support in prose — may be auto-applied per loader.md §3 macro_regime mapping". Zero schema cost in the fallback path — runs against existing `prose.md`. If path is a valid leaf but the tilt value is zero (omitted or neutral), before exiting scan `extraction.extraction_notes` for any mention of the field name (e.g., "momentum" for `tilts.factors.momentum`, "information_technology" or "tech" for `tilts.sectors.information_technology`). If found, emit: `"Tilt is currently zero but extraction_notes mentions this field — may reflect an edit at the confirmation gate or a re-extraction that changed the value. Run `--version-history` to inspect prior values."` Then exit. If no mention, exit cleanly with `"Tilt is zero (neutral) — no active tilt to explain."` |
+| `--why <tilt-path>` | On-demand provenance query. Takes a dotted path (e.g., `tilts.factors.momentum`, `tilts.sectors.information_technology`, `tilts.macro_regime.growth`). JIT-load `references/why-provenance.md` for path parsing rules, derivation resolution order, and per-source output formats. |
 | `--version-history` | Read `audit.jsonl`, filter `action="save"` entries in the current view family, and render a compact chain: `version_id → version_id` with the `version_diff` payload rendered as a short bullet list. If any save has `version_diff_truncated: true`, note that. Use this to audit how the view evolved. |
+
+### Status block (output of `--status`)
+
+```
+Active house view
+─────────────────
+Name:           <view_name>
+Uploader:       <uploaded_by> (<uploader_role>)
+Effective:      <effective_date> through <valid_through>   [<N> days remaining]
+Calibration:    <heuristic_phase0 | empirical_phase1>
+Schema:         v<schema_version>
+
+Tilts active:   <count of non-zero tilts>
+  factors:      <pretty list>
+  sectors:      <pretty list>
+  regions:      <pretty list>
+  themes:       <pretty list>
+
+Excludes:       <count>
+  <ticker / sector / theme>  — <reason>
+  ...
+
+Audit chain:    <ok | broken (offset N)>
+Last consume:   <timestamp> by <skill>
+Version chain:  <N versions; latest version_id <truncated>>
+```
+
+If `valid_through` has passed, prefix the block with a warning line: `! View expired <date>. Tilts not applied. Use --extend or --clear.`
 
 ## Output Format
 
-See Step 5. For operational modes, output the requested status block or success/failure message.
+See Step 5 for the post-save summary. See §"Status block" above for `--status`. For other operational modes, output the requested success/failure message.
 
 > *Local-filesystem implementation. A managed, org-keyed version (`set_house_view`, `get_active_house_view`, etc., backed by Supabase) is on the roadmap; schema and loader semantics carry forward unchanged.*
