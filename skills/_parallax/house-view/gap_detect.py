@@ -7,7 +7,7 @@ Identifies dimensions in a draft view that are candidates for fill-in from
 the Parallax data-driven macro view. A "fillable gap" requires all three:
 
   1. Eligible dimension. macro_regime / factors / regions / sectors only.
-     Pillars (Phase 0 encoding-only), themes (CIO judgment, free-form),
+     Pillars (encoding-only), themes (CIO judgment, free-form),
      styles (no clean Parallax mapping), and excludes (policy/ethical) are
      never gap-fillable.
 

@@ -4,7 +4,7 @@ Frozen set of labeled house-view documents that every extraction-prompt change m
 
 ## Why this exists
 
-Phase 0 dogfooding found Q-A/Q-B/Q-C/Q-E bugs on a **single** live walkthrough. With 1 sample + 4 desk extractions we could not falsify whether a schema change, loader change, or prompt change actually improved extraction — changes might pass the one sample by luck and regress 3 others silently.
+Early dogfooding found multiple extraction bugs on a **single** live walkthrough. With 1 sample + 4 desk extractions we could not falsify whether a schema change, loader change, or prompt change actually improved extraction — changes might pass the one sample by luck and regress 3 others silently.
 
 This corpus is the ground truth. All future changes to `load-house-view/SKILL.md` (extraction prompt), `_parallax/house-view/schema.yaml` (structural constraints), or `_parallax/house-view/loader.md` (consume semantics) must run against the corpus before merge.
 
@@ -20,7 +20,7 @@ Each entry in `corpus.yaml` pairs a source document with a **human-labeled expec
 
 ## How to run
 
-Proposed usage (loader not yet implemented — deferred to Phase 0 iteration):
+Proposed usage (runner not yet implemented):
 
 ```
 python3 skills/load-house-view/regression-corpus/run_regression.py \
@@ -40,7 +40,7 @@ Add new entries when:
 - A production bug report includes a specific extraction failure
 - Schema changes add new fields — update all entries to label the new field
 
-**Target size:** 15-20 entries before Phase 1 promotion. Current: 5 seeds from the `samples/` directory.
+**Target size:** 15-20 entries before any release that depends on the corpus. Current: 5 seeds from the `samples/` directory.
 
 ## Labeling discipline
 

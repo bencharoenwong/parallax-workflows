@@ -50,7 +50,7 @@ def _build_manifest(kid: str) -> dict:
 
     Values block is intentionally tiny (just enough to round-trip) — the
     verifier doesn't inspect content semantics, only structure + signature.
-    Real Batch 3.5+ tests will use richer fixtures derived from the spec
+    Real cache-layer tests use richer fixtures derived from the spec
     triad's worked example.
     """
     return {

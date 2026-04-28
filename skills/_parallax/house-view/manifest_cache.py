@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Calibration manifest on-disk cache + load orchestrator (Batch 3.5).
+"""Calibration manifest on-disk cache + load orchestrator.
 
 Layered on top of `manifest_verify.py`. This module owns:
 
@@ -27,7 +27,7 @@ Layered on top of `manifest_verify.py`. This module owns:
 
 What this module does NOT do (deferred):
   - HTTP fetch from the endpoint. Caller passes a pre-fetched manifest
-    dict (or `None` to force cache-only). HTTP wiring lands when Batch 2
+    dict (or `None` to force cache-only). HTTP wiring lands when the server
     server is available — until then, callers can stub by reading a
     fresh manifest off disk.
   - Session pinning of `version=latest` (schema spec §7.5). The orches-
