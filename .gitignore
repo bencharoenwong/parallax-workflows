@@ -39,12 +39,15 @@ skills/_parallax/house-view/tests/run_diff_harness.py
 # match the existing test_view_hash.py / view_hash_fixture.yaml precedent
 # and let auditors run a known-good round-trip on a fresh clone.
 #
-# Production signing keys (when Batch 2 generates them) MUST live outside
-# this repo entirely — the server side is in ~/parallax_mcp/, not here.
-# Nothing in this repo's tests/ directory is ever a production secret.
+# Production signing keys (when the server signing service generates them)
+# MUST live outside this repo entirely — the server side is in a separate
+# repo. Nothing in this repo's tests/ directory is ever a production secret.
 
 # Internal regression baselines (second round).
 skills/load-house-view/regression-corpus/baselines/2026-04-22/
 
 # Planning docs — private by default.
 docs/plans/
+
+# Internal QA artifacts
+skills/load-house-view/PHASE_0_TEST_REPORT.md

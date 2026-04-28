@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reasoning chain emitter (Batch 4).
+"""Reasoning chain emitter.
 
 Implements the chain envelope from notes/2026-04-24-reasoning-chain-spec.md
 §2-§4. The chain is the audit artifact: every consumer-skill invocation
@@ -7,7 +7,7 @@ that applies a house view writes one chain per run, capturing the view,
 the manifest in force, the base scores, and the final portfolio in a
 single YAML file an auditor can replay against.
 
-Scope (Batch 4):
+Scope:
   - `emit_chain()` builds + writes a structured chain.yaml per spec §2.
   - Phase-0 transition path: when no manifest is in force, manifest_ref
     is filled with the `phase-0-bundled` placeholder per chain spec §3.2,
@@ -23,7 +23,7 @@ Scope (Batch 4):
 
 Out of scope:
   - Prose rendering of the chain (§6.1 vs §6.2). The structured form
-    is canonical; prose is on-demand and deferred to Batch 4.5.
+    is canonical; prose is on-demand and deferred to a later release.
   - Chain signing (§3.6). v1 default is `alg: "none"`; client-side
     signing waits for the D-migration.
   - Hash-receipt ledger upload (§4.2 v2 option). v1 is local-only.

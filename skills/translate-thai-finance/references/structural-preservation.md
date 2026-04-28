@@ -73,7 +73,7 @@ Copy all numbers exactly. Don't round, reformat, or convert units.
 | Currency amounts | `C$51.3 billion`, `USD 41.22` | Exact amount, translate unit word only |
 | Dates (ISO) | `2026-03-26`, `Q2 2026` | Pass through as-is |
 | Index levels | `1,462.23`, `49.37` | Exact digits including commas |
-| Ratios/scores | `Omega +0.40`, `Z-score -0.701` | Keep label English, exact number |
+| Ratios/scores | `Factor +0.40`, `Z-score -0.701` | Keep label English, exact number |
 | Ranges | `1.35–1.39`, `50.0%–100.0%` | Keep both endpoints exact |
 
 **Never:** Round `51.3` to `51`, convert `C$` to `฿`, change `2.25%` to `2.3%`.

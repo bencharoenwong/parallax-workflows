@@ -14,7 +14,7 @@ Five realistic CIO house-view documents. Each is intentionally written in the pr
 
 ## Using these for testing
 
-To dogfood Phase 0:
+To dogfood:
 
 ```
 /parallax-load-house-view skills/load-house-view/samples/2026-reflationary.md
@@ -28,7 +28,7 @@ Walk through the confirmation gate. Note any extraction misses or low-confidence
 
 Verify the output preamble references the loaded view, that tilts are visibly applied (e.g., financials/industrials/energy overweight), and that any conflict between the user's "diversified" intent and the view's directional tilts is banner-flagged.
 
-Repeat for each sample. Capture results in `../PHASE_0_TEST_REPORT.md`.
+Repeat for each sample. Capture results in your local notes.
 
 ## Notes on realism
 
@@ -39,4 +39,4 @@ These samples were written to expose the failure modes flagged in the adversaria
 - **Mandate vs view fields** — ESG sample has both permanent excludes (mandate) and review-period tilts (view). Extraction should populate both correctly.
 - **Indirect exposure rules** ("companies with >25% China revenue") — these don't map cleanly to RIC suffix or sector. Loader should mark these as a known-limit and surface to user at confirmation.
 
-If extraction fails to handle these patterns at >0.7 confidence, the schema or extraction prompt needs revision before Phase 1.
+If extraction fails to handle these patterns at >0.7 confidence, the schema or extraction prompt needs revision before any release that depends on the corpus.

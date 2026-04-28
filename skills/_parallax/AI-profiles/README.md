@@ -19,11 +19,11 @@ A profile can ship ONLY if:
 
 | Profile | Status | Anchor | Workflow shape |
 |---|---|---|---|
-| `buffett` | **SHIPPED** (Phase 1) | Frazzini, Kabiller, Pedersen, "Buffett's Alpha", *FAJ* 2018; reconciled for 21st-century intangibles via Lev & Srivastava (2022) | Bottom-up single-stock; +Quality +Value −Momentum +Defensive |
-| `greenblatt` | **SHIPPED** (Phase 2) | Greenblatt, *The Little Book That Beats the Market* (2006); Gray & Carlisle, *Quantitative Value* (2012) | Mechanical screen: ROC + earnings yield → top-decile basket |
-| `klarman` | **SHIPPED** (Phase 2) | Klarman, *Margin of Safety* (1991) | Bottom-up special situations: balance sheet + cash rationality |
-| `soros` | **SHIPPED** (Phase 2) | Soros, *The Alchemy of Finance* (1987); Drobny, *Inside the House of Money* (2006) | Top-down macro → regime themes → dual-channel ticker exposure |
-| `AI-consensus` | **SHIPPED** (Phase 3) | Meta-skill | Runs all 4 profiles in parallel; surfaces super-majority signal + factor-level agreement |
+| `buffett` | **SHIPPED** | Frazzini, Kabiller, Pedersen, "Buffett's Alpha", *FAJ* 2018; reconciled for 21st-century intangibles via Lev & Srivastava (2022) | Bottom-up single-stock; +Quality +Value −Momentum +Defensive |
+| `greenblatt` | **SHIPPED** | Greenblatt, *The Little Book That Beats the Market* (2006); Gray & Carlisle, *Quantitative Value* (2012) | Mechanical screen: ROC + earnings yield → top-decile basket |
+| `klarman` | **SHIPPED** | Klarman, *Margin of Safety* (1991) | Bottom-up special situations: balance sheet + cash rationality |
+| `soros` | **SHIPPED** | Soros, *The Alchemy of Finance* (1987); Drobny, *Inside the House of Money* (2006) | Top-down macro → regime themes → dual-channel ticker exposure |
+| `AI-consensus` | **SHIPPED** | Meta-skill | Runs all 4 profiles in parallel; surfaces super-majority signal + factor-level agreement |
 
 ## v1 token cost summary
 
@@ -69,4 +69,4 @@ Profiles are not gated on legal review before invocation. The disclaimer languag
 
 - `profile-schema.md` — the YAML frontmatter contract every profile must conform to
 - `output-template.md` — the required output structure, disclaimer, and citation format
-- `consensus-config.md` — thresholds and applicable-count floor for the `parallax-AI-consensus` meta-skill (Phase 3)
+- `consensus-config.md` — thresholds and applicable-count floor for the `parallax-AI-consensus` meta-skill
