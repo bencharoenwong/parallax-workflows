@@ -141,8 +141,8 @@ def _sections_touched_filtered(
     requested: list[str] | None,
 ) -> list[str]:
     """Return `sections_touched` after applying the `active: false`
-    suppression rule from chain spec §7 (preserves PRISM-routing privacy
-    posture: anchors with active=false are NOT advertised in chains).
+    suppression rule from chain spec §7: anchors marked inactive in the
+    manifest are NOT advertised in chains.
     """
     if requested is None:
         return []
