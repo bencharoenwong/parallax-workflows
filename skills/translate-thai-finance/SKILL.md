@@ -42,7 +42,7 @@ Thai analysts use these English terms directly. Translating them sounds machine-
 
 **Macro indicators English:** Economic Surprise Index, Initial Jobless Claims, ISM PMI, DXY, CPI, FOMC, NFP, PCE
 
-**Parallax/proprietary scoring terms English:** Quantum, Omega, Xi, Entropy, PCSI, cycle momentum, market entropy — keep English with numeric values (e.g., "Omega +0.40", "Xi +0.375")
+**Proprietary factor and score labels English:** keep any composite-score labels, factor scores, or sub-factor identifiers in English with their numeric values (e.g., "Factor +0.40", "Score -0.18"). Do not translate label text; never alter sign or magnitude.
 
 **Company names:** Always English. Never translate suffixes (Holdings, Corp, Inc, Ltd, Group).
 
