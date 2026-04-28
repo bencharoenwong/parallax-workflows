@@ -4,6 +4,7 @@ Packages view artifacts and the hash-chained audit trail into a portable tarball
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import tarfile
@@ -13,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import rfc8785
+import yaml
 
 try:
     from . import audit_chain
@@ -55,19 +57,17 @@ def create_bundle(
 
         # Validate view_id
         with open(view_yaml, "r") as f:
-            import yaml
-            view_data = yaml.load(f, Loader=yaml.SafeLoader)
+            view_data = yaml.safe_load(f)
             actual_id = view_data.get("metadata", {}).get("view_id")
             if actual_id != view_id:
                 raise ExportError(f"Active view_id '{actual_id}' != requested '{view_id}'")
 
         # 4. Create Integrity Manifest
         manifest: dict[str, str] = {}
-        
-        def _add_to_manifest(path: Path, archive_name: str):
+
+        def _add_to_manifest(path: Path, archive_name: str) -> None:
             if not path.exists():
                 return
-            import hashlib
             h = hashlib.sha256(path.read_bytes()).hexdigest()
             manifest[archive_name] = h
 

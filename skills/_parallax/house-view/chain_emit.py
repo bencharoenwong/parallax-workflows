@@ -240,6 +240,11 @@ def _normalize_final_portfolio(fp: dict[str, Any]) -> dict[str, Any]:
     weights = fp.get("weights")
     if not isinstance(weights, dict):
         raise ChainEnvelopeMalformed("final_portfolio.weights must be a dict")
+    for k, v in weights.items():
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            raise ChainEnvelopeMalformed(
+                f"final_portfolio.weights[{k!r}] must be numeric (int or float); got {type(v).__name__}"
+            )
     weight_sum = sum(weights.values())
     if abs(weight_sum - 1.0) > 1e-9 and abs(weight_sum) > 1e-9:
         # Allow weights={} (empty portfolio), but if non-empty, must sum to 1.

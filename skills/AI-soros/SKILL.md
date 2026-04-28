@@ -128,7 +128,6 @@ Ranked trade ideas:
 [same structure]
 
 Workflow derived from: Soros (1987); Drobny (2006).
-Last anchor-tested: <date> | Last legal review: <date>
 Tool sequence: list_macro_countries, macro_analyst × N, get_telemetry, build_stock_universe × N, get_peer_snapshot × M
 Token cost: ~25-40 tokens
 
@@ -165,7 +164,6 @@ Profile fit: <match / partial_match / no_match>
   - no_match: neither channel flagged (Soros-style lens has no current view)
 
 Workflow derived from: Soros (1987); Drobny (2006).
-Last anchor-tested: <date> | Last legal review: <date>
 
 ---
 This output is an AI-inferred interpretation of George Soros's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by George Soros or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.

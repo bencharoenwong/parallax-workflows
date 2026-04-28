@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Generate a signed test manifest fixture for manifest_verify round-trips.
 
-GITIGNORED — this script signs with the test-only key in
-`tests/fixtures/test-signing-key.priv`, NOT a production key. Regenerate
-the fixture whenever the manifest schema changes.
+PUBLIC — this script signs with the test-only key in
+`tests/fixtures/test-signing-key.priv`, NOT a production key. The test-only
+kid is labeled `use: "test-only"` in `signing/trusted_keys.json` and is
+deliberately published so auditors can verify round-trip on a fresh clone.
+Regenerate the fixture whenever the manifest schema changes.
 
 Usage (from skills/_parallax/house-view/):
 

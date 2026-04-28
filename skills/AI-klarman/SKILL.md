@@ -142,7 +142,6 @@ Profile fit: <match / partial_match / no_match> — <count> of 4 checks passed.
 [Optional: "No position warranted on this ticker per margin-of-safety principles. Cash is a valid stance."]
 
 Workflow derived from: Klarman, S. (1991). Margin of Safety.
-Last anchor-tested: <date> | Last legal review: <date>
 Tool sequence: get_company_info, get_peer_snapshot, get_financials(balance_sheet/cash_flow/ratios, 4 periods)
 Token cost: ~5 tokens
 

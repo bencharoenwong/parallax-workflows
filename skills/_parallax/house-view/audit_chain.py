@@ -193,10 +193,10 @@ def append_entry(
         fcntl.flock(f.fileno(), fcntl.LOCK_EX)
         try:
             # Defense in depth: enforce 0600 on every append so the file stays
-            # tight even if (a) created externally with umask perms (Phase 0
-            # SKILL.md "create empty if missing" path, security audit Finding 5),
-            # (b) chmod'd looser between appends, or (c) the first-write chmod
-            # below was skipped due to a prior empty-file create.
+            # tight even if (a) created externally with umask perms (SKILL.md
+            # "create empty if missing" path), or (b) chmod'd looser between
+            # appends. This is the only chmod call in this function — there is
+            # no separate first-write path.
             try:
                 audit_path.chmod(_AUDIT_FILE_MODE)
             except OSError:
@@ -237,10 +237,6 @@ def append_entry(
                     "hard ceiling %d). Payload approaching tail-read ceiling.",
                     len(line_bytes), _AUDIT_ENTRY_WARN_BYTES, _TAIL_READ_MAX_BYTES
                 )
-            
-            # Set permissions on first write
-            if f.tell() == len(line_bytes):
-                audit_path.chmod(_AUDIT_FILE_MODE)
 
             return final_entry
         finally:

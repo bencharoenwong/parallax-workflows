@@ -8,7 +8,7 @@ JIT-loaded by every `parallax-*` skill that consumes the active house view. Defi
 
 ## 1. Locating the active view
 
-**Phase 0 path:** `$PARALLAX_HOUSE_VIEW_DIR` if set, else `~/.parallax/active-house-view/`.
+**Local-filesystem path (current):** `$PARALLAX_HOUSE_VIEW_DIR` if set, else `~/.parallax/active-house-view/`.
 - `view.yaml` — canonical structured tilts + metadata
 - `prose.md` — verbatim CIO narrative with `paired_yaml_hash` frontmatter
 - `audit.jsonl` — append-only log of consume events
@@ -17,7 +17,7 @@ On successful load, the loader MUST emit an explicit log line: `"Active house vi
 
 **No active view:** if the directory or `view.yaml` is missing, behave as today — no tilts, no banners, standard disclaimer. Do not error; do not prompt the user.
 
-**Phase 1 path:** Supabase `house_views` table keyed by `org_id`. Loader fetches latest non-expired version. Loader.md is identical from this consumer's perspective — only the resolver mechanism changes.
+**Managed path (roadmap):** Supabase `house_views` table keyed by `org_id`. Loader fetches latest non-expired version. Loader.md is identical from the consumer's perspective — only the resolver mechanism changes.
 
 ---
 
@@ -68,7 +68,7 @@ Run these checks in order. On any failure, behave per "Failure handling" below �
 
 ### Quantum-factor pillars (Ω Φ Ξ Ψ)
 
-The four pillars (`econometrics_phase`, `valuation_state`, `market_entropy`, `psychological_wavelength`) are **encoding-only in Phase 0**. Extractors populate them at ingest from CIO prose (see `skills/load-house-view/SKILL.md`); they are stored in `view.yaml` for forward-compatibility but are NOT translated into factor multipliers, universe effects, or consumer-skill output in Phase 0.
+The four pillars (`econometrics_phase`, `valuation_state`, `market_entropy`, `psychological_wavelength`) are **encoding-only**. Extractors populate them at ingest from CIO prose (see `skills/load-house-view/SKILL.md`); they are stored in `view.yaml` for forward-compatibility but are NOT translated into factor multipliers, universe effects, or consumer-skill output by the current loader.
 
 Rationale: MCP equity-only scope doesn't yet carry expected-return / volatility inputs needed for a full multi-pillar composite. Asset-class pillar weights are deployment-specific judgment calls that downstream users should calibrate themselves. Guessing at a partial formula risks silently miscalibrating portfolio math.
 
@@ -188,7 +188,7 @@ When an active view is loaded and applied, every consumer skill MUST:
 
    > *Tilt multipliers are heuristic and uncalibrated (`calibration_status: heuristic_phase0`). Intended for directional research only — do not use for regulatory capital, fiduciary-grade portfolio construction, or client-facing recommendations.*
 
-   When `metadata.calibration_status == "empirical_phase1"` (Phase 1 only, after the calibration backtest lands), replace with a one-line pointer to calibration evidence. The disclosure is **not optional** — rationale tracked in `notes/` (XAI compliance; SR 11-7 conceptual-soundness; EU AI Act Art 13 transparency-by-design). No client-facing or regulated deployment is permitted while the `heuristic_phase0` disclosure is active.
+   When `metadata.calibration_status == "empirical_phase1"` (after the calibration backtest lands), replace with a one-line pointer to calibration evidence. The disclosure is **not optional** (XAI compliance; SR 11-7 conceptual-soundness; EU AI Act Art 13 transparency-by-design). No client-facing or regulated deployment is permitted while the `heuristic_phase0` disclosure is active.
 
 2. **Conflict banners** — render inline at the section where the conflict arose (e.g., universe selection, allocation), not bundled at the end.
 
@@ -212,7 +212,7 @@ When NO active view is loaded, skills run as today — standard output, no pream
 
 ## 6. Audit logging
 
-Every consume event appends one JSONL line to `~/.parallax/active-house-view/audit.jsonl`. The schema below is stable — Phase 1 promotes this to a Supabase `house_view_audit` table with identical field names and types, so any Phase 0 audit file can be bulk-loaded without transformation.
+Every consume event appends one JSONL line to `~/.parallax/active-house-view/audit.jsonl`. The schema below is stable — the managed version promotes this to a Supabase `house_view_audit` table with identical field names and types, so any local audit file can be bulk-loaded without transformation.
 
 ### 6.1 Required fields (every line)
 
@@ -223,7 +223,7 @@ Every consume event appends one JSONL line to `~/.parallax/active-house-view/aud
 | `view_id` | string (uuid v4) OR `null` | Null when `applied=false` AND reason is `no_view`, OR when `action=="extraction_attempt"` (the draft has no assigned `view_id` until saved). |
 | `version_id` | string (uuid v4) OR `null` | Null under the same conditions as `view_id`. |
 | `skill` | string | `parallax-<name>` of the consuming skill. |
-| `action` | string (enum) | One of: `save`, `clear`, `extend`, `re-pair`, `edit`, `consume`, `extraction_attempt`. `consume` is the default for any consumer-skill invocation (portfolio-builder, should-i-buy, etc.). `extraction_attempt` (added Phase 0.5b) logs ingestion drafts whether or not they became saves — captures retries, edits, and rejects. The others are operational events from `parallax-load-house-view`. Consumers that encounter an unrecognized `action` value MUST skip the row (forward-compatibility). |
+| `action` | string (enum) | One of: `save`, `clear`, `extend`, `re-pair`, `edit`, `consume`, `extraction_attempt`. `consume` is the default for any consumer-skill invocation (portfolio-builder, should-i-buy, etc.). `extraction_attempt` logs ingestion drafts whether or not they became saves — captures retries, edits, and rejects. The others are operational events from `parallax-load-house-view`. Consumers that encounter an unrecognized `action` value MUST skip the row (forward-compatibility). |
 | `applied` | bool | True if tilts were actually applied to the skill's output. False if validation failed, single-stock skill (conflict-flag only), or operational action. |
 
 ### 6.2 Conditional fields
@@ -252,7 +252,7 @@ Every consume event appends one JSONL line to `~/.parallax/active-house-view/aud
 
 ### 6.3 Forbidden
 
-- **Skill-specific custom keys are not permitted.** If a new field is needed, add it to §6.2 as a conditional field with an explicit required-when rule. Drift here blocks Phase 1 migration.
+- **Skill-specific custom keys are not permitted.** If a new field is needed, add it to §6.2 as a conditional field with an explicit required-when rule. Drift here blocks future migration to the managed backend.
 - **No PII.** `query_summary` is the only user-derived content; truncate at 200 chars and do not log account IDs, client names, or full holdings arrays.
 
 ### 6.4 Minimal examples
@@ -265,7 +265,7 @@ Every consume event appends one JSONL line to `~/.parallax/active-house-view/aud
 {"schema_version":1,"ts":"2026-04-24T06:03:00Z","view_id":null,"version_id":null,"skill":"parallax-portfolio-builder","action":"consume","applied":false,"failure_reason":"drift: prose.md frontmatter paired_yaml_hash != recomputed view_hash","query_summary":"<user input>"}
 ```
 
-Phase 1: same fields, persisted to Supabase `house_view_audit` table. Field names, types, and required-when semantics carry forward unchanged. A backfill of Phase 0 audit files is a straight `COPY FROM` of the JSONL.
+Managed version (roadmap): same fields, persisted to a Supabase `house_view_audit` table. Field names, types, and required-when semantics carry forward unchanged. A backfill of local audit files is a straight `COPY FROM` of the JSONL.
 
 ---
 

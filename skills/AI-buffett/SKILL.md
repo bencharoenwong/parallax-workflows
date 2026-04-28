@@ -137,7 +137,6 @@ Frazzini, Kabiller, Pedersen (2018) decompose Berkshire Hathaway's 1976-2017 ret
 Profile fit: match — 4 of 4 factor criteria met.
 
 Workflow derived from: Frazzini, Kabiller, Pedersen (2018), "Buffett's Alpha", FAJ 74(4):35-55.
-Last anchor-tested: 2026-04-06 | Last legal review: PENDING
 Tool sequence: get_company_info, get_peer_snapshot, get_financials(summary), get_score_analysis(52w), explain_methodology
 Token cost: 4 tokens
 

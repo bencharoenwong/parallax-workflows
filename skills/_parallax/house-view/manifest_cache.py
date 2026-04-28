@@ -272,8 +272,14 @@ class ManifestCache:
     def put(self, manifest: dict[str, Any]) -> Path:
         """Atomic write of a verified manifest to the cache.
 
-        Caller's responsibility to verify before calling put — this
-        method does NOT verify (the orchestrator does, then writes).
+        WARNING: this method does NOT verify the signature. The caller MUST
+        invoke `manifest_verify.verify_manifest()` first. The orchestrator
+        `load_manifest()` enforces this contract; if you call `put()` directly,
+        an unverified manifest will be written to disk. A subsequent `get(verify=True)`
+        will catch it on read, but `get(verify=False)` will return the unverified
+        manifest. Don't call `put()` from integration code unless you've already
+        verified.
+
         Writes via tempfile + rename so partial writes never expose a
         truncated cache file.
         """

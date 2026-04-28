@@ -17,7 +17,7 @@ gotchas:
   - Confirmation gate persists a pre-edit snapshot (Step 3a) when uploader chooses 'Edit specific fields' — writes extractor's pristine draft to `.archive/<version>/pre_edit.yaml` alongside the superseded view. No-edit confirmations skip this.
   - Every extraction attempt (Step 3b) logs an `extraction_attempt` audit entry to `audit.jsonl` — whether or not it becomes a save. Capture disposition (confirmed/edited/re_extracted/rejected) + draft_yaml_hash per loader.md §6.2.
   - Save (Step 4 step 10) computes a `version_diff` block vs `parent_version_id` and stashes it on the save audit entry. Only when this save supersedes a prior version.
-  - Phase 1 Manifest: Invoke `manifest_cache.load_manifest()` during Step 4 (Write Phase) to resolve active calibration. Handle `DeadStateNoFallback` or signature errors by logging a warning and falling back to Phase 0.
+  - Calibration manifest: Invoke `manifest_cache.load_manifest()` during Step 4 (Write Phase) to resolve active calibration. Handle `DeadStateNoFallback` or signature errors by logging a warning and falling back to the bundled-values default.
   - Reasoning Chains: Every save MUST invoke `chain_emit.emit_chain()` (or `emit_phase_0_chain()`) to produce a compliance artifact at `~/.parallax/reasoning-chains/`.
   - Compliance Export: Use `--export <view_id>` to generate a regulator-grade bundle. Validates hash-chain integrity before packaging.
   - `--why <tilt-path>` is on-demand. Reads `provenance.yaml` first when present; the latest derivation entry for the leaf controls the answer. If type is `macro_regime_rule`, cite `rule_ref` + `trigger`. If type is `prose_extraction` or no `provenance.yaml` exists (legacy view), fall back to the prose.md targeted re-read. The saved house view never carries Parallax-derived overlays — augmentation happens just-in-time at consumer-skill use, with provenance recorded on the consuming portfolio/screen artifact, not on the view itself.
@@ -49,13 +49,14 @@ Ingest a CIO house view (PDF / text / URL / wizard) into the Parallax workflow s
 
 ## Where the view lives
 
-**Phase 0:** `~/.parallax/active-house-view/`
+`~/.parallax/active-house-view/`
 - `view.yaml` — canonical YAML per `_parallax/house-view/schema.yaml`
 - `prose.md` — verbatim CIO narrative with `paired_yaml_hash` frontmatter
-- `audit.jsonl` — append-only consume log (consumers append; this skill initializes)
+- `provenance.yaml` — per-tilt derivation records (prose extraction / macro-regime rule / manual edit)
+- `audit.jsonl` — append-only hash-chained log (consumers append; this skill initializes)
 - `.archive/<view_id>-<version_id>/` — superseded versions (kept for `parent_version_id` traceability)
 
-If `~/.parallax/active-house-view/` does not exist, create it on first save.
+If `~/.parallax/active-house-view/` does not exist, create it on first save. Files are written `0600`, the directory is `0700`.
 
 ## Workflow
 
@@ -77,7 +78,7 @@ Produce a draft YAML conforming to `_parallax/house-view/schema.yaml`. For each 
 | `market_entropy` (Ξ) | Technicals/vol/flows — "orderly rotation", "elevated VIX", "breadth deteriorating", "heavy issuance" | +2 low/ordered → -2 high/disordered |
 | `psychological_wavelength` (Ψ) | Sentiment/RORO — "risk-on backdrop", "frothy retail", "capitulation", "fear index elevated" | +2 very positive → -2 very negative |
 
-Pillars are usually coarse — a prose view rarely articulates sub-factor level. If the source is silent on a pillar, leave at 0 and flag `pillars` extraction_confidence ≤ 0.6. Pillar scores are encoding-only in Phase 0 (per loader.md §3): they are stored but do NOT auto-translate into factor multipliers.
+Pillars are usually coarse — a prose view rarely articulates sub-factor level. If the source is silent on a pillar, leave at 0 and flag `pillars` extraction_confidence ≤ 0.6. Pillar scores are encoding-only (per loader.md §3): they are stored but do NOT auto-translate into factor multipliers.
 
 **Hedged or split-sector language is a known failure mode.** When the source uses phrases like:
 - "constructive on tech but selective in semis"
@@ -263,4 +264,4 @@ To check: /parallax-load-house-view --status
 
 See Step 5. For operational modes, output the requested status block or success/failure message.
 
-> *Phase 0 internal tool. Phase 1 promotes this to Parallax MCP server tools (`set_house_view`, `get_active_house_view`, etc.) with org-keyed Supabase storage. Schema and loader semantics carry forward unchanged.*
+> *Local-filesystem implementation. A managed, org-keyed version (`set_house_view`, `get_active_house_view`, etc., backed by Supabase) is on the roadmap; schema and loader semantics carry forward unchanged.*

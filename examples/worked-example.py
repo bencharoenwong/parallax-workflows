@@ -16,7 +16,7 @@ Reproducible: same inputs → byte-identical outputs (the determinism property t
 auditability pitch is built on). No network calls; no time-varying data.
 
 Run from the repo root:
-  /tmp/parallax-batch3-venv/bin/python examples/phase-0.5f-worked-example.py
+  python examples/worked-example.py
 """
 from __future__ import annotations
 
@@ -228,7 +228,7 @@ audit_entry_hash = hashlib.sha256(audit_payload_canonical.encode("utf-8")).hexdi
 # Render outputs
 # ---------------------------------------------------------------------------
 
-OUT = REPO / "examples" / "phase-0.5f-worked-example.md"
+OUT = REPO / "examples" / "worked-example.md"
 
 md = []
 md.append("# End-to-End Audit-Trail Worked Example\n")

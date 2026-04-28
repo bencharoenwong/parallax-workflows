@@ -1,0 +1,25 @@
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/skills/_parallax/house-view"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "house-view"
+    # Pinned exact versions are intentional for long-horizon replay determinism
+    # (see CONTRIBUTING.md and DECISIONS.md). Dependabot raises PRs; merge
+    # requires fixture regeneration if rfc8785 or pynacl changes — see the
+    # pin-bump procedure in DECISIONS.md before merging any PR here.
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "dependencies"
+      - "github-actions"

@@ -1,39 +1,76 @@
 # Parallax House View — Shared Core
 
-This directory holds the shared house-view infrastructure consumed by `parallax-load-house-view` (writer) and the portfolio / single-stock skills (readers).
+The shared house-view infrastructure consumed by `parallax-load-house-view` (writer) and the portfolio / single-stock skills (readers).
+
+This directory holds the canonical schema, the loader contract, the conflict-rendering helpers, and the Python modules that implement audit chaining, calibration-manifest verification, reasoning-chain emission, and gap detection. Skills JIT-load specific files within this directory; the directory itself is never loaded as a unit.
 
 ## Files
 
-- **`schema.yaml`** — Canonical YAML structure. Single source of truth for the view's shape, metadata, tilt vocabulary, and `view_hash` computation.
-- **`loader.md`** — JIT-loaded by every consumer skill. Defines load-time validation, multiplier mapping, conflict resolution, output rendering, and audit logging.
-- **`render_helpers.md`** — Canonical templates for view-aware conflict banners (single-stock skills' §7.1/§7.2/§7.3 surfaces).
-- **`manifest_verify.py`** *(Batch 3 minimal slice — added 2026-04-25)* — Calibration manifest verifier. Pure function: takes a manifest dict + path to `signing/trusted_keys.json`, returns parsed dict + chain-anchor hash on valid Ed25519+JCS signature, raises typed errors on failure (`KeyIdUnknown`, `SignatureInvalid`, `ManifestSignatureMissing`, etc.). Implements anti-collision guard from chain spec §3.2 (security audit A-1).
-- **`manifest_cache.py`** *(Batch 3.5 — added 2026-04-25)* — On-disk cache layer + load orchestrator. `ManifestCache` class persists verified manifests to `~/.parallax/calibration/<org_id>_<calibration_version>.json` with atomic 0600/0700 writes (security audit B-1) and emits `cache_permissions_unsafe` warnings on read if perms drift. Includes strict expiry boundary (`manifest_expires_at <= now()`, schema spec §6.2 step 5), rollback-blocking monotonicity check on `calibration_version`, and the **A-3 dead-state guard** (fresh manifest with unknown kid + cached manifest expired → `DeadStateNoFallback`, schema spec §6.2 step 2). The `load_manifest()` orchestrator composes verify + expiry + monotonicity + cache fallback. HTTP fetch + 304/ETag handling + session pinning of `version=latest` deferred until Batch 2 endpoint is live.
-- **`chain_emit.py`** *(Batch 4 — added 2026-04-25)* — Reasoning chain emitter. `emit_chain()` builds the chain envelope per chain spec §2 (spec_version, skill_version, run_id, org_id, manifest_ref, view, base_scores, final_portfolio, signature) and writes it to `~/.parallax/reasoning-chains/<YYYY-MM>/<run_id>.yaml` with atomic 0600/0700 writes. Suppresses `active: false` manifest sections from `sections_touched` (chain spec §7 PRISM-routing privacy). Defensive anti-collision guard re-checks `manifest_ref.hash != signing_payload_hash` at emit time. `emit_phase_0_chain()` wrapper records the bundled-values transition state (chain spec §3.2 Phase-0 special case). Refuses to overwrite existing `run_id` files unless explicitly opted in.
-- **`chain_prune.py`** *(Batch 4 — added 2026-04-25)* — `parallax chain prune --before YYYY-MM-DD [--confirm]` retention CLI required by security audit B-2. Dry-run by default, `--confirm` deletes, summary line `pruned <N> chains, <bytes> freed; oldest remaining: <date>`. Refuses symlinked chain_dir, declines to delete files modified after process start, parses `--before` strictly (YYYY-MM-DD).
-- **`gap_detect.py`** — `detect_gaps(draft_view, prose, extraction_notes, source_type) -> list[Gap]`. Identifies fillable gaps: silent (0/null AND name+aliases not mentioned in prose/notes via word-boundary regex match) or low-confidence non-zero (`extraction_confidence[dim] < 0.4`). Eligible dimensions are `macro_regime`, `factors`, `regions`, `sectors` only — pillars (encoding-only), themes (CIO judgment), styles (no Parallax mapping), excludes (policy) are NEVER returned. `LOW_COVERAGE_REGIONS` deny-list demotes long-tail keys (`apac_ex_japan, chile, mena, philippines, vietnam`) to silent-by-default unless explicitly mentioned. Consumed by downstream consumer skills (e.g., /parallax-portfolio-builder) at JIT use time when the active house view is silent on a dimension the consumer needs. Pure module, no I/O.
-- **`gap_suggest.py`** — Pairs with `gap_detect`. `plan_calls(gaps, available_markets=None) -> list[CallSpec]` deduplicates MCP calls: one `get_telemetry` covers macro_regime + factors; one `macro_analyst(market="United States")` covers all sector gaps; one `macro_analyst` per covered region market. **`available_markets` parameter:** when provided (e.g., from `list_macro_countries()`), filters `REGION_MARKET_MAP` to only currently-online markets — catches coverage drift without code edits. `report_skipped_leaves(gaps, available_markets=None)` returns per-dimension leaves silently dropped due to no MCP coverage — for honest partial-coverage banners in consumer skills. `fold_responses(gaps, results) -> list[Suggestion]` converts MCP responses to Suggestions via per-dimension helpers. **Shape-tolerant fold helpers:** `_extract_component_text` reads nested `response["components"][name]["content"]` (live API), top-level `response[name]` (legacy fixture), and single-component `response["content"]` (component-scoped call) shapes uniformly. `macro_analyst_to_sector_tilts` adds prose-extraction fallback (sentence-level proximity scoring) for the live API's narrative `sector_positioning` content. Consumed by downstream consumer skills, not by ingest. Pure module — the consuming skill makes the actual MCP calls and feeds responses back.
-- **`signing/trusted_keys.json`** — Pinned Ed25519 verification keys. Trust anchor: the verifier rejects any manifest whose `signing_key_id` is not in this file. Long-horizon-replay note inside the file documents the version-pin rule (chain spec §8.2).
-- **`requirements.txt`** — Exact pins for the verifier's deps (`pynacl==1.6.2`, `rfc8785==0.1.4`). Per chain spec §5 + security audit A-7, the lockfile MUST be exact, not a range, for 7yr replay determinism.
-- **`tests/test_manifest_verify.py`** — Round-trip + tamper coverage: valid signature, mutated values block, unknown kid, empty signature value, and a synthetic anti-collision-guard trip. **5/5 pass.**
-- **`tests/test_manifest_cache.py`** — Cache layer coverage: round-trip, atomic-write perms, loose-perms warning, strict expiry boundary, monotonicity rollback rejection, dead-state guard, orchestrator new-version write, orchestrator cache-only fallback, offline expired-cache warning. **9/9 pass.**
-- **`tests/test_gap_detect.py`** *(Phase 0.5d — added 2026-04-26)* — Detection coverage: silent-eligible, mentioned-via-prose-alias, ineligible-dimension (pillars / themes / styles), low-confidence non-zero, wizard-mode skip, macro_regime null tokens, word-boundary alias matching. **17/17 pass.**
-- **`tests/test_gap_suggest.py`** *(Phase 0.5d — added 2026-04-26)* — Suggestion coverage: planner Phase 0 violation guard, telemetry/region/sector dedup logic, regime-tag → factor-delta mapping per loader.md §3, sector positioning across dict + list response shapes, end-to-end fold preserving Gap.reason, hard assertion that no suggestion ever targets pillars / themes / styles. **24/24 pass.**
-- **`tests/test_gap_suggest_live.py`** *(added 2026-04-26)* — Regression coverage against captured live MCP responses (`tests/fixtures/macro_analyst_*_live.json`): nested `components.X.content` shape extraction, prose-extraction sector path (Energy/Financials/Consumer Discretionary detection from US sector_positioning narrative), `available_markets` filtering, `report_skipped_leaves` honest disclosure of uncovered regions, long-tail demotion respecting `LOW_COVERAGE_REGIONS` deny-list, `report_date` fallback for `data_as_of`. **12/12 pass.** Fixtures: Canada (positive), Germany (mixed), India (negative), US sector_positioning (prose).
-- **`README.md`** — This file.
+### Specification
 
-## Phase status
+| File | Purpose |
+|---|---|
+| `schema.yaml` | Canonical YAML structure. Single source of truth for the view's shape, metadata, tilt vocabulary, and `view_hash` computation. |
+| `loader.md` | JIT-loaded by every consumer skill. Defines load-time validation, multiplier mapping, conflict resolution, output rendering, and audit logging. |
+| `render_helpers.md` | Canonical templates for view-aware conflict banners (single-stock skills' §7.1/§7.2/§7.3 surfaces). |
+| `signing/trusted_keys.json` | Pinned Ed25519 verification keys. The verifier rejects any manifest whose `signing_key_id` is not in this file. The test-only kid is deliberately included so auditors can run round-trip on a fresh clone; production deployments without that kid are unaffected. |
+| `requirements.txt` | Exact pins for the verifier's deps (`pynacl==1.6.2`, `rfc8785==0.1.4`, `pyyaml==6.0.3`). The lockfile MUST be exact, not a range, for long-horizon replay determinism. |
 
-**Phase 0 (current):** Local filesystem storage at `~/.parallax/active-house-view/`. Single active view per machine. Internal/dogfood only.
+### Python modules
 
-**Phase 1:** Same shape promoted to Parallax MCP server tools (`set_house_view`, `get_active_house_view`, `clear_house_view`, `list_house_views`) backed by Supabase, keyed by `org_id`. Loader.md remains identical from the consumer's perspective; only the resolver mechanism changes.
+All modules are pure functions with no MCP coupling. They import cleanly into any harness.
 
-**Phase 2:** Web upload form on chicago.global → optional self-hosted container.
+| Module | Public API | Purpose |
+|---|---|---|
+| `audit_chain.py` | `append_entry(audit_path, entry_data)` | Append-only hash-chained audit log. Each entry's `prev_entry_hash` links to the previous entry. RFC 8785 JCS canonicalization. Tampering with any entry breaks the chain on next verification. |
+| `audit_export.py` | `create_bundle(view_id) -> Path` | Export a regulator-grade tarball: view + prose + provenance + full audit trail. Refuses to ship if the chain is broken. |
+| `manifest_verify.py` | `verify_manifest(manifest_dict, trusted_keys_path)` | Pure function. Returns parsed dict + chain-anchor hash on valid Ed25519+JCS signature. Raises typed errors on failure: `ManifestMalformed`, `KeyIdUnknown`, `KeyIdNotYetValid`, `KeyIdExpired`, `SignatureInvalid`, `ManifestSignatureMissing`. |
+| `manifest_cache.py` | `ManifestCache(...)`, `load_manifest(...)` | On-disk cache layer + load orchestrator. Persists verified manifests to `~/.parallax/calibration/<org_id>_<calibration_version>.json` with atomic `0600`/`0700` writes. Strict expiry boundary, monotonicity check, and dead-state guard (fresh manifest with unknown kid AND cached manifest expired raises `DeadStateNoFallback`). |
+| `chain_emit.py` | `emit_chain(...)`, `emit_phase_0_chain(...)` | Reasoning chain emitter. Builds the chain envelope (spec_version, skill_version, run_id, org_id, manifest_ref, view, base_scores, final_portfolio, signature) and writes it to `~/.parallax/reasoning-chains/<YYYY-MM>/<run_id>.yaml` with atomic `0600`/`0700`. Refuses to overwrite existing run_id files unless explicitly opted in. |
+| `chain_prune.py` | `parallax chain prune --before YYYY-MM-DD [--confirm]` | Retention CLI. Dry-run by default, `--confirm` to delete. Refuses symlinked chain_dir; declines files modified after process start; parses `--before` strictly. |
+| `gap_detect.py` | `detect_gaps(draft_view, prose, extraction_notes, source_type) -> list[Gap]` | Identifies fillable gaps: silent (0/null AND name+aliases not mentioned in prose/notes via word-boundary regex match) or low-confidence non-zero (`extraction_confidence[dim] < 0.4`). Eligible dimensions: `macro_regime`, `factors`, `regions`, `sectors`. Pillars / themes / styles / excludes are never returned. Pure module, no I/O. |
+| `gap_suggest.py` | `plan_calls(...)`, `report_skipped_leaves(...)`, `fold_responses(...)` | Pairs with `gap_detect`. Plans deduplicated MCP calls; reports per-dimension leaves silently dropped due to no MCP coverage; folds responses into Suggestions. The consuming skill makes the actual MCP calls and feeds responses back. Pure module. |
+
+### Tests
+
+Coverage is in the adjacent `tests/` directory. The test signing key + signed test fixture + fixture generator are deliberately public so auditors can run round-trip on a fresh clone.
+
+| Suite | Coverage |
+|---|---|
+| `tests/test_view_hash.py` | Reference implementation of `view_hash` computation; round-trip determinism. |
+| `tests/test_audit_chain.py` | Append, hash linkage, tamper detection, race-free file open, adaptive tail read. |
+| `tests/test_audit_export.py` | Bundle creation, broken-chain refusal. |
+| `tests/test_manifest_verify.py` | Round-trip + tamper coverage: valid signature, mutated values block, unknown kid, empty signature value, anti-collision guard. |
+| `tests/test_manifest_cache.py` | Atomic-write perms, loose-perms warning, strict expiry boundary, monotonicity rollback rejection, dead-state guard, orchestrator new-version write, cache-only fallback, offline expired-cache warning. |
+| `tests/test_chain_emit.py` | Envelope structure, anti-collision check, refuse-overwrite, atomic write. |
+| `tests/test_gap_detect.py` | Silent-eligible, mentioned-via-prose-alias, ineligible-dimension, low-confidence non-zero, wizard-mode skip, macro_regime null tokens, word-boundary alias matching. |
+| `tests/test_gap_suggest.py` | Planner dedup logic, regime-tag → factor-delta mapping, sector positioning across response shapes, end-to-end fold preserving `Gap.reason`. |
+| `tests/test_gap_suggest_live.py` | Regression coverage against captured live MCP responses (`tests/fixtures/macro_analyst_*_live.json`). |
+| `tests/test_skill_integration.py` | End-to-end SKILL.md write paths against fixture inputs. |
+
+Run the suite from the repo root:
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r skills/_parallax/house-view/requirements.txt pytest
+pytest skills/_parallax/house-view/tests/
+```
+
+A temp venv is required because PEP 668 blocks Homebrew Python's pip from installing into the system environment.
+
+## Storage
+
+| Artifact | Path | Permissions |
+|---|---|---|
+| Active house view | `~/.parallax/active-house-view/` | dir `0700`, files `0600` |
+| Archived versions | `~/.parallax/active-house-view/.archive/<view_id>-<version_id>/` | dir `0700`, files `0600` |
+| Calibration cache | `~/.parallax/calibration/` | dir `0700`, files `0600` |
+| Reasoning chains | `~/.parallax/reasoning-chains/<YYYY-MM>/` | dir `0700`, files `0600` |
+
+Override the active-view location with `PARALLAX_HOUSE_VIEW_DIR`. Override the calibration / chain locations via the corresponding constructor arguments to `ManifestCache` and `emit_chain`.
+
+A managed, org-keyed backend (Supabase, accessed through the Parallax MCP server) is on the roadmap. Loader semantics carry forward unchanged; only the resolver mechanism changes.
 
 ## Why a shared subdir under `_parallax/`?
 
-Mirrors the `AI-profiles/` pattern: a family of related files (schema + loader + README) lives together rather than scattered. Skills JIT-load specific files within the dir; the dir itself is never loaded as a unit.
-
-## Reference
-
-Full design rationale, adversarial review findings, and resolution decisions are in the design doc: `~/.claude/plans/logical-scribbling-kay.md` (working copy) — promote to repo `docs/` once Phase 0 stabilizes.
+Mirrors the `AI-profiles/` pattern: a family of related files (schema + loader + Python modules + tests) lives together rather than scattered across consumer skills. Skills JIT-load specific files within this directory; the directory itself is never loaded as a unit.
