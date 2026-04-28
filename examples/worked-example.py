@@ -291,7 +291,7 @@ mexico_row = next(r for r in rows if r["region"] == "mexico")
 md.append(f"For `{mexico_row['ticker']}` ({mexico_row['name']}, mexico {mexico_row['region_multiplier']:+d}):\n\n")
 md.append(f"- **Source:** `{mexico_row['region_source']}`\n")
 md.append(f"- **Evidence:** {mexico_row['region_evidence']}\n")
-md.append(f"- **Means:** the saved house view (UBS CIO Mar 2026) was silent on Mexico. The portfolio-construction step asked Parallax data for a current Mexico read; the response was unavailable today (no MCP coverage). Mexico stayed neutral. The bank's view is untouched. The principal can see EXACTLY what the bank said vs what Parallax filled vs what defaulted to neutral.\n\n")
+md.append(f"- **Means:** the saved house view (sample Q2 2026 letter) was silent on Mexico. The portfolio-construction step asked Parallax data for a current Mexico read; the response was unavailable today (no MCP coverage). Mexico stayed neutral. The bank's view is untouched. The principal can see EXACTLY what the bank said vs what Parallax filled vs what defaulted to neutral.\n\n")
 
 md.append("## Determinism check (the auditability pitch made concrete)\n\n")
 md.append("Re-running this script with the same active view, same thesis, same captured fixtures produces the SAME audit-entry SHA-256: `{}` — by construction, because:\n\n".format(audit_entry_hash[:32]))

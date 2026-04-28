@@ -49,10 +49,10 @@ ELIGIBLE_DIMENSIONS = ("macro_regime", "factors", "regions", "sectors")
 # named-country granularity. Silent-by-default — skipped from gap flagging
 # UNLESS the source prose explicitly mentions them (in which case the
 # normal silent-AND-not-mentioned check still fires for an explicit override).
-# Discovered via cross-doc gap-detect comparison of LO 2024 vs UBS Mar 2026:
-# 6 of 26 unique silent leaves were silent in BOTH banks. Adding leaves to
-# this set should be evidence-based — only after observing N>=2 banks both
-# silent on a given leaf.
+# Discovered via cross-doc gap-detect comparison of two anonymous bank views:
+# 6 of 26 unique silent leaves were silent in BOTH. Adding leaves to this set
+# should be evidence-based — only after observing N>=2 banks both silent on
+# a given leaf.
 LOW_COVERAGE_REGIONS = frozenset({
     "apac_ex_japan",
     "chile",

@@ -5,10 +5,10 @@
 > Demonstrates the consumer-side architecture end-to-end: the saved house view stays PURE (bank's view + uploader confirmation only); current-data augmentation happens at THIS portfolio's construction time, scoped to THIS decision, with explicit per-tilt source tags. A compliance officer reviewing this artifact can defensively reconstruct what came from the bank's view vs from current data, with timestamps.
 
 ## Active house view (read-only inputs)
-- `view_id`: `086db6a9-9d0e-4c24-82bd-823cbda79eb3`
-- `view_version_id`: `e2621adc-d90f-4054-a5be-f72546dfe340`
-- `view_hash`: `6d23eecd394a3f9390cc47f789a3dc87...`
-- `view_name`: UBS CIO March 2026 Monthly Letter — Navigating uncertainty
+- `view_id`: `00000000-0000-0000-0000-000000000001`
+- `view_version_id`: `00000000-0000-0000-0000-000000000002`
+- `view_hash`: `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`
+- `view_name`: Sample CIO Q2 2026 Letter — Navigating uncertainty
 - `effective_date → valid_through`: 2026-03-19 → 2026-06-17
 - `uploader_role`: CIO
 
@@ -146,7 +146,7 @@ For `WALMEX.MX` (Walmart de Mexico, mexico +0):
 
 - **Source:** `[neutral]`
 - **Evidence:** silent in saved view + no JIT augmentation available
-- **Means:** the saved house view (UBS CIO Mar 2026) was silent on Mexico. The portfolio-construction step asked Parallax data for a current Mexico read; the response was unavailable today (no MCP coverage). Mexico stayed neutral. The bank's view is untouched. The principal can see EXACTLY what the bank said vs what Parallax filled vs what defaulted to neutral.
+- **Means:** the saved house view (sample Q2 2026 letter) was silent on Mexico. The portfolio-construction step asked Parallax data for a current Mexico read; the response was unavailable today (no MCP coverage). Mexico stayed neutral. The bank's view is untouched. The principal can see EXACTLY what the bank said vs what Parallax filled vs what defaulted to neutral.
 
 ## Determinism check (the auditability pitch made concrete)
 
