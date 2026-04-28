@@ -8,6 +8,7 @@ AI-powered equity research workflows for [Parallax](https://chicago.global/paral
 - **Research analysts** — due diligence, peer comparison, earnings forensics
 - **Wealth advisors** — portfolio health checks, plain-language recommendations for clients
 - **Individual investors** — quick stock evaluations, thematic screening, watchlist monitoring
+- **Engineering teams** — embedding Parallax into internal research tools, B-CIO synthesis layers, white-label investment products. Workflows are reference implementations under MIT — fork them, modify the prompts, swap the inputs, ship in your own harness.
 
 Run commands like `/parallax-should-i-buy AAPL` or `/parallax-client-review [holdings]` and get a structured research report. Each workflow orchestrates Parallax MCP tools in parallel — company data, factor scores, macro analysis, news — so you get comprehensive output from a single command.
 
@@ -56,6 +57,44 @@ The `_parallax` directory contains shared conventions, token-cost reference, and
 
 If you see "tool not found" errors, the MCP server is not connected.
 
+## Forking and Customizing
+
+Every workflow is a `SKILL.md` file — a structured prompt the model orchestrates. To customize:
+
+```bash
+# Develop against the repo directly. install.sh symlinks each skill, so edits
+# in the repo propagate live without re-installing.
+git clone https://github.com/bencharoenwong/parallax-workflows.git
+cd parallax-workflows
+./install.sh
+
+# Fork a workflow
+cp -r skills/should-i-buy skills/my-should-i-buy
+$EDITOR skills/my-should-i-buy/SKILL.md   # change behavior, output format, MCP tool sequence
+./install.sh                              # picks up the new skill on next Claude Code restart
+```
+
+A few common customizations:
+- **Different output format.** Edit the "Output Format" section of `SKILL.md`. The model follows it verbatim.
+- **Different tool sequence.** Add or remove `mcp__claude_ai_Parallax__*` calls in the workflow steps.
+- **Different scoring backend.** The schema and loader under `skills/_parallax/house-view/` are scoring-engine-agnostic; the SKILL.md files are the layer that's coupled to Parallax MCP. Replace those calls with your own data source and the rest keeps working.
+- **Different storage path.** House-view artifacts default to `~/.parallax/active-house-view/`. The path is referenced in `SKILL.md` and the Python helpers under `_parallax/house-view/`.
+
+The Python modules (`audit_chain`, `chain_emit`, `manifest_verify`, `gap_detect`, `gap_suggest`) are pure functions with no MCP coupling — they import cleanly into any harness.
+
+## Audit & Compliance
+
+For compliance, vendor risk, and information security reviews:
+
+- **Documented methodology.** Six-factor framework with academic foundations (Markowitz, Fama). Not a black-box ML model labeled as a factor model. See `skills/_parallax/house-view/loader.md`.
+- **Hash-chained audit log.** Every house-view save and every consume appends an entry to `~/.parallax/active-house-view/audit.jsonl` with `prev_entry_hash` linking. Tampering with any entry breaks the chain on next verification.
+- **Ed25519-signed reasoning chains.** Every consume writes a structured reasoning chain to `~/.parallax/reasoning-chains/` capturing the inputs, the manifest reference, and the output. Designed for 7-year replay against pinned tool versions.
+- **Regulator-grade export.** `/parallax-load-house-view --export <view_id>` packages view + prose + provenance + full hash-chained audit trail into a tarball. Refuses to ship if the chain is broken.
+- **Per-tilt provenance.** Every non-neutral tilt carries a derivation record: prose-extraction (with source span), macro-regime rule (with rule reference and trigger), or manual edit (with prior value and edit notes). `--why <tilt-path>` reconstructs the answer.
+- **Local-only by default.** No telemetry. No external calls during ingest beyond the LLM the operator chose. Files are written with restrictive permissions.
+
+Implementation lives in `skills/_parallax/house-view/audit_chain.py`, `chain_emit.py`, `manifest_verify.py`, `manifest_cache.py`, and `audit_export.py`. Test coverage is in the adjacent `tests/` directory; the test signing key and fixtures are deliberately public so auditors can verify round-trip on a fresh clone.
+
 ## Workflows
 
 ### Concierge
@@ -88,20 +127,28 @@ All portfolio workflows take holdings as JSON: `[{"symbol":"AAPL.O","weight":0.2
 | `/parallax-rebalance [holdings]` | Prioritized trades with health flags and score rationale |
 | `/parallax-scenario-analysis "event" portfolio=[holdings]` | Exposure assessment and rotation candidates |
 
-### House view (Phase 0 — internal)
+### House View
 
-Load a CIO house view once; portfolio workflows automatically apply its tilts and excludes. Single-stock workflows surface conflict flags but do not apply tilts.
+Bring your own house view. The CIO memo, IC strategy doc, or macro-desk PDF that anchors your book becomes a first-class object every portfolio workflow auto-loads.
 
 | Command | What it does |
 |---|---|
 | `/parallax-load-house-view <pdf or .md or url>` | Ingest, extract structured tilts, confirm with uploader, save as active view |
 | `/parallax-load-house-view` | Wizard mode for guided manual entry |
 | `/parallax-load-house-view --status` | Show active view summary |
-| `/parallax-load-house-view --extend <date>` | Push valid_through forward |
+| `/parallax-load-house-view --extend <date>` | Push `valid_through` forward |
 | `/parallax-load-house-view --re-pair` | Re-pair after manual prose edit |
+| `/parallax-load-house-view --why <tilt-path>` | Trace any tilt to the source span that generated it |
+| `/parallax-load-house-view --export <view_id>` | Export regulator-grade compliance bundle |
 | `/parallax-load-house-view --clear` | Remove active view |
 
-Active view is consumed by: `portfolio-builder`, `rebalance`, `thematic-screen`, `morning-brief`, `client-review`, `explain-portfolio`. Conflict-flag-only by: `should-i-buy`, `deep-dive`. See `skills/load-house-view/samples/` for 5 sample CIO views and `skills/_parallax/house-view/loader.md` for the multiplier mapping and conflict-resolution rules.
+**Three design choices worth knowing about:**
+
+1. **Your LLM, your prompt.** Extraction runs in your harness, against your model. Documents do not leave your machine.
+2. **Local by default.** The view lives at `~/.parallax/active-house-view/` — `view.yaml`, `prose.md`, `provenance.yaml`, `audit.jsonl`. Files are written `0600`, the directory is `0700`. We do not host it.
+3. **Audit was a design input.** Every save writes a hash-chained audit entry, an Ed25519-signed reasoning chain, and a per-tilt provenance record. `--export` produces a regulator-grade bundle. `--why tilts.factors.momentum` traces any tilt back to the source span (or rule, or manual edit) that generated it.
+
+Active view is consumed by: `portfolio-builder`, `rebalance`, `thematic-screen`, `morning-brief`, `client-review`, `explain-portfolio`. Conflict-flag-only by: `should-i-buy`, `deep-dive`. See `skills/load-house-view/samples/` for sample CIO views, `skills/_parallax/house-view/loader.md` for the multiplier mapping and conflict-resolution rules, and `skills/_parallax/house-view/README.md` for the module reference.
 
 ### Market & Discovery
 

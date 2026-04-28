@@ -3,14 +3,14 @@
 # This file is the single source of truth for the house-view YAML structure.
 # JIT-loaded by skills/load-house-view/SKILL.md (writer) and skills/_parallax/house-view/loader.md (consumers).
 #
-# Phase 0: stored on disk at ~/.parallax/active-house-view/view.yaml + prose.md.
-# Phase 1: same shape, persisted in Supabase keyed by org_id.
+# Storage: stored on disk at ~/.parallax/active-house-view/view.yaml + prose.md.
+# Roadmap: same shape, persisted in Supabase keyed by org_id (managed backend).
 #
 # All metadata fields are REQUIRED at ingest. Tilts are sparse — only declare what the CIO actually has a view on.
 # Omitted tilt fields default to neutral (0).
 
 metadata:
-  schema_version: 1                          # int, added 2026-04-24 for forward-compat legacy-view detection. v1 covers the schema in effect through Phase 0.5c. Loader gates optional-field reads on this.
+  schema_version: 1                          # int, for forward-compat legacy-view detection. Loader gates optional-field reads on this.
   calibration_status: heuristic_phase0       # enum: heuristic_phase0 | empirical_phase1. Until empirical calibration lands, every save writes "heuristic_phase0" and the load preamble (loader.md §5.1) emits the mandatory disclosure. Do NOT default a reader to empirical; missing field means heuristic_phase0.
   view_id: <uuid v4>                         # generated at ingest, immutable for life of view family
   view_name: "Q2 2026 House View"            # human-readable, shown in banners
@@ -54,9 +54,9 @@ metadata:
 tilts:
 
   # Quantum-factor pillar scores (coarse CIO-level take per pillar, -2 to +2).
-  # Pillar scores are ENCODING-ONLY in Phase 0 — stored for forward-compatibility
-  # but NOT auto-translated into factor multipliers or consumer-skill output.
-  # See loader.md §3 "Quantum-factor pillars" for the Phase 0 contract.
+  # Pillar scores are ENCODING-ONLY — stored for forward-compatibility
+  # but NOT auto-translated into factor multipliers or consumer-skill output by the current loader.
+  # See loader.md §3 "Quantum-factor pillars" for the contract.
   pillars:
     econometrics_phase: 0           # Ω. +2 = constructive backdrop, -2 = recessionary/stress
     valuation_state: 0              # Φ. +2 = very undervalued, -2 = highly overvalued
@@ -203,7 +203,7 @@ tilts:
 
 # ---------------------------------------------------------------------------
 # PROSE — verbatim CIO narrative, paired by hash.
-# Stored in a sibling prose.md file in Phase 0; same dir as view.yaml.
+# Stored in a sibling prose.md file; same dir as view.yaml.
 # Schema below documents the pairing field that lives in prose.md frontmatter.
 # ---------------------------------------------------------------------------
 
@@ -298,7 +298,7 @@ extraction:
 # The hash deliberately excludes metadata/extraction/prose so that:
 # - Re-saving the same view (different upload_timestamp) preserves the hash.
 # - Prose edits do not invalidate the pairing UNLESS the YAML body actually changed.
-# - Phase 1 Supabase storage can de-duplicate views by view_hash across orgs.
+# - The managed Supabase backend (roadmap) can de-duplicate views by view_hash across orgs.
 #
 # ---------------------------------------------------------------------------
 # Pinned canonicalization algorithm (added 2026-04-24).

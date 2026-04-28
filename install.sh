@@ -22,7 +22,13 @@ PARALLAX_SOURCE="$SCRIPT_DIR/skills/_parallax"
 if [ -L "$PARALLAX_TARGET" ] && [ "$(readlink "$PARALLAX_TARGET")" = "$PARALLAX_SOURCE" ]; then
     echo "  Symlinked  _parallax (already dev mode — edits live from repo)"
 else
-    rm -rf "$PARALLAX_TARGET"
+    # Refuse to clobber a real directory — only replace stale symlinks.
+    if [ -e "$PARALLAX_TARGET" ] && [ ! -L "$PARALLAX_TARGET" ]; then
+        echo "  ERROR: $PARALLAX_TARGET exists and is not a symlink." >&2
+        echo "  Refusing to delete a real directory. Move or remove it manually, then re-run." >&2
+        exit 1
+    fi
+    rm -f "$PARALLAX_TARGET"
     ln -s "$PARALLAX_SOURCE" "$PARALLAX_TARGET"
     echo "  Symlinked  _parallax (shared conventions + house-view loader/schema)"
 fi
