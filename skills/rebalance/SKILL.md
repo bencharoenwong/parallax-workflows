@@ -39,19 +39,22 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 
 Per `loader.md` §1-§2: read view if present, validate hash and expiry. If view present, capture tilt vector + excludes. The view's tilts define **direction of rebalance** — current weights that diverge from view-tilted weights become rebalance candidates beyond the standard health-flag triggers. If validation fails or no view present, run rebalance using only health flags + macro context.
 
-### Batch A — Current state (parallel)
+### Batch A — Current state (parallel, best-effort)
 
 | Tool | Parameters | Notes |
 |---|---|---|
-| `analyze_portfolio` | `holdings`, lens="performance" | Returns/risk metrics |
-| `analyze_portfolio` | `holdings`, lens="concentration" | Concentration analysis |
-| `get_peer_snapshot` | per holding | **Primary scoring source** for `PARALLAX_LOADER_V2=1`. Aggregate scores client-side per `loader.md` §3b. |
-| `get_company_info` | per holding | **Ground-truth panel oracle** per loader.md §5 rule 3 — records `expected_name` for mismatch check against `get_peer_snapshot.target_company`. |
-| `check_portfolio_redundancy` | `holdings` | Overlap detection |
-| `list_macro_countries` | — | Check market coverage |
-| `quick_portfolio_scores`| `holdings` | **Legacy/V1 path only**. Do NOT use if `PARALLAX_LOADER_V2=1` and view active. |
+| `analyze_portfolio` | `holdings`, lens="performance" | Returns/risk metrics. **Timeout fallback:** skip if exceeds 30s. |
+| `analyze_portfolio` | `holdings`, lens="concentration" | Concentration analysis. **Timeout fallback:** skip if exceeds 30s. |
+| `get_peer_snapshot` | per holding | **Primary scoring source** for `PARALLAX_LOADER_V2=1`. **Timeout handling:** fire in parallel; if N≥2 calls timeout, mark those holdings as "scores unavailable" and continue with health-flags-only scoring. Collect successful scores only. Aggregate client-side per `loader.md` §3b. **For 10+ holdings:** prioritize top/bottom 5 by weight; timeout on remaining holdings is acceptable — fall back to health flags for those positions. |
+| `get_company_info` | per holding | **Ground-truth panel oracle** per loader.md §5 rule 3 — records `expected_name` for mismatch check against `get_peer_snapshot.target_company`. **Timeout handling:** if timeout, mark holding as "name verification unavailable" and flag ⚠ UNVERIFIED. |
+| `check_portfolio_redundancy` | `holdings` | Overlap detection. **Timeout fallback:** if exceeds 20s, flag "redundancy check skipped" and continue. |
+| `list_macro_countries` | — | Check market coverage. **Timeout fallback:** skip if exceeds 5s. |
+| `quick_portfolio_scores`| `holdings` | **Legacy/V1 path only**. Do NOT use if `PARALLAX_LOADER_V2=1` and view active. **Timeout fallback:** if exceeds 10s, degrade to health-flags-only scoring. |
 
-**After Batch A**: cross-check returned names against `get_company_info` names per loader.md §5 rule 3. For `PARALLAX_LOADER_V2=1`, any mismatch in `get_peer_snapshot` is flagged ⚠ MISMATCH and excluded from aggregate calculations. For V1, any mismatch in `quick_portfolio_scores` is re-scored individually.
+**After Batch A** (best-effort completion):
+1. Cross-check returned names against `get_company_info` results per loader.md §5 rule 3. For `PARALLAX_LOADER_V2=1`, any mismatch in `get_peer_snapshot` is flagged ⚠ MISMATCH and excluded from aggregate calculations. Unverified holdings (name check timeout) are flagged ⚠ UNVERIFIED.
+2. For holdings with no scores (timeouts), scoring is determined by health flags only — these holdings cannot be ranked by factor scores and must be evaluated by "High/Medium/Low priority" categories based on flags alone.
+3. Summary output: "Batch A completed: N/M holdings scored (M-N timeouts on peer snapshots). Rebalance will proceed with health-flag-driven recommendations for scoring-unavailable holdings."
 
 ### Batch B — Macro + score trends (after Batch A)
 
