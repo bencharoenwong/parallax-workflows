@@ -223,7 +223,12 @@ On `Confirm`:
 8. **Compute** `prose_body_hash = sha256(prose_body_utf8).hexdigest()` per schema.yaml §"prose_body_hash computation". The hash is over the bytes that will appear AFTER the closing `---` of the frontmatter — not over the whole file. Compute on the finalized body before writing.
 9. **Write (atomic-safe per-file pattern)**:
    - **Pre-write validation:** Before firing any writes, validate that all required fields are set and the directory `~/.parallax/active-house-view/` is writable. If not writable, fail loudly and do not proceed.
-   - **Stage 1: Archive (non-blocking, best-effort):** Archive existing `~/.parallax/active-house-view/view.yaml` and `prose.md` to `~/.parallax/active-house-view/.archive/<old_view_id>-<old_version_id>/` **asynchronously**. Archive failures are non-blocking — log a warning but do not abort the save. (The archive is a courtesy; it is not load-bearing for correctness.)
+   - **Stage 1: Compute version-diff BEFORE writes** — only when `metadata.parent_version_id` is non-null (i.e., this save supersedes a prior version in the same view family). **Must happen before archiving to avoid async race conditions:**
+     0. **Current-view guard.** If the current active `~/.parallax/active-house-view/view.yaml` does not exist (fresh install), set `version_diff_truncated: true` with `notes: "no_prior_version"` on the save audit entry. Do not emit a `version_diff` field. Continue to save.
+     1. Read the current active `view.yaml` (the prior version being superseded).
+     2. Compute a flat diff restricted to the `tilts` and `excludes` subtrees (same scope as `view_hash`) by comparing the prior `view.yaml` with the new draft. For each dotted path (`tilts.sectors.health_care`, `tilts.factors.momentum`, `excludes[0]`, etc.) that differs, record `{path: [old_value, new_value]}`. Use `null` for either side when the key is absent on that side. Cap output at 40 entries; if more, truncate and set `version_diff_truncated: true`.
+     3. Stash computed diff for use in Step 11.
+   - **Stage 1b: Archive (non-blocking, best-effort):** After version-diff is computed, archive the current active `~/.parallax/active-house-view/view.yaml` and `prose.md` to `~/.parallax/active-house-view/.archive/<old_view_id>-<old_version_id>/` **asynchronously**. Archive failures are non-blocking — log a warning but do not abort the save. (The archive is a courtesy; it is not load-bearing for correctness.)
    - **Stage 2: Write new files with per-file atomic renames (atomic operation):**
      - **Write to temporary files in the active directory:** For each file to be written, write first to `~/.parallax/active-house-view/<filename>.tmp.<new_version_id>`:
        - `view.yaml.tmp.<new_version_id>`
@@ -242,12 +247,8 @@ On `Confirm`:
      - `chmod 0o600` on `provenance.yaml` (security audit Finding 6 — file carries source-extracted prose snippets; default umask perms would leave it world-readable on shared workstations).
      - `chmod 0o600` on `audit.jsonl` (security audit Finding 5 — closes the window between empty-file creation and the first `audit_chain.append_entry`). The `audit_chain` module also re-enforces 0600 on every append as defense in depth.
      - `chmod 0o700` the parent dir `~/.parallax/active-house-view/` if it was created in this run.
-   - **Stage 2c.1: Rollback (only if any write fails during Stage 2):** If any file write fails before all temporary files are created, clean up any partial temporary files and report the error: **"Save failed: <file> write error. No files written. Safe to retry."** Do not proceed to Step 10. The active view remains unchanged.
-10. **Compute version-diff (Layer 3)** — only when `metadata.parent_version_id` is non-null (i.e., this save supersedes a prior version in the same view family):
-    0. **Archive-missing guard.** If `.archive/<parent_view_id>-<parent_version_id>/view.yaml` does not exist (fresh install, manual deletion, or the parent was cleared before this update), skip sub-steps 1-2 and set `version_diff_truncated: true` with `notes: "parent_archive_missing: <parent_view_id>-<parent_version_id>"` on the save audit entry. Do not emit a `version_diff` field. Continue to save — the missing-archive case is survivable, not a save blocker.
-    1. Read the parent's archived `view.yaml` from `.archive/<parent_view_id>-<parent_version_id>/view.yaml`.
-    2. Compute a flat diff restricted to the `tilts` and `excludes` subtrees (same scope as `view_hash`). For each dotted path (`tilts.sectors.health_care`, `tilts.factors.momentum`, `excludes[0]`, etc.) that differs, record `{path: [old_value, new_value]}`. Use `null` for either side when the key is absent on that side. Cap output at 40 entries; if more, truncate and set `version_diff_truncated: true`.
-    3. Stash as `version_diff` on the save audit entry in step 11 below.
+   - **Stage 2c.1: Rollback (only if any write fails during Stage 2):** If any file write fails before all temporary files are created, clean up any partial temporary files and report the error: **"Save failed: <file> write error. No files written. Safe to retry."** Do not proceed to Step 11. The active view remains unchanged.
+10. (Moved to Step 9 Stage 1 to avoid async race conditions.)
 11. **Append Hash-Chained Audit Entry:**
     - Prepare entry payload:
       ```json

@@ -37,8 +37,9 @@ Fire both in parallel:
 
 1. **Load Active House View** — Per `loader.md` §1-§2. If view present, capture tilt vector + excludes. Resolve user theme vs view per §4: theme is sovereign, but conflicts surface as banners (e.g., theme="AI infrastructure" + view says `tech: -2` → screen runs as requested with "House view is UW tech; screen run per your explicit theme" banner).
 2. **Build Universe** — Resolve user theme vs. view per loader.md §4. If view present AND `PARALLAX_LOADER_V2=1`, follow `loader.md` §3 "Application (V2)": decompose tilts into parallel per-sector calls, merge, and dedupe. If V1, prepend tilt context to the query and call `build_stock_universe` once. Filter results against `tilts.excludes`.
+   - **Fallback on timeout:** If `build_stock_universe` times out (exceeds 30s), retry once with a narrower query (e.g., single primary sector from theme, or drop secondary modifiers). If second attempt still times out or returns empty, use `check_portfolio_redundancy` as a placeholder (will show "universe unavailable") and flag in output. Do not abort the screen.
 
-**After Phase A:** Proceed to Phase B with completed universe.
+**After Phase A:** Proceed to Phase B with completed universe (or placeholder if unavailable).
 
 ### Phase B — Inline Validation (no new tool calls)
 
@@ -47,15 +48,17 @@ Fire both in parallel:
 
 **After Phase B:** Proceed to Phase C with validated universe.
 
-### Phase C — Scoring & Analytics (parallel, ~3–4 tokens)
-
-Fire all three in parallel:
+### Phase C — Scoring & Analytics (sequential coordination, ~3–4 tokens)
 
 **C1. Ground-truth check + Score Top Picks** (per loader.md §5 rule 3 — required universally) — For the top N results, call `get_peer_snapshot` AND `get_company_info` per candidate in parallel. Record `returned_name` (snapshot `target_company`) and `expected_name` (info `name`). Treat any row where `returned_name ≠ expected_name` as UNTRUSTED (do not rank, flag ⚠ MISMATCH). If view active, re-rank trusted rows by `composite × multiplier(holding's sector)` per loader.md §3.
 
-**C2. Compare Peers** — For the highest-scored TRUSTED stock, call `export_peer_comparison` with format "json".
+**After C1 completes, fire C2 and C3 in parallel:**
 
-**C3. Quick Financials** — For the top 3 trusted picks, call `get_financials` with statement "summary". Append audit log entry per loader.md §6.
+**C2. Compare Peers** — For the highest-scored TRUSTED stock (determined from C1 results), call `export_peer_comparison` with format "json".
+
+**C3. Quick Financials** — For the top 3 trusted picks (determined from C1 results), call `get_financials` with statement "summary".
+
+**After C2 and C3 complete:** Append audit log entry per loader.md §6.
 
 ## Output Format
 

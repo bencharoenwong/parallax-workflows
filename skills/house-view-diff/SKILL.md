@@ -32,6 +32,18 @@ Full protocol: [`_parallax/house-view/tests/portfolio_diff_harness.md`](../_para
 
 Consumer runners should surface at least three outcomes — PASS, WEAK, KILL — corresponding to the shift magnitude falling within the pass band, outside the warning band, or below the economic-viability threshold respectively. Specific band values are maintained internally by the reference-implementation provider.
 
+## Error Contracts
+
+Consumers implementing the paired-call protocol must handle these failure modes:
+
+| Scenario | Behavior |
+|----------|----------|
+| **Leg A succeeds, Leg B times out** | Diff output shows baseline only. Surface message: "View load timed out; baseline results shown. Diff unavailable." Include Leg A results but do not emit `PASS/WEAK/KILL` verdict. |
+| **Leg A times out, Leg B succeeds** | Diff output incomplete. Surface message: "Universe build timed out; view results shown. Diff incomplete." Include Leg B results but do not emit verdict. |
+| **Both Leg A and Leg B timeout simultaneously** | No diff output possible. **Fail loudly with explicit error:** "Both legs timed out (>30s each). Diff protocol requires both results; cannot proceed. Retry with simpler theme or larger time budget." Do not emit partial output; do not emit verdict. Exit with error status. |
+| **Leg B fails (view validation error, not timeout)** | If Leg A succeeded, surface both: Leg A results (solid) and error message for Leg B. Do not emit diff; do not emit verdict. Flag as "View validation failed — comparison incomplete." |
+| **Both legs fail (query error, bad theme)** | Fail loudly with the error from whichever leg ran first. "Query error: [theme interpretation failed / no candidates found]. Could not construct baseline; diff not applicable." Exit with error status. |
+
 ## Troubleshooting
 
 - **"View did not load"** → Check `PARALLAX_HOUSE_VIEW_DIR` resolution per `_parallax/house-view/loader.md §1`.
