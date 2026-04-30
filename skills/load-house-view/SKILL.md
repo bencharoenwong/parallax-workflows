@@ -221,18 +221,23 @@ On `Confirm`:
     - Otherwise: set to `"heuristic_phase0"`.
 7. **Construct the prose body** (the markdown that will live below the frontmatter — verbatim CIO narrative).
 8. **Compute** `prose_body_hash = sha256(prose_body_utf8).hexdigest()` per schema.yaml §"prose_body_hash computation". The hash is over the bytes that will appear AFTER the closing `---` of the frontmatter — not over the whole file. Compute on the finalized body before writing.
-9. **Write (async pattern)**:
-   - **Archive in parallel (if present):** Archive existing `~/.parallax/active-house-view/view.yaml` and `prose.md` to `~/.parallax/active-house-view/.archive/<old_view_id>-<old_version_id>/` concurrently (do not wait for archive to complete before proceeding to writes).
-   - **Write new files in parallel:** Fire all file writes concurrently:
-     - `view.yaml`
-     - `prose.md` with frontmatter **four fields in this order**: `paired_yaml_hash`, `prose_body_hash`, `view_id`, `version_id`. Frontmatter is the only part of the file NOT covered by `prose_body_hash`.
-     - `provenance.yaml`
-     - `audit.jsonl` (create if does not exist)
-   - **On write completion:** Apply permission enforcement concurrently:
+9. **Write (atomic-safe async pattern)**:
+   - **Pre-write validation:** Before firing any writes, validate that all required fields are set and the directory `~/.parallax/active-house-view/` is writable. If not writable, fail loudly and do not proceed.
+   - **Stage 1: Archive (non-blocking, best-effort):** Archive existing `~/.parallax/active-house-view/view.yaml` and `prose.md` to `~/.parallax/active-house-view/.archive/<old_view_id>-<old_version_id>/` **asynchronously**. Archive failures are non-blocking — log a warning but do not abort the save. (The archive is a courtesy; it is not load-bearing for correctness.)
+   - **Stage 2: Write new files with rollback support (atomic operation):**
+     - **Write to temporary staging directory first:** Write all new files to a temporary directory `~/.parallax/active-house-view/.staging-<new_version_id>/` to prevent partial writes to the active directory.
+       - `view.yaml`
+       - `prose.md` with frontmatter **four fields in this order**: `paired_yaml_hash`, `prose_body_hash`, `view_id`, `version_id`. Frontmatter is the only part of the file NOT covered by `prose_body_hash`.
+       - `provenance.yaml`
+       - `audit.jsonl` (temporary staging copy)
+     - **Write concurrently:** All files in staging directory write in parallel. If ANY write fails, immediately abort remaining writes and proceed to rollback (Step 9c).
+   - **Stage 2b: Atomic swap** (only if all staging writes succeeded):
+     - Atomically move `~/.parallax/active-house-view/.staging-<new_version_id>/` → `~/.parallax/active-house-view/` (via `mv` or platform-specific atomic rename). **If swap fails (should be rare), clean up staging directory and fail loudly with "Atomic swap failed — view not activated. Manual recovery may be needed."**
+   - **Stage 2c: Permission enforcement (post-swap):** After atomic swap succeeds, apply permissions concurrently:
      - `chmod 0o600` on `provenance.yaml` (security audit Finding 6 — file carries source-extracted prose snippets; default umask perms would leave it world-readable on shared workstations).
      - `chmod 0o600` on `audit.jsonl` (security audit Finding 5 — closes the window between empty-file creation and the first `audit_chain.append_entry`). The `audit_chain` module also re-enforces 0600 on every append as defense in depth.
      - `chmod 0o700` the parent dir `~/.parallax/active-house-view/` if it was created in this run.
-   - **Error handling:** If any write fails (archive, view.yaml, prose.md, provenance.yaml, or audit.jsonl), abort all concurrent writes and report which file failed. Do not proceed to step 10.
+   - **Stage 2c.1: Rollback (only if any write fails during Stage 2):** If any file write fails in the staging directory (before atomic swap), clean up the entire staging directory and report the error: **"Save failed: <file> write error. No files written. Safe to retry."** Do not proceed to Step 10. The active view remains unchanged.
 10. **Compute version-diff (Layer 3)** — only when `metadata.parent_version_id` is non-null (i.e., this save supersedes a prior version in the same view family):
     0. **Archive-missing guard.** If `.archive/<parent_view_id>-<parent_version_id>/view.yaml` does not exist (fresh install, manual deletion, or the parent was cleared before this update), skip sub-steps 1-2 and set `version_diff_truncated: true` with `notes: "parent_archive_missing: <parent_view_id>-<parent_version_id>"` on the save audit entry. Do not emit a `version_diff` field. Continue to save — the missing-archive case is survivable, not a save blocker.
     1. Read the parent's archived `view.yaml` from `.archive/<parent_view_id>-<parent_version_id>/view.yaml`.
