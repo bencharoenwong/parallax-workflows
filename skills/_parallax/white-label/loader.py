@@ -202,7 +202,15 @@ def _resolve_logo_paths(
     warnings: list[str] = []
 
     for key, raw_path in logos.items():
-        expanded = Path(raw_path).expanduser()
+        try:
+            expanded = Path(str(raw_path)).expanduser()
+        except (TypeError, ValueError) as exc:
+            resolved[key] = ""
+            msg = f"logo_missing: {key} invalid path value: {raw_path!r}"
+            warnings.append(msg)
+            logger.warning("White-label logo invalid path — key=%s error=%s", key, exc)
+            continue
+
         if expanded.exists():
             resolved[key] = str(expanded)
         else:
