@@ -119,30 +119,36 @@ class TestExtractFromUrl:
     """Test URL-based extraction."""
 
     def test_extract_from_url_returns_dict_shape(self):
-        # Mock or skip actual network call
-        # This test verifies the function signature and return structure
-        # Full implementation will use defuddle/scrapling
-        pass
+        # Passes an invalid/unreachable URL — extract_from_url must degrade gracefully
+        result = extract_from_url("https://0.0.0.0")
+        assert isinstance(result, dict)
+        required_keys = ["colors", "logos", "fonts", "source", "extracted_at", "confidence_scores"]
+        assert all(k in result for k in required_keys), f"Missing keys: {set(required_keys) - set(result.keys())}"
 
     def test_extract_from_url_confidence_scores(self):
-        # Verify confidence_scores dict exists
-        pass
+        result = extract_from_url("https://0.0.0.0")
+        assert isinstance(result["confidence_scores"], dict)
 
     def test_extract_from_url_sets_source_type(self):
-        # Verify source.type == "url"
-        pass
+        result = extract_from_url("https://0.0.0.0")
+        assert result["source"]["type"] == "url"
 
 
 class TestExtractFromPdf:
     """Test PDF-based extraction."""
 
     def test_extract_from_pdf_missing_file(self):
-        # Verify FileNotFoundError raised for missing PDF
-        pass
+        # Spec requires graceful degradation (no exception) for missing files
+        result = extract_from_pdf("/nonexistent/path/that/does/not/exist.pdf")
+        assert isinstance(result, dict), "Must return dict, not raise"
+        assert "error" in result, "Must include 'error' key on missing file"
+        assert result["source"]["type"] == "pdf"
 
     def test_extract_from_pdf_returns_dict_shape(self):
-        # Verify return dict has required keys
-        pass
+        # Pass a missing file — graceful degradation still returns correct shape
+        result = extract_from_pdf("/nonexistent/path/that/does/not/exist.pdf")
+        required_keys = ["colors", "logos", "fonts", "source", "extracted_at", "confidence_scores"]
+        assert all(k in result for k in required_keys), f"Missing keys: {set(required_keys) - set(result.keys())}"
 
 
 class TestExtractFromWizard:
@@ -152,6 +158,9 @@ class TestExtractFromWizard:
         # Verify function exists and is callable
         assert callable(extract_from_wizard)
 
-    def test_extract_from_wizard_placeholder(self):
-        # Full wizard tests deferred to integration after SKILL.md
-        pass
+    def test_extract_from_wizard_returns_dict_shape(self):
+        result = extract_from_wizard()
+        required_keys = ["colors", "logos", "fonts", "source", "extracted_at", "confidence_scores"]
+        assert all(k in result for k in required_keys), f"Missing keys: {set(required_keys) - set(result.keys())}"
+        assert result["source"]["type"] == "wizard"
+        assert "reference" in result["source"], "source must include 'reference' key for schema consistency"
