@@ -1,0 +1,89 @@
+# Parallax White-Label Branding — Canonical Schema
+#
+# This file is the single source of truth for white-label client branding configuration.
+# Stored on disk at ~/.parallax/client-branding/config.yaml
+#
+# All fields are REQUIRED unless marked optional. Validation summary provides
+# pass/warn/fail status for each asset with detailed check results.
+
+metadata:
+  schema_version: 1                          # int, for forward-compat legacy-config detection
+  client_name: ""                            # required: human-readable client display name
+  extracted_at: "2026-04-30T00:00:00Z"      # ISO 8601, when config was extracted/generated
+  source:                                    # required: how this config was sourced
+    type: "url"                              # enum: url | pdf | wizard
+    reference: ""                            # url, pdf path, or wizard session id
+    confidence: 0.0                          # 0.0-1.0, overall confidence in extraction
+  extracted_by: ""                           # optional: email or user id of extractor
+  notes: ""                                  # optional: free-form notes about this config
+
+branding:
+  colors:
+    primary: "#000000"                       # required: primary brand color (hex format)
+    secondary: "#FFFFFF"                     # required: secondary brand color (hex format)
+    accent: "#0066CC"                        # required: accent color (hex format)
+    background: "#FFFFFF"                    # required: background color (hex format)
+    text: "#333333"                          # required: default text color (hex format)
+
+  logos:
+    primary: "~/.parallax/client-branding/primary-logo.png"   # required: local path to primary logo
+    favicon: "~/.parallax/client-branding/favicon.ico"        # required: local path to favicon
+
+  fonts:
+    header: "Arial"                          # required: font name for headers
+    body: "Helvetica"                        # required: font name for body text
+    monospace: "Courier New"                 # required: font name for monospace/code
+
+validation_summary:
+  colors:
+    primary:
+      status: "pass"                         # enum: pass | warn | fail
+      checks: []                             # list of check details
+    secondary:
+      status: "pass"
+      checks: []
+    accent:
+      status: "pass"
+      checks: []
+    background:
+      status: "pass"
+      checks: []
+    text:
+      status: "pass"
+      checks: []
+    contrast:
+      text_on_background:
+        status: "pass"                       # WCAG contrast check: text_color on background_color
+        ratio: 0.0                           # actual contrast ratio achieved
+        checks: []
+
+  logos:
+    primary:
+      status: "pass"
+      checks: []
+    favicon:
+      status: "pass"
+      checks: []
+
+  fonts:
+    header:
+      status: "pass"
+      checks: []
+    body:
+      status: "pass"
+      checks: []
+    monospace:
+      status: "pass"
+      checks: []
+
+confidence_scores:                           # 0.0-1.0 per asset, reflects extraction confidence
+  primary_color: 1.0
+  secondary_color: 1.0
+  accent_color: 1.0
+  background_color: 1.0
+  text_color: 1.0
+  primary_logo: 1.0
+  favicon: 1.0
+  header_font: 1.0
+  body_font: 1.0
+  monospace_font: 1.0
