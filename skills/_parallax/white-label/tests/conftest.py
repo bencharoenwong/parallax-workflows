@@ -22,7 +22,7 @@ _LOADER_PATH = (
 )
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def loader_module() -> ModuleType:
     """Load loader.py from its absolute path and return the module object."""
     spec = importlib.util.spec_from_file_location(

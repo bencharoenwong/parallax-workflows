@@ -350,4 +350,31 @@ def test_logger_debug_clean_load(
     debug_records = [r for r in caplog.records if r.levelno == logging.DEBUG]
     warn_records  = [r for r in caplog.records if r.levelno >= logging.WARNING]
     assert len(debug_records) >= 1
+    assert any("loaded cleanly" in r.message.lower() for r in debug_records)
     assert len(warn_records) == 0
+
+
+# ---------------------------------------------------------------------------
+# Test 9: Invalid logo path value (non-string, schema-unavailable path)
+# ---------------------------------------------------------------------------
+
+
+def test_invalid_logo_value_schema_unavailable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    loader_module: ModuleType,
+) -> None:
+    """Non-string logo value (int) in schema-unavailable path -> treated as missing path, no exception."""
+    bad = _valid_config(primary_logo="42", favicon="/path/to/favicon.ico")
+    bad["branding"]["logos"]["primary"] = 42  # type: ignore[assignment]
+    config_path = _write_config(tmp_path, bad)
+    monkeypatch.setattr(loader_module, "_CONFIG_PATH", config_path)
+    monkeypatch.setattr(loader_module, "_SCHEMA", None)
+
+    result = loader_module.load_client_branding()
+
+    assert "schema_unavailable" in result["error"]
+    assert "logo_missing" in result["error"]
+    assert result["logos"]["primary"] == ""
+    assert result["logos"]["favicon"] == ""
+    assert result["colors"]["primary"] == "#1A2B3C"
