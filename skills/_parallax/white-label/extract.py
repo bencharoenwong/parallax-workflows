@@ -320,7 +320,18 @@ def extract_from_pdf(pdf_path: str) -> Dict[str, Any]:
     pdf_file = Path(pdf_path)
 
     if not pdf_file.exists():
-        raise FileNotFoundError(f"PDF file not found: {pdf_path}")
+        return {
+            "colors": {},
+            "logos": {},
+            "fonts": {},
+            "source": {
+                "type": "pdf",
+                "reference": pdf_path,
+            },
+            "extracted_at": datetime.utcnow().isoformat() + "Z",
+            "confidence_scores": {},
+            "error": "PDF file not found",
+        }
 
     try:
         # Try to extract text from PDF
@@ -394,8 +405,6 @@ def extract_from_pdf(pdf_path: str) -> Dict[str, Any]:
             "confidence_scores": confidence_scores,
         }
 
-    except FileNotFoundError:
-        raise
     except Exception as e:
         # Graceful degradation
         return {
@@ -425,6 +434,7 @@ def extract_from_wizard() -> Dict[str, Any]:
         "fonts": {},
         "source": {
             "type": "wizard",
+            "reference": None,
         },
         "extracted_at": datetime.utcnow().isoformat() + "Z",
         "confidence_scores": {},
