@@ -1,7 +1,7 @@
 """Brand asset extraction from flexible sources: URLs, PDFs, wizard intake."""
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from urllib.parse import urlparse
@@ -26,7 +26,7 @@ class ColorExtractor:
             })
 
         # Match 3-digit hex colors (#RGB)
-        for match in re.finditer(r'#[0-9A-Fa-f]{3}\b', text):
+        for match in re.finditer(r'#[0-9A-Fa-f]{3}(?![0-9A-Fa-f])\b', text):
             colors.append({
                 "hex": match.group(0).upper(),
                 "confidence": 0.95,
@@ -153,9 +153,14 @@ class FontExtractor:
             # Determine usage from selector context
             usage = "body"  # default
 
-            # Look backward in text to find the selector
-            start_pos = max(0, match.start() - 200)
-            selector_text = text[start_pos:match.start()].lower()
+            # Look backward in text to find the selector (scoped to current rule block)
+            brace_pos = text.rfind('{', 0, match.start())
+            if brace_pos == -1:
+                start_pos = 0
+            else:
+                # Selector is before the brace, look backward with reasonable window
+                start_pos = max(0, brace_pos - 100)
+            selector_text = text[start_pos:brace_pos if brace_pos != -1 else match.start()].lower()
 
             if any(h in selector_text for h in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header']):
                 usage = "header"
@@ -292,7 +297,7 @@ def extract_from_url(url: str) -> Dict[str, Any]:
                 "type": "url",
                 "reference": url,
             },
-            "extracted_at": datetime.utcnow().isoformat() + "Z",
+            "extracted_at": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
             "confidence_scores": confidence_scores,
         }
 
@@ -306,7 +311,7 @@ def extract_from_url(url: str) -> Dict[str, Any]:
                 "type": "url",
                 "reference": url,
             },
-            "extracted_at": datetime.utcnow().isoformat() + "Z",
+            "extracted_at": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
             "confidence_scores": {},
             "error": str(e),
         }
@@ -328,7 +333,7 @@ def extract_from_pdf(pdf_path: str) -> Dict[str, Any]:
                 "type": "pdf",
                 "reference": pdf_path,
             },
-            "extracted_at": datetime.utcnow().isoformat() + "Z",
+            "extracted_at": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
             "confidence_scores": {},
             "error": "PDF file not found",
         }
@@ -339,12 +344,12 @@ def extract_from_pdf(pdf_path: str) -> Dict[str, Any]:
             import pypdf
             with open(pdf_path, "rb") as f:
                 reader = pypdf.PdfReader(f)
-                pdf_text = "\n".join(page.extract_text() for page in reader.pages[:5])
+                pdf_text = "\n".join(t for t in (page.extract_text() for page in reader.pages[:5]) if t)
         except ImportError:
             try:
                 import pdfplumber
                 with pdfplumber.open(pdf_path) as pdf:
-                    pdf_text = "\n".join(page.extract_text() for page in pdf.pages[:5])
+                    pdf_text = "\n".join(t for t in (page.extract_text() for page in pdf.pages[:5]) if t)
             except ImportError:
                 pdf_text = "(PDF text extraction unavailable)"
 
@@ -401,7 +406,7 @@ def extract_from_pdf(pdf_path: str) -> Dict[str, Any]:
                 "type": "pdf",
                 "reference": pdf_path,
             },
-            "extracted_at": datetime.utcnow().isoformat() + "Z",
+            "extracted_at": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
             "confidence_scores": confidence_scores,
         }
 
@@ -415,7 +420,7 @@ def extract_from_pdf(pdf_path: str) -> Dict[str, Any]:
                 "type": "pdf",
                 "reference": pdf_path,
             },
-            "extracted_at": datetime.utcnow().isoformat() + "Z",
+            "extracted_at": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
             "confidence_scores": {},
             "error": str(e),
         }
@@ -436,7 +441,7 @@ def extract_from_wizard() -> Dict[str, Any]:
             "type": "wizard",
             "reference": None,
         },
-        "extracted_at": datetime.utcnow().isoformat() + "Z",
+        "extracted_at": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
         "confidence_scores": {},
         "note": "Wizard extraction requires interactive input; implement in SKILL.md orchestration",
     }
