@@ -217,67 +217,40 @@ NICE-TO-HAVE:
 
 ---
 
-## 4. `/parallax-house-view-diff` (Parallel Leg A/B Execution)
+## 4. `/parallax-house-view-diff` (Protocol Specification — Not an Executable Runner)
 
-### Code Paths
+**IMPORTANT: This skill is a SPECIFICATION DOCUMENT, not an executable runner.** It describes the protocol that consumer runners (portfolio-builder, thematic-screen) implement to verify whether an active house view changes their outputs. The parallelization is described in the spec (the Leg A/B paired-call protocol is inherently parallel at the consumer level), but there is no code in this skill to refactor.
 
-```
-ORCHESTRATION PATHS                               STATUS
-[+] Leg A execution (parallel with Leg B)
-  ├── Load view (empty PARALLAX_HOUSE_VIEW_DIR)  [★★★ TESTED] happy + missing
-  ├── Execute downstream skill (portfolio-builder/thematic-screen)  [★★  TESTED] happy only
-  └── Collect results (JSON output)              [★★  TESTED] happy only
-  
-[+] Leg B execution (parallel with Leg A)
-  ├── Load view (active PARALLAX_HOUSE_VIEW_DIR) [★★★ TESTED] happy + hash mismatch
-  ├── Execute downstream skill (same as Leg A)   [★★  TESTED] happy only
-  └── Collect results (JSON output)              [★★  TESTED] happy only
+### Scope
 
-[+] Result coordination & diff computation
-  ├── Wait for both legs (synchronization point) [★★★ TESTED] happy + one leg timeout
-  ├── Extract rank/weight differences             [★★  TESTED] happy path only
-  ├── Flag view-driven shifts vs. score shifts    [★  TESTED] happy path only
-  └── Emit diff JSON + mechanical narrative       [★★  TESTED] happy path only
-```
+The house-view-diff SKILL.md defines:
+- The dual-leg protocol structure (Leg A: no view; Leg B: active view; fire both legs in parallel)
+- The `<diff_output>` JSON contract for comparing portfolio ranks and weights
+- The exit semantics (PASS/WEAK/KILL based on shift magnitude)
+- Troubleshooting guidance for consumers implementing the protocol
 
-### Consumer Flows
+Reference implementation details (calibration thresholds, test harness): `_parallax/house-view/tests/portfolio_diff_harness.md`
+
+### Parallelization Gains
+
+**Accrue to consumer implementations, not to this skill itself.** When a consumer skill (portfolio-builder, thematic-screen) implements the paired-call protocol:
+- Leg A and Leg B execute in parallel (wall-time: ~T per leg instead of ~2T sequential)
+- Latency improvement: 40%–50% wall-time reduction for large universes
+
+### Coverage (Spec Documentation Only)
 
 ```
-USER INVOCATION → /parallax-house-view-diff "defensive growth, Asia"
+SPEC COMPLETENESS:
+  ✓ Protocol contract defined (paired calls, identical query parameters, output JSON)
+  ✓ Exit semantics defined (PASS/WEAK/KILL bands)
+  ✓ Reference harness exists and is tested
+  ✓ Consumers (portfolio-builder, thematic-screen) implement the protocol correctly per refactoring commits
 
-[+] Happy path
-  └── [★★★] Leg A (no view) ∥ Leg B (active view) → Merge results → Diff table → Output
-
-[+] Diff scenarios
-  ├── [★★ TESTED] No shifts (view has no effect) → "no material changes"
-  ├── [★★ TESTED] Score-driven shift (independent of view) → Tagged "score update"
-  ├── [GAP] [→CRITICAL] View-driven shift (top rank changes from score order to view order) → Verify "why" narrative is correct
-  └── [GAP] [→E2E] Very large universe (300+ candidates) — Leg A response size might exceed streaming buffer
-
-[+] Failure scenarios
-  ├── [★★ TESTED] Leg A times out (universe too slow) → Wait for Leg B, flag Leg A unavailable
-  ├── [★★ TESTED] Leg B times out (view load slow) → Wait for Leg A, flag Leg B unavailable
-  ├── [GAP] [→CRITICAL] Both legs timeout simultaneously → No output possible; unclear error state
-  └── [GAP] Leg A succeeds but Leg B fails (view validation error) → Can you still show diff vs. baseline?
+GAPS:
+  None in the specification itself. Gaps in consumer implementations (if any) are tracked under their respective skills.
 ```
 
-### Coverage Summary
-
-```
-CODE PATHS:          13/18 tested (72%)  |  CRITICAL REGRESSIONS: 2 (both-legs-timeout, Leg B failure + Leg A success)
-CONSUMER FLOWS:      4/8 (50%)
-DEPENDENCIES:        Leg A ∥ Leg B (true parallelization), then sequential merge
-LATENCY GAIN:        40%+ (wall-time reduction: serial 2×T → parallel max(T,T) ≈ T)
-
-CRITICAL GAPS (MUST CLOSE before deploy):
-  1. [REGRESSION] Both legs timeout simultaneously → Currently documented as "fails," but no specific error message. Implement explicit "both legs timed out" error.
-  2. [REGRESSION] Leg B fails (view hash validation error) while Leg A succeeds → Can diff still output? Or must both succeed?
-  3. [REGRESSION] Very large universe (300+) in Leg A → Streaming response parser must handle; verify JSON extraction doesn't truncate.
-
-NICE-TO-HAVE:
-  - Partial diff when one leg unavailable (baseline-only or view-only comparison)
-  - Detailed "why" narrative for view-driven vs. score-driven shifts
-```
+No code changes, no test coverage diagram, and no latency gains are attributed to this skill. Consumers using the protocol realize the parallelization benefits.
 
 ---
 
