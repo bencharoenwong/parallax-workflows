@@ -31,13 +31,31 @@ Discover investment opportunities by theme using Parallax's semantic universe bu
 
 Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call. Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode and fallback patterns. JIT-load `_parallax/house-view/loader.md` for active-view validation and conflict resolution.
 
-0. **Load Active House View** — Per `loader.md` §1-§2. If view present, capture tilt vector + excludes. Resolve user theme vs view per §4: theme is sovereign, but conflicts surface as banners (e.g., theme="AI infrastructure" + view says `tech: -2` → screen runs as requested with "House view is UW tech; screen run per your explicit theme" banner).
-1. **Build Universe** — Resolve user theme vs. view per loader.md §4. If view present AND `PARALLAX_LOADER_V2=1`, follow `loader.md` §3 "Application (V2)": decompose tilts into parallel per-sector calls, merge, and dedupe. If V1, prepend tilt context to the query and call `build_stock_universe` once. Filter results against `tilts.excludes`.
-2. **Divergence assertion** (per loader.md §5 rule 4 — required universally, view or no view) — REQUIRED for V1 paths. If the query named N≥2 sectors/themes, compute `max_sector_share / total` in returned candidates. If > 0.6, emit fail-loud warning: "universe collapsed to single sector despite multi-sector request." If `PARALLAX_LOADER_V2=1`, the divergence assertion is used to verify the merge quality but is less likely to trigger a hard failure.
-3. **Apply freeform excludes** — if view active and `tilts.excludes_freeform` non-empty (per loader.md §3 "Free-form excludes handling"), drop candidates matching any pattern against `get_company_info` name/description/sector.
-4. **Ground-truth check + Score Top Picks** (per loader.md §5 rule 3 — required universally) — For the top N results, call `get_peer_snapshot` AND `get_company_info` per candidate in parallel. Record `returned_name` (snapshot `target_company`) and `expected_name` (info `name`). Treat any row where `returned_name ≠ expected_name` as UNTRUSTED (do not rank, flag ⚠ MISMATCH). If view active, re-rank trusted rows by `composite × multiplier(holding's sector)` per loader.md §3.
-5. **Compare Peers** — For the highest-scored TRUSTED stock, call `export_peer_comparison` with format "json".
-6. **Quick Financials** — For the top 3 trusted picks, call `get_financials` with statement "summary". Append audit log entry per loader.md §6.
+### Phase A — Setup (parallel, ~2–3 tokens)
+
+Fire both in parallel:
+
+1. **Load Active House View** — Per `loader.md` §1-§2. If view present, capture tilt vector + excludes. Resolve user theme vs view per §4: theme is sovereign, but conflicts surface as banners (e.g., theme="AI infrastructure" + view says `tech: -2` → screen runs as requested with "House view is UW tech; screen run per your explicit theme" banner).
+2. **Build Universe** — Resolve user theme vs. view per loader.md §4. If view present AND `PARALLAX_LOADER_V2=1`, follow `loader.md` §3 "Application (V2)": decompose tilts into parallel per-sector calls, merge, and dedupe. If V1, prepend tilt context to the query and call `build_stock_universe` once. Filter results against `tilts.excludes`.
+
+**After Phase A:** Proceed to Phase B with completed universe.
+
+### Phase B — Inline Validation (no new tool calls)
+
+3. **Divergence assertion** (per loader.md §5 rule 4 — required universally, view or no view) — REQUIRED for V1 paths. If the query named N≥2 sectors/themes, compute `max_sector_share / total` in returned candidates. If > 0.6, emit fail-loud warning: "universe collapsed to single sector despite multi-sector request." If `PARALLAX_LOADER_V2=1`, the divergence assertion is used to verify the merge quality but is less likely to trigger a hard failure.
+4. **Apply freeform excludes** — if view active and `tilts.excludes_freeform` non-empty (per loader.md §3 "Free-form excludes handling"), drop candidates matching any pattern against `get_company_info` name/description/sector.
+
+**After Phase B:** Proceed to Phase C with validated universe.
+
+### Phase C — Scoring & Analytics (parallel, ~3–4 tokens)
+
+Fire all three in parallel:
+
+**C1. Ground-truth check + Score Top Picks** (per loader.md §5 rule 3 — required universally) — For the top N results, call `get_peer_snapshot` AND `get_company_info` per candidate in parallel. Record `returned_name` (snapshot `target_company`) and `expected_name` (info `name`). Treat any row where `returned_name ≠ expected_name` as UNTRUSTED (do not rank, flag ⚠ MISMATCH). If view active, re-rank trusted rows by `composite × multiplier(holding's sector)` per loader.md §3.
+
+**C2. Compare Peers** — For the highest-scored TRUSTED stock, call `export_peer_comparison` with format "json".
+
+**C3. Quick Financials** — For the top 3 trusted picks, call `get_financials` with statement "summary". Append audit log entry per loader.md §6.
 
 ## Output Format
 
