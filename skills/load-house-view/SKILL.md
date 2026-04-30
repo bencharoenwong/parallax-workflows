@@ -64,7 +64,11 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 
 ### Step 1 — Detect mode and load source
 
-If a path or URL was given: read the source via the appropriate tool (`Read` with `pages` for PDFs >10 pages; `defuddle` or `WebFetch` for URLs). Skip the wizard and proceed to Step 2.
+If a path or URL was given: read the source via the appropriate tool. For PDFs:
+- **≤10 pages:** use `Read` with `pages` parameter in one call; proceed to Step 2.
+- **>10 pages:** use streaming extraction — read in 5-page chunks via `Read` with `pages: "N-(N+4)"`, parse YAML incrementally, merge results. Track `extraction_confidence` per chunk (if a chunk fails to parse, flag ≤ 0.5 for that chunk and continue). Merged result proceeds to Step 2 with average confidence score across chunks.
+
+For URLs: use `defuddle` or `WebFetch`. Skip the wizard and proceed to Step 2.
 
 If no source was given (wizard mode): walk the uploader through the schema interactively in the order below, using one `AskUserQuestion` invocation per numbered group (not eight separate prompts). Skip any dimension the uploader leaves neutral.
 
@@ -200,7 +204,7 @@ A successful `save` after a confirmed draft still emits its own `action: "save"`
 On `Confirm`:
 
 1. **Compute** `view_hash` per schema.yaml §"view_hash computation" (pinned algorithm; the reference Python snippet is reproduced in `skills/_parallax/house-view/tests/test_view_hash.py`). Keep the implementation byte-identical to the reference — any deviation will break hash round-trip.
-1a. **Load Calibration Manifest:** Call `manifest_cache.load_manifest(fresh_manifest=None)` to resolve the active manifest. Capture `manifest` and `status` (handle exceptions by falling back to `status="PHASE_0_FALLBACK"`).
+1a. **Load Calibration Manifest (async-ready):** Call `manifest_cache.load_manifest(fresh_manifest=None)` to resolve the active manifest. Capture `manifest` and `status` (handle exceptions by falling back to `status="PHASE_0_FALLBACK"`). If manifest caching supports async lookup, use non-blocking I/O to avoid stalling other Step 4 operations.
 1b. **Generate Provenance:** Create a `provenance.yaml` artifact capturing the evidence for every non-neutral tilt.
     - Classification (per schema.yaml §"Classification taxonomy"): `prose_extraction` (LLM-derived from CIO source), `macro_regime_rule` (auto-mapped per loader.md §3), or `manual_edit` (uploader edit at confirmation gate). Parallax-derived values are NEVER folded into the saved view — consumer skills carry that provenance per portfolio/screen artifact at JIT use time. (Legacy views may carry an additional `parallax_data_fill` class from a deprecated ingest-time-augment design; supported for back-compat read but never produced at save time.)
     - Per-class field tables in schema.yaml. Baseline fields shared by all classes: `confidence` (0.0-1.0), `rationale` (≤500 chars). Type-specific: `source_span` (prose_extraction), `rule_ref`+`trigger` (macro_regime_rule), `prior_value`+`edit_notes` (manual_edit).
@@ -217,12 +221,18 @@ On `Confirm`:
     - Otherwise: set to `"heuristic_phase0"`.
 7. **Construct the prose body** (the markdown that will live below the frontmatter — verbatim CIO narrative).
 8. **Compute** `prose_body_hash = sha256(prose_body_utf8).hexdigest()` per schema.yaml §"prose_body_hash computation". The hash is over the bytes that will appear AFTER the closing `---` of the frontmatter — not over the whole file. Compute on the finalized body before writing.
-9. **Write**:
-   - Archive existing `~/.parallax/active-house-view/view.yaml` and `prose.md` (if present) to `~/.parallax/active-house-view/.archive/<old_view_id>-<old_version_id>/`.
-   - Write new `view.yaml`.
-   - Write new `prose.md` with frontmatter **four fields in this order**: `paired_yaml_hash`, `prose_body_hash`, `view_id`, `version_id`. Frontmatter is the only part of the file NOT covered by `prose_body_hash`.
-   - Write new `provenance.yaml`, then **immediately `chmod 0o600`** (security audit Finding 6 — file carries source-extracted prose snippets; default umask perms would leave it world-readable on shared workstations). Also `chmod 0o700` the parent dir `~/.parallax/active-house-view/` if it was created in this run.
-   - If `audit.jsonl` does not exist, create it empty AND **`chmod 0o600` on creation** (security audit Finding 5 — closes the window between empty-file creation and the first `audit_chain.append_entry` that would otherwise apply the perm). The `audit_chain` module also re-enforces 0600 on every append as defense in depth.
+9. **Write (async pattern)**:
+   - **Archive in parallel (if present):** Archive existing `~/.parallax/active-house-view/view.yaml` and `prose.md` to `~/.parallax/active-house-view/.archive/<old_view_id>-<old_version_id>/` concurrently (do not wait for archive to complete before proceeding to writes).
+   - **Write new files in parallel:** Fire all file writes concurrently:
+     - `view.yaml`
+     - `prose.md` with frontmatter **four fields in this order**: `paired_yaml_hash`, `prose_body_hash`, `view_id`, `version_id`. Frontmatter is the only part of the file NOT covered by `prose_body_hash`.
+     - `provenance.yaml`
+     - `audit.jsonl` (create if does not exist)
+   - **On write completion:** Apply permission enforcement concurrently:
+     - `chmod 0o600` on `provenance.yaml` (security audit Finding 6 — file carries source-extracted prose snippets; default umask perms would leave it world-readable on shared workstations).
+     - `chmod 0o600` on `audit.jsonl` (security audit Finding 5 — closes the window between empty-file creation and the first `audit_chain.append_entry`). The `audit_chain` module also re-enforces 0600 on every append as defense in depth.
+     - `chmod 0o700` the parent dir `~/.parallax/active-house-view/` if it was created in this run.
+   - **Error handling:** If any write fails (archive, view.yaml, prose.md, provenance.yaml, or audit.jsonl), abort all concurrent writes and report which file failed. Do not proceed to step 10.
 10. **Compute version-diff (Layer 3)** — only when `metadata.parent_version_id` is non-null (i.e., this save supersedes a prior version in the same view family):
     0. **Archive-missing guard.** If `.archive/<parent_view_id>-<parent_version_id>/view.yaml` does not exist (fresh install, manual deletion, or the parent was cleared before this update), skip sub-steps 1-2 and set `version_diff_truncated: true` with `notes: "parent_archive_missing: <parent_view_id>-<parent_version_id>"` on the save audit entry. Do not emit a `version_diff` field. Continue to save — the missing-archive case is survivable, not a save blocker.
     1. Read the parent's archived `view.yaml` from `.archive/<parent_view_id>-<parent_version_id>/view.yaml`.
@@ -234,7 +244,8 @@ On `Confirm`:
       {"schema_version":1,"ts":"...","view_id":"...","version_id":"...","view_hash":"...","skill":"parallax-load-house-view","action":"save","applied":true,"parent_version_id":"...","provenance_hash":"...","version_diff":{...}}
       ```
     - Invoke `audit_chain.append_entry(audit_path, entry_data)` to handle `prev_entry_hash` linking and RFC 8785 canonicalization.
-11a. **Emit Reasoning Chain:**
+11a. **Emit Reasoning Chain (deferred, non-blocking):**
+    - This step can be deferred to async completion AFTER the save confirmation is returned to the user. It does not block user confirmation in Step 5.
     - Call `chain_emit.emit_chain()` (or `emit_phase_0_chain()`) to produce the reasoning chain.
     - Since `load-house-view` produces a view rather than a portfolio, pass dummy values: `base_scores={"response_inline": {}, "response_hash": "0"*64}` and `final_portfolio={"weights": {}}`.
     - Use `run_id = "01HZ..."` (generate a unique ULID/UUID) and `skill_version = "parallax-load-house-view@1.0.0"`.
