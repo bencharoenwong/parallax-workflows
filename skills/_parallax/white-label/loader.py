@@ -289,7 +289,11 @@ def load_client_branding() -> dict[str, Any]:
         resolved_logos, logo_warnings = _resolve_logo_paths(logos_raw)
         patched_data = {**data, "branding": {**branding, "logos": resolved_logos}}
         result = _build_result(patched_data, logo_warnings)
-        result["error"] = "schema_unavailable"
+        # Preserve logo warnings alongside schema_unavailable
+        if logo_warnings:
+            result["error"] = "schema_unavailable; " + result["error"]
+        else:
+            result["error"] = "schema_unavailable"
         return result
 
     # --- Failure point 3: schema validation ---
