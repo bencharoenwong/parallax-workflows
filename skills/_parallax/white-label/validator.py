@@ -74,9 +74,9 @@ class ColorValidator:
             float: Relative luminance (0.0-1.0)
         """
         r, g, b = [x / 255.0 for x in rgb]
-        r = r / 12.92 if r <= 0.03928 else ((r + 0.055) / 1.055) ** 2.4
-        g = g / 12.92 if g <= 0.03928 else ((g + 0.055) / 1.055) ** 2.4
-        b = b / 12.92 if b <= 0.03928 else ((b + 0.055) / 1.055) ** 2.4
+        r = r / 12.92 if r <= 0.04045 else ((r + 0.055) / 1.055) ** 2.4
+        g = g / 12.92 if g <= 0.04045 else ((g + 0.055) / 1.055) ** 2.4
+        b = b / 12.92 if b <= 0.04045 else ((b + 0.055) / 1.055) ** 2.4
         return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
     @staticmethod
@@ -131,7 +131,8 @@ class ColorValidator:
         if ratio >= 4.5:
             return {
                 "status": "pass",
-                "ratio": ratio,
+                "ratio": round(ratio, 2),
+                "recommendation": None,
             }
         elif ratio >= 3.0:
             return {
@@ -209,12 +210,23 @@ class LogoValidator:
                 "error": f"File size {file_size / 1024 / 1024:.2f}MB exceeds 5MB limit",
             }
 
+        # SVG: PIL cannot open it; skip dimension check, return pass with note
+        if fmt == "svg":
+            return {
+                "status": "pass",
+                "path": str(path),
+                "format": "SVG",
+                "dimensions": None,
+                "file_size": file_size,
+                "note": "SVG format: dimension check skipped (PIL does not support SVG)",
+            }
+
         # Check dimensions (requires PIL)
         try:
             from PIL import Image
 
-            img = Image.open(path)
-            dimensions = img.size
+            with Image.open(path) as img:
+                dimensions = img.size
             result: dict[str, Any] = {
                 "status": "pass",
                 "path": str(path),
@@ -252,6 +264,14 @@ class FontValidator:
     """Validator for font availability and fallback suggestions."""
 
     _SYSTEM_FONTS_CACHE: set[str] | None = None
+    _FALLBACK_FONTS: set[str] = {
+        "Arial",
+        "Helvetica",
+        "Times New Roman",
+        "Courier New",
+        "Georgia",
+        "Verdana",
+    }
 
     @staticmethod
     def get_system_fonts() -> set[str]:
@@ -274,14 +294,7 @@ class FontValidator:
             return fonts
         except (ImportError, Exception):
             # Fallback: common fonts that exist on most systems
-            FontValidator._SYSTEM_FONTS_CACHE = {
-                "Arial",
-                "Helvetica",
-                "Times New Roman",
-                "Courier New",
-                "Georgia",
-                "Verdana",
-            }
+            FontValidator._SYSTEM_FONTS_CACHE = FontValidator._FALLBACK_FONTS
             return FontValidator._SYSTEM_FONTS_CACHE
 
     @staticmethod
@@ -345,9 +358,14 @@ class FontValidator:
 
         # Not found; suggest fallback
         fallback = FontValidator._suggest_fallback(font_name)
-        return {
+        result: dict = {
             "status": "warn",
             "font_name": font_name,
             "installed": False,
             "fallback": fallback,
         }
+        # Signal degraded detection mode (matplotlib unavailable)
+        if system_fonts is FontValidator._FALLBACK_FONTS:
+            result["detection"] = "degraded"
+            result["note"] = "Font detection unavailable (matplotlib not installed); result may be inaccurate"
+        return result
