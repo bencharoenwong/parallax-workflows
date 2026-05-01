@@ -1,26 +1,4 @@
-"""
-test_credit_lens.py — Comprehensive test suite for /parallax-credit-lens logic.
-
-Coverage targets:
-  - Overall: 80%+
-  - credit_lens_logic.py (core): 95%+
-
-Structure:
-  TestAltmanZScore          — unit: Z-score computation + zone flags
-  TestAbsoluteFlagging      — unit: per-metric absolute threshold logic
-  TestPeerRelativeFlagging  — unit: peer-relative flag logic
-  TestConservativeRule      — unit: more-conservative-of-two-rules integration
-  TestQualityChangeFlagging — unit: 52-week quality score change thresholds
-  TestOverallTrafficLight   — unit: majority-vote aggregation
-  TestRICValidation         — unit: RIC format validation
-  TestReportBuilders        — unit: markdown section assembly
-  TestIntegrationFixtures   — integration: fixture-driven full-metric evaluation
-  TestErrorDegradation      — integration: graceful degradation paths
-  TestEdgeCases             — unit: boundaries, zeros, negatives, Unicode
-
-Run from repo root:
-    pytest skills/credit-lens/tests/test_credit_lens.py -v --tb=short
-"""
+"""Comprehensive test suite for /parallax-credit-lens logic. Run: pytest skills/credit-lens/tests/test_credit_lens.py -v"""
 
 from __future__ import annotations
 
@@ -68,13 +46,7 @@ def _load_fixture(filename: str) -> dict:
     return json.loads((_FIXTURES / filename).read_text())
 
 
-# ---------------------------------------------------------------------------
-# TestAltmanZScore
-# ---------------------------------------------------------------------------
-
-
 class TestAltmanZScore:
-    """Unit tests for compute_altman_z — arithmetic + zone flags."""
 
     def _safe_inputs(
         self,
@@ -100,7 +72,6 @@ class TestAltmanZScore:
         )
 
     def test_safe_zone_returns_green(self) -> None:
-        """Z > 2.99 → GREEN."""
         inputs = self._safe_inputs()
         z, variant, flag = compute_altman_z(inputs)
         assert z > 2.99
@@ -108,7 +79,6 @@ class TestAltmanZScore:
         assert variant == "Z"
 
     def test_distress_zone_returns_red(self) -> None:
-        """Z < 1.81 → RED."""
         inputs = self._safe_inputs(
             working_capital=-5000.0,
             retained_earnings=-8000.0,
@@ -121,7 +91,6 @@ class TestAltmanZScore:
         assert flag == Flag.RED
 
     def test_grey_zone_returns_amber(self) -> None:
-        """1.81 <= Z <= 2.99 → AMBER."""
         # Inputs tuned to produce Z ≈ 1.865 (verified: 1.81 <= 1.865 <= 2.99)
         # X1=0.05, X2=0.10, X3=0.05, X4=0.50, X5=1.20
         # Z = 0.06 + 0.14 + 0.165 + 0.30 + 1.20 = 1.865
@@ -139,34 +108,28 @@ class TestAltmanZScore:
         assert flag == Flag.AMBER
 
     def test_book_equity_variant_label(self) -> None:
-        """When market_cap is None, variant label should be Z'."""
         inputs = self._safe_inputs(market_cap=None, book_equity=10000.0)
         _, variant, _ = compute_altman_z(inputs)
         assert variant == "Z'"
 
     def test_market_cap_preferred_over_book_equity(self) -> None:
-        """When both market_cap and book_equity are provided, use market_cap (variant=Z)."""
         inputs = self._safe_inputs(market_cap=25000.0, book_equity=10000.0)
         _, variant, _ = compute_altman_z(inputs)
         assert variant == "Z"
 
     def test_raises_on_zero_total_assets(self) -> None:
-        """Zero total_assets should raise ValueError."""
         with pytest.raises(ValueError, match="total_assets"):
             compute_altman_z(self._safe_inputs(total_assets=0.0))
 
     def test_raises_on_zero_total_liabilities(self) -> None:
-        """Zero total_liabilities should raise ValueError."""
         with pytest.raises(ValueError, match="total_liabilities"):
             compute_altman_z(self._safe_inputs(total_liabilities=0.0))
 
     def test_raises_when_neither_market_cap_nor_book_equity(self) -> None:
-        """No X4 data → ValueError."""
         with pytest.raises(ValueError, match="market_cap or book_equity"):
             compute_altman_z(self._safe_inputs(market_cap=None, book_equity=None))
 
     def test_z_boundary_safe_exactly_299(self) -> None:
-        """Z exactly at 2.99 should be AMBER (not GREEN — threshold is strictly >2.99)."""
         # Construct inputs that yield exactly 2.99 via normalised formula
         # X1=0, X2=0, X3=0, X4=0, X5 = 2.99/1.0
         inputs = AltmanInputs(
@@ -183,7 +146,6 @@ class TestAltmanZScore:
         assert flag == Flag.AMBER
 
     def test_z_boundary_distress_exactly_181(self) -> None:
-        """Z exactly at 1.81 should be AMBER (1.81-2.99 inclusive is grey zone)."""
         inputs = AltmanInputs(
             working_capital=0.0,
             retained_earnings=0.0,
@@ -198,7 +160,6 @@ class TestAltmanZScore:
         assert flag == Flag.AMBER
 
     def test_z_formula_arithmetic(self) -> None:
-        """Manually verify Altman Z formula for known inputs."""
         # Z = 1.2*X1 + 1.4*X2 + 3.3*X3 + 0.6*X4 + 1.0*X5
         ta = 1000.0
         tl = 500.0
@@ -216,7 +177,6 @@ class TestAltmanZScore:
         assert abs(z - expected) < 1e-9
 
     def test_negative_working_capital_reduces_z(self) -> None:
-        """Negative working capital should pull Z down."""
         base = AltmanInputs(
             working_capital=5000.0,
             retained_earnings=5000.0,
@@ -240,7 +200,6 @@ class TestAltmanZScore:
         assert z_neg < z_base
 
     def test_altman_z_nan_market_cap_returns_unavailable(self) -> None:
-        """When market_cap is NaN, Z-score computation produces z=NaN → Flag.UNAVAILABLE."""
         import math
         inputs = self._safe_inputs(market_cap=float('nan'))
         z, variant, flag = compute_altman_z(inputs)
@@ -248,15 +207,8 @@ class TestAltmanZScore:
         assert flag == Flag.UNAVAILABLE
 
 
-# ---------------------------------------------------------------------------
-# TestAbsoluteFlagging
-# ---------------------------------------------------------------------------
-
 
 class TestAbsoluteFlagging:
-    """Unit tests for absolute-threshold flagging per SKILL.md."""
-
-    # --- Debt/EBITDA (high_bad: >3.5x AMBER, >5.0x RED) ---
 
     def test_debt_ebitda_below_amber_is_green(self) -> None:
         assert flag_metric(2.0, None, None, "debt_ebitda") == Flag.GREEN
@@ -314,15 +266,7 @@ class TestAbsoluteFlagging:
         assert flag_metric(0.72, None, None, "current_ratio") == Flag.RED
 
 
-# ---------------------------------------------------------------------------
-# TestPeerRelativeFlagging
-# ---------------------------------------------------------------------------
-
-
 class TestPeerRelativeFlagging:
-    """Unit tests for peer-relative flag logic (high_bad and low_bad metrics)."""
-
-    # --- high_bad (D/EBITDA): lower than peer median → GREEN ---
 
     def test_high_bad_below_peer_median_is_green(self) -> None:
         # value=2.0, peer_median=3.0, peer_p75=4.5 → below median → GREEN
@@ -331,7 +275,7 @@ class TestPeerRelativeFlagging:
 
     def test_high_bad_between_median_and_p75_is_amber(self) -> None:
         # value=3.8, peer_median=3.0, peer_p75=4.5 → between → AMBER
-        # but also check absolute: 3.8 >= 3.5 → AMBER absolute too
+        # but also check absolute: 3.8 > 3.5 → AMBER absolute too
         result = flag_metric(3.8, peer_median=3.0, peer_p75=4.5, metric_key="debt_ebitda")
         assert result == Flag.AMBER
 
@@ -339,8 +283,6 @@ class TestPeerRelativeFlagging:
         # value=5.5, peer_median=3.0, peer_p75=4.5 → above p75 → RED
         result = flag_metric(5.5, peer_median=3.0, peer_p75=4.5, metric_key="debt_ebitda")
         assert result == Flag.RED
-
-    # --- low_bad (interest_coverage): higher than peer median → GREEN ---
 
     def test_low_bad_above_peer_median_is_green(self) -> None:
         # value=25.0, peer_median=10.0, peer_p75=6.0 (p75 is lower threshold)
@@ -358,61 +300,41 @@ class TestPeerRelativeFlagging:
         assert result == Flag.RED
 
     def test_no_peer_data_falls_back_to_absolute_only(self) -> None:
-        """When peer data is None, only absolute thresholds apply."""
         # debt_ebitda=2.0 → absolute GREEN (< 3.5)
         result = flag_metric(2.0, peer_median=None, peer_p75=None, metric_key="debt_ebitda")
         assert result == Flag.GREEN
 
     def test_partial_peer_data_skips_peer_comparison(self) -> None:
-        """Only peer_median provided (no p75) → peer comparison skipped."""
-        result = flag_metric(6.0, peer_median=3.0, peer_p75=None, metric_key="debt_ebitda")
         # peer comparison skipped → falls through to absolute only: 6.0 > 5.0 (strictly) → RED
+        result = flag_metric(6.0, peer_median=3.0, peer_p75=None, metric_key="debt_ebitda")
         assert result == Flag.RED
 
 
-# ---------------------------------------------------------------------------
-# TestPeerPercentileAssertion
-# ---------------------------------------------------------------------------
-
-
 class TestPeerPercentileAssertion:
-    """Unit tests for peer percentile validation in low_bad metrics."""
-
-    def test_low_bad_inverted_peer_percentiles_raises_assertion(self) -> None:
-        """For low_bad metrics, peer_p75 > peer_median should raise AssertionError."""
+    def test_low_bad_inverted_peer_percentiles_raises_error(self) -> None:
         # Inverted: p75 (10.0) > median (5.0) — violates low_bad assumption
-        with pytest.raises(AssertionError, match="peer_p75.*must be"):
+        with pytest.raises(ValueError, match="peer_p75.*must be"):
             flag_metric(7.0, peer_median=5.0, peer_p75=10.0, metric_key="interest_coverage")
 
     def test_low_bad_correct_peer_percentiles_no_error(self) -> None:
-        """For low_bad metrics, correct ordering peer_p75 <= peer_median should work."""
         # Correct: p75 (6.0) <= median (10.0)
         result = flag_metric(8.0, peer_median=10.0, peer_p75=6.0, metric_key="interest_coverage")
         assert result == Flag.AMBER
 
 
-# ---------------------------------------------------------------------------
-# TestConservativeRule
-# ---------------------------------------------------------------------------
-
-
 class TestConservativeRule:
-    """Verify the more-conservative-of-two-rules is applied correctly."""
 
     def test_absolute_red_overrides_peer_green(self) -> None:
-        """Absolute says RED, peer says GREEN → result is RED (more conservative)."""
-        # debt_ebitda=5.5 → absolute RED (>=5.0)
+        # debt_ebitda=5.5 → absolute RED (>5.0)
         # peer_median=6.0, peer_p75=7.0 → value 5.5 is below peer median → peer GREEN
         result = flag_metric(5.5, peer_median=6.0, peer_p75=7.0, metric_key="debt_ebitda")
         assert result == Flag.RED
 
     def test_peer_red_overrides_absolute_green(self) -> None:
-        """Peer says RED, absolute says GREEN → result is RED (more conservative)."""
-        # interest_coverage=2.5 → absolute: 2.5 > 1.5 and <=3.0 → AMBER (not GREEN)
-        # Actually test with debt_ebitda: value=4.6, peer_median=2.0, peer_p75=4.0
+        # debt_ebitda=4.6, peer_median=2.0, peer_p75=4.0
         # peer: 4.6 > peer_p75=4.0 → RED
-        # absolute: 4.6 >= 3.5 but < 5.0 → AMBER
-        # result should be RED (peer RED is more conservative than absolute AMBER)
+        # absolute: 4.6 > 3.5 but < 5.0 → AMBER
+        # result should be RED (more conservative)
         result = flag_metric(4.6, peer_median=2.0, peer_p75=4.0, metric_key="debt_ebitda")
         assert result == Flag.RED
 
@@ -427,13 +349,7 @@ class TestConservativeRule:
         assert result == Flag.RED
 
 
-# ---------------------------------------------------------------------------
-# TestQualityChangeFlagging
-# ---------------------------------------------------------------------------
-
-
 class TestQualityChangeFlagging:
-    """Unit tests for 52-week Quality score change thresholds."""
 
     def test_flat_quality_is_green(self) -> None:
         assert flag_quality_change(0) == Flag.GREEN
@@ -492,7 +408,7 @@ class TestOverallTrafficLight:
         assert overall_traffic_light(flags) == Flag.GREEN
 
     def test_tie_red_beats_amber(self) -> None:
-        """On exact tie between RED and AMBER, RED wins (more conservative)."""
+        # On exact tie between RED and AMBER, RED wins (more conservative)
         flags = [Flag.RED, Flag.AMBER]
         assert overall_traffic_light(flags) == Flag.RED
 
@@ -524,18 +440,12 @@ class TestOverallTrafficLight:
         assert overall_traffic_light(flags) == Flag.GREEN
 
     def test_three_way_tie_red_wins(self) -> None:
-        """Three-way tie → RED wins (highest severity first in resolution order)."""
+        # Three-way tie → RED wins (highest severity first in resolution order)
         flags = [Flag.RED, Flag.AMBER, Flag.GREEN]
         assert overall_traffic_light(flags) == Flag.RED
 
 
-# ---------------------------------------------------------------------------
-# TestRICValidation
-# ---------------------------------------------------------------------------
-
-
 class TestRICValidation:
-    """Unit tests for RIC format validation."""
 
     def test_valid_us_equity(self) -> None:
         valid, msg = validate_ric("AAPL.O")
@@ -579,23 +489,17 @@ class TestRICValidation:
         assert valid is False
 
     def test_whitespace_stripped_valid(self) -> None:
-        """Leading/trailing whitespace should be stripped before validation."""
+        # Leading/trailing whitespace should be stripped before validation
         valid, _ = validate_ric("  AAPL.O  ")
         assert valid is True
 
     def test_numeric_ticker_valid(self) -> None:
-        """HK-style numeric tickers are valid."""
+        # HK-style numeric tickers are valid
         valid, _ = validate_ric("0700.HK")
         assert valid is True
 
 
-# ---------------------------------------------------------------------------
-# TestReportBuilders
-# ---------------------------------------------------------------------------
-
-
 class TestReportBuilders:
-    """Unit tests for markdown section assembly functions."""
 
     def _sample_report(self, *, flag: Flag = Flag.GREEN) -> CreditReport:
         return CreditReport(

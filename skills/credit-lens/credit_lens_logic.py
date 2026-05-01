@@ -1,16 +1,4 @@
-"""
-credit_lens_logic.py — Pure-logic layer for /parallax-credit-lens skill.
-
-Encapsulates all computation that does not touch MCP tools:
-  - Altman Z-score (market-cap variant Z, fallback Z' with book equity)
-  - Per-metric flag assignment (GREEN / AMBER / RED) via peer-relative +
-    absolute threshold rules
-  - Overall traffic-light aggregation (majority-color wins)
-  - Report-section assembly helpers
-
-This module is MCP-free and fully unit-testable.  The orchestration layer
-(SKILL.md) calls these helpers after tool responses are collected.
-"""
+"""Pure-logic layer for /parallax-credit-lens skill — MCP-free, fully unit-testable."""
 
 from __future__ import annotations
 
@@ -18,11 +6,6 @@ import math
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
-
-
-# ---------------------------------------------------------------------------
-# Flag constants
-# ---------------------------------------------------------------------------
 
 
 class Flag(str, Enum):
@@ -40,11 +23,6 @@ EMOJI = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Absolute credit thresholds (from SKILL.md)
-# ---------------------------------------------------------------------------
-
-
 # (amber_threshold, red_threshold, direction)
 # direction="high_bad"  → higher value is worse (e.g. D/EBITDA)
 # direction="low_bad"   → lower value is worse  (e.g. Interest Coverage)
@@ -57,23 +35,9 @@ ABSOLUTE_THRESHOLDS: dict[str, tuple[float, float, str]] = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Altman Z-Score
-# ---------------------------------------------------------------------------
-
-
 @dataclass
 class AltmanInputs:
-    """Financial inputs for public-company Altman Z-score computation.
-
-    All values in consistent currency units (e.g. USD millions).
-
-    X1 = Working Capital / Total Assets
-    X2 = Retained Earnings / Total Assets
-    X3 = EBIT / Total Assets
-    X4 = Market Cap / Total Liabilities   (use book equity if mkt cap unavailable)
-    X5 = Revenue / Total Assets
-    """
+    """All values in consistent currency units; market_cap=None triggers Z' variant."""
     working_capital: float
     retained_earnings: float
     ebit: float
@@ -142,19 +106,7 @@ def flag_metric(
     peer_p75: Optional[float],
     metric_key: str,
 ) -> Flag:
-    """Assign GREEN/AMBER/RED to a single metric.
-
-    Strategy (SKILL.md): apply both peer-relative and absolute rules; use the
-    *more conservative* (worse) result.
-
-    peer-relative logic:
-      - Better than peer median → GREEN
-      - Between peer median and peer 75th pct → AMBER
-      - Worse than peer 75th pct → RED
-    Peer comparison skipped when either peer_median or peer_p75 is None.
-
-    Absolute logic per ABSOLUTE_THRESHOLDS dict.
-    """
+    """Assign GREEN/AMBER/RED by applying both peer-relative and absolute rules; use more conservative result."""
     peer_flag = _peer_relative_flag(value, peer_median, peer_p75, metric_key)
     abs_flag = _absolute_flag(value, metric_key)
 
@@ -183,18 +135,18 @@ def _peer_relative_flag(
 
     # Validate peer percentile ordering for low_bad metrics
     if direction == "low_bad":
-        assert peer_p75 <= peer_median, \
-            f"peer_p75 ({peer_p75}) must be <= peer_median ({peer_median}) for {metric_key} (low_bad direction)"
+        if not (peer_p75 <= peer_median):
+            raise ValueError(
+                f"peer_p75 ({peer_p75}) must be <= peer_median ({peer_median}) for {metric_key} (low_bad direction)"
+            )
 
     if direction == "high_bad":
-        # Lower is better
         if value <= peer_median:
             return Flag.GREEN
         if value <= peer_p75:
             return Flag.AMBER
         return Flag.RED
     else:
-        # direction == "low_bad": higher is better
         if value >= peer_median:
             return Flag.GREEN
         if value >= peer_p75:
@@ -242,12 +194,7 @@ def _worse_flag(a: Flag, b: Flag) -> Flag:
 
 
 def flag_quality_change(change_pts: float) -> Flag:
-    """Flag the 52-week Quality score change per SKILL.md thresholds.
-
-    Thresholds (negative = deterioration):
-      AMBER: change > -5 pts  (i.e. worse than -5)
-      RED:   change > -15 pts (i.e. worse than -15)
-    """
+    """AMBER: change ≤ -5 pts, RED: change ≤ -15 pts (52w deterioration)."""
     if change_pts <= -15:
         return Flag.RED
     if change_pts <= -5:
@@ -284,11 +231,6 @@ def overall_traffic_light(flags: list[Flag]) -> Flag:
     return Flag.UNAVAILABLE  # unreachable
 
 
-# ---------------------------------------------------------------------------
-# RIC validation
-# ---------------------------------------------------------------------------
-
-
 def validate_ric(symbol: str) -> tuple[bool, str]:
     """Return (is_valid, message).
 
@@ -305,11 +247,6 @@ def validate_ric(symbol: str) -> tuple[bool, str]:
     if not ticker or not exchange:
         return False, f"'{symbol}' has empty ticker or exchange suffix"
     return True, "OK"
-
-
-# ---------------------------------------------------------------------------
-# Report section builders
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -347,7 +284,6 @@ def build_header(report: CreditReport) -> str:
 
 
 def build_metrics_table(rows: list[MetricRow]) -> str:
-    """Render the metrics dashboard as a markdown table."""
     header = (
         "| Category | Signal | Metric Value | Peer Median | Interpretation |\n"
         "|----------|--------|--------------|-------------|----------------|\n"
@@ -364,7 +300,6 @@ def build_metrics_table(rows: list[MetricRow]) -> str:
 
 
 def build_key_flags_section(flags: list[str]) -> str:
-    """Return bulleted key flags section; empty string if no flags."""
     if not flags:
         return "No RED or AMBER flags."
     return "\n".join(f"- {line}" for line in flags)
@@ -384,7 +319,6 @@ def build_footer() -> str:
 
 
 def assemble_report(report: CreditReport) -> str:
-    """Assemble all sections into the full markdown report string."""
     sections = [
         build_header(report),
         "",
