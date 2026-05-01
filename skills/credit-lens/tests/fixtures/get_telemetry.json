@@ -1,0 +1,15 @@
+{
+  "regime": {
+    "label": "Late Cycle — Risk-Off",
+    "description": "Credit spreads widening; equity volatility elevated. Defensive positioning favored. Sector rotation underway from cyclicals to defensives and quality.",
+    "credit_implication": "Elevated refinancing risk for high-yield issuers; investment-grade credits remain well-supported but spread widening should be monitored.",
+    "risk_appetite": "LOW",
+    "as_of": "2026-05-01"
+  },
+  "macro_indicators": {
+    "vix": 22.4,
+    "credit_spread_ig_bps": 98,
+    "credit_spread_hy_bps": 385,
+    "10y_treasury_yield": 4.45
+  }
+}

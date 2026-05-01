@@ -1,6 +1,6 @@
 ---
 name: parallax-AI-consensus
-description: "Runs all installed Parallax AI Investor Profiles (Buffett, Greenblatt, Klarman, Soros) against a single ticker or short basket (cap 5). Returns the per-profile verdict matrix, the super-majority consensus signal per consensus-config.md, and a factor-level agreement detail showing which factors/criteria were flagged by multiple profiles. Cross-profile agreement IS the high-conviction signal. Third-person framing throughout, AI-inferred from public information. NOT financial advice. NOT personalized."
+description: "Runs all installed Parallax AI Investor Profiles (Buffett, Greenblatt, Klarman, Soros, PTJ) against a single ticker or short basket (cap 5). Returns the per-profile verdict matrix, the super-majority consensus signal per consensus-config.md, and a factor-level agreement detail showing which factors/criteria were flagged by multiple profiles. Cross-profile agreement IS the high-conviction signal. Third-person framing throughout, AI-inferred from public information. NOT financial advice. NOT personalized."
 negative-triggers:
   - Single profile only → use /parallax-AI-buffett, /parallax-AI-greenblatt, /parallax-AI-klarman, or /parallax-AI-soros
   - Broader macro outlook → use /parallax-macro-outlook
@@ -9,9 +9,9 @@ negative-triggers:
   - Running backtests → use /backtest
 gotchas:
   - JIT-load _parallax/parallax-conventions.md, profile-schema.md, output-template.md, consensus-config.md
-  - JIT-load ALL installed profile specs under _parallax/AI-profiles/profiles/ — buffett.md, greenblatt.md, klarman.md, soros.md
+  - JIT-load ALL installed profile specs under _parallax/AI-profiles/profiles/ — buffett.md, greenblatt.md, klarman.md, soros.md, ptj.md
   - Do NOT re-implement profile logic — invoke each profile dispatcher's workflow as documented in skills/AI-<name>/SKILL.md
-  - Cap basket input at 5 tickers per call. For single-ticker queries, all 4 profiles are applicable (Soros runs single-ticker dual-channel mode)
+  - Cap basket input at 5 tickers per call. For single-ticker queries, all 5 profiles are applicable (Soros and PTJ run single-ticker dual/tri-channel modes)
   - Super-majority math uses ceiling rounding per consensus-config.md — required = ceil(0.75 × applicable)
   - Partial matches do NOT count toward the super-majority signal but DO count toward factor-level agreement surfacing
   - Factor-level agreement is the highest-value section — do not skip it
@@ -64,6 +64,7 @@ For each installed profile, execute its workflow per its dispatcher:
 - **Greenblatt** — `get_company_info` + `build_stock_universe` (sector-scoped peer universe) + `get_financials(statement=ratios)` for top-30 peers + rank. Universe query MUST be sector-scoped (broad queries time out).
 - **Klarman** — `get_company_info` + `get_peer_snapshot` + `get_financials(statement=balance_sheet)` + `get_financials(statement=cash_flow)` + `get_financials(statement=ratios)` + 4 balance-sheet checks. DO NOT pass `periods=4` explicitly — server default is correct.
 - **Soros** — `list_macro_countries` + `macro_analyst(component=tactical) × N` + `get_telemetry` + `get_company_info` + `build_stock_universe` per theme + dual-channel exposure check (Channel A has two sub-paths: universe membership OR sector/industry match; `get_telemetry` may return `UNAVAILABLE` in current env).
+- **PTJ** — `list_macro_countries` + `macro_analyst(component=tactical) × N` + `get_company_info` + `get_score_analysis` + `get_technical_analysis` + `get_stock_outlook(aspect=risk_return)` + `get_peer_snapshot` + tri-channel conviction evaluation (Technical setup, Macro regime, Volatility asymmetry).
 
 **Cross-validation gate — use the correct field name per tool:** `get_peer_snapshot` returns the target company as `target_company` (top-level), NOT `name`. Cross-check against `get_company_info`'s `name` field.
 
@@ -124,6 +125,7 @@ Profiles run: <N> of <total installed>
 | AI-greenblatt         | <verdict>     | <top X% of peer universe / no match>      |
 | AI-klarman            | <verdict>     | <N of 4 balance-sheet checks passed>      |
 | AI-soros              | <verdict>     | <dual-channel: A=<status> B=<status>>     |
+| AI-ptj                | <verdict>     | <tri-channel: T=<status> M=<status> V=<status>> |
 
 ## Super-majority consensus signal
 
@@ -176,10 +178,11 @@ This output is an AI-inferred synthesis produced by the Parallax AI Investor Pro
 - Greenblatt ticker-check: ~10-15 tokens (universe build + peer ratios)
 - Klarman: ~5-7 tokens (balance sheet + cash flow + ratios + peer snapshot)
 - Soros single-ticker: ~25-30 tokens (macro + telemetry + universe)
+- PTJ single-ticker: ~14-16 tokens (macro + technical + peer snapshot + outlook + score analysis)
 
-**Total per single-ticker consensus call: ~45-55 tokens.** Most expensive skill in the family, but the value is the cross-profile agreement signal no single profile provides.
+**Total per single-ticker consensus call: ~60-70 tokens.** Most expensive skill in the family, but the value is the cross-profile agreement signal no single profile provides.
 
-For basket mode (5 tickers), Buffett/Klarman/Greenblatt run per-ticker; Soros's macro workflow runs once and only the per-ticker exposure check repeats. Approximate basket-of-5 cost: ~150-200 tokens.
+For basket mode (5 tickers), Buffett/Klarman/Greenblatt run per-ticker; Soros and PTJ's macro workflows run once and only the per-ticker exposure check repeats. Approximate basket-of-5 cost: ~180-240 tokens.
 
 ## Why this meta-skill exists
 
