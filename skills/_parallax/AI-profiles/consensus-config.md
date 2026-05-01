@@ -35,6 +35,21 @@ If `A < minimum_applicable_count`, the signal is `INSUFFICIENT_PROFILES` (not `N
 | 2 | 2 | 3 | INSUFFICIENT_PROFILES |
 | 1 | 1 | 3 | INSUFFICIENT_PROFILES |
 
+## Worked examples (v2: 5 profiles with PTJ)
+
+| Applicable (A) | Matches (M) | required_matches = ceil(0.75 × A) | Signal |
+|---|---|---|---|
+| 5 | 5 | 4 | YES |
+| 5 | 4 | 4 | YES |
+| 5 | 3 | 4 | NO |
+| 4 | 4 | 3 | YES |
+| 4 | 3 | 3 | YES |
+| 4 | 2 | 3 | NO |
+| 3 | 3 | 3 | YES (effectively unanimous for 3-profile case) |
+| 3 | 2 | 3 | NO |
+
+**Note:** The 75% super-majority rule and ceiling rounding remain unchanged. With 5 profiles, a `YES` signal requires 4 matches (ceil(0.75 × 5) = 4). If one profile skips due to data unavailability, the calculation reverts to the 4-profile math (ceil(0.75 × 4) = 3 required).
+
 ## Why these defaults
 
 - **75% super-majority** — High enough to be informative (random-chance consensus is ~25% with 4 independent binary verdicts), low enough to survive one profile disagreeing in a structurally different way.

@@ -1,0 +1,38 @@
+{
+  "symbol": "AAPL.O",
+  "company_name": "Apple Inc.",
+  "analysis_date": "2026-05-01",
+  "factor_trajectory": {
+    "quality": {
+      "current": 72,
+      "52w_ago": 78,
+      "change_pts": -6,
+      "trend": "deteriorating"
+    },
+    "value": {
+      "current": 38,
+      "52w_ago": 41,
+      "change_pts": -3,
+      "trend": "stable"
+    },
+    "momentum": {
+      "current": 61,
+      "52w_ago": 55,
+      "change_pts": 6,
+      "trend": "improving"
+    },
+    "growth": {
+      "current": 55,
+      "52w_ago": 58,
+      "change_pts": -3,
+      "trend": "stable"
+    },
+    "total": {
+      "current": 67,
+      "52w_ago": 71,
+      "change_pts": -4,
+      "trend": "stable"
+    }
+  },
+  "summary": "Quality factor has deteriorated moderately over the past 52 weeks, driven by margin compression. Other factors remain stable or improving."
+}

@@ -1,0 +1,32 @@
+{
+  "symbol": "AAPL.O",
+  "company_name": "Apple Inc.",
+  "framework": "Palepu",
+  "analysis_date": "2026-05-01",
+  "profitability": {
+    "assessment": "Strong and consistent profitability. Net profit margin of 26.4% and EBITDA margin of 33.6% are significantly above sector median. ROE of 160% reflects aggressive buyback program reducing equity base.",
+    "score": "HIGH",
+    "trend": "STABLE"
+  },
+  "liquidity": {
+    "assessment": "Current ratio of 0.87 is below 1.0, indicating negative working capital. This is a structural feature of Apple's business model (deferred revenue, supplier credit terms) rather than a distress signal. Immediate liquidity is supported by $65B in cash and short-term investments.",
+    "score": "MODERATE",
+    "trend": "STABLE"
+  },
+  "leverage_solvency": {
+    "assessment": "Debt/EBITDA of 1.21x and interest coverage of 29x place Apple firmly in investment-grade territory. Long-term debt of $91.7B is manageable relative to annual FCF of $108.8B — the company could retire its entire debt in less than one year of operating cash flow.",
+    "score": "LOW_RISK",
+    "trend": "IMPROVING"
+  },
+  "accruals_quality": {
+    "assessment": "Cash conversion is excellent. Operating cash flow of $118.3B substantially exceeds reported net income of $93.7B, indicating earnings are strongly cash-backed. Accruals ratio is negative, a positive signal.",
+    "score": "HIGH",
+    "accruals_ratio": -0.065,
+    "trend": "STABLE"
+  },
+  "overall_solvency": {
+    "verdict": "SOLVENT",
+    "confidence": "HIGH",
+    "narrative": "Apple demonstrates strong solvency across all Palepu dimensions. The negative working capital is structural, not a distress signal. Debt capacity is ample, earnings quality is high, and FCF generation significantly exceeds debt service requirements."
+  }
+}
