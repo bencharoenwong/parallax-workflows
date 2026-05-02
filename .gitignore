@@ -54,3 +54,6 @@ skills/load-house-view/PHASE_0_TEST_REPORT.md
 
 # Local-only knowledge graph from /graphify — public repo, knowledge stays local
 graphify-out/
+
+# Local-only benchmark results — server-load info, specific portfolio examples; harness is public
+evals/results/
