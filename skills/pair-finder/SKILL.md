@@ -211,3 +211,7 @@ Single-pair report — no comparison table:
 - **(`--with-history`)** Realized stats
 - **Score comparability flag** (always render — same_universe or cross_universe)
 - Liquidity disclaimer + standard disclaimer
+
+## Disclaimer
+
+*This is informational analysis based on Parallax factor scores. Hedge ratios assume executable liquidity; ADV, short borrow, and float are not validated by Parallax — verify externally before sizing. All outputs should be reviewed by qualified professionals before any investment decisions.*
