@@ -24,8 +24,10 @@ Presentation-ready portfolio review with health flags and prioritized recommenda
 ## Usage
 
 ```
-/parallax-client-review [{"symbol":"AAPL.O","weight":0.25},{"symbol":"BRK-B.N","weight":0.20}] client="conservative retiree, income focus, 10yr horizon" benchmark=SPY.O
+/parallax-client-review [{"symbol":"AAPL.O","weight":0.25},{"symbol":"BRK-B.N","weight":0.20}] client="conservative retiree, income focus, 10yr horizon"
 ```
+
+**Note on `benchmark=` parameter.** The current workflow body does NOT consume a `benchmark=` parameter — the example above intentionally omits it. If a future revision adds benchmark-relative attribution: pass benchmarks as **plain ETF tickers** (e.g., `SPY`, `QQQ`, `EWJ`) and route through `etf_daily_price` — NOT `export_price_series`. The two endpoints are separate. Equity tickers (with RIC suffix like `.O` or `.N`) go through `export_price_series`; ETFs (plain ticker) go through `etf_daily_price`. Mixing them silently fails-empty.
 
 ## Workflow
 
