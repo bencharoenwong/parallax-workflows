@@ -84,19 +84,38 @@ Record each candidate's: ric, company_name, sector, industry, market, all 5 fact
 
 Per spec scope-cut: beta-neutral sizing is in the default path because PMs act on beta-neutral, not dollar-neutral.
 
-**Benchmark availability check.** Parallax's price-series universe is equity-only. Common ETFs (SPY, IVV, VOO, EWJ, EWU, etc.) are NOT in coverage. **First, attempt `export_price_series(SPY.N, days=180)` (or the relevant market's benchmark). If the call returns no data, fall back to pair-relative regression beta** — the variance-minimizing hedge ratio computed from the long-leg / short-leg covariance directly, no benchmark needed. Per `references/residual-math.md` §"Pair-relative regression beta (benchmark-unavailable fallback)".
+**Equities go through `export_price_series`. ETFs (benchmarks) go through `etf_daily_price` — a SEPARATE endpoint.** `export_price_series` does not return ETF data; using it for benchmarks returns empty. Use the right tool for each leg.
 
-Pair-relative regression beta is mathematically defensible for sector-neutral pairs (it minimizes residual variance) but interprets differently from a market-beta hedge — the output MUST flag this distinction prominently when the fallback is used. Render: *"⚠ Benchmark caveat: SPY/IVV/VOO not in Parallax price universe — beta-neutral sizing uses pair-relative regression beta (variance-minimizing hedge ratio), not market-beta-neutral. Verify externally if market-beta-neutral sizing is required."*
+**Canonical benchmark mapping by `market` field:**
 
-Fire all in parallel (always include the benchmark attempt — it's cheap; just be ready to fall back):
+| Primary leg's `market` | Benchmark ticker (plain, no RIC suffix) | Notes |
+|---|---|---|
+| `United States` | `SPY` | S&P 500. For tech-heavy pairs, can substitute `QQQ` |
+| `Japan` | `EWJ` | iShares MSCI Japan |
+| `United Kingdom` | `EWU` | iShares MSCI UK |
+| `Hong Kong` | `EWH` | iShares MSCI Hong Kong |
+| `Singapore` | `EWS` | iShares MSCI Singapore |
+| `Germany` | `EWG` | iShares MSCI Germany |
+| `Taiwan` | `EWT` | iShares MSCI Taiwan |
+| `Korea` | `EWY` | iShares MSCI South Korea |
+| `Canada` | `EWC` | iShares MSCI Canada |
+| `Australia` | `EWA` | iShares MSCI Australia |
+| (other) | call `etf_search(market="<market>", query="MSCI", recommendation="HOLD")` and pick highest-AUM result | Fallback discovery |
+
+Compute the start/end dates for a 180d window: `end_date = today`, `start_date = today - 180 days` (calendar; ~125 trading days will be returned).
+
+Fire all in parallel:
 
 - `export_price_series(symbol=primary_ric, days=180, format="json")`
 - `export_price_series(symbol=candidate_ric, days=180, format="json")` × N candidates
-- `export_price_series(symbol=<benchmark_ric>, days=180, format="json")` (attempt; may return empty)
+- `etf_daily_price(symbol=<benchmark_ticker>, start_date=<start_date>, end_date=<end_date>)` — **NOT `export_price_series`**
 
-Compute beta inline per `references/residual-math.md` §"Beta computation". Beta-neutral hedge ratio = `beta_long / beta_short` if benchmark is available, else `cov(returns_long, returns_short) / var(returns_short)` (pair-relative regression).
+Compute beta inline per `references/residual-math.md` §"Beta computation". Beta-neutral hedge ratio = `beta_long / beta_short` (dollars short per dollar long).
 
-If a price series for a leg returns < 90 days of data: flag the affected candidate as "insufficient history for beta" and report only dollar-neutral sizing for that pair.
+**Fallbacks (in order):**
+1. If `etf_daily_price` returns no data for the chosen benchmark → call `etf_search(market="<market>")` to find an alternative; retry with the top result.
+2. If still no benchmark available → fall back to pair-relative regression beta (variance-minimizing hedge ratio) per `references/residual-math.md` §3a. Render the "⚠ Benchmark unavailable" caveat.
+3. If a leg's price series returns < 90 days of data → flag the affected candidate as "insufficient history for beta" and report only dollar-neutral sizing for that pair.
 
 #### Batch D — Macro residual (parallel, after Batch A confirms primary's market)
 
@@ -135,15 +154,18 @@ Inspect the long's peer-comparison `data` array:
 
 #### Batch B — Beta computation (parallel, default path)
 
-Same fallback rule as suggestion mode Batch C: attempt the benchmark price-series; fall back to pair-relative regression beta if Parallax doesn't carry the benchmark. 3 calls:
+Same tool-split as suggestion mode Batch C: equity legs use `export_price_series`, the benchmark ETF uses `etf_daily_price`. 3 calls:
 
 - `export_price_series(long_ric, days=180, format="json")`
 - `export_price_series(short_ric, days=180, format="json")`
-- `export_price_series(<benchmark_ric>, days=180, format="json")` (attempt; may return empty)
+- `etf_daily_price(symbol=<benchmark_ticker>, start_date=<start_date>, end_date=<end_date>)`
 
-Benchmark selection: if both legs share a `market`, use that market's benchmark. If markets differ, use the long-leg's market benchmark and flag the cross-market exposure in the residual section. If benchmark is unavailable, render the same "⚠ Benchmark caveat" disclosure as suggestion mode and use pair-relative regression beta.
+Benchmark selection: use the canonical mapping in suggestion mode Batch C. If both legs share a `market`, use that market's benchmark. If markets differ, use the long-leg's market benchmark and flag the cross-market exposure in the residual section.
 
-If either leg has < 90 days of data: report dollar-neutral sizing only and flag.
+Fallbacks (same order as suggestion mode):
+1. `etf_daily_price` empty → `etf_search(market=...)` discovery → retry
+2. Still empty → pair-relative regression beta with "⚠ Benchmark unavailable" caveat
+3. Leg < 90 days → dollar-neutral only for that pair
 
 #### Batch C — Macro residual (parallel)
 

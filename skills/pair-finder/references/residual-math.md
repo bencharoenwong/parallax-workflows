@@ -36,7 +36,11 @@ returns_L = [(P_L[t] / P_L[t-1]) - 1 for t in 1..N]
 returns_B = [(P_B[t] / P_B[t-1]) - 1 for t in 1..N]
 ```
 
-where `P_L[t]` is the close price on day `t` from `export_price_series.data[t].close` (or whatever the actual field name is — verify in the response).
+**Field paths (different per Parallax endpoint):**
+- Equity legs (long, short) come from `export_price_series` → `.data[t].close`
+- Benchmark ETFs come from `etf_daily_price` → response is a **list directly** (not nested under `.data`); each row has `.close`
+
+Both endpoints return chronologically-sorted daily bars. Align by `date` if the equity and ETF series have different start/end days (markets close on different holidays).
 
 Beta:
 
@@ -52,9 +56,11 @@ Round to 2 decimal places for output.
 
 **Insufficient-history rule:** if a leg has fewer than 90 daily observations, do NOT compute beta — flag as "insufficient history for beta" and skip beta-neutral sizing for that pair.
 
-## 3a. Pair-relative regression beta (benchmark-unavailable fallback)
+## 3a. Pair-relative regression beta (last-resort fallback)
 
-When `export_price_series(<benchmark_ric>)` returns no data (Parallax price universe is equity-only and does not carry SPY / IVV / VOO / EWJ / EWU and similar ETFs), use pair-relative regression beta directly. This is the variance-minimizing hedge ratio that does not require a benchmark:
+Use this ONLY when both `etf_daily_price(<canonical_benchmark>)` AND `etf_search(market=...)` discovery have failed to yield a usable benchmark series. This is rare (most major markets have a tracked ETF), but it can happen for niche markets or recently de-listed benchmarks.
+
+This is the variance-minimizing hedge ratio that does not require a benchmark:
 
 ```
 returns_long  = [(P_long[t]  / P_long[t-1])  - 1 for t in 1..N]
