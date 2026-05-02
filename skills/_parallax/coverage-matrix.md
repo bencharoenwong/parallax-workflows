@@ -63,3 +63,15 @@ Any skill that:
 - Calls `export_price_series` or any other equity-only tool downstream
 
 MUST include a pre-classification step (a la `pair-finder/SKILL.md` Batch C / `explain-portfolio/SKILL.md` Step 1a). The lint at `scripts/coverage-lint.sh` enforces this.
+
+## Failure-handling contracts: atomic vs aggregation
+
+When a tool returns empty/error after the right routing, the skill's response depends on its TYPE — failure is not one-size-fits-all:
+
+| Skill type | Examples | Contract on per-component failure |
+|---|---|---|
+| **Sizing / construction** | `pair-finder` (hedge ratios), `rebalance` (trade list) | **Atomic gate.** Refuse to render the primary deliverable. A partially-computed hedge ratio is a confidence-building lie. Halt with named failure + operator-action options (see `pair-finder/SKILL.md` Batch C.5). |
+| **Aggregation / attribution** | `explain-portfolio` (return decomposition), `portfolio-checkup` (health flags), `morning-brief` (per-holding news) | **Partial render with explicit MISSING blocks.** Compute the aggregate on the remaining weight; surface each missing component by name. Never silently zero or drop. (See `explain-portfolio/SKILL.md` Step 1c.) |
+| **Per-symbol research** | `should-i-buy`, `deep-dive`, `due-diligence` | **Per-section partial.** If one tool fails (e.g., news), render the section as "Analysis pending — tool unavailable" and continue with other sections. Per `_parallax/parallax-conventions.md` §4. |
+
+The lint enforces routing correctness (right tool for the asset class). It does NOT enforce the failure contract — that is per-skill design judgment. When authoring or reviewing, ask: "if tool X returns empty for one input, does the user want a halt, a partial, or a per-section fallback?"
