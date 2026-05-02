@@ -20,4 +20,37 @@ gotchas:
 
 Long/short equity pair construction for fundamental PMs. Given one leg of a thesis, suggest the other leg from peers and report what residual exposure survives the hedge. Given both legs, report the residual.
 
-(Workflow body to follow in subsequent tasks.)
+## Usage
+
+Three invocation modes:
+
+```bash
+# Mode 1 — Find short candidate for a long thesis
+/parallax-pair-finder NVDA.O long
+/parallax-pair-finder NVDA.O long --candidates=3 --with-history
+
+# Mode 2 — Find long candidate for a short thesis
+/parallax-pair-finder INTC.O short
+
+# Mode 3 — Evaluate a pair the PM already has
+/parallax-pair-finder long=NVDA.O short=AMD.O
+/parallax-pair-finder long=NVDA.O short=AMD.O --with-history
+```
+
+**Flags:**
+- `--candidates=N` (default 3 in suggestion modes; ignored in evaluate mode)
+- `--with-history` (adds 60d→180d realized correlation, pair vol, max drawdown, hit rate)
+
+**Default selection criterion (v1):** closest peer with worst total score for short candidates; closest peer with best total score for long candidates. (Same-sector relative-value framing.)
+
+## Workflow
+
+JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, and fallback patterns. JIT-load `references/residual-math.md` for factor-net, beta, and hedge-ratio formulas. Call `ToolSearch` with query `"+Parallax"` to load deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
+
+Detect mode from invocation:
+- `<symbol> long` → Mode 1 (find short candidate)
+- `<symbol> short` → Mode 2 (find long candidate)
+- `long=<symbol> short=<symbol>` → Mode 3 (evaluate pair)
+- Anything else → ask the user to clarify which mode.
+
+(Mode-specific workflows in subsequent tasks.)
