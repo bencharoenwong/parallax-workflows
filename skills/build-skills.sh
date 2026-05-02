@@ -45,6 +45,17 @@ build_one() {
   printf "  ✓ %s → %s (%s)\n" "$name" "$out" "$(du -h "$out" | cut -f1)"
 }
 
+# Coverage lint — gate the build on asset-class / endpoint mismatches.
+# Pass --no-lint as the first argument to skip in emergencies.
+if [[ "${1:-}" == "--no-lint" ]]; then
+  shift
+  echo "WARN: coverage-lint skipped (--no-lint)"
+elif [[ -x ./_parallax/scripts/coverage-lint.sh ]]; then
+  echo "Running coverage-lint…"
+  ./_parallax/scripts/coverage-lint.sh
+  echo ""
+fi
+
 if [[ $# -eq 0 ]]; then
   set -- $KNOWN_SKILLS
 fi
