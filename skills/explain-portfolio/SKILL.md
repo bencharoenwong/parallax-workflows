@@ -48,11 +48,36 @@ Per `loader.md` §1-§2. If view present, capture tilt vector. The view does NOT
 
 Infer lookback period from the client's statement ("this month" → ~21 trading days, "this week" → 5 days, "this quarter" → ~63 days). Default to 21 days if ambiguous.
 
-Call `export_price_series` for each holding (parallel) with the inferred period. Compute:
+#### Step 1a — Asset-class pre-classification (parallel, MANDATORY)
+
+`export_price_series` is the **equity-only** price endpoint; ETFs (SPY, QQQ, IEFA, EWJ, etc.) silently return empty from it and would otherwise be dropped from portfolio-return attribution — a HIGH-IMPACT bias. Before pulling price history, classify each holding:
+
+- For each holding, call `etf_profile(<plain_ticker>)` in parallel.
+- If response is `{"error": "No profile data found", ...}` → treat as **equity**, route through `export_price_series`.
+- If response returns an ETF profile (non-error) → treat as **ETF**, route through `etf_daily_price`.
+
+This costs N additional FREE/instant calls (one per holding) — see `_parallax/token-costs.md`. The cost is well below the cost of biased portfolio attribution.
+
+#### Step 1b — Pull price history (parallel, split by asset class)
+
+Fire ALL of the following in a single tool-call turn:
+
+- For each EQUITY holding → `export_price_series(symbol=<ric>, days=<inferred_period>, format="json")`
+- For each ETF holding → `etf_daily_price(symbol=<plain_ticker>, start_date=<today − period>, end_date=<today>)`
+
+#### Step 1c — Compute attribution + halt rule
+
+Compute:
 - Per-holding return over the period (close-to-close)
 - Weighted contribution to portfolio return: holding return × weight
 - Total portfolio return (sum of weighted contributions)
 - Rank holdings by contribution (biggest detractors first)
+
+**Halt rule (no silent drops):** if any holding returns empty/error from BOTH `etf_profile` AND its routed endpoint, the skill MUST surface this explicitly:
+
+> ⚠ Cannot compute return for `<holding_symbol>` — neither `export_price_series` nor `etf_daily_price` returned data. This holding is **not** included in the attribution below; the reported portfolio return is computed on the remaining `<X>%` of weight. Operator decision required: supply prices externally, or remove from the portfolio for this analysis.
+
+Render this banner above the attribution table — never silently zero or skip a holding.
 
 Compare computed return against the client's stated figure. If they diverge significantly (>1%), note the discrepancy.
 
