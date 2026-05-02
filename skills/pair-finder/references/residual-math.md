@@ -56,11 +56,13 @@ Round to 2 decimal places for output.
 
 **Insufficient-history rule:** if a leg has fewer than 90 daily observations, do NOT compute beta — flag as "insufficient history for beta" and skip beta-neutral sizing for that pair.
 
-## 3a. Pair-relative regression beta (last-resort fallback)
+## 3a. Pair-relative regression beta (REFERENCE MATH — NOT A v1 FALLBACK)
 
-Use this ONLY when both `etf_daily_price(<canonical_benchmark>)` AND `etf_search(market=...)` discovery have failed to yield a usable benchmark series. This is rare (most major markets have a tracked ETF), but it can happen for niche markets or recently de-listed benchmarks.
+> **v1 status:** Documented for completeness. **NOT used at runtime.** When `etf_daily_price` and `etf_search` both fail to yield a benchmark, the skill HALTS per the SKILL.md output gate (Batch C.5 / B.5). Hedge ratios computed against a non-market benchmark are not interchangeable with market-beta-neutral hedge ratios; substituting silently produces a confidence-building lie. The user-facing failure is honest: "cannot produce hedge ratios — operator action required."
+>
+> A future v2 may add an explicit `--mode=pair-relative` flag that opts into this method when the user knows what they are buying. Until that flag exists, this section is reference math only.
 
-This is the variance-minimizing hedge ratio that does not require a benchmark:
+The variance-minimizing hedge ratio that does not require a benchmark:
 
 ```
 returns_long  = [(P_long[t]  / P_long[t-1])  - 1 for t in 1..N]
