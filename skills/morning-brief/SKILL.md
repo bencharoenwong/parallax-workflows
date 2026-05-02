@@ -40,12 +40,14 @@ Per `loader.md` §1-§2. If view present, capture tilt vector, excludes, prose e
 
 ### Batch A — Market context + portfolio scoring (parallel)
 
+**Fire ALL rows below in a single tool-call turn.** Every row is independent. For per-holding rows (`get_peer_snapshot`, `get_company_info`), fan out one call per holding **within the same turn** so all N×2 holding-level calls run concurrently with the portfolio-level and macro-level calls. Sequential per-holding loops are the largest latency leak in this skill — do not introduce one.
+
 | Tool | Parameters | Notes |
 |---|---|---|
 | `get_telemetry` | fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences | Market regime |
 | `macro_analyst` | market (default: US), no component | Macro summary (returns all components inline including tactical — do not make separate per-component calls) |
-| `get_peer_snapshot` | per holding | **Primary scoring source** for `PARALLAX_LOADER_V2=1`. Aggregate scores client-side per `loader.md` §3b. |
-| `get_company_info` | per holding (parallel) | **Ground-truth panel oracle** per loader.md §5 rule 3 (required universally, view or no view). Records `expected_name` to cross-check against `get_peer_snapshot.target_company`. |
+| `get_peer_snapshot` | per holding — **all N calls fan out in parallel within Batch A** | **Primary scoring source** for `PARALLAX_LOADER_V2=1`. Aggregate scores client-side per `loader.md` §3b. |
+| `get_company_info` | per holding — **all N calls fan out in parallel within Batch A** | **Ground-truth panel oracle** per loader.md §5 rule 3 (required universally, view or no view). Records `expected_name` to cross-check against `get_peer_snapshot.target_company`. |
 | `check_portfolio_redundancy` | `holdings` | Overlap detection |
 | `quick_portfolio_scores` | `holdings` | **Legacy/V1 path only**. Do NOT use if `PARALLAX_LOADER_V2=1` and view active. |
 

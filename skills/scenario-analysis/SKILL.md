@@ -43,12 +43,12 @@ Fire all three simultaneously:
 
 ### Phase 2: Assess Portfolio Exposure (parallel after Phase 1)
 
-Fire 4-5 simultaneously:
+**Fire ALL of the following in a single tool-call turn** — `analyze_portfolio` plus N parallel `get_score_analysis` calls (one per holding) all dispatch simultaneously. Do NOT iterate `get_score_analysis` one holding at a time; serial loops over a 5-10 holding portfolio are the dominant latency leak in this skill. `get_score_analysis` is independent per holding per `_parallax/parallax-conventions.md` §3.
 
 | Tool | Parameters | Notes |
 |---|---|---|
 | `analyze_portfolio` | holdings, lens "concentration" | Sector/factor exposures. WARNING: may exceed 180K chars — fall back to `check_portfolio_redundancy` if truncated |
-| `get_score_analysis` | each holding, 4-8 weeks | Current trajectories |
+| `get_score_analysis` | per holding, 4-8 weeks — **all N calls fan out in parallel within Phase 2** | Current trajectories |
 
 Then call `get_assessment` with a prompt that:
    - Describes the scenario
