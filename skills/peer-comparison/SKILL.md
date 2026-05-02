@@ -43,9 +43,24 @@ Peer symbols from `get_peer_snapshot` may lack exchange suffixes (e.g., `GM` ins
 
 ### Batch B — Trends + price series (parallel, after Batch A identifies peers)
 
+#### B.0 — Asset-class pre-classification (parallel, MANDATORY for price legs)
+
+`export_price_series` is the **equity-only** price endpoint; sector/country ETFs (which `get_peer_snapshot` can occasionally surface as peers) silently return empty from it and would otherwise be dropped from the relative-price-performance comparison. Before Batch B, classify each leg (primary + top 2 peers):
+
+- For each of the 3 legs, call `etf_profile(<plain_ticker>)` in parallel.
+- `{"error": "No profile data found", ...}` → equity, route through `export_price_series`.
+- Non-error response → ETF, route through `etf_daily_price`.
+
+This adds 3 FREE/instant calls (per `_parallax/token-costs.md`).
+
+#### B.1 — Trends + price series (parallel)
+
 Fire all 6 calls simultaneously:
 - `get_score_analysis` for primary + top 2 peers (3 calls). If the user supplied `weeks=N` in the invocation, pass it as `weeks` as int N (non-default — see conventions §0.1); otherwise rely on the server default of 52.
-- `export_price_series` for primary + top 2 peers (3 calls) with `format="json"`. Rely on the server default for `days` (100); if a custom window is needed, pass `days` as int N per conventions §0.1.
+- For each leg classified as **equity** in B.0 → `export_price_series(symbol=<ric>, days=<N>, format="json")`. Default `days=100`.
+- For each leg classified as **ETF** in B.0 → `etf_daily_price(symbol=<plain_ticker>, start_date=<today − days>, end_date=<today>)`.
+
+**Halt-and-surface rule:** if a leg returns empty from BOTH endpoints, exclude it from the price-performance section and render an explicit note: "⚠ Could not retrieve price history for `<symbol>`; relative price chart shows the remaining legs only." Never silently drop a leg without disclosure.
 
 ## Output Format
 
