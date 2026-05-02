@@ -153,3 +153,61 @@ The macro residual = long's tactical regime stance MINUS short's tactical regime
 #### Batch D — (Optional, with `--with-history`)
 
 Same as suggestion mode Batch E: extend price series to 365d, compute realized correlation, pair vol, max drawdown, hit rate.
+
+## Output Format
+
+### Suggestion mode (Mode 1 / Mode 2)
+
+Tiered: verdict → comparison table → per-pair detail.
+
+#### 1. Verdict (top of output)
+
+One-line ranked recommendation:
+
+> **Top pair: `<long>` / `<short>` (rank 1 of N).** Cleanest residual: `<one-line idiosyncratic thesis>`. Sector-neutral within `<sector>`; net factor tilt: `<top-2 factor residuals>`.
+
+If only one candidate viable (e.g., others lacked beta history): say so explicitly.
+
+#### 2. Comparison table
+
+| Rank | Long | Short | Net Total | Net Value | Net Quality | Net Momentum | Net Defensive | Net Tactical | Sector Resid. | Domicile Resid. | $-neutral | β-neutral | Idiosyncratic Thesis |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | NVDA.O | ARM.O | +2.7 | +1 | +1 | +2 | +5 | +3 | 0 | 0 | 1:1 | 0.94:1 | Long defensive moat vs ARM royalty risk |
+| 2 | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... |
+
+(Sector residual is "0" when both legs share the same sector. Domicile residual is "0" when both share the same `market` field.)
+
+#### 3. Per-pair detail (one block per candidate)
+
+For each candidate, render:
+
+- **Pair identification**: long ric + name + sector/industry; short ric + name + sector/industry; market cap ratio
+- **Net factor scores**: 5-pillar table (long − short for each)
+- **Sector / domicile residual**: "Both legs are `<sector>` / `<industry>` / `<market>`" if neutral, else explicit description
+- **Macro residual**: from `macro_analyst` — primary market regime stance
+- **Sizing**:
+  - Dollar-neutral: 1:1 notional
+  - Beta-neutral: `<ratio>` dollars short per dollar long (β_long / β_short = `<num>`)
+- **Idiosyncratic thesis residual**: 1-2 sentence narrative — "After this pair, you are net long `<top factor>` and `<sector/macro>`; the bet is `<plain English>`."
+- **(`--with-history` only)** Realized correlation `<corr>`, pair vol `<vol>` annualized, max drawdown `<dd>`, hit rate `<hr>`.
+
+#### 4. Mandatory disclaimers (bottom)
+
+- *Liquidity caveat: hedge ratios assume executable liquidity. Average daily volume, short borrow, and float are not validated by Parallax — verify externally before sizing.*
+- *Score comparability flag* (suggestion mode: always "same_universe — single peer-comparison call"; evaluate mode: render the flag from Step A.5).
+- Standard Parallax informational-not-investment-advice disclaimer (see `_parallax/parallax-conventions.md` §7).
+
+### Evaluate mode (Mode 3)
+
+Single-pair report — no comparison table:
+
+- **Pair**: `<long>` / `<short>` — sector / industry / market for each
+- **Net factor scores** (5-pillar table)
+- **Sector residual** (== 0 if same sector, else "cross-sector exposure: `<long_sector>` long / `<short_sector>` short")
+- **Domicile / currency residual** (== 0 if same market, else "cross-currency exposure: `<long_market>` long / `<short_market>` short")
+- **Macro residual** (per-leg regime stance + delta if cross-market)
+- **Sizing**: dollar-neutral and beta-neutral
+- **Idiosyncratic thesis residual** (1-2 sentences)
+- **(`--with-history`)** Realized stats
+- **Score comparability flag** (always render — same_universe or cross_universe)
+- Liquidity disclaimer + standard disclaimer
