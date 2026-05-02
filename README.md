@@ -12,6 +12,18 @@ AI-powered equity research workflows for [Parallax](https://chicago.global/paral
 
 Run commands like `/parallax-should-i-buy AAPL` or `/parallax-client-review [holdings]` and get a structured research report. Each workflow orchestrates Parallax MCP tools in parallel — company data, factor scores, macro analysis, news — so you get comprehensive output from a single command.
 
+## Quick Start
+
+If you have Parallax connected and want to try it now, three commands cover 80% of usage:
+
+| If you want to… | Run |
+|---|---|
+| Be guided to the right workflow | `Hi Parallax` (or `/parallax-concierge`) |
+| Evaluate a single stock | `/parallax-should-i-buy AAPL` |
+| Run a portfolio health check | `/parallax-portfolio-checkup [{"symbol":"AAPL.O","weight":0.4},{"symbol":"MSFT.O","weight":0.6}]` |
+
+Everything below is the full catalog. The concierge is the recommended entry point for first-time users — it asks one clarifying question and routes you.
+
 ## What's in this repo
 
 The repo is open-source. Two layers:
@@ -127,9 +139,12 @@ All portfolio workflows take holdings as JSON: `[{"symbol":"AAPL.O","weight":0.2
 | `/parallax-rebalance [holdings]` | Prioritized trades with health flags and score rationale |
 | `/parallax-scenario-analysis "event" portfolio=[holdings]` | Exposure assessment and rotation candidates |
 
-### House View
+### House View — flagship complex workflow
 
 Bring your own house view. The CIO memo, IC strategy doc, or macro-desk PDF that anchors your book becomes a first-class object every portfolio workflow auto-loads.
+
+> **For users:** load it once, every portfolio command picks it up. Skip to the table.
+> **For builders:** this is the most involved skill in the repo — schema, validation, hash-chained audit log, Ed25519-signed reasoning chains, calibration manifest verifier, regulator-grade export. If you're studying how a complex `/parallax-*` skill is structured, **start here**. The implementation under `skills/_parallax/house-view/` is authored by load-house-view but its `loader.md` and `render_helpers.md` are deliberately shared — the consuming portfolio and single-stock skills JIT-load them when surfacing view conflicts.
 
 | Command | What it does |
 |---|---|
@@ -235,6 +250,13 @@ skills/
 ```
 
 Each `SKILL.md` is a self-contained instruction set. Claude reads it when you invoke the command, then orchestrates the Parallax MCP tools accordingly. No code execution — just structured API orchestration.
+
+**Where things live:**
+- `skills/<workflow>/SKILL.md` — the user-invocable workflows
+- `skills/_parallax/parallax-conventions.md`, `token-costs.md`, `AI-profiles/` — genuinely shared across many skills (RIC resolution, parallel-call patterns, AI profile framework)
+- `skills/_parallax/house-view/` — house-view subsystem. Authored by `/parallax-load-house-view` (schema, audit chain, signed reasoning chains, calibration manifest verifier); also consumed by the portfolio and single-stock skills that surface view conflicts (`portfolio-builder`, `rebalance`, `client-review`, `morning-brief`, `explain-portfolio`, `thematic-screen`, `deep-dive`, `should-i-buy`). `loader.md` and `render_helpers.md` are the shared interface; `gap_detect` / `gap_suggest` are loaded by `portfolio-builder --augment-silent` only.
+
+**Reference templates.** The newer skills (`credit-lens`, `load-house-view`, `white-label-onboard`) carry typed dataclasses, comprehensive test suites, and explicit reference modules. If you're authoring or upgrading a skill, model on those.
 
 ## Known Limitations
 

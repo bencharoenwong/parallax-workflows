@@ -35,6 +35,15 @@ Thanks for the interest. A few notes on what fits and what doesn't.
 - **Markdown:** standard CommonMark. Tables for reference material, prose for explanation. Code blocks tagged with the language.
 - **Commit messages:** `<type>(<scope>): <subject>`. Types: `feat`, `fix`, `docs`, `test`, `chore`. Examples in `git log`.
 
+## Reference templates
+
+When adding or substantially upgrading a skill, mirror the structure of one of the newer skills:
+- `skills/credit-lens/` — typed dataclasses (`AltmanInputs`, `CreditReport`, `Flag`, `MetricRow`), pure scoring functions, comprehensive test classes (`TestReportBuilders`, `TestEdgeCases`, `TestAbsoluteFlagging`).
+- `skills/load-house-view/` — multi-stage workflow with schema, validation, audit chain, and signed reasoning chains. Use as the reference for any skill that needs persistence + audit guarantees.
+- `skills/_parallax/white-label/` — extraction + validation pattern, modular tests under `tests/`.
+
+Older skills (`deep-dive`, `peer-comparison`, `due-diligence`, `should-i-buy`) predate this discipline and remain SKILL.md-only — that is fine for prompt-orchestration skills with no Python plumbing. **Don't refactor them mechanically just to match.** Upgrade only when a real reason to touch them surfaces (a bug, a new feature, observed user friction).
+
 ## License
 
 By contributing, you agree your contributions are licensed under the same MIT license as the rest of the repository. See `LICENSE`.
