@@ -109,3 +109,47 @@ If `list_macro_countries` does not include `<primary_market>`: skip macro and re
 If `--with-history` flag passed, extend Batch C: re-call `export_price_series` with `days=365` for primary + each candidate (skip benchmark — already have it from Batch C). Compute realized correlation, pair vol, max drawdown of the spread, hit rate per `references/residual-math.md` §"Realized pair stats".
 
 (If skill latency is a concern, do this as a single 365-day call per leg in Batch C and slice; revisit if a future audit shows it matters.)
+
+### Mode 3 — Evaluate mode (both legs given)
+
+Inputs: `long=<RIC>` + `short=<RIC>`. Optional: `--with-history`.
+
+#### Batch A — Identification + scores (parallel)
+
+Fire all in parallel:
+
+| Tool | Parameters | Notes |
+|---|---|---|
+| `get_company_info` | symbol = `<long_ric>,<short_ric>` (comma-separated) | Single multi-symbol call per MCP schema. Returns sector, industry, market cap, market for both legs |
+| `export_peer_comparison` | symbol = long_ric, format = "json" | Get long's peer set. If short_ric appears in this peer set → both legs scored in same universe (safe to subtract) |
+| `list_macro_countries` | (none) | For Batch C |
+
+#### Step A.5 — Score comparability resolution (in-process)
+
+Inspect the long's peer-comparison `data` array:
+
+- **If `short_ric` IS in the peer set** (`peer.ric == short_ric` for some peer) → use the long's and short's scores directly from the peer-comparison response. Both scores are in the same universe; net subtraction is safe. Set `score_comparability_flag = "same_universe"`.
+- **If `short_ric` is NOT in the peer set** (cross-sector or distant peer) → fire one fallback call: `get_peer_snapshot(short_ric)` to retrieve the short's scores. Set `score_comparability_flag = "cross_universe — best-effort comparable"`. The output MUST surface this flag prominently. Per spec: "Evaluate mode accepts cross-sector pairs but flags them."
+
+#### Batch B — Beta computation (parallel, default path)
+
+Same as suggestion mode Batch C, but only 3 calls:
+
+- `export_price_series(long_ric, days=180, format="json")`
+- `export_price_series(short_ric, days=180, format="json")`
+- `export_price_series(<benchmark_ric>, days=180, format="json")`
+
+Benchmark selection: if both legs share a `market`, use that market's benchmark. If markets differ, use the long-leg's market benchmark and flag the cross-market exposure in the residual section.
+
+If either leg has < 90 days of data: report dollar-neutral sizing only and flag.
+
+#### Batch C — Macro residual (parallel)
+
+- `macro_analyst(market=<long_market>, component="tactical")`
+- `macro_analyst(market=<short_market>, component="tactical")` (only fire if `short_market != long_market`)
+
+The macro residual = long's tactical regime stance MINUS short's tactical regime stance (qualitative — render as "long-leg market regime is X; short-leg market regime is Y; the pair carries a cross-market regime tilt" if different).
+
+#### Batch D — (Optional, with `--with-history`)
+
+Same as suggestion mode Batch E: extend price series to 365d, compute realized correlation, pair vol, max drawdown, hit rate.
