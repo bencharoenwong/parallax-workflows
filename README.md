@@ -125,6 +125,7 @@ Implementation lives in `skills/_parallax/house-view/audit_chain.py`, `chain_emi
 | `/parallax-earnings-quality AAPL.O` | Accruals, revenue quality, manipulation risk |
 | `/parallax-score-explainer AAPL.O "why is value low?"` | Plain-language methodology explanation |
 | `/parallax-peer-comparison AAPL.O` | Factor scores and price performance vs peers |
+| `/parallax-pair-finder NVDA.O long` (or `short`, or `long=X short=Y`) | Long/short pair construction — find the other leg from peers, or evaluate a pair you have, with full residual-exposure decomposition |
 
 ### Portfolio
 
