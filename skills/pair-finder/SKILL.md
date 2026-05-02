@@ -96,7 +96,7 @@ Per spec scope-cut: beta-neutral sizing is in the default path because PMs act o
 | `United Kingdom` | `EWU` | iShares MSCI UK |
 | `Hong Kong` | `EWH` | iShares MSCI Hong Kong |
 | `Singapore` | `EWS` | iShares MSCI Singapore |
-| `Germany` | `EWG` | iShares MSCI Germany |
+| `Germany` | `EWG` | iShares MSCI Germany — **NOT IN PARALLAX COVERAGE as of 2026-05-02**; output gate (Batch C.5) WILL fire. Operator: pass `--benchmark=DAX.GY` if available in another data source, or accept HALT |
 | `Taiwan` | `EWT` | iShares MSCI Taiwan |
 | `Korea` | `EWY` | iShares MSCI South Korea |
 | `Canada` | `EWC` | iShares MSCI Canada |
@@ -104,6 +104,8 @@ Per spec scope-cut: beta-neutral sizing is in the default path because PMs act o
 | (other) | call `etf_search(market="<market>", query="MSCI", recommendation="HOLD")` and pick highest-AUM result | Fallback discovery |
 
 Compute the start/end dates for a 180d window: `end_date = today`, `start_date = today - 180 days` (calendar; ~125 trading days will be returned).
+
+**API quirk to avoid:** `etf_daily_price` accepts a comma-separated multi-symbol input but returns `[]` if ANY of the listed symbols is missing from coverage. ALWAYS use single-symbol calls for benchmarks — one call per benchmark — so a single coverage gap doesn't silently fail the whole batch.
 
 Fire all in parallel:
 
