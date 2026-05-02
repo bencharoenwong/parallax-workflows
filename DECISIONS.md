@@ -1,5 +1,30 @@
 # Decision Log
 
+This file captures the *why* behind each shipping milestone — alternatives that were rejected, flip conditions that would reverse the decision, verification status. For the *what* (one-line summary of what landed), see [CHANGELOG.md](CHANGELOG.md).
+
+Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
+
+## Index
+
+- [2026-04-27 — Ingest stays pure; augmentation moves to consumer-skill JIT](#2026-04-27-house-view-ingest-stays-pure-data-augmentation-moves-to-consumer-skill-jit)
+- [2026-04-26 — Gap-fill: suggest-with-per-field-accept](#2026-04-26-house-view-ingest-gap-fill--suggest-with-per-field-accept)
+- [2026-04-25 — Calibration manifest client + chain emitter shipped (Batch 3+3.5+4)](#2026-04-25-batch-3354-shipped-calibration-manifest-client--chain-emitter--implementation-milestone)
+- [2026-04-25 — Pre-Batch-2 security-auditor hardening](#2026-04-25-security-auditor-pass-pre-batch-2-hardening-of-calibration-manifest-spec-triad)
+- [2026-04-25 — Calibration manifest spec triad v1 LOCKED](#2026-04-25-later-calibration-manifest-spec-triad-v1-locked--endpoint--schema--reasoning-chain)
+- [2026-04-25 — Tier 2 reframe: compliance-first sequence](#2026-04-25-tier-2-reframe--compliance-first-sequence-one-pager--hash-chain-original-tier-2a2b-not-the-right-next-batch)
+- [2026-04-24 (eve) — XAI deep research validates Phase 0.5, +1 gap](#2026-04-24-evening-xai-compliance-posture--deep-research-validates-phase-05-architecture-surfaces-1-new-gap)
+- [2026-04-24 — Single-stock §7 split + render_view_conflict() seam](#2026-04-24-late-morning-house-view-single-stock-7-split--render_view_conflict-seam)
+- [2026-04-24 — Extraction auditing: defer per-tilt provenance, ship --why on-demand](#2026-04-24-midday-house-view-extraction-auditing--defer-per-tilt-provenance-ship---why-on-demand)
+- [2026-04-24 — §7 compliance memo as parallel track](#2026-04-24-midday-7-compliance-memo--parallel-track-not-blocking)
+- [2026-04-24 — Calibration architecture Option C](#2026-04-24-pm-calibration-architecture--option-c-hybrid-signed-manifest-d-compatible)
+- [2026-04-24 — Corpus publishing budget](#2026-04-24-corpus-publishing-budget--100-public-labeled-tilts-2-bundles-per-view-family-no-pillar-integers)
+- [2026-04-23 — Diff harness as spec-only, internals local](#2026-04-23-pm-house-view-diff-harness-shipped-as-spec-only-internal-artifacts-stay-local)
+- [2026-04-23 — Don't build /hv/compile as IP-protection](#2026-04-23-dont-build-hvcompile-as-an-ip-protection-move)
+- [2026-04-22 — Next increment = portfolio_diff_harness](#2026-04-22-next-increment--portfolio_diff_harness-not-more-schema)
+- [2026-04-21 — Phase 0 iteration path](#2026-04-21-phase-0-iteration-path--schema-first-week-1-loader-rewrite-next-sprint)
+
+---
+
 ## 2026-04-27: House-view ingest stays pure; data augmentation moves to consumer-skill JIT
 **Why:** End-to-end validation against real CIO docs surfaced two problems with auto-gap-fill at ingest. **(1) Functional:** the fold helpers were written against assumed response shapes; the live API nests differently and returns sector positioning as narrative prose, not structured maps. Result: zero usable suggestions on live data despite passing unit tests against synthetic fixtures. **(2) Architectural:** even with helpers fixed, silently injecting current-data values into the saved view broke the trust contract — when the saved view mixes "what the bank said" with "what current data said today," compliance can no longer answer "is this our bank's view or a derived view?" cleanly. The pivot: **saved house view stays pure (bank's view + uploader confirmation only); current-data augmentation happens at consumer-skill use time, with provenance recorded per consuming artifact, never folded back into the saved view.**
 **Impact:**

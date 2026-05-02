@@ -2,6 +2,8 @@
 
 All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
+> This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
+
 ## 2026-04-28
 
 ### Added
