@@ -31,22 +31,26 @@ TIMEFILE="$STEM.time"
 
 echo "[$(date -u +%H:%M:%S)Z] running ($SKILL_TAG, label=$LABEL)..."
 
-# /usr/bin/time is more parseable than the bash builtin
-TIME_BIN="/usr/bin/time"
-if [ ! -x "$TIME_BIN" ]; then
-  TIME_BIN=time
+# Use GNU time (gtime on mac via homebrew, /usr/bin/time -v on Linux) if available,
+# else fall back to date-bracket bash timing. macOS /usr/bin/time has different flags
+# than GNU time, so portable detection is to test for the -f flag.
+GNU_TIME=""
+if command -v gtime >/dev/null 2>&1; then
+  GNU_TIME=gtime
+elif /usr/bin/time -f "%e" true 2>/dev/null; then
+  GNU_TIME=/usr/bin/time
 fi
 
-# capture wall-clock with the builtin if /usr/bin/time isn't available
-if [ "$TIME_BIN" = "time" ]; then
+if [ -n "$GNU_TIME" ]; then
+  "$GNU_TIME" -f 'wall_seconds: %e\nuser_seconds: %U\nsys_seconds: %S\nmax_rss_kb: %M' \
+    -o "$TIMEFILE" \
+    claude -p "$PROMPT" > "$OUT" 2>&1 || true
+else
+  # Portable fallback: date-bracket the call
   START=$(date +%s.%N)
   claude -p "$PROMPT" > "$OUT" 2>&1 || true
   END=$(date +%s.%N)
   python3 -c "print(f'wall_seconds: {$END - $START:.2f}')" > "$TIMEFILE"
-else
-  "$TIME_BIN" -f 'wall_seconds: %e\nuser_seconds: %U\nsys_seconds: %S\nmax_rss_kb: %M' \
-    -o "$TIMEFILE" \
-    claude -p "$PROMPT" > "$OUT" 2>&1 || true
 fi
 
 WALL=$(grep -E '^wall_seconds' "$TIMEFILE" | awk '{print $2}')
