@@ -14,6 +14,7 @@ gotchas:
   - Evaluate mode (both legs given) MUST flag score-comparability uncertainty when short_ric is NOT in long's peer set (cross-sector pair)
   - "v1 scope cuts: no revenue-geography mix (use domicile/listing-currency only), no share counts (dollar/beta-neutral ratios only), no cross-sector suggestions (within-sector peers only). Evaluate mode accepts cross-sector pairs but flags them."
   - "Liquidity disclaimer is MANDATORY in every output: ADV / borrow / float not validated by Parallax — verify externally before sizing."
+  - "Output gate (HARD HALT): refuse to render hedge ratios if benchmark price series is null or has < 60 observations. Do NOT substitute pair-relative regression beta and emit a caveat — that pattern is BANNED for primary deliverables. Halt with named failure reason and operator-action options."
 ---
 
 # Pair Finder
@@ -114,8 +115,34 @@ Compute beta inline per `references/residual-math.md` §"Beta computation". Beta
 
 **Fallbacks (in order):**
 1. If `etf_daily_price` returns no data for the chosen benchmark → call `etf_search(market="<market>")` to find an alternative; retry with the top result.
-2. If still no benchmark available → fall back to pair-relative regression beta (variance-minimizing hedge ratio) per `references/residual-math.md` §3a. Render the "⚠ Benchmark unavailable" caveat.
-3. If a leg's price series returns < 90 days of data → flag the affected candidate as "insufficient history for beta" and report only dollar-neutral sizing for that pair.
+2. If a leg's price series returns < 90 days of data → flag the affected candidate as "insufficient history for beta" and report **only dollar-neutral sizing** for that pair (do NOT halt the whole skill — this is per-leg degradation, surfaced in the row).
+
+#### Batch C.5 — Output gate (HARD HALT — non-negotiable)
+
+After Batch C completes and BEFORE rendering any beta-neutral hedge ratios, run this gate. The "⚠ Benchmark unavailable" caveat-footnote pattern is **forbidden** for primary deliverables. If the benchmark is genuinely unavailable, the skill HALTS — it does not silently substitute pair-relative regression beta and emit a footnote.
+
+```
+HARD GATE — refuse, do not degrade:
+  if benchmark_series is null OR len(benchmark_series.observations) < 60:
+    ABORT skill output. Render exactly:
+
+      ⚠ Cannot produce beta-neutral hedge ratios.
+        Benchmark: <benchmark_ticker> for market <primary_market>
+        Returned: <N> observations from etf_daily_price (need ≥ 60 for stable beta)
+        Failure path: <which fallback step ran last — initial-fetch / etf_search-discovery>
+
+      Operator action — pick one:
+        (a) Re-run with explicit benchmark: /parallax-pair-finder <symbol> <side> --benchmark=<alt-ticker>
+        (b) Run with --no-beta to get dollar-neutral suggestions only (factor / sector residuals still computed)
+        (c) Escalate to API team if etf_daily_price coverage for this market is genuinely missing
+
+    DO NOT render Batch D, Batch E, the comparison table, or any per-pair detail.
+    DO NOT emit hedge ratios under any other label (no "pair-relative regression" substitution).
+```
+
+Rationale: a hedge ratio computed against the wrong benchmark is a confidence-building lie. PMs reading a footnote do not adjust their downstream sizing decision; they adjust their footnote-tolerance. Refusing to emit primary deliverables when the underlying assumption fails is the only honest harm-reduction.
+
+The pair-relative regression formula in `references/residual-math.md` §3a is NOT used in v1. It is documented for v2 if a deliberate "pair-relative mode" flag is added; until then, treat the formula as reference math only.
 
 #### Batch D — Macro residual (parallel, after Batch A confirms primary's market)
 
@@ -164,8 +191,11 @@ Benchmark selection: use the canonical mapping in suggestion mode Batch C. If bo
 
 Fallbacks (same order as suggestion mode):
 1. `etf_daily_price` empty → `etf_search(market=...)` discovery → retry
-2. Still empty → pair-relative regression beta with "⚠ Benchmark unavailable" caveat
-3. Leg < 90 days → dollar-neutral only for that pair
+2. Leg < 90 days → dollar-neutral only for that pair (per-leg degradation, not whole-skill halt)
+
+#### Batch B.5 — Output gate (HARD HALT — non-negotiable)
+
+Same gate as suggestion-mode Batch C.5. If benchmark is genuinely unavailable after fallback #1 above, HALT with the operator-action message — do NOT substitute pair-relative regression or emit a "⚠ Benchmark unavailable" caveat. Hedge ratios that cannot be properly computed are not emitted in any form. The pair-relative regression formula is reference math only in v1; not a runtime fallback.
 
 #### Batch C — Macro residual (parallel)
 
