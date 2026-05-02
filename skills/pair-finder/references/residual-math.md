@@ -52,6 +52,25 @@ Round to 2 decimal places for output.
 
 **Insufficient-history rule:** if a leg has fewer than 90 daily observations, do NOT compute beta — flag as "insufficient history for beta" and skip beta-neutral sizing for that pair.
 
+## 3a. Pair-relative regression beta (benchmark-unavailable fallback)
+
+When `export_price_series(<benchmark_ric>)` returns no data (Parallax price universe is equity-only and does not carry SPY / IVV / VOO / EWJ / EWU and similar ETFs), use pair-relative regression beta directly. This is the variance-minimizing hedge ratio that does not require a benchmark:
+
+```
+returns_long  = [(P_long[t]  / P_long[t-1])  - 1 for t in 1..N]
+returns_short = [(P_short[t] / P_short[t-1]) - 1 for t in 1..N]
+
+mean_L = sum(returns_long)  / N
+mean_S = sum(returns_short) / N
+cov_LS = sum((returns_long[t] - mean_L) * (returns_short[t] - mean_S) for t in 1..N) / N
+var_S  = sum((returns_short[t] - mean_S)^2 for t in 1..N) / N
+hedge_ratio_pair_relative = cov_LS / var_S
+```
+
+This gives `$X short per $1 long` that minimizes residual spread variance over the 180d window. Mathematically defensible for sector-neutral pairs; semantically different from a market-beta hedge.
+
+**Output requirement:** when this fallback is used, the skill MUST render a "⚠ Benchmark caveat" line above the comparison table or pair-detail block, naming pair-relative regression and noting the interpretive difference vs a market-beta hedge.
+
 ## 4. Hedge ratios
 
 Both ratios are in dollar terms (no share counts — see Plan-agent finding F).

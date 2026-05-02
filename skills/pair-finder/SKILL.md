@@ -84,17 +84,19 @@ Record each candidate's: ric, company_name, sector, industry, market, all 5 fact
 
 Per spec scope-cut: beta-neutral sizing is in the default path because PMs act on beta-neutral, not dollar-neutral.
 
-Determine benchmark from primary leg's `market` field: US → `SPY` (or `SPY.N` if RIC required); Japan → `EWJ`; UK → `EWU`; etc. (Default fallback: `SPY` if market is unrecognized — flag in output.)
+**Benchmark availability check.** Parallax's price-series universe is equity-only. Common ETFs (SPY, IVV, VOO, EWJ, EWU, etc.) are NOT in coverage. **First, attempt `export_price_series(SPY.N, days=180)` (or the relevant market's benchmark). If the call returns no data, fall back to pair-relative regression beta** — the variance-minimizing hedge ratio computed from the long-leg / short-leg covariance directly, no benchmark needed. Per `references/residual-math.md` §"Pair-relative regression beta (benchmark-unavailable fallback)".
 
-Fire all in parallel:
+Pair-relative regression beta is mathematically defensible for sector-neutral pairs (it minimizes residual variance) but interprets differently from a market-beta hedge — the output MUST flag this distinction prominently when the fallback is used. Render: *"⚠ Benchmark caveat: SPY/IVV/VOO not in Parallax price universe — beta-neutral sizing uses pair-relative regression beta (variance-minimizing hedge ratio), not market-beta-neutral. Verify externally if market-beta-neutral sizing is required."*
+
+Fire all in parallel (always include the benchmark attempt — it's cheap; just be ready to fall back):
 
 - `export_price_series(symbol=primary_ric, days=180, format="json")`
 - `export_price_series(symbol=candidate_ric, days=180, format="json")` × N candidates
-- `export_price_series(symbol=benchmark_ric, days=180, format="json")`
+- `export_price_series(symbol=<benchmark_ric>, days=180, format="json")` (attempt; may return empty)
 
-Compute beta inline per `references/residual-math.md` §"Beta computation". Beta-neutral hedge ratio = `beta_long / beta_short` (dollars short per dollar long).
+Compute beta inline per `references/residual-math.md` §"Beta computation". Beta-neutral hedge ratio = `beta_long / beta_short` if benchmark is available, else `cov(returns_long, returns_short) / var(returns_short)` (pair-relative regression).
 
-If a price series returns < 90 days of data: flag the affected candidate as "insufficient history for beta" and report only dollar-neutral sizing for that pair.
+If a price series for a leg returns < 90 days of data: flag the affected candidate as "insufficient history for beta" and report only dollar-neutral sizing for that pair.
 
 #### Batch D — Macro residual (parallel, after Batch A confirms primary's market)
 
@@ -133,13 +135,13 @@ Inspect the long's peer-comparison `data` array:
 
 #### Batch B — Beta computation (parallel, default path)
 
-Same as suggestion mode Batch C, but only 3 calls:
+Same fallback rule as suggestion mode Batch C: attempt the benchmark price-series; fall back to pair-relative regression beta if Parallax doesn't carry the benchmark. 3 calls:
 
 - `export_price_series(long_ric, days=180, format="json")`
 - `export_price_series(short_ric, days=180, format="json")`
-- `export_price_series(<benchmark_ric>, days=180, format="json")`
+- `export_price_series(<benchmark_ric>, days=180, format="json")` (attempt; may return empty)
 
-Benchmark selection: if both legs share a `market`, use that market's benchmark. If markets differ, use the long-leg's market benchmark and flag the cross-market exposure in the residual section.
+Benchmark selection: if both legs share a `market`, use that market's benchmark. If markets differ, use the long-leg's market benchmark and flag the cross-market exposure in the residual section. If benchmark is unavailable, render the same "⚠ Benchmark caveat" disclosure as suggestion mode and use pair-relative regression beta.
 
 If either leg has < 90 days of data: report dollar-neutral sizing only and flag.
 
