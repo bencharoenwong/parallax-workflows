@@ -53,4 +53,59 @@ Detect mode from invocation:
 - `long=<symbol> short=<symbol>` → Mode 3 (evaluate pair)
 - Anything else → ask the user to clarify which mode.
 
-(Mode-specific workflows in subsequent tasks.)
+### Mode 1 / Mode 2 — Suggestion mode (one leg given)
+
+Inputs: primary RIC + side (`long` | `short`). Optional: `--candidates=N` (default 3), `--with-history`.
+
+#### Batch A — Identification + peer set + macro coverage (parallel)
+
+Fire all three simultaneously:
+
+| Tool | Parameters | Notes |
+|---|---|---|
+| `get_company_info` | symbol = primary RIC | Validates RIC, returns sector, industry, market cap, market |
+| `export_peer_comparison` | symbol = primary RIC, format = "json" | **Workhorse call.** Returns peer set with cross-sectionally comparable factor scores (value, quality, momentum, defensive, tactical, total), sector, industry, market, market cap, P/E, EV/EBITDA, ROE, YTD return, recommendation. Single-call comparability — DO NOT use independent `get_peer_snapshot` calls in this mode |
+| `list_macro_countries` | (none) | Gates macro coverage for Batch D |
+
+If `export_peer_comparison` fails: retry once. If it still fails, fall back to `get_peer_snapshot(primary)` and note in output that score comparability across candidates is "best-effort" (Plan-agent finding D).
+
+If `get_company_info` returns empty: apply RIC resolution per `_parallax/parallax-conventions.md` §1 (try `.O`, then `.N`, then escalate to user).
+
+#### Step A.5 — In-process candidate selection (no MCP calls)
+
+From the `export_peer_comparison.data` array, exclude the row where `is_target == true` (that's the primary leg). For the remaining peers:
+
+- **`long` side given** → user wants a SHORT candidate. Sort peers ascending by `total` score. Take the bottom N (default 3). These are the lowest-scoring peers — the v1 mode-B candidates.
+- **`short` side given** → user wants a LONG candidate. Sort peers descending by `total` score. Take the top N.
+
+Record each candidate's: ric, company_name, sector, industry, market, all 5 factor scores, total, market cap, recommendation, ytd return.
+
+#### Batch C — Beta computation (parallel, default path — NOT gated by --with-history)
+
+Per spec scope-cut: beta-neutral sizing is in the default path because PMs act on beta-neutral, not dollar-neutral.
+
+Determine benchmark from primary leg's `market` field: US → `SPY` (or `SPY.N` if RIC required); Japan → `EWJ`; UK → `EWU`; etc. (Default fallback: `SPY` if market is unrecognized — flag in output.)
+
+Fire all in parallel:
+
+- `export_price_series(symbol=primary_ric, days=180, format="json")`
+- `export_price_series(symbol=candidate_ric, days=180, format="json")` × N candidates
+- `export_price_series(symbol=benchmark_ric, days=180, format="json")`
+
+Compute beta inline per `references/residual-math.md` §"Beta computation". Beta-neutral hedge ratio = `beta_long / beta_short` (dollars short per dollar long).
+
+If a price series returns < 90 days of data: flag the affected candidate as "insufficient history for beta" and report only dollar-neutral sizing for that pair.
+
+#### Batch D — Macro residual (parallel, after Batch A confirms primary's market)
+
+Both legs are within-sector in suggestion mode → both legs share the same primary `market`. So one `macro_analyst` call covers both:
+
+- `macro_analyst(market=<primary_market>, component="tactical")`
+
+If `list_macro_countries` does not include `<primary_market>`: skip macro and render "macro context unavailable for this market" in output.
+
+#### Batch E — (Optional, with `--with-history`)
+
+If `--with-history` flag passed, extend Batch C: re-call `export_price_series` with `days=365` for primary + each candidate (skip benchmark — already have it from Batch C). Compute realized correlation, pair vol, max drawdown of the spread, hit rate per `references/residual-math.md` §"Realized pair stats".
+
+(If skill latency is a concern, do this as a single 365-day call per leg in Batch C and slice; revisit if a future audit shows it matters.)
