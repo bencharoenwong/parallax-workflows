@@ -75,3 +75,13 @@ When a tool returns empty/error after the right routing, the skill's response de
 | **Per-symbol research** | `should-i-buy`, `deep-dive`, `due-diligence` | **Per-section partial.** If one tool fails (e.g., news), render the section as "Analysis pending — tool unavailable" and continue with other sections. Per `_parallax/parallax-conventions.md` §4. |
 
 The lint enforces routing correctness (right tool for the asset class). It does NOT enforce the failure contract — that is per-skill design judgment. When authoring or reviewing, ask: "if tool X returns empty for one input, does the user want a halt, a partial, or a per-section fallback?"
+
+## Deferred: upstream `supported_asset_classes` schema field
+
+A request to add a `supported_asset_classes` field to each MCP tool's schema was considered and deferred 2026-05-03. Rationale:
+
+- `etf_profile` already serves as the asset-class oracle (see Known API quirks #2). One FREE call per symbol; classification is a solved problem client-side.
+- Coverage-lint enforces routing at build time, which is a stronger guarantee than runtime metadata (fails the merge, not the user).
+- An upstream metadata field would not address the deeper instruction-execution gap — a model can ignore schema metadata the same way it can ignore SKILL.md prose. The structural fix for that is a deterministic dispatch layer (client-side), not a server schema change.
+
+Re-open if/when: (a) we add asset classes beyond equity/ETF (futures, FX, fixed income — probe count grows), or (b) we want protocol-level refusal at the MCP layer.
