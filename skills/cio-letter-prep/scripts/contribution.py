@@ -196,7 +196,7 @@ def daily_contribution(
             d = _parse_iso(d_str, field=f"daily_prices['{sym}']")
             if start_d <= d <= end_d:
                 all_dates.add(d_str)
-    timeline = sorted(all_dates, key=_parse_iso_unchecked)
+    timeline = sorted(all_dates, key=lambda d: _parse_iso(d, field="daily_prices"))
 
     if len(timeline) < 2:
         raise ValueError(
@@ -267,6 +267,26 @@ def daily_contribution(
             sym = trade["symbol"]
             weights[sym] = weights.get(sym, 0.0) + trade["weight_delta"]
 
+    # ---- 7b. Cross-check reconstructed ending weights vs current_portfolio
+    # The trade walk above produced `weights` as the ending state implied by
+    # prior_portfolio + trade_log. The caller's `current_portfolio` claims
+    # the ending state independently. If the two disagree by more than
+    # DEFAULT_WEIGHT_SUM_TOLERANCE for any symbol present in either dict,
+    # the inputs are internally inconsistent — fail loudly rather than
+    # silently letting sub-tolerance trade-log drift accumulate.
+    cross_check_symbols = set(weights.keys()) | set(current_portfolio.keys())
+    for sym in cross_check_symbols:
+        reconstructed = weights.get(sym, 0.0)
+        claimed = current_portfolio.get(sym, 0.0)
+        diff = reconstructed - claimed
+        if abs(diff) > DEFAULT_WEIGHT_SUM_TOLERANCE:
+            raise ValueError(
+                f"current_portfolio inconsistent with prior_portfolio + trade_log "
+                f"for symbol '{sym}': reconstructed weight {reconstructed:.6f} vs "
+                f"claimed {claimed:.6f} (diff={diff:+.6f}, "
+                f"tolerance={DEFAULT_WEIGHT_SUM_TOLERANCE})"
+            )
+
     # ---- 8. Reconciliation gate ------------------------------------------
     diff = sum(contributions.values()) - portfolio_total_return
     if abs(diff) > reconciliation_tolerance:
@@ -316,10 +336,6 @@ def _parse_iso(s: str, *, field: str) -> _date_cls:
         return _date_cls.fromisoformat(s)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"{field}: invalid ISO date '{s}': {exc}") from exc
-
-
-def _parse_iso_unchecked(s: str) -> _date_cls:
-    return _date_cls.fromisoformat(s)
 
 
 def _validate_weights_sum(weights: dict[str, float], label: str) -> None:
