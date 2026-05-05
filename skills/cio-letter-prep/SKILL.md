@@ -21,7 +21,7 @@ gotchas:
   - export_price_series is bounded to 365 days. For period > 365 days, reject with a v2-roadmap note: "Period > 365 days not yet supported. Split into quarterly windows and aggregate manually; native multi-quarter aggregation is on the v2 roadmap."
   - Output is Word .docx ONLY (decision 6D). Markdown is an intermediate artifact, not the deliverable. The final hand-off goes through the `docx` skill chain.
   - Materiality tiers for excluded holdings (Amendment C): ≤5% total excluded → in-line "Coverage gap" note above the contributors table; >5% → high-visibility WARNING banner at the top of the doc; any single excluded holding >10% weight → reject the attribution section entirely with an error pointing to the missing symbol.
-  - Driver-field fallback hierarchy (Amendment D): when filling the `Driver:` slot in a contributor / detractor row, look in order — (1) notable news event with date from `get_news_synthesis`, (2) significant factor score change from `get_score_analysis`, (3) sector/peer movement from `get_peer_snapshot`, (4) default phrase ("Price appreciation in line with [sector / market]" or "Multiple expansion / contraction"). Never render a row with an empty driver slot.
+  - Driver-field fallback hierarchy (Amendment D): when filling the `Driver:` slot in a contributor / detractor row, look in order — (1) notable news event with date from `get_news_synthesis`, (2) significant factor score change from `get_score_analysis`, (3) sector / peer movement from the sector-exposure and peer-rollup fields surfaced by `analyze_portfolio` (this skill does not call `get_peer_snapshot` directly), (4) default phrase ("Price appreciation in line with [sector / market]" or "Multiple expansion / contraction"). Never render a row with an empty driver slot.
   - This skill is private-beta gated (decision 9A); it is excluded from default `build-skills.sh` builds. Confirm enablement before running for new customers.
 ---
 
@@ -67,7 +67,7 @@ JIT-load `_parallax/parallax-conventions.md` for execution-mode, RIC resolution,
 
 ### Batch A — Period analytics fan-out (parallel)
 
-Fire all rows below in a single tool-call turn. Every row is independent. Per conventions §2, cross-validate `target_company` returned by `get_peer_snapshot` (called inside `analyze_portfolio` summary) against `get_company_info.name` for each holding; flag any mismatch and exclude mismatched holdings from aggregate factor calculations.
+Fire all rows below in a single tool-call turn. Every row is independent. Per conventions §2, cross-validate any `target_company` field surfaced in the `analyze_portfolio` peer rollup (Parallax internally consults `get_peer_snapshot`; this skill does NOT call `get_peer_snapshot` directly) against `get_company_info.name` for each holding; flag any mismatch and exclude mismatched holdings from aggregate factor calculations.
 
 | Tool | Parameters | Notes |
 |---|---|---|
@@ -138,7 +138,7 @@ Compose the structured pack content with these sections in order. Hand the resul
    Fill `{driver_field}` per the Amendment D fallback hierarchy:
    1. Notable news event with date (from `get_news_synthesis`) — e.g., `Beat Q1 EPS by 12%, raised guidance (2026-04-22)`.
    2. Significant factor score change (from `get_score_analysis`) — e.g., `MOMENTUM 5.2 → 7.8 over period`.
-   3. Sector / peer movement (from `get_peer_snapshot` via `analyze_portfolio`) — e.g., `Semis sector +8.4%; SOX leadership`.
+   3. Sector / peer movement (from the sector-exposure and peer-rollup fields surfaced by `analyze_portfolio`; no direct `get_peer_snapshot` call) — e.g., `Semis sector +8.4%; SOX leadership`.
    4. Default phrase: `Price appreciation in line with [sector / market]` or `Multiple expansion`.
    Never leave the driver slot blank.
 5. **Top detractors table** — bottom 5 by contribution_bps. Same row template; default-phrase fallback for negative cases is `Multiple contraction` or `Price weakness in line with [sector / market]`.
@@ -186,21 +186,21 @@ This example mirrors `scripts/test_contribution.py::test_held_entire_period_no_t
 - JPM: `r[d] = (100-d)/(101-d) - 1 = -1/(101-d)` for d ∈ [1, 30]
 
 **Per-holding sum of arithmetic daily returns:**
-- AAPL: `Σ_{k=100..129} 1/k ≈ 0.26336`
+- AAPL: `Σ_{k=100..129} 1/k ≈ 0.2635215`
 - MSFT: `0`
-- JPM: `−Σ_{k=71..100} 1/k ≈ −0.34988`
+- JPM: `−Σ_{k=71..100} 1/k ≈ −0.3545408`
 
 **Contributions (weight × sum-of-daily-returns, since weights are constant):**
-- AAPL contribution ≈ `(1/3) × 0.26336 ≈ +0.08779` (`+877.9 bps`)
+- AAPL contribution ≈ `(1/3) × 0.2635215 ≈ +0.0878405` (`+878.4 bps`)
 - MSFT contribution ≈ `0` (`+0 bps`)
-- JPM contribution ≈ `(1/3) × (−0.34988) ≈ −0.11663` (`−1166.3 bps`)
+- JPM contribution ≈ `(1/3) × (−0.3545408) ≈ −0.1181803` (`−1181.8 bps`)
 
 **Portfolio total return (arithmetic sum of daily portfolio returns):**
-- ≈ `+0.08779 + 0 + (−0.11663) ≈ −0.02883` (`−288.3 bps`)
+- ≈ `+0.0878405 + 0 + (−0.1181803) ≈ −0.0303397` (`−303.4 bps`)
 
 **Reconciliation:** `sum(contributions) − portfolio_total_return ≈ 0` (well below the 1-bp tolerance). Amendment A's gate passes.
 
-**Pack rendering** (synthesized; not from a real run): top contributor `AAPL.O +877.9 bps`; top detractor `JPM.N −1166.3 bps`; period total `−288.3 bps`. Driver fields would be filled per Amendment D fallback (defaults to "Price appreciation / contraction in line with [stock-level move]" for this synthetic data because no real news / factor / peer signal exists).
+**Pack rendering** (synthesized; not from a real run): top contributor `AAPL.O +878.4 bps`; top detractor `JPM.N −1181.8 bps`; period total `−303.4 bps`. Driver fields would be filled per Amendment D fallback (defaults to "Price appreciation / contraction in line with [stock-level move]" for this synthetic data because no real news / factor / peer signal exists).
 
 ## Math Reference: scripts/contribution.py
 
