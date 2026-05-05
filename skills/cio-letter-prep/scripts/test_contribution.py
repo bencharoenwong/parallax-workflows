@@ -540,3 +540,119 @@ def test_weight_sum_tolerance_constant_is_named():
     """Tolerance is module-level, not a magic number."""
     assert DEFAULT_WEIGHT_SUM_TOLERANCE > 0
     assert DEFAULT_RECONCILIATION_TOLERANCE > 0
+
+
+# --------------------------------------------------------------------------
+# Test 7: Cross-check current_portfolio against reconstructed ending weights
+# --------------------------------------------------------------------------
+
+def test_inconsistent_current_portfolio_raises():
+    """current_portfolio that disagrees with trade reconstruction by > 1e-3
+    must raise ValueError, with a message identifying the offending symbol,
+    reconstructed weight, claimed weight, and diff.
+    """
+    days = 30
+    flat_100 = {_date(d): 100.0 for d in range(days + 1)}
+    daily_prices = {
+        "AAPL.O": flat_100,
+        "MSFT.O": dict(flat_100),
+        "JPM.N": dict(flat_100),
+    }
+
+    # Prior weights sum to 1.0. Single trim of AAPL -0.10 -> MSFT +0.10.
+    # Reconstructed ending: AAPL=0.4, MSFT=0.35, JPM=0.25
+    prior = {"AAPL.O": 0.5, "MSFT.O": 0.25, "JPM.N": 0.25}
+    trade_log = [
+        {"symbol": "AAPL.O", "action": "trim", "date": _date(14), "weight_delta": -0.10},
+        {"symbol": "MSFT.O", "action": "add", "date": _date(14), "weight_delta": +0.10},
+    ]
+
+    # Caller claims AAPL ended at 0.30 (off by 0.10 from reconstructed 0.40).
+    # Sums to 1.0 so weight-sum gate passes, but cross-check should fire.
+    bad_current = {"AAPL.O": 0.30, "MSFT.O": 0.45, "JPM.N": 0.25}
+
+    with pytest.raises(ValueError) as excinfo:
+        daily_contribution(
+            prior_portfolio=prior,
+            current_portfolio=bad_current,
+            trade_log=trade_log,
+            daily_prices=daily_prices,
+            period_start=_date(0),
+            period_end=_date(days),
+        )
+
+    msg = str(excinfo.value)
+    # Message must identify offending symbol and surface the numbers.
+    assert "AAPL.O" in msg
+    # Reconstructed = 0.4, claimed = 0.30, diff = -0.10 (or 0.10 depending on sign).
+    assert "0.4" in msg or "0.40" in msg
+    assert "0.3" in msg or "0.30" in msg
+
+
+def test_consistent_current_portfolio_within_tolerance_passes():
+    """current_portfolio within DEFAULT_WEIGHT_SUM_TOLERANCE (1e-3) of the
+    reconstructed ending weights must pass without error.
+    """
+    days = 30
+    flat_100 = {_date(d): 100.0 for d in range(days + 1)}
+    daily_prices = {
+        "AAPL.O": flat_100,
+        "MSFT.O": dict(flat_100),
+        "JPM.N": dict(flat_100),
+    }
+
+    prior = {"AAPL.O": 0.5, "MSFT.O": 0.25, "JPM.N": 0.25}
+    trade_log = [
+        {"symbol": "AAPL.O", "action": "trim", "date": _date(14), "weight_delta": -0.10},
+        {"symbol": "MSFT.O", "action": "add", "date": _date(14), "weight_delta": +0.10},
+    ]
+
+    # Reconstructed ending: AAPL=0.40, MSFT=0.35, JPM=0.25.
+    # Caller passes 5e-4 drift on each — sub-tolerance.
+    near_current = {"AAPL.O": 0.40 + 5e-4, "MSFT.O": 0.35 - 5e-4, "JPM.N": 0.25}
+
+    # Should not raise.
+    result = daily_contribution(
+        prior_portfolio=prior,
+        current_portfolio=near_current,
+        trade_log=trade_log,
+        daily_prices=daily_prices,
+        period_start=_date(0),
+        period_end=_date(days),
+    )
+    assert "contributions" in result
+
+
+def test_inconsistent_current_portfolio_extra_symbol_raises():
+    """current_portfolio names a symbol with non-zero weight that the trade
+    reconstruction never establishes (or has at zero) -> ValueError.
+    """
+    days = 30
+    flat_100 = {_date(d): 100.0 for d in range(days + 1)}
+    daily_prices = {
+        "AAPL.O": flat_100,
+        "MSFT.O": dict(flat_100),
+        "TSLA.O": dict(flat_100),
+    }
+
+    prior = {"AAPL.O": 0.5, "MSFT.O": 0.5}
+    # No trades. Reconstructed end: AAPL=0.5, MSFT=0.5, TSLA=0 (not present).
+    trade_log: list[dict] = []
+
+    # Caller claims TSLA at 0.10 with offsetting trim — sums to 1.0 but
+    # contradicts the empty trade log.
+    bad_current = {"AAPL.O": 0.4, "MSFT.O": 0.5, "TSLA.O": 0.10}
+
+    with pytest.raises(ValueError) as excinfo:
+        daily_contribution(
+            prior_portfolio=prior,
+            current_portfolio=bad_current,
+            trade_log=trade_log,
+            daily_prices=daily_prices,
+            period_start=_date(0),
+            period_end=_date(days),
+        )
+
+    msg = str(excinfo.value)
+    # Either AAPL.O (off by 0.1) or TSLA.O (off by 0.1) should be named — both fail.
+    assert "AAPL.O" in msg or "TSLA.O" in msg
