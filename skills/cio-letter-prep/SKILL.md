@@ -154,7 +154,7 @@ Word .docx ONLY (decision 6D). Markdown is an intermediate format; the deliverab
 1. Batch C composes the structured content (period header, tables as row-arrays, prose paragraphs as strings, conditional banner / forward-outlook flags).
 2. Hand the structured content to the `docx` skill: tables become Word tables (Heading 1 row, fixed-width columns), section headers become Word Heading styles (1 / 2), prose becomes Body Text, the WARNING banner (if any) is rendered with a top-of-doc highlight (background color or boxed Heading 1).
 3. The `docx` skill's create-new-document path uses `docx-js` (npm) to assemble and validate the .docx, writing the output file to a path the user can open. See `~/.claude/skills/docx/SKILL.md` for the invocation pattern.
-4. Optionally render alongside a sibling markdown file for diffability — `.docx` is the deliverable, the `.md` is for review-tool friendliness only.
+4. The single deliverable is `.docx`. An internal Markdown intermediate may be produced during development for diffing or review-tool friendliness, but it is NEVER handed to the CIO and NEVER counted as the skill's output. If you find yourself shipping markdown, you've broken decision 6D — re-render to `.docx`.
 
 **Golden fixture:** Decision 8A pins a reference output at `skills/cio-letter-prep/fixtures/golden_pack_2026-04.docx` (produced in Task 4 against live MCP). Visual + math validation use the same fixture; CI compares structural shape (sections, table row counts, banner presence) against the golden.
 
