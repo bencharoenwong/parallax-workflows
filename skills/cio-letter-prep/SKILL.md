@@ -11,7 +11,7 @@ negative-triggers:
 gotchas:
   - JIT-load `_parallax/parallax-conventions.md` for RIC resolution (§1), symbol cross-validation (§2), parallel execution (§3), graceful fallbacks (§4), news async handling (§5), macro reasoning (§6), and disclaimer (§7).
   - JIT-load `_parallax/house-view/loader.md` ONLY if the user supplies an active view AND the forward-outlook section is being rendered. Per decision 3B-modified, the house view is scoped to the forward-outlook section ONLY — retrospective sections (period header, attribution, contributors, detractors, trade narrative, macro, news) are always view-agnostic. If no active view is present, omit the forward-outlook section entirely; do not retrofit view language onto retrospective prose.
-  - Attribution uses **daily contribution analysis** (decision 1A, Amendment B): daily weight reconstruction from `prior_portfolio + trade_log`, then `sum_d (daily_weight × daily_return)` per holding. Naive `weight × period_return` is silently wrong when positions change mid-period. Per Amendment B, do NOT call this "time-weighted contribution" or TWR in any output — TWR is a different industry term (return calculation that strips cash flows) and conflating the two confuses practitioners; "daily contribution analysis" or "daily contribution" is the correct phrase throughout the pack.
+  - Attribution uses **daily contribution analysis** (decision 1A + Amendment B): daily weight reconstruction from `prior_portfolio + trade_log`, then `sum_d (daily_weight × daily_return)` per holding. Naive `weight × period_return` is silently wrong when positions change mid-period. Per Amendment B, do NOT call this "time-weighted contribution" or TWR in any output — TWR is a different industry term (return calculation that strips cash flows) and conflating the two confuses practitioners; "daily contribution analysis" or "daily contribution" is the correct phrase throughout the pack.
   - Daily contribution math is computed by `scripts/contribution.py` (decision 7A, Amendment A). The skill MUST invoke the script via Bash; the LLM does not hand-compute weighted returns. The script enforces a 1-bp reconciliation gate — `sum(contributions) ≈ portfolio_total_return` — and raises `ReconciliationError` on violation. If the gate fires, do not render the pack; surface the error to the user with the offending diff.
   - `prior_portfolio` and `trade_log` are HARD-REQUIRED (decision 2A). If either is missing, reject the invocation with the accepted-shape examples in the Inputs section. Do NOT degrade to a position-only contribution computation — the math is silently wrong when positions change mid-period (the failure mode this skill exists to prevent).
   - `daily_prices` passed to `contribution.py` MUST be total-return prices (dividends reinvested). `export_price_series` returns total-return-adjusted closes; do not pass raw closes from any other source.
@@ -54,7 +54,9 @@ If `prior_portfolio` or `trade_log` is missing, reject with a clear error and an
 
 ## Workflow
 
-JIT-load `_parallax/parallax-conventions.md` for execution-mode, RIC resolution, symbol cross-validation, fallbacks, news async, and macro reasoning. JIT-load `_parallax/house-view/loader.md` ONLY if `house_view` is supplied AND the forward-outlook section will render (per Amendment 3B-modified scope).
+> **Decision/amendment notation:** `decision NX` refers to the eng-review choice (1A through 10B). `Amendment X` refers to a post-swarm addition (A through E). They use disjoint namespaces — never `Amendment NX`.
+
+JIT-load `_parallax/parallax-conventions.md` for execution-mode, RIC resolution, symbol cross-validation, fallbacks, news async, and macro reasoning. JIT-load `_parallax/house-view/loader.md` ONLY if `house_view` is supplied AND the forward-outlook section will render (per decision 3B-modified scope).
 
 ### Batch 0 — Tool loading + house view check
 
@@ -72,9 +74,11 @@ Fire all rows below in a single tool-call turn. Every row is independent. Per co
 | `mcp__claude_ai_Parallax__get_telemetry` | fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences | Market regime context for the period header. |
 | `mcp__claude_ai_Parallax__analyze_portfolio` | `holdings=current_portfolio` | Current factor / sector / concentration. |
 | `mcp__claude_ai_Parallax__analyze_portfolio` | `holdings=prior_portfolio` | Prior factor / sector / concentration — used to compute period deltas (the attribution snapshot). |
-| `mcp__claude_ai_Parallax__export_price_series` | `symbol=<each holding>`, `days=<min(period_days, 365)>` | One call per holding. Returns total-return-adjusted closes. Fan out **all N calls in parallel** within Batch A. Asset class is implicitly equity for this skill — single-stock fund-manager portfolios; if a holding resolves to ETF (`etf_profile` would surface this), branch on asset class via `etf_daily_price` instead per the equity branch convention. <!-- coverage-lint: ignore-next --> The Pre-classification gate is "this skill assumes equity legs only — the CIO letter is for stock funds." |
+| `mcp__claude_ai_Parallax__export_price_series` | `symbol=<each holding>`, `days=<min(period_days, 365)>` | One call per holding. Returns total-return-adjusted closes. Fan out **all N calls in parallel** within Batch A. Fires for the FULL holdings set (contribution math input) — per-mover Batch B fan-out is the truncated set, not this call. |
 | `mcp__claude_ai_Parallax__get_company_info` | per holding | Ground-truth name oracle for cross-validation (per conventions §2). Fan out in parallel. |
 | `mcp__claude_ai_Parallax__check_portfolio_redundancy` | `holdings=current_portfolio` | Surfaced under coverage gaps if low coverage; otherwise informs trade-narrative quality. |
+
+Asset-class scope: this skill assumes equity legs only (single-stock fund-manager portfolios — the CIO letter is for stock funds), so `export_price_series` is the correct call for every holding. If a holding resolves to ETF (`etf_profile` would surface this), branch on asset class via `etf_daily_price` per the equity-branch convention; equity is the default Pre-classification gate here.
 
 If `export_price_series` fails for a holding, mark that holding as price-unavailable and apply Amendment C tiering after Batch B's contribution math.
 
@@ -129,7 +133,7 @@ Compose the structured pack content with these sections in order. Hand the resul
 1. **Period header** — `period_start` to `period_end` (calendar days), gross return (from `portfolio_total_return`), max drawdown (computed locally from the daily portfolio return path), realized vol (annualized from daily portfolio returns). If `benchmark` was provided, include benchmark return and excess return.
 2. **WARNING banner** (only if Amendment C tier 2 fired — total excluded weight > 5%).
 3. **Attribution snapshot** — factor and sector deltas (current vs prior `analyze_portfolio` output). Two short paragraphs: factor-tilt change, sector-weight change. Reference any redundancy alerts from `check_portfolio_redundancy`.
-4. **Top contributors table** — top 5 by contribution_bps. One row per holding using the Amendment 4A template:
+4. **Top contributors table** — top 5 by contribution_bps. One row per holding using the decision 4A row template (driver field filled per Amendment D fallback):
    `{symbol} | {contrib_bps} bps | Driver: {driver_field}`
    Fill `{driver_field}` per the Amendment D fallback hierarchy:
    1. Notable news event with date (from `get_news_synthesis`) — e.g., `Beat Q1 EPS by 12%, raised guidance (2026-04-22)`.
@@ -142,7 +146,7 @@ Compose the structured pack content with these sections in order. Hand the resul
 7. **Macro snapshot** — one bullet per macro market (≤ 3 bullets). Pull headline from each `macro_analyst` summary; ground in the period's regime call from `get_telemetry`.
 8. **News themes** — cluster news from `get_news_synthesis` calls by `sector × directional move` (positive vs negative). Max 5 buckets. Each bucket cites ≥ 1 ticker by name. Do NOT repeat the per-mover driver text verbatim; this section is sector-themed.
 9. **Forward-outlook** — render ONLY if `house_view` is active and validated (decision 3B-modified). 1 bullet per top-5 holding by current weight, framed in view-language (regime call, tilt direction, conviction notes per loader.md §3-§5). If no active view, OMIT this section entirely. Do not retrofit view-language onto retrospective sections.
-10. **Coverage gaps** (Amendment C tier 1 / Amendment 5A baseline) — list any holdings excluded from contribution due to missing data with their weights. List any holdings excluded from per-position analysis due to the 40-holding soft cap (decision 10B). List any tools that returned "data unavailable" per conventions §4 fallback policy.
+10. **Coverage gaps** (decision 5A baseline + Amendment C tier 1) — list any holdings excluded from contribution due to missing data with their weights. List any holdings excluded from per-position analysis due to the 40-holding soft cap (decision 10B). List any tools that returned "data unavailable" per conventions §4 fallback policy.
 11. **Disclaimer** — per conventions §7. If active view: use the view-aware disclaimer per loader.md §5 rule 5; otherwise the standard wording (see Disclaimer section below).
 
 ## Output Format
@@ -156,7 +160,7 @@ Word .docx ONLY (decision 6D). Markdown is an intermediate format; the deliverab
 3. The `docx` skill's create-new-document path uses `docx-js` (npm) to assemble and validate the .docx, writing the output file to a path the user can open. See `~/.claude/skills/docx/SKILL.md` for the invocation pattern.
 4. The single deliverable is `.docx`. An internal Markdown intermediate may be produced during development for diffing or review-tool friendliness, but it is NEVER handed to the CIO and NEVER counted as the skill's output. If you find yourself shipping markdown, you've broken decision 6D — re-render to `.docx`.
 
-**Golden fixture:** Decision 8A pins a reference output at `skills/cio-letter-prep/fixtures/golden_pack_2026-04.docx` (produced in Task 4 against live MCP). Visual + math validation use the same fixture; CI compares structural shape (sections, table row counts, banner presence) against the golden.
+**Golden fixture:** Decision 8A pins a reference output at `skills/cio-letter-prep/fixtures/golden_pack_2026-04.docx` *[Forward reference — produced by Task 4 against live MCP, committed before private-beta release. CI comparison gating will fail loudly if the file is missing.]* Visual + math validation use the same fixture; CI compares structural shape (sections, table row counts, banner presence) against the golden.
 
 ## Worked Numerical Example (held-entire-period)
 
@@ -202,7 +206,7 @@ This example mirrors `scripts/test_contribution.py::test_held_entire_period_no_t
 
 Function: `daily_contribution(prior_portfolio, current_portfolio, trade_log, daily_prices, period_start, period_end, reconciliation_tolerance=1e-4)`.
 
-- **Required-input contract (Amendment 2A):** all six positional arguments are required. The function rejects empty / mismatched / out-of-order / out-of-period inputs with a `ValueError`, including a cross-check that `prior_portfolio + trade_log` reconstructs `current_portfolio` within 10 bps of weight per symbol.
+- **Required-input contract (decision 2A):** all six positional arguments are required. The function rejects empty / mismatched / out-of-order / out-of-period inputs with a `ValueError`, including a cross-check that `prior_portfolio + trade_log` reconstructs `current_portfolio` within 10 bps of weight per symbol.
 - **Total-return-prices assumption:** `daily_prices` MUST be total-return prices (dividends reinvested). Pass `export_price_series` outputs directly. Passing raw closes breaks reconciliation by the dividend amount; see `test_non_total_return_prices_break_math_negative_control` for the negative control.
 - **Reconciliation gate (Amendment A):** the function computes `diff = sum(contributions) − portfolio_total_return` and raises `ReconciliationError(diff, tolerance)` if `|diff| > 1e-4` (1 bp). The skill MUST NOT catch and discard this error — surface it to the user with the diff value and abort rendering.
 - **Returns:** `{contributions: {symbol: decimal_contribution}, portfolio_total_return: arithmetic_sum_of_daily_portfolio_returns, reconciliation_diff: signed_diff}`. `contribution_bps = decimal_contribution * 10000`.
