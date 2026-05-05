@@ -1,0 +1,22 @@
+{
+  "market": "United States",
+  "component": "tactical",
+  "regime": "late-cycle",
+  "tactical": {
+    "stance": "neutral-defensive",
+    "horizon_months": 3,
+    "summary": "Sticky core inflation and a hawkish Fed reaction function argue for trimming duration risk and rotating from high-multiple growth toward quality-defensive equity. Credit remains well-bid but spreads have begun to widen in HY.",
+    "key_drivers": [
+      "Core CPI 3.4% YoY, above target",
+      "Fed minutes show no near-term cut",
+      "Labor market cooling but not breaking"
+    ],
+    "factor_tilts": {
+      "VALUE": "neutral",
+      "QUALITY": "overweight",
+      "MOMENTUM": "underweight",
+      "DEFENSIVE": "overweight"
+    }
+  },
+  "generated_at": "2026-04-30T17:55:00Z"
+}
