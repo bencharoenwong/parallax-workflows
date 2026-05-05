@@ -1,0 +1,28 @@
+{
+  "factor_exposures": {
+    "VALUE": 5.8,
+    "QUALITY": 7.2,
+    "MOMENTUM": 4.6,
+    "DEFENSIVE": 6.1
+  },
+  "sector_exposures": {
+    "Information Technology": 0.32,
+    "Financials": 0.18,
+    "Health Care": 0.15,
+    "Consumer Staples": 0.12,
+    "Energy": 0.10,
+    "Industrials": 0.08,
+    "Other": 0.05
+  },
+  "concentration": {
+    "top1_weight": 0.22,
+    "top3_weight": 0.51,
+    "hhi": 0.118
+  },
+  "risk_metrics": {
+    "weighted_beta": 1.05,
+    "volatility_estimate": 0.164
+  },
+  "holdings_count": 8,
+  "as_of": "2026-04-30"
+}
