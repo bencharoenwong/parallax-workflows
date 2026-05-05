@@ -24,6 +24,15 @@ When the live MCP server changes a response shape, refresh the relevant mock
 (see ``mcp_mocks/README.md``) and update the schema below in the same commit.
 A red contract test in CI surfaces drift before the customer does.
 
+Coupling with SKILL.md
+----------------------
+
+When SKILL.md (Task 3) is updated to read a new field from any of these
+endpoints, the corresponding schema in this file MUST be updated in the same
+PR. The README in ``mcp_mocks/`` describes the refresh workflow, but the
+coupling is flagged here because a SKILL.md author updating field reads is
+unlikely to check the README first.
+
 Implementation notes
 --------------------
 
@@ -31,6 +40,15 @@ We use a hand-rolled validator instead of ``jsonschema`` to keep the skill
 stdlib-only (consistent with ``contribution.py``). The validator is small
 (~40 lines) and supports nested dicts, lists-of-dicts, and a small "any of
 these types" form via tuples — sufficient for these contracts.
+
+Validator limitation — empty lists
+----------------------------------
+
+When a schema specifies a list with element-shape ``[elt_schema]``, an empty
+list passes the validator unconditionally — element-shape validation only
+fires per-element. If empty lists are not legitimate output for an endpoint,
+add a ``len(data[field]) > 0`` guard in that endpoint's realistic-values
+test.
 
 Schemas use this Python-dict DSL:
 
@@ -483,6 +501,9 @@ def test_get_assessment_mock_has_realistic_values():
     """Assessment prose is substantive (not a stub) and timestamp ISO."""
     data = _load_mock("get_assessment")
     assert data["symbol"]
+    # 50 chars ≈ shortest plausible non-stub sentence; tighter would risk
+    # false positives on terse-but-real outputs. Same threshold reused in
+    # the get_news_synthesis test below for the same reason.
     assert len(data["assessment"]) >= 50, (
         "assessment text suspiciously short — likely a stub"
     )
@@ -532,6 +553,10 @@ def test_macro_analyst_mock_has_realistic_values():
     data = _load_mock("macro_analyst")
     assert data["market"]
     assert data["tactical"]["stance"]
+    # 30 chars accommodates terse-but-real tactical summaries like
+    # "Constructive on US large-cap"; tighter would false-positive on
+    # legitimate one-line stances. Stricter than 50 used elsewhere because
+    # tactical summaries are conventionally headline-length.
     assert len(data["tactical"]["summary"]) >= 30
     if "horizon_months" in data["tactical"]:
         assert data["tactical"]["horizon_months"] > 0
