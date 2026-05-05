@@ -583,7 +583,9 @@ def test_inconsistent_current_portfolio_raises():
 
     msg = str(excinfo.value)
     # Message must identify offending symbol and surface the numbers.
-    assert "AAPL.O" in msg
+    # Both AAPL.O and MSFT.O violate the gate (each off by 0.10 in this fixture);
+    # set iteration order determines which surfaces first. Either is correct.
+    assert ("AAPL.O" in msg) or ("MSFT.O" in msg)
     # Reconstructed = 0.4, claimed = 0.30, diff = -0.10 (or 0.10 depending on sign).
     assert "0.4" in msg or "0.40" in msg
     assert "0.3" in msg or "0.30" in msg
