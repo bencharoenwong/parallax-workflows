@@ -1,0 +1,90 @@
+# Shared MCP Mock Fixtures
+
+One JSON file per Parallax MCP endpoint consumed by parallax-* skills. These mocks back the contract tests in `../contract_validator.py` + `../contract_schemas.py` and are imported by per-skill `test_mcp_contracts.py` files.
+
+## Why these exist
+
+Multiple skills orchestrate the same Parallax MCP endpoints. Each skill reads a specific subset of fields from each response. If an upstream response shape changes silently, every consuming skill degrades silently.
+
+The contract tests:
+
+1. Define a per-endpoint schema (in `../contract_schemas.py`) listing the fields skills are **known** to read, marked required vs optional with expected types.
+2. Validate that each happy-path mock JSON in this directory conforms to that schema.
+3. Run sanity checks on values (factor scores in `[0,10]`, dates ISO, prices positive, weights in `[0,1]`).
+
+A red contract test in CI surfaces drift before a customer hits it.
+
+## Files
+
+| File | Endpoint | Notes |
+|---|---|---|
+| `get_telemetry.json` | `mcp__claude_ai_Parallax__get_telemetry` | Market regime, signals, divergences |
+| `analyze_portfolio.json` | `mcp__claude_ai_Parallax__analyze_portfolio` | Factor + sector + concentration |
+| `export_price_series.json` | `mcp__claude_ai_Parallax__export_price_series` | One holding's daily OHLCV |
+| `get_company_info.json` | `mcp__claude_ai_Parallax__get_company_info` | One holding; ground-truth name oracle |
+| `check_portfolio_redundancy.json` | `mcp__claude_ai_Parallax__check_portfolio_redundancy` | **PROVISIONAL** — see below |
+| `get_assessment.json` | `mcp__claude_ai_Parallax__get_assessment` | AI synthesis (async, ~30-90s) |
+| `get_score_analysis.json` | `mcp__claude_ai_Parallax__get_score_analysis` | Weekly score history per ticker |
+| `get_news_synthesis.json` | `mcp__claude_ai_Parallax__get_news_synthesis` | News synthesis per ticker (async) |
+| `macro_analyst.json` | `mcp__claude_ai_Parallax__macro_analyst` | One country's tactical view |
+
+For multi-holding fan-out endpoints, the mock represents **one** call's response. Skills call them in parallel per holding / per top-mover.
+
+## Provisional schemas
+
+`check_portfolio_redundancy` field-level usage is not yet documented in any SKILL.md with explicit field reads. The schema is best-inference from the function name and the redundancy concept used in `portfolio-checkup`. When a skill explicitly relies on a specific field, validate the schema against an actual MCP call and update both the schema and this mock.
+
+## How to add contract tests for a new skill
+
+A consuming skill creates `skills/<skill>/scripts/test_mcp_contracts.py`:
+
+```python
+from __future__ import annotations
+import pathlib, sys
+import pytest
+
+# Add the shared `_parallax/scripts/` to sys.path
+_HERE = pathlib.Path(__file__).resolve().parent
+_PARALLAX = _HERE.parent.parent / "_parallax" / "scripts"
+sys.path.insert(0, str(_PARALLAX))
+
+from contract_validator import load_mock, validate, OPTIONAL, NUM, is_iso_date
+from contract_schemas import GET_TELEMETRY_SCHEMA, ANALYZE_PORTFOLIO_SCHEMA  # ...
+
+def test_get_telemetry_mock_conforms_to_schema():
+    validate(load_mock("get_telemetry"), GET_TELEMETRY_SCHEMA, "get_telemetry")
+
+def test_get_telemetry_mock_has_realistic_values():
+    data = load_mock("get_telemetry")
+    assert data["regime_tag"] in {"risk-on", "risk-off", "neutral", "mixed", "selective rotation"}
+    # ...
+```
+
+Per-skill realistic-values tests should encode the specific assumptions THAT skill makes about plausible values — different skills may care about different ranges. The structural-conformance tests are shared.
+
+## How to refresh when the live MCP server changes
+
+When upstream Parallax MCP changes a response shape:
+
+1. **Capture the new shape.** Hit the live endpoint via the MCP tool and save the response. Sanitize any tenant-specific identifiers.
+2. **Update the mock** in this directory to match the new shape. Keep the same file name.
+3. **Update the schema** in `../contract_schemas.py` to reflect the new contract — remove dropped fields, add new fields with required/optional markers, change types as needed.
+4. **Re-read every SKILL.md that imports the schema** to confirm those skills are still reading fields that exist in the new shape. If a skill needs to change to read new fields, do that in the same PR.
+5. **Run the tests** across all affected skills:
+   ```
+   pytest $(find skills -name test_mcp_contracts.py) -q
+   ```
+6. **Commit mock + schema + skill changes together.** The contract test is only a guard if it stays in sync with the live endpoint.
+
+## How to add a new endpoint to the contract surface
+
+1. Read the consuming SKILL.md(s) and identify which fields the skill reads from the response.
+2. Add a new mock JSON in this directory (one happy-path response).
+3. Add a new schema constant in `../contract_schemas.py` listing the fields with required/optional markers and types.
+4. Per-skill: add `test_<endpoint>_mock_conforms_to_schema` + `test_<endpoint>_mock_has_realistic_values` in that skill's `test_mcp_contracts.py`.
+5. Update the table above.
+
+## Out of scope (v2)
+
+- **Error-path mocks.** Each endpoint here gets one happy-path mock. Modeling error responses ("data unavailable", quota exceeded, partial coverage) is deferred — failure-handling contracts are documented in `_parallax/coverage-matrix.md` and exercised in skill-level integration tests.
+- **Cross-endpoint consistency.** The mocks each pin a single endpoint in isolation; they are not jointly consistent. Integration tests within each skill use coordinated fixture sets where needed.

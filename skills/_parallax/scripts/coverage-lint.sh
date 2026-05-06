@@ -85,7 +85,8 @@ check_cio_letter_prep_structure() {
   local root="skills/cio-letter-prep"
   local skill_md="$root/SKILL.md"
   local scripts_dir="$root/scripts"
-  local mocks_dir="$scripts_dir/mcp_mocks"
+  # Mocks moved to shared location under _parallax/scripts/ in feat/contract-tests-shared
+  local mocks_dir="skills/_parallax/scripts/mcp_mocks"
 
   # 1. SKILL.md must exist
   if [[ ! -f "$skill_md" ]]; then
@@ -137,18 +138,29 @@ check_cio_letter_prep_structure() {
     fi
   done
 
-  # 5. mcp_mocks/ must contain ≥ 9 .json files
+  # 5. Shared mcp_mocks/ must contain ≥ 9 .json files (moved to _parallax/scripts/
+  #    so all parallax-* skills can import the same fixtures).
   if [[ ! -d "$mocks_dir" ]]; then
     violations=$((violations + 1))
-    echo "FAIL  $mocks_dir: missing directory (cio-letter-prep requires ≥ 9 MCP mock JSONs)"
+    echo "FAIL  $mocks_dir: missing directory (shared MCP mocks; required for contract tests)"
   else
     local mock_count
     mock_count=$(find "$mocks_dir" -maxdepth 1 -name '*.json' -type f | wc -l | tr -d ' ')
     if [[ "$mock_count" -lt 9 ]]; then
       violations=$((violations + 1))
-      echo "FAIL  $mocks_dir: contains $mock_count .json file(s); cio-letter-prep requires ≥ 9"
+      echo "FAIL  $mocks_dir: contains $mock_count .json file(s); shared MCP mocks require ≥ 9"
     fi
   fi
+  # Shared validator + schemas must exist alongside mocks
+  local shared_file
+  for shared_file in \
+    "skills/_parallax/scripts/contract_validator.py" \
+    "skills/_parallax/scripts/contract_schemas.py"; do
+    if [[ ! -f "$shared_file" ]]; then
+      violations=$((violations + 1))
+      echo "FAIL  $shared_file: missing (shared contract-test infrastructure)"
+    fi
+  done
 
   # 6. Optionally run the actual test suite. Strongest check; gated on pytest.
   if command -v pytest >/dev/null 2>&1; then
