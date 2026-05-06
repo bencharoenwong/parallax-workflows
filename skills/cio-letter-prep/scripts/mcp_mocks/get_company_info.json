@@ -1,0 +1,12 @@
+{
+  "symbol": "AAPL.O",
+  "name": "Apple Inc.",
+  "exchange": "NASDAQ",
+  "sector": "Information Technology",
+  "industry": "Technology Hardware, Storage & Peripherals",
+  "country": "United States",
+  "market_cap_usd": 2870000000000,
+  "currency": "USD",
+  "description": "Apple Inc. designs, manufactures, and markets smartphones, personal computers, tablets, wearables, and accessories worldwide.",
+  "website": "https://www.apple.com"
+}

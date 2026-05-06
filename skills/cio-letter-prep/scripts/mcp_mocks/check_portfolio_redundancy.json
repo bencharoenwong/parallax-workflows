@@ -1,0 +1,21 @@
+{
+  "overlap_pairs": [
+    {
+      "symbol_a": "AAPL.O",
+      "symbol_b": "MSFT.O",
+      "overlap_score": 0.62,
+      "shared_factors": ["MOMENTUM", "QUALITY"],
+      "shared_sector": "Information Technology"
+    },
+    {
+      "symbol_a": "JPM.N",
+      "symbol_b": "BAC.N",
+      "overlap_score": 0.71,
+      "shared_factors": ["VALUE"],
+      "shared_sector": "Financials"
+    }
+  ],
+  "coverage_pct": 0.875,
+  "holdings_analyzed": 7,
+  "holdings_total": 8
+}
