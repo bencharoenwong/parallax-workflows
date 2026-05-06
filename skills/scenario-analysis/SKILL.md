@@ -41,18 +41,34 @@ Fire all three simultaneously:
 | `get_telemetry` | fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences | Starting macro environment |
 | `macro_analyst` | relevant countries/regions; component "tactical" if macro event | Positioning implications |
 
-### Phase 2: Assess Portfolio Exposure (parallel after Phase 1)
+### Phase 2: Assess Portfolio Exposure
 
-**Fire ALL of the following in a single tool-call turn** — `analyze_portfolio` plus N parallel `get_score_analysis` calls (one per holding) all dispatch simultaneously. Do NOT iterate `get_score_analysis` one holding at a time; serial loops over a 5-10 holding portfolio are the dominant latency leak in this skill. `get_score_analysis` is independent per holding per `_parallax/parallax-conventions.md` §3.
+Phase 2 is staged into two parallel turns: **2a classification + ground-truth** must complete before **2b per-equity scoring + sector** can fire, because the asset-class decision in 2a determines which holdings are eligible for 2b's `get_score_analysis` (factor scores are equity-only). Within each sub-phase every call is independent and parallel-safe per `_parallax/parallax-conventions.md` §3.
+
+#### Phase 2a — Classification + ground-truth (parallel, single tool-call turn)
 
 | Tool | Parameters | Notes |
 |---|---|---|
-| `analyze_portfolio` | holdings, lens "concentration" | Sector/factor exposures. WARNING: may exceed 180K chars — fall back to `check_portfolio_redundancy` if truncated |
-| `get_score_analysis` | per holding, 4-8 weeks — **all N calls fan out in parallel within Phase 2** | Current trajectories |
+| `analyze_portfolio` | holdings, lens "concentration" | Sector/factor exposures. WARNING: may exceed 180K chars — fall back to `check_portfolio_redundancy` if truncated. Server-side ETF handling: ETFs included here without per-skill branching. |
+| `etf_profile` | per holding, plain ticker — **all N calls fan out in parallel within 2a** | **Asset-class oracle.** Non-error response → ETF; error response (`{"error": "No profile data found"}`) → equity. Free / instant per `_parallax/token-costs.md`. Mirrors `explain-portfolio` Step 1a. |
+| `get_company_info` | per holding — **all N calls fan out in parallel within 2a** | **Ground-truth name oracle** for cross-validation per conventions §2. Per-holding only — do NOT use comma-joined: comma-joined calls fail-empty on partial coverage, which is risky for arbitrary user-supplied portfolios where any single unresolved RIC silently zeroes the entire batch. |
+
+**Gate between 2a and 2b** — perform the following checks on 2a results before firing 2b:
+
+1. **Asset-class routing**: partition holdings into `equities` (etf_profile error) and `etfs` (etf_profile non-error). Phase 2b's `get_score_analysis` runs ONLY on the `equities` set.
+2. **Name cross-validation** (per conventions §2): for each holding, compare `get_company_info.name` against any name field surfaced in `analyze_portfolio` peer rollups. Mismatches are flagged ⚠ MISMATCH and the holding is **fully excluded** from downstream analysis — both from 2b's `get_score_analysis` and from Phase 3's `get_assessment` prompt construction. Do not include mismatched holdings with empty profiles; that produces hallucinated factor profiles in the assessor's output.
+
+#### Phase 2b — Per-equity score trajectories (parallel, single tool-call turn)
+
+| Tool | Parameters | Notes |
+|---|---|---|
+| `get_score_analysis` | per **equity** holding (excluding ETFs from 2a and ⚠ MISMATCH holdings), 4-8 weeks — **all N calls fan out in parallel within 2b** | Current factor trajectories. Skipped holdings are surfaced explicitly in output (see Output Format). |
 
 Then call `get_assessment` with a prompt that:
    - Describes the scenario
-   - Lists each holding with its sector and factor profile
+   - Lists each **equity, non-mismatched** holding with its sector and factor profile
+   - For ETF holdings: lists symbol + sector exposure from `analyze_portfolio` only (no per-holding factor profile)
+   - Explicitly excludes ⚠ MISMATCH holdings from the prompt entirely
    - Asks: "Rank these holdings from most-exposed to least-exposed to this scenario. For each, explain the transmission mechanism (direct revenue impact, supply chain, regulatory, sentiment)."
 
 ### Phase 3: Sector Rotation & Replacement Candidates
@@ -71,8 +87,9 @@ Then call `get_assessment` with a prompt that:
 ## Output Format
 
 - **Scenario Summary** (what happened, why it matters — 2-3 sentences)
+- **Ground-truth Integrity** *(only render if Phase 2a flagged any mismatches OR ETFs were excluded from per-position trajectory)* — table: `symbol`, `returned_name`, `expected_name`, status (⚠ MISMATCH / ETF — sector exposure only / TRUSTED). Mismatched holdings were fully excluded from the assessment prompt; ETF holdings are present in `analyze_portfolio` sector exposure but not in per-position factor trajectories.
 - **Macro Regime Impact** (how this shifts the current regime, which factors are affected)
-- **Exposure Heat Map** (table: each holding ranked by exposure level — High/Medium/Low — with transmission mechanism)
+- **Exposure Heat Map** (table: each equity holding ranked by exposure level — High/Medium/Low — with transmission mechanism. ETF holdings appear with sector-level exposure only; mismatched holdings are excluded.)
 - **Most Exposed** (the 2-3 holdings at greatest risk, with specific reasoning)
 - **Least Affected** (safe positions — brief explanation why)
 - **Sector Rotation Thesis** (what benefits from this scenario)
