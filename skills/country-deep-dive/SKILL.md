@@ -56,4 +56,4 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 - **Score Trends** (which top picks are improving vs. declining)
 - **Investment Thesis** (synthesis: why this market, what factors favor it, key risks)
 
-> These are analytical outputs based on Parallax factor scores, not investment advice.
+> *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*

@@ -77,4 +77,4 @@ Explain scores and flags in plain terms:
 
 Keep tone friendly and educational.
 
-> These are analytical outputs based on Parallax factor scores, not investment advice.
+> *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
