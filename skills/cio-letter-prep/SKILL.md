@@ -201,9 +201,9 @@ Function: `daily_contribution(prior_portfolio, current_portfolio, trade_log, dai
 - **Returns:** `{contributions: {symbol: decimal_contribution}, portfolio_total_return: arithmetic_sum_of_daily_portfolio_returns, reconciliation_diff: signed_diff}`. `contribution_bps = decimal_contribution * 10000`.
 - **Arithmetic vs geometric:** the math sums daily contributions arithmetically, not geometrically. The reported `portfolio_total_return` is therefore the arithmetic sum of daily portfolio returns, NOT the geometrically compounded period return. For monthly letter periods the gap is small but non-zero; document it in the pack's footnote if asked.
 
-## MCP Endpoint Contracts: scripts/mcp_mocks/
+## MCP Endpoint Contracts: shared `_parallax/scripts/`
 
-Contract tests live at `scripts/test_mcp_contracts.py`. Mocks for each Parallax MCP endpoint the skill calls live at `scripts/mcp_mocks/*.json`. The tests assert that each mock conforms to a per-endpoint schema listing the fields the skill is known to read, with required / optional markers and types. Refresh workflow is documented in `scripts/mcp_mocks/README.md`. **When this skill begins reading a new field from any endpoint, update the schema in `test_mcp_contracts.py` and the corresponding mock JSON in the same PR.** A red contract test in CI surfaces upstream schema drift before a customer hits it.
+Contract tests for this skill live at `scripts/test_mcp_contracts.py` and import the shared validator + schemas from `_parallax/scripts/contract_validator.py` and `_parallax/scripts/contract_schemas.py`. Mock fixtures live at `_parallax/scripts/mcp_mocks/*.json` (shared across all parallax-* skills consuming the same endpoints). The tests assert that each mock conforms to a per-endpoint schema listing the fields the skill is known to read, with required / optional markers and types. Refresh workflow is documented in `_parallax/scripts/mcp_mocks/README.md`. **When this skill begins reading a new field from any endpoint, update the schema in `_parallax/scripts/contract_schemas.py` and the corresponding mock JSON in the same PR.** A red contract test in CI surfaces upstream schema drift before a customer hits it.
 
 ## Disclaimer
 
