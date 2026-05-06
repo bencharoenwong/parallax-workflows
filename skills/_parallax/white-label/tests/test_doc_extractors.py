@@ -236,11 +236,6 @@ class TestVoiceValidator:
         result = VoiceValidator.validate_voice(voice)
         assert result["status"] == "pass"
 
-    def test_missing_fields_dont_pass(self):
-        # placeholder to keep ordering; real test below
-        pass
-
-
 class TestColorClassifiers:
     def test_normalize_hex_3_to_6(self):
         assert _normalize_hex("#fff") == "#FFFFFF"

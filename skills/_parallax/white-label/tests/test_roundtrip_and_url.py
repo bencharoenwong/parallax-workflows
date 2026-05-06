@@ -273,6 +273,43 @@ class TestUrlFallbackRegression:
         # No error
         assert draft.get("error") is None
 
+    def test_external_stylesheet_following_recovers_fonts(self):
+        """When the page links to external CSS via <link rel='stylesheet'>,
+        the fetcher follows it and the font extractor finds declarations in
+        the stylesheet content."""
+        from subprocess import CompletedProcess
+
+        def fake_run(*args, **kwargs):
+            return CompletedProcess(args, returncode=1, stdout="")
+
+        # Page HTML has only a stylesheet link, no inline font-family
+        page_html = b"""
+<!DOCTYPE html><html><head>
+<link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400">
+</head><body><h1>Test</h1><p>Some content here.</p></body></html>
+"""
+        external_css = b"""
+body { font-family: 'Helvetica Neue', sans-serif; color: #333333; }
+h1 { font-family: 'Inter', sans-serif; color: #5A597A; }
+"""
+
+        def fake_urlopen(req, timeout=None):
+            full_url = req.full_url if hasattr(req, "full_url") else str(req)
+            if "style.css" in full_url:
+                return _StubResponse(external_css)
+            return _StubResponse(page_html)
+
+        with mock.patch("subprocess.run", fake_run), \
+             mock.patch("urllib.request.urlopen", fake_urlopen):
+            draft = extract_from_url("https://example.com/")
+
+        # Fonts should be recovered from external CSS or the Google Fonts URL
+        assert draft["fonts"], f"expected fonts to be populated, got {draft['fonts']}"
+        font_names = {data.get("name", "") for data in draft["fonts"].values()}
+        assert any("Inter" in n or "Helvetica" in n for n in font_names), \
+            f"expected Inter or Helvetica in extracted fonts, got {font_names}"
+
     def test_example_voice_artifact_validates(self):
         """Test 2: The voice extraction artifact produced from a real 2642-word
         Example letter should pass VoiceValidator (corpus size + section
