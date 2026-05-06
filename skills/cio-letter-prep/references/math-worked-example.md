@@ -43,7 +43,7 @@ so the math is verifiable without running the script.
 ## Reconciliation
 
 `sum(contributions) − portfolio_total_return ≈ 0` (well below the 1-bp tolerance).
-Amendment A's gate passes.
+The reconciliation gate passes.
 
 ## Pack rendering (synthesized; not from a real run)
 
@@ -51,6 +51,6 @@ Amendment A's gate passes.
 - Top detractor: `JPM.N −1181.8 bps`
 - Period total: `−303.4 bps`
 
-Driver fields would be filled per Amendment D fallback (defaults to "Price
-appreciation / contraction in line with [stock-level move]" for this synthetic
-data because no real news / factor / peer signal exists).
+Driver fields would be filled per the fallback hierarchy in SKILL.md (defaults
+to "Price appreciation / contraction in line with [stock-level move]" for this
+synthetic data because no real news / factor / peer signal exists).
