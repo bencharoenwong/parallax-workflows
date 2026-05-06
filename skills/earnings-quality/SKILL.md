@@ -59,4 +59,4 @@ Call `get_assessment` with a prompt focused on: earnings quality concerns, reven
 - **AI Assessment** (synthesized risk opinion)
 - **Recommended Actions** (what to monitor, what warrants deeper investigation)
 
-> These are analytical outputs based on Parallax factor scores, not investment advice.
+> *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
