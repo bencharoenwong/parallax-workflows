@@ -217,11 +217,26 @@ body { background: #FFFFFF; color: #333333; font-family: 'Calibri', sans-serif; 
 
 
 class _StubResponse:
-    """Minimal stand-in for urllib's HTTPResponse."""
-    def __init__(self, body: bytes):
+    """Minimal stand-in for urllib's HTTPResponse.
+
+    NOTE: bare `mock.MagicMock()` for `.headers` is a footgun. The production
+    code in _fetch_external_stylesheets does:
+
+        ctype = resp.headers.get_content_type() if hasattr(...) else ...
+        if ctype and "css" not in ctype.lower() and "text" not in ctype.lower():
+            continue
+
+    With a bare MagicMock, hasattr is always True and `ctype` becomes a
+    MagicMock instance whose `__contains__` returns False — so `"css" not in
+    ctype` is True and the content-type guard silently skips the body. Use
+    real lambdas via spec= so the guard exercises the path it claims to.
+    """
+    def __init__(self, body: bytes, content_type: str = "text/html"):
         self._body = body
-        self.headers = mock.MagicMock()
+        self.headers = mock.MagicMock(spec=["get_content_charset", "get_content_type", "get"])
         self.headers.get_content_charset = lambda: "utf-8"
+        self.headers.get_content_type = lambda: content_type
+        self.headers.get = lambda key, default=None: content_type if key.lower() == "content-type" else default
 
     def read(self, amt=None):
         # Real urllib HTTPResponse.read accepts an optional size cap.
@@ -275,20 +290,28 @@ class TestUrlFallbackRegression:
 
     def test_external_stylesheet_following_recovers_fonts(self):
         """When the page links to external CSS via <link rel='stylesheet'>,
-        the fetcher follows it and the font extractor finds declarations in
-        the stylesheet content."""
+        the fetcher follows it AND parses Google Fonts URLs separately. Both
+        paths must contribute to the extracted fonts.
+
+        Pin the stylesheet response with a CORRECT Content-Type ("text/css")
+        so the production content-type guard in _fetch_external_stylesheets
+        actually allows the body through. Earlier version of this test
+        passed only because Google Fonts URL parsing fired BEFORE urlopen
+        and the external CSS body was silently rejected.
+        """
         from subprocess import CompletedProcess
 
         def fake_run(*args, **kwargs):
             return CompletedProcess(args, returncode=1, stdout="")
 
-        # Page HTML has only a stylesheet link, no inline font-family
         page_html = b"""
 <!DOCTYPE html><html><head>
 <link rel="stylesheet" href="/assets/style.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400">
 </head><body><h1>Test</h1><p>Some content here.</p></body></html>
 """
+        # NB: 'Helvetica Neue' is the marker that the EXTERNAL CSS path fired
+        # (Inter would be found just from the Google Fonts query string).
         external_css = b"""
 body { font-family: 'Helvetica Neue', sans-serif; color: #333333; }
 h1 { font-family: 'Inter', sans-serif; color: #5A597A; }
@@ -297,18 +320,25 @@ h1 { font-family: 'Inter', sans-serif; color: #5A597A; }
         def fake_urlopen(req, timeout=None):
             full_url = req.full_url if hasattr(req, "full_url") else str(req)
             if "style.css" in full_url:
-                return _StubResponse(external_css)
-            return _StubResponse(page_html)
+                return _StubResponse(external_css, content_type="text/css")
+            return _StubResponse(page_html, content_type="text/html")
 
         with mock.patch("subprocess.run", fake_run), \
              mock.patch("urllib.request.urlopen", fake_urlopen):
             draft = extract_from_url("https://example.com/")
 
-        # Fonts should be recovered from external CSS or the Google Fonts URL
+        # Fonts should be populated
         assert draft["fonts"], f"expected fonts to be populated, got {draft['fonts']}"
         font_names = {data.get("name", "") for data in draft["fonts"].values()}
-        assert any("Inter" in n or "Helvetica" in n for n in font_names), \
-            f"expected Inter or Helvetica in extracted fonts, got {font_names}"
+
+        # BOTH paths must have fired:
+        #   - Inter proves the Google Fonts query path fired (or the external CSS path did)
+        #   - Helvetica Neue proves the external CSS fetch path specifically fired
+        #     (it appears nowhere except in external_css)
+        assert any("Helvetica" in n for n in font_names), \
+            f"external CSS fetch path did not fire — expected 'Helvetica Neue' in fonts, got {font_names}"
+        assert any("Inter" in n for n in font_names), \
+            f"Google Fonts path did not fire — expected 'Inter' in fonts, got {font_names}"
 
     def test_polaris_voice_artifact_validates(self):
         """Test 2: The voice extraction artifact produced from a real 2642-word
