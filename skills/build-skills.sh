@@ -32,8 +32,7 @@ get_excludes() {
 KNOWN_SKILLS="translate-chinese-finance translate-thai-finance"
 
 # Private beta — opt-in only, not built by default.
-# cio-letter-prep is in private beta with First Plus Asset Management.
-# See plan-eng-review notes 2026-05-05 for the 9A release-gate decision.
+# Skills here are gated until pilot customers complete one full usage cycle.
 PRIVATE_BETA_SKILLS="cio-letter-prep"
 
 is_private_beta() {

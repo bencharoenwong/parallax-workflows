@@ -26,7 +26,7 @@ gotchas:
   - Empty contributor / detractor side: if all holdings have positive (negative) contribution, render the populated table only; suppress the empty side rather than rendering "No detractors" prose.
   - Single-holding portfolio: top-5 collapses to top-1 (or top-N for N < 5); render valid for N ∈ [1, 5].
   - Duplicate symbol in input portfolio: reject at validation with "Duplicate symbol {sym}" — no auto-dedup.
-  - Mid-period delisting (price series ends before period_end): treat as an Amendment-C coverage gap (drop from rankings + surface), not a hard ValueError.
+  - Mid-period delisting (price series ends before period_end): treat as a coverage gap (drop from rankings + surface per the materiality tiers), not a hard ValueError.
   - This skill is private-beta gated; excluded from default `build-skills.sh` builds. Confirm enablement before running for new customers.
 ---
 
@@ -75,7 +75,7 @@ Fire all rows below in a single tool-call turn. Every row is independent. Per co
 | Tool | Parameters | Notes |
 |---|---|---|
 | `mcp__claude_ai_Parallax__get_telemetry` | fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences | Market regime context for the period header. |
-| `mcp__claude_ai_Parallax__analyze_portfolio` | `portfolio=[{date:period_start, ...prior}, {date:rebalance_date, ...current}]`, `start_date=period_start`, `end_date=period_end`, `benchmark=<input or default>`, `fields=["portfolio_summary","performance_metrics","drawdown_analysis","portfolio_scores","concentration_metrics","company_contribution","sector_contribution","sector_allocation","time_period_returns","latest_holdings"]` | **Single multi-date call.** Server-side `company_contribution` is canonical; current+prior factor exposures via `latest_holdings` + `sector_allocation` over time. `scripts/contribution.py` runs as the reconciliation audit (Batch B step 1). |
+| `mcp__claude_ai_Parallax__analyze_portfolio` | Construct the `portfolio` array as one entry at `period_start` carrying `prior_portfolio` weights, plus one entry per distinct trade date in `trade_log` carrying the cumulative-post-trade weights as of that date. The final entry's weights MUST equal `current_portfolio`. `start_date=period_start`, `end_date=period_end`, `benchmark=<input or "ACWI.OQ">`, `fields=["portfolio_summary","performance_metrics","drawdown_analysis","portfolio_scores","concentration_metrics","company_contribution","sector_contribution","sector_allocation","time_period_returns","latest_holdings"]`. For the common single-rebalance case (one trade date `D`), the array has 2 entries: `[{date: period_start, ...prior}, {date: D, ...current}]`. | **Single multi-date call.** Server-side `company_contribution` is canonical; current+prior factor exposures via `latest_holdings` + `sector_allocation` over time. `scripts/contribution.py` runs as the reconciliation audit (Batch B step 1). |
 | `mcp__claude_ai_Parallax__export_price_series` | `symbol=<each holding>`, `days=<min(period_days, 365)>` | One call per holding (parallel). Returns TR-adjusted closes. Fires for the FULL holdings set (input to local audit) — Batch B fan-out is the truncated set, not this. |
 | `mcp__claude_ai_Parallax__get_company_info` | `symbol="<comma-joined RICs>"` | **Single call**, comma-separated. FREE, instant. Returns all holdings' names for cross-validation per conventions §2. |
 | `mcp__claude_ai_Parallax__check_portfolio_redundancy` | `holdings=current_portfolio` | Surfaced under coverage gaps if low coverage; otherwise informs trade-narrative quality. |
@@ -156,7 +156,8 @@ Compose the structured pack content with these sections in order. Hand the resul
 8. **News themes** — cluster news from `get_news_synthesis` calls by `sector × directional move` (positive vs negative). Max 5 buckets. Each bucket cites ≥ 1 ticker by name. Do NOT repeat the per-mover driver text verbatim; this section is sector-themed.
 9. **Forward-outlook** — render ONLY if `house_view` is active and validated. 1 bullet per top-5 holding by current weight, framed in view-language (regime call, tilt direction, conviction notes per loader.md §3-§5). If no active view, OMIT this section entirely.
 10. **Coverage gaps** — list any holdings excluded from contribution due to missing data with their weights. List any holdings excluded from per-position analysis due to the 40-holding soft cap. List any tools that returned "data unavailable" per conventions §4.
-11. **Disclaimer** — per conventions §7. If active view: use the view-aware disclaimer per loader.md §5 rule 5; otherwise the standard wording (see Disclaimer section below).
+11. **Provenance** — small footer block (smaller font, italic): generation date, tools used (with versions if available), reconciliation-audit result formatted as `Reconciliation audit: PASS — local total {X} bps vs server {Y} bps; diff {Z} bps; tolerance 25 bps` (or `FAIL` with halt-and-report wording). Skill version + private-beta tag.
+12. **Disclaimer** — per conventions §7. If active view: use the view-aware disclaimer per loader.md §5 rule 5; otherwise the standard wording (see Disclaimer section below).
 
 ## Output Format
 
@@ -165,9 +166,24 @@ Word .docx ONLY via the `docx` skill chain. The deliverable is a .docx file the 
 **Render chain:**
 
 1. Batch C composes the structured content (period header, tables as row-arrays, prose paragraphs as strings, conditional banner / forward-outlook flags).
-2. Hand the structured content to the `docx` skill: tables become Word tables (Heading 1 row, fixed-width columns), section headers become Word Heading styles (1 / 2), prose becomes Body Text, the WARNING banner (if any) is rendered with a top-of-doc highlight (background color or boxed Heading 1).
-3. The `docx` skill's create-new-document path uses `docx-js` (npm) to assemble and validate the .docx, writing the output file to a path the user can open. See `~/.claude/skills/docx/SKILL.md` for the invocation pattern.
-4. The single deliverable is `.docx`. An internal Markdown intermediate may be produced during development for diffing or review-tool friendliness, but it is NEVER handed to the CIO and NEVER counted as the skill's output. If you find yourself shipping markdown, you've broken the output contract — re-render to `.docx`.
+2. Hand the structured content to the `docx` skill: tables become Word tables (branded header row, alternating-row shading), section headers become Word Heading styles (1 / 2), prose becomes Body Text, the WARNING banner (if any) is rendered with a top-of-doc highlight (amber background + dark text).
+3. The single deliverable is `.docx`. An internal Markdown intermediate may be produced during development for diffing or review-tool friendliness, but it is NEVER handed to the CIO and NEVER counted as the skill's output. If you find yourself shipping markdown, you've broken the output contract — re-render to `.docx`.
+
+**Default brand palette** (placeholder; the fund's own brand can override):
+
+| Token | Hex | Use |
+|---|---|---|
+| `cg-navy-900` | `#0C2746` | H1/H2 headings, table header fill |
+| `cg-navy-700` | `#154175` | H3/H4 headings, interactive accents |
+| `cg-neutral-900` | `#1F2937` | Body text |
+| `cg-neutral-500` | `#6B7280` | Muted text (subtitle, provenance, disclaimer) |
+| `cg-neutral-100` | `#EAEDF3` | Alternating-row table shading |
+| `cg-green-700` | `#15803D` | Positive contributions, "PASS" markers |
+| `cg-red-700` | `#B91C1C` | Negative contributions, "FAIL" markers |
+| `cg-amber-700` | `#B45309` | Warning banner text |
+| `cg-amber-50` | `#F9F1EB` | Warning banner fill |
+
+The render synthesis applies these tokens to: title (navy-900), body (neutral-900), section headings (navy-900 H1/H2 → navy-700 H3/H4 → navy-400 H5/H6), table headers (navy-900 fill + white text), even rows (neutral-100 shading), contributor "+ bps" (green-700), detractor "− bps" (red-700), provenance/disclaimer (neutral-500 + italic + 8-9pt). Funds publishing under their own brand should swap the palette in their config; the default palette is a sensible institutional-finance baseline.
 
 **Golden fixture:** Reference output at `skills/cio-letter-prep/fixtures/golden_pack_2026-04.docx`. Visual + math validation use the same fixture; CI compares structural shape (sections, table row counts, banner presence) against the golden.
 
@@ -207,7 +223,19 @@ If active view: use the view-aware disclaimer per `_parallax/house-view/loader.m
 
 ## Design Lineage
 
-| Tag | Where rationale lives | Summary |
-|---|---|---|
-| Decisions 1A–10B | eng-review notes (`~/.claude/notes/2026-05-05-1502-plan-eng-review-parallax-cio-letter-prep.md`) | Choices made during plan-eng-review: math approach (1A), input strictness (2A), house-view scope (3B-modified), template structure (4A), partial-data tiers (5A), Word output (6D), test anchor (7A), golden fixture (8A), private-beta gate (9A), size cap (10B). |
-| Amendments A–E | same notes (Plan-Swarm Amendments section) | Post-swarm additions: A reconciliation gate, B "daily contribution analysis" naming, C materiality tiers, D driver fallback hierarchy, E MCP contract tests. |
+The skill's design choices, summarized inline so the rationale is self-contained:
+
+| Choice | Rationale |
+|---|---|
+| Daily contribution analysis (not naive `weight × period_return`) | Naive math is silently wrong when positions change mid-period. Daily reconstruction from prior + trade_log is the only correct approach for rebalanced portfolios. |
+| Hard-require `prior_portfolio` + `trade_log` | Without both, the math falls back to wrong-by-default. Better to reject than silently degrade. |
+| House view scoped to forward-outlook section ONLY | Letter is retrospective; view is forward-looking. Mixing them creates anachronism risk in the LP narrative. |
+| Tight composition templates with required evidence slots | Free-form prose drifts into generic platitudes. Templates force evidence-anchored drivers. |
+| Materiality tiers for excluded holdings | Drop-with-note is insufficient when the dropped holding is a top contributor. Tiers ensure user-visible warnings scale with materiality. |
+| Word .docx output via the `docx` skill chain | Fund managers write LP letters in Word. Native format reduces friction and matches CIO workflow. |
+| Server-side `company_contribution` as canonical numbers | Parallax's server-side math is what CIO will defend in LP meetings. Local `contribution.py` is the audit gate. |
+| 5+5 contributor/detractor cap with 40-holding soft cap | Async per-mover MCP calls are expensive (~30-90s each). Caps balance cost against narrative depth. |
+| Driver fallback hierarchy (news → factor → sector → default phrase) | Real news is best evidence; default phrases prevent broken row rendering when no signal exists. |
+| Reconciliation gate + 25-bp audit tolerance | Inner 1-bp gate catches math bugs in `contribution.py`; outer 25-bp gate catches local-vs-server divergence beyond known convention skew. |
+| Private-beta gate | Pilot with named customer first; promote after one full letter cycle of feedback. |
+| MCP contract tests | Catch upstream Parallax schema drift in CI before customers hit it. |
