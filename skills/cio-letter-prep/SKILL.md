@@ -152,12 +152,12 @@ from loader import load_client_branding  # noqa: E402
 
 branding = load_client_branding()
 
-# Treat config_not_found as "no client configured" (use defaults). Treat
-# logo_missing as a partial-success — palette and fonts still usable.
-err = branding.get("error") or ""
+# Treat config_not_found / schema_invalid / yaml_parse_error as "no client
+# configured, use defaults". Treat logo_missing as a partial success — palette
+# and fonts are still usable, just skip the cover-page logo.
+err = branding.get("error")
 white_label_active = (
-    err == ""  # error is None on a clean load
-    or err is None
+    err is None
     or err.startswith("logo_missing")
 )
 ```
@@ -236,19 +236,13 @@ The render synthesis applies these tokens to: title (navy-900), body (neutral-90
 | `cg-amber-700` / `cg-amber-50` | **(unchanged)** | Semantic warning — never branded |
 | `cg-neutral-500` | **(unchanged)** | Muted text contrast — fund's `text` color may be too dark for muting |
 
-The CIO header / cover page also gains the client's name when available (read from `metadata.client_name` in `~/.parallax/client-branding/config.yaml`; loader does not currently surface it directly, so for now read the YAML directly when needed):
+The CIO header / cover page also gains the client's name when available — read it directly from the loader's return dict:
 
 ```python
-import yaml
-cfg_path = Path.home() / ".parallax" / "client-branding" / "config.yaml"
-client_name = ""
-if cfg_path.exists():
-    try:
-        cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
-        client_name = cfg.get("metadata", {}).get("client_name", "")
-    except Exception:
-        client_name = ""
+client_name = branding.get("client_name", "")
 ```
+
+> **Branch dependency note.** `branding["client_name"]` is surfaced by the loader on `feat/white-label-extension` (added alongside the voice + multi_source schema work). On `main` today the loader does NOT yet return `client_name`. Until that branch merges, this skill MUST tolerate `client_name == ""` from `branding.get("client_name", "")` — the cover-page header simply omits the client name when absent. Do NOT introduce a second `yaml.safe_load` against the same config file as a workaround: it duplicates the loader's parsing, bypasses error handling, and creates a race window between the loader's `cfg_path.exists()` check and the second read. The correct path is to wait for the loader's `client_name` exposure.
 
 Logo missing (loader returned `error: logo_missing: ...`) → render the rest of the white-label substitution but skip the cover-page logo, log a warning in the Provenance footer.
 
