@@ -44,4 +44,4 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 
 Keep it scannable. Lead with what changed.
 
-> These are analytical outputs based on Parallax factor scores, not investment advice.
+> *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*

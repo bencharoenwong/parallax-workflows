@@ -63,4 +63,4 @@ If requested: call `build_stock_universe` with "[country] equities". For top 5: 
 - **Top Equity Opportunities** (if equity screening included: table with symbol, name, sector, score, trend)
 - **Data Freshness** (when macro data was last updated)
 
-> These are analytical outputs based on Parallax factor scores, not investment advice.
+> *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*

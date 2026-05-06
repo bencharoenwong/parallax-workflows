@@ -101,4 +101,4 @@ Client-ready report:
 
 If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
 
-> These are analytical outputs based on Parallax factor scores, not investment advice.
+> *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
