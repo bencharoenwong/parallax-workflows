@@ -1,0 +1,150 @@
+"""
+Shared MCP endpoint contract schemas for parallax-* skills.
+
+Each constant below is the canonical contract for one Parallax MCP endpoint —
+the fields the consuming skills are KNOWN to read, with required/optional
+markers and expected types. Per-skill contract tests assert that mock JSON
+fixtures conform to these schemas.
+
+When a skill begins reading a new field from any endpoint, update the schema
+here and the corresponding mock under ``mcp_mocks/`` in the same PR.
+
+The schema DSL is documented in ``contract_validator.py``.
+"""
+
+from __future__ import annotations
+
+from contract_validator import NUM, OPTIONAL
+
+
+GET_TELEMETRY_SCHEMA = {
+    "regime_tag": str,
+    "signals": dict,  # opaque blob; skill reads opportunistically
+    "commentary": {
+        "headline": str,
+        "mechanism": str,
+    },
+    "divergences": [{
+        "ticker": str,
+        "factor": str,
+        "magnitude": NUM,
+    }],
+}
+
+
+ANALYZE_PORTFOLIO_SCHEMA = {
+    "factor_exposures": {
+        "VALUE": NUM,
+        "QUALITY": NUM,
+        "MOMENTUM": NUM,
+        "DEFENSIVE": NUM,
+    },
+    "sector_exposures": dict,  # sector name -> weight; arbitrary keys
+    "concentration": ({
+        "top1_weight": NUM,
+        "top3_weight": NUM,
+        "hhi": (NUM, OPTIONAL),
+    }, OPTIONAL),
+    "risk_metrics": (dict, OPTIONAL),
+    "holdings_count": (int, OPTIONAL),
+    "as_of": (str, OPTIONAL),
+}
+
+
+EXPORT_PRICE_SERIES_SCHEMA = {
+    "symbol": str,
+    "currency": (str, OPTIONAL),
+    "prices": [{
+        "date": str,
+        "open": (NUM, OPTIONAL),
+        "high": (NUM, OPTIONAL),
+        "low": (NUM, OPTIONAL),
+        "close": NUM,
+        "volume": (NUM, OPTIONAL),
+    }],
+}
+
+
+GET_COMPANY_INFO_SCHEMA = {
+    "symbol": str,
+    "name": str,
+    "exchange": (str, OPTIONAL),
+    "sector": str,
+    "industry": (str, OPTIONAL),
+    "country": (str, OPTIONAL),
+    "market_cap_usd": (NUM, OPTIONAL),
+    "currency": (str, OPTIONAL),
+    "description": (str, OPTIONAL),
+    "website": (str, OPTIONAL),
+}
+
+
+# PROVISIONAL — see mcp_mocks/README.md. The skill plans refer to this endpoint
+# but field-level usage is not yet documented in any existing SKILL.md. The
+# schema below is best-inference from the function name and conventions; refresh
+# against the live MCP response when wiring it into a new skill's contract test.
+CHECK_PORTFOLIO_REDUNDANCY_SCHEMA = {
+    "overlap_pairs": [{
+        "symbol_a": str,
+        "symbol_b": str,
+        "overlap_score": NUM,
+        "shared_factors": ([str], OPTIONAL),
+        "shared_sector": (str, OPTIONAL),
+    }],
+    "coverage_pct": (NUM, OPTIONAL),
+    "holdings_analyzed": (int, OPTIONAL),
+    "holdings_total": (int, OPTIONAL),
+}
+
+
+GET_ASSESSMENT_SCHEMA = {
+    "symbol": str,
+    "name": (str, OPTIONAL),
+    "assessment": str,
+    "rationale": (str, OPTIONAL),
+    "confidence": (str, OPTIONAL),
+    "generated_at": (str, OPTIONAL),
+}
+
+
+GET_SCORE_ANALYSIS_SCHEMA = {
+    "symbol": str,
+    "name": (str, OPTIONAL),
+    "weeks": (int, OPTIONAL),
+    "history": [{
+        "date": str,
+        "VALUE": NUM,
+        "QUALITY": NUM,
+        "MOMENTUM": NUM,
+        "DEFENSIVE": NUM,
+        "OVERALL": (NUM, OPTIONAL),
+    }],
+}
+
+
+GET_NEWS_SYNTHESIS_SCHEMA = {
+    "symbol": str,
+    "name": (str, OPTIONAL),
+    "summary": str,
+    "key_themes": ([str], OPTIONAL),
+    "sentiment": (str, OPTIONAL),
+    "articles_analyzed": (int, OPTIONAL),
+    "period_start": (str, OPTIONAL),
+    "period_end": (str, OPTIONAL),
+    "generated_at": (str, OPTIONAL),
+}
+
+
+MACRO_ANALYST_SCHEMA = {
+    "market": str,
+    "component": (str, OPTIONAL),
+    "regime": (str, OPTIONAL),
+    "tactical": {
+        "stance": str,
+        "horizon_months": (int, OPTIONAL),
+        "summary": str,
+        "key_drivers": ([str], OPTIONAL),
+        "factor_tilts": (dict, OPTIONAL),
+    },
+    "generated_at": (str, OPTIONAL),
+}
