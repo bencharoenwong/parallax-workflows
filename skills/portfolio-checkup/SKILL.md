@@ -5,6 +5,7 @@ negative-triggers:
   - Fund manager morning brief → use /parallax-morning-brief
   - Client portfolio review (RIA) → use /parallax-client-review
   - Single stock analysis → use /parallax-should-i-buy
+  - Portfolio with significant ETF allocation → equity scope only in v1; ETF holdings will fail V2 scoring and may silently mismap in V1. ETF-aware health-check is on the v2 roadmap; for now use /parallax-explain-portfolio (which handles ETFs via etf_profile pre-classification) for ETF-heavy portfolios.
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for RIC resolution (§1), symbol cross-validation (§2), parallel execution (§3), and fallback patterns (§4)
   - JIT-load references/health-flags.md for the 5-flag health system, thresholds, and mixed-exchange fallback
@@ -54,9 +55,11 @@ This step gates Batch B and Batch C; do not start them until A.5 is complete.
 3. **Fallback ladder** — apply the first tier whose precondition holds:
    - **V2 (primary)** — V2 coverage ≥ 50% → use V2-aggregated scores; do NOT fire V1.
    - **V1 fallback** — V2 coverage < 50% → fire `quick_portfolio_scores` once; cross-validate its returned names against the **already-cached** `get_company_info.name` from Batch A (do NOT re-fire `get_company_info`); mismatched V1 holdings are re-scored individually via `get_peer_snapshot`.
-   - **Mixed-exchange split-and-merge** — V1 coverage also < 50% → split holdings by exchange suffix, score each group, merge per `references/health-flags.md` §4. This is the last-resort path.
+   - **Mixed-exchange split-and-merge** — V1 coverage also < 50% → split holdings by exchange suffix, score each group, merge per the "Mixed-Exchange Fallback" section of `references/health-flags.md`. This is the last-resort path.
 
 The cross-validation gate runs against whichever path is used, never bypassed.
+
+**`get_company_info` retry / failure handling**: per conventions §4, retry once on first failure. If the second attempt also fails, the holding has no oracle for cross-validation — treat it as **unverified** and exclude it from aggregate factor calculations (same treatment as a ⚠ MISMATCH). Surface the holding in the Verification Note as "could not be verified — Parallax company-info lookup failed" so the user knows it was excluded for a different reason than mismatch.
 
 ### Batch B — Macro context (after Step A.5)
 
