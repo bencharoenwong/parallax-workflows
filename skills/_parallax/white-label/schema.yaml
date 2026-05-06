@@ -87,3 +87,53 @@ confidence_scores:                           # 0.0-1.0 per asset, reflects extra
   header_font: 1.0
   body_font: 1.0
   monospace_font: 1.0
+
+# Optional voice section. Populated when corpus (PPTX/DOCX/URL body text) is
+# available and voice extraction is run. Downstream skills that produce written
+# content (newsletters, letters, meeting prep) read this section. Skills that
+# produce visual-only output (PDF reports) ignore it.
+#
+# Voice fields follow the Lago 7-section template with a Rezvani tone matrix.
+# Voice extraction is LLM-based (driven by SKILL.md prompting), not regex.
+voice:
+  enabled: false                             # required: gate flag for downstream consumers
+  positioning: ""                            # 1-2 sentences: who they are, what they do
+  tone:
+    register: ""                             # e.g., "formal-institutional", "warm-advisory", "technical-direct"
+    primary_attributes: []                   # 3-5 attributes, e.g., ["measured", "evidence-led", "client-first"]
+    avoid_attributes: []                     # words/tones to avoid, e.g., ["hyperbolic", "casual", "speculative"]
+  core_rules: []                             # non-negotiables, derived from observed patterns
+  anti_filler: []                            # phrase patterns to delete from AI drafts
+  audience_adaptation: []                    # optional: per-audience voice variants
+    # - audience: "internal" | "client" | "regulator"
+    #   notes: ""
+  channel_notes: []                          # optional: per-channel voice variants
+    # - channel: "newsletter" | "letter" | "meeting-prep" | "email"
+    #   notes: ""
+  drafted_vs_sent: []                        # optional: AI-draft vs hand-sent example pairs
+    # - context: ""
+    #   draft: ""
+    #   sent: ""
+    #   lesson: ""
+  company_context: ""                        # how they describe themselves, competitors, positioning
+  disclaimers: []                            # jurisdiction-specific compliance footers
+    # - jurisdiction: "MAS" | "SFC" | "SEC" | "HKMA"
+    #   text: ""
+    #   placement: "footer" | "first-page" | "report-end"
+  source_corpus:                             # provenance of voice extraction
+    documents: []                            # list of input file paths or URLs
+    word_count: 0                            # int, total words analyzed
+    confidence: 0.0                          # 0.0-1.0, voice extraction confidence
+    notes: ""                                # any caveats from extraction (low corpus, mixed sources, etc.)
+
+# Cross-source validation log. Populated when more than one source is provided
+# (e.g., URL + PPTX). Mismatches are surfaced at confirmation gate; the user
+# decides which value to keep — never auto-resolved.
+multi_source:
+  sources: []                                # list of source descriptors used
+  mismatches: []                             # fields that disagreed
+    # - field: "colors.primary"
+    #   values: [{source: "...", value: "#003366"}, {source: "...", value: "#0033FF"}]
+  agreements: []                             # fields that agreed (sanity-check signal)
+    # - field: "fonts.header"
+    #   value: "Calibri"

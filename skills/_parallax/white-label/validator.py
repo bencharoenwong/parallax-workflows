@@ -369,3 +369,78 @@ class FontValidator:
             result["detection"] = "degraded"
             result["note"] = "Font detection unavailable (matplotlib not installed); result may be inaccurate"
         return result
+
+
+class VoiceValidator:
+    """Light validation for the voice section.
+
+    Voice extraction is LLM-driven, so 'correctness' isn't checkable here.
+    What we can check: corpus size, section completeness, presence of the
+    fields downstream consumers will rely on.
+    """
+
+    MIN_CORPUS_WORDS = 500
+    RECOMMENDED_CORPUS_WORDS = 2000
+    MIN_ANTI_FILLER = 3
+    MIN_CORE_RULES = 2
+
+    @staticmethod
+    def validate_corpus_size(word_count: int) -> dict:
+        """Check that the source corpus is large enough for credible voice extraction."""
+        if word_count >= VoiceValidator.RECOMMENDED_CORPUS_WORDS:
+            return {"status": "pass", "word_count": word_count}
+        if word_count >= VoiceValidator.MIN_CORPUS_WORDS:
+            return {
+                "status": "warn",
+                "word_count": word_count,
+                "note": f"Corpus is below recommended {VoiceValidator.RECOMMENDED_CORPUS_WORDS} words; voice extraction may be shallow.",
+            }
+        return {
+            "status": "fail",
+            "word_count": word_count,
+            "note": f"Corpus is below minimum {VoiceValidator.MIN_CORPUS_WORDS} words; voice extraction is unreliable. Provide more sample documents.",
+        }
+
+    @staticmethod
+    def validate_section_completeness(voice: dict) -> dict:
+        """Check that downstream-required voice fields are populated."""
+        missing: list[str] = []
+        if not voice.get("positioning", "").strip():
+            missing.append("positioning")
+        if not voice.get("tone", {}).get("register", "").strip():
+            missing.append("tone.register")
+        if len(voice.get("tone", {}).get("primary_attributes", []) or []) < 3:
+            missing.append("tone.primary_attributes (need 3+)")
+        if len(voice.get("core_rules", []) or []) < VoiceValidator.MIN_CORE_RULES:
+            missing.append(f"core_rules (need {VoiceValidator.MIN_CORE_RULES}+)")
+        if len(voice.get("anti_filler", []) or []) < VoiceValidator.MIN_ANTI_FILLER:
+            missing.append(f"anti_filler (need {VoiceValidator.MIN_ANTI_FILLER}+)")
+
+        if not missing:
+            return {"status": "pass", "missing": []}
+        if len(missing) <= 2:
+            return {"status": "warn", "missing": missing}
+        return {"status": "fail", "missing": missing}
+
+    @staticmethod
+    def validate_voice(voice: dict) -> dict:
+        """Run all voice checks. Returns aggregated result."""
+        if not voice or not voice.get("enabled"):
+            return {"status": "skipped", "note": "Voice section not enabled."}
+
+        word_count = voice.get("source_corpus", {}).get("word_count", 0)
+        corpus = VoiceValidator.validate_corpus_size(word_count)
+        completeness = VoiceValidator.validate_section_completeness(voice)
+
+        # Aggregate: worst-of corpus and completeness
+        rank = {"pass": 0, "warn": 1, "fail": 2}
+        worst = max(rank[corpus["status"]], rank[completeness["status"]])
+        agg_status = ["pass", "warn", "fail"][worst]
+
+        return {
+            "status": agg_status,
+            "checks": {
+                "corpus": corpus,
+                "completeness": completeness,
+            },
+        }

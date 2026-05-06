@@ -1,14 +1,20 @@
 name: parallax-white-label-onboard
-description: "Configure white-label client branding for Parallax report output. Extracts colors, logos, and fonts from a website URL, PDF brand guide, or guided wizard intake. Validates assets against WCAG accessibility standards, presents a confirmation gate, then saves branding to ~/.parallax/client-branding/ where downstream skills (client-review, due-diligence, deep-dive) inject it into PDF output. Use to onboard a new client brand, update an existing one, or audit what branding is currently active."
+description: "Configure white-label client branding for Parallax report output. Extracts colors, logos, fonts AND writing voice from a folder of client collateral (PowerPoint, Word docs), a website URL, a PDF brand guide, or guided wizard intake. Multi-source ingestion supported: when more than one source is provided, mismatches between sources are flagged at the confirmation gate rather than silently resolved. Validates visual assets against WCAG accessibility standards and voice section against corpus-size and completeness thresholds, presents a confirmation gate, then saves branding to ~/.parallax/client-branding/ where downstream skills inject it: visual goes into client-review, due-diligence, and deep-dive PDFs; voice goes into letter-writing, newsletter, and meeting-prep skills. Use to onboard a new client brand, update an existing one, or audit what branding is currently active."
 negative-triggers:
   - Generating a client report → use /parallax-client-review (it loads the saved branding automatically)
   - One-off color/font question → answer inline, don't save as config
   - Portfolio construction → use /parallax-portfolio-builder
+  - Single-prompt voice rewrite of one piece of content → use /humanizer or /chicago-global-voice; this skill is for persistent client brand state
 gotchas:
   - JIT-load _parallax/white-label/schema.yaml before extraction — it is the single source of truth for config.yaml shape
   - JIT-load _parallax/white-label/extract.py and _parallax/white-label/validator.py before running Steps 1 and 2
   - URL input — use defuddle (Bash: `defuddle parse <url> --md`) if available, else WebFetch; do NOT defuddle PDFs
   - PDF input — use the Read tool with `pages` parameter; read up to first 10 pages unless the brand guide is clearly deeper
+  - PPTX input — extract.extract_from_pptx() reads OOXML theme XML directly (precise colors/fonts) and aggregates slide text for voice corpus. Requires python-pptx
+  - DOCX input — extract.extract_from_docx() same pattern via word/theme/theme1.xml. Requires python-docx
+  - Folder input — when given a directory, run all .pptx/.docx/.pdf files inside it through their respective extractors and merge_drafts() the result before validation
+  - Voice extraction is LLM-driven (NOT regex) — extract.py only assembles the corpus. SKILL.md Step 1.5 prompts the model to fill the voice schema using the Lago 7-section template
+  - Voice corpus must be ≥500 words for credible extraction; ≥2000 words is recommended. VoiceValidator.validate_corpus_size enforces this with warn/fail. Below the floor, refuse to populate voice or surface a hard warning
   - Wizard mode is triggered by invoking with no argument — guide intake via AskUserQuestion, one prompt per group
   - Confirmation gate is REQUIRED — config must not be written until the user explicitly confirms
   - Validation warnings (warn/fail) never block the save — surface them and let the user decide
@@ -29,12 +35,18 @@ Configure client branding for Parallax equity research report output.
 ## Usage
 
 ```
-/parallax-white-label-onboard                           # wizard mode — guided intake via prompts
-/parallax-white-label-onboard <https://client.com>      # auto-extract from website
-/parallax-white-label-onboard <path/to/brand-guide.pdf> # extract from PDF brand guide
-/parallax-white-label-onboard --status                  # show active branding summary
-/parallax-white-label-onboard --clear                   # remove active branding (requires confirmation)
+/parallax-white-label-onboard                              # wizard mode — guided intake via prompts
+/parallax-white-label-onboard <https://client.com>         # auto-extract from website
+/parallax-white-label-onboard <path/to/brand-guide.pdf>    # extract from PDF brand guide
+/parallax-white-label-onboard <path/to/newsletter.pptx>    # extract from PowerPoint (visual + voice)
+/parallax-white-label-onboard <path/to/letter.docx>        # extract from Word (visual + voice)
+/parallax-white-label-onboard <path/to/client-collateral/> # extract from folder of mixed PPTX/DOCX/PDF
+/parallax-white-label-onboard <url> <path/to/folder>       # multi-source: cross-validate URL vs documents
+/parallax-white-label-onboard --status                     # show active branding summary
+/parallax-white-label-onboard --clear                      # remove active branding (requires confirmation)
 ```
+
+**Multi-source priority.** When more than one source is supplied, visual fields with mismatches are surfaced at the confirmation gate (never auto-merged). Voice corpus is concatenated across all sources before voice extraction. The merged draft's `source.type` becomes `"multi"` with all components listed in `source.components`.
 
 ## Where branding lives
 
@@ -48,17 +60,55 @@ Files are written `0600`; `assets/` is `0700`; the directory is `0700` on creati
 
 ## Integration with Downstream Skills
 
-When `/parallax-client-review`, `/parallax-due-diligence`, or `/parallax-deep-dive` generate PDF or formatted output, they check for `~/.parallax/client-branding/config.yaml`. If present and valid, they inject the client's colors, logo, and fonts. If absent or corrupted, they fall back to default Parallax branding silently — this skill never breaks downstream consumers.
+Two consumer classes:
 
-**Loading pattern for consumer skills:**
+**Visual consumers** — `/parallax-client-review`, `/parallax-due-diligence`, `/parallax-deep-dive` and any skill that produces a PDF or formatted report. They read `branding.colors`, `branding.logos`, `branding.fonts`. They ignore `voice`.
+
+**Voice consumers** — letter-writing, newsletter, meeting-prep, email-drafting, and any skill that produces written content under the client's name. They read `voice.*` and apply it as a style guide before generating prose. They optionally also read `branding.*` if the output is rendered (e.g., a branded PDF letter).
+
+Both classes silently fall back to default Parallax styling/voice if the config is absent or corrupted. This skill never breaks downstream consumers.
+
+**Visual consumer loading pattern:**
 ```python
 import yaml, os
 config_path = os.path.expanduser("~/.parallax/client-branding/config.yaml")
 if os.path.exists(config_path):
     with open(config_path) as f:
-        branding = yaml.safe_load(f)
-    # Use branding["branding"]["colors"]["primary"] etc.
+        cfg = yaml.safe_load(f)
+    primary_color = cfg["branding"]["colors"]["primary"]
+    # ... etc
 ```
+
+**Voice consumer loading pattern:**
+```python
+import yaml, os
+config_path = os.path.expanduser("~/.parallax/client-branding/config.yaml")
+voice = None
+if os.path.exists(config_path):
+    with open(config_path) as f:
+        cfg = yaml.safe_load(f)
+    if cfg.get("voice", {}).get("enabled"):
+        voice = cfg["voice"]
+
+# In the prose-generation prompt, prepend something like:
+if voice:
+    style_block = f"""
+    Write in the voice of {cfg['metadata']['client_name']}. Their register is
+    {voice['tone']['register']}. Primary attributes: {', '.join(voice['tone']['primary_attributes'])}.
+    Avoid: {', '.join(voice['tone']['avoid_attributes'])}.
+
+    Non-negotiable rules:
+    {chr(10).join('- ' + r for r in voice['core_rules'])}
+
+    Phrases to delete on sight (anti-filler):
+    {chr(10).join('- ' + p for p in voice['anti_filler'])}
+
+    How they describe themselves: {voice['company_context']}
+    """
+    prompt = style_block + "\n\n" + content_prompt
+```
+
+**Drafted-vs-Sent feedback loop.** Voice consumer skills SHOULD save the AI draft + the human-edited final version after each session as an entry in `voice.drafted_vs_sent`. This is the highest-quality voice calibration data and improves future outputs. Implementation deferred until at least one voice consumer is wired up.
 
 ## Workflow
 
@@ -76,19 +126,42 @@ from skills._parallax.white_label.validator import (
 
 ### Step 0 — Detect input mode
 
-Examine the invocation argument:
+Examine each invocation argument (the skill accepts one or more):
 
 | Condition | Mode |
 |---|---|
-| No argument | Wizard |
+| No argument | **Entry menu** (see below) |
 | Argument starts with `http://` or `https://` | URL extraction |
 | Argument is a file path ending in `.pdf` | PDF extraction |
+| Argument is a file path ending in `.pptx` | PPTX extraction |
+| Argument is a file path ending in `.docx` | DOCX extraction |
+| Argument is an existing directory | Folder extraction (run all `.pptx`/`.docx`/`.pdf` inside) |
 | Argument is `--status` | Show status block |
 | Argument is `--clear` | Clear branding |
 
-For `--status` and `--clear`, jump directly to the Operational Modes section. For the three extraction modes, proceed to Step 1.
+**Multi-source.** If two or more arguments resolve to extraction modes (any combination of URL, PDF, PPTX, DOCX, folder), run each through its respective extractor and call `extract.merge_drafts(drafts)` + `extract.cross_validate_visual(drafts)` before the validation step. Mismatches are stored in the draft for surfacing at Step 3.
 
-If the argument does not match any of the above (e.g., a `.docx` file, a plain ticker, a relative path without extension), stop and ask: "I couldn't identify the input type. Please provide a URL, a PDF path, or run without arguments for wizard mode."
+For `--status` and `--clear`, jump directly to the Operational Modes section. For all extraction modes (single or multi-source), proceed to Step 1.
+
+If an argument does not match any row above (e.g., a plain ticker, a relative path with no extension, a file that does not exist), stop and ask: "I couldn't identify the input type for `<arg>`. Please provide a URL, a `.pdf`/`.pptx`/`.docx` path, a folder path, or run without arguments for the entry menu."
+
+**Entry menu (no-argument invocation).** Do NOT jump straight into the manual color-hex wizard. The operator may not know that PPTX/DOCX or folder ingestion exists. First show the routing menu via `AskUserQuestion`:
+
+> How do you want to onboard this client's brand?
+>
+> - **Point me at their website** — I'll extract colors, fonts, logo, and writing voice from the homepage. Best when their site is the primary brand reference. *Recommended starting point.*
+> - **Point me at a folder of their materials** — drop their newsletters / letters / decks (`.pptx`, `.docx`, `.pdf`) in a folder; I'll extract everything from the OOXML theme XML and aggregate the body text for voice analysis. Best for voice fidelity.
+> - **Both — website AND folder** — I'll cross-validate visual fields between sources, flag mismatches for you to resolve, and combine the corpora for stronger voice extraction. *Best when both are available.*
+> - **Manual wizard** — I'll prompt you for each value (colors, fonts, logo URL). Use only if you have no website and no document samples.
+
+After the operator picks, ask the follow-up:
+
+| Choice | Follow-up question |
+|---|---|
+| Website | "What's the URL?" — accept and re-route through Step 0 with the URL as argument. |
+| Folder | "What's the folder path? (Absolute path; should contain `.pptx`, `.docx`, or `.pdf` files.)" — re-route through Step 0. |
+| Both | Two questions: URL, then folder path. Re-route through Step 0 with both arguments. |
+| Manual wizard | Proceed directly to Step 1 wizard mode. |
 
 ### Step 1 — Extract brand assets
 
@@ -120,9 +193,189 @@ draft = extract_from_pdf(pdf_path)
 
 PDF extraction reads up to 5 pages by default (per the extract module). If the brand guide appears to be a dedicated multi-page document and extraction confidence is low (<0.6 average), offer: "Low confidence on PDF extraction. Shall I read more pages or switch to wizard mode to confirm values manually?"
 
+**PPTX mode:**
+
+```python
+draft = extract_from_pptx(pptx_path)
+```
+
+`extract_from_pptx` reads `ppt/theme/theme1.xml` directly, so colors and fonts come from the canonical OOXML theme declarations (confidence 0.9). Body text from every text frame is aggregated into `draft["voice_corpus"]` for the voice extraction step. The OOXML slot mapping is fixed: `accent1`→primary, `accent2`→secondary, `accent3`→accent, `dk1`→text, `lt1`→background. If the deck uses a heavily customized theme that overrides these slots inline, theme XML may understate the actual on-slide colors — flag this and offer wizard override.
+
+**DOCX mode:**
+
+```python
+draft = extract_from_docx(docx_path)
+```
+
+Identical pattern via `word/theme/theme1.xml`. Body text from all paragraphs (skipping headers/footers) aggregated into `draft["voice_corpus"]`. Word's defaults are commonly Calibri (header) + Cambria (body); if the document inherits defaults rather than declaring custom fonts, the extracted values reflect the default theme — note this in `notes`.
+
+**Folder mode:**
+
+Folder mode is NOT a blind iteration. The operator's folder may contain a mix of branded marketing material (newsletters, decks, brochures), voice-only material (memos, white papers, blog exports, transcripts), and irrelevant files (logos as standalone images, spreadsheets, raw data). The LLM must inventory and classify before extracting, and confirm with the operator when the folder is mixed or ambiguous.
+
+**Step F-1 — Inventory the folder.** List every file (recursive one level by default; ask the operator if deeper recursion is wanted for large structures). Capture filename, extension, and size. Group by type:
+
+| Group | Extensions | Extraction path |
+|---|---|---|
+| **OOXML branded** | `.pptx`, `.docx` | `extract_from_pptx` / `extract_from_docx` — visual (theme XML) + voice corpus |
+| **PDF branded** | `.pdf` | `extract_from_pdf` — visual (heuristic, low confidence) + voice corpus |
+| **Text-only voice** | `.md`, `.markdown`, `.txt`, `.html`, `.htm`, `.rtf`, `.eml` | Read tool → strip markup if HTML/EML → append to supplementary voice corpus (no visual extraction) |
+| **Visual asset** | `.png`, `.jpg`, `.jpeg`, `.svg`, `.ico`, `.webp` | Treat as candidate logo / brand asset; offer to use as logo path if naming or count suggests it |
+| **Out of scope** | everything else (`.xlsx`, `.csv`, `.zip`, etc.) | Skip; report skip count to operator |
+
+**Step F-2 — Classify each in-scope file by likely role.** Read the filename + (for OOXML/PDF) sample the first few hundred chars of body text. Categorize:
+
+| Role | Heuristic signals | Treatment |
+|---|---|---|
+| **Branded marketing** | filenames like `newsletter`, `quarterly`, `letter`, `brochure`, `pitch`, `deck`; cover slide / first page mentions client name + tagline | Extract visual + voice. High weight in voice corpus. |
+| **Internal memo / whitepaper** | filenames like `memo`, `internal`, `notes`, `research`, `whitepaper`, `analysis`; body text is dense prose without marketing framing | Extract voice only. Skip visual (theme is generic Office default; would mislead). |
+| **Client-policy / compliance** | filenames like `policy`, `compliance`, `disclosure`, `terms`; body text is legal boilerplate | Skip voice (legal language is a different register). Optionally pull explicit disclaimer text into the `disclaimers[]` section if found. |
+| **Transcript / interview** | filenames like `transcript`, `interview`, `Q&A`, `call`; body text is conversational with multiple speakers | Voice only, but flag in notes — interview voice is unrepresentative of written voice. Lower-weight or ask operator. |
+| **Ambiguous** | filename gives no signal AND first-page sample is inconclusive | Surface to operator: show filename, file size, first 200 chars of text, ask "Include this for visual + voice / voice only / skip?" |
+
+**Step F-3 — Operator confirmation gate.** Before extraction, present the inventory + classification:
+
+```
+Folder: <path>  (depth: 1)
+
+In-scope files (8):
+  ✓ newsletters/2026-Q1.pptx           — branded marketing  (visual + voice)
+  ✓ newsletters/2026-Q2.pptx           — branded marketing  (visual + voice)
+  ✓ letters/2026-jan-client-letter.docx — branded marketing  (visual + voice)
+  ✓ research/macro-outlook-2026.docx   — internal memo      (voice only)
+  ✓ research/credit-views.md            — text voice         (voice only)
+  ? misc/agm-transcript.txt             — transcript         (ASK: include?)
+  - misc/holdings-2026q1.xlsx           — out of scope       (skipped)
+  - misc/portfolio-data.csv             — out of scope       (skipped)
+
+Visual assets (2):
+  ✓ assets/logo.png                     — candidate logo
+  - assets/team-photo.jpg                — skipped (not logo-shaped naming)
+
+Confirm? Or change classification for any file?
+```
+
+For ambiguous items (the `?` rows), ask one `AskUserQuestion` per file with the choices: include for visual + voice / include for voice only / skip.
+
+**Step F-4 — Extract per classification.**
+
+```python
+import os
+from pathlib import Path
+folder = Path(folder_path)
+drafts: list = []
+voice_only_corpus_chunks: list[str] = []  # text from non-OOXML voice-only files
+
+for f, classification in classified_files.items():
+    if classification == "skip":
+        continue
+    if classification in ("branded_visual_voice", "branded"):
+        if f.suffix.lower() == ".pptx":
+            drafts.append(extract_from_pptx(str(f)))
+        elif f.suffix.lower() == ".docx":
+            drafts.append(extract_from_docx(str(f)))
+        elif f.suffix.lower() == ".pdf":
+            drafts.append(extract_from_pdf(str(f)))
+    elif classification == "voice_only":
+        if f.suffix.lower() in (".pptx", ".docx", ".pdf"):
+            # extract for voice corpus only — discard the (likely-default) visual fields
+            d = (extract_from_pptx if f.suffix.lower() == ".pptx"
+                 else extract_from_docx if f.suffix.lower() == ".docx"
+                 else extract_from_pdf)(str(f))
+            voice_only_corpus_chunks.append(d.get("voice_corpus", {}).get("text", ""))
+        else:
+            # Text-only file — use Read tool, strip markup if HTML/EML, append
+            text = read_text_file(str(f))  # operator-side helper; see below
+            voice_only_corpus_chunks.append(text)
+
+if not drafts and not voice_only_corpus_chunks:
+    # Empty supported-file inventory; surface error and offer wizard fallback
+    ...
+
+# Merge OOXML drafts (visual + voice)
+if len(drafts) == 1:
+    draft = drafts[0]
+elif len(drafts) > 1:
+    draft = merge_drafts(drafts)
+    xv = cross_validate_visual(drafts)
+    draft["multi_source"] = {
+        "sources": [d["source"] for d in drafts],
+        "mismatches": xv["mismatches"],
+        "agreements": xv["agreements"],
+    }
+else:
+    # Voice-only folder — start with an empty visual draft
+    from datetime import datetime, timezone
+    draft = {
+        "colors": {}, "logos": {}, "fonts": {},
+        "source": {"type": "folder-voice-only", "reference": str(folder)},
+        "extracted_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "confidence_scores": {},
+        "voice_corpus": {"text": "", "word_count": 0, "truncated": False},
+    }
+
+# Append voice-only corpus chunks to draft's voice_corpus
+if voice_only_corpus_chunks:
+    extra_text = "\n\n".join(voice_only_corpus_chunks)
+    existing = draft.get("voice_corpus", {}).get("text", "")
+    combined = (existing + "\n\n" + extra_text).strip()
+    # Truncate again if needed (3000-word cap matches _voice_corpus_from_text)
+    words = combined.split()
+    if len(words) > 3000:
+        combined = " ".join(words[:3000])
+        truncated = True
+    else:
+        truncated = False
+    draft["voice_corpus"] = {
+        "text": combined,
+        "word_count": len(words),
+        "truncated": truncated,
+    }
+```
+
+`read_text_file` is an inline helper — operator just uses the Read tool for `.md`/`.txt`/`.html`/`.eml`, strips HTML tags if present (BeautifulSoup or simple regex), strips email headers if `.eml`, returns the body. No new Python dependency required for v1.
+
+**Background frameworks (cited inline so an LLM reading this skill has the grounding):**
+
+The voice extraction in Step 1.5 follows three named patterns documented in `DECISIONS.md` 2026-05-06:
+
+- **Lago voice template** (`getlago/inside-lago-voice-skill`): 7 sections — Voice / Core Rules / Anti-Filler / Audience Adaptation / Channel Notes / Drafted-vs-Sent / Company Context. Calibration is via *Drafted vs Sent* example pairs.
+- **Rezvani brand audit** (`alirezarezvani/claude-skills/marketing-skill/brand-guidelines`): 7-dimension audit (colors, fonts, logo, body text, imagery, tone, prohibited uses) and Tone Matrix (voice × context).
+- **Genesys 4-phase extraction** (`matteotitta/genesys-claude-code-pmm-quickstart/.claude/skills/brand-guidelines`): Fetch & Detect → Extract Tokens → Visual Description → Generate Output → Review, with confidence scoring 0–5 and explicit gap documentation.
+
+The skill blends them: Genesys 4-phase backbone → Rezvani schema as the output target → Lago voice section embedded inside.
+
+**Multi-source mode (URL + folder, or any 2+ sources):**
+
+```python
+drafts = []
+for arg in args:
+    if arg.startswith("http"):
+        drafts.append(extract_from_url(arg))
+    elif arg.endswith(".pptx"):
+        drafts.append(extract_from_pptx(arg))
+    elif arg.endswith(".docx"):
+        drafts.append(extract_from_docx(arg))
+    elif arg.endswith(".pdf"):
+        drafts.append(extract_from_pdf(arg))
+    elif Path(arg).is_dir():
+        # Recurse via folder mode helper
+        ...
+
+draft = merge_drafts(drafts)
+cross_validation = cross_validate_visual(drafts)
+draft["multi_source"] = {
+    "sources": [d["source"] for d in drafts],
+    "mismatches": cross_validation["mismatches"],
+    "agreements": cross_validation["agreements"],
+}
+```
+
+Mismatches are NOT auto-resolved here. They surface in the Step 3 confirmation gate.
+
 **Draft structure after extraction:**
 
-All three modes produce a `draft` dict with this shape:
+All extraction modes produce a `draft` dict with this shape:
 ```python
 {
     "colors": {
@@ -141,13 +394,117 @@ All three modes produce a `draft` dict with this shape:
         "body": {"name": "Open Sans", "confidence": 0.80},
         "monospace": {"name": "Courier New", "confidence": 0.70},
     },
-    "source": {"type": "url"|"pdf"|"wizard", "reference": "..."},
+    "source": {"type": "url"|"pdf"|"pptx"|"docx"|"wizard"|"multi", "reference": "..."},
     "extracted_at": "2026-04-30T00:00:00Z",
     "confidence_scores": {...},
+    "voice_corpus": {                         # only present for sources with body text
+        "text": "...",                        # cleaned, optionally truncated to ~3000 words
+        "word_count": 0,
+        "truncated": False,
+    },
+    # Only present for multi-source extraction:
+    "multi_source": {
+        "sources": [...],
+        "mismatches": [{"field": "...", "values": [...]}, ...],
+        "agreements": [{"field": "...", "value": ...}, ...],
+    },
 }
 ```
 
 Missing fields (empty dict values or absent keys) are acceptable — they will surface as warnings at Step 2 and can be filled at Step 3.
+
+### Step 1.5 — Voice extraction (only when corpus is available)
+
+**Skip this step entirely if `draft["voice_corpus"]["word_count"] < 500`.** Below that floor, voice extraction is unreliable; set `draft["voice"] = {"enabled": False}` and continue to Step 2. Surface the gap to the user: "Voice section not populated — corpus is only `<N>` words, below the 500-word minimum. Add more sample documents to enable voice extraction."
+
+**When corpus is sufficient,** drive voice extraction via in-skill prompting (no Python — this is LLM-native work). Read the corpus from `draft["voice_corpus"]["text"]` and prompt yourself with the structure below, then write the resulting fields into `draft["voice"]`.
+
+**Voice extraction prompt structure (Lago 7-section + Rezvani tone matrix):**
+
+```
+You are reading {N} words of body text from {client_name}'s recent client-facing
+material ({source_descriptor}). Your task: extract their writing voice into a
+structured profile that downstream skills will use to draft new material that
+sounds like them.
+
+Produce a YAML block with these fields. Be specific. "Write clearly" is useless;
+"Cut any sentence that announces the smart thing before saying it" is actionable.
+
+positioning: |  # 1-2 sentences: who they are, what they do, who they serve
+tone:
+  register: # one phrase, e.g., "formal-institutional", "warm-advisory", "technical-direct"
+  primary_attributes: [3-5 attributes observed in the corpus]
+  avoid_attributes:   [words/tones that would clearly NOT fit the corpus]
+core_rules: [3-7 non-negotiables derived from observed patterns — e.g., "Never make
+            forward-looking statements without a 'subject to' clause"]
+anti_filler: [5+ phrase patterns to delete from AI drafts — e.g., "leverage our
+              expertise", "best-in-class", "we believe that we believe"]
+audience_adaptation:  # optional; only if the corpus shows clear differentiation
+  - audience: ...
+    notes: ...
+channel_notes:        # optional; only if the corpus spans multiple channels
+  - channel: ...
+    notes: ...
+company_context: |    # how they describe themselves, competitors, positioning
+disclaimers:          # only include if explicit disclaimers appear in the corpus
+  - jurisdiction: ...
+    text: ...
+    placement: ...
+```
+
+Set `draft["voice"]["enabled"] = True`, `draft["voice"]["source_corpus"]["word_count"] = N`, `draft["voice"]["source_corpus"]["documents"] = [list of source references]`, `draft["voice"]["source_corpus"]["confidence"] = your_self_assessed_confidence_0_to_1`.
+
+**Self-check before writing into draft:**
+
+- [ ] Did I derive `core_rules` and `anti_filler` from the corpus, or am I producing generic asset-management boilerplate? Generic = bad. Re-do.
+- [ ] If I claim `tone.register` is "formal-institutional", can I quote 2 specific phrases from the corpus that prove it? If not, soften the claim.
+- [ ] Did I leave any field as `""` or `[]` because the corpus genuinely doesn't show it, or because I didn't look? Be honest — empty is better than fabricated.
+
+**Drafted-vs-Sent pairs are not auto-extractable.** They require comparison between an AI draft and a human-edited version. Leave `drafted_vs_sent: []` in the initial extraction. Document in `voice.source_corpus.notes` that this should be populated incrementally as the client uses downstream skills (we save the draft + sent pair after each session).
+
+### Step 1.75 — Completeness audit & supplement offer
+
+Before validation, audit the draft for thinness and proactively offer to supplement. The operator may have given just a URL not realizing that adding a sample folder dramatically improves voice extraction; saving a thin config without surfacing the gap is a UX failure.
+
+**Audit checks:**
+
+```python
+audit = []
+n_brand_colors = sum(1 for r in ["primary", "secondary", "accent"] if r in draft.get("colors", {}))
+n_fonts = len(draft.get("fonts", {}))
+voice_words = draft.get("voice_corpus", {}).get("word_count", 0)
+voice_enabled = draft.get("voice", {}).get("enabled", False)
+has_logo = "primary" in draft.get("logos", {})
+
+if n_brand_colors < 2:
+    audit.append(("colors_thin", f"only {n_brand_colors} brand color(s) extracted"))
+if n_fonts == 0:
+    audit.append(("fonts_missing", "no fonts extracted (URL extraction often misses externally-hosted CSS)"))
+if not has_logo:
+    audit.append(("logo_missing", "no logo extracted"))
+if voice_words < 500:
+    audit.append(("voice_corpus_thin", f"voice corpus is only {voice_words} words; voice extraction skipped (need ≥500)"))
+elif voice_words < 2000:
+    audit.append(("voice_corpus_low", f"voice corpus is {voice_words} words; below recommended 2000 for high-confidence voice extraction"))
+if not voice_enabled and voice_words >= 500:
+    audit.append(("voice_disabled_unexpectedly", "voice corpus was sufficient but voice section is not enabled"))
+```
+
+**If any audit item fires AND the operator is in single-source mode**, surface them clearly via `AskUserQuestion` BEFORE the confirmation gate:
+
+> The extraction is thin in these areas:
+>   - <list of audit items, one per line, with the human-readable description>
+>
+> Do you want to supplement before saving?
+>
+> - **Add a folder of sample materials** — point me at a folder with their newsletters / letters / decks. I'll re-extract and merge. *Recommended if voice corpus is thin or fonts are missing.*
+> - **Add their website URL** — only useful if you started with a folder. *Recommended if you want a sanity-check cross-source.*
+> - **Fill the gaps manually in wizard mode** — I'll prompt you for the missing fields only.
+> - **Save what I have** — I'll save the partial config; downstream consumers fall back to defaults for missing fields. The audit notes go into `metadata.notes`.
+
+**If the operator chooses to supplement,** loop back to Step 0 with the additional source(s) and run multi-source extraction. If they choose "save what I have," append the audit list to `draft["metadata"]["notes"]` so the gap is durable in the saved config and the operator can re-run with more sources later.
+
+**If the operator is already in multi-source mode** (e.g., URL + folder), skip the supplement offer — they've already given the skill its best shot. Surface the audit items in the confirmation-gate "MISSING FIELDS" block instead, so they're visible but don't block.
 
 ### Step 2 — Validate assets
 
@@ -184,6 +541,15 @@ for role in ["header", "body", "monospace"]:
     if font_name:
         font_result = FontValidator.validate_font(font_name)
 ```
+
+**Voice validation** (skip when `draft["voice"]["enabled"]` is False):
+```python
+from skills._parallax.white_label.validator import VoiceValidator
+voice_result = VoiceValidator.validate_voice(draft.get("voice", {"enabled": False}))
+# voice_result = {"status": "pass"|"warn"|"fail"|"skipped", "checks": {"corpus": {...}, "completeness": {...}}}
+```
+
+`status: "skipped"` is the default when voice extraction was bypassed (corpus too small or visual-only sources). It is informational, not an error. Do NOT block the save on a skipped voice section — visual-only configs remain valid for visual-only downstream consumers.
 
 **Assemble validation summary table:**
 
@@ -241,6 +607,24 @@ Header:      <font name>  (confidence: <X.XX>)
 Body:        <font name>  (confidence: <X.XX>)
 Monospace:   <font name>  (confidence: <X.XX>)
 
+--- VOICE ---
+Enabled:     <yes|no — corpus N words from M document(s)>
+Register:    <e.g., "formal-institutional">
+Tone:        <comma-list of primary_attributes>
+Avoid:       <comma-list of avoid_attributes>
+Core rules:  <count>
+Anti-filler: <count>
+Disclaimers: <count, with jurisdictions if any>
+Confidence:  <X.XX>
+(only present when voice.enabled)
+
+--- MULTI-SOURCE MISMATCHES ---
+<for each mismatch>
+  field: <e.g., colors.primary>
+    <source_a>: <value_a>
+    <source_b>: <value_b>
+(only present when len(sources) >= 2 and mismatches found; otherwise omit section)
+
 --- VALIDATION SUMMARY ---
 <validation table from Step 2>
 
@@ -249,6 +633,8 @@ Monospace:   <font name>  (confidence: <X.XX>)
 
 ============================================================
 ```
+
+**Mismatch resolution.** If multi-source mismatches are present, the user MUST pick a winner per mismatched field before saving. Use `AskUserQuestion` per mismatched field, listing each candidate value as a choice (with source attribution). Apply the chosen value to `draft` before proceeding to save. Do NOT attempt to auto-pick by confidence or recency — the PM/CIO is the canonical source of truth on which version of their brand is current.
 
 For color swatches (the `████` blocks), use Unicode block characters filled with a text approximation if terminal color is unavailable: `[#FF5733]`.
 
@@ -367,6 +753,28 @@ config = {
     "validation_summary": validation_results,   # from Step 2, updated with post-download logo checks
     "confidence_scores": draft["confidence_scores"],
 }
+
+# Voice section (only if extracted; otherwise leave the schema default with enabled: false)
+if draft.get("voice", {}).get("enabled"):
+    config["voice"] = {
+        "enabled": True,
+        "positioning":         draft["voice"].get("positioning", ""),
+        "tone":                draft["voice"].get("tone", {"register": "", "primary_attributes": [], "avoid_attributes": []}),
+        "core_rules":          draft["voice"].get("core_rules", []),
+        "anti_filler":         draft["voice"].get("anti_filler", []),
+        "audience_adaptation": draft["voice"].get("audience_adaptation", []),
+        "channel_notes":       draft["voice"].get("channel_notes", []),
+        "drafted_vs_sent":     draft["voice"].get("drafted_vs_sent", []),
+        "company_context":     draft["voice"].get("company_context", ""),
+        "disclaimers":         draft["voice"].get("disclaimers", []),
+        "source_corpus":       draft["voice"].get("source_corpus", {"documents": [], "word_count": 0, "confidence": 0.0, "notes": ""}),
+    }
+else:
+    config["voice"] = {"enabled": False}
+
+# Multi-source provenance (only if more than one source was used)
+if "multi_source" in draft:
+    config["multi_source"] = draft["multi_source"]
 ```
 
 Compute `config_hash = sha256(yaml.safe_dump(config["branding"], sort_keys=True).encode()).hexdigest()`.
@@ -457,14 +865,17 @@ Output:
 ```
 Branding saved.
   client:      <client_name>
-  source:      <type>: <reference>
+  source:      <type>: <reference>  (or "multi: N sources" when multi-source)
   colors:      <count of non-empty color slots> configured
   logos:       <count> downloaded to assets/
   fonts:       <count of non-empty font slots> configured
+  voice:       <enabled: yes|no — corpus N words from M docs, register: ...>
   warnings:    <count of warn/fail checks> (see validation above)
 
-Active in: client-review, due-diligence, deep-dive.
-Fallback: if branding load fails, downstream skills use default Parallax styling.
+Active in:
+  visual:  client-review, due-diligence, deep-dive
+  voice:   any skill that calls cfg["voice"] when enabled
+Fallback: if branding load fails, downstream skills use default Parallax styling/voice.
 
 Audit & inspect:
   /parallax-white-label-onboard --status    # active branding summary
@@ -509,6 +920,13 @@ Fonts:
   Body:       <name>
   Monospace:  <name>
 
+Voice:
+  Enabled:    <yes | no>
+  Register:   <e.g., formal-institutional>
+  Tone:       <comma-list of primary_attributes | not configured>
+  Corpus:     <N words from M documents | not configured>
+  Confidence: <X.XX | not configured>
+
 Validation:   <N pass, N warn, N fail>
 Audit chain:  <ok | not yet initialized>
 ```
@@ -545,4 +963,7 @@ A successful workflow produces:
 - `~/.parallax/client-branding/audit.jsonl` has at least one entry with `"action":"save"` and a valid `prev_entry_hash` chain
 - User saw the confirmation gate and explicitly chose "Confirm and save" before any file was written
 - Validation summary is present in config.yaml with status per asset (even if some are warn/fail)
-- Downstream skill check: `yaml.safe_load(open("~/.parallax/client-branding/config.yaml"))["branding"]["colors"]["primary"]` returns the configured hex string
+- Downstream visual-consumer check: `yaml.safe_load(open("~/.parallax/client-branding/config.yaml"))["branding"]["colors"]["primary"]` returns the configured hex string
+- When voice was extracted: `cfg["voice"]["enabled"] is True`, `cfg["voice"]["positioning"]` is a non-empty string, `len(cfg["voice"]["core_rules"]) >= 2`, `len(cfg["voice"]["anti_filler"]) >= 3`, and `cfg["voice"]["source_corpus"]["word_count"] >= 500`
+- When multi-source was used: `cfg["multi_source"]["sources"]` lists every input, mismatches were either resolved at the gate or recorded; no silent merges
+- When voice was NOT extracted: `cfg["voice"]["enabled"] is False` and downstream voice consumers fall back to defaults silently
