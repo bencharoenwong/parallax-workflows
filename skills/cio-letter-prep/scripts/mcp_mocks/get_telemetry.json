@@ -1,0 +1,25 @@
+{
+  "regime_tag": "risk-off",
+  "signals": {
+    "vix": 22.4,
+    "credit_spread_hy_bps": 412,
+    "term_premium_10y": 0.18,
+    "breadth_pct_above_200dma": 38.5
+  },
+  "commentary": {
+    "headline": "Defensive rotation as duration-sensitive growth de-rates",
+    "mechanism": "Sticky core CPI plus hawkish Fed minutes lifted the back end; high-multiple growth lost ~5% while staples and healthcare outperformed."
+  },
+  "divergences": [
+    {
+      "ticker": "AAPL.O",
+      "factor": "MOMENTUM",
+      "magnitude": -1.4
+    },
+    {
+      "ticker": "JNJ.N",
+      "factor": "DEFENSIVE",
+      "magnitude": 0.9
+    }
+  ]
+}

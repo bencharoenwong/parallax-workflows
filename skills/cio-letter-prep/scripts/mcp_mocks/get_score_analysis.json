@@ -1,0 +1,20 @@
+{
+  "symbol": "AAPL.O",
+  "name": "Apple Inc.",
+  "weeks": 13,
+  "history": [
+    {"date": "2026-02-01", "VALUE": 4.2, "QUALITY": 8.6, "MOMENTUM": 7.8, "DEFENSIVE": 5.4, "OVERALL": 6.5},
+    {"date": "2026-02-08", "VALUE": 4.3, "QUALITY": 8.7, "MOMENTUM": 7.7, "DEFENSIVE": 5.5, "OVERALL": 6.6},
+    {"date": "2026-02-15", "VALUE": 4.2, "QUALITY": 8.7, "MOMENTUM": 7.5, "DEFENSIVE": 5.5, "OVERALL": 6.5},
+    {"date": "2026-02-22", "VALUE": 4.4, "QUALITY": 8.6, "MOMENTUM": 7.3, "DEFENSIVE": 5.6, "OVERALL": 6.5},
+    {"date": "2026-03-01", "VALUE": 4.5, "QUALITY": 8.5, "MOMENTUM": 7.0, "DEFENSIVE": 5.6, "OVERALL": 6.4},
+    {"date": "2026-03-08", "VALUE": 4.6, "QUALITY": 8.5, "MOMENTUM": 6.8, "DEFENSIVE": 5.7, "OVERALL": 6.4},
+    {"date": "2026-03-15", "VALUE": 4.7, "QUALITY": 8.4, "MOMENTUM": 6.5, "DEFENSIVE": 5.7, "OVERALL": 6.3},
+    {"date": "2026-03-22", "VALUE": 4.8, "QUALITY": 8.4, "MOMENTUM": 6.2, "DEFENSIVE": 5.8, "OVERALL": 6.3},
+    {"date": "2026-03-29", "VALUE": 4.9, "QUALITY": 8.3, "MOMENTUM": 6.0, "DEFENSIVE": 5.8, "OVERALL": 6.2},
+    {"date": "2026-04-05", "VALUE": 5.0, "QUALITY": 8.3, "MOMENTUM": 5.8, "DEFENSIVE": 5.9, "OVERALL": 6.2},
+    {"date": "2026-04-12", "VALUE": 5.1, "QUALITY": 8.2, "MOMENTUM": 5.6, "DEFENSIVE": 5.9, "OVERALL": 6.1},
+    {"date": "2026-04-19", "VALUE": 5.2, "QUALITY": 8.2, "MOMENTUM": 5.5, "DEFENSIVE": 6.0, "OVERALL": 6.1},
+    {"date": "2026-04-26", "VALUE": 5.3, "QUALITY": 8.1, "MOMENTUM": 5.4, "DEFENSIVE": 6.0, "OVERALL": 6.1}
+  ]
+}
