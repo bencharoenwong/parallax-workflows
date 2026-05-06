@@ -4,13 +4,13 @@
 
 5 flags evaluated against portfolio data. Each flag is binary (triggered or not).
 
-| Flag | Condition | Source | Threshold |
+| Flag | Condition | Source (V2 primary / V1 fallback) | Threshold |
 |---|---|---|---|
-| **Low Score** | Portfolio overall score is weak | `quick_portfolio_scores` | Overall ≤ 5.0 |
-| **Concentration** | Single holding too large or top-3 dominate | Holdings weights | Any single >15% OR top-3 >45% |
+| **Low Score** | Portfolio overall score is weak | `get_peer_snapshot` aggregate (V2) / `quick_portfolio_scores` (V1) — verified-holdings weighted average | Overall ≤ 5.0 |
+| **Concentration** | Single holding too large or top-3 dominate | Holdings weights (computed over original holdings, not just verified) | Any single >15% OR top-3 >45% |
 | **Redundancy** | Multiple overlapping positions | `check_portfolio_redundancy` | ≥ 2 redundant pairs |
-| **Value Trap** | Portfolio-weighted value score is low | `quick_portfolio_scores` | Portfolio value score ≤ 3.0 |
-| **Macro Misalignment** | Overweight in sectors with negative tactical outlook | `macro_analyst` (tactical) | Holdings overweight in unfavourable sectors |
+| **Value Trap** | Portfolio-weighted value score is low | `get_peer_snapshot.value` aggregate (V2) / `quick_portfolio_scores` (V1) — verified-holdings weighted average | Portfolio value score ≤ 3.0 |
+| **Macro Misalignment** | Overweight in sectors with negative tactical outlook | `macro_analyst` (tactical), evaluated against verified-holdings sector weights | Holdings overweight in unfavourable sectors |
 
 ## Health Status Labels
 
@@ -22,7 +22,9 @@
 
 ## Mixed-Exchange Fallback
 
-When `quick_portfolio_scores` returns coverage for **<50% of holdings by weight**:
+This is **tier 3** of the fallback ladder defined in the SKILL.md Step A.5 — invoked only when V2 (`get_peer_snapshot` per-holding) AND V1 (`quick_portfolio_scores`) both return coverage <50% by weight.
+
+When triggered:
 
 1. Split holdings by exchange suffix (group `.O`/`.N` together as US, `.L` as UK, etc.).
 2. Call `quick_portfolio_scores` for each exchange group separately.
