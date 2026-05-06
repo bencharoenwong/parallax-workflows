@@ -43,12 +43,15 @@ Fire all three simultaneously:
 
 ### Phase 2: Assess Portfolio Exposure (parallel after Phase 1)
 
-**Fire ALL of the following in a single tool-call turn** — `analyze_portfolio` plus N parallel `get_score_analysis` calls (one per holding) all dispatch simultaneously. Do NOT iterate `get_score_analysis` one holding at a time; serial loops over a 5-10 holding portfolio are the dominant latency leak in this skill. `get_score_analysis` is independent per holding per `_parallax/parallax-conventions.md` §3.
+**Fire ALL of the following in a single tool-call turn** — `analyze_portfolio` plus N parallel `get_company_info` and `get_score_analysis` calls (one per holding) all dispatch simultaneously. Do NOT iterate one holding at a time; serial loops over a 5-10 holding portfolio are the dominant latency leak in this skill. Per `_parallax/parallax-conventions.md` §3, all per-holding calls are independent and parallel-safe.
 
 | Tool | Parameters | Notes |
 |---|---|---|
 | `analyze_portfolio` | holdings, lens "concentration" | Sector/factor exposures. WARNING: may exceed 180K chars — fall back to `check_portfolio_redundancy` if truncated |
-| `get_score_analysis` | per holding, 4-8 weeks — **all N calls fan out in parallel within Phase 2** | Current trajectories |
+| `get_company_info` | per holding (or single comma-joined call across all RICs) — fan out in parallel within Phase 2 | **Ground-truth name oracle** for cross-validation per conventions §2. Also reveals asset class — flag any holding whose `industry` field indicates ETF / fund (no `industry`, or industry contains "exchange-traded" / "fund"); for ETF holdings, skip the per-holding `get_score_analysis` call (factor scores are equity-only) and rely on `analyze_portfolio` server-side ETF handling. |
+| `get_score_analysis` | per **equity** holding, 4-8 weeks — **all N calls fan out in parallel within Phase 2** | Current trajectories. Skip for holdings classified as ETF in the cross-validation step above. |
+
+**After Phase 2:** per conventions §2, cross-check the names returned by `get_score_analysis` against `get_company_info.name` for the same symbol. If names diverge, warn explicitly and treat `get_company_info` as truth. Mismatched holdings are excluded from the trajectory analysis with a flagged note in the output. Holdings dropped due to ETF-asset-class are surfaced explicitly in the output ("X holdings excluded from per-position trajectory analysis: ETF asset class — see analyze_portfolio for sector exposure").
 
 Then call `get_assessment` with a prompt that:
    - Describes the scenario
