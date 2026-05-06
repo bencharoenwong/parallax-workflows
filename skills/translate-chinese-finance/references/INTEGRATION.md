@@ -97,7 +97,7 @@ Add a one-line entry to `~/.claude/CLAUDE.md` under the Skills section pointing 
 
 ## 6. Regenerating the web-upload skill files
 
-The `chinese_translation_config.py` source lives in `<workspace>/` (and `<workspace>/chinese_translation_review_for_kevin/`). When that file changes:
+The `chinese_translation_config.py` source lives in `<workspace>/` (and `<workspace>/chinese_translation_review/`). When that file changes:
 
 1. Regenerate `skill_simplified.md` from `chinese_translation_config.py` (existing pipeline already does this — the file's top says "Auto-generated from `chinese_translation_config.py`").
 2. Build a `chinese_translation_config_tw.py` analogue (currently `skill_traditional.md` is hand-tuned canonical; the source `.py` doesn't exist yet).
