@@ -304,6 +304,28 @@ class TestAssignColorRolesByFrequency:
         assert result_many["primary"]["confidence"] == 0.85   # ≥5
         assert result_few["primary"]["confidence"] == 0.6     # singleton
 
+    def test_off_white_backgrounds_not_routed_to_primary(self):
+        """Regression for review finding: #F5F5F5, #FAFAFA, #F0F0F0 should be
+        treated as neutral greys (excluded from brand pool), not assigned to
+        primary. Brand color in saturated palette should win."""
+        # Common website pattern: bulk of CSS uses off-white shades + a few
+        # saturated brand colors.
+        colors = (
+            [{"hex": "#F5F5F5", "confidence": 0.95}] * 30   # background-ish, off-white
+            + [{"hex": "#FAFAFA", "confidence": 0.95}] * 20  # background-ish
+            + [{"hex": "#F0F0F0", "confidence": 0.95}] * 15  # background-ish
+            + [{"hex": "#5A597A", "confidence": 0.95}] * 5   # actual brand color (singleton-ish)
+        )
+        result = _assign_color_roles_by_frequency(colors)
+        # The saturated brand color should win primary, NOT the most-frequent off-white
+        assert result.get("primary", {}).get("hex") == "#5A597A"
+        # Off-white shades should not appear as any brand role
+        for role in ("primary", "secondary", "accent"):
+            assigned = result.get(role, {}).get("hex")
+            if assigned is not None:
+                assert assigned not in ("#F5F5F5", "#FAFAFA", "#F0F0F0"), \
+                    f"{role} should not be off-white {assigned}"
+
     def test_three_digit_hex_normalized(self):
         colors = [{"hex": "#fff", "confidence": 0.95}] * 5 + [{"hex": "#f00", "confidence": 0.95}] * 5
         result = _assign_color_roles_by_frequency(colors)

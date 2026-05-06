@@ -10,9 +10,10 @@ Public interface
     load_client_branding() -> dict[str, Any]
     build_config_from_draft(draft, validation_summary=None) -> dict[str, Any]
 
-Return shape (always 8 top-level keys)
+Return shape (always 9 top-level keys)
 ---------------------------------------
     {
+        "client_name":       str,              # "" when no config
         "colors":            dict | {},
         "logos":             dict | {},
         "fonts":             dict | {},
@@ -174,8 +175,9 @@ def _resolve_config_path() -> Path:
 
 
 def _empty_result(error: str) -> dict[str, Any]:
-    """Canonical 8-key empty result dict with a populated error field."""
+    """Canonical 9-key empty result dict with a populated error field."""
     return {
+        "client_name":       "",
         "colors":            {},
         "logos":             {},
         "fonts":             {},
@@ -271,7 +273,7 @@ def _build_result(
     logo_warnings: list[str],
 ) -> dict[str, Any]:
     """
-    Assemble the canonical 8-key result dict from validated, logo-resolved data.
+    Assemble the canonical 9-key result dict from validated, logo-resolved data.
 
     *logo_warnings* are joined into the error field when present; error is
     None on a fully clean load.
@@ -284,6 +286,7 @@ def _build_result(
     error: str | None = "; ".join(logo_warnings) if logo_warnings else None
 
     return {
+        "client_name":       metadata.get("client_name", ""),
         "colors":            branding.get("colors", {}),
         "logos":             branding.get("logos", {}),
         "fonts":             branding.get("fonts", {}),
@@ -408,9 +411,9 @@ def load_client_branding() -> dict[str, Any]:
     """
     Load and validate client branding configuration.
 
-    Returns a dict with exactly 6 keys: colors, logos, fonts, source,
-    confidence_scores, error.  error is None on a fully clean load, a
-    human-readable string on any degradation.
+    Returns a dict with exactly 9 keys: client_name, colors, logos, fonts,
+    source, confidence_scores, voice, multi_source, error.  error is None on a
+    fully clean load, a human-readable string on any degradation.
 
     Failure points:
         1. Missing config file   -> short-circuit, error="config_not_found"

@@ -223,8 +223,11 @@ class _StubResponse:
         self.headers = mock.MagicMock()
         self.headers.get_content_charset = lambda: "utf-8"
 
-    def read(self):
-        return self._body
+    def read(self, amt=None):
+        # Real urllib HTTPResponse.read accepts an optional size cap.
+        if amt is None:
+            return self._body
+        return self._body[:amt]
 
     def __enter__(self):
         return self

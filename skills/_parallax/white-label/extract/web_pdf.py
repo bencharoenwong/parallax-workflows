@@ -18,6 +18,9 @@ from .colors import ColorExtractor, _assign_color_roles_by_frequency
 from .voice import _voice_corpus_from_text
 
 
+_EMPTY_VOICE_CORPUS = {"text": "", "word_count": 0, "truncated": False}
+
+
 class LogoExtractor:
     """Extract logo URLs and paths from text and HTML."""
 
@@ -203,7 +206,12 @@ def extract_from_url(url: str) -> Dict[str, Any]:
                 from urllib.request import Request, urlopen
                 req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
                 with urlopen(req, timeout=15) as resp:
-                    raw_bytes = resp.read()
+                    # Cap the read at 5 MB. Brand-asset extraction works on the
+                    # head of the page (style block, logo links, page text); a
+                    # multi-megabyte response is almost certainly the wrong
+                    # asset (large PDF, video) and would consume memory before
+                    # the extractors run.
+                    raw_bytes = resp.read(5 * 1024 * 1024)
                     encoding = resp.headers.get_content_charset() or "utf-8"
                     raw_html = raw_bytes.decode(encoding, errors="replace")
             except Exception:
@@ -297,6 +305,7 @@ def extract_from_pdf(pdf_path: str) -> Dict[str, Any]:
             },
             "extracted_at": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
             "confidence_scores": {},
+            "voice_corpus": dict(_EMPTY_VOICE_CORPUS),
             "error": "PDF file not found",
         }
 
@@ -360,6 +369,7 @@ def extract_from_pdf(pdf_path: str) -> Dict[str, Any]:
             },
             "extracted_at": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
             "confidence_scores": confidence_scores,
+            "voice_corpus": _voice_corpus_from_text(pdf_text) if pdf_text else dict(_EMPTY_VOICE_CORPUS),
         }
 
     except Exception as e:
@@ -372,6 +382,7 @@ def extract_from_pdf(pdf_path: str) -> Dict[str, Any]:
                 "reference": pdf_path,
             },
             "extracted_at": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+            "voice_corpus": dict(_EMPTY_VOICE_CORPUS),
             "confidence_scores": {},
             "error": str(e),
         }
