@@ -57,3 +57,9 @@ graphify-out/
 
 # Local-only benchmark results — server-load info, specific portfolio examples; harness is public
 evals/results/
+
+# Coverage artifacts
+.coverage
+*.coverage
+.coverage.*
+htmlcov/
