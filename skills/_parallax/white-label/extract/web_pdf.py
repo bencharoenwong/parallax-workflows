@@ -221,11 +221,20 @@ class FontExtractor:
                 start_pos = max(0, brace_pos - 100)
             selector_text = text[start_pos:brace_pos if brace_pos != -1 else match.start()].lower()
 
-            if any(h in selector_text for h in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header']):
+            # Restrict selector inspection to the LAST line before the brace.
+            # CSS selectors are conventionally on one line; widening past the
+            # preceding newline lets concatenated HTML body content (e.g.,
+            # `<h1>Title</h1>` from the page when CSS+HTML are merged) bleed
+            # into the heuristic and mis-tag body fonts as headers.
+            selector_text = selector_text.rsplit('\n', 1)[-1]
+
+            # Word-boundary checks so substrings inside HTML tags or other
+            # selectors don't accidentally trigger usage classification.
+            if re.search(r'\b(h[1-6]|header)\b', selector_text):
                 usage = "header"
-            elif any(m in selector_text for m in ['mono', 'code', 'pre']):
+            elif re.search(r'\b(mono|code|pre)\b', selector_text):
                 usage = "monospace"
-            elif 'body' in selector_text:
+            elif re.search(r'\bbody\b', selector_text):
                 usage = "body"
 
             fonts.append({
