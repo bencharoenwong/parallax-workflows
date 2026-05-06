@@ -5,12 +5,14 @@ negative-triggers:
   - Fund manager morning brief → use /parallax-morning-brief
   - Client portfolio review (RIA) → use /parallax-client-review
   - Single stock analysis → use /parallax-should-i-buy
+  - Portfolio with significant ETF allocation → equity scope only in v1; ETF holdings will fail V2 scoring and may silently mismap in V1. ETF-aware health-check is on the v2 roadmap; for now use /parallax-explain-portfolio (which handles ETFs via etf_profile pre-classification) for ETF-heavy portfolios.
 gotchas:
-  - JIT-load _parallax/parallax-conventions.md for fallback patterns and parallel execution
+  - JIT-load _parallax/parallax-conventions.md for RIC resolution (§1), symbol cross-validation (§2), parallel execution (§3), and fallback patterns (§4)
   - JIT-load references/health-flags.md for the 5-flag health system, thresholds, and mixed-exchange fallback
   - Holdings must be in RIC format with weights summing to ~1.0
+  - Per-holding `get_peer_snapshot` + `get_company_info` cross-validation is the primary scoring path (matches morning-brief V2 pattern). `quick_portfolio_scores` is the V1 fallback — known symbol-mapping bugs for non-US numeric tickers (HK / TW / KR), so retail portfolios with mixed exchanges silently mismap without the cross-validation gate.
   - Mixed-exchange portfolios may have partial scoring coverage — apply split-and-merge fallback
-  - Plain language output — no finance jargon
+  - Plain language output — no finance jargon. Surface name mismatches in user-friendly terms ("Some holdings could not be verified") rather than technical jargon.
 ---
 
 # Portfolio Checkup
@@ -31,29 +33,47 @@ Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-c
 
 Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
 
-### Batch A — Fire scoring + macro calls in parallel
+### Batch A — V2 scoring + redundancy + market coverage (parallel)
+
+**Fire ALL rows below in a single tool-call turn.** Every row is independent. For per-holding rows (`get_peer_snapshot`, `get_company_info`), fan out one call per holding **within the same turn** so all N×2 holding-level calls run concurrently with the portfolio-level calls. Sequential per-holding loops are the largest latency leak in this skill — do not introduce one.
 
 | Tool | Parameters | Notes |
 |---|---|---|
-| `quick_portfolio_scores` | `holdings` | Factor scores per holding + portfolio |
+| `get_peer_snapshot` | per holding — **all N calls fan out in parallel within Batch A** | **Primary scoring source** (V2 path). Aggregate factor scores client-side. |
+| `get_company_info` | per holding — **all N calls fan out in parallel within Batch A** | **Ground-truth name oracle** for cross-validation per conventions §2. Records `expected_name` to cross-check against `get_peer_snapshot.target_company`. |
 | `check_portfolio_redundancy` | `holdings` | Overlap detection |
 | `list_macro_countries` | — | Check which markets are covered |
 
-### Batch B — Macro context (after Batch A)
+`quick_portfolio_scores` is **NOT** fired in Batch A. It is reserved for the V1 fallback path in Step A.5 below; firing it unconditionally violates conventions §2 (V1 known to silently mismap symbols for non-US numeric tickers) and would consume tokens for output that the V2 path supersedes.
 
-Derive home markets from RIC suffixes across holdings. Call `macro_analyst` with component="tactical" for each unique covered market (cap at 3).
+### Step A.5 — Cross-validation gate + fallback decision (sequential, MUST complete before Batch B)
 
-### Batch C — Health flag evaluation
+This step gates Batch B and Batch C; do not start them until A.5 is complete.
 
-Per `references/health-flags.md`, evaluate all 5 flags:
+1. **Cross-validation** (per conventions §2): for each holding, compare `get_peer_snapshot.target_company` (or its `name` field) against `get_company_info.name`. Mismatches are flagged ⚠ MISMATCH and **excluded from aggregate factor calculations**; their per-position scores are not displayed.
+2. **Compute V2 coverage**: weight share of holdings that returned non-empty `get_peer_snapshot` AND passed cross-validation.
+3. **Fallback ladder** — apply the first tier whose precondition holds:
+   - **V2 (primary)** — V2 coverage ≥ 50% → use V2-aggregated scores; do NOT fire V1.
+   - **V1 fallback** — V2 coverage < 50% → fire `quick_portfolio_scores` once; cross-validate its returned names against the **already-cached** `get_company_info.name` from Batch A (do NOT re-fire `get_company_info`); mismatched V1 holdings are re-scored individually via `get_peer_snapshot`.
+   - **Mixed-exchange split-and-merge** — V1 coverage also < 50% → split holdings by exchange suffix, score each group, merge per the "Mixed-Exchange Fallback" section of `references/health-flags.md`. This is the last-resort path.
 
-1. **Low Score** — Overall ≤ 5.0?
-2. **Concentration** — Any single holding >15%? Top-3 >45%?
-3. **Redundancy** — ≥ 2 redundant pairs? (flag as low-confidence if coverage <60%)
-4. **Value Trap** — Portfolio value score ≤ 3.0?
-5. **Macro Misalignment** — Overweight in sectors flagged unfavourable?
+The cross-validation gate runs against whichever path is used, never bypassed.
 
-If `quick_portfolio_scores` coverage <50%: execute mixed-exchange fallback (split by exchange, re-score, merge).
+**`get_company_info` retry / failure handling**: per conventions §4, retry once on first failure. If the second attempt also fails, the holding has no oracle for cross-validation — treat it as **unverified** and exclude it from aggregate factor calculations (same treatment as a ⚠ MISMATCH). Surface the holding in the Verification Note as "could not be verified — Parallax company-info lookup failed" so the user knows it was excluded for a different reason than mismatch.
+
+### Batch B — Macro context (after Step A.5)
+
+Derive home markets from RIC suffixes across **verified, non-mismatched** holdings (the set Step A.5 cleared). Call `macro_analyst` with component="tactical" for each unique covered market (cap at 3).
+
+### Batch C — Health flag evaluation (after Step A.5)
+
+Per `references/health-flags.md`, evaluate all 5 flags using the verified-holdings factor scores produced by Step A.5. All "portfolio aggregate" calculations below are computed over the verified set only — mismatched holdings are excluded.
+
+1. **Low Score** — Portfolio overall (verified-holdings weighted average) ≤ 5.0?
+2. **Concentration** — Any single holding >15%? Top-3 >45%? (computed over original holdings, not just verified — concentration is a structural property)
+3. **Redundancy** — ≥ 2 redundant pairs? (flag as low-confidence if `check_portfolio_redundancy` coverage <60%)
+4. **Value Trap** — Portfolio value score (verified-holdings weighted average) ≤ 3.0?
+5. **Macro Misalignment** — Overweight in sectors flagged unfavourable in Batch B?
 
 Assign health status: **Healthy** (0 flags) · **Monitor** (1-2) · **Attention** (3+)
 
@@ -68,7 +88,8 @@ Explain scores and flags in plain terms:
 ## Output Format
 
 - **Portfolio Health Status** (Healthy/Monitor/Attention badge with flag count)
-- **Your Portfolio Scorecard** (simple factor table with plain-language labels; flag indicators per holding)
+- **Verification Note** *(only render if any cross-validation mismatches were detected)* — plain-language note: "Some holdings (X out of N) could not be matched to verified data and were excluded from aggregate factor analysis: [list of symbols]. The remaining N-X holdings drive the scores below."
+- **Your Portfolio Scorecard** (simple factor table with plain-language labels; flag indicators per holding. Mismatched holdings show "—" instead of scores.)
 - **Health Flags** (each triggered flag explained in plain language — what it means, why it matters)
 - **Overlap Alert** (if redundancy found, explain why; include reliability note if coverage <60%)
 - **Macro Context** (2-3 sentences on relevant economic environment — skip if no covered markets)
