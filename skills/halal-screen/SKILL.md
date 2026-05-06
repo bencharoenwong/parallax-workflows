@@ -41,6 +41,12 @@ These are the standard Shariah compliance thresholds used in this skill. They ar
 
 ## Workflow
 
+JIT-load `_parallax/parallax-conventions.md` for RIC resolution, parallel execution, and fallback patterns.
+
+### Step 0 — Tool loading
+
+Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call. Without this step, all Parallax tool calls below fail with "tool not found."
+
 **For single stock compliance check:**
 1. Call `get_company_info` to retrieve sector/industry — check against prohibited industries (banking, alcohol, tobacco, gambling, pork, weapons, adult entertainment).
 2. Call `get_financials` with statement "balance_sheet" to retrieve total debt and total assets. Compute: total debt / total assets. **FAIL if >= 33%.**
