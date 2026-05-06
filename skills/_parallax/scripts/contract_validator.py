@@ -1,47 +1,10 @@
 """
 Shared MCP contract-test validator for parallax-* skills.
 
-The Parallax MCP family is consumed by multiple skills (cio-letter-prep,
-morning-brief, client-review, rebalance, explain-portfolio, ...). Each skill
-reads a specific subset of fields from each endpoint's response. If an upstream
-endpoint changes its response shape (drops a field, renames, changes type),
-every consuming skill silently degrades until a customer hits it.
-
-This module provides the shared validator + helpers that per-skill contract
-tests use to assert "the mock JSON conforms to the schema we documented."
-Schemas (the canonical contract per endpoint) live in ``contract_schemas.py``.
-Mock fixtures live in ``mcp_mocks/*.json``.
-
-Per-skill usage
----------------
-
-A consuming skill creates ``skills/<skill>/scripts/test_mcp_contracts.py``::
-
-    from __future__ import annotations
-    import pathlib, sys
-
-    # Add the shared `_parallax/scripts/` to sys.path
-    _HERE = pathlib.Path(__file__).resolve().parent
-    _PARALLAX = _HERE.parent.parent / "_parallax" / "scripts"
-    sys.path.insert(0, str(_PARALLAX))
-
-    from contract_validator import (
-        load_mock, validate, OPTIONAL, NUM, is_iso_date, is_iso_datetime,
-    )
-    from contract_schemas import (
-        GET_TELEMETRY_SCHEMA, ANALYZE_PORTFOLIO_SCHEMA,  # ...
-    )
-
-    def test_get_telemetry_mock_conforms_to_schema():
-        validate(load_mock("get_telemetry"), GET_TELEMETRY_SCHEMA, "get_telemetry")
-
-    def test_get_telemetry_mock_has_realistic_values():
-        data = load_mock("get_telemetry")
-        assert data["regime_tag"] in {"risk-on", "risk-off", "neutral", "mixed", "selective rotation"}
-        # ...
-
-The skill MAY also add its own per-skill mocks if it consumes endpoint shapes
-not covered by the shared mocks (see ``mcp_mocks/README.md``).
+Validates that mock JSON fixtures in ``mcp_mocks/*.json`` conform to the
+endpoint schemas in ``contract_schemas.py``. Per-skill contract tests import
+``load_mock``, ``validate``, ``OPTIONAL``, ``NUM``, ``is_iso_date``; see
+``mcp_mocks/README.md`` for setup instructions.
 
 Schema DSL (Python-dict)
 ------------------------
@@ -86,14 +49,8 @@ If a future endpoint legitimately uses null for a field, introduce a
 ``NULLABLE`` sentinel (alongside ``OPTIONAL``) rather than loosening
 ``OPTIONAL`` itself. Don't add this until a real schema needs it.
 
-Coupling with skill SKILL.md files
-----------------------------------
-
-When a skill begins reading a new field from any endpoint, the corresponding
-schema in ``contract_schemas.py`` MUST be updated in the same PR. The README
-in ``mcp_mocks/`` describes the refresh workflow; the coupling is flagged here
-because a SKILL.md author updating field reads is unlikely to check the
-README first.
+When a skill begins reading a new field, update the schema in
+``contract_schemas.py`` AND the mock in ``mcp_mocks/`` in the same PR.
 """
 
 from __future__ import annotations
