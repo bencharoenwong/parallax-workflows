@@ -1,15 +1,7 @@
 """
-Shared MCP endpoint contract schemas for parallax-* skills.
-
-Each constant below is the canonical contract for one Parallax MCP endpoint —
-the fields the consuming skills are KNOWN to read, with required/optional
-markers and expected types. Per-skill contract tests assert that mock JSON
-fixtures conform to these schemas.
-
-When a skill begins reading a new field from any endpoint, update the schema
-here and the corresponding mock under ``mcp_mocks/`` in the same PR.
-
-The schema DSL is documented in ``contract_validator.py``.
+Canonical per-endpoint contracts for Parallax MCP: fields skills are known to
+read, marked required/optional with expected types. Schema DSL documented in
+``contract_validator.py``.
 """
 
 from __future__ import annotations

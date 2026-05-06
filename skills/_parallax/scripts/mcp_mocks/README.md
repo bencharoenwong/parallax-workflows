@@ -36,31 +36,10 @@ For multi-holding fan-out endpoints, the mock represents **one** call's response
 
 ## How to add contract tests for a new skill
 
-A consuming skill creates `skills/<skill>/scripts/test_mcp_contracts.py`:
-
-```python
-from __future__ import annotations
-import pathlib, sys
-import pytest
-
-# Add the shared `_parallax/scripts/` to sys.path
-_HERE = pathlib.Path(__file__).resolve().parent
-_PARALLAX = _HERE.parent.parent / "_parallax" / "scripts"
-sys.path.insert(0, str(_PARALLAX))
-
-from contract_validator import load_mock, validate, OPTIONAL, NUM, is_iso_date
-from contract_schemas import GET_TELEMETRY_SCHEMA, ANALYZE_PORTFOLIO_SCHEMA  # ...
-
-def test_get_telemetry_mock_conforms_to_schema():
-    validate(load_mock("get_telemetry"), GET_TELEMETRY_SCHEMA, "get_telemetry")
-
-def test_get_telemetry_mock_has_realistic_values():
-    data = load_mock("get_telemetry")
-    assert data["regime_tag"] in {"risk-on", "risk-off", "neutral", "mixed", "selective rotation"}
-    # ...
-```
-
-Per-skill realistic-values tests should encode the specific assumptions THAT skill makes about plausible values — different skills may care about different ranges. The structural-conformance tests are shared.
+Create `skills/<skill>/scripts/test_mcp_contracts.py` and follow the import
+pattern from any existing `test_mcp_contracts.py`. Per-skill realistic-values
+tests encode the specific value assumptions that skill makes; structural
+conformance is shared via ``contract_validator.validate``.
 
 ## How to refresh when the live MCP server changes
 

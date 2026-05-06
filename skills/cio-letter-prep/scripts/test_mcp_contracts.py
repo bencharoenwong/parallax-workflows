@@ -1,17 +1,8 @@
 """
 Contract tests for the Parallax MCP endpoints consumed by cio-letter-prep.
 
-Imports the shared validator + schemas from ``_parallax/scripts/``. Mocks live
-at ``_parallax/scripts/mcp_mocks/`` and are shared across all skills that
-consume the same endpoints.
-
-When SKILL.md adds a read of a new field from any endpoint, update the schema
-in ``_parallax/scripts/contract_schemas.py`` AND the corresponding mock JSON
-in ``_parallax/scripts/mcp_mocks/`` in the same PR.
-
-Per-skill realistic-values tests (below) assert the values are plausible
-(dates ISO, scores in [0,10], prices > 0, weights in [0,1], etc.) — the
-validator covers structure, these cover content.
+Structural conformance via the shared validator; per-skill realistic-values
+tests assert plausible content (scores in [0,10], dates ISO, prices > 0).
 """
 
 from __future__ import annotations
@@ -20,10 +11,6 @@ import pathlib
 import sys
 
 
-# Add the shared `_parallax/scripts/` directory to sys.path so the validator
-# and schemas can be imported. The repo layout is
-# ``skills/_parallax/scripts/`` and ``skills/<skill>/scripts/`` — siblings,
-# not a Python package.
 _HERE = pathlib.Path(__file__).resolve().parent
 _PARALLAX_SCRIPTS = _HERE.parent.parent / "_parallax" / "scripts"
 sys.path.insert(0, str(_PARALLAX_SCRIPTS))
