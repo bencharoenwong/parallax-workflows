@@ -28,6 +28,8 @@ gotchas:
   - Duplicate symbol in input portfolio: reject at validation with "Duplicate symbol {sym}" — no auto-dedup.
   - Mid-period delisting (price series ends before period_end): treat as a coverage gap (drop from rankings + surface per the materiality tiers), not a hard ValueError.
   - This skill is private-beta gated; excluded from default `build-skills.sh` builds. Confirm enablement before running for new customers.
+  - Batch B.5 loads white-label branding via `_parallax/white-label/loader.py` → `load_client_branding()`. Treat `error == "config_not_found"` as "no client configured, use defaults" (the no-op path). Treat `error` starting with `"logo_missing"` as partial success — palette/fonts still usable, just skip the cover-page logo. Any other error (`schema_invalid`, `yaml_parse_error`) → fall back to defaults and surface a warning in the Provenance footer.
+  - Voice and auto-jurisdiction disclaimers remain explicitly out of scope (see "Not in scope"). Even if the white-label config carries a `voice` section after the loader extension, this skill MUST NOT use it for prose generation or disclaimer substitution. Visual branding only.
 ---
 
 # CIO Letter Prep Pack
@@ -135,6 +137,39 @@ The script's own 1-bp inner gate (`ReconciliationError` on `|sum(contributions) 
 
 Per conventions §5, the async tools should not block render assembly; if they have not resolved by render time, leave a `[news pending]` placeholder and complete on resolution.
 
+### Batch B.5 — Load white-label branding (optional, pre-render)
+
+Before composing the pack, attempt to load the active white-label client branding. This swaps the default Parallax-CG palette for the fund's own brand when configured (per `/parallax-white-label-onboard`). When no client config is present, the default palette in **Output Format** below applies and this step is a no-op.
+
+```python
+import sys
+from pathlib import Path
+
+# loader lives at _parallax/white-label/loader.py; resolve from this skill's location
+_WHITE_LABEL_DIR = Path(__file__).parent.parent / "_parallax" / "white-label"
+sys.path.insert(0, str(_WHITE_LABEL_DIR))
+from loader import load_client_branding  # noqa: E402
+
+branding = load_client_branding()
+
+# Treat config_not_found as "no client configured" (use defaults). Treat
+# logo_missing as a partial-success — palette and fonts still usable.
+err = branding.get("error") or ""
+white_label_active = (
+    err == ""  # error is None on a clean load
+    or err is None
+    or err.startswith("logo_missing")
+)
+```
+
+If `white_label_active` is True, the render in Batch C uses the substitution table in **Output Format → White-label substitution**. Logo path (when present) is inserted at the .docx cover-page header. Semantic colors (`cg-green-700`, `cg-red-700`, `cg-amber-*`) are NEVER overridden — they signal positive/negative/warning, not brand identity.
+
+If `white_label_active` is False, the default palette applies and no logo is inserted.
+
+Record the choice in the Provenance footer: `Branding: white-label (source: <branding.source.reference>)` OR `Branding: default Parallax`.
+
+**Out-of-scope (per `Not in scope` section):** voice prose generation and auto-jurisdiction disclaimers. Even when the white-label config carries a `voice` section (post-extension to the loader), this skill does NOT use it — the CIO writes the prose; the disclaimer remains the standard wording per the **Disclaimer** section.
+
 ### Batch C — Synthesis (sequential)
 
 Compose the structured pack content with these sections in order. Hand the resulting structured content to the `docx` skill chain to render to Word format.
@@ -156,7 +191,7 @@ Compose the structured pack content with these sections in order. Hand the resul
 8. **News themes** — cluster news from `get_news_synthesis` calls by `sector × directional move` (positive vs negative). Max 5 buckets. Each bucket cites ≥ 1 ticker by name. Do NOT repeat the per-mover driver text verbatim; this section is sector-themed.
 9. **Forward-outlook** — render ONLY if `house_view` is active and validated. 1 bullet per top-5 holding by current weight, framed in view-language (regime call, tilt direction, conviction notes per loader.md §3-§5). If no active view, OMIT this section entirely.
 10. **Coverage gaps** — list any holdings excluded from contribution due to missing data with their weights. List any holdings excluded from per-position analysis due to the 40-holding soft cap. List any tools that returned "data unavailable" per conventions §4.
-11. **Provenance** — small footer block (smaller font, italic): generation date, tools used (with versions if available), reconciliation-audit result formatted as `Reconciliation audit: PASS — local total {X} bps vs server {Y} bps; diff {Z} bps; tolerance 25 bps` (or `FAIL` with halt-and-report wording). Skill version + private-beta tag.
+11. **Provenance** — small footer block (smaller font, italic): generation date, tools used (with versions if available), reconciliation-audit result formatted as `Reconciliation audit: PASS — local total {X} bps vs server {Y} bps; diff {Z} bps; tolerance 25 bps` (or `FAIL` with halt-and-report wording). Skill version + private-beta tag. **Branding line** — one line stating which palette was used: `Branding: white-label (source: <reference>)` when `white_label_active`, OR `Branding: default Parallax` when not. If `logo_missing` was the loader warning, append `(logo unavailable, omitted from cover)`.
 12. **Disclaimer** — per conventions §7. If active view: use the view-aware disclaimer per loader.md §5 rule 5; otherwise the standard wording (see Disclaimer section below).
 
 ## Output Format
@@ -184,6 +219,38 @@ Word .docx ONLY via the `docx` skill chain. The deliverable is a .docx file the 
 | `cg-amber-50` | `#F9F1EB` | Warning banner fill |
 
 The render synthesis applies these tokens to: title (navy-900), body (neutral-900), section headings (navy-900 H1/H2 → navy-700 H3/H4 → navy-400 H5/H6), table headers (navy-900 fill + white text), even rows (neutral-100 shading), contributor "+ bps" (green-700), detractor "− bps" (red-700), provenance/disclaimer (neutral-500 + italic + 8-9pt). Funds publishing under their own brand should swap the palette in their config; the default palette is a sensible institutional-finance baseline.
+
+**White-label substitution.** When `white_label_active` (per Batch B.5), the renderer substitutes brand-identity tokens with the client's config and leaves semantic tokens (positive / negative / warning) untouched. Mapping:
+
+| Default token | Substitute with | Notes |
+|---|---|---|
+| `cg-navy-900` | `branding.colors.primary` | H1/H2 fill, table header fill |
+| `cg-navy-700` | `branding.colors.secondary` (or primary if secondary missing) | H3/H4 |
+| `cg-neutral-900` | `branding.colors.text` | Body text |
+| `cg-neutral-100` | derive lighter shade from `branding.colors.background` | Alternating-row shading; if background is `#FFFFFF`, keep default `#EAEDF3` |
+| (no token; new) | `branding.logos.primary` | Inserted as cover-page header image (left-aligned, ≤ 1.5 inch height) |
+| (no token; new) | `branding.fonts.header` | Word style: Heading 1, Heading 2, Heading 3 |
+| (no token; new) | `branding.fonts.body` | Word style: Body Text, table cells |
+| `cg-green-700` | **(unchanged)** | Semantic positive — never branded |
+| `cg-red-700` | **(unchanged)** | Semantic negative — never branded |
+| `cg-amber-700` / `cg-amber-50` | **(unchanged)** | Semantic warning — never branded |
+| `cg-neutral-500` | **(unchanged)** | Muted text contrast — fund's `text` color may be too dark for muting |
+
+The CIO header / cover page also gains the client's name when available (read from `metadata.client_name` in `~/.parallax/client-branding/config.yaml`; loader does not currently surface it directly, so for now read the YAML directly when needed):
+
+```python
+import yaml
+cfg_path = Path.home() / ".parallax" / "client-branding" / "config.yaml"
+client_name = ""
+if cfg_path.exists():
+    try:
+        cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+        client_name = cfg.get("metadata", {}).get("client_name", "")
+    except Exception:
+        client_name = ""
+```
+
+Logo missing (loader returned `error: logo_missing: ...`) → render the rest of the white-label substitution but skip the cover-page logo, log a warning in the Provenance footer.
 
 **Golden fixture:** Reference output at `skills/cio-letter-prep/fixtures/golden_pack_2026-04.docx`. Visual + math validation use the same fixture; CI compares structural shape (sections, table row counts, banner presence) against the golden.
 
@@ -233,6 +300,7 @@ The skill's design choices, summarized inline so the rationale is self-contained
 | Tight composition templates with required evidence slots | Free-form prose drifts into generic platitudes. Templates force evidence-anchored drivers. |
 | Materiality tiers for excluded holdings | Drop-with-note is insufficient when the dropped holding is a top contributor. Tiers ensure user-visible warnings scale with materiality. |
 | Word .docx output via the `docx` skill chain | Fund managers write LP letters in Word. Native format reduces friction and matches CIO workflow. |
+| White-label visual substitution (palette + fonts + logo); voice and disclaimers stay v2 | Visual branding is independent of prose; replacing the default Parallax-CG palette with the fund's own brand makes the .docx look like the fund's collateral without touching the killed-premise voice-generation territory. Voice and auto-disclaimers remain explicitly out of scope (see "Not in scope") because the CIO writes the prose and reviews the disclaimer; pulling either from a config silently would violate the design's compliance posture. |
 | Server-side `company_contribution` as canonical numbers | Parallax's server-side math is what CIO will defend in LP meetings. Local `contribution.py` is the audit gate. |
 | 5+5 contributor/detractor cap with 40-holding soft cap | Async per-mover MCP calls are expensive (~30-90s each). Caps balance cost against narrative depth. |
 | Driver fallback hierarchy (news → factor → sector → default phrase) | Real news is best evidence; default phrases prevent broken row rendering when no signal exists. |
