@@ -73,14 +73,19 @@ def _is_dark_text_candidate(h: str) -> bool:
 
 def _is_neutral_grey(h: str) -> bool:
     """True if the color is a near-greyscale neutral (channels within 10) in the
-    light-grey to dark-grey range. Excludes saturated brand colors."""
+    light-grey to dark-grey range. Excludes saturated brand colors.
+
+    Upper bound 250 (not 230) so common off-white backgrounds like #F5F5F5,
+    #FAFAFA, #F0F0F0, #EAEAEA are caught as neutrals instead of falling into
+    the brand pool and getting routed to primary.
+    """
     h = _normalize_hex(h)
     if len(h) != 7:
         return False
     r, g, b = int(h[1:3], 16), int(h[3:5], 16), int(h[5:7], 16)
     if max(r, g, b) - min(r, g, b) > 10:
         return False
-    return 80 <= max(r, g, b) <= 230
+    return 80 <= max(r, g, b) <= 250
 
 
 def _assign_color_roles_by_frequency(colors_list: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
