@@ -20,6 +20,98 @@ from .voice import _voice_corpus_from_text
 
 _EMPTY_VOICE_CORPUS = {"text": "", "word_count": 0, "truncated": False}
 
+# Caps for external-stylesheet following: total link follows + per-fetch size +
+# overall budget. URL extraction is best-effort; runaway fetching against a
+# fanned-out site is the wrong trade.
+_MAX_STYLESHEET_LINKS = 5
+_STYLESHEET_READ_CAP = 1 * 1024 * 1024  # 1 MB per stylesheet
+_STYLESHEET_TOTAL_TIMEOUT_SECONDS = 8
+
+
+def _fetch_external_stylesheets(raw_html: str, base_url: str) -> str:
+    """Best-effort extraction of font information from external CSS.
+
+    Many sites declare fonts in external stylesheet files (linked via
+    `<link rel="stylesheet" href="...">`) or via Google Fonts
+    (`<link href="https://fonts.googleapis.com/css2?family=...">`). The raw HTML
+    body alone has no `font-family` declaration to feed the regex extractor, so
+    URL-based font extraction comes back empty.
+
+    Strategy:
+      1. Regex-find up to _MAX_STYLESHEET_LINKS stylesheet hrefs in the HTML.
+      2. For Google Fonts URLs, extract `family=` parameters directly — they
+         carry the font name without needing the file fetched.
+      3. For other CSS URLs, fetch (size-capped, total-time-capped) and append
+         the bytes to the returned string. The downstream regex extractor will
+         find `font-family:` declarations inside the fetched content.
+
+    All errors are swallowed silently — this is best-effort enrichment, not a
+    correctness path. Returns the concatenated CSS-equivalent text.
+    """
+    import re
+    import time
+    from urllib.parse import urljoin, parse_qs, urlparse
+
+    # Stylesheet href regex (HTML attribute order varies)
+    link_pattern = re.compile(
+        r'<link\b[^>]*\brel\s*=\s*["\']?stylesheet["\']?[^>]*\bhref\s*=\s*["\']([^"\']+)["\']'
+        r'|'
+        r'<link\b[^>]*\bhref\s*=\s*["\']([^"\']+)["\'][^>]*\brel\s*=\s*["\']?stylesheet["\']?',
+        re.IGNORECASE,
+    )
+
+    hrefs: list[str] = []
+    for m in link_pattern.finditer(raw_html):
+        href = m.group(1) or m.group(2)
+        if href:
+            hrefs.append(href)
+        if len(hrefs) >= _MAX_STYLESHEET_LINKS:
+            break
+
+    if not hrefs:
+        return ""
+
+    parts: list[str] = []
+    deadline = time.monotonic() + _STYLESHEET_TOTAL_TIMEOUT_SECONDS
+
+    for href in hrefs:
+        if time.monotonic() >= deadline:
+            break
+
+        absolute = urljoin(base_url, href)
+
+        # Google Fonts: family parameter contains the font name(s); no fetch needed
+        try:
+            parsed = urlparse(absolute)
+        except Exception:
+            continue
+        if "fonts.googleapis.com" in (parsed.netloc or "") or "fonts.gstatic.com" in (parsed.netloc or ""):
+            qs = parse_qs(parsed.query)
+            for fam in qs.get("family", []):
+                # "Roboto:wght@400" or "Roboto+Slab" -> normalise to a font-family declaration
+                name = fam.split(":", 1)[0].replace("+", " ")
+                if name:
+                    parts.append(f"font-family: {name};")
+            continue
+
+        # Non-Google CSS: fetch the file directly and append
+        try:
+            from urllib.request import Request, urlopen
+            req = Request(absolute, headers={"User-Agent": "Mozilla/5.0"})
+            remaining = max(1, int(deadline - time.monotonic()))
+            with urlopen(req, timeout=remaining) as resp:
+                ctype = resp.headers.get_content_type() if hasattr(resp.headers, "get_content_type") else (resp.headers.get("Content-Type") or "")
+                # Only treat text/css as readable; HTML / images / binary blobs are noise
+                if ctype and "css" not in ctype.lower() and "text" not in ctype.lower():
+                    continue
+                raw = resp.read(_STYLESHEET_READ_CAP)
+                encoding = resp.headers.get_content_charset() or "utf-8"
+                parts.append(raw.decode(encoding, errors="replace"))
+        except Exception:
+            continue
+
+    return "\n\n".join(parts)
+
 
 class LogoExtractor:
     """Extract logo URLs and paths from text and HTML."""
@@ -217,7 +309,12 @@ def extract_from_url(url: str) -> Dict[str, Any]:
             except Exception:
                 pass
 
-        combined_text = (page_text + "\n\n" + raw_html).strip()
+        # Best-effort: follow up to N <link rel="stylesheet"> hrefs to recover
+        # font declarations that live in external CSS (a common pattern that
+        # leaves URL-only extraction with empty fonts).
+        external_css = _fetch_external_stylesheets(raw_html, base_url=url) if raw_html else ""
+
+        combined_text = "\n\n".join(t for t in (page_text, raw_html, external_css) if t).strip()
         if not combined_text:
             combined_text = f"(Unable to fetch {url})"
 
