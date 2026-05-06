@@ -236,6 +236,92 @@ class TestVoiceValidator:
         result = VoiceValidator.validate_voice(voice)
         assert result["status"] == "pass"
 
+class TestFolderModeIntegration:
+    """Integration test for SKILL.md folder mode (F-1 to F-4 flow).
+
+    The semantic classification step (F-2) is LLM-driven; this test exercises
+    the F-4 mechanical extraction pattern: iterate files, dispatch to the
+    right extractor by extension, merge drafts, cross-validate, append
+    text-only content to the voice corpus.
+    """
+
+    def test_mixed_folder_extracts_and_merges(self, tmp_path, sample_pptx, sample_docx):
+        from pptx import Presentation
+        from docx import Document
+
+        # Build a folder with PPTX, DOCX, and a plain .txt (voice-only contributor)
+        folder = tmp_path / "client_collateral"
+        folder.mkdir()
+
+        # Re-use the existing fixtures via shutil-like copy (write fresh files)
+        prs = Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[5])
+        slide.shapes.title.text = "Quarterly Newsletter Q1"
+        body = slide.shapes.add_textbox(0, 1000000, 5000000, 2000000).text_frame
+        body.text = "Our discipline serves clients across credit and equity. We avoid speculation."
+        pptx_path = folder / "newsletter-q1.pptx"
+        prs.save(str(pptx_path))
+
+        doc = Document()
+        doc.add_heading("Client Letter", 1)
+        doc.add_paragraph("Dear clients, we maintain measured optimism amid uncertainty.")
+        doc.add_paragraph("Quality remains our anchor through cycles.")
+        docx_path = folder / "client-letter-jan.docx"
+        doc.save(str(docx_path))
+
+        # Voice-only text file (extension .md / .txt are read directly per F-4 flow)
+        txt_path = folder / "research-notes.md"
+        txt_path.write_text(
+            "# Internal Research Note\n\n"
+            "We continue to favor capital-intensive businesses with hard-asset moats. "
+            "The structural shift toward physical scarcity is well underway.",
+            encoding="utf-8",
+        )
+
+        # F-4 mechanical pattern (LLM does F-1 to F-3 semantic classification first;
+        # this test pins the deterministic extraction phase):
+        drafts = [
+            extract_from_pptx(str(pptx_path)),
+            extract_from_docx(str(docx_path)),
+        ]
+
+        # Both OOXML drafts came through cleanly
+        assert all(d.get("error") is None for d in drafts), \
+            f"unexpected error in drafts: {[d.get('error') for d in drafts]}"
+        assert all(d["voice_corpus"]["word_count"] > 0 for d in drafts)
+
+        # Merge OOXML drafts
+        merged = merge_drafts(drafts)
+        assert merged["source"]["type"] == "multi"
+        assert "by_source" in merged["voice_corpus"]
+        assert len(merged["voice_corpus"]["by_source"]) == 2
+
+        # Cross-validate (default Office theme — should agree on visual fields)
+        xv = cross_validate_visual(drafts)
+        # Expect agreements on at least colors.primary (both default to Office accent1)
+        agreement_fields = {a["field"] for a in xv["agreements"]}
+        assert "colors.primary" in agreement_fields, \
+            f"expected colors.primary agreement, got {agreement_fields}"
+
+        # Append the text-only file's content to voice_corpus (per SKILL.md F-4)
+        extra_text = txt_path.read_text(encoding="utf-8")
+        before_words = merged["voice_corpus"]["word_count"]
+        merged["voice_corpus"]["text"] += "\n\n" + extra_text
+        merged["voice_corpus"]["word_count"] = before_words + len(extra_text.split())
+
+        assert merged["voice_corpus"]["word_count"] > before_words
+        assert "physical scarcity" in merged["voice_corpus"]["text"].lower(), \
+            "text-only file content not propagated into voice corpus"
+
+    def test_folder_with_single_file_no_merge_needed(self, tmp_path, sample_pptx):
+        """Single-file folder: extract returns the draft as-is; no merge_drafts call."""
+        # Just one supported file — merge_drafts([draft]) returns the draft unchanged
+        draft = extract_from_pptx(sample_pptx)
+        merged = merge_drafts([draft])
+        assert merged is draft  # identity preservation
+        assert merged["source"]["type"] == "pptx"  # NOT promoted to "multi"
+
+
 class TestColorClassifiers:
     def test_normalize_hex_3_to_6(self):
         assert _normalize_hex("#fff") == "#FFFFFF"

@@ -117,13 +117,19 @@ source_corpus:
   documents:
     - "~/parallax-obsidian/06-Investor-Letters/Polaris/2026-01 Polaris.md"
   word_count: 2642
-  confidence: 0.85
+  confidence: 0.7
   notes: |
-    Single-letter sample. High confidence on tone register and primary attributes
-    (clearly literary-institutional with thesis-led structure). Lower confidence on
-    audience_adaptation and channel_notes — single source cannot reveal variation
-    across audience tiers or distribution channels. Drafted-vs-sent pairs not
-    extractable from finished letter.
+    Aggregate confidence is 0.7 — a floor reflecting the weakest extracted
+    sections, not the strongest. Per-section honest read:
+      - tone.register, tone.primary_attributes, core_rules, anti_filler,
+        positioning, company_context: high (~0.85). Every claim is anchored
+        to a quoted phrase from the corpus.
+      - audience_adaptation, channel_notes: empty by design — single-letter
+        sample cannot reveal variation across audience tiers or channels.
+      - drafted_vs_sent: empty — finished letters do not expose the
+        AI-draft-vs-human-edit pair the Lago framework calibrates from.
+    Multi-letter (≥6 monthly + 1 annual) corpus would lift this to ~0.85
+    overall AND populate audience_adaptation / channel_notes credibly.
 
 # ---- VALIDATION CHECKLIST (Step 1.5 self-check) ----
 #
