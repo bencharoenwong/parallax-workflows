@@ -323,8 +323,16 @@ h1 { font-family: 'Inter', sans-serif; color: #5A597A; }
                 return _StubResponse(external_css, content_type="text/css")
             return _StubResponse(page_html, content_type="text/html")
 
+        # scrapling.Fetcher.get is the first HTTP path tried in extract_from_url;
+        # if left unpatched it makes a real network call to example.com and the
+        # urllib fallback (where fake_urlopen lives) never fires. Patch it to
+        # raise so the urllib path runs deterministically.
+        def fake_scrapling_get(url, **kwargs):
+            raise RuntimeError("test: forcing urllib fallback")
+
         with mock.patch("subprocess.run", fake_run), \
-             mock.patch("urllib.request.urlopen", fake_urlopen):
+             mock.patch("urllib.request.urlopen", fake_urlopen), \
+             mock.patch("scrapling.fetchers.Fetcher.get", fake_scrapling_get):
             draft = extract_from_url("https://example.com/")
 
         # Fonts should be populated
