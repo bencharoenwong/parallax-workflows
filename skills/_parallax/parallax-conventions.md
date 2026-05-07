@@ -22,7 +22,7 @@ Parallax tools (`mcp__claude_ai_Parallax__*`) are deferred MCP tools. Before the
 
 ---
 
-## 0.1 Tool Parameter Reference
+## 0.2 Tool Parameter Reference
 
 Parameter names that commonly trip up skill authors (and LLMs guessing from prose). Use the exact names below when calling these tools:
 
@@ -176,7 +176,67 @@ If no covered markets are relevant, return `"macro": "unavailable"` — don't fo
 
 ---
 
-## 7. Disclaimer
+## 7. Capability Index — "I want to do X, which skill/tool?"
+
+External integrators and skill authors frequently ask for capabilities that already exist under a different name. Check this index before proposing a new skill or REST endpoint.
+
+### Portfolio analytics
+
+| User-phrased need | Use this | Notes |
+|---|---|---|
+| Stress book / scenario analysis | `/parallax-scenario-analysis` skill | Forward-looking event analysis (rate shock, USD shock, oil shock, regime replays). Skill orchestrates `get_assessment` + macro + news. NOT a REST primitive — talk track lives in skill layer. |
+| Drawdown attribution ("why am I down X%?") | `/parallax-explain-portfolio` skill | Decomposes drawdown into market-regime / factor / stock-specific components via score-vs-price divergence. ~60 tokens. |
+| Per-holding return contribution | `analyze_portfolio` → `company_contribution` field | Returns `total_pl`, `contribution_pct`, `return_pct`, `avg_weight` per holding. **NOTE:** This is RETURN contribution, NOT risk contribution (no marginal vol / component VaR). For risk decomposition, no current capability — flag as gap. |
+| Portfolio drawdown statistics | `analyze_portfolio` → `drawdown_analysis` field | Includes `current_drawdown`, `max_drawdown`, underwater periods, durations, recovery days, and a per-day timeseries. See `response-schemas.md` for nested structure. |
+| Rolling metrics (Sharpe, vol, beta, correlation) | `analyze_portfolio` → `rolling_metrics` field | Three windows: `window_30d` / `window_60d` / `window_90d`, each with daily timeseries. See `response-schemas.md`. |
+| Concentration / effective N / HHI | `analyze_portfolio` → `concentration_metrics` field | `effective_positions` is weight-based (1/HHI on weights). Risk-weighted Effective N is not currently exposed. |
+| Score time series (per symbol) | `get_score_analysis` with `weeks` parameter | Returns weeks-windowed factor history. Default 52 weeks. **Portfolio-level score history is not currently exposed** — must aggregate per-holding client-side. |
+| Sector/market overlap, redundancy | `check_portfolio_redundancy` | Pairwise overlap + clustering at the portfolio level. |
+| Build/tilt a stock universe | `build_stock_universe` (V2: per-tilt parallel calls per §0) | Free-text query, sector-scoped. |
+
+### Multi-stock / consensus
+
+| User-phrased need | Use this | Notes |
+|---|---|---|
+| Multi-investor consensus across factor-profile lenses | `/parallax-AI-consensus` skill | Orchestrates Buffett / Klarman / Greenblatt / Soros / PTJ profile skills. **Skill-only by design** — multi-profile orchestration with judgment fusion does NOT translate to a REST contract without freezing the ensemble. |
+| Single-investor profile factor scoring | `/parallax-AI-buffett`, `-AI-soros`, `-AI-greenblatt`, `-AI-klarman`, `-AI-ptj` | Each is a standalone profile skill. Profiles ARE proprietary — see `_parallax/AI-profiles/`. |
+| Peer comparison table | `get_peer_snapshot` | Symbol → `target_company` (top-level) + peer rows (`name` field). |
+
+### Symbol resolution & search
+
+| User-phrased need | Use this | Notes |
+|---|---|---|
+| Plain ticker → RIC | Pass through any tool — most resolve automatically; otherwise apply §1 suffix table | `analyze_portfolio` already routes through `bulk_resolve_symbols` server-side. If a symbol comes back in `data_quality.missing_rics`, it's missing from the IDENTIFIERS table (see §1 escalation). |
+| Fuzzy / typo-tolerant search ("apple" / "semiconductor") | `search_stocks` MCP tool | Whoosh-backed; supports market/sector filters. |
+| Validate a single symbol | `validate_symbol` MCP tool (if exposed) — otherwise `get_company_info` | Returns resolved RIC. |
+
+### Reports & analysis
+
+| User-phrased need | Use this | Notes |
+|---|---|---|
+| Full Parallax research report (PDF-shaped) | `get_stock_report` (async, ~1-2min) | Use `check_job_status` to poll. |
+| Forensic earnings-quality screen | `/parallax-earnings-quality` skill | Accruals, revenue recognition, manipulation risk. |
+| Full Palepu-framework due diligence | `/parallax-due-diligence` skill | Financials + ratios + macro context + Parallax research report. |
+| Long/short pair construction | `/parallax-pair-finder` skill | Given one leg, suggests counter-leg from peers; given both, reports residual exposure. |
+
+### Reverse-lookup: "I have a Parallax response field, what is it?"
+
+If you see a field in a response and don't know what it means, check `response-schemas.md` (nested structure of `rolling_metrics`, `drawdown_analysis`, `concentration_metrics`, `company_contribution`, `portfolio_scores`, `data_quality`). That file is authoritative until upstream OpenAPI publishes example responses.
+
+---
+
+## 8. Marketing & Competitive Integrity
+
+For all marketing artifacts (vs-pages, alternative guides, feature comparisons), the **Autoreason Adversarial Loop** is the mandatory quality gate.
+
+1. **Evidence-First**: Every claim about a competitor must be cross-referenced against the `competitor-intelligence` schema.
+2. **Adversarial Audit**: High-stakes content must be filtered through a **Strawman** persona to detect and remove "marketing slop" (hyperbolic adjectives) and unsubstantiated claims.
+3. **Objective Nuance**: Every comparison must include a "Who should choose [Competitor]" section to maintain institutional credibility.
+4. **Staleness Check**: Competitive claims are dated. If the teardown data is >180 days old, a fresh verification is required before publishing.
+
+---
+
+## 9. Disclaimer
 
 Every workflow output must end with a disclaimer. Use the exact wording from the skill's Output Format section if one is specified, otherwise use:
 
