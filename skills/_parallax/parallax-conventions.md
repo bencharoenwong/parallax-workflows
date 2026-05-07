@@ -223,17 +223,6 @@ External integrators and skill authors frequently ask for capabilities that alre
 
 If you see a field in a response and don't know what it means, check `response-schemas.md` (nested structure of `rolling_metrics`, `drawdown_analysis`, `concentration_metrics`, `company_contribution`, `portfolio_scores`, `data_quality`). That file is authoritative until upstream OpenAPI publishes example responses.
 
-### Known gaps (genuinely missing — not discoverability)
-
-These are surfaced repeatedly by integrators. They do NOT exist today; flag them as roadmap items, not as "use existing X":
-
-- **Risk contribution per holding** (marginal vol / component VaR) — `company_contribution` is return-only.
-- **Liquidity / ADV fields** — `company_info` has single-day `volume`, NOT 30d ADV, days-to-liquidate, or bid-ask spread.
-- **Benchmark recommender** — `analyze_portfolio` accepts a single benchmark string; no auto-suggestion logic.
-- **Pairwise correlation matrix** — concentration HHI is a proxy, not a correlation matrix.
-- **Portfolio-level score history rollup** — per-symbol exists via `get_score_analysis`; portfolio aggregation is client-side only.
-- **Lot-level tax-aware rebalance** — not currently planned. `analyze_portfolio` accepts `transaction_costs` but not lot-level cost basis with wash-sale / LTCG-STCG handling.
-
 ---
 
 ## 8. Marketing & Competitive Integrity
