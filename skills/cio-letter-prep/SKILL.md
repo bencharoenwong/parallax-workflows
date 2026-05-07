@@ -242,7 +242,7 @@ The CIO header / cover page also gains the client's name when available — read
 client_name = branding.get("client_name", "")
 ```
 
-> **Branch dependency note.** `branding["client_name"]` is surfaced by the loader on `feat/white-label-extension` (added alongside the voice + multi_source schema work). On `main` today the loader does NOT yet return `client_name`. Until that branch merges, this skill MUST tolerate `client_name == ""` from `branding.get("client_name", "")` — the cover-page header simply omits the client name when absent. Do NOT introduce a second `yaml.safe_load` against the same config file as a workaround: it duplicates the loader's parsing, bypasses error handling, and creates a race window between the loader's `cfg_path.exists()` check and the second read. The correct path is to wait for the loader's `client_name` exposure.
+> **Tolerate empty `client_name`.** Older configs predating the loader's `client_name` field return `""` from `branding.get("client_name", "")`; the cover-page header simply omits the client name in that case. Do NOT introduce a second `yaml.safe_load` against the same config file as a workaround — it duplicates the loader's parsing, bypasses error handling, and creates a race window between the loader's `cfg_path.exists()` check and the second read.
 
 Logo missing (loader returned `error: logo_missing: ...`) → render the rest of the white-label substitution but skip the cover-page logo, log a warning in the Provenance footer.
 
