@@ -8,16 +8,20 @@ Called on every skill invocation — optimised to be silent on success.
 Public interface
 ----------------
     load_client_branding() -> dict[str, Any]
+    build_config_from_draft(draft, validation_summary=None) -> dict[str, Any]
 
-Return shape (always 6 top-level keys)
+Return shape (always 9 top-level keys)
 ---------------------------------------
     {
+        "client_name":       str,              # "" when no config
         "colors":            dict | {},
         "logos":             dict | {},
         "fonts":             dict | {},
         "source":            dict | {},
         "confidence_scores": dict | {},
-        "error":             str | None,   # None = clean load
+        "voice":             dict | {},        # {"enabled": False} if not extracted
+        "multi_source":      dict | {},        # populated only when 2+ sources used
+        "error":             str | None,       # None = clean load
     }
 """
 
@@ -57,7 +61,7 @@ _JSONSCHEMA: dict[str, Any] = {
                     "type": "object",
                     "required": ["type", "reference", "confidence"],
                     "properties": {
-                        "type":       {"type": "string", "enum": ["url", "pdf", "wizard"]},
+                        "type":       {"type": "string", "enum": ["url", "pdf", "pptx", "docx", "wizard", "multi", "folder-voice-only"]},
                         "reference":  {"type": "string"},
                         "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
                     },
@@ -101,6 +105,45 @@ _JSONSCHEMA: dict[str, Any] = {
         "confidence_scores": {
             "type": "object",
         },
+        "voice": {
+            "type": "object",
+            "properties": {
+                "enabled":     {"type": "boolean"},
+                "positioning": {"type": "string"},
+                "tone": {
+                    "type": "object",
+                    "properties": {
+                        "register":           {"type": "string"},
+                        "primary_attributes": {"type": "array"},
+                        "avoid_attributes":   {"type": "array"},
+                    },
+                },
+                "core_rules":          {"type": "array"},
+                "anti_filler":         {"type": "array"},
+                "audience_adaptation": {"type": "array"},
+                "channel_notes":       {"type": "array"},
+                "drafted_vs_sent":     {"type": "array"},
+                "company_context":     {"type": "string"},
+                "disclaimers":         {"type": "array"},
+                "source_corpus": {
+                    "type": "object",
+                    "properties": {
+                        "documents":  {"type": "array"},
+                        "word_count": {"type": "integer", "minimum": 0},
+                        "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+                        "notes":      {"type": "string"},
+                    },
+                },
+            },
+        },
+        "multi_source": {
+            "type": "object",
+            "properties": {
+                "sources":    {"type": "array"},
+                "mismatches": {"type": "array"},
+                "agreements": {"type": "array"},
+            },
+        },
     },
 }
 
@@ -132,13 +175,16 @@ def _resolve_config_path() -> Path:
 
 
 def _empty_result(error: str) -> dict[str, Any]:
-    """Canonical 6-key empty result dict with a populated error field."""
+    """Canonical 9-key empty result dict with a populated error field."""
     return {
+        "client_name":       "",
         "colors":            {},
         "logos":             {},
         "fonts":             {},
         "source":            {},
         "confidence_scores": {},
+        "voice":             {"enabled": False},
+        "multi_source":      {},
         "error":             error,
     }
 
@@ -227,24 +273,133 @@ def _build_result(
     logo_warnings: list[str],
 ) -> dict[str, Any]:
     """
-    Assemble the canonical 6-key result dict from validated, logo-resolved data.
+    Assemble the canonical 9-key result dict from validated, logo-resolved data.
 
     *logo_warnings* are joined into the error field when present; error is
     None on a fully clean load.
     """
     branding = data.get("branding", {})
     metadata = data.get("metadata", {})
+    voice    = data.get("voice", {"enabled": False})
+    multi    = data.get("multi_source", {})
 
     error: str | None = "; ".join(logo_warnings) if logo_warnings else None
 
     return {
+        "client_name":       metadata.get("client_name", ""),
         "colors":            branding.get("colors", {}),
         "logos":             branding.get("logos", {}),
         "fonts":             branding.get("fonts", {}),
         "source":            metadata.get("source", {}),
         "confidence_scores": data.get("confidence_scores", {}),
+        "voice":             voice,
+        "multi_source":      multi,
         "error":             error,
     }
+
+
+# ---------------------------------------------------------------------------
+# Save-side helper — used by SKILL.md Step 4c at write time, and by tests
+# to verify save → reload roundtrip integrity.
+# ---------------------------------------------------------------------------
+
+
+def _avg_confidence(confidence_scores: dict[str, float]) -> float:
+    """Compute average confidence across all extracted fields. Returns 0.0 for empty."""
+    if not confidence_scores:
+        return 0.0
+    return sum(confidence_scores.values()) / len(confidence_scores)
+
+
+def build_config_from_draft(
+    draft: dict[str, Any],
+    validation_summary: dict[str, Any] | None = None,
+    client_name: str = "",
+    extracted_by: str = "",
+    notes: str = "",
+) -> dict[str, Any]:
+    """Construct a canonical config.yaml dict from an extraction draft.
+
+    This is the inverse of load_client_branding's parsing — it takes the
+    in-memory draft produced by extract_from_pptx / extract_from_docx /
+    extract_from_url / merge_drafts and assembles the dict that
+    yaml.safe_dump should write.
+
+    Used at SKILL.md Step 4c (save time) AND by tests (save → reload roundtrip).
+    """
+    src = draft.get("source", {}) or {}
+    src_type = src.get("type", "wizard")
+    src_ref = src.get("reference") or ""
+
+    config: dict[str, Any] = {
+        "metadata": {
+            "schema_version": 1,
+            "client_name":    client_name or draft.get("client_name", ""),
+            "extracted_at":   draft.get("extracted_at", ""),
+            "source": {
+                "type":       src_type,
+                "reference":  str(src_ref),
+                "confidence": _avg_confidence(draft.get("confidence_scores", {})),
+            },
+            "extracted_by": extracted_by,
+            "notes":        notes,
+        },
+        "branding": {
+            "colors": {
+                "primary":    draft.get("colors", {}).get("primary",    {}).get("hex", ""),
+                "secondary":  draft.get("colors", {}).get("secondary",  {}).get("hex", ""),
+                "accent":     draft.get("colors", {}).get("accent",     {}).get("hex", ""),
+                "background": draft.get("colors", {}).get("background", {}).get("hex", "#FFFFFF"),
+                "text":       draft.get("colors", {}).get("text",       {}).get("hex", "#333333"),
+            },
+            "logos": {
+                "primary": (
+                    draft.get("logos", {}).get("primary", {}).get("local_path")
+                    or draft.get("logos", {}).get("primary", {}).get("path")
+                    or draft.get("logos", {}).get("primary", {}).get("url", "")
+                ),
+                "favicon": (
+                    draft.get("logos", {}).get("favicon", {}).get("local_path")
+                    or draft.get("logos", {}).get("favicon", {}).get("path")
+                    or draft.get("logos", {}).get("favicon", {}).get("url", "")
+                ),
+            },
+            "fonts": {
+                "header":    draft.get("fonts", {}).get("header",    {}).get("name", "Arial"),
+                "body":      draft.get("fonts", {}).get("body",      {}).get("name", "Helvetica"),
+                "monospace": draft.get("fonts", {}).get("monospace", {}).get("name", "Courier New"),
+            },
+        },
+        "confidence_scores": draft.get("confidence_scores", {}),
+    }
+
+    if validation_summary is not None:
+        config["validation_summary"] = validation_summary
+
+    voice = draft.get("voice")
+    if voice and voice.get("enabled"):
+        config["voice"] = {
+            "enabled":             True,
+            "positioning":         voice.get("positioning", ""),
+            "tone":                voice.get("tone", {"register": "", "primary_attributes": [], "avoid_attributes": []}),
+            "core_rules":          voice.get("core_rules", []),
+            "anti_filler":         voice.get("anti_filler", []),
+            "audience_adaptation": voice.get("audience_adaptation", []),
+            "channel_notes":       voice.get("channel_notes", []),
+            "drafted_vs_sent":     voice.get("drafted_vs_sent", []),
+            "company_context":     voice.get("company_context", ""),
+            "disclaimers":         voice.get("disclaimers", []),
+            "source_corpus":       voice.get("source_corpus", {
+                "documents": [], "word_count": 0, "confidence": 0.0, "notes": "",
+            }),
+        }
+    else:
+        config["voice"] = {"enabled": False}
+
+    if "multi_source" in draft:
+        config["multi_source"] = draft["multi_source"]
+
+    return config
 
 
 # ---------------------------------------------------------------------------
@@ -256,9 +411,9 @@ def load_client_branding() -> dict[str, Any]:
     """
     Load and validate client branding configuration.
 
-    Returns a dict with exactly 6 keys: colors, logos, fonts, source,
-    confidence_scores, error.  error is None on a fully clean load, a
-    human-readable string on any degradation.
+    Returns a dict with exactly 9 keys: client_name, colors, logos, fonts,
+    source, confidence_scores, voice, multi_source, error.  error is None on a
+    fully clean load, a human-readable string on any degradation.
 
     Failure points:
         1. Missing config file   -> short-circuit, error="config_not_found"

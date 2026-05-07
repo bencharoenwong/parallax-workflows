@@ -77,7 +77,7 @@ def test_happy_path(
     monkeypatch: pytest.MonkeyPatch,
     loader_module: ModuleType,
 ) -> None:
-    """Valid config with real logo files -> all 6 keys present, error=None."""
+    """Valid config with real logo files -> all 8 keys present, error=None."""
     logo = tmp_path / "primary-logo.png"
     favicon = tmp_path / "favicon.ico"
     logo.write_bytes(b"\x89PNG")
@@ -93,10 +93,16 @@ def test_happy_path(
     result = loader_module.load_client_branding()
 
     assert set(result.keys()) == {
-        "colors", "logos", "fonts", "source", "confidence_scores", "error"
+        "client_name", "colors", "logos", "fonts", "source", "confidence_scores",
+        "voice", "multi_source", "error",
     }
     assert result["error"] is None
     assert result["colors"]["primary"] == "#1A2B3C"
+    # Voice + multi_source default to empty/disabled when not present in config
+    assert result["voice"] == {"enabled": False}
+    assert result["multi_source"] == {}
+    # client_name surfaced from metadata for downstream consumers
+    assert isinstance(result["client_name"], str)
     assert result["logos"]["primary"] == str(logo)
     assert result["logos"]["favicon"] == str(favicon)
     assert result["fonts"]["header"] == "Inter"
