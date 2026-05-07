@@ -1,6 +1,6 @@
 ---
 name: parallax-scenario-analysis
-description: "React to a news event or scenario: assess portfolio exposure, macro regime shift, sector impact, identify most-exposed holdings, find rotation candidates, and output a concrete action plan via Parallax MCP tools. Requires a portfolio and a scenario description. NOT for routine morning briefs (use /parallax-morning-brief), not for macro outlook without a triggering event (use /parallax-macro-outlook)."
+description: "React to a news event or scenario: assess portfolio exposure, macro regime shift, sector impact, identify most-exposed holdings, find rotation candidates, and output a concrete action plan via Parallax MCP tools. Also surfaces under PM/RIA vocabulary: 'stress book', 'scenario suite', 'stress test' (e.g., rates +100bps, USD shock, 2008 / 2020 / 2022 replays). Requires a portfolio and a scenario description. NOT for routine morning briefs (use /parallax-morning-brief), not for macro outlook without a triggering event (use /parallax-macro-outlook)."
 negative-triggers:
   - Routine morning brief → use /parallax-morning-brief
   - General macro outlook → use /parallax-macro-outlook
