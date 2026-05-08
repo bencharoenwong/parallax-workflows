@@ -10,6 +10,18 @@ gotchas:
   - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
   - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §7.1/§7.2/§7.3 (single-stock conflict surfacing — blanket note + peer-suggest token + score-tension banner), §6 (audit). Do NOT apply tilts — single-stock skills surface conflicts only; peer suggestions are flagged but never filtered.
   - When rendering §7.1/§7.2/§7.3 flags, JIT-load _parallax/house-view/render_helpers.md and route every token through `render_view_conflict()`. Do not hand-construct the string.
+  - LANGUAGE PILOT — if a second positional arg is supplied AND is not `en`, Step 5 (Translate output) is MANDATORY — do not skip. Route `zh-CN`/`zh-TW`/`zh-HK` to `/translate-chinese-finance`, `th` to `/translate-thai-finance`. The variant must be passed as a delimited routing block ABOVE the prose body — NOT as a prose sentence the translator could echo. Use exactly this shape (the marker line and the dashed separator are required so the translator skips the block):
+
+        ROUTING DIRECTIVE — DO NOT TRANSLATE OR ECHO THIS BLOCK:
+          target_variant: zh-HK            # one of: zh-CN | zh-TW | zh-HK | (omit for Thai)
+          source_language: en
+          begin_content_below_separator: true
+        ---
+
+        <rendered prose body starts here>
+
+    Without this exact shape, zh-HK in particular will trigger the Chinese translator's "ask for HK listings" branch and break the automated chain.
+  - Disclaimer boundary check after translation: track which disclaimer was rendered in the English output (view-aware per loader.md §5 if a house view is active, otherwise the standard wording). If the translator dropped the disclaimer, FIRST attempt a single-section re-translation pass on just the disclaimer text (using the same routing-directive shape) so the appended disclaimer matches the output language. Only fall back to appending the original English disclaimer if the second translator pass also fails or returns empty.
   - When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
   - get_stock_outlook supports 4 aspects — analyst_targets, recommendations, risk_return, dividends
   - explain_methodology is free/instant — use it for any notably high or low score
@@ -105,7 +117,29 @@ If active view: use the view-aware disclaimer per loader.md §5. Otherwise:
 
 This step runs ONLY when the user supplied a second positional arg AND that arg is not `en`.
 
-**Imperative directive — do not skip:** if the language arg is `zh-CN`, `zh-TW`, or `zh-HK`, invoke `/translate-chinese-finance` with the fully rendered English output from this skill (everything from "The Company" through the Disclaimer, including the audit log entry) AND pass the variant explicitly. If the language arg is `th`, invoke `/translate-thai-finance` instead.
+**Imperative directive — do not skip.** Capture two things from the rendered English output before invoking the translator:
+
+1. The full body — every section in the Output Format above, in order: The Company, The Scores, House View Note (if rendered), Financial Health, Macro Context, Dividends, Risk vs Peers, Recent News, Analyst View, Bottom Line, audit log entry, Disclaimer. Both the audit log entry (per loader.md §6) and the Disclaimer (per loader.md §5 if view active, otherwise the standard wording at the bottom of this file) are in scope.
+2. Which disclaimer variant was rendered (view-aware vs. standard). Used by the boundary check below.
+
+**Variant routing (mechanism is explicit — the translator skill has no parameter slot, only prose; we use a delimited routing block so the translator does not echo it).** Invoke the appropriate translator skill with the input shaped as follows:
+
+```
+ROUTING DIRECTIVE — DO NOT TRANSLATE OR ECHO THIS BLOCK:
+  target_variant: <variant>
+  source_language: en
+  begin_content_below_separator: true
+---
+
+<rendered prose body>
+```
+
+Variant routing table:
+
+- `zh-CN` → `/translate-chinese-finance`, `target_variant: zh-CN`
+- `zh-TW` → `/translate-chinese-finance`, `target_variant: zh-TW`
+- `zh-HK` → `/translate-chinese-finance`, `target_variant: zh-HK` — the routing block is REQUIRED for HK because otherwise the Chinese translator pauses to ask the user (per its `SKILL.md` Greater-China default rules) and breaks the automated chain.
+- `th` → `/translate-thai-finance` — `target_variant` line may be omitted (Thai has no branching), but the routing block (with the marker line and `---` separator) is still REQUIRED so the translator does not echo any leading meta into output.
 
 The translator skill consumes the rendered prose, NOT the raw MCP tool responses. Do not pass `get_company_info` JSON or `get_score_analysis` payloads through the translator — they are structural data, not narrative.
 
@@ -114,4 +148,10 @@ Translator-failure handling:
 - If the language arg is unrecognized (anything other than the five values listed in Usage), output the original English with: `> Language '<arg>' not supported; output shown in English. Supported: en, zh-CN, zh-TW, zh-HK, th.`
 - Translator output replaces the English output in the chat; do not show both.
 
-The Disclaimer must survive translation — translators are instructed to preserve disclaimer wording per `_parallax/parallax-conventions.md` §9. If the translated output is missing the disclaimer (boundary check after translation completes), append the standard English disclaimer below the translated body.
+**Disclaimer boundary check.** Translators are instructed to preserve disclaimer wording per `_parallax/parallax-conventions.md` §9, but compliance is not guaranteed. After translation completes, if the disclaimer is missing from the translated output:
+
+1. **First try a single-section re-translation pass.** Invoke the same translator skill with the same routing block (variant unchanged), passing only the original English disclaimer text as the body. Append the result to the translated output. This keeps the entire output in the target language for the common case (translator merely dropped the disclaimer).
+
+2. **If the re-translation pass fails or returns empty**, fall back to appending the original English disclaimer text — but use the disclaimer that was actually rendered in the English output (view-aware per loader.md §5 if the session has an active house view, otherwise the standard wording). Do NOT re-append the standard disclaimer unconditionally — that would substitute the wrong text in any view-active session.
+
+3. **Audit, do not surface.** When the boundary check fires (either step 1 or step 2), record the event in the existing audit log entry's `notes` field per loader.md §6.2 (e.g., `notes: "disclaimer boundary check fired — re-translated"` or `notes: "disclaimer boundary check fired — english fallback"`). Do NOT add a custom key to the audit entry — loader.md §6.3 forbids skill-specific custom keys; `notes` is the schema-compliant landing spot for free-text traces. Do NOT add a user-visible footer — the appended content is correct either way and a technical English note in an otherwise translated document defeats the purpose of the re-translation pass.

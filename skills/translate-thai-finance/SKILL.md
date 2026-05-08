@@ -15,6 +15,17 @@ Translate provided content into Thai following institutional finance translation
 
 **NOT for:** General Thai translation without finance context, transliteration of brand names, creative writing in Thai, proofreading existing Thai translations, or writing Thai reports from scratch.
 
+**Routing-directive blocks.** When invoked from another skill (e.g., `/parallax-should-i-buy`), the input may begin with a routing block of the form:
+
+```
+ROUTING DIRECTIVE — DO NOT TRANSLATE OR ECHO THIS BLOCK:
+  source_language: en
+  begin_content_below_separator: true
+---
+```
+
+The block is metadata, not content. Translate ONLY the content after the `---` separator. Never translate, paraphrase, or echo any line from the marker through the separator into the output.
+
 ---
 
 ## Core Rules
