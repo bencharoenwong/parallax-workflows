@@ -27,9 +27,11 @@ Quick, plain-language stock evaluation using Parallax MCP tools.
 /parallax-should-i-buy AAPL
 /parallax-should-i-buy MSFT.O
 /parallax-should-i-buy 005930.KS
+/parallax-should-i-buy AAPL zh-CN
+/parallax-should-i-buy 005930.KS th
 ```
 
-Accepts plain tickers (auto-converts to RIC) or RIC format directly.
+Accepts plain tickers (auto-converts to RIC) or RIC format directly. Optional second positional arg sets the output language — one of `en` (default), `zh-CN`, `zh-TW`, `zh-HK`, `th`. Anything else falls back to `en` with a warning.
 
 ## Workflow
 
@@ -98,3 +100,18 @@ Append audit log entry per loader.md §6.
 If active view: use the view-aware disclaimer per loader.md §5. Otherwise:
 
 > *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
+
+### Step 5 — Translate output (conditional, terminal)
+
+This step runs ONLY when the user supplied a second positional arg AND that arg is not `en`.
+
+**Imperative directive — do not skip:** if the language arg is `zh-CN`, `zh-TW`, or `zh-HK`, invoke `/translate-chinese-finance` with the fully rendered English output from this skill (everything from "The Company" through the Disclaimer, including the audit log entry) AND pass the variant explicitly. If the language arg is `th`, invoke `/translate-thai-finance` instead.
+
+The translator skill consumes the rendered prose, NOT the raw MCP tool responses. Do not pass `get_company_info` JSON or `get_score_analysis` payloads through the translator — they are structural data, not narrative.
+
+Translator-failure handling:
+- If the translator fails or returns an empty/partial result, output the original English with a one-line warning footer: `> Translation to <lang> failed; output shown in English. Re-run if the issue is transient.`
+- If the language arg is unrecognized (anything other than the five values listed in Usage), output the original English with: `> Language '<arg>' not supported; output shown in English. Supported: en, zh-CN, zh-TW, zh-HK, th.`
+- Translator output replaces the English output in the chat; do not show both.
+
+The Disclaimer must survive translation — translators are instructed to preserve disclaimer wording per `_parallax/parallax-conventions.md` §9. If the translated output is missing the disclaimer (boundary check after translation completes), append the standard English disclaimer below the translated body.
