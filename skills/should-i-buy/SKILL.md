@@ -15,6 +15,8 @@ gotchas:
   - explain_methodology is free/instant — use it for any notably high or low score
   - For non-US tickers, consult the exchange suffix table in shared conventions
   - Always include the disclaimer at the end
+  - If a second positional arg is supplied AND is not `en`, Step 5 (Translate output) is MANDATORY — do not skip. Route `zh-CN`/`zh-TW`/`zh-HK` to `/translate-chinese-finance`, `th` to `/translate-thai-finance`. The variant must be passed as an imperative one-line prefix (`Translate to <variant>:`) above the rendered prose, otherwise the Chinese translator will ask the user to disambiguate (especially for `zh-HK`) and break the automated chain.
+  - Disclaimer boundary check after translation: track which disclaimer was rendered in the English output (view-aware per loader.md §5 if a house view is active, otherwise the standard wording). If the translator drops the disclaimer, re-append THAT SAME disclaimer (translated if possible, English fallback if not) — not the standard one unconditionally.
 ---
 
 # Should I Buy
@@ -105,7 +107,17 @@ If active view: use the view-aware disclaimer per loader.md §5. Otherwise:
 
 This step runs ONLY when the user supplied a second positional arg AND that arg is not `en`.
 
-**Imperative directive — do not skip:** if the language arg is `zh-CN`, `zh-TW`, or `zh-HK`, invoke `/translate-chinese-finance` with the fully rendered English output from this skill (everything from "The Company" through the Disclaimer, including the audit log entry) AND pass the variant explicitly. If the language arg is `th`, invoke `/translate-thai-finance` instead.
+**Imperative directive — do not skip.** Capture two things from the rendered English output before invoking the translator:
+
+1. The full body — every section in the Output Format above, in order: The Company, The Scores, House View Note (if rendered), Financial Health, Macro Context, Dividends, Risk vs Peers, Recent News, Analyst View, Bottom Line, audit log entry, Disclaimer. Both the audit log entry (per loader.md §6) and the Disclaimer (per loader.md §5 if view active, otherwise the standard wording at the bottom of this file) are in scope.
+2. Which disclaimer variant was rendered (view-aware vs. standard). Used by the boundary check below.
+
+**Variant routing (mechanism is explicit — the translator skill has no parameter slot, only prose).** Invoke the appropriate translator skill with a one-line variant prefix on the input, then the rendered body:
+
+- `zh-CN` → `/translate-chinese-finance` with input prefixed by `Translate to zh-CN (Simplified, mainland conventions):`
+- `zh-TW` → `/translate-chinese-finance` with input prefixed by `Translate to zh-TW (Traditional, Taiwan conventions):`
+- `zh-HK` → `/translate-chinese-finance` with input prefixed by `Translate to zh-HK (Traditional, Hong Kong conventions):` — the prefix is REQUIRED for HK because otherwise the Chinese translator will pause to ask the user, breaking the automated chain.
+- `th` → `/translate-thai-finance` (no variant — the Thai skill has no branching).
 
 The translator skill consumes the rendered prose, NOT the raw MCP tool responses. Do not pass `get_company_info` JSON or `get_score_analysis` payloads through the translator — they are structural data, not narrative.
 
@@ -114,4 +126,9 @@ Translator-failure handling:
 - If the language arg is unrecognized (anything other than the five values listed in Usage), output the original English with: `> Language '<arg>' not supported; output shown in English. Supported: en, zh-CN, zh-TW, zh-HK, th.`
 - Translator output replaces the English output in the chat; do not show both.
 
-The Disclaimer must survive translation — translators are instructed to preserve disclaimer wording per `_parallax/parallax-conventions.md` §9. If the translated output is missing the disclaimer (boundary check after translation completes), append the standard English disclaimer below the translated body.
+**Disclaimer boundary check.** Translators are instructed to preserve disclaimer wording per `_parallax/parallax-conventions.md` §9, but compliance is not guaranteed. After translation completes, if the disclaimer is missing from the translated output:
+
+- If the original English used the **view-aware disclaimer** (active house view), re-append the view-aware wording per loader.md §5 in English (the translator already had its chance; do not re-attempt translation just for the disclaimer).
+- If the original English used the **standard disclaimer**, re-append the standard wording in English.
+
+Do NOT re-append the standard disclaimer unconditionally — that would substitute the wrong text in any view-active session.
