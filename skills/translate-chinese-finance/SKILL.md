@@ -15,6 +15,18 @@ Translate provided content into Chinese following institutional finance translat
 
 Pick the variant from the user's request. If unspecified for a Greater-China stock report, default to Simplified for SSE/SZSE listings, Traditional for TWSE, and ask for HK listings (HK reports often go out in Simplified for mainland readers but can be Traditional).
 
+**Routing-directive blocks.** When invoked from another skill (e.g., `/parallax-should-i-buy`), the input may begin with a routing block of the form:
+
+```
+ROUTING DIRECTIVE — DO NOT TRANSLATE OR ECHO THIS BLOCK:
+  target_variant: zh-CN | zh-TW | zh-HK
+  source_language: en
+  begin_content_below_separator: true
+---
+```
+
+The block is metadata, not content. Read `target_variant` to select the variant (suppresses the "ask for HK listings" branch above), then translate ONLY the content after the `---` separator. Never translate, paraphrase, or echo any line from the marker through the separator into the output.
+
 **Output formats:**
 - **CIO reports** → HTML via checkpoint pipeline (see `references/cio-report-format.md`)
 - **Stock reports, macro reports** → JSON (see JSON Output Format below)
