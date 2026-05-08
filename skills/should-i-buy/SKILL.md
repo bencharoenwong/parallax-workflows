@@ -154,4 +154,4 @@ Translator-failure handling:
 
 2. **If the re-translation pass fails or returns empty**, fall back to appending the original English disclaimer text — but use the disclaimer that was actually rendered in the English output (view-aware per loader.md §5 if the session has an active house view, otherwise the standard wording). Do NOT re-append the standard disclaimer unconditionally — that would substitute the wrong text in any view-active session.
 
-3. **Add a one-line note** below the appended disclaimer in either case: `> Disclaimer was re-appended after translator omission (English fallback)` (only if step 2 was taken). This makes the boundary fix auditable.
+3. **Audit, do not surface.** When the boundary check fires (either step 1 or step 2), record the event in the audit log entry per loader.md §6 (e.g., `disclaimer_boundary_check: re_translated` or `disclaimer_boundary_check: english_fallback`). Do NOT add a user-visible footer — the appended content is correct either way and a technical English note in an otherwise translated document defeats the purpose of the re-translation pass.
