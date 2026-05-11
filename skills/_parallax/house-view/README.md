@@ -30,6 +30,7 @@ All modules are pure functions with no MCP coupling. They import cleanly into an
 | `chain_prune.py` | `parallax chain prune --before YYYY-MM-DD [--confirm]` | Retention CLI. Dry-run by default, `--confirm` to delete. Refuses symlinked chain_dir; declines files modified after process start; parses `--before` strictly. |
 | `gap_detect.py` | `detect_gaps(draft_view, prose, extraction_notes, source_type) -> list[Gap]` | Identifies fillable gaps: silent (0/null AND name+aliases not mentioned in prose/notes via word-boundary regex match) or low-confidence non-zero (`extraction_confidence[dim] < 0.4`). Eligible dimensions: `macro_regime`, `factors`, `regions`, `sectors`. Pillars / themes / styles / excludes are never returned. Pure module, no I/O. |
 | `gap_suggest.py` | `plan_calls(...)`, `report_skipped_leaves(...)`, `fold_responses(...)` | Pairs with `gap_detect`. Plans deduplicated MCP calls; reports per-dimension leaves silently dropped due to no MCP coverage; folds responses into Suggestions. The consuming skill makes the actual MCP calls and feeds responses back. Pure module. |
+| `view_status.py` | `compute_status(view_dir=None, today=None) -> ViewStatus`; CLI `python -m view_status [--dir PATH] [--json] [--exit-code-by-state]` | Operator-agnostic status + banner helper. Single source of truth for expiry math across operator LLMs (loader.md §2.6 delegates to this). Returns `state` ∈ {`none`, `malformed`, `not_yet_effective`, `expired`, `critical`, `warning`, `active`}, plus `banner` (verbatim string to surface), `days_remaining`, and `tilts_apply` (false for `none`/`malformed`/`expired`/`not_yet_effective`). Thresholds: `CRITICAL_DAYS=10`, `WARNING_DAYS=14`. Resolution order for `view_dir`: explicit arg → `$PARALLAX_HOUSE_VIEW_DIR` → `~/.parallax/active-house-view/`. |
 
 ### Tests
 
@@ -47,6 +48,7 @@ Coverage is in the adjacent `tests/` directory. The test signing key + signed te
 | `tests/test_gap_suggest.py` | Planner dedup logic, regime-tag → factor-delta mapping, sector positioning across response shapes, end-to-end fold preserving `Gap.reason`. |
 | `tests/test_gap_suggest_live.py` | Regression coverage against captured live MCP responses (`tests/fixtures/macro_analyst_*_live.json`). |
 | `tests/test_skill_integration.py` | End-to-end SKILL.md write paths against fixture inputs. |
+| `tests/test_view_status.py` | Boundary coverage for `view_status.compute_status`: 9/10/13/14-day tier transitions (`critical`/`warning`/`active`), plus `none`, `malformed`, `not_yet_effective`, and `expired` paths. |
 
 Run the suite from the repo root:
 
@@ -67,7 +69,7 @@ A temp venv is required because PEP 668 blocks Homebrew Python's pip from instal
 | Calibration cache | `~/.parallax/calibration/` | dir `0700`, files `0600` |
 | Reasoning chains | `~/.parallax/reasoning-chains/<YYYY-MM>/` | dir `0700`, files `0600` |
 
-Override the active-view location with `PARALLAX_HOUSE_VIEW_DIR`. Override the calibration / chain locations via the corresponding constructor arguments to `ManifestCache` and `emit_chain`.
+Override the active-view location with `PARALLAX_HOUSE_VIEW_DIR` — both the loader and `view_status.py` honor this variable. `view_status` additionally accepts an explicit `view_dir=` kwarg or `--dir` CLI flag; resolution order is explicit arg → `$PARALLAX_HOUSE_VIEW_DIR` → default `~/.parallax/active-house-view/`. Override the calibration / chain locations via the corresponding constructor arguments to `ManifestCache` and `emit_chain`.
 
 A managed, org-keyed backend (Supabase, accessed through the Parallax MCP server) is on the roadmap. Loader semantics carry forward unchanged; only the resolver mechanism changes.
 
