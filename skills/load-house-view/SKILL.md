@@ -296,7 +296,7 @@ To clear:  /parallax-load-house-view --clear
 
 | Flag | Behavior |
 |---|---|
-| `--status` | Read `view.yaml`, validate per loader.md §2, render the status block defined in §"Status block" below. If no view, print "No active house view." |
+| `--status` | Read `view.yaml`, validate per loader.md §2, then invoke `view_status.compute_status()` (or shell `python -m view_status`) to obtain the canonical status. Print the helper's `banner` field verbatim as the first line, then render the status block defined in §"Status block" below. The banner is the single source of truth for state wording across operator LLMs — do NOT paraphrase. If no view, the helper returns `state="none"` with the standard "No active house view" banner. |
 | `--clear` | Archive current view to `.archive/`, remove `view.yaml` and `prose.md`. Append audit entry `{"action":"clear"}`. |
 | `--extend <date>` | Update `metadata.valid_through` only. Bump `version_id`. Re-pair (recompute view_hash — should be unchanged since tilts/excludes unmodified — and re-write `prose.md` frontmatter). |
 | `--re-pair` | Recompute `view_hash` from current `view.yaml` and `prose_body_hash` from current `prose.md` body. Update `prose.md` frontmatter `paired_yaml_hash` AND `prose_body_hash` to match. Use this after a manual prose edit (body or YAML) when the edit was intentional; the command re-anchors both hashes in one step. Note that re-pair intentionally blesses whatever is currently on disk — run only after you have reviewed the edit. |
@@ -307,12 +307,16 @@ To clear:  /parallax-load-house-view --clear
 
 ### Status block (output of `--status`)
 
+The first line is the `view_status` helper's `banner` field, surfaced verbatim. The block below follows on the next lines. The helper emits one of seven states (`none`, `malformed`, `not_yet_effective`, `expired`, `critical`, `warning`, `active`) — see `_parallax/house-view/view_status.py` and loader.md §2.6 for the full taxonomy and wording. Do not paraphrase the banner.
+
 ```
+<view_status.banner>
+
 Active house view
 ─────────────────
 Name:           <view_name>
 Uploader:       <uploaded_by> (<uploader_role>)
-Effective:      <effective_date> through <valid_through>   [<N> days remaining]
+Effective:      <effective_date> through <valid_through>   [<days_remaining> days remaining]
 Calibration:    <heuristic_phase0 | empirical_phase1>
 Schema:         v<schema_version>
 
@@ -331,7 +335,7 @@ Last consume:   <timestamp> by <skill>
 Version chain:  <N versions; latest version_id <truncated>>
 ```
 
-If `valid_through` has passed, prefix the block with a warning line: `! View expired <date>. Tilts not applied. Use --extend or --clear.`
+The leading `<view_status.banner>` line covers all non-active states (expired, critical/warning countdowns, not-yet-effective, malformed, none). Do not hand-craft a prefix line — the helper owns the wording, including the days-remaining count and the refresh / `--extend` / `--clear` guidance.
 
 ## Output Format
 
