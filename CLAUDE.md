@@ -32,3 +32,15 @@ skills/
 ## Prerequisites
 
 The Parallax MCP server must be connected as `claude_ai_Parallax`. If tools return "not found", the server is not configured.
+
+## Gated push (no-mistakes)
+
+This repo is initialized with the `no-mistakes` gate. Push branches via:
+
+```
+git push no-mistakes <branch>
+```
+
+The gate runs review / test / document / lint in an isolated worktree, forwards to `origin`, and opens a PR. PR #20 was the first one through. The `document` step has auto-fix enabled and may add a commit; everything else reports findings only. CI step idles until timeout because this repo has no `.github/workflows/` — append `-o no-mistakes.skip=ci` to the push command to skip it.
+
+Attach to an active run with `no-mistakes` (TUI). Bypass with `git push origin <branch>` only when intentional and announced. See global CLAUDE.md §"Gated push via no-mistakes" for the full convention.
