@@ -38,9 +38,11 @@ The Parallax MCP server must be connected as `claude_ai_Parallax`. If tools retu
 This repo is initialized with the `no-mistakes` gate. Push branches via:
 
 ```
-git push no-mistakes <branch>
+git push no-mistakes <branch> -o no-mistakes.skip=ci
 ```
 
-The gate runs review / test / document / lint in an isolated worktree, forwards to `origin`, and opens a PR. PR #20 was the first one through. The `document` step has auto-fix enabled and may add a commit; everything else reports findings only. CI step idles until timeout because this repo has no `.github/workflows/` — append `-o no-mistakes.skip=ci` to the push command to skip it.
+The `-o no-mistakes.skip=ci` flag is required for this repo — there is no `.github/workflows/`, so the `ci` step would otherwise idle for 4h waiting for checks that never register.
 
-Attach to an active run with `no-mistakes` (TUI). Bypass with `git push origin <branch>` only when intentional and announced. See global CLAUDE.md §"Gated push via no-mistakes" for the full convention.
+The gate runs review / test / document / lint in an isolated worktree, forwards to `origin`, and opens a PR. The `document` step has auto-fix enabled and may add a commit; everything else reports findings only.
+
+Attach to an active run with `no-mistakes` (TUI). Bypass with `git push origin <branch>` only when intentional, and state the reason in the same response. See global CLAUDE.md §"Gated push via no-mistakes" for the full convention, the safety rule on hooks not firing inside the gate, and the data-perimeter constraint on `no-mistakes init`.
