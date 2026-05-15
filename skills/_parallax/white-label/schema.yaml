@@ -7,7 +7,7 @@
 # pass/warn/fail status for each asset with detailed check results.
 
 metadata:
-  schema_version: 1                          # int, for forward-compat legacy-config detection
+  schema_version: 2                          # int, for forward-compat legacy-config detection
   client_name: ""                            # required: human-readable client display name
   extracted_at: "2026-04-30T00:00:00Z"      # ISO 8601, when config was extracted/generated
   source:                                    # required: how this config was sourced
@@ -21,18 +21,40 @@ branding:
   colors:
     primary: "#000000"                       # required: primary brand color (hex format)
     secondary: "#FFFFFF"                     # required: secondary brand color (hex format)
-    accent: "#0066CC"                        # required: accent color (hex format)
-    background: "#FFFFFF"                    # required: background color (hex format)
-    text: "#333333"                          # required: default text color (hex format)
+    tertiary: "#0066CC"                      # required: tertiary brand color (was 'accent' in v1)
+    neutral: "#FFFFFF"                       # required: neutral color (was 'background' in v1)
 
   logos:
     primary: "~/.parallax/client-branding/primary-logo.png"   # required: local path to primary logo
     favicon: "~/.parallax/client-branding/favicon.ico"        # required: local path to favicon
 
-  fonts:
-    header: "Arial"                          # required: font name for headers
-    body: "Helvetica"                        # required: font name for body text
-    monospace: "Courier New"                 # required: font name for monospace/code
+  typography:
+    h1:       { fontFamily: "Arial", fontSize: "32pt", fontWeight: 700, lineHeight: "1.2", letterSpacing: "0" }
+    h2:       { fontFamily: "Arial", fontSize: "24pt", fontWeight: 700, lineHeight: "1.2", letterSpacing: "0" }
+    h3:       { fontFamily: "Arial", fontSize: "20pt", fontWeight: 700, lineHeight: "1.2", letterSpacing: "0" }
+    h4:       { fontFamily: "Arial", fontSize: "16pt", fontWeight: 700, lineHeight: "1.2", letterSpacing: "0" }
+    h5:       { fontFamily: "Arial", fontSize: "14pt", fontWeight: 700, lineHeight: "1.2", letterSpacing: "0" }
+    body-md:  { fontFamily: "Helvetica", fontSize: "12pt", fontWeight: 400, lineHeight: "1.5", letterSpacing: "0" }
+    body-sm:  { fontFamily: "Helvetica", fontSize: "10pt", fontWeight: 400, lineHeight: "1.5", letterSpacing: "0" }
+    code:     { fontFamily: "Courier New", fontSize: "12pt", fontWeight: 400, lineHeight: "1.5", letterSpacing: "0" }
+  
+  rounded:
+    sm: "4px"
+    md: "8px"
+    lg: "16px"
+    full: "9999px"
+
+  spacing:
+    xs: "4px"
+    sm: "8px"
+    md: "16px"
+    lg: "24px"
+    xl: "32px"
+
+  components:
+    body-text:
+      backgroundColor: "{colors.neutral}"
+      textColor: "#333333"                   # required: default text color (was 'text' in v1)
 
 validation_summary:
   colors:

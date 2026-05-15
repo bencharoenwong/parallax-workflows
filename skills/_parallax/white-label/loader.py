@@ -70,34 +70,65 @@ _JSONSCHEMA: dict[str, Any] = {
         },
         "branding": {
             "type": "object",
-            "required": ["colors", "logos", "fonts"],
-            "properties": {
-                "colors": {
-                    "type": "object",
-                    "required": ["primary", "secondary", "accent", "background", "text"],
+            "required": ["colors", "logos"],
+            "oneOf": [
+                {
+                    # v1 schema
+                    "required": ["fonts"],
                     "properties": {
-                        "primary":    {"type": "string"},
-                        "secondary":  {"type": "string"},
-                        "accent":     {"type": "string"},
-                        "background": {"type": "string"},
-                        "text":       {"type": "string"},
-                    },
+                        "colors": {
+                            "type": "object",
+                            "required": ["primary", "secondary", "accent", "background", "text"],
+                            "properties": {
+                                "primary":    {"type": "string"},
+                                "secondary":  {"type": "string"},
+                                "accent":     {"type": "string"},
+                                "background": {"type": "string"},
+                                "text":       {"type": "string"},
+                            },
+                        },
+                        "fonts": {
+                            "type": "object",
+                            "required": ["header", "body", "monospace"],
+                            "properties": {
+                                "header":    {"type": "string"},
+                                "body":      {"type": "string"},
+                                "monospace": {"type": "string"},
+                            },
+                        },
+                    }
                 },
+                {
+                    # v2 schema
+                    "required": ["typography"],
+                    "properties": {
+                        "colors": {
+                            "type": "object",
+                            "required": ["primary", "secondary", "tertiary", "neutral"],
+                            "properties": {
+                                "primary":   {"type": "string"},
+                                "secondary": {"type": "string"},
+                                "tertiary":  {"type": "string"},
+                                "neutral":   {"type": "string"},
+                            },
+                        },
+                        "typography": {
+                            "type": "object",
+                            "minProperties": 1
+                        },
+                        "rounded": {"type": "object"},
+                        "spacing": {"type": "object"},
+                        "components": {"type": "object"}
+                    }
+                }
+            ],
+            "properties": {
                 "logos": {
                     "type": "object",
                     "required": ["primary", "favicon"],
                     "properties": {
                         "primary": {"type": "string"},
                         "favicon": {"type": "string"},
-                    },
-                },
-                "fonts": {
-                    "type": "object",
-                    "required": ["header", "body", "monospace"],
-                    "properties": {
-                        "header":    {"type": "string"},
-                        "body":      {"type": "string"},
-                        "monospace": {"type": "string"},
                     },
                 },
             },
@@ -268,6 +299,124 @@ def _resolve_logo_paths(
     return resolved, warnings
 
 
+def _detect_schema_version(data: dict[str, Any]) -> int:
+    metadata = data.get("metadata", {})
+    if "schema_version" in metadata and isinstance(metadata["schema_version"], int):
+        return metadata["schema_version"]
+    # Heuristic
+    colors = data.get("branding", {}).get("colors", {})
+    if "tertiary" in colors and "accent" not in colors:
+        return 2
+    return 1
+
+def _normalize_branding_v2_to_return_shape(data: dict[str, Any]) -> dict[str, Any]:
+    branding = data.get("branding", {})
+    colors_v2 = branding.get("colors", {})
+    typo_v2 = branding.get("typography", {})
+    components_v2 = branding.get("components", {})
+
+    colors_legacy = {
+        "primary":    colors_v2.get("primary", ""),
+        "secondary":  colors_v2.get("secondary", ""),
+        "accent":     colors_v2.get("tertiary", ""),
+        "background": colors_v2.get("neutral", ""),
+        "text":       components_v2.get("body-text", {}).get("textColor", ""),
+    }
+    fonts_legacy = {
+        "header":    typo_v2.get("h1", {}).get("fontFamily", ""),
+        "body":      typo_v2.get("body-md", {}).get("fontFamily", ""),
+        "monospace": typo_v2.get("code", {}).get("fontFamily", ""),
+    }
+    return {
+        "colors":     colors_legacy,
+        "fonts":      fonts_legacy,
+        "typography": typo_v2,
+        "rounded":    branding.get("rounded", {}),
+        "spacing":    branding.get("spacing", {}),
+        "components": components_v2,
+    }
+
+def _config_to_draft(cfg: dict[str, Any]) -> dict[str, Any]:
+    """Reconstruct a synthetic draft dict from an on-disk config.yaml.
+
+    Inverse of build_config_from_draft, used by /parallax-white-label-onboard
+    --regenerate-design-md so emit_design_md can be re-run without re-extracting
+    from source. Works for both v1 (accent/background/text + fonts.*) and v2
+    (tertiary/neutral/components.body-text + typography.*) shapes.
+
+    Confidence is set to 1.0 on every reconstructed field — these values came
+    from a previously-confirmed config, not a fresh extraction.
+    """
+    branding = cfg.get("branding", {}) or {}
+    colors_in = branding.get("colors", {}) or {}
+    fonts_in = branding.get("fonts", {}) or {}
+    typo_in = branding.get("typography", {}) or {}
+    components_in = branding.get("components", {}) or {}
+
+    # Canonical legacy color slots regardless of v1/v2 on disk
+    legacy_text = (
+        colors_in.get("text")
+        or (components_in.get("body-text", {}) or {}).get("textColor", "")
+    )
+    legacy_background = colors_in.get("background") or colors_in.get("neutral", "")
+    legacy_accent = colors_in.get("accent") or colors_in.get("tertiary", "")
+
+    def _col(value: str) -> dict[str, Any]:
+        return {"hex": value, "confidence": 1.0} if value else {}
+
+    draft: dict[str, Any] = {
+        "colors": {
+            k: v
+            for k, v in {
+                "primary": _col(colors_in.get("primary", "")),
+                "secondary": _col(colors_in.get("secondary", "")),
+                "accent": _col(legacy_accent),
+                "background": _col(legacy_background),
+                "text": _col(legacy_text),
+            }.items()
+            if v
+        },
+        "logos": {
+            role: ({"local_path": ref, "confidence": 1.0} if isinstance(ref, str) and ref else {})
+            for role, ref in (branding.get("logos", {}) or {}).items()
+        },
+        "fonts": {
+            role: ({"name": name, "confidence": 1.0} if name else {})
+            for role, name in {
+                "header": fonts_in.get("header", "") or (typo_in.get("h1", {}) or {}).get("fontFamily", ""),
+                "body": fonts_in.get("body", "") or (typo_in.get("body-md", {}) or {}).get("fontFamily", ""),
+                "monospace": fonts_in.get("monospace", "") or (typo_in.get("code", {}) or {}).get("fontFamily", ""),
+            }.items()
+        },
+        "source": (cfg.get("metadata", {}) or {}).get(
+            "source", {"type": "regenerated-from-config", "reference": ""}
+        ),
+        "extracted_at": (cfg.get("metadata", {}) or {}).get("extracted_at", ""),
+        "confidence_scores": {},
+    }
+
+    # v2 token tree (used by emit_design_md when present; absent = emitter
+    # falls back to fonts.*)
+    if typo_in:
+        draft["typography"] = typo_in
+    if branding.get("rounded"):
+        draft["rounded"] = branding["rounded"]
+    if branding.get("spacing"):
+        draft["spacing"] = branding["spacing"]
+
+    return draft
+
+
+def archive_legacy_config(config_path: Path) -> Path:
+    from datetime import datetime, timezone
+    import shutil
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+    archive_dir = config_path.parent / ".archive" / f"{ts}-pre-v2-migration"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    archive_path = archive_dir / "config.yaml"
+    shutil.copy2(config_path, archive_path)
+    return archive_path
+
 def _build_result(
     data: dict[str, Any],
     logo_warnings: list[str],
@@ -283,18 +432,35 @@ def _build_result(
     voice    = data.get("voice", {"enabled": False})
     multi    = data.get("multi_source", {})
 
+    version = _detect_schema_version(data)
+    if version >= 2:
+        norm = _normalize_branding_v2_to_return_shape(data)
+        colors = norm["colors"]
+        fonts = norm["fonts"]
+        extra = {
+            "typography": norm["typography"],
+            "rounded": norm["rounded"],
+            "spacing": norm["spacing"],
+            "components": norm["components"],
+        }
+    else:
+        colors = branding.get("colors", {})
+        fonts = branding.get("fonts", {})
+        extra = {}
+
     error: str | None = "; ".join(logo_warnings) if logo_warnings else None
 
     return {
         "client_name":       metadata.get("client_name", ""),
-        "colors":            branding.get("colors", {}),
+        "colors":            colors,
         "logos":             branding.get("logos", {}),
-        "fonts":             branding.get("fonts", {}),
+        "fonts":             fonts,
         "source":            metadata.get("source", {}),
         "confidence_scores": data.get("confidence_scores", {}),
         "voice":             voice,
         "multi_source":      multi,
         "error":             error,
+        **extra
     }
 
 
@@ -317,6 +483,7 @@ def build_config_from_draft(
     client_name: str = "",
     extracted_by: str = "",
     notes: str = "",
+    *, schema_version: int = 2
 ) -> dict[str, Any]:
     """Construct a canonical config.yaml dict from an extraction draft.
 
@@ -333,7 +500,7 @@ def build_config_from_draft(
 
     config: dict[str, Any] = {
         "metadata": {
-            "schema_version": 1,
+            "schema_version": schema_version,
             "client_name":    client_name or draft.get("client_name", ""),
             "extracted_at":   draft.get("extracted_at", ""),
             "source": {
@@ -345,13 +512,6 @@ def build_config_from_draft(
             "notes":        notes,
         },
         "branding": {
-            "colors": {
-                "primary":    draft.get("colors", {}).get("primary",    {}).get("hex", ""),
-                "secondary":  draft.get("colors", {}).get("secondary",  {}).get("hex", ""),
-                "accent":     draft.get("colors", {}).get("accent",     {}).get("hex", ""),
-                "background": draft.get("colors", {}).get("background", {}).get("hex", "#FFFFFF"),
-                "text":       draft.get("colors", {}).get("text",       {}).get("hex", "#333333"),
-            },
             "logos": {
                 "primary": (
                     draft.get("logos", {}).get("primary", {}).get("local_path")
@@ -364,14 +524,55 @@ def build_config_from_draft(
                     or draft.get("logos", {}).get("favicon", {}).get("url", "")
                 ),
             },
-            "fonts": {
-                "header":    draft.get("fonts", {}).get("header",    {}).get("name", "Arial"),
-                "body":      draft.get("fonts", {}).get("body",      {}).get("name", "Helvetica"),
-                "monospace": draft.get("fonts", {}).get("monospace", {}).get("name", "Courier New"),
-            },
         },
         "confidence_scores": draft.get("confidence_scores", {}),
     }
+
+    if schema_version >= 2:
+        config["branding"]["colors"] = {
+            "primary":    draft.get("colors", {}).get("primary",    {}).get("hex", ""),
+            "secondary":  draft.get("colors", {}).get("secondary",  {}).get("hex", ""),
+            "tertiary":   draft.get("colors", {}).get("accent",     {}).get("hex", ""),
+            "neutral":    draft.get("colors", {}).get("background", {}).get("hex", "#FFFFFF"),
+        }
+        
+        # Use default typography if missing
+        typography = draft.get("typography", {})
+        if not typography:
+            typography = {
+                "h1": {"fontFamily": "Arial"},
+                "body-md": {"fontFamily": "Helvetica"},
+                "code": {"fontFamily": "Courier New"}
+            }
+        config["branding"]["typography"] = typography
+        
+        if "rounded" in draft and draft["rounded"]:
+            config["branding"]["rounded"] = draft["rounded"]
+        if "spacing" in draft and draft["spacing"]:
+            config["branding"]["spacing"] = draft["spacing"]
+            
+        components = draft.get("components", {})
+        if not components and "text" in draft.get("colors", {}):
+            components = {
+                "body-text": {
+                    "backgroundColor": "{colors.neutral}",
+                    "textColor": draft["colors"]["text"]["hex"]
+                }
+            }
+        config["branding"]["components"] = components
+    else:
+        config["branding"]["colors"] = {
+            "primary":    draft.get("colors", {}).get("primary",    {}).get("hex", ""),
+            "secondary":  draft.get("colors", {}).get("secondary",  {}).get("hex", ""),
+            "accent":     draft.get("colors", {}).get("accent",     {}).get("hex", ""),
+            "background": draft.get("colors", {}).get("background", {}).get("hex", "#FFFFFF"),
+            "text":       draft.get("colors", {}).get("text",       {}).get("hex", "#333333"),
+        }
+        config["branding"]["fonts"] = {
+            "header":    draft.get("fonts", {}).get("header",    {}).get("name", "Arial"),
+            "body":      draft.get("fonts", {}).get("body",      {}).get("name", "Helvetica"),
+            "monospace": draft.get("fonts", {}).get("monospace", {}).get("name", "Courier New"),
+        }
 
     if validation_summary is not None:
         config["validation_summary"] = validation_summary
