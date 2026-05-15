@@ -305,6 +305,7 @@ Options (mirrors autoplan, adapted to a view update):
 | M5 | Hash chain broken when reading `audit.jsonl` | refuse to run; user must restore from `.archive/` or `--re-pair` (existing flow) |
 | M6 | User picks B/C at gate but `load-house-view` confirmation fails | stress-test audit entry already written with `applied=false`; load-house-view writes its own `save` entry; no state corruption |
 | M7 | Two stress-test runs concurrently (parallel terminals) | second run sees `view_hash` unchanged at Phase 0 + 3 (no view mutation); both audits append safely via hash-chain serialisation; CIO sees two artifacts |
+| M8 | Parallax `last_updated` is present but stale (e.g., `parallax_age_days >> 30`) | `compute_age_delta` returns `"fresh"` when CIO is younger than Parallax-age + 30d, so a 90-day-old Parallax signal vs. fresh CIO renders as `DIVERGENT_FRESH` (Taste) — not flagged as a data-quality issue. v1 limitation; CIO must inspect `last_updated` in the report header before treating divergences as substantive. v2 will add a `PARALLAX_DATA_STALE` sentinel above an absolute age threshold. Surfaced by adversarial-reviewer post-implementation. |
 
 ---
 
