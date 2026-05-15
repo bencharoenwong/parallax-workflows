@@ -175,7 +175,10 @@ def classify_mcp_meta_state(
     if response.get("success") is False:
         return "PARALLAX_SILENT", f"success=false: {response.get('error', 'unspecified')}"
     err = response.get("error")
-    if err in {"timeout", "rate_limit"}:
+    # Any non-None `error` flags a degraded response, regardless of `success`.
+    # Production MCPs use diverse error vocabularies (permission_denied,
+    # tool_not_found, internal_error, ...) — we cannot enumerate them.
+    if err is not None:
         return "PARALLAX_SILENT", f"{err} on {market}"
     if response.get("success") is True:
         return "ok", f"healthy response for {market}"

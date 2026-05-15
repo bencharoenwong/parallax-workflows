@@ -707,6 +707,24 @@ def test_classify_mcp_malformed_shape_is_unreachable():
     assert state == "UNREACHABLE"
 
 
+def test_classify_mcp_unknown_error_with_success_true_is_silent():
+    """success: true + unrecognized error key → PARALLAX_SILENT (not ok).
+
+    Production MCPs use diverse error vocabularies (permission_denied,
+    tool_not_found, internal_error, ...). Any non-None `error` flags a
+    degraded response, regardless of `success`. Without this guard, a
+    degraded response would be passed to the LLM as healthy prose.
+    """
+    for err in ("permission_denied", "tool_not_found", "internal_error", "forbidden"):
+        state, summary = stress.classify_mcp_meta_state(
+            response={"success": True, "error": err},
+            market="us",
+            covered_markets={"us"},
+        )
+        assert state == "PARALLAX_SILENT", f"{err} should be PARALLAX_SILENT, got {state}"
+        assert err in summary
+
+
 def test_classify_mcp_ok_response():
     """success: true → ok; LLM does prose interpretation downstream."""
     state, summary = stress.classify_mcp_meta_state(
