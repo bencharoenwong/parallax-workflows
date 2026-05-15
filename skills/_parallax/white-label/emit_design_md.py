@@ -50,10 +50,27 @@ def _frontmatter_dict(draft: dict[str, Any]) -> dict[str, Any]:
         out["typography"] = draft["typography"].copy()
     else:
         out["typography"] = {}
-        
-    if "fonts" in draft and "monospace" in draft["fonts"] and "name" in draft["fonts"]["monospace"]:
-        out["typography"]["code"] = {"fontFamily": draft["fonts"]["monospace"]["name"]}
-        
+
+    # v1 fallback: when typography.* is absent or partial, fill from legacy
+    # fonts.{header,body,monospace} so /parallax-white-label-onboard
+    # --regenerate-design-md on an old config still produces a complete
+    # DESIGN.md. fonts.header → typography.h1, fonts.body → typography.body-md,
+    # fonts.monospace → typography.code. typography.* takes precedence when
+    # both are present (typography is the v2 source of truth).
+    legacy_font_map = (
+        ("header", "h1"),
+        ("body", "body-md"),
+        ("monospace", "code"),
+    )
+    fonts = draft.get("fonts", {}) or {}
+    for legacy_role, design_level in legacy_font_map:
+        if design_level in out["typography"]:
+            continue
+        slot = fonts.get(legacy_role) or {}
+        name = slot.get("name") if isinstance(slot, dict) else None
+        if name:
+            out["typography"][design_level] = {"fontFamily": name}
+
     if not out["typography"]:
         del out["typography"]
 
