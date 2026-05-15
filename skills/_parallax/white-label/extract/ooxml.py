@@ -39,10 +39,15 @@ def _parse_pptx_master_typography(zf) -> tuple[Dict[str, Dict[str, Any]], Dict[s
         b = defRPr.get("b")
         lnSpc = pr_elem.find(".//a:lnSpc/a:spcPct", ns)
         
-        style = {"letterSpacing": "0"}
+        # DESIGN.md spec only permits px / rem / em units; pt is rejected by the
+        # linter. Convert pt → px at 96dpi (1pt = 4/3 px) and round to integer.
+        # letterSpacing must be a dimension (with unit), not bare "0".
+        style = {"letterSpacing": "0em"}
         conf = 0.5
         if sz:
-            style["fontSize"] = f"{int(sz)/100:g}pt"
+            pt = int(sz) / 100
+            px = round(pt * 4 / 3)
+            style["fontSize"] = f"{px}px"
             conf = 0.85
         style["fontWeight"] = 700 if b == "1" else 400
         if lnSpc is not None and lnSpc.get("val"):
@@ -103,12 +108,17 @@ def _parse_docx_style_typography(zf) -> tuple[Dict[str, Dict[str, Any]], Dict[st
             if spacing is not None:
                 lnSpc = spacing.get(f"{{{ns['w']}}}line")
                 
-        style_dict = {"letterSpacing": "0"}
+        # DESIGN.md spec only permits px / rem / em units; pt is rejected by the
+        # linter. DOCX w:sz is half-points → pt → px at 4/3 ratio (96dpi).
+        # letterSpacing must carry a unit.
+        style_dict = {"letterSpacing": "0em"}
         conf = 0.5
         if sz is not None:
             val_sz = sz.get(f"{{{ns['w']}}}val")
             if val_sz:
-                style_dict["fontSize"] = f"{int(val_sz)/2:g}pt"
+                pt = int(val_sz) / 2
+                px = round(pt * 4 / 3)
+                style_dict["fontSize"] = f"{px}px"
                 conf = 0.85
         style_dict["fontWeight"] = 700 if b is not None else 400
         if lnSpc:

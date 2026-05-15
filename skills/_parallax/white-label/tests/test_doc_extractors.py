@@ -462,9 +462,13 @@ def test_ooxml_pptx_typography_and_radii(tmp_path):
     draft = extract_from_pptx(str(pptx_path))
     
     assert "typography" in draft
-    assert draft["typography"]["h1"]["fontSize"] == "44pt"
+    # DESIGN.md spec only accepts px / rem / em — extractor converts pt → px
+    # at 96dpi (1pt = 4/3 px). 44pt → 59px, 12pt → 16px. letterSpacing must
+    # carry a unit ("0em"), not bare "0".
+    assert draft["typography"]["h1"]["fontSize"] == "59px"
     assert draft["typography"]["h1"]["fontWeight"] == 700
-    assert draft["typography"]["body-md"]["fontSize"] == "12pt"
+    assert draft["typography"]["h1"]["letterSpacing"] == "0em"
+    assert draft["typography"]["body-md"]["fontSize"] == "16px"
     assert draft["typography"]["body-md"]["lineHeight"] == "1.5"
     assert "h2" not in draft["typography"]
     
@@ -497,8 +501,10 @@ def test_ooxml_docx_typography(tmp_path):
     draft = extract_from_docx(str(docx_path))
     
     assert "typography" in draft
-    assert draft["typography"]["h1"]["fontSize"] == "24pt"
+    # DOCX half-points → pt → px. w:sz=48 → 24pt → 32px.
+    assert draft["typography"]["h1"]["fontSize"] == "32px"
     assert draft["typography"]["h1"]["fontWeight"] == 700
+    assert draft["typography"]["h1"]["letterSpacing"] == "0em"
     assert draft["typography"]["h1"]["lineHeight"] == "1.5"
     assert draft["confidence_scores"]["typography.h1"] == 0.85
 
