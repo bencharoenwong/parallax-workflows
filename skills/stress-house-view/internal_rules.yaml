@@ -1,0 +1,47 @@
+- id: "rates_cutting_momentum_pos"
+  description: "Rates cutting is historically unfavorable for high-momentum stocks."
+  class: "hard_stop"
+  last_reviewed: "2026-05-14"
+  confidence: 0.9
+  pattern:
+    when:
+      tilts.macro_regime.rates: "cutting"
+      tilts.factors.momentum: ">=1"
+
+- id: "growth_slowing_cyclicals_overweight"
+  description: "Slowing growth favors defensive sectors over cyclicals."
+  class: "taste"
+  last_reviewed: "2026-05-14"
+  confidence: 0.7
+  pattern:
+    when:
+      tilts.macro_regime.growth: "slowing"
+    any_of:
+      - tilts.sectors.financials: ">=1"
+      - tilts.sectors.industrials: ">=1"
+      - tilts.sectors.materials: ">=1"
+
+- id: "excludes_energy_em_commodity_overweight"
+  description: "Excluding energy while overweighting commodity-exporting EM regions may re-introduce energy beta implicitly."
+  class: "taste"
+  last_reviewed: "2026-05-14"
+  confidence: 0.6
+  pattern:
+    when:
+      excludes: "contains:energy"
+    any_of:
+      - tilts.regions.brazil: ">=1"
+      - tilts.regions.indonesia: ">=1"
+      - tilts.regions.mexico: ">=1"
+      - tilts.regions.chile: ">=1"
+      - tilts.regions.emea: ">=1"
+
+- id: "pillar_omega_risk_on"
+  description: "A negative econometrics phase (Ω) contradicts a risk-on appetite."
+  class: "hard_stop"
+  last_reviewed: "2026-05-14"
+  confidence: 0.85
+  pattern:
+    when:
+      tilts.pillars.econometrics_phase: "<=-1"
+      tilts.macro_regime.risk_appetite: "risk_on"
