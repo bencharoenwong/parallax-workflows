@@ -274,6 +274,175 @@ class FontExtractor:
         return fonts
 
 
+
+class TypographyExtractor:
+    @staticmethod
+    def extract_type_scale_from_css(css_text: str) -> Dict[str, Dict[str, Any]]:
+        import re
+        css_text = re.sub(r'/\*.*?\*/', '', css_text, flags=re.DOTALL)
+        scale = {}
+        pattern = re.compile(r'(?:\b|\.)(h[1-6]|body(?:-md)?|p|code|pre)\b[^{}]*\{([^}]+)\}', re.IGNORECASE)
+        sel_map = {
+            "h1": "h1", "h2": "h2", "h3": "h3", "h4": "h4", "h5": "h5",
+            "body": "body-md", "p": "body-md", "body-md": "body-md",
+            "code": "code", "pre": "code"
+        }
+        for match in pattern.finditer(css_text):
+            sel = match.group(1).lower()
+            if sel not in sel_map: continue
+            level = sel_map[sel]
+            if level in scale: continue 
+            
+            block = match.group(2)
+            style = {
+                "fontWeight": 400,
+                "lineHeight": "1.5",
+                "letterSpacing": "0"
+            }
+            
+            fs_m = re.search(r'font-size\s*:\s*([^;]+)', block, re.IGNORECASE)
+            fw_m = re.search(r'font-weight\s*:\s*([^;]+)', block, re.IGNORECASE)
+            lh_m = re.search(r'line-height\s*:\s*([^;]+)', block, re.IGNORECASE)
+            ls_m = re.search(r'letter-spacing\s*:\s*([^;]+)', block, re.IGNORECASE)
+            ff_m = re.search(r'font-family\s*:\s*([^;]+)', block, re.IGNORECASE)
+            
+            if not any([fs_m, fw_m, lh_m, ls_m, ff_m]): continue
+            
+            if fs_m: style["fontSize"] = fs_m.group(1).strip()
+            if fw_m: 
+                val = fw_m.group(1).strip()
+                if val.isdigit(): style["fontWeight"] = int(val)
+                elif val.lower() == "bold": style["fontWeight"] = 700
+            if lh_m: style["lineHeight"] = lh_m.group(1).strip()
+            if ls_m: style["letterSpacing"] = ls_m.group(1).strip()
+            if ff_m: style["fontFamily"] = ff_m.group(1).strip().split(',')[0].strip(' "\'')
+            
+            scale[level] = style
+            
+        return scale
+
+class ShapeExtractor:
+    @staticmethod
+    def extract_border_radii(css_text: str) -> Dict[str, str]:
+        import re
+        radii = []
+        has_full = False
+        for match in re.finditer(r'border-radius\s*:\s*([^;]+)', css_text, re.IGNORECASE):
+            val = match.group(1).strip()
+            if "50%" in val:
+                has_full = True
+                continue
+            if "%" in val:
+                continue
+            m = re.match(r'^([\d.]+)(px|rem)$', val, re.IGNORECASE)
+            if m:
+                num = float(m.group(1))
+                unit = m.group(2).lower()
+                if unit == "rem": num *= 16 
+                if num >= 9999:
+                    has_full = True
+                else:
+                    radii.append((num, val))
+                    
+        res = {}
+        if has_full:
+            res["full"] = "9999px"
+            
+        unique = {}
+        for num, text in radii:
+            if num not in unique:
+                unique[num] = text
+        nums = sorted(list(unique.keys()))
+        if len(nums) >= 2:
+            import math
+            sm_idx = max(0, int(len(nums) * 0.25))
+            md_idx = int(len(nums) * 0.5)
+            lg_idx = min(len(nums) - 1, int(len(nums) * 0.75))
+            
+            res["sm"] = unique[nums[sm_idx]]
+            res["md"] = unique[nums[md_idx]]
+            res["lg"] = unique[nums[lg_idx]]
+            
+            if nums[sm_idx] < 4:
+                res["sm"] = "4px"
+                
+        elif has_full:
+            pass 
+        else:
+            return {}
+            
+        return res
+
+class SpacingExtractor:
+    @staticmethod
+    def extract_spacing_scale(css_text: str) -> Dict[str, str]:
+        import re
+        vals = []
+        for match in re.finditer(r'(?:padding|margin|gap)(?:-[a-z]+)?\s*:\s*([^;]+)', css_text, re.IGNORECASE):
+            parts = match.group(1).split()
+            for p in parts:
+                m = re.match(r'^([\d.]+)(px|rem)$', p, re.IGNORECASE)
+                if m:
+                    num = float(m.group(1))
+                    if num == 0: continue
+                    unit = m.group(2).lower()
+                    if unit == "rem": num *= 16
+                    vals.append((num, p))
+        unique = {}
+        for num, text in vals:
+            if num not in unique:
+                unique[num] = text
+        nums = sorted(list(unique.keys()))
+        if len(nums) >= 4:
+            sm_idx = max(0, int(len(nums) * 0.25))
+            md_idx = int(len(nums) * 0.5)
+            lg_idx = min(len(nums) - 1, int(len(nums) * 0.75))
+            
+            return {
+                "xs": unique[nums[0]],
+                "sm": unique[nums[sm_idx]],
+                "md": unique[nums[md_idx]],
+                "lg": unique[nums[lg_idx]],
+                "xl": unique[nums[-1]]
+            }
+        return {}
+
+def _extract_brand_guide_prose(pdf_text: str, *, filename: str) -> Dict[str, str]:
+    import re
+    if not re.search(r'(brand|guide|identity|style)', filename, re.IGNORECASE):
+        return {}
+        
+    found = []
+    patterns = {
+        "overview": r'^(?:\d+\.\s*)?Overview\b',
+        "colors": r'^(?:\d+\.\s*)?Colors\b',
+        "typography": r'^(?:\d+\.\s*)?Typography\b',
+        "dos_and_donts": r'^(?:\d+\.\s*)?Do\'s and Don\'ts\b'
+    }
+    
+    positions = []
+    lines = pdf_text.split('\n')
+    for i, line in enumerate(lines):
+        for key, pat in patterns.items():
+            if re.match(pat, line.strip(), re.IGNORECASE):
+                if key not in found:
+                    found.append(key)
+                positions.append((i, key))
+                
+    if len(found) < 3:
+        return {}
+        
+    res = {}
+    positions.sort(key=lambda x: x[0])
+    for idx, (line_idx, key) in enumerate(positions):
+        start = line_idx + 1
+        end = positions[idx+1][0] if idx + 1 < len(positions) else len(lines)
+        prose = "\n".join(lines[start:end]).strip()
+        if prose:
+            res[key] = prose
+            
+    return res
+
 def extract_from_url(url: str) -> Dict[str, Any]:
     """Extract branding from a website.
 
@@ -363,7 +532,19 @@ def extract_from_url(url: str) -> Dict[str, Any]:
             "text": "", "word_count": 0, "truncated": False,
         }
 
-        return {
+        typography = TypographyExtractor.extract_type_scale_from_css(combined_text)
+        rounded = ShapeExtractor.extract_border_radii(combined_text)
+        spacing = SpacingExtractor.extract_spacing_scale(combined_text)
+        
+        if typography:
+            for level in typography:
+                confidence_scores[f"typography.{level}"] = 0.80
+        if rounded:
+            confidence_scores["rounded"] = 0.70
+        if spacing:
+            confidence_scores["spacing"] = 0.50
+            
+        ret = {
             "colors": colors,
             "logos": logos,
             "fonts": fonts,
@@ -375,6 +556,10 @@ def extract_from_url(url: str) -> Dict[str, Any]:
             "confidence_scores": confidence_scores,
             "voice_corpus": voice_corpus,
         }
+        if typography: ret["typography"] = typography
+        if rounded: ret["rounded"] = rounded
+        if spacing: ret["spacing"] = spacing
+        return ret
 
     except Exception as e:
         return {
@@ -465,7 +650,9 @@ def extract_from_pdf(pdf_path: str) -> Dict[str, Any]:
         for usage, data in fonts.items():
             confidence_scores[f"font_{usage}"] = data["confidence"]
 
-        return {
+        brand_guide_prose = _extract_brand_guide_prose(pdf_text, filename=pdf_file.name)
+        
+        ret = {
             "colors": colors,
             "logos": logos,
             "fonts": fonts,
@@ -477,6 +664,9 @@ def extract_from_pdf(pdf_path: str) -> Dict[str, Any]:
             "confidence_scores": confidence_scores,
             "voice_corpus": _voice_corpus_from_text(pdf_text) if pdf_text else dict(_EMPTY_VOICE_CORPUS),
         }
+        if brand_guide_prose:
+            ret["brand_guide_prose"] = brand_guide_prose
+        return ret
 
     except Exception as e:
         return {

@@ -164,3 +164,89 @@ class TestExtractFromWizard:
         assert all(k in result for k in required_keys), f"Missing keys: {set(required_keys) - set(result.keys())}"
         assert result["source"]["type"] == "wizard"
         assert "reference" in result["source"], "source must include 'reference' key for schema consistency"
+
+def test_typography_extractor():
+    from extract.web_pdf import TypographyExtractor
+    css = """
+    h1 { font-size: 32px; font-weight: bold; line-height: 1.2; font-family: "Open Sans"; }
+    .body-md { font-size: 16px; font-weight: 400; line-height: 1.5; letter-spacing: 0.1px; }
+    p { font-size: 14px; } /* Should not override body-md if .body-md is found first, wait actually our dict overrides but order depends on CSS */
+    code { font-family: monospace; }
+    """
+    scale = TypographyExtractor.extract_type_scale_from_css(css)
+    assert "h1" in scale
+    assert scale["h1"]["fontSize"] == "32px"
+    assert scale["h1"]["fontWeight"] == 700
+    assert scale["h1"]["fontFamily"] == "Open Sans"
+    
+    assert "body-md" in scale
+    assert scale["body-md"]["fontSize"] == "16px"
+    assert scale["body-md"]["fontWeight"] == 400
+    
+    assert "code" in scale
+    assert scale["code"]["fontFamily"] == "monospace"
+
+def test_shape_extractor():
+    from extract.web_pdf import ShapeExtractor
+    css = """
+    .btn-sm { border-radius: 4px; }
+    .btn-md { border-radius: 8px; }
+    .btn-lg { border-radius: 16px; }
+    .circle { border-radius: 50%; }
+    .weird { border-radius: 9999px; }
+    """
+    radii = ShapeExtractor.extract_border_radii(css)
+    assert radii["sm"] == "4px"
+    assert radii["md"] == "8px"
+    assert radii["lg"] == "16px"
+    assert radii["full"] == "9999px"
+    
+def test_spacing_extractor():
+    from extract.web_pdf import SpacingExtractor
+    css = """
+    .a { margin: 4px; }
+    .b { padding: 8px; }
+    .c { gap: 16px; }
+    .d { margin-top: 24px; }
+    .e { padding-bottom: 32px; }
+    """
+    spacing = SpacingExtractor.extract_spacing_scale(css)
+    assert spacing["xs"] == "4px"
+    assert spacing["sm"] == "8px"
+    assert spacing["md"] == "16px"
+    assert spacing["lg"] == "24px"
+    assert spacing["xl"] == "32px"
+
+def test_spacing_extractor_omits_thin():
+    from extract.web_pdf import SpacingExtractor
+    css = """
+    .a { margin: 4px; }
+    .b { padding: 8px; }
+    """
+    spacing = SpacingExtractor.extract_spacing_scale(css)
+    assert spacing == {}
+
+def test_extract_brand_guide_prose():
+    from extract.web_pdf import _extract_brand_guide_prose
+    text = """
+    1. Overview
+    This is the overview.
+    2. Colors
+    Here are colors.
+    3. Typography
+    Here is type.
+    4. Do's and Don'ts
+    Do not do this.
+    """
+    # matches filename
+    res = _extract_brand_guide_prose(text, filename="brand_guide.pdf")
+    assert "overview" in res
+    assert "This is the overview." in res["overview"]
+    assert "colors" in res
+    assert "typography" in res
+    assert "dos_and_donts" in res
+    
+    # doesn't match filename
+    res2 = _extract_brand_guide_prose(text, filename="annual_report.pdf")
+    assert res2 == {}
+

@@ -430,3 +430,102 @@ class TestVoiceValidatorMissingFields:
         result = VoiceValidator.validate_voice(voice)
         assert result["status"] == "fail"
         assert "positioning" in result["checks"]["completeness"]["missing"]
+
+
+def test_ooxml_pptx_typography_and_radii(tmp_path):
+    import zipfile
+    from extract.ooxml import extract_from_pptx
+
+    pptx_path = tmp_path / "test.pptx"
+    
+    master_xml = b'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+        <p:txStyles>
+            <p:titleStyle><a:lvl1pPr><a:defRPr sz="4400" b="1"/></a:lvl1pPr></p:titleStyle>
+            <p:bodyStyle><a:lvl5pPr><a:defRPr sz="1200"/><a:lnSpc><a:spcPct val="150000"/></a:lnSpc></a:lvl5pPr></p:bodyStyle>
+        </p:txStyles>
+    </p:sldMaster>'''
+    
+    slide_xml = b'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+        <p:spTree>
+            <p:sp><p:spPr><a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 4000"/></a:avLst></a:prstGeom></p:spPr></p:sp>
+            <p:sp><p:spPr><a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 4000"/></a:avLst></a:prstGeom></p:spPr></p:sp>
+            <p:sp><p:spPr><a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 12000"/></a:avLst></a:prstGeom></p:spPr></p:sp>
+        </p:spTree>
+    </p:sld>'''
+
+    with zipfile.ZipFile(pptx_path, "w") as zf:
+        zf.writestr("ppt/slideMasters/slideMaster1.xml", master_xml)
+        zf.writestr("ppt/slides/slide1.xml", slide_xml)
+        
+    draft = extract_from_pptx(str(pptx_path))
+    
+    assert "typography" in draft
+    assert draft["typography"]["h1"]["fontSize"] == "44pt"
+    assert draft["typography"]["h1"]["fontWeight"] == 700
+    assert draft["typography"]["body-md"]["fontSize"] == "12pt"
+    assert draft["typography"]["body-md"]["lineHeight"] == "1.5"
+    assert "h2" not in draft["typography"]
+    
+    assert "rounded" in draft
+    assert draft["rounded"]["sm"] == "4px"
+    assert draft["rounded"]["md"] == "12px"
+    
+    assert draft["confidence_scores"]["typography.h1"] == 0.85
+    assert draft["confidence_scores"]["typography.body-md"] == 0.85
+    assert draft["confidence_scores"]["rounded"] == 0.5
+
+def test_ooxml_docx_typography(tmp_path):
+    import zipfile
+    from extract.ooxml import extract_from_docx
+
+    docx_path = tmp_path / "test.docx"
+
+    styles_xml = b'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+        <w:style w:type="paragraph" w:styleId="Heading1">
+            <w:name w:val="heading 1"/>
+            <w:rPr><w:sz w:val="48"/><w:b/></w:rPr>
+            <w:pPr><w:spacing w:line="360"/></w:pPr>
+        </w:style>
+    </w:styles>'''
+
+    with zipfile.ZipFile(docx_path, "w") as zf:
+        zf.writestr("word/styles.xml", styles_xml)
+
+    draft = extract_from_docx(str(docx_path))
+    
+    assert "typography" in draft
+    assert draft["typography"]["h1"]["fontSize"] == "24pt"
+    assert draft["typography"]["h1"]["fontWeight"] == 700
+    assert draft["typography"]["h1"]["lineHeight"] == "1.5"
+    assert draft["confidence_scores"]["typography.h1"] == 0.85
+
+def test_ooxml_no_round_rect_yields_empty(tmp_path):
+    from unittest.mock import patch, MagicMock
+    import zipfile
+    from extract.ooxml import extract_from_pptx
+
+    pptx_path = tmp_path / "test.pptx"
+    pptx_path.write_text("fake")
+
+    mock_zip = MagicMock()
+    mock_zip.namelist.return_value = ["ppt/slides/slide1.xml"]
+    
+    slide_xml = b"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+    </p:sld>"""
+
+    def mock_open(name):
+        m = MagicMock()
+        m = io.BytesIO(slide_xml)
+        
+        return m
+    
+    mock_zip.open = mock_open
+    
+    with patch("zipfile.ZipFile", return_value=mock_zip):
+        draft = extract_from_pptx(str(pptx_path))
+        assert "rounded" not in draft
+

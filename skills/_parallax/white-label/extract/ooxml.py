@@ -16,6 +16,147 @@ from .voice import _voice_corpus_from_text
 _OOXML_A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
 
 
+
+def _parse_pptx_master_typography(zf) -> tuple[Dict[str, Dict[str, Any]], Dict[str, float]]:
+    from xml.etree import ElementTree as ET
+    try:
+        with zf.open("ppt/slideMasters/slideMaster1.xml") as f:
+            root = ET.fromstring(f.read())
+    except KeyError:
+        return {}, {}
+    ns = {"p": "http://schemas.openxmlformats.org/presentationml/2006/main", "a": _OOXML_A_NS}
+    txStyles = root.find(".//p:txStyles", ns)
+    if txStyles is None: return {}, {}
+    
+    typography = {}
+    confidences = {}
+    
+    def parse_pr(pr_elem, level_name):
+        if pr_elem is None: return
+        defRPr = pr_elem.find(".//a:defRPr", ns)
+        if defRPr is None: return
+        sz = defRPr.get("sz")
+        b = defRPr.get("b")
+        lnSpc = pr_elem.find(".//a:lnSpc/a:spcPct", ns)
+        
+        style = {"letterSpacing": "0"}
+        conf = 0.5
+        if sz:
+            style["fontSize"] = f"{int(sz)/100:g}pt"
+            conf = 0.85
+        style["fontWeight"] = 700 if b == "1" else 400
+        if lnSpc is not None and lnSpc.get("val"):
+            style["lineHeight"] = f"{int(lnSpc.get('val'))/100000:g}"
+            if conf < 0.7: conf = 0.7
+            
+        typography[level_name] = style
+        confidences[f"typography.{level_name}"] = conf
+
+    titleStyle = txStyles.find("p:titleStyle", ns)
+    if titleStyle is not None:
+        parse_pr(titleStyle.find("a:lvl1pPr", ns), "h1")
+    
+    bodyStyle = txStyles.find("p:bodyStyle", ns)
+    if bodyStyle is not None:
+        parse_pr(bodyStyle.find("a:lvl1pPr", ns), "h2")
+        parse_pr(bodyStyle.find("a:lvl2pPr", ns), "h3")
+        parse_pr(bodyStyle.find("a:lvl3pPr", ns), "h4")
+        parse_pr(bodyStyle.find("a:lvl4pPr", ns), "h5")
+        parse_pr(bodyStyle.find("a:lvl5pPr", ns), "body-md")
+        parse_pr(bodyStyle.find("a:lvl6pPr", ns), "body-sm")
+        
+    return typography, confidences
+
+def _parse_docx_style_typography(zf) -> tuple[Dict[str, Dict[str, Any]], Dict[str, float]]:
+    from xml.etree import ElementTree as ET
+    try:
+        with zf.open("word/styles.xml") as f:
+            root = ET.fromstring(f.read())
+    except KeyError:
+        return {}, {}
+    ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+    typography = {}
+    confidences = {}
+    
+    name_map = {
+        "heading 1": "h1", "heading 2": "h2", "heading 3": "h3",
+        "heading 4": "h4", "heading 5": "h5", "normal": "body-md",
+        "no spacing": "body-sm"
+    }
+    for style in root.findall("w:style", ns):
+        name_elem = style.find("w:name", ns)
+        if name_elem is None: continue
+        val = name_elem.get(f"{{{ns['w']}}}val")
+        if not val: continue
+        name_val = val.lower()
+        if name_val not in name_map: continue
+        level_name = name_map[name_val]
+        
+        rPr = style.find("w:rPr", ns)
+        sz = rPr.find("w:sz", ns) if rPr is not None else None
+        b = rPr.find("w:b", ns) if rPr is not None else None
+        
+        pPr = style.find("w:pPr", ns)
+        lnSpc = None
+        if pPr is not None:
+            spacing = pPr.find("w:spacing", ns)
+            if spacing is not None:
+                lnSpc = spacing.get(f"{{{ns['w']}}}line")
+                
+        style_dict = {"letterSpacing": "0"}
+        conf = 0.5
+        if sz is not None:
+            val_sz = sz.get(f"{{{ns['w']}}}val")
+            if val_sz:
+                style_dict["fontSize"] = f"{int(val_sz)/2:g}pt"
+                conf = 0.85
+        style_dict["fontWeight"] = 700 if b is not None else 400
+        if lnSpc:
+            style_dict["lineHeight"] = f"{int(lnSpc)/240:g}"
+            if conf < 0.7: conf = 0.7
+            
+        typography[level_name] = style_dict
+        confidences[f"typography.{level_name}"] = conf
+    return typography, confidences
+
+def _detect_corner_radii_pptx(zf) -> Dict[str, str]:
+    from xml.etree import ElementTree as ET
+    import re
+    ns = {"p": "http://schemas.openxmlformats.org/presentationml/2006/main", "a": _OOXML_A_NS}
+    radii = []
+    for name in zf.namelist():
+        if re.match(r"^ppt/slides/slide\d+\.xml$", name):
+            with zf.open(name) as f:
+                try:
+                    root = ET.fromstring(f.read())
+                except Exception:
+                    continue
+                for geom in root.findall(".//a:prstGeom[@prst='roundRect']", ns):
+                    adj = geom.find("a:avLst/a:gd[@name='adj']", ns)
+                    if adj is not None and adj.get("fmla"):
+                        fmla = adj.get("fmla")
+                        if fmla.startswith("val "):
+                            try:
+                                px = int(fmla[4:]) / 1000.0
+                                radii.append(px)
+                            except ValueError:
+                                pass
+    if not radii: return {}
+    counts = {}
+    for r in radii:
+        if r < 8: key = "sm"
+        elif r <= 16: key = "md"
+        else: key = "lg"
+        if key not in counts: counts[key] = []
+        counts[key].append(r)
+        
+    res = {}
+    for key, vals in counts.items():
+        mode_val = max(set(vals), key=vals.count)
+        res[key] = f"{int(mode_val)}px"
+    return res
+
+
 def _parse_ooxml_theme(theme_xml_bytes: bytes) -> Dict[str, Any]:
     """Parse OOXML theme XML and return color scheme + font scheme.
 
@@ -112,6 +253,13 @@ def extract_from_pptx(pptx_path: str) -> Dict[str, Any]:
                     theme = _parse_ooxml_theme(f.read())
 
         role_map = _theme_to_role_map(theme)
+        
+        typography = {}
+        typo_conf = {}
+        rounded = {}
+        with zipfile.ZipFile(pptx_path, "r") as zf:
+            typography, typo_conf = _parse_pptx_master_typography(zf)
+            rounded = _detect_corner_radii_pptx(zf)
 
         body_text = ""
         try:
@@ -137,13 +285,23 @@ def extract_from_pptx(pptx_path: str) -> Dict[str, Any]:
         for usage, data in role_map["fonts"].items():
             confidence_scores[f"font_{usage}"] = data["confidence"]
 
-        return {
+        if typography:
+            confidence_scores.update(typo_conf)
+        if rounded:
+            confidence_scores["rounded"] = 0.5
+            
+        ret = {
             **base_return,
             "colors": role_map["colors"],
             "fonts": role_map["fonts"],
             "confidence_scores": confidence_scores,
             "voice_corpus": corpus,
         }
+        if typography:
+            ret["typography"] = typography
+        if rounded:
+            ret["rounded"] = rounded
+        return ret
 
     except Exception as e:
         return {**base_return, "error": str(e)}
@@ -179,6 +337,13 @@ def extract_from_docx(docx_path: str) -> Dict[str, Any]:
                     theme = _parse_ooxml_theme(f.read())
 
         role_map = _theme_to_role_map(theme)
+        
+        typography = {}
+        typo_conf = {}
+        rounded = {}
+        with zipfile.ZipFile(docx_path, "r") as zf:
+            typography, typo_conf = _parse_docx_style_typography(zf)
+            
 
         body_text = ""
         try:
@@ -201,13 +366,21 @@ def extract_from_docx(docx_path: str) -> Dict[str, Any]:
         for usage, data in role_map["fonts"].items():
             confidence_scores[f"font_{usage}"] = data["confidence"]
 
-        return {
+        if typography:
+            confidence_scores.update(typo_conf)
+        
+            
+        ret = {
             **base_return,
             "colors": role_map["colors"],
             "fonts": role_map["fonts"],
             "confidence_scores": confidence_scores,
             "voice_corpus": corpus,
         }
+        if typography:
+            ret["typography"] = typography
+        
+        return ret
 
     except Exception as e:
         return {**base_return, "error": str(e)}
