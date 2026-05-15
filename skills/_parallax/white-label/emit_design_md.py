@@ -80,12 +80,63 @@ def _frontmatter_dict(draft: dict[str, Any]) -> dict[str, Any]:
     if "spacing" in draft and draft["spacing"]:
         out["spacing"] = draft["spacing"].copy()
 
+    # Components wire each declared color token to a semantic surface via
+    # {colors.<name>} token-refs so the linter's `orphaned-tokens` rule passes.
+    # Canonical mapping (matches the DESIGN.md spec README example):
+    #   primary   → body-text ink (typography surface)
+    #   secondary → caption / border accents
+    #   tertiary  → primary call-to-action surface
+    #   neutral   → page background
     out["components"] = {}
-    if "background" in draft.get("colors", {}) and "text" in draft.get("colors", {}):
-        out["components"]["body-text"] = {
+    colors_in = draft.get("colors", {})
+
+    if "background" in colors_in:
+        body_text = {"backgroundColor": "{colors.neutral}"}
+        if "primary" in colors_in:
+            body_text["textColor"] = "{colors.primary}"
+        elif "text" in colors_in:
+            body_text["textColor"] = colors_in["text"]["hex"].upper()
+        out["components"]["body-text"] = body_text
+
+    if "secondary" in colors_in and "background" in colors_in:
+        out["components"]["caption"] = {
             "backgroundColor": "{colors.neutral}",
-            "textColor": draft["colors"]["text"]["hex"].upper()
+            "textColor": "{colors.secondary}",
         }
+
+    if "accent" in colors_in:
+        # button-primary textColor: pick the higher-contrast of neutral (light
+        # paper) and primary (dark ink) against tertiary. Warm accents like
+        # #FF6600 fail WCAG against white but pass easily against dark ink;
+        # cool accents are the inverse. Compute via ColorValidator's contrast
+        # helper rather than hardcoding the assumption.
+        button_primary = {"backgroundColor": "{colors.tertiary}"}
+        tertiary_hex = colors_in["accent"].get("hex", "")
+        primary_hex = colors_in.get("primary", {}).get("hex", "")
+        neutral_hex = colors_in.get("background", {}).get("hex", "")
+
+        candidates = [
+            ("{colors.primary}", primary_hex),
+            ("{colors.neutral}", neutral_hex),
+        ]
+        scored = []
+        for ref, candidate_hex in candidates:
+            if not candidate_hex:
+                continue
+            try:
+                ratio = ColorValidator.wcag_contrast_ratio(candidate_hex, tertiary_hex)
+            except (AttributeError, ValueError):
+                ratio = 0.0
+            scored.append((ratio, ref))
+
+        if scored:
+            scored.sort(reverse=True)
+            button_primary["textColor"] = scored[0][1]
+        elif "background" in colors_in:
+            button_primary["textColor"] = "{colors.neutral}"
+
+        out["components"]["button-primary"] = button_primary
+
     if not out["components"]:
         del out["components"]
 
