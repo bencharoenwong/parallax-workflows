@@ -15,7 +15,12 @@ gotchas:
   - "v1 scope cuts: no revenue-geography mix (use domicile/listing-currency only), no share counts (dollar/beta-neutral ratios only), no cross-sector suggestions (within-sector peers only). Evaluate mode accepts cross-sector pairs but flags them."
   - "Liquidity disclaimer is MANDATORY in every output: ADV / borrow / float not validated by Parallax — verify externally before sizing."
   - "Output gate (HARD HALT): refuse to render hedge ratios if benchmark price series is null or has < 60 observations. Do NOT substitute pair-relative regression beta and emit a caveat — that pattern is BANNED for primary deliverables. Halt with named failure reason and operator-action options."
+  - JIT-load `_parallax/house-view/loader.md` if an active CIO view is present. Pair-finder is dual-single-stock per `loader.md` §7 (read-only consumers): tilts are NOT applied to candidate ranking or score subtraction. The view surfaces as: (a) §7.3 score-vs-view tension banner per leg (if leg's total ≥ 7 AND leg's sector tilt ≤ -1 in view), (b) §7.1 House View Note rendered once per pair after the per-pair detail, (c) §6 audit log per pair evaluated. §7.2 peer-suggest token N/A — pair-finder constructs its own candidate set from `export_peer_comparison`, not via `get_peer_snapshot.suggestion`.
+  - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
+  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
+
+<!-- white-label: integration-pattern.md -->
 
 # Pair Finder
 
@@ -47,6 +52,10 @@ Three invocation modes:
 ## Workflow
 
 JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, and fallback patterns. JIT-load `references/residual-math.md` for factor-net, beta, and hedge-ratio formulas. Call `ToolSearch` with query `"+Parallax"` to load deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
+
+### Pre-Workflow — Load Active House View
+
+Per `_parallax/house-view/loader.md` §1 and §2: load and validate any active house view BEFORE running mode-specific batches. If view present, capture the load preamble for rendering at the top of Output Format per §5.1 and the sector tilt vector. Tilts are NOT applied to scores or to candidate ranking; the view surfaces as conflict signals per §7 (single-stock pattern, applied per-leg). If no active view (or validation failure): run the workflow normally with the standard disclaimer.
 
 Detect mode from invocation:
 - `<symbol> long` → Mode 1 (find short candidate)
@@ -210,7 +219,23 @@ The macro residual = long's tactical regime stance MINUS short's tactical regime
 
 Same as suggestion mode Batch E: extend price series to 365d, compute realized correlation, pair vol, max drawdown, hit rate.
 
+### Post-Workflow — House View per-leg conflict surfacing
+
+If a view was loaded in Pre-Workflow, for each leg (primary + each candidate in suggestion mode; long + short in evaluate mode):
+
+1. From the leg's sector (from `get_company_info` or `export_peer_comparison`) and the captured tilt vector, check §7.3 tension condition: `leg.total >= 7.0 AND view.tilts.sectors[leg.sector] <= -1`. If true for either leg, render the §7.3 banner per pair via `render_view_conflict(kind="score_tension", ...)`.
+2. Render the §7.1 House View Note once per pair (after the per-pair detail) via `render_view_conflict(kind="blanket", ...)` if any leg conflicts with view tilts.
+3. Append the §6 audit log entry per loader.md §6.1 once per skill invocation (consolidated for all pairs, not per-pair).
+
+### Pre-Render — Load white-label branding
+
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format. The loader returns exactly six keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+
 ## Output Format
+
+**House View Preamble** (only if view active) — render per loader.md §5 rule 1 at the very top, before the mode-specific output. Per loader.md §5.1.
+
+**Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** pair finder`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to Provenance.
 
 ### Suggestion mode (Mode 1 / Mode 2)
 
@@ -268,6 +293,12 @@ Single-pair report — no comparison table:
 - **Score comparability flag** (always render — same_universe or cross_universe)
 - Liquidity disclaimer + standard disclaimer
 
+### Provenance (always present, bottom of output)
+
+One line stating branding state per integration-pattern.md §7 markdown column (5 error states; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+
 ## Disclaimer
+
+If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
 
 *This is informational analysis based on Parallax factor scores. Hedge ratios assume executable liquidity; ADV, short borrow, and float are not validated by Parallax — verify externally before sizing. All outputs should be reviewed by qualified professionals before any investment decisions.*
