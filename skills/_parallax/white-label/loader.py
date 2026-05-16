@@ -356,10 +356,10 @@ def _detect_schema_version(data: dict[str, Any]) -> int:
     return 1
 
 def _normalize_branding_v2_to_return_shape(data: dict[str, Any]) -> dict[str, Any]:
-    branding = data.get("branding", {})
-    colors_v2 = branding.get("colors", {})
-    typo_v2 = branding.get("typography", {})
-    components_v2 = branding.get("components", {})
+    branding = data.get("branding", {}) or {}
+    colors_v2 = branding.get("colors", {}) or {}
+    typo_v2 = branding.get("typography", {}) or {}
+    components_v2 = branding.get("components", {}) or {}
 
     # Resolve components.body-text.textColor for the legacy `text` slot.
     # The DESIGN.md spec encourages token-refs like "{colors.primary}" inside
@@ -368,7 +368,7 @@ def _normalize_branding_v2_to_return_shape(data: dict[str, Any]) -> dict[str, An
     # empty (rather than leaking the raw "{colors.X}" string) when the ref
     # points nowhere we can resolve. Symmetric with the defensive handling in
     # _config_to_draft.
-    raw_text_color = components_v2.get("body-text", {}).get("textColor", "")
+    raw_text_color = (components_v2.get("body-text", {}) or {}).get("textColor", "")
     if isinstance(raw_text_color, str) and raw_text_color.startswith("{"):
         # Token-refs of any shape must not leak. Try to resolve {colors.X};
         # any other ref ({typography.X}, malformed) collapses to empty so a
