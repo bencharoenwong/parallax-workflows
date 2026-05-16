@@ -1,6 +1,7 @@
 """Tests for PPTX/DOCX extractors, cross-source validation, merging,
 and voice validation. Companion to test_extract.py / test_validator.py."""
 
+import io
 import sys
 from pathlib import Path
 
@@ -430,3 +431,117 @@ class TestVoiceValidatorMissingFields:
         result = VoiceValidator.validate_voice(voice)
         assert result["status"] == "fail"
         assert "positioning" in result["checks"]["completeness"]["missing"]
+
+
+def test_ooxml_pptx_typography_and_radii(tmp_path):
+    import zipfile
+    from extract.ooxml import extract_from_pptx
+
+    pptx_path = tmp_path / "test.pptx"
+    
+    master_xml = b'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+        <p:txStyles>
+            <p:titleStyle><a:lvl1pPr><a:defRPr sz="4400" b="1"/></a:lvl1pPr></p:titleStyle>
+            <p:bodyStyle><a:lvl5pPr><a:defRPr sz="1200"/><a:lnSpc><a:spcPct val="150000"/></a:lnSpc></a:lvl5pPr></p:bodyStyle>
+        </p:txStyles>
+    </p:sldMaster>'''
+    
+    slide_xml = b'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+        <p:spTree>
+            <p:sp><p:spPr><a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 4000"/></a:avLst></a:prstGeom></p:spPr></p:sp>
+            <p:sp><p:spPr><a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 4000"/></a:avLst></a:prstGeom></p:spPr></p:sp>
+            <p:sp><p:spPr><a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 12000"/></a:avLst></a:prstGeom></p:spPr></p:sp>
+        </p:spTree>
+    </p:sld>'''
+
+    with zipfile.ZipFile(pptx_path, "w") as zf:
+        zf.writestr("ppt/slideMasters/slideMaster1.xml", master_xml)
+        zf.writestr("ppt/slides/slide1.xml", slide_xml)
+        
+    draft = extract_from_pptx(str(pptx_path))
+    
+    assert "typography" in draft
+    # DESIGN.md spec only accepts px / rem / em — extractor converts pt → px
+    # at 96dpi (1pt = 4/3 px). 44pt → 59px, 12pt → 16px. letterSpacing must
+    # carry a unit ("0em"), not bare "0".
+    assert draft["typography"]["h1"]["fontSize"] == "59px"
+    assert draft["typography"]["h1"]["fontWeight"] == 700
+    assert draft["typography"]["h1"]["letterSpacing"] == "0em"
+    assert draft["typography"]["body-md"]["fontSize"] == "16px"
+    assert draft["typography"]["body-md"]["lineHeight"] == "1.5"
+    assert "h2" not in draft["typography"]
+    
+    assert "rounded" in draft
+    # OOXML adj is a percentage in 1/100000 units (not pixels). The extractor
+    # buckets by percentage tier and emits a fixed representative px per tier:
+    # adj < 10000 → sm/4px, 10000-25000 → md/8px, 25000-45000 → lg/16px,
+    # >= 45000 → full/9999px. The fixture has adj=4000 (sm tier) and
+    # adj=12000 (md tier).
+    assert draft["rounded"]["sm"] == "4px"
+    assert draft["rounded"]["md"] == "8px"
+    
+    # h1 = titleStyle → high confidence (0.85). body-md = bodyStyle lvl5 →
+    # deeply-indented bullet text in PPTX semantics, not authoritative body
+    # typography for most decks; capped at 0.6 then bumped to 0.7 by lineHeight
+    # presence. See LOW_CONFIDENCE_LEVELS in _parse_pptx_master_typography.
+    assert draft["confidence_scores"]["typography.h1"] == 0.85
+    assert draft["confidence_scores"]["typography.body-md"] == 0.7
+    assert draft["confidence_scores"]["rounded"] == 0.5
+
+def test_ooxml_docx_typography(tmp_path):
+    import zipfile
+    from extract.ooxml import extract_from_docx
+
+    docx_path = tmp_path / "test.docx"
+
+    styles_xml = b'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+        <w:style w:type="paragraph" w:styleId="Heading1">
+            <w:name w:val="heading 1"/>
+            <w:rPr><w:sz w:val="48"/><w:b/></w:rPr>
+            <w:pPr><w:spacing w:line="360"/></w:pPr>
+        </w:style>
+    </w:styles>'''
+
+    with zipfile.ZipFile(docx_path, "w") as zf:
+        zf.writestr("word/styles.xml", styles_xml)
+
+    draft = extract_from_docx(str(docx_path))
+    
+    assert "typography" in draft
+    # DOCX half-points → pt → px. w:sz=48 → 24pt → 32px.
+    assert draft["typography"]["h1"]["fontSize"] == "32px"
+    assert draft["typography"]["h1"]["fontWeight"] == 700
+    assert draft["typography"]["h1"]["letterSpacing"] == "0em"
+    assert draft["typography"]["h1"]["lineHeight"] == "1.5"
+    assert draft["confidence_scores"]["typography.h1"] == 0.85
+
+def test_ooxml_no_round_rect_yields_empty(tmp_path):
+    from unittest.mock import patch, MagicMock
+    import zipfile
+    from extract.ooxml import extract_from_pptx
+
+    pptx_path = tmp_path / "test.pptx"
+    pptx_path.write_text("fake")
+
+    mock_zip = MagicMock()
+    mock_zip.namelist.return_value = ["ppt/slides/slide1.xml"]
+    
+    slide_xml = b"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+    </p:sld>"""
+
+    def mock_open(name):
+        m = MagicMock()
+        m = io.BytesIO(slide_xml)
+        
+        return m
+    
+    mock_zip.open = mock_open
+    
+    with patch("zipfile.ZipFile", return_value=mock_zip):
+        draft = extract_from_pptx(str(pptx_path))
+        assert "rounded" not in draft
+

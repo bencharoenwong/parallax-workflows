@@ -444,3 +444,106 @@ class VoiceValidator:
                 "completeness": completeness,
             },
         }
+
+
+class DesignMdValidator:
+    NPX_TIMEOUT_SECONDS = 20
+    _availability_cache: bool | None = None
+
+    @classmethod
+    def is_available(cls, refresh: bool = False) -> bool:
+        """Return True when `npx` is on PATH and `npx --version` exits 0.
+
+        Result is memoized for the process lifetime. Pass refresh=True to
+        force a re-probe — useful for long-running sessions where the
+        operator installs Node after an initial False result (otherwise
+        `lint()` would continue to skip even after npx becomes available).
+        """
+        if not refresh and cls._availability_cache is not None:
+            return cls._availability_cache
+        import shutil
+        import subprocess
+        if not shutil.which("npx"):
+            cls._availability_cache = False
+            return False
+        try:
+            res = subprocess.run(["npx", "--version"], capture_output=True, text=True, timeout=5)
+            cls._availability_cache = (res.returncode == 0)
+        except Exception:
+            cls._availability_cache = False
+        return cls._availability_cache
+
+    @staticmethod
+    def lint(design_md_text: str) -> dict[str, Any]:
+        if not DesignMdValidator.is_available():
+            return {"status": "skipped", "available": False, "note": "npx not installed"}
+
+        import subprocess
+        import json
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.NamedTemporaryFile(suffix=".md", delete=False, mode="w", encoding="utf-8") as tf:
+            tf.write(design_md_text)
+            temp_path = tf.name
+
+        try:
+            # `-y` flag: auto-accept npx's "Ok to proceed?" prompt on first-call
+            # install (when @google/design.md isn't cached yet). Without it, npx
+            # hangs waiting for stdin confirmation and we'd hit the timeout
+            # instead of getting useful output.
+            res = subprocess.run(
+                ["npx", "-y", "@google/design.md", "lint", temp_path, "--format", "json"],
+                capture_output=True,
+                text=True,
+                timeout=DesignMdValidator.NPX_TIMEOUT_SECONDS
+            )
+            raw_exit_code = res.returncode
+            try:
+                parsed = json.loads(res.stdout)
+                findings = parsed.get("findings", [])
+                # status based on findings
+                if raw_exit_code == 0 and not findings:
+                    status = "pass"
+                elif raw_exit_code != 0:
+                    status = "fail"
+                else:
+                    status = "warn" if findings else "pass"
+                    
+                return {
+                    "status": status,
+                    "available": True,
+                    "findings": findings,
+                    "raw_exit_code": raw_exit_code,
+                    "note": None
+                }
+            except json.JSONDecodeError:
+                return {
+                    "status": "skipped",
+                    "available": True,
+                    "findings": [],
+                    "raw_exit_code": raw_exit_code,
+                    "note": f"Failed to parse npx JSON output. stdout: {res.stdout[:100]}"
+                }
+        except subprocess.TimeoutExpired:
+            return {
+                "status": "skipped",
+                "available": True,
+                "findings": [],
+                "raw_exit_code": -1,
+                "note": f"npx lint timed out after {DesignMdValidator.NPX_TIMEOUT_SECONDS}s"
+            }
+        except Exception as e:
+            return {
+                "status": "skipped",
+                "available": True,
+                "findings": [],
+                "raw_exit_code": -1,
+                "note": f"npx lint failed to run: {e}"
+            }
+        finally:
+            try:
+                Path(temp_path).unlink()
+            except Exception:
+                pass
+

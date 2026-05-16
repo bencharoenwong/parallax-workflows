@@ -47,6 +47,16 @@ def _fetch_external_stylesheets(raw_html: str, base_url: str) -> str:
 
     All errors are swallowed silently — this is best-effort enrichment, not a
     correctness path. Returns the concatenated CSS-equivalent text.
+
+    Security note (SSRF surface):
+        This function fetches arbitrary URLs harvested from `<link rel=stylesheet>`
+        elements in the supplied HTML. Run against a hostile or compromised brand
+        page, the href could point at internal endpoints (e.g.
+        `http://169.254.169.254/...` cloud metadata, or intranet probes). The
+        documented use case is operator-supplied URLs run from a personal laptop,
+        which is acceptable. If this helper is ever wrapped in a server endpoint
+        or shared-session context, the caller MUST restrict outbound hosts to a
+        public allowlist before invoking it.
     """
     import re
     import time
@@ -274,6 +284,355 @@ class FontExtractor:
         return fonts
 
 
+
+def _flatten_at_rules(css_text: str) -> str:
+    """Unwrap @media / @supports / @keyframes / @container blocks so their
+    inner rules appear at top level. The downstream rule-finder regex doesn't
+    handle nested braces, so without this pre-pass every rule inside an
+    @media block is silently dropped — on a real Tailwind/Bootstrap stylesheet
+    that's most of the responsive typography.
+
+    Brace-counting is used because a regex can't reliably match balanced
+    braces. Calls itself recursively so a `@supports { @media { ... } }`
+    onion gets fully unwrapped. Comments are assumed already stripped by
+    the caller.
+    """
+    out = []
+    i = 0
+    n = len(css_text)
+    while i < n:
+        ch = css_text[i]
+        if ch == '@':
+            # Find the opening brace of the at-rule's body, or the terminating
+            # semicolon for prelude-only rules like @import / @charset.
+            brace_start = -1
+            semi = -1
+            for j in range(i, n):
+                if css_text[j] == '{':
+                    brace_start = j
+                    break
+                if css_text[j] == ';':
+                    semi = j
+                    break
+            if brace_start == -1:
+                # No body — skip up to the semicolon (or end) and discard.
+                i = (semi + 1) if semi != -1 else n
+                continue
+            # Walk to find the matching closing brace.
+            depth = 1
+            j = brace_start + 1
+            while j < n and depth > 0:
+                c = css_text[j]
+                if c == '{':
+                    depth += 1
+                elif c == '}':
+                    depth -= 1
+                j += 1
+            if depth != 0:
+                # Unbalanced; stop processing this branch.
+                break
+            inner = css_text[brace_start + 1:j - 1]
+            out.append(_flatten_at_rules(inner))
+            i = j
+        else:
+            # Non-at character: copy through to the next @-rule (or end).
+            next_at = css_text.find('@', i)
+            if next_at == -1:
+                out.append(css_text[i:])
+                break
+            out.append(css_text[i:next_at])
+            i = next_at
+    return ''.join(out)
+
+
+def _normalize_css_dimension(value: str, *, zero_unit: str = "em") -> str:
+    """Normalize a CSS dimension to a DESIGN.md-spec-compliant unit.
+
+    The DESIGN.md linter rejects `pt` outright and accepts only px / rem / em.
+    Many real-world stylesheets (especially for print or PDF brand guides
+    served as HTML) use pt. Convert pt → px at 96dpi (1pt = 4/3 px) and
+    normalize the unit casing.
+
+    Unitless zero (`0`, `0.0`) is interpreted as a dimension with the unit
+    `zero_unit` (default `em`). The linter requires letterSpacing carry a
+    unit, so bare `"0"` from CSS would be rejected. The caller can pass
+    `zero_unit="px"` if `px` is more semantically appropriate for the field.
+
+    Other bare numbers (line-height multipliers like `1.5`) are returned
+    unchanged — those are valid CSS unitless values. Unknown units (`%`,
+    `vw`, CSS keywords) pass through verbatim; the linter will surface them.
+    """
+    import re
+    s = value.strip()
+    m = re.match(r'^(-?[\d.]+)\s*([a-zA-Z%]+)?\s*$', s)
+    if not m:
+        return s
+    num_str, unit = m.group(1), (m.group(2) or "").lower()
+    if not unit:
+        # Unitless zero gets a unit; non-zero unitless stays as-is (it's a
+        # line-height multiplier or similar valid unitless value).
+        try:
+            if float(num_str) == 0:
+                return f"0{zero_unit}"
+        except (ValueError, TypeError):
+            pass
+        return num_str
+    if unit == "pt":
+        try:
+            px = round(float(num_str) * 4 / 3)
+            return f"{px}px"
+        except (ValueError, TypeError):
+            return s
+    if unit in ("px", "rem", "em"):
+        return f"{num_str}{unit}"
+    return s
+
+
+class TypographyExtractor:
+    @staticmethod
+    def extract_type_scale_from_css(css_text: str) -> Dict[str, Dict[str, Any]]:
+        import re
+        css_text = re.sub(r'/\*.*?\*/', '', css_text, flags=re.DOTALL)
+        # Unwrap @media / @supports / @keyframes / @container blocks so their
+        # inner rules become visible to the rule-finder regex (which assumes
+        # no nested braces). On real Tailwind/Bootstrap stylesheets the bulk
+        # of typography lives inside @media — without this, it's silently lost.
+        css_text = _flatten_at_rules(css_text)
+        scale = {}
+
+        sel_map = {
+            "h1": "h1", "h2": "h2", "h3": "h3", "h4": "h4", "h5": "h5",
+            "body": "body-md", "p": "body-md", "body-md": "body-md",
+            "code": "code", "pre": "code",
+        }
+
+        # Find every rule (selectors-list { declarations }) and check whether
+        # any selector-list token EXACTLY matches one of our canonical names.
+        # Anchored on token boundaries — '.h1-banner', '.code-block', '.p-4'
+        # are utility classes that look prefix-similar but must NOT pollute
+        # the canonical typography scale (this would happen on any real
+        # Tailwind/Bootstrap site otherwise).
+        rule_pattern = re.compile(r'([^{}]+)\{([^}]+)\}', re.DOTALL)
+        for rule_match in rule_pattern.finditer(css_text):
+            selectors_blob = rule_match.group(1)
+            # Split on comma to handle "h1, .heading { ... }", then strip
+            # whitespace and pseudo-classes/combinators to isolate the
+            # outermost token (e.g. "article > h1:first-child" → "h1").
+            level = None
+            for sel_raw in selectors_blob.split(','):
+                sel = sel_raw.strip()
+                # Take the LAST CSS token of a descendant selector — it's the
+                # element being styled. Strip pseudo-classes / pseudo-elements.
+                tokens = re.split(r'\s+', sel)
+                if not tokens:
+                    continue
+                last = tokens[-1]
+                last = re.sub(r'[:].*$', '', last)         # strip pseudo
+                last = re.sub(r'\[.*?\]', '', last)        # strip attribute selectors
+                # IDs are never canonical typography names — skip.
+                if last.startswith('#'):
+                    continue
+                # For class selectors, only match when the class name EQUALS a
+                # canonical token (e.g. `.body-md` → "body-md"). Reject names
+                # that merely have the canonical as prefix (`.h1-banner`,
+                # `.code-block`) — those are utility classes, not semantic
+                # typography surfaces.
+                if last.startswith('.'):
+                    candidate = last[1:].lower()
+                else:
+                    candidate = last.lower()
+                if candidate in sel_map:
+                    level = sel_map[candidate]
+                    break
+            if level is None or level in scale:
+                continue
+
+            match = rule_match  # alias for backward compatibility with original block
+            sel = level         # retained for tracing; not used downstream
+            
+            block = match.group(2)
+            style = {
+                "fontWeight": 400,
+                "lineHeight": "1.5",
+                "letterSpacing": "0em",
+            }
+
+            fs_m = re.search(r'font-size\s*:\s*([^;]+)', block, re.IGNORECASE)
+            fw_m = re.search(r'font-weight\s*:\s*([^;]+)', block, re.IGNORECASE)
+            lh_m = re.search(r'line-height\s*:\s*([^;]+)', block, re.IGNORECASE)
+            ls_m = re.search(r'letter-spacing\s*:\s*([^;]+)', block, re.IGNORECASE)
+            ff_m = re.search(r'font-family\s*:\s*([^;]+)', block, re.IGNORECASE)
+
+            if not any([fs_m, fw_m, lh_m, ls_m, ff_m]): continue
+
+            if fs_m: style["fontSize"] = _normalize_css_dimension(fs_m.group(1).strip())
+            if fw_m:
+                val = fw_m.group(1).strip()
+                if val.isdigit(): style["fontWeight"] = int(val)
+                elif val.lower() == "bold": style["fontWeight"] = 700
+            if lh_m:
+                # line-height accepts a unitless multiplier or a dimension.
+                # Pass unitless through; normalize pt for dimension form.
+                lh_val = lh_m.group(1).strip()
+                style["lineHeight"] = _normalize_css_dimension(lh_val) if any(u in lh_val.lower() for u in ("pt", "px", "rem", "em")) else lh_val
+            if ls_m: style["letterSpacing"] = _normalize_css_dimension(ls_m.group(1).strip())
+            if ff_m: style["fontFamily"] = ff_m.group(1).strip().split(',')[0].strip(' "\'')
+            
+            scale[level] = style
+            
+        return scale
+
+class ShapeExtractor:
+    @staticmethod
+    def extract_border_radii(css_text: str) -> Dict[str, str]:
+        import re
+        # Any radius above this threshold (px) is treated as "full" (pill shape).
+        # Values like 999px, 1000px etc. are clearly pill intent even if they
+        # don't reach the 9999 sentinel; without this clamp they'd skew the
+        # sm/md/lg percentile sort.
+        FULL_RADIUS_PX_THRESHOLD = 64
+        radii = []
+        has_full = False
+        for match in re.finditer(r'border-radius\s*:\s*([^;]+)', css_text, re.IGNORECASE):
+            val = match.group(1).strip()
+            if "50%" in val:
+                has_full = True
+                continue
+            if "%" in val:
+                continue
+            m = re.match(r'^([\d.]+)(px|rem)$', val, re.IGNORECASE)
+            if m:
+                num = float(m.group(1))
+                unit = m.group(2).lower()
+                if unit == "rem":
+                    num *= 16
+                if num >= FULL_RADIUS_PX_THRESHOLD:
+                    has_full = True
+                else:
+                    radii.append((num, val))
+
+        res = {}
+        if has_full:
+            res["full"] = "9999px"
+
+        unique = {}
+        for num, text in radii:
+            if num not in unique:
+                unique[num] = text
+        nums = sorted(list(unique.keys()))
+        if len(nums) >= 2:
+            sm_idx = max(0, int(len(nums) * 0.25))
+            md_idx = int(len(nums) * 0.5)
+            lg_idx = min(len(nums) - 1, int(len(nums) * 0.75))
+            
+            res["sm"] = unique[nums[sm_idx]]
+            res["md"] = unique[nums[md_idx]]
+            res["lg"] = unique[nums[lg_idx]]
+            
+            if nums[sm_idx] < 4:
+                res["sm"] = "4px"
+                
+        elif has_full:
+            pass 
+        else:
+            return {}
+            
+        return res
+
+class SpacingExtractor:
+    @staticmethod
+    def extract_spacing_scale(css_text: str) -> Dict[str, str]:
+        import re
+        vals = []
+        for match in re.finditer(r'(?:padding|margin|gap)(?:-[a-z]+)?\s*:\s*([^;]+)', css_text, re.IGNORECASE):
+            parts = match.group(1).split()
+            for p in parts:
+                m = re.match(r'^([\d.]+)(px|rem)$', p, re.IGNORECASE)
+                if m:
+                    num = float(m.group(1))
+                    if num == 0: continue
+                    unit = m.group(2).lower()
+                    if unit == "rem": num *= 16
+                    vals.append((num, p))
+        unique = {}
+        for num, text in vals:
+            if num not in unique:
+                unique[num] = text
+        nums = sorted(list(unique.keys()))
+        if len(nums) >= 4:
+            sm_idx = max(0, int(len(nums) * 0.25))
+            md_idx = int(len(nums) * 0.5)
+            lg_idx = min(len(nums) - 1, int(len(nums) * 0.75))
+            
+            return {
+                "xs": unique[nums[0]],
+                "sm": unique[nums[sm_idx]],
+                "md": unique[nums[md_idx]],
+                "lg": unique[nums[lg_idx]],
+                "xl": unique[nums[-1]]
+            }
+        return {}
+
+def _extract_brand_guide_prose(pdf_text: str, *, filename: str) -> Dict[str, str]:
+    import re
+    if not re.search(r'(brand|guide|identity|style)', filename, re.IGNORECASE):
+        return {}
+        
+    found = []
+    # The apostrophe class [\'’] matches both ASCII (') and the curly
+    # right-single-quotation-mark (U+2019, ’) that PDF brand guides commonly
+    # render via smart-quote substitution. Without the alternation, real
+    # brand guides with "Do’s and Don’ts" headings are missed entirely.
+    APOS = r"[\'’]"
+    patterns = {
+        "overview": r'^(?:\d+\.\s*)?Overview\b',
+        "colors": r'^(?:\d+\.\s*)?Colors\b',
+        "typography": r'^(?:\d+\.\s*)?Typography\b',
+        "dos_and_donts": rf'^(?:\d+\.\s*)?Do{APOS}s and Don{APOS}ts\b',
+    }
+    
+    # Heuristic for detecting TOC lines: heavy dot-leader pattern
+    # ("Overview .................. 5") or trailing page numbers. When a
+    # heading-matching line is structured like a TOC entry, treat it as
+    # decorative rather than a real section boundary. This prevents TOC
+    # entries from stealing the "first non-empty" slot from the real body.
+    toc_pattern = re.compile(r'\.{4,}|\s\d+\s*$')
+
+    positions = []
+    lines = pdf_text.split('\n')
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        for key, pat in patterns.items():
+            if re.match(pat, stripped, re.IGNORECASE):
+                if toc_pattern.search(stripped):
+                    # TOC entry — skip, don't record a position.
+                    continue
+                if key not in found:
+                    found.append(key)
+                positions.append((i, key))
+                
+    if len(found) < 3:
+        return {}
+        
+    res = {}
+    positions.sort(key=lambda x: x[0])
+    for idx, (line_idx, key) in enumerate(positions):
+        start = line_idx + 1
+        end = positions[idx+1][0] if idx + 1 < len(positions) else len(lines)
+        prose = "\n".join(lines[start:end]).strip()
+        if not prose:
+            continue
+        # Some PDFs put a Table of Contents up top — the TOC entry matches the
+        # heading regex but its slice ends at the next TOC entry, producing
+        # empty or stub prose. KEEP the first non-empty slice (i.e. the one
+        # that actually contains body text). Subsequent matches for the same
+        # key are usually the real body following a TOC; allow them to
+        # overwrite ONLY when the previously-stored prose was empty.
+        if key not in res or not res[key]:
+            res[key] = prose
+
+    return res
+
 def extract_from_url(url: str) -> Dict[str, Any]:
     """Extract branding from a website.
 
@@ -296,10 +655,19 @@ def extract_from_url(url: str) -> Dict[str, Any]:
             pass
 
         raw_html = ""
+        # Cap raw_html size to prevent regex-quadratic blowup on multi-MB pages.
+        # Note: the cap is measured in CHARACTERS (Python str length), not raw
+        # bytes — for multi-byte UTF-8 the true byte count can be 2-4× higher.
+        # This is intentional: the downstream regex extractors operate on the
+        # decoded string, so the relevant cost is character count. The urllib
+        # branch caps at 5MB of raw bytes BEFORE decode (different surface).
+        MAX_RAW_HTML_CHARS = 5 * 1024 * 1024
         try:
             from scrapling.fetchers import Fetcher
             page = Fetcher.get(url, stealthy_headers=True, follow_redirects=True)
             raw_html = getattr(page, "html_content", "") or str(page)
+            if isinstance(raw_html, str) and len(raw_html) > MAX_RAW_HTML_CHARS:
+                raw_html = raw_html[:MAX_RAW_HTML_CHARS]
             if not page_text:
                 page_text = page.get_all_text(separator="\n", strip=True)
         except Exception:
@@ -363,7 +731,19 @@ def extract_from_url(url: str) -> Dict[str, Any]:
             "text": "", "word_count": 0, "truncated": False,
         }
 
-        return {
+        typography = TypographyExtractor.extract_type_scale_from_css(combined_text)
+        rounded = ShapeExtractor.extract_border_radii(combined_text)
+        spacing = SpacingExtractor.extract_spacing_scale(combined_text)
+        
+        if typography:
+            for level in typography:
+                confidence_scores[f"typography.{level}"] = 0.80
+        if rounded:
+            confidence_scores["rounded"] = 0.70
+        if spacing:
+            confidence_scores["spacing"] = 0.50
+            
+        ret = {
             "colors": colors,
             "logos": logos,
             "fonts": fonts,
@@ -375,6 +755,10 @@ def extract_from_url(url: str) -> Dict[str, Any]:
             "confidence_scores": confidence_scores,
             "voice_corpus": voice_corpus,
         }
+        if typography: ret["typography"] = typography
+        if rounded: ret["rounded"] = rounded
+        if spacing: ret["spacing"] = spacing
+        return ret
 
     except Exception as e:
         return {
@@ -465,7 +849,9 @@ def extract_from_pdf(pdf_path: str) -> Dict[str, Any]:
         for usage, data in fonts.items():
             confidence_scores[f"font_{usage}"] = data["confidence"]
 
-        return {
+        brand_guide_prose = _extract_brand_guide_prose(pdf_text, filename=pdf_file.name)
+        
+        ret = {
             "colors": colors,
             "logos": logos,
             "fonts": fonts,
@@ -477,6 +863,9 @@ def extract_from_pdf(pdf_path: str) -> Dict[str, Any]:
             "confidence_scores": confidence_scores,
             "voice_corpus": _voice_corpus_from_text(pdf_text) if pdf_text else dict(_EMPTY_VOICE_CORPUS),
         }
+        if brand_guide_prose:
+            ret["brand_guide_prose"] = brand_guide_prose
+        return ret
 
     except Exception as e:
         return {

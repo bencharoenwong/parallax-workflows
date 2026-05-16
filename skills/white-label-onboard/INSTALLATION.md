@@ -3,6 +3,7 @@
 ## Prerequisites
 
 - **Python**: 3.9 or later
+- **Node.js 18+ (optional):** Required for inline DESIGN.md lint feedback at the confirmation gate. Without Node, `DesignMdValidator.lint` returns `status: "skipped"` and no lint findings are shown — the save still completes normally. To enable lint feedback, install Node 18+ (e.g., `brew install node@20`) and warm the npm cache by running one full onboarding. Operators on Node-less machines will not see lint results but will not encounter errors.
 - **Dependencies** (auto-installed via Claude Code):
   - `pyyaml` — YAML config parsing
   - `jsonschema` — Schema validation

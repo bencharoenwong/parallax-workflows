@@ -55,6 +55,54 @@ def cross_validate_visual(drafts: List[Dict[str, Any]]) -> Dict[str, List[Dict[s
         elif len(unique) == 1 and len(values) >= 2:
             agreements.append({"field": f"fonts.{role}", "value": values[0]["value"]})
 
+    # Typography
+    for level in ["h1", "h2", "h3", "h4", "h5", "body-md", "body-sm", "code"]:
+        values = []
+        for d in drafts:
+            entry = d.get("typography", {}).get(level)
+            if entry and entry.get("fontFamily"):
+                values.append({
+                    "source": d.get("source", {}).get("reference", "?"),
+                    "value": entry["fontFamily"].strip().lower(),
+                })
+        unique = {v["value"] for v in values}
+        if len(unique) > 1:
+            mismatches.append({"field": f"typography.{level}.fontFamily", "values": values})
+        elif len(unique) == 1 and len(values) >= 2:
+            agreements.append({"field": f"typography.{level}.fontFamily", "value": values[0]["value"]})
+            
+    # Rounded
+    for slot in ["sm", "md", "lg", "full"]:
+        values = []
+        for d in drafts:
+            val = d.get("rounded", {}).get(slot)
+            if val:
+                values.append({
+                    "source": d.get("source", {}).get("reference", "?"),
+                    "value": val,
+                })
+        unique = {v["value"] for v in values}
+        if len(unique) > 1:
+            mismatches.append({"field": f"rounded.{slot}", "values": values})
+        elif len(unique) == 1 and len(values) >= 2:
+            agreements.append({"field": f"rounded.{slot}", "value": values[0]["value"]})
+
+    # Spacing
+    for slot in ["xs", "sm", "md", "lg", "xl"]:
+        values = []
+        for d in drafts:
+            val = d.get("spacing", {}).get(slot)
+            if val:
+                values.append({
+                    "source": d.get("source", {}).get("reference", "?"),
+                    "value": val,
+                })
+        unique = {v["value"] for v in values}
+        if len(unique) > 1:
+            mismatches.append({"field": f"spacing.{slot}", "values": values})
+        elif len(unique) == 1 and len(values) >= 2:
+            agreements.append({"field": f"spacing.{slot}", "value": values[0]["value"]})
+
     return {"mismatches": mismatches, "agreements": agreements}
 
 
@@ -96,6 +144,55 @@ def merge_drafts(drafts: List[Dict[str, Any]]) -> Dict[str, Any]:
             existing = merged["fonts"].get(role)
             if not existing or data.get("confidence", 0) > existing.get("confidence", 0):
                 merged["fonts"][role] = data
+
+    merged["typography"] = {}
+    merged["rounded"] = {}
+    merged["spacing"] = {}
+    
+    # Typography: atomic object replacement
+    for level in ["h1", "h2", "h3", "h4", "h5", "body-md", "body-sm", "code"]:
+        best_conf = -1.0
+        best_data = None
+        for d in drafts:
+            data = d.get("typography", {}).get(level)
+            if data:
+                conf = d.get("confidence_scores", {}).get(f"typography.{level}", 0)
+                if conf > best_conf:
+                    best_conf = conf
+                    best_data = data
+        if best_data:
+            merged["typography"][level] = best_data
+
+    # Rounded: atomic object replacement
+    best_conf = -1.0
+    best_data = None
+    for d in drafts:
+        data = d.get("rounded", {})
+        if data:
+            conf = d.get("confidence_scores", {}).get("rounded", 0)
+            if conf > best_conf:
+                best_conf = conf
+                best_data = data
+    if best_data:
+        merged["rounded"] = best_data
+
+    # Spacing: atomic object replacement
+    best_conf = -1.0
+    best_data = None
+    for d in drafts:
+        data = d.get("spacing", {})
+        if data:
+            conf = d.get("confidence_scores", {}).get("spacing", 0)
+            if conf > best_conf:
+                best_conf = conf
+                best_data = data
+    if best_data:
+        merged["spacing"] = best_data
+
+    # Clean up empty dicts
+    if not merged["typography"]: del merged["typography"]
+    if not merged["rounded"]: del merged["rounded"]
+    if not merged["spacing"]: del merged["spacing"]
 
     combined_text_parts: List[str] = []
     total_words = 0

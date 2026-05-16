@@ -52,32 +52,50 @@ Configure client branding for Parallax equity research report output.
 
 `~/.parallax/client-branding/`
 - `config.yaml` — canonical config per `_parallax/white-label/schema.yaml`
+- `DESIGN.md` — Google Labs DESIGN.md companion file emitted from the same draft (frontmatter tokens + 8-section markdown rationale); consumed by frontend coding-agent skills that want a recognized spec
 - `assets/` — downloaded logo files (logo-primary.png, favicon.ico, etc.)
 - `audit.jsonl` — append-only hash-chained log
 - `.archive/<timestamp>-<source>/` — superseded configs kept for traceability
 
 Files are written `0600`; `assets/` is `0700`; the directory is `0700` on creation.
 
+## Optional prerequisites
+
+The DESIGN.md emit path is in-process and pure Python. The optional **DESIGN.md linter** wraps `npx @google/design.md` (Google Labs CLI, published to npm). When Node 18+ is on PATH, the validator runs the linter at save time and surfaces findings in the confirmation gate. When Node is absent, the validator returns `status: "skipped"` and the save proceeds — nothing breaks; the operator just doesn't get inline lint feedback.
+
+If you want the inline lint feedback, install Node 18+ (e.g., `brew install node@20`) and run `/parallax-white-label-onboard <source>` once to warm the npm cache. To pin the version for reproducibility, run `npm install -g @google/design.md@<version>` before invoking the skill. The validator passes `-y` so first-call invocation does not block on the npm install prompt; this also means npx will silently fetch whatever the registry resolves for `@google/design.md` on a clean machine — pin the version in regulated environments.
+
 ## Integration with Downstream Skills
 
 Two consumer classes:
 
-**Visual consumers** — `/parallax-client-review`, `/parallax-due-diligence`, `/parallax-deep-dive` and any skill that produces a PDF or formatted report. They read `branding.colors`, `branding.logos`, `branding.fonts`. They ignore `voice`.
+**Visual consumers** — Skills that produce a PDF or formatted report. They read `branding.colors`, `branding.logos`, `branding.fonts`. They ignore `voice`. Currently integrated: `/parallax-cio-letter-prep`. Planned but not yet wired: `/parallax-client-review`, `/parallax-due-diligence`, `/parallax-deep-dive` (they fall back to default Parallax styling until integrated).
 
 **Voice consumers** — letter-writing, newsletter, meeting-prep, email-drafting, and any skill that produces written content under the client's name. They read `voice.*` and apply it as a style guide before generating prose. They optionally also read `branding.*` if the output is rendered (e.g., a branded PDF letter).
 
 Both classes silently fall back to default Parallax styling/voice if the config is absent or corrupted. This skill never breaks downstream consumers.
 
-**Visual consumer loading pattern:**
+**Visual consumer loading pattern.** Always go through `loader.load_client_branding()` rather than reading raw YAML keys directly — the loader bridges v1↔v2 file shapes so downstream code keeps working through the schema migration:
+
 ```python
-import yaml, os
-config_path = os.path.expanduser("~/.parallax/client-branding/config.yaml")
-if os.path.exists(config_path):
-    with open(config_path) as f:
-        cfg = yaml.safe_load(f)
-    primary_color = cfg["branding"]["colors"]["primary"]
-    # ... etc
+from skills._parallax.white_label.loader import load_client_branding
+
+result = load_client_branding()
+if result.get("error") is None:
+    # Legacy 9-key shape — works against both v1 AND v2 config.yaml on disk
+    primary_color = result["colors"]["primary"]
+    accent_color  = result["colors"]["accent"]   # v2: derived from colors.tertiary
+    bg_color      = result["colors"]["background"]  # v2: derived from colors.neutral
+    header_font   = result["fonts"]["header"]    # v2: derived from typography.h1.fontFamily
+
+    # v2-only bonus keys (empty dict on v1) — opt-in for spec-aware consumers
+    typography = result.get("typography", {})    # full token tree per DESIGN.md
+    rounded    = result.get("rounded", {})
+    spacing    = result.get("spacing", {})
+    components = result.get("components", {})
 ```
+
+**Do NOT** read `cfg["branding"]["colors"]["accent"]` directly — that key exists in v1 files but is named `tertiary` in v2. The loader is the single source of truth for the legacy return shape.
 
 **Voice consumer loading pattern:**
 ```python
@@ -138,6 +156,7 @@ Examine each invocation argument (the skill accepts one or more):
 | Argument is an existing directory | Folder extraction (run all `.pptx`/`.docx`/`.pdf` inside) |
 | Argument is `--status` | Show status block |
 | Argument is `--clear` | Clear branding |
+| Argument is `--regenerate-design-md` | Regenerate `DESIGN.md` from current `config.yaml` (no extraction; see Operational Modes) |
 
 **Multi-source.** If two or more arguments resolve to extraction modes (any combination of URL, PDF, PPTX, DOCX, folder), run each through its respective extractor and call `extract.merge_drafts(drafts)` + `extract.cross_validate_visual(drafts)` before the validation step. Mismatches are stored in the draft for surfacing at Step 3.
 
@@ -628,11 +647,22 @@ Confidence:  <X.XX>
 --- VALIDATION SUMMARY ---
 <validation table from Step 2>
 
+--- DESIGN.md FRONTMATTER (preview) ---
+<indented YAML excerpt of frontmatter, truncated to 30 lines max>
+Save path: ~/.parallax/client-branding/DESIGN.md
+
+--- DESIGN.md LINT (N findings) ---
+<one line per finding: [severity] rule: message>
+(when status="skipped": single line "DESIGN.md lint: skipped (npx not available; install Node 18+ to enable).")
+(when status="pass" with 0 findings: single line "DESIGN.md lint: pass (0 findings).")
+
 --- MISSING FIELDS ---
 <list of fields with confidence 0.0 or absent, or "none">
 
 ============================================================
 ```
+
+The DESIGN.md frontmatter preview is generated by calling `emit_design_md(draft, client_name=..., extracted_at=..., source_refs=[...])` from `skills/_parallax/white-label/emit_design_md.py`, splitting on `---` fences, and indenting the YAML block. Lint findings come from `DesignMdValidator.lint(design_md_text)` in `validator.py`. Both are informational — they never auto-block the save. The four-option `AskUserQuestion` set below stays unchanged.
 
 **Mismatch resolution.** If multi-source mismatches are present, the user MUST pick a winner per mismatched field before saving. Use `AskUserQuestion` per mismatched field, listing each candidate value as a choice (with source attribution). Apply the chosen value to `draft` before proceeding to save. Do NOT attempt to auto-pick by confidence or recency — the PM/CIO is the canonical source of truth on which version of their brand is current.
 
@@ -649,9 +679,9 @@ Then ask via `AskUserQuestion`:
 **If "Edit specific fields":**
 
 1. Serialize the pre-edit draft to an in-memory holding buffer (`pre_edit_draft = copy.deepcopy(draft)`).
-2. Ask: "Which fields do you want to edit? (e.g., colors.primary, logos.primary, fonts.header)" — accept comma-separated list.
+2. Ask: "Which fields do you want to edit? (e.g., colors.primary, typography.h1.fontSize, rounded.md, spacing.lg, logos.primary)" — accept comma-separated list. Accept both legacy keys (`colors.primary`, `fonts.header`, etc.) AND new DESIGN.md vocabulary (`typography.<level>.fontSize`, `rounded.<size>`, `spacing.<slot>`, `components.body-text.textColor`). Reject any other path with the message "Unknown field: <path>".
 3. For each named field, ask for the new value via `AskUserQuestion`.
-4. Update `draft` with the new values. Set confidence to 1.0 for any manually edited field.
+4. Update `draft` with the new values. Set confidence to 1.0 for any manually edited field. When the edited path is inside a typography object (e.g., `typography.h1.fontSize`), reset the entire `typography.h1` object's confidence (`confidence_scores["typography.h1"] = 1.0`).
 5. Re-run Step 2 validation on the edited draft.
 6. Re-render the confirmation gate with updated values and validation.
 7. When the user ultimately confirms the edited version:
@@ -715,66 +745,60 @@ After download, re-run `LogoValidator.validate_logo(dest)` on each successfully 
 
 #### 4c. Construct config.yaml
 
-Build the config dict conforming to `_parallax/white-label/schema.yaml`:
+**Use `build_config_from_draft(draft, schema_version=2)` from `loader.py` — do not hand-assemble the config dict.** The builder is the single source of truth for the v2 shape (decisions 3A, 5A: drops `fonts.*`, emits `colors.tertiary` and flat `colors.neutral`, wires `components.body-text`). It also handles the `voice` section and the `multi_source` provenance block — no post-build mutation needed.
 
 ```python
-import yaml, uuid
-from datetime import datetime, timezone
+from skills._parallax.white_label.loader import build_config_from_draft
 
-config = {
-    "metadata": {
-        "schema_version": 1,
-        "client_name": draft.get("client_name", ""),
-        "extracted_at": draft["extracted_at"],
-        "source": draft["source"],
-        "extracted_by": draft.get("extracted_by", ""),
-        "notes": draft.get("notes", ""),
-    },
-    "branding": {
-        "colors": {
-            "primary":    draft["colors"].get("primary",    {}).get("hex", ""),
-            "secondary":  draft["colors"].get("secondary",  {}).get("hex", ""),
-            "accent":     draft["colors"].get("accent",     {}).get("hex", ""),
-            "background": draft["colors"].get("background", {}).get("hex", "#FFFFFF"),
-            "text":       draft["colors"].get("text",       {}).get("hex", "#333333"),
-        },
-        "logos": {
-            "primary": draft["logos"].get("primary", {}).get("local_path")
-                       or draft["logos"].get("primary", {}).get("url", ""),
-            "favicon": draft["logos"].get("favicon", {}).get("local_path")
-                       or draft["logos"].get("favicon", {}).get("url", ""),
-        },
-        "fonts": {
-            "header":    draft["fonts"].get("header",    {}).get("name", "Arial"),
-            "body":      draft["fonts"].get("body",      {}).get("name", "Helvetica"),
-            "monospace": draft["fonts"].get("monospace", {}).get("name", "Courier New"),
-        },
-    },
-    "validation_summary": validation_results,   # from Step 2, updated with post-download logo checks
-    "confidence_scores": draft["confidence_scores"],
-}
+config = build_config_from_draft(
+    draft,
+    client_name=draft.get("client_name", ""),
+    extracted_by=draft.get("extracted_by", ""),
+    notes=draft.get("notes", ""),
+    validation_summary=validation_results,   # from Step 2; updated with post-download logo checks
+    schema_version=2,
+)
+```
 
-# Voice section (only if extracted; otherwise leave the schema default with enabled: false)
-if draft.get("voice", {}).get("enabled"):
-    config["voice"] = {
-        "enabled": True,
-        "positioning":         draft["voice"].get("positioning", ""),
-        "tone":                draft["voice"].get("tone", {"register": "", "primary_attributes": [], "avoid_attributes": []}),
-        "core_rules":          draft["voice"].get("core_rules", []),
-        "anti_filler":         draft["voice"].get("anti_filler", []),
-        "audience_adaptation": draft["voice"].get("audience_adaptation", []),
-        "channel_notes":       draft["voice"].get("channel_notes", []),
-        "drafted_vs_sent":     draft["voice"].get("drafted_vs_sent", []),
-        "company_context":     draft["voice"].get("company_context", ""),
-        "disclaimers":         draft["voice"].get("disclaimers", []),
-        "source_corpus":       draft["voice"].get("source_corpus", {"documents": [], "word_count": 0, "confidence": 0.0, "notes": ""}),
-    }
-else:
-    config["voice"] = {"enabled": False}
+For reference, the v2 config shape looks like (do NOT hand-write this — call the builder):
 
-# Multi-source provenance (only if more than one source was used)
-if "multi_source" in draft:
-    config["multi_source"] = draft["multi_source"]
+```yaml
+metadata:
+  schema_version: 2
+  client_name: <draft.client_name>
+  extracted_at: <draft.extracted_at>
+  source: <draft.source>
+branding:
+  colors:
+    primary: <hex>
+    secondary: <hex>
+    tertiary: <hex>           # was 'accent' in v1
+    neutral: <hex>            # flat hex; was 'background' in v1
+  logos:
+    primary: <local_path or url>
+    favicon: <local_path or url>
+  typography:
+    h1:      { fontFamily, fontSize, fontWeight, lineHeight, letterSpacing }
+    h2..h5:  { ... }
+    body-md: { ... }
+    code:    { ... }          # was 'fonts.monospace' in v1
+  rounded:   { sm, md, lg, full }
+  spacing:   { xs, sm, md, lg, xl }
+  components:
+    body-text:
+      backgroundColor: "{colors.neutral}"
+      textColor: <hex>        # text-on-neutral pair; was 'colors.text' in v1
+validation_summary: <validation_results>
+confidence_scores: <draft.confidence_scores>
+```
+
+`fonts.*` is **not** emitted in v2. The loader's `_normalize_branding_v2_to_return_shape` derives the legacy `fonts.{header,body,monospace}` keys from `typography.{h1,body-md,code}.fontFamily` at read time, so downstream consumers continue to see the 9-key return shape unchanged.
+
+Legacy v1 fallback (only when a downstream skill or migration explicitly passes `schema_version=1`):
+
+```python
+config = build_config_from_draft(draft, schema_version=1, validation_summary=validation_results)
+# Emits the old shape: colors.accent / colors.background / colors.text + fonts.{header,body,monospace}
 ```
 
 Compute `config_hash = sha256(yaml.safe_dump(config["branding"], sort_keys=True).encode()).hexdigest()`.
@@ -814,9 +838,38 @@ os.chmod(os.path.expanduser("~/.parallax/client-branding/config.yaml"), 0o600)
 os.chmod(assets_dir, 0o700)
 ```
 
-On write failure: report "Save failed: <file> write error. No files written. Safe to retry." Do not proceed to Step 4f.
+On write failure: report "Save failed: <file> write error. No files written. Safe to retry." Do not proceed to Step 4e' or Step 4f.
+
+#### 4e'. Write DESIGN.md (Google Labs spec)
+
+Emit the DESIGN.md companion file from the in-memory draft and write it atomically alongside `config.yaml`:
+
+```python
+from skills._parallax.white_label.emit_design_md import emit_design_md
+import hashlib
+
+design_md_text = emit_design_md(
+    draft,
+    client_name=config["metadata"]["client_name"],
+    extracted_at=config["metadata"]["extracted_at"],
+    source_refs=[config["metadata"]["source"]["reference"]] if isinstance(config["metadata"].get("source"), dict) else [],
+)
+
+design_staging = f"{staging_dir}/DESIGN.md"
+with open(design_staging, "w", encoding="utf-8") as f:
+    f.write(design_md_text)
+shutil.move(design_staging, os.path.expanduser("~/.parallax/client-branding/DESIGN.md"))
+os.chmod(os.path.expanduser("~/.parallax/client-branding/DESIGN.md"), 0o600)
+
+design_md_hash = hashlib.sha256(design_md_text.encode("utf-8")).hexdigest()
+lint_status = validation_results.get("design_md", {}).get("status", "skipped")
+```
+
+`emit_design_md` raises `ValueError` on invalid hex tokens in the draft — caller should have validated at Step 2 already, but if it raises here, treat as a write failure and surface the path of the bad hex. Do not proceed to Step 4f.
 
 #### 4f. Append hash-chained audit entry
+
+**Audit-entry schema bump (intentional chain discontinuity).** With the DESIGN.md emit at Step 4e', save entries now include `design_md_hash` and `lint_status`. The chain hash is `sha256(prior-line-bytes)`, so the first new-shape entry after a v1 audit log will appear as a chain break to any downstream verifier comparing entry shape across the bump. This is intentional: keep the prior chain readable for forensics but treat entries before this point as belonging to the v1 audit schema. If a verifier exists, gate it on `entry.get("design_md_hash") is not None` to detect schema-2 entries; absent that field, treat the entry as v1.
 
 ```python
 import json, hashlib
@@ -848,6 +901,8 @@ entry = {
     },
     "disposition": disposition,   # "confirmed" | "edited"
     "draft_yaml_hash": draft_yaml_hash,
+    "design_md_hash": design_md_hash,   # sha256 of DESIGN.md text written at Step 4e'
+    "lint_status": lint_status,         # "pass" | "warn" | "fail" | "skipped"
 }
 
 with open(audit_path, "a") as f:
@@ -892,7 +947,98 @@ Try it:
 | Flag | Behavior |
 |---|---|
 | `--status` | Read `config.yaml`, render status block below. If no config: print "No active client branding configured." |
-| `--clear` | Ask for explicit confirmation ("Type YES to remove client branding"). On confirm: archive `config.yaml` and `assets/` to `.archive/<timestamp>-clear/`, remove live files. Append `{"action":"clear"}` audit entry. |
+| `--clear` | Ask for explicit confirmation ("Type YES to remove client branding"). On confirm: archive `config.yaml`, `DESIGN.md`, and `assets/` to `.archive/<timestamp>-clear/`, remove live files. Append `{"action":"clear"}` audit entry. |
+| `--regenerate-design-md` | Re-emit `DESIGN.md` from the current `config.yaml` without re-extracting from source. See section below. |
+
+### Regenerate-from-config mode (`--regenerate-design-md`)
+
+Purpose: keep `DESIGN.md` in sync with `config.yaml` after manual edits, without re-running source extraction. Single source of truth: `config.yaml` is canonical; `DESIGN.md` is derived.
+
+**What `--regenerate-design-md` preserves and recomputes:**
+- **Preserved from config.yaml:** all color tokens, typography/font declarations, rounded/spacing values, logos, voice section (if present), `extracted_at` timestamp, source provenance, `multi_source` block.
+- **Recomputed:** DESIGN.md frontmatter YAML and 8-section markdown body. The `design_md_hash` in the audit chain is updated to reflect the new output.
+- **Not archived:** the prior `DESIGN.md` is overwritten without an `.archive/` snapshot. If you need to retain the old file, copy it manually before running this flag.
+- **v1 config behavior:** `fonts.header`/`fonts.body`/`fonts.monospace` are used as fallbacks for `typography.h1`/`body-md`/`code` slots (confidence 0.5). No `typography.*` block is required in the config.
+
+```python
+import os, hashlib, shutil, yaml
+from datetime import datetime, timezone
+from skills._parallax.white_label.emit_design_md import emit_design_md
+
+config_path = os.path.expanduser("~/.parallax/client-branding/config.yaml")
+if not os.path.exists(config_path):
+    print("No active branding to regenerate from. Run /parallax-white-label-onboard first.")
+    return
+
+with open(config_path) as f:
+    cfg = yaml.safe_load(f) or {}
+
+# Validate minimum required keys for emission
+required_ok = (
+    cfg.get("branding", {}).get("colors", {}).get("primary")
+    and (
+        cfg.get("branding", {}).get("typography", {}).get("h1")
+        or cfg.get("branding", {}).get("fonts", {}).get("header")
+    )
+)
+if not required_ok:
+    missing = []
+    if not cfg.get("branding", {}).get("colors", {}).get("primary"):
+        missing.append("branding.colors.primary")
+    if not (cfg.get("branding", {}).get("typography", {}).get("h1") or cfg.get("branding", {}).get("fonts", {}).get("header")):
+        missing.append("branding.typography.h1 or branding.fonts.header")
+    print(f"Cannot regenerate — config.yaml missing required keys: {missing}. Re-run /parallax-white-label-onboard to repair.")
+    return
+
+# Reconstruct a synthetic draft (the inverse of build_config_from_draft)
+draft = _config_to_draft(cfg)  # in loader.py; mirrors build_config_from_draft
+
+design_md_text = emit_design_md(
+    draft,
+    client_name=cfg.get("metadata", {}).get("client_name", ""),
+    extracted_at=cfg.get("metadata", {}).get("extracted_at", ""),
+    source_refs=[(cfg.get("metadata", {}).get("source") or {}).get("reference", "regenerated-from-config")],
+)
+
+# Atomic write
+design_md_path = os.path.expanduser("~/.parallax/client-branding/DESIGN.md")
+staging = design_md_path + ".staging"
+with open(staging, "w", encoding="utf-8") as f:
+    f.write(design_md_text)
+shutil.move(staging, design_md_path)
+os.chmod(design_md_path, 0o600)
+
+# Audit entry
+audit_path = os.path.expanduser("~/.parallax/client-branding/audit.jsonl")
+prev_hash = "0" * 64
+if os.path.exists(audit_path):
+    with open(audit_path) as f:
+        lines = [l.strip() for l in f if l.strip()]
+    if lines:
+        prev_hash = hashlib.sha256(lines[-1].encode()).hexdigest()
+
+entry = {
+    "schema_version": 1,
+    "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    "skill": "parallax-white-label-onboard",
+    "action": "regenerate_design_md",
+    "applied": True,
+    "design_md_hash": hashlib.sha256(design_md_text.encode("utf-8")).hexdigest(),
+    "prev_entry_hash": prev_hash,
+}
+import json
+with open(audit_path, "a") as f:
+    f.write(json.dumps(entry, separators=(",", ":")) + "\n")
+os.chmod(audit_path, 0o600)
+
+print("DESIGN.md regenerated from config.yaml. Sources unchanged.")
+```
+
+Hard errors (printed + return, no partial emit):
+- `config.yaml` not present → "No active branding to regenerate from. Run /parallax-white-label-onboard first."
+- `config.yaml` present but missing `branding.colors.primary` or both typography & fonts → "Cannot regenerate — config.yaml missing required keys: ...". Do not write a partial `DESIGN.md`.
+
+Behavior on a v1 config (no `typography.*` block): emitter takes `fonts.header` / `fonts.body` / `fonts.monospace` as the `typography.h1.fontFamily` / `body-md.fontFamily` / `code.fontFamily` defaults (with confidence-neutral 0.5).
 
 ### Status block (output of `--status`)
 
