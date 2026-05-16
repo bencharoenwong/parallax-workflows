@@ -117,11 +117,11 @@ Configuration is stored at `~/.parallax/client-branding/config.yaml`:
 
 ```yaml
 metadata:
-  schema_version: 1
+  schema_version: 2
   client_name: "Acme Capital"
   extracted_at: "2026-04-30T12:00:00Z"
   source:
-    type: "url"  # or "pdf" or "wizard"
+    type: "url"  # url | pdf | pptx | docx | wizard | multi | folder-voice-only
     reference: "https://acme.example.com"
     confidence: 0.95
 
@@ -129,22 +129,32 @@ branding:
   colors:
     primary: "#1A2B3C"
     secondary: "#FFFFFF"
-    accent: "#FF6600"
-    background: "#F5F5F5"
-    text: "#333333"
+    tertiary: "#FF6600"     # v1 "accent"
+    neutral: "#F5F5F5"      # v1 "background"
+  typography:
+    h1:      { fontFamily: "Inter",  fontSize: "32px", fontWeight: 700 }
+    body-md: { fontFamily: "Roboto", fontSize: "16px", fontWeight: 400 }
+    code:    { fontFamily: "JetBrains Mono", fontSize: "14px", fontWeight: 400 }
+  rounded:
+    sm: "4px"
+    md: "8px"
+  spacing:
+    md: "16px"
+    lg: "24px"
+  components:
+    body-text:
+      textColor: "{colors.primary}"  # token-ref or literal hex
   logos:
     primary: "~/.parallax/client-branding/assets/logo.png"
     favicon: "~/.parallax/client-branding/assets/favicon.ico"
-  fonts:
-    header: "Inter"
-    body: "Roboto"
-    monospace: "JetBrains Mono"
 
 confidence_scores:
   color_primary: 0.99
   logo_primary: 0.85
-  font_header: 0.95
+  typography_h1: 0.95
 ```
+
+v1 configs (`schema_version: 1`, `colors.{accent,background,text}` + `fonts.{header,body,monospace}`) continue to load via the loader bridge — `load_client_branding()` returns the same 9-key shape for both v1 and v2.
 
 ### Permission Model
 
@@ -189,12 +199,15 @@ pytest skills/_parallax/white-label/tests/ -v
 
 ### Test Coverage
 
-- **21 extraction tests** — Color/logo/font extraction from CSS, PDF text, HTML
-- **21 validation tests** — Color contrast, logo dimensions, font availability, fallbacks
-- **12 loader tests** — Config loading, error handling, graceful degradation, schema validation
-- **6 integration tests** — End-to-end workflows: extract → validate → save → load cycles
+- Extraction tests — Color/logo/font extraction from CSS, PDF text, HTML, PPTX, DOCX
+- Validation tests — Color contrast, logo dimensions, font availability, fallbacks
+- Loader tests — Config loading, error handling, graceful degradation, v1↔v2 schema bridge
+- Integration tests — End-to-end workflows: extract → validate → save → load cycles
+- Regression tests — v1 fixture round-trip, v2 normalization, `--clear` archives both files
+- DESIGN.md tests — emitter output, frontmatter shape, lint validator
+- Document extractor tests — OOXML theme parsing, CSS scale, brand-guide prose
 
-All 67 tests pass with real assertions (no stubs).
+All 152 tests pass with real assertions (no stubs).
 
 ## Error Handling
 
