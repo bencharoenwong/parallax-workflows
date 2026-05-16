@@ -120,7 +120,14 @@ def _parse_docx_style_typography(zf) -> tuple[Dict[str, Dict[str, Any]], Dict[st
                 px = round(pt * 4 / 3)
                 style_dict["fontSize"] = f"{px}px"
                 conf = 0.85
-        style_dict["fontWeight"] = 700 if b is not None else 400
+        # OOXML allows explicit <w:b w:val="0"/> or <w:b w:val="false"/> to
+        # DISABLE bold inheritance. The element's presence alone isn't enough —
+        # treat val="0" / "false" as 400, otherwise 700.
+        if b is not None:
+            b_val = (b.get(f"{{{ns['w']}}}val") or "").lower()
+            style_dict["fontWeight"] = 400 if b_val in ("0", "false") else 700
+        else:
+            style_dict["fontWeight"] = 400
         if lnSpc:
             style_dict["lineHeight"] = f"{int(lnSpc)/240:g}"
             if conf < 0.7: conf = 0.7

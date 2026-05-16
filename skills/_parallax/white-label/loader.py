@@ -315,12 +315,29 @@ def _normalize_branding_v2_to_return_shape(data: dict[str, Any]) -> dict[str, An
     typo_v2 = branding.get("typography", {})
     components_v2 = branding.get("components", {})
 
+    # Resolve components.body-text.textColor for the legacy `text` slot.
+    # The DESIGN.md spec encourages token-refs like "{colors.primary}" inside
+    # components, but downstream consumers expect colors.text to be a literal
+    # hex. Resolve the token-ref against colors_v2 when possible; fall back to
+    # empty (rather than leaking the raw "{colors.X}" string) when the ref
+    # points nowhere we can resolve. Symmetric with the defensive handling in
+    # _config_to_draft.
+    raw_text_color = components_v2.get("body-text", {}).get("textColor", "")
+    if isinstance(raw_text_color, str) and raw_text_color.startswith("{colors."):
+        ref_key = raw_text_color.strip("{}").split(".", 1)[-1]
+        resolved_text = colors_v2.get(ref_key, "")
+        # Don't resolve to another token-ref (defends against chained refs)
+        if isinstance(resolved_text, str) and resolved_text.startswith("{"):
+            resolved_text = ""
+    else:
+        resolved_text = raw_text_color
+
     colors_legacy = {
         "primary":    colors_v2.get("primary", ""),
         "secondary":  colors_v2.get("secondary", ""),
         "accent":     colors_v2.get("tertiary", ""),
         "background": colors_v2.get("neutral", ""),
-        "text":       components_v2.get("body-text", {}).get("textColor", ""),
+        "text":       resolved_text,
     }
     fonts_legacy = {
         "header":    typo_v2.get("h1", {}).get("fontFamily", ""),

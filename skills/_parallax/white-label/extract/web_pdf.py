@@ -475,16 +475,19 @@ def extract_from_url(url: str) -> Dict[str, Any]:
             pass
 
         raw_html = ""
-        # Mirror the urllib branch's 5MB cap on the scrapling path. The downstream
-        # CSS extractors are regex-heavy and become quadratic-ish on multi-MB
-        # input. Brand-asset extraction only needs the head of the document.
-        MAX_RAW_HTML_BYTES = 5 * 1024 * 1024
+        # Cap raw_html size to prevent regex-quadratic blowup on multi-MB pages.
+        # Note: the cap is measured in CHARACTERS (Python str length), not raw
+        # bytes — for multi-byte UTF-8 the true byte count can be 2-4× higher.
+        # This is intentional: the downstream regex extractors operate on the
+        # decoded string, so the relevant cost is character count. The urllib
+        # branch caps at 5MB of raw bytes BEFORE decode (different surface).
+        MAX_RAW_HTML_CHARS = 5 * 1024 * 1024
         try:
             from scrapling.fetchers import Fetcher
             page = Fetcher.get(url, stealthy_headers=True, follow_redirects=True)
             raw_html = getattr(page, "html_content", "") or str(page)
-            if isinstance(raw_html, str) and len(raw_html) > MAX_RAW_HTML_BYTES:
-                raw_html = raw_html[:MAX_RAW_HTML_BYTES]
+            if isinstance(raw_html, str) and len(raw_html) > MAX_RAW_HTML_CHARS:
+                raw_html = raw_html[:MAX_RAW_HTML_CHARS]
             if not page_text:
                 page_text = page.get_all_text(separator="\n", strip=True)
         except Exception:

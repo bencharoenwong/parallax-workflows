@@ -342,3 +342,78 @@ def test_config_to_draft_ignores_token_ref_textcolor():
     draft = loader._config_to_draft(cfg)
     # text slot should be absent (token-ref filtered) rather than carrying a malformed hex.
     assert "text" not in draft.get("colors", {}), "token-ref must not leak into colors.text.hex"
+
+
+# ---------------------------------------------------------------------------
+# Round-4 review finding: _normalize_branding_v2_to_return_shape symmetric
+# token-ref guard (was missing while _config_to_draft had it).
+# ---------------------------------------------------------------------------
+
+def test_loader_normalize_resolves_token_ref_textcolor():
+    """_normalize_branding_v2_to_return_shape: when components.body-text.
+    textColor is a {colors.primary} token-ref, the legacy `colors.text` slot
+    must resolve to the literal hex via colors_v2 lookup, NOT leak the raw
+    "{colors.primary}" string. Asymmetric with _config_to_draft would have
+    leaked it (round-3 review finding)."""
+    cfg = {
+        "metadata": {"schema_version": 2},
+        "branding": {
+            "colors": {
+                "primary": "#001122",
+                "secondary": "#334455",
+                "tertiary": "#FF6600",
+                "neutral": "#FFFFFF",
+            },
+            "components": {
+                "body-text": {
+                    "backgroundColor": "{colors.neutral}",
+                    "textColor": "{colors.primary}",
+                }
+            },
+        },
+    }
+    norm = loader._normalize_branding_v2_to_return_shape(cfg)
+    text_val = norm["colors"]["text"]
+    assert not (isinstance(text_val, str) and text_val.startswith("{")), \
+        f"colors.text leaked token-ref: {text_val!r}"
+    assert text_val == "#001122", f"expected resolved primary hex, got {text_val!r}"
+
+
+def test_loader_normalize_empty_when_token_ref_unresolvable():
+    """If body-text.textColor references a color that isn't defined, fall
+    back to empty rather than leak the raw ref."""
+    cfg = {
+        "metadata": {"schema_version": 2},
+        "branding": {
+            "colors": {"primary": "#001122", "neutral": "#FFFFFF"},
+            "components": {
+                "body-text": {
+                    "backgroundColor": "{colors.neutral}",
+                    "textColor": "{colors.does-not-exist}",
+                }
+            },
+        },
+    }
+    norm = loader._normalize_branding_v2_to_return_shape(cfg)
+    text_val = norm["colors"]["text"]
+    assert text_val == "", f"expected empty fallback, got {text_val!r}"
+
+
+def test_loader_normalize_passes_literal_hex_through():
+    """Sanity check: when components.body-text.textColor is already a literal
+    hex, normalize passes it through unchanged (no false-positive token-ref
+    detection on hex strings starting with #)."""
+    cfg = {
+        "metadata": {"schema_version": 2},
+        "branding": {
+            "colors": {"primary": "#001122", "neutral": "#FFFFFF"},
+            "components": {
+                "body-text": {
+                    "backgroundColor": "{colors.neutral}",
+                    "textColor": "#222222",
+                }
+            },
+        },
+    }
+    norm = loader._normalize_branding_v2_to_return_shape(cfg)
+    assert norm["colors"]["text"] == "#222222"
