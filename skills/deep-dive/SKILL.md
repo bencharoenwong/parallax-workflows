@@ -14,7 +14,10 @@ gotchas:
   - get_assessment is async and uses Perplexity — may take 30-90s
   - get_assessment prompt should incorporate macro context, score trends, and dividend profile alongside existing data
   - For non-US symbols, apply HK ambiguity cross-check from shared conventions
+  - Pre-Render step loads white-label branding via `_parallax/white-label/loader.py` → `load_visual_branding()` (the 6-key visual subset wrapper). Voice/typography/etc. are structurally absent — `branding["voice"]` raises `KeyError`. Snippet inlined per Tier 1 pilot convention (no JIT-load of integration-pattern.md from this skill). Provenance state-to-text mapping and Branding Header semantics follow integration-pattern.md §5 + §7.
 ---
+
+<!-- white-label: integration-pattern.md -->
 
 # Position Deep Dive
 
@@ -76,8 +79,34 @@ This decomposition is MANDATORY when a view is present (MAS FEAT P13/14, SR 11-7
 
 Apply graceful fallback patterns from shared conventions for any missing data.
 
+### Pre-Render — Load white-label branding
+
+Before composing the Output Format, load the client's visual branding. Inlined per Tier 1 pilot convention.
+
+```python
+import sys
+from pathlib import Path
+
+_WHITE_LABEL_DIR = Path(__file__).parent.parent / "_parallax" / "white-label"
+sys.path.insert(0, str(_WHITE_LABEL_DIR))
+from loader import load_visual_branding  # noqa: E402
+
+branding = load_visual_branding()
+
+err = branding.get("error")
+white_label_active = (
+    err is None
+    or err.startswith("logo_missing")
+)
+client_name = branding.get("client_name", "")
+```
+
+The loader returns exactly six keys: `client_name`, `colors`, `logos`, `fonts`, `source`, `error`. Any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`. Load `_parallax/white-label/integration-pattern.md` for the full contract, error-state table (§4), substitution semantics (§5), and Provenance template (§7).
+
 ## Output Format
 
+- **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (banner from Step 0 + low-confidence warnings if any). Per loader.md §5.1, the load preamble goes "at the very top" — it precedes the Branding Header.
+- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view active): `**<client_name>** deep dive`. Logo handling per integration-pattern.md §5: empty path → text line only; URL → embed `![<client_name>](<url>)`; absolute local path (starts with `/` or `~`) → skip embed and append `Logo on file: <basename>` to Provenance.
 - **Company Overview** (3 sentences)
 - **Macro Environment** (regime context for relevant markets, factor implications)
 - **Factor Profile** (table: each factor score with peer rank + 52-week trend direction)
@@ -91,6 +120,7 @@ Apply graceful fallback patterns from shared conventions for any missing data.
 - **News Catalyst Watch** (material items only)
 - **Assessment** *(AI-generated — Perplexity deep-research synthesis)* — includes macro + trend data; if view active, MUST end with the three-bullet tilt decomposition per Batch C contract. This is deep-dive's primary alignment surface. Render the section header with the italic parenthetical verbatim — it's the contextual-proximity AI disclosure per HKMA/SFC Nov 2024 Circular; the document-level banner (§5 rule 6) is not sufficient for the Perplexity-backed non-deterministic content in this specific section.
 - **Risk Factors** (what could go wrong)
+- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (5 error states; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
 
 Append audit log entry per loader.md §6.
 
