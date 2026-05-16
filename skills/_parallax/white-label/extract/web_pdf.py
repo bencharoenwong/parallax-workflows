@@ -285,15 +285,82 @@ class FontExtractor:
 
 
 
-def _normalize_css_dimension(value: str) -> str:
+def _flatten_at_rules(css_text: str) -> str:
+    """Unwrap @media / @supports / @keyframes / @container blocks so their
+    inner rules appear at top level. The downstream rule-finder regex doesn't
+    handle nested braces, so without this pre-pass every rule inside an
+    @media block is silently dropped — on a real Tailwind/Bootstrap stylesheet
+    that's most of the responsive typography.
+
+    Brace-counting is used because a regex can't reliably match balanced
+    braces. Calls itself recursively so a `@supports { @media { ... } }`
+    onion gets fully unwrapped. Comments are assumed already stripped by
+    the caller.
+    """
+    out = []
+    i = 0
+    n = len(css_text)
+    while i < n:
+        ch = css_text[i]
+        if ch == '@':
+            # Find the opening brace of the at-rule's body, or the terminating
+            # semicolon for prelude-only rules like @import / @charset.
+            brace_start = -1
+            semi = -1
+            for j in range(i, n):
+                if css_text[j] == '{':
+                    brace_start = j
+                    break
+                if css_text[j] == ';':
+                    semi = j
+                    break
+            if brace_start == -1:
+                # No body — skip up to the semicolon (or end) and discard.
+                i = (semi + 1) if semi != -1 else n
+                continue
+            # Walk to find the matching closing brace.
+            depth = 1
+            j = brace_start + 1
+            while j < n and depth > 0:
+                c = css_text[j]
+                if c == '{':
+                    depth += 1
+                elif c == '}':
+                    depth -= 1
+                j += 1
+            if depth != 0:
+                # Unbalanced; stop processing this branch.
+                break
+            inner = css_text[brace_start + 1:j - 1]
+            out.append(_flatten_at_rules(inner))
+            i = j
+        else:
+            # Non-at character: copy through to the next @-rule (or end).
+            next_at = css_text.find('@', i)
+            if next_at == -1:
+                out.append(css_text[i:])
+                break
+            out.append(css_text[i:next_at])
+            i = next_at
+    return ''.join(out)
+
+
+def _normalize_css_dimension(value: str, *, zero_unit: str = "em") -> str:
     """Normalize a CSS dimension to a DESIGN.md-spec-compliant unit.
 
     The DESIGN.md linter rejects `pt` outright and accepts only px / rem / em.
     Many real-world stylesheets (especially for print or PDF brand guides
     served as HTML) use pt. Convert pt → px at 96dpi (1pt = 4/3 px) and
-    normalize the unit casing. Bare numbers without a unit are returned
-    unchanged (line-height multipliers are valid as unitless). Unknown units
-    are passed through — the linter will surface them as errors.
+    normalize the unit casing.
+
+    Unitless zero (`0`, `0.0`) is interpreted as a dimension with the unit
+    `zero_unit` (default `em`). The linter requires letterSpacing carry a
+    unit, so bare `"0"` from CSS would be rejected. The caller can pass
+    `zero_unit="px"` if `px` is more semantically appropriate for the field.
+
+    Other bare numbers (line-height multipliers like `1.5`) are returned
+    unchanged — those are valid CSS unitless values. Unknown units (`%`,
+    `vw`, CSS keywords) pass through verbatim; the linter will surface them.
     """
     import re
     s = value.strip()
@@ -302,6 +369,13 @@ def _normalize_css_dimension(value: str) -> str:
         return s
     num_str, unit = m.group(1), (m.group(2) or "").lower()
     if not unit:
+        # Unitless zero gets a unit; non-zero unitless stays as-is (it's a
+        # line-height multiplier or similar valid unitless value).
+        try:
+            if float(num_str) == 0:
+                return f"0{zero_unit}"
+        except (ValueError, TypeError):
+            pass
         return num_str
     if unit == "pt":
         try:
@@ -319,6 +393,11 @@ class TypographyExtractor:
     def extract_type_scale_from_css(css_text: str) -> Dict[str, Dict[str, Any]]:
         import re
         css_text = re.sub(r'/\*.*?\*/', '', css_text, flags=re.DOTALL)
+        # Unwrap @media / @supports / @keyframes / @container blocks so their
+        # inner rules become visible to the rule-finder regex (which assumes
+        # no nested braces). On real Tailwind/Bootstrap stylesheets the bulk
+        # of typography lives inside @media — without this, it's silently lost.
+        css_text = _flatten_at_rules(css_text)
         scale = {}
 
         sel_map = {

@@ -275,3 +275,44 @@ def test_typography_extractor_rejects_utility_class_prefix():
     # Utility classes must NOT have polluted the typography scale
     assert scale["h1"]["fontSize"] != "99px"
     assert scale["code"]["fontFamily"] != "Wrong Mono"
+
+
+def test_typography_extractor_handles_at_media_rules():
+    """Round-8 finding: rule-finder regex doesn't handle nested braces, so
+    rules inside @media blocks were silently dropped. _flatten_at_rules
+    pre-pass unwraps them so the typography scale captures responsive rules."""
+    from extract.web_pdf import TypographyExtractor
+
+    css = """
+    h1 { font-size: 14px; }
+    @media (min-width: 768px) {
+      h1 { font-size: 32px; font-family: "Real Display"; }
+      .body-md { font-size: 16px; font-family: "Real Body"; }
+    }
+    @supports (display: grid) {
+      code { font-family: "Real Mono"; }
+    }
+    """
+    scale = TypographyExtractor.extract_type_scale_from_css(css)
+    # Outer h1 wins because it appears first (we take first-occurrence-only).
+    # But the key insight: the inner rules MUST also be discoverable so other
+    # selectors (body-md, code) aren't silently lost.
+    assert scale["h1"]["fontSize"] == "14px"
+    assert scale["body-md"]["fontFamily"] == "Real Body"
+    assert scale["code"]["fontFamily"] == "Real Mono"
+
+
+def test_normalize_css_dimension_unitless_zero_gets_unit():
+    """Round-8 finding: _normalize_css_dimension returned bare '0' for
+    `letter-spacing: 0`, which the DESIGN.md linter rejects (letterSpacing
+    must carry a unit). Unitless zero now gets the zero_unit (default 'em')."""
+    from extract.web_pdf import _normalize_css_dimension
+    assert _normalize_css_dimension("0") == "0em"
+    assert _normalize_css_dimension("0.0") == "0em"
+    # Non-zero unitless stays unchanged (line-height multiplier path)
+    assert _normalize_css_dimension("1.5") == "1.5"
+    # pt → px conversion still works
+    assert _normalize_css_dimension("12pt") == "16px"
+    # px/rem/em pass through with normalized casing
+    assert _normalize_css_dimension("16PX") == "16px"
+    assert _normalize_css_dimension("1.5rem") == "1.5rem"
