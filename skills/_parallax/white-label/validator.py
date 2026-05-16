@@ -451,8 +451,15 @@ class DesignMdValidator:
     _availability_cache: bool | None = None
 
     @classmethod
-    def is_available(cls) -> bool:
-        if cls._availability_cache is not None:
+    def is_available(cls, refresh: bool = False) -> bool:
+        """Return True when `npx` is on PATH and `npx --version` exits 0.
+
+        Result is memoized for the process lifetime. Pass refresh=True to
+        force a re-probe — useful for long-running sessions where the
+        operator installs Node after an initial False result (otherwise
+        `lint()` would continue to skip even after npx becomes available).
+        """
+        if not refresh and cls._availability_cache is not None:
             return cls._availability_cache
         import shutil
         import subprocess

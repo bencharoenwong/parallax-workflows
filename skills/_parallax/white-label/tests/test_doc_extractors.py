@@ -476,8 +476,12 @@ def test_ooxml_pptx_typography_and_radii(tmp_path):
     assert draft["rounded"]["sm"] == "4px"
     assert draft["rounded"]["md"] == "12px"
     
+    # h1 = titleStyle → high confidence (0.85). body-md = bodyStyle lvl5 →
+    # deeply-indented bullet text in PPTX semantics, not authoritative body
+    # typography for most decks; capped at 0.6 then bumped to 0.7 by lineHeight
+    # presence. See LOW_CONFIDENCE_LEVELS in _parse_pptx_master_typography.
     assert draft["confidence_scores"]["typography.h1"] == 0.85
-    assert draft["confidence_scores"]["typography.body-md"] == 0.85
+    assert draft["confidence_scores"]["typography.body-md"] == 0.7
     assert draft["confidence_scores"]["rounded"] == 0.5
 
 def test_ooxml_docx_typography(tmp_path):

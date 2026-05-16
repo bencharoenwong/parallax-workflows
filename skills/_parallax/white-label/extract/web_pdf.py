@@ -335,6 +335,11 @@ class ShapeExtractor:
     @staticmethod
     def extract_border_radii(css_text: str) -> Dict[str, str]:
         import re
+        # Any radius above this threshold (px) is treated as "full" (pill shape).
+        # Values like 999px, 1000px etc. are clearly pill intent even if they
+        # don't reach the 9999 sentinel; without this clamp they'd skew the
+        # sm/md/lg percentile sort.
+        FULL_RADIUS_PX_THRESHOLD = 64
         radii = []
         has_full = False
         for match in re.finditer(r'border-radius\s*:\s*([^;]+)', css_text, re.IGNORECASE):
@@ -348,23 +353,23 @@ class ShapeExtractor:
             if m:
                 num = float(m.group(1))
                 unit = m.group(2).lower()
-                if unit == "rem": num *= 16 
-                if num >= 9999:
+                if unit == "rem":
+                    num *= 16
+                if num >= FULL_RADIUS_PX_THRESHOLD:
                     has_full = True
                 else:
                     radii.append((num, val))
-                    
+
         res = {}
         if has_full:
             res["full"] = "9999px"
-            
+
         unique = {}
         for num, text in radii:
             if num not in unique:
                 unique[num] = text
         nums = sorted(list(unique.keys()))
         if len(nums) >= 2:
-            import math
             sm_idx = max(0, int(len(nums) * 0.25))
             md_idx = int(len(nums) * 0.5)
             lg_idx = min(len(nums) - 1, int(len(nums) * 0.75))

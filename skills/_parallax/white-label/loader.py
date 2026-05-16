@@ -323,11 +323,16 @@ def _normalize_branding_v2_to_return_shape(data: dict[str, Any]) -> dict[str, An
     # points nowhere we can resolve. Symmetric with the defensive handling in
     # _config_to_draft.
     raw_text_color = components_v2.get("body-text", {}).get("textColor", "")
-    if isinstance(raw_text_color, str) and raw_text_color.startswith("{colors."):
-        ref_key = raw_text_color.strip("{}").split(".", 1)[-1]
-        resolved_text = colors_v2.get(ref_key, "")
-        # Don't resolve to another token-ref (defends against chained refs)
-        if isinstance(resolved_text, str) and resolved_text.startswith("{"):
+    if isinstance(raw_text_color, str) and raw_text_color.startswith("{"):
+        # Token-refs of any shape must not leak. Try to resolve {colors.X};
+        # any other ref ({typography.X}, malformed) collapses to empty so a
+        # downstream hex-validation gate doesn't see "{...}" as a hex value.
+        ref_body = raw_text_color.strip("{}")
+        if ref_body.startswith("colors."):
+            resolved_text = colors_v2.get(ref_body.split(".", 1)[-1], "")
+            if isinstance(resolved_text, str) and resolved_text.startswith("{"):
+                resolved_text = ""
+        else:
             resolved_text = ""
     else:
         resolved_text = raw_text_color
@@ -561,29 +566,40 @@ def build_config_from_draft(
             "neutral":    draft.get("colors", {}).get("background", {}).get("hex", "#FFFFFF"),
         }
         
-        # Use default typography if missing
-        typography = draft.get("typography", {})
+        # Derive typography from draft. Priority: explicit draft.typography
+        # (extractor populated it) → draft.fonts.* fallback (extractor only set
+        # font names, e.g. wizard mode or v1 PDF). If neither is populated,
+        # write an empty typography dict rather than fabricating Arial/Helvetica
+        # defaults that mislead the operator about what was extracted.
+        typography = draft.get("typography", {}) or {}
         if not typography:
-            typography = {
-                "h1": {"fontFamily": "Arial"},
-                "body-md": {"fontFamily": "Helvetica"},
-                "code": {"fontFamily": "Courier New"}
-            }
+            fonts_in = draft.get("fonts", {}) or {}
+            font_map = (("header", "h1"), ("body", "body-md"), ("monospace", "code"))
+            for legacy_role, design_level in font_map:
+                slot = fonts_in.get(legacy_role) or {}
+                name = slot.get("name") if isinstance(slot, dict) else None
+                if name:
+                    typography[design_level] = {"fontFamily": name}
         config["branding"]["typography"] = typography
-        
+
         if "rounded" in draft and draft["rounded"]:
             config["branding"]["rounded"] = draft["rounded"]
         if "spacing" in draft and draft["spacing"]:
             config["branding"]["spacing"] = draft["spacing"]
-            
+
         components = draft.get("components", {})
         if not components and "text" in draft.get("colors", {}):
-            components = {
-                "body-text": {
-                    "backgroundColor": "{colors.neutral}",
-                    "textColor": draft["colors"]["text"]["hex"]
+            # Defensive .get() — draft.colors.text may be present as an empty
+            # or partial dict (e.g., wizard mode where the operator skipped
+            # text color), which would KeyError on bare indexing.
+            text_hex = draft["colors"]["text"].get("hex", "") if isinstance(draft["colors"]["text"], dict) else ""
+            if text_hex:
+                components = {
+                    "body-text": {
+                        "backgroundColor": "{colors.neutral}",
+                        "textColor": text_hex,
+                    }
                 }
-            }
         config["branding"]["components"] = components
     else:
         config["branding"]["colors"] = {
@@ -637,9 +653,15 @@ def load_client_branding() -> dict[str, Any]:
     """
     Load and validate client branding configuration.
 
-    Returns a dict with exactly 9 keys: client_name, colors, logos, fonts,
-    source, confidence_scores, voice, multi_source, error.  error is None on a
-    fully clean load, a human-readable string on any degradation.
+    Returns a dict whose minimum shape is 9 keys: client_name, colors, logos,
+    fonts, source, confidence_scores, voice, multi_source, error.  error is
+    None on a fully clean load, a human-readable string on any degradation.
+
+    When the on-disk config is schema_version: 2, the result additionally
+    carries four bonus keys derived from the new token tree: typography,
+    rounded, spacing, components. v1 configs return empty dicts for these
+    bonus keys. Downstream consumers reading only the legacy 9 keys are
+    unaffected by the v1↔v2 distinction.
 
     Failure points:
         1. Missing config file   -> short-circuit, error="config_not_found"

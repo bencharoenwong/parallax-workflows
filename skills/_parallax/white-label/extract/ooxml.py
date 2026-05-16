@@ -31,6 +31,13 @@ def _parse_pptx_master_typography(zf) -> tuple[Dict[str, Dict[str, Any]], Dict[s
     typography = {}
     confidences = {}
     
+    # PPTX bodyStyle levels lvl1..lvl6 are *indent depths* inside the body
+    # placeholder, not a heading hierarchy. lvl1 maps reasonably to "h2" (top
+    # of body), but lvl3..lvl5 are progressively-indented bullet styles that
+    # rarely correspond to a designer's intended h4/h5 typography. Cap their
+    # confidence at 0.6 so downstream consumers can soft-weight or omit them.
+    LOW_CONFIDENCE_LEVELS = {"h4", "h5", "body-md", "body-sm"}
+
     def parse_pr(pr_elem, level_name):
         if pr_elem is None: return
         defRPr = pr_elem.find(".//a:defRPr", ns)
@@ -38,7 +45,7 @@ def _parse_pptx_master_typography(zf) -> tuple[Dict[str, Dict[str, Any]], Dict[s
         sz = defRPr.get("sz")
         b = defRPr.get("b")
         lnSpc = pr_elem.find(".//a:lnSpc/a:spcPct", ns)
-        
+
         # DESIGN.md spec only permits px / rem / em units; pt is rejected by the
         # linter. Convert pt → px at 96dpi (1pt = 4/3 px) and round to integer.
         # letterSpacing must be a dimension (with unit), not bare "0".
@@ -48,12 +55,15 @@ def _parse_pptx_master_typography(zf) -> tuple[Dict[str, Dict[str, Any]], Dict[s
             pt = int(sz) / 100
             px = round(pt * 4 / 3)
             style["fontSize"] = f"{px}px"
-            conf = 0.85
+            # Top-of-hierarchy levels (titleStyle → h1, bodyStyle lvl1 → h2,
+            # lvl2 → h3) are confident size signals. Deeper indent levels get
+            # a lower ceiling — they're bullet styles, not heading scale.
+            conf = 0.6 if level_name in LOW_CONFIDENCE_LEVELS else 0.85
         style["fontWeight"] = 700 if b == "1" else 400
         if lnSpc is not None and lnSpc.get("val"):
             style["lineHeight"] = f"{int(lnSpc.get('val'))/100000:g}"
             if conf < 0.7: conf = 0.7
-            
+
         typography[level_name] = style
         confidences[f"typography.{level_name}"] = conf
 
@@ -263,20 +273,20 @@ def extract_from_pptx(pptx_path: str) -> Dict[str, Any]:
     try:
         import zipfile
         theme: Dict[str, Any] = {"colors": {}, "fonts": {}}
+        typography: Dict[str, Any] = {}
+        typo_conf: Dict[str, float] = {}
+        rounded: Dict[str, str] = {}
+        # Single open — theme parse, typography parse, and radii detection all
+        # operate on the same archive (previously opened twice).
         with zipfile.ZipFile(pptx_path, "r") as zf:
             theme_paths = [n for n in zf.namelist() if n.startswith("ppt/theme/") and n.endswith(".xml")]
             if theme_paths:
                 with zf.open(theme_paths[0]) as f:
                     theme = _parse_ooxml_theme(f.read())
-
-        role_map = _theme_to_role_map(theme)
-        
-        typography = {}
-        typo_conf = {}
-        rounded = {}
-        with zipfile.ZipFile(pptx_path, "r") as zf:
             typography, typo_conf = _parse_pptx_master_typography(zf)
             rounded = _detect_corner_radii_pptx(zf)
+
+        role_map = _theme_to_role_map(theme)
 
         body_text = ""
         try:
@@ -347,20 +357,19 @@ def extract_from_docx(docx_path: str) -> Dict[str, Any]:
     try:
         import zipfile
         theme: Dict[str, Any] = {"colors": {}, "fonts": {}}
+        typography: Dict[str, Any] = {}
+        typo_conf: Dict[str, float] = {}
+        rounded: Dict[str, str] = {}
+        # Single open — theme parse and typography parse share the archive.
         with zipfile.ZipFile(docx_path, "r") as zf:
             theme_paths = [n for n in zf.namelist() if n.startswith("word/theme/") and n.endswith(".xml")]
             if theme_paths:
                 with zf.open(theme_paths[0]) as f:
                     theme = _parse_ooxml_theme(f.read())
+            typography, typo_conf = _parse_docx_style_typography(zf)
 
         role_map = _theme_to_role_map(theme)
-        
-        typography = {}
-        typo_conf = {}
-        rounded = {}
-        with zipfile.ZipFile(docx_path, "r") as zf:
-            typography, typo_conf = _parse_docx_style_typography(zf)
-            
+
 
         body_text = ""
         try:
