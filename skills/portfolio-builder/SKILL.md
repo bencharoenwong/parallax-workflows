@@ -19,7 +19,10 @@ gotchas:
   - **View-status banner is REQUIRED first thing in output when active view exists** — never bury after the holdings table. If execution gets compressed, this is the section that must NOT be dropped. RM uses the banner as the primary signal that the view is active and what's being applied.
   - **Phase A Parallelization:** View load and universe build run in parallel (view load is fast; universe build is the latency bottleneck). Both complete before Phase B begins.
   - **Operator verification:** see [examples/testing-posture.md](../../examples/testing-posture.md)
+  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
+
+<!-- white-label: integration-pattern.md -->
 
 # Portfolio Builder
 
@@ -76,9 +79,14 @@ Begin only after Phase A completes. Steps 3–6 have tight dependencies; execute
 - **When `--augment-silent` was applied:** the audit entry MUST carry `augmented_dimensions: [{path, source_tool, source_call_args, data_as_of}]` so the per-portfolio JIT augmentation provenance is on the audit chain and recoverable for compliance review. When `--augment-silent` was NOT applied but silent dimensions existed, log `silent_dimensions_skipped: [...]` so the auditor can see what wasn't filled.
 - Append audit log entry per loader.md §6.
 
+### Pre-Render — Load white-label branding
+
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format. The loader returns exactly six keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+
 ## Output Format
 
 - **House View Preamble** (REQUIRED FIRST when view active — render BEFORE any other section, never bury after the holdings table) — Per loader.md §5. MUST include: short view_id (first 8 chars), view_name, `effective_date → valid_through`, and a one-line summary `Applying tilts: <comma list of non-zero tilt names with values>`. If `--augment-silent` was used, append `JIT-augmented: <list of dim paths>`. This preamble is the user's primary signal that the view is active and what it's doing. If execution gets token-compressed, KEEP this section — drop other sections first if needed.
+- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** portfolio construction`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to Provenance.
 - **Investment Thesis** (restate and refine the user's intent; note any view-vs-thesis conflicts inline per loader.md §4)
 - **Universe Built** (how many candidates, key sectors; note force-includes from +2 tilts and excludes applied; surface divergence-assertion result per loader.md §5 rule 4)
 - **Selected Holdings** (table: `input_ticker`, `returned_name` (from scoring-tool response), `expected_name` (from get_company_info), sector, total score, weight, key factor strengths; if view active, include a "Tilt Effect" column showing the multiplier applied to each holding AND a "Tilt Source" column tagging the dimension's source. **Tilt Source enforcement (compliance contract):** EVERY row × dimension cell MUST carry a non-empty tag in `{[house_view: <path>=<value>], [parallax_jit, <tool>[<args>]@<date>], [neutral, <reason>]}`. If any cell would be empty, that's a runtime bug — emit `⚠ Tilt Source missing for <row> × <dim>; verify before relying on this output` and refuse to claim the output is compliance-ready. **Flag any row where `returned_name ≠ expected_name` with ⚠ MISMATCH and do not treat that row's scores as authoritative** — per loader.md §5 rule 3.)
@@ -86,6 +94,7 @@ Begin only after Phase A completes. Steps 3–6 have tight dependencies; execute
 - **Portfolio Factor Profile** (VALUE, QUALITY, MOMENTUM, DEFENSIVE scores — computed as weighted aggregate of per-holding `get_peer_snapshot` scores; note `quick_portfolio_scores` batch output only if all names cross-validated)
 - **Redundancy Notes** (any overlap flagged and how it was resolved; include client-computed sector concentration if `check_portfolio_redundancy` returned an empty concentration map on a clearly-concentrated portfolio)
 - **Implementation Notes** (liquidity, position sizing, suggested rebalance frequency)
+- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (5 error states; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
 
 If active view: use the view-aware disclaimer per loader.md §5. Otherwise:
 

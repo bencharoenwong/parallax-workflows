@@ -15,7 +15,10 @@ gotchas:
   - build_stock_universe can find replacement candidates for positions being trimmed
   - Output must include specific buy/sell/trim quantities, not just vague suggestions
   - For portfolios with 10+ holdings, prioritize score trend scans for top/bottom 5 by weight to manage latency
+  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
+
+<!-- white-label: integration-pattern.md -->
 
 # Portfolio Rebalance
 
@@ -83,9 +86,14 @@ Per `loader.md` §1-§2: read view if present, validate hash and expiry. If view
 
 If `PARALLAX_LOADER_V2=1`, follow `loader.md` §3b: aggregate per-holding `get_peer_snapshot` scores for the proposed new allocation. If V1, call `quick_portfolio_scores`. If view active, verify proposed allocation aligns with view tilts within 10% per sector. Append audit log entry per loader.md §6.
 
+### Pre-Render — Load white-label branding
+
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format. The loader returns exactly six keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+
 ## Output Format
 
-- **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (preamble)
+- **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (preamble). Per loader.md §5.1 the preamble goes at the very top — it precedes the Branding Header.
+- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** rebalance`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to Provenance.
 - **Current Portfolio Assessment** (factor scores, concentration issues, redundancy; if view active, current alignment vs view-tilted target)
 - **Health Status** (Healthy/Monitor/Attention badge with flag summary)
 - **Health Flags** (table: each triggered flag per holding with priority level; View Misalignment / View Excluded shown as their own flag types)
@@ -96,6 +104,7 @@ If `PARALLAX_LOADER_V2=1`, follow `loader.md` §3b: aggregate per-holding `get_p
 - **Replacement Candidates** (if trimming, scored alternatives; filtered against tilts.excludes + tilts.excludes_freeform if view active; all candidates ground-truth-validated per loader.md §5 rule 3; divergence-assertion result for replacement universe per loader.md §5 rule 4)
 - **Before/After Comparison** (factor scores: current vs. proposed; if view active, alignment-to-view metric included)
 - **Implementation Notes** (suggested execution order, liquidity considerations)
+- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (5 error states; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
 
 If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
 

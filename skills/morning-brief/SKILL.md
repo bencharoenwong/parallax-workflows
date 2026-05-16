@@ -14,7 +14,10 @@ gotchas:
   - macro_analyst parameter is `market` (not `country`); e.g., `macro_analyst(market="United States")`
   - The macro_analyst summary call returns all components inline including tactical — do not make separate per-component calls
   - Health flags (from portfolio-checkup/references/health-flags.md) apply here too — flag portfolios needing attention
+  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
+
+<!-- white-label: integration-pattern.md -->
 
 # Morning Brief
 
@@ -60,11 +63,16 @@ Per `loader.md` §1-§2. If view present, capture tilt vector, excludes, prose e
 3. For top N holdings by weight (default 3): call `get_news_synthesis` (async — don't block output).
 4. Append audit log entry per loader.md §6.
 
+### Pre-Render — Load white-label branding
+
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format. The loader returns exactly six keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+
 ## Output Format
 
 Present as a structured morning brief, under 800 words:
 
-- **House View Preamble** (only if view active) — 1-line summary per loader.md §5 rule 1 (preamble)
+- **House View Preamble** (only if view active) — 1-line summary per loader.md §5 rule 1 (preamble). Per loader.md §5.1 the preamble goes at the very top — it precedes the Branding Header.
+- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** morning brief`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to Provenance.
 - **Market Regime & Signals** (2-3 sentences; if view active, note alignment/divergence with view's regime call)
 - **Macro Snapshot** (bullet points)
 - **Ground-truth Integrity** (only render if any mismatch detected — table: `input_ticker`, `returned_name`, `expected_name`, status. Mismatched holdings had scores re-derived via `get_peer_snapshot` — per loader.md §5 rule 3.)
@@ -72,6 +80,7 @@ Present as a structured morning brief, under 800 words:
 - **Redundancy & Alignment Alerts** (only if flagged; include View Misalignment / View Excluded if view active)
 - **Holding News** (one paragraph per holding)
 - **Action Items** (what deserves attention today; if view active, prioritize toward view rebalance direction)
+- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (5 error states; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
 
 Lead with what matters.
 
