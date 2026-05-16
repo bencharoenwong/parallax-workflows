@@ -1,6 +1,7 @@
 """Tests for PPTX/DOCX extractors, cross-source validation, merging,
 and voice validation. Companion to test_extract.py / test_validator.py."""
 
+import io
 import sys
 from pathlib import Path
 

@@ -285,6 +285,35 @@ class FontExtractor:
 
 
 
+def _normalize_css_dimension(value: str) -> str:
+    """Normalize a CSS dimension to a DESIGN.md-spec-compliant unit.
+
+    The DESIGN.md linter rejects `pt` outright and accepts only px / rem / em.
+    Many real-world stylesheets (especially for print or PDF brand guides
+    served as HTML) use pt. Convert pt → px at 96dpi (1pt = 4/3 px) and
+    normalize the unit casing. Bare numbers without a unit are returned
+    unchanged (line-height multipliers are valid as unitless). Unknown units
+    are passed through — the linter will surface them as errors.
+    """
+    import re
+    s = value.strip()
+    m = re.match(r'^(-?[\d.]+)\s*([a-zA-Z%]+)?\s*$', s)
+    if not m:
+        return s
+    num_str, unit = m.group(1), (m.group(2) or "").lower()
+    if not unit:
+        return num_str
+    if unit == "pt":
+        try:
+            px = round(float(num_str) * 4 / 3)
+            return f"{px}px"
+        except (ValueError, TypeError):
+            return s
+    if unit in ("px", "rem", "em"):
+        return f"{num_str}{unit}"
+    return s
+
+
 class TypographyExtractor:
     @staticmethod
     def extract_type_scale_from_css(css_text: str) -> Dict[str, Dict[str, Any]]:
@@ -307,24 +336,28 @@ class TypographyExtractor:
             style = {
                 "fontWeight": 400,
                 "lineHeight": "1.5",
-                "letterSpacing": "0"
+                "letterSpacing": "0em",
             }
-            
+
             fs_m = re.search(r'font-size\s*:\s*([^;]+)', block, re.IGNORECASE)
             fw_m = re.search(r'font-weight\s*:\s*([^;]+)', block, re.IGNORECASE)
             lh_m = re.search(r'line-height\s*:\s*([^;]+)', block, re.IGNORECASE)
             ls_m = re.search(r'letter-spacing\s*:\s*([^;]+)', block, re.IGNORECASE)
             ff_m = re.search(r'font-family\s*:\s*([^;]+)', block, re.IGNORECASE)
-            
+
             if not any([fs_m, fw_m, lh_m, ls_m, ff_m]): continue
-            
-            if fs_m: style["fontSize"] = fs_m.group(1).strip()
-            if fw_m: 
+
+            if fs_m: style["fontSize"] = _normalize_css_dimension(fs_m.group(1).strip())
+            if fw_m:
                 val = fw_m.group(1).strip()
                 if val.isdigit(): style["fontWeight"] = int(val)
                 elif val.lower() == "bold": style["fontWeight"] = 700
-            if lh_m: style["lineHeight"] = lh_m.group(1).strip()
-            if ls_m: style["letterSpacing"] = ls_m.group(1).strip()
+            if lh_m:
+                # line-height accepts a unitless multiplier or a dimension.
+                # Pass unitless through; normalize pt for dimension form.
+                lh_val = lh_m.group(1).strip()
+                style["lineHeight"] = _normalize_css_dimension(lh_val) if any(u in lh_val.lower() for u in ("pt", "px", "rem", "em")) else lh_val
+            if ls_m: style["letterSpacing"] = _normalize_css_dimension(ls_m.group(1).strip())
             if ff_m: style["fontFamily"] = ff_m.group(1).strip().split(',')[0].strip(' "\'')
             
             scale[level] = style
@@ -428,11 +461,16 @@ def _extract_brand_guide_prose(pdf_text: str, *, filename: str) -> Dict[str, str
         return {}
         
     found = []
+    # The apostrophe class [\'’] matches both ASCII (') and the curly
+    # right-single-quotation-mark (U+2019, ’) that PDF brand guides commonly
+    # render via smart-quote substitution. Without the alternation, real
+    # brand guides with "Do’s and Don’ts" headings are missed entirely.
+    APOS = r"[\'’]"
     patterns = {
         "overview": r'^(?:\d+\.\s*)?Overview\b',
         "colors": r'^(?:\d+\.\s*)?Colors\b',
         "typography": r'^(?:\d+\.\s*)?Typography\b',
-        "dos_and_donts": r'^(?:\d+\.\s*)?Do\'s and Don\'ts\b'
+        "dos_and_donts": rf'^(?:\d+\.\s*)?Do{APOS}s and Don{APOS}ts\b',
     }
     
     positions = []

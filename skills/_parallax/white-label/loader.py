@@ -566,11 +566,16 @@ def build_config_from_draft(
             "neutral":    draft.get("colors", {}).get("background", {}).get("hex", "#FFFFFF"),
         }
         
-        # Derive typography from draft. Priority: explicit draft.typography
-        # (extractor populated it) → draft.fonts.* fallback (extractor only set
-        # font names, e.g. wizard mode or v1 PDF). If neither is populated,
-        # write an empty typography dict rather than fabricating Arial/Helvetica
-        # defaults that mislead the operator about what was extracted.
+        # Derive typography from draft. Priority:
+        #   1. explicit draft.typography (extractor populated it)
+        #   2. draft.fonts.* fallback (extractor only set font names; wizard
+        #      mode or v1 PDF source)
+        #   3. generic CSS family-name placeholder ("sans-serif") so the v2
+        #      schema's `typography: minProperties: 1` constraint is satisfied
+        #      and the config remains loadable on next read. Using a CSS
+        #      generic family rather than a specific name (Arial / Helvetica)
+        #      makes the placeholder obvious — the operator sees "sans-serif"
+        #      and knows no real typography was extracted.
         typography = draft.get("typography", {}) or {}
         if not typography:
             fonts_in = draft.get("fonts", {}) or {}
@@ -580,6 +585,8 @@ def build_config_from_draft(
                 name = slot.get("name") if isinstance(slot, dict) else None
                 if name:
                     typography[design_level] = {"fontFamily": name}
+        if not typography:
+            typography = {"body-md": {"fontFamily": "sans-serif"}}
         config["branding"]["typography"] = typography
 
         if "rounded" in draft and draft["rounded"]:
