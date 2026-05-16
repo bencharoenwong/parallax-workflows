@@ -68,16 +68,27 @@ Two consumer classes:
 
 Both classes silently fall back to default Parallax styling/voice if the config is absent or corrupted. This skill never breaks downstream consumers.
 
-**Visual consumer loading pattern:**
+**Visual consumer loading pattern.** Always go through `loader.load_client_branding()` rather than reading raw YAML keys directly — the loader bridges v1↔v2 file shapes so downstream code keeps working through the schema migration:
+
 ```python
-import yaml, os
-config_path = os.path.expanduser("~/.parallax/client-branding/config.yaml")
-if os.path.exists(config_path):
-    with open(config_path) as f:
-        cfg = yaml.safe_load(f)
-    primary_color = cfg["branding"]["colors"]["primary"]
-    # ... etc
+from skills._parallax.white_label.loader import load_client_branding
+
+result = load_client_branding()
+if result.get("error") is None:
+    # Legacy 9-key shape — works against both v1 AND v2 config.yaml on disk
+    primary_color = result["colors"]["primary"]
+    accent_color  = result["colors"]["accent"]   # v2: derived from colors.tertiary
+    bg_color      = result["colors"]["background"]  # v2: derived from colors.neutral
+    header_font   = result["fonts"]["header"]    # v2: derived from typography.h1.fontFamily
+
+    # v2-only bonus keys (empty dict on v1) — opt-in for spec-aware consumers
+    typography = result.get("typography", {})    # full token tree per DESIGN.md
+    rounded    = result.get("rounded", {})
+    spacing    = result.get("spacing", {})
+    components = result.get("components", {})
 ```
+
+**Do NOT** read `cfg["branding"]["colors"]["accent"]` directly — that key exists in v1 files but is named `tertiary` in v2. The loader is the single source of truth for the legacy return shape.
 
 **Voice consumer loading pattern:**
 ```python

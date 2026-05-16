@@ -474,8 +474,13 @@ def test_ooxml_pptx_typography_and_radii(tmp_path):
     assert "h2" not in draft["typography"]
     
     assert "rounded" in draft
+    # OOXML adj is a percentage in 1/100000 units (not pixels). The extractor
+    # buckets by percentage tier and emits a fixed representative px per tier:
+    # adj < 10000 → sm/4px, 10000-25000 → md/8px, 25000-45000 → lg/16px,
+    # >= 45000 → full/9999px. The fixture has adj=4000 (sm tier) and
+    # adj=12000 (md tier).
     assert draft["rounded"]["sm"] == "4px"
-    assert draft["rounded"]["md"] == "12px"
+    assert draft["rounded"]["md"] == "8px"
     
     # h1 = titleStyle → high confidence (0.85). body-md = bodyStyle lvl5 →
     # deeply-indented bullet text in PPTX semantics, not authoritative body

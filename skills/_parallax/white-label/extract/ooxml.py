@@ -167,24 +167,39 @@ def _detect_corner_radii_pptx(zf) -> Dict[str, str]:
                         fmla = adj.get("fmla")
                         if fmla.startswith("val "):
                             try:
-                                px = int(fmla[4:]) / 1000.0
-                                radii.append(px)
+                                # OOXML `adj` for prstGeom roundRect is a
+                                # PERCENTAGE in units of 1/100000 — value 50000
+                                # means radius equals 50% of half the shorter
+                                # side (i.e. full pill). It is NOT a pixel value
+                                # and dividing by 1000 was nonsense. Without the
+                                # parent shape's xfrm cx/cy we can't compute the
+                                # absolute px radius, so we keep the raw
+                                # percentage and bucket later.
+                                radii.append(int(fmla[4:]))
                             except ValueError:
                                 pass
-    if not radii: return {}
-    counts = {}
+    if not radii:
+        return {}
+    # Bucket by percentage tier rather than guessed px. Emit a fixed
+    # representative px per tier so downstream consumers get a usable token.
+    # adj < 10000 (<10%)              → sm  (4px)
+    # adj 10000–25000 (10–25%)        → md  (8px)
+    # adj 25000–45000 (25–45%)        → lg  (16px)
+    # adj >= 45000 (≥45%, near-pill)  → full (9999px)
+    counts: Dict[str, int] = {}
     for r in radii:
-        if r < 8: key = "sm"
-        elif r <= 16: key = "md"
-        else: key = "lg"
-        if key not in counts: counts[key] = []
-        counts[key].append(r)
-        
-    res = {}
-    for key, vals in counts.items():
-        mode_val = max(set(vals), key=vals.count)
-        res[key] = f"{int(mode_val)}px"
-    return res
+        if r < 10000:
+            key = "sm"
+        elif r < 25000:
+            key = "md"
+        elif r < 45000:
+            key = "lg"
+        else:
+            key = "full"
+        counts[key] = counts.get(key, 0) + 1
+
+    tier_to_px = {"sm": "4px", "md": "8px", "lg": "16px", "full": "9999px"}
+    return {key: tier_to_px[key] for key in counts}
 
 
 def _parse_ooxml_theme(theme_xml_bytes: bytes) -> Dict[str, Any]:

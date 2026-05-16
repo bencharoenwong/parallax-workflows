@@ -488,8 +488,12 @@ class DesignMdValidator:
             temp_path = tf.name
 
         try:
+            # `-y` flag: auto-accept npx's "Ok to proceed?" prompt on first-call
+            # install (when @google/design.md isn't cached yet). Without it, npx
+            # hangs waiting for stdin confirmation and we'd hit the timeout
+            # instead of getting useful output.
             res = subprocess.run(
-                ["npx", "@google/design.md", "lint", temp_path, "--format", "json"],
+                ["npx", "-y", "@google/design.md", "lint", temp_path, "--format", "json"],
                 capture_output=True,
                 text=True,
                 timeout=DesignMdValidator.NPX_TIMEOUT_SECONDS
