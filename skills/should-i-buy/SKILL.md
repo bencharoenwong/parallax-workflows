@@ -27,7 +27,10 @@ gotchas:
   - explain_methodology is free/instant — use it for any notably high or low score
   - For non-US tickers, consult the exchange suffix table in shared conventions
   - Always include the disclaimer at the end
+  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
+
+<!-- white-label: integration-pattern.md -->
 
 # Should I Buy
 
@@ -90,10 +93,15 @@ If no covered markets are relevant, skip macro section.
 - Synthesize all data into plain-language output.
 - Apply graceful fallback patterns from shared conventions for any missing data.
 
+### Pre-Render — Load white-label branding
+
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format. The loader returns exactly six keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+
 ## Output Format
 
-Present as a friendly, structured report. When an active house view is loaded, JIT-load `_parallax/house-view/render_helpers.md` and route every §7 flag through `render_view_conflict()` — do not hand-construct the strings.
+Present as a friendly, structured report. When an active house view is loaded, JIT-load `_parallax/house-view/render_helpers.md` and route every §7 flag through `render_view_conflict()` — do not hand-construct the strings. Per loader.md §5.1 the active-view load preamble (from Step 0) renders at the very top of output.
 
+- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the house view preamble (or at the very top if no view): `**<client_name>** stock review`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to Provenance.
 - **The Company** (what they do, how big)
 - **The Scores** (simple table with plain-English interpretation; include 52-week trend direction — e.g., "Quality trending up from 5.8 to 7.2")
   - *If view active:* check §7.3 tension condition (`total_score >= 7.0 AND view.tilts.sectors[stock_sector] <= -1`). If true, render the tension banner via `render_view_conflict(kind="score_tension", ...)` directly below the scores table.
@@ -106,6 +114,7 @@ Present as a friendly, structured report. When an active house view is loaded, J
 - **Recent News** (bullets)
 - **Analyst View** (price target range, consensus)
 - **Bottom Line** (balanced 2-sentence summary — pros and cons, not a recommendation)
+- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (5 error states; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
 
 Append audit log entry per loader.md §6.
 
