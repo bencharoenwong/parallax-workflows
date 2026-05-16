@@ -92,9 +92,14 @@ def test_happy_path(
 
     result = loader_module.load_client_branding()
 
+    # Loader return contract: 9 legacy keys (preserved for downstream PDF
+    # consumers) plus 4 bonus keys (typography/rounded/spacing/components)
+    # that v2-aware consumers can opt into. On v1 input the bonus keys are
+    # populated as empty dicts so `[]` access works without KeyError.
     assert set(result.keys()) == {
         "client_name", "colors", "logos", "fonts", "source", "confidence_scores",
         "voice", "multi_source", "error",
+        "typography", "rounded", "spacing", "components",
     }
     assert result["error"] is None
     assert result["colors"]["primary"] == "#1A2B3C"
@@ -131,6 +136,28 @@ def test_missing_config(
     assert result["fonts"] == {}
     assert result["source"] == {}
     assert result["confidence_scores"] == {}
+    # v2-aware bonus keys must be present (empty) on error paths too —
+    # consumers reading result["typography"] should never KeyError.
+    assert result["typography"] == {}
+    assert result["rounded"] == {}
+    assert result["spacing"] == {}
+    assert result["components"] == {}
+
+
+def test_error_and_success_paths_share_shape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    loader_module: ModuleType,
+) -> None:
+    """_empty_result and _build_result must return the same set of top-level keys
+    so v2-aware consumers can read bonus keys unconditionally."""
+    monkeypatch.setattr(loader_module, "_CONFIG_PATH", tmp_path / "missing.yaml")
+    error_keys = set(loader_module.load_client_branding().keys())
+
+    success_keys = set(loader_module._build_result({"branding": {}, "metadata": {}}, []).keys())
+    assert error_keys == success_keys, (
+        f"shape drift: error={error_keys ^ success_keys}"
+    )
 
 
 # ---------------------------------------------------------------------------

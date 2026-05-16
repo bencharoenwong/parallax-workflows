@@ -22,6 +22,13 @@ _LOADER_PATH = (
 )
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers",
+        "npx: requires `npx @google/design.md` available on PATH; skipped otherwise",
+    )
+
+
 @pytest.fixture(scope="function")
 def loader_module() -> ModuleType:
     """Load loader.py from its absolute path and return the module object."""

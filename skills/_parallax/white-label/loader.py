@@ -10,8 +10,8 @@ Public interface
     load_client_branding() -> dict[str, Any]
     build_config_from_draft(draft, validation_summary=None) -> dict[str, Any]
 
-Return shape (always 9 top-level keys)
----------------------------------------
+Return shape (always 13 top-level keys, identical on success and error paths)
+-----------------------------------------------------------------------------
     {
         "client_name":       str,              # "" when no config
         "colors":            dict | {},
@@ -22,6 +22,12 @@ Return shape (always 9 top-level keys)
         "voice":             dict | {},        # {"enabled": False} if not extracted
         "multi_source":      dict | {},        # populated only when 2+ sources used
         "error":             str | None,       # None = clean load
+        # v2-aware bonus keys — empty dicts on v1 configs and on every error
+        # path, so consumers can read result["typography"] etc. unconditionally.
+        "typography":        dict | {},
+        "rounded":           dict | {},
+        "spacing":           dict | {},
+        "components":        dict | {},
     }
 """
 
@@ -70,34 +76,71 @@ _JSONSCHEMA: dict[str, Any] = {
         },
         "branding": {
             "type": "object",
-            "required": ["colors", "logos", "fonts"],
-            "properties": {
-                "colors": {
-                    "type": "object",
-                    "required": ["primary", "secondary", "accent", "background", "text"],
+            "required": ["colors", "logos"],
+            # anyOf (not oneOf) so a hand-edited or partially-migrated config
+            # carrying BOTH v1 markers (fonts + colors.accent) and v2 markers
+            # (typography + colors.tertiary) still validates — _detect_schema_version
+            # disambiguates downstream by preferring v2 when both are present.
+            # Pre-check via _detect_hybrid_branding() surfaces a clearer error
+            # message in the load path when the operator should clean up the file.
+            "anyOf": [
+                {
+                    # v1 schema
+                    "required": ["fonts"],
                     "properties": {
-                        "primary":    {"type": "string"},
-                        "secondary":  {"type": "string"},
-                        "accent":     {"type": "string"},
-                        "background": {"type": "string"},
-                        "text":       {"type": "string"},
-                    },
+                        "colors": {
+                            "type": "object",
+                            "required": ["primary", "secondary", "accent", "background", "text"],
+                            "properties": {
+                                "primary":    {"type": "string"},
+                                "secondary":  {"type": "string"},
+                                "accent":     {"type": "string"},
+                                "background": {"type": "string"},
+                                "text":       {"type": "string"},
+                            },
+                        },
+                        "fonts": {
+                            "type": "object",
+                            "required": ["header", "body", "monospace"],
+                            "properties": {
+                                "header":    {"type": "string"},
+                                "body":      {"type": "string"},
+                                "monospace": {"type": "string"},
+                            },
+                        },
+                    }
                 },
+                {
+                    # v2 schema
+                    "required": ["typography"],
+                    "properties": {
+                        "colors": {
+                            "type": "object",
+                            "required": ["primary", "secondary", "tertiary", "neutral"],
+                            "properties": {
+                                "primary":   {"type": "string"},
+                                "secondary": {"type": "string"},
+                                "tertiary":  {"type": "string"},
+                                "neutral":   {"type": "string"},
+                            },
+                        },
+                        "typography": {
+                            "type": "object",
+                            "minProperties": 1
+                        },
+                        "rounded": {"type": "object"},
+                        "spacing": {"type": "object"},
+                        "components": {"type": "object"}
+                    }
+                }
+            ],
+            "properties": {
                 "logos": {
                     "type": "object",
                     "required": ["primary", "favicon"],
                     "properties": {
                         "primary": {"type": "string"},
                         "favicon": {"type": "string"},
-                    },
-                },
-                "fonts": {
-                    "type": "object",
-                    "required": ["header", "body", "monospace"],
-                    "properties": {
-                        "header":    {"type": "string"},
-                        "body":      {"type": "string"},
-                        "monospace": {"type": "string"},
                     },
                 },
             },
@@ -175,7 +218,12 @@ def _resolve_config_path() -> Path:
 
 
 def _empty_result(error: str) -> dict[str, Any]:
-    """Canonical 9-key empty result dict with a populated error field."""
+    """Canonical 13-key empty result dict with a populated error field.
+
+    Matches the success-path shape from _build_result so v2-aware consumers
+    reading result["typography"] / ["rounded"] / ["spacing"] / ["components"]
+    don't KeyError on any error path.
+    """
     return {
         "client_name":       "",
         "colors":            {},
@@ -186,6 +234,10 @@ def _empty_result(error: str) -> dict[str, Any]:
         "voice":             {"enabled": False},
         "multi_source":      {},
         "error":             error,
+        "typography":        {},
+        "rounded":           {},
+        "spacing":           {},
+        "components":        {},
     }
 
 
@@ -268,6 +320,179 @@ def _resolve_logo_paths(
     return resolved, warnings
 
 
+def _detect_hybrid_branding(data: dict[str, Any]) -> str | None:
+    """Return a human-readable description when branding has BOTH v1 and v2
+    shape markers, else None. The anyOf schema would still accept this, but
+    the result of the v1↔v2 bridge in `_normalize_branding_v2_to_return_shape`
+    is ambiguous — clean up the file rather than guessing which shape wins.
+    """
+    branding = data.get("branding", {}) or {}
+    colors = branding.get("colors", {}) or {}
+    has_v1_color_markers = bool({"accent", "background", "text"} & set(colors.keys()))
+    has_v2_color_markers = bool({"tertiary", "neutral"} & set(colors.keys()))
+    has_v1_fonts = bool(branding.get("fonts"))
+    has_v2_typo = bool(branding.get("typography"))
+
+    conflicts = []
+    if has_v1_color_markers and has_v2_color_markers:
+        v1_keys = sorted({"accent", "background", "text"} & set(colors.keys()))
+        v2_keys = sorted({"tertiary", "neutral"} & set(colors.keys()))
+        conflicts.append(f"colors has both v1 ({', '.join(v1_keys)}) and v2 ({', '.join(v2_keys)}) keys")
+    if has_v1_fonts and has_v2_typo:
+        conflicts.append("branding has both `fonts.*` (v1) and `typography.*` (v2)")
+    if not conflicts:
+        return None
+    return "; ".join(conflicts) + ". Run /parallax-white-label-onboard to re-extract, or remove the v1 keys (accent/background/text/fonts) when migrating to v2."
+
+
+def _detect_schema_version(data: dict[str, Any]) -> int:
+    metadata = data.get("metadata", {})
+    if "schema_version" in metadata and isinstance(metadata["schema_version"], int):
+        return metadata["schema_version"]
+    # Heuristic
+    colors = data.get("branding", {}).get("colors", {})
+    if "tertiary" in colors and "accent" not in colors:
+        return 2
+    return 1
+
+def _normalize_branding_v2_to_return_shape(data: dict[str, Any]) -> dict[str, Any]:
+    branding = data.get("branding", {}) or {}
+    colors_v2 = branding.get("colors", {}) or {}
+    typo_v2 = branding.get("typography", {}) or {}
+    components_v2 = branding.get("components", {}) or {}
+
+    # Resolve components.body-text.textColor for the legacy `text` slot.
+    # The DESIGN.md spec encourages token-refs like "{colors.primary}" inside
+    # components, but downstream consumers expect colors.text to be a literal
+    # hex. Resolve the token-ref against colors_v2 when possible; fall back to
+    # empty (rather than leaking the raw "{colors.X}" string) when the ref
+    # points nowhere we can resolve. Symmetric with the defensive handling in
+    # _config_to_draft.
+    raw_text_color = (components_v2.get("body-text", {}) or {}).get("textColor", "")
+    if isinstance(raw_text_color, str) and raw_text_color.startswith("{"):
+        # Token-refs of any shape must not leak. Try to resolve {colors.X};
+        # any other ref ({typography.X}, malformed) collapses to empty so a
+        # downstream hex-validation gate doesn't see "{...}" as a hex value.
+        ref_body = raw_text_color.strip("{}")
+        if ref_body.startswith("colors."):
+            resolved_text = colors_v2.get(ref_body.split(".", 1)[-1], "")
+            if isinstance(resolved_text, str) and resolved_text.startswith("{"):
+                resolved_text = ""
+        else:
+            resolved_text = ""
+    else:
+        resolved_text = raw_text_color
+
+    colors_legacy = {
+        "primary":    colors_v2.get("primary", ""),
+        "secondary":  colors_v2.get("secondary", ""),
+        "accent":     colors_v2.get("tertiary", ""),
+        "background": colors_v2.get("neutral", ""),
+        "text":       resolved_text,
+    }
+    fonts_legacy = {
+        "header":    typo_v2.get("h1", {}).get("fontFamily", ""),
+        "body":      typo_v2.get("body-md", {}).get("fontFamily", ""),
+        "monospace": typo_v2.get("code", {}).get("fontFamily", ""),
+    }
+    return {
+        "colors":     colors_legacy,
+        "fonts":      fonts_legacy,
+        "typography": typo_v2,
+        "rounded":    branding.get("rounded", {}),
+        "spacing":    branding.get("spacing", {}),
+        "components": components_v2,
+    }
+
+def _config_to_draft(cfg: dict[str, Any]) -> dict[str, Any]:
+    """Reconstruct a synthetic draft dict from an on-disk config.yaml.
+
+    Inverse of build_config_from_draft, used by /parallax-white-label-onboard
+    --regenerate-design-md so emit_design_md can be re-run without re-extracting
+    from source. Works for both v1 (accent/background/text + fonts.*) and v2
+    (tertiary/neutral/components.body-text + typography.*) shapes.
+
+    Confidence is set to 1.0 on every reconstructed field — these values came
+    from a previously-confirmed config, not a fresh extraction.
+    """
+    branding = cfg.get("branding", {}) or {}
+    colors_in = branding.get("colors", {}) or {}
+    fonts_in = branding.get("fonts", {}) or {}
+    typo_in = branding.get("typography", {}) or {}
+    components_in = branding.get("components", {}) or {}
+
+    # Canonical legacy color slots regardless of v1/v2 on disk.
+    # Defensive: if a user hand-edited config.yaml to use a {colors.X} token
+    # reference (DESIGN.md spec encourages it inside components), we cannot
+    # resolve the literal hex here without a token-resolution pass — emit_design_md
+    # would then ValueError on the hex-validation gate. Skip token-refs and let
+    # the caller fall back to the raw color from the colors map.
+    raw_text = (components_in.get("body-text", {}) or {}).get("textColor", "")
+    legacy_text = colors_in.get("text") or (
+        raw_text if not (isinstance(raw_text, str) and raw_text.startswith("{")) else ""
+    )
+    legacy_background = colors_in.get("background") or colors_in.get("neutral", "")
+    legacy_accent = colors_in.get("accent") or colors_in.get("tertiary", "")
+
+    def _col(value: str) -> dict[str, Any]:
+        # Refuse token-refs ('{colors.primary}') — only literal hex is valid here.
+        if isinstance(value, str) and value.startswith("{"):
+            return {}
+        return {"hex": value, "confidence": 1.0} if value else {}
+
+    draft: dict[str, Any] = {
+        "colors": {
+            k: v
+            for k, v in {
+                "primary": _col(colors_in.get("primary", "")),
+                "secondary": _col(colors_in.get("secondary", "")),
+                "accent": _col(legacy_accent),
+                "background": _col(legacy_background),
+                "text": _col(legacy_text),
+            }.items()
+            if v
+        },
+        "logos": {
+            role: ({"local_path": ref, "confidence": 1.0} if isinstance(ref, str) and ref else {})
+            for role, ref in (branding.get("logos", {}) or {}).items()
+        },
+        "fonts": {
+            role: ({"name": name, "confidence": 1.0} if name else {})
+            for role, name in {
+                "header": fonts_in.get("header", "") or (typo_in.get("h1", {}) or {}).get("fontFamily", ""),
+                "body": fonts_in.get("body", "") or (typo_in.get("body-md", {}) or {}).get("fontFamily", ""),
+                "monospace": fonts_in.get("monospace", "") or (typo_in.get("code", {}) or {}).get("fontFamily", ""),
+            }.items()
+        },
+        "source": (cfg.get("metadata", {}) or {}).get(
+            "source", {"type": "regenerated-from-config", "reference": ""}
+        ),
+        "extracted_at": (cfg.get("metadata", {}) or {}).get("extracted_at", ""),
+        "confidence_scores": {},
+    }
+
+    # v2 token tree (used by emit_design_md when present; absent = emitter
+    # falls back to fonts.*)
+    if typo_in:
+        draft["typography"] = typo_in
+    if branding.get("rounded"):
+        draft["rounded"] = branding["rounded"]
+    if branding.get("spacing"):
+        draft["spacing"] = branding["spacing"]
+
+    return draft
+
+
+def archive_legacy_config(config_path: Path) -> Path:
+    from datetime import datetime, timezone
+    import shutil
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+    archive_dir = config_path.parent / ".archive" / f"{ts}-pre-v2-migration"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    archive_path = archive_dir / "config.yaml"
+    shutil.copy2(config_path, archive_path)
+    return archive_path
+
 def _build_result(
     data: dict[str, Any],
     logo_warnings: list[str],
@@ -283,18 +508,43 @@ def _build_result(
     voice    = data.get("voice", {"enabled": False})
     multi    = data.get("multi_source", {})
 
+    version = _detect_schema_version(data)
+    if version >= 2:
+        norm = _normalize_branding_v2_to_return_shape(data)
+        colors = norm["colors"]
+        fonts = norm["fonts"]
+        extra = {
+            "typography": norm["typography"],
+            "rounded": norm["rounded"],
+            "spacing": norm["spacing"],
+            "components": norm["components"],
+        }
+    else:
+        colors = branding.get("colors", {})
+        fonts = branding.get("fonts", {})
+        # v1 has no token tree, but populate empty dicts for the v2 bonus keys
+        # so consumers can read them with `[]` access without KeyError. The
+        # docstring promises this shape.
+        extra = {
+            "typography": {},
+            "rounded": {},
+            "spacing": {},
+            "components": {},
+        }
+
     error: str | None = "; ".join(logo_warnings) if logo_warnings else None
 
     return {
         "client_name":       metadata.get("client_name", ""),
-        "colors":            branding.get("colors", {}),
+        "colors":            colors,
         "logos":             branding.get("logos", {}),
-        "fonts":             branding.get("fonts", {}),
+        "fonts":             fonts,
         "source":            metadata.get("source", {}),
         "confidence_scores": data.get("confidence_scores", {}),
         "voice":             voice,
         "multi_source":      multi,
         "error":             error,
+        **extra
     }
 
 
@@ -317,6 +567,7 @@ def build_config_from_draft(
     client_name: str = "",
     extracted_by: str = "",
     notes: str = "",
+    *, schema_version: int = 2
 ) -> dict[str, Any]:
     """Construct a canonical config.yaml dict from an extraction draft.
 
@@ -333,7 +584,7 @@ def build_config_from_draft(
 
     config: dict[str, Any] = {
         "metadata": {
-            "schema_version": 1,
+            "schema_version": schema_version,
             "client_name":    client_name or draft.get("client_name", ""),
             "extracted_at":   draft.get("extracted_at", ""),
             "source": {
@@ -345,13 +596,6 @@ def build_config_from_draft(
             "notes":        notes,
         },
         "branding": {
-            "colors": {
-                "primary":    draft.get("colors", {}).get("primary",    {}).get("hex", ""),
-                "secondary":  draft.get("colors", {}).get("secondary",  {}).get("hex", ""),
-                "accent":     draft.get("colors", {}).get("accent",     {}).get("hex", ""),
-                "background": draft.get("colors", {}).get("background", {}).get("hex", "#FFFFFF"),
-                "text":       draft.get("colors", {}).get("text",       {}).get("hex", "#333333"),
-            },
             "logos": {
                 "primary": (
                     draft.get("logos", {}).get("primary", {}).get("local_path")
@@ -364,14 +608,73 @@ def build_config_from_draft(
                     or draft.get("logos", {}).get("favicon", {}).get("url", "")
                 ),
             },
-            "fonts": {
-                "header":    draft.get("fonts", {}).get("header",    {}).get("name", "Arial"),
-                "body":      draft.get("fonts", {}).get("body",      {}).get("name", "Helvetica"),
-                "monospace": draft.get("fonts", {}).get("monospace", {}).get("name", "Courier New"),
-            },
         },
         "confidence_scores": draft.get("confidence_scores", {}),
     }
+
+    if schema_version >= 2:
+        config["branding"]["colors"] = {
+            "primary":    draft.get("colors", {}).get("primary",    {}).get("hex", ""),
+            "secondary":  draft.get("colors", {}).get("secondary",  {}).get("hex", ""),
+            "tertiary":   draft.get("colors", {}).get("accent",     {}).get("hex", ""),
+            "neutral":    draft.get("colors", {}).get("background", {}).get("hex", "#FFFFFF"),
+        }
+        
+        # Derive typography from draft. Priority:
+        #   1. explicit draft.typography (extractor populated it)
+        #   2. draft.fonts.* fallback (extractor only set font names; wizard
+        #      mode or v1 PDF source)
+        #   3. generic CSS family-name placeholder ("sans-serif") so the v2
+        #      schema's `typography: minProperties: 1` constraint is satisfied
+        #      and the config remains loadable on next read. Using a CSS
+        #      generic family rather than a specific name (Arial / Helvetica)
+        #      makes the placeholder obvious — the operator sees "sans-serif"
+        #      and knows no real typography was extracted.
+        typography = draft.get("typography", {}) or {}
+        if not typography:
+            fonts_in = draft.get("fonts", {}) or {}
+            font_map = (("header", "h1"), ("body", "body-md"), ("monospace", "code"))
+            for legacy_role, design_level in font_map:
+                slot = fonts_in.get(legacy_role) or {}
+                name = slot.get("name") if isinstance(slot, dict) else None
+                if name:
+                    typography[design_level] = {"fontFamily": name}
+        if not typography:
+            typography = {"body-md": {"fontFamily": "sans-serif"}}
+        config["branding"]["typography"] = typography
+
+        if "rounded" in draft and draft["rounded"]:
+            config["branding"]["rounded"] = draft["rounded"]
+        if "spacing" in draft and draft["spacing"]:
+            config["branding"]["spacing"] = draft["spacing"]
+
+        components = draft.get("components", {})
+        if not components and "text" in draft.get("colors", {}):
+            # Defensive .get() — draft.colors.text may be present as an empty
+            # or partial dict (e.g., wizard mode where the operator skipped
+            # text color), which would KeyError on bare indexing.
+            text_hex = draft["colors"]["text"].get("hex", "") if isinstance(draft["colors"]["text"], dict) else ""
+            if text_hex:
+                components = {
+                    "body-text": {
+                        "backgroundColor": "{colors.neutral}",
+                        "textColor": text_hex,
+                    }
+                }
+        config["branding"]["components"] = components
+    else:
+        config["branding"]["colors"] = {
+            "primary":    draft.get("colors", {}).get("primary",    {}).get("hex", ""),
+            "secondary":  draft.get("colors", {}).get("secondary",  {}).get("hex", ""),
+            "accent":     draft.get("colors", {}).get("accent",     {}).get("hex", ""),
+            "background": draft.get("colors", {}).get("background", {}).get("hex", "#FFFFFF"),
+            "text":       draft.get("colors", {}).get("text",       {}).get("hex", "#333333"),
+        }
+        config["branding"]["fonts"] = {
+            "header":    draft.get("fonts", {}).get("header",    {}).get("name", "Arial"),
+            "body":      draft.get("fonts", {}).get("body",      {}).get("name", "Helvetica"),
+            "monospace": draft.get("fonts", {}).get("monospace", {}).get("name", "Courier New"),
+        }
 
     if validation_summary is not None:
         config["validation_summary"] = validation_summary
@@ -411,9 +714,15 @@ def load_client_branding() -> dict[str, Any]:
     """
     Load and validate client branding configuration.
 
-    Returns a dict with exactly 9 keys: client_name, colors, logos, fonts,
-    source, confidence_scores, voice, multi_source, error.  error is None on a
-    fully clean load, a human-readable string on any degradation.
+    Returns a dict whose minimum shape is 9 keys: client_name, colors, logos,
+    fonts, source, confidence_scores, voice, multi_source, error.  error is
+    None on a fully clean load, a human-readable string on any degradation.
+
+    When the on-disk config is schema_version: 2, the result additionally
+    carries four bonus keys derived from the new token tree: typography,
+    rounded, spacing, components. v1 configs return empty dicts for these
+    bonus keys. Downstream consumers reading only the legacy 9 keys are
+    unaffected by the v1↔v2 distinction.
 
     Failure points:
         1. Missing config file   -> short-circuit, error="config_not_found"
@@ -460,6 +769,14 @@ def load_client_branding() -> dict[str, Any]:
         return result
 
     # --- Failure point 3: schema validation ---
+    # Hybrid-shape pre-check: a hand-edited config that carries BOTH the v1
+    # font/colors keys AND the v2 typography/colors keys passes anyOf
+    # validation but signals operator confusion. Surface a clearer error
+    # than the generic jsonschema message.
+    _hybrid_branding_check = _detect_hybrid_branding(data)
+    if _hybrid_branding_check is not None:
+        logger.warning("White-label config has hybrid v1+v2 shape: %s", _hybrid_branding_check)
+        return _empty_result(f"schema_invalid: hybrid_v1_v2: {_hybrid_branding_check}")
     schema_error = _validate_schema(data, _SCHEMA)
     if schema_error is not None:
         logger.warning("White-label config schema violation: %s", schema_error)

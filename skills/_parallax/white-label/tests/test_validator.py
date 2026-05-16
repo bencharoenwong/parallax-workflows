@@ -255,3 +255,60 @@ class TestFontValidator:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+class TestDesignMdValidator:
+    def test_skipped_when_npx_missing(self, monkeypatch):
+        monkeypatch.setattr("shutil.which", lambda x: None)
+        validator.DesignMdValidator._availability_cache = None
+        res = validator.DesignMdValidator.lint("dummy")
+        assert res["status"] == "skipped"
+        assert res["available"] is False
+
+    def test_parses_clean_json_output(self, monkeypatch):
+        validator.DesignMdValidator._availability_cache = True
+        class MockProc:
+            returncode = 0
+            stdout = '{"findings": [], "summary": {}}'
+        monkeypatch.setattr("subprocess.run", lambda *a, **k: MockProc())
+        res = validator.DesignMdValidator.lint("dummy")
+        assert res["status"] == "pass"
+        assert res["findings"] == []
+        assert res["raw_exit_code"] == 0
+
+    def test_parses_findings_array(self, monkeypatch):
+        validator.DesignMdValidator._availability_cache = True
+        class MockProc:
+            returncode = 1
+            stdout = '{"findings": [{"rule": "test", "severity": "error", "message": "msg"}], "summary": {}}'
+        monkeypatch.setattr("subprocess.run", lambda *a, **k: MockProc())
+        res = validator.DesignMdValidator.lint("dummy")
+        assert res["status"] == "fail"
+        assert len(res["findings"]) == 1
+        assert res["findings"][0]["rule"] == "test"
+
+    def test_handles_timeout(self, monkeypatch):
+        validator.DesignMdValidator._availability_cache = True
+        def raise_timeout(*a, **k):
+            import subprocess; raise subprocess.TimeoutExpired("cmd", 20)
+        monkeypatch.setattr("subprocess.run", raise_timeout)
+        res = validator.DesignMdValidator.lint("dummy")
+        assert res["status"] == "skipped"
+        assert "timed out" in res["note"]
+
+    def test_handles_non_json_stdout(self, monkeypatch):
+        validator.DesignMdValidator._availability_cache = True
+        class MockProc:
+            returncode = 1
+            stdout = 'npx: installed 1 in 2s\nnot json'
+        monkeypatch.setattr("subprocess.run", lambda *a, **k: MockProc())
+        res = validator.DesignMdValidator.lint("dummy")
+        assert res["status"] == "skipped"
+        assert "Failed to parse" in res["note"]
+
+    @pytest.mark.npx
+    def test_lint_real_npx_smoke(self):
+        if not validator.DesignMdValidator.is_available():
+            pytest.skip("npx not available")
+        md = "---\ncolors:\n  primary: \"#FF0000\"\n---\n## Overview"
+        res = validator.DesignMdValidator.lint(md)
+        assert res["status"] in ("pass", "warn", "fail", "skipped")
