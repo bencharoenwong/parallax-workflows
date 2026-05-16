@@ -136,6 +136,28 @@ def test_missing_config(
     assert result["fonts"] == {}
     assert result["source"] == {}
     assert result["confidence_scores"] == {}
+    # v2-aware bonus keys must be present (empty) on error paths too —
+    # consumers reading result["typography"] should never KeyError.
+    assert result["typography"] == {}
+    assert result["rounded"] == {}
+    assert result["spacing"] == {}
+    assert result["components"] == {}
+
+
+def test_error_and_success_paths_share_shape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    loader_module: ModuleType,
+) -> None:
+    """_empty_result and _build_result must return the same set of top-level keys
+    so v2-aware consumers can read bonus keys unconditionally."""
+    monkeypatch.setattr(loader_module, "_CONFIG_PATH", tmp_path / "missing.yaml")
+    error_keys = set(loader_module.load_client_branding().keys())
+
+    success_keys = set(loader_module._build_result({"branding": {}, "metadata": {}}, []).keys())
+    assert error_keys == success_keys, (
+        f"shape drift: error={error_keys ^ success_keys}"
+    )
 
 
 # ---------------------------------------------------------------------------

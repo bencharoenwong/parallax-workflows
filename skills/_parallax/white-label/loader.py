@@ -10,8 +10,8 @@ Public interface
     load_client_branding() -> dict[str, Any]
     build_config_from_draft(draft, validation_summary=None) -> dict[str, Any]
 
-Return shape (always 9 top-level keys)
----------------------------------------
+Return shape (always 13 top-level keys, identical on success and error paths)
+-----------------------------------------------------------------------------
     {
         "client_name":       str,              # "" when no config
         "colors":            dict | {},
@@ -22,6 +22,12 @@ Return shape (always 9 top-level keys)
         "voice":             dict | {},        # {"enabled": False} if not extracted
         "multi_source":      dict | {},        # populated only when 2+ sources used
         "error":             str | None,       # None = clean load
+        # v2-aware bonus keys — empty dicts on v1 configs and on every error
+        # path, so consumers can read result["typography"] etc. unconditionally.
+        "typography":        dict | {},
+        "rounded":           dict | {},
+        "spacing":           dict | {},
+        "components":        dict | {},
     }
 """
 
@@ -212,7 +218,12 @@ def _resolve_config_path() -> Path:
 
 
 def _empty_result(error: str) -> dict[str, Any]:
-    """Canonical 9-key empty result dict with a populated error field."""
+    """Canonical 13-key empty result dict with a populated error field.
+
+    Matches the success-path shape from _build_result so v2-aware consumers
+    reading result["typography"] / ["rounded"] / ["spacing"] / ["components"]
+    don't KeyError on any error path.
+    """
     return {
         "client_name":       "",
         "colors":            {},
@@ -223,6 +234,10 @@ def _empty_result(error: str) -> dict[str, Any]:
         "voice":             {"enabled": False},
         "multi_source":      {},
         "error":             error,
+        "typography":        {},
+        "rounded":           {},
+        "spacing":           {},
+        "components":        {},
     }
 
 
