@@ -28,9 +28,11 @@ gotchas:
   - Duplicate symbol in input portfolio: reject at validation with "Duplicate symbol {sym}" — no auto-dedup.
   - Mid-period delisting (price series ends before period_end): treat as a coverage gap (drop from rankings + surface per the materiality tiers), not a hard ValueError.
   - This skill is private-beta gated; excluded from default `build-skills.sh` builds. Confirm enablement before running for new customers.
-  - Batch B.5 loads white-label branding via `_parallax/white-label/loader.py` → `load_client_branding()`. Treat `error == "config_not_found"` as "no client configured, use defaults" (the no-op path). Treat `error` starting with `"logo_missing"` as partial success — palette/fonts still usable, just skip the cover-page logo. Any other error (`schema_invalid`, `yaml_parse_error`) → fall back to defaults and surface a warning in the Provenance footer.
-  - Voice and auto-jurisdiction disclaimers remain explicitly out of scope (see "Not in scope"). Even if the white-label config carries a `voice` section after the loader extension, this skill MUST NOT use it for prose generation or disclaimer substitution. Visual branding only.
+  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step; that doc carries the loader call (`load_visual_branding`), error-state contract, docx substitution table (§6), and Provenance template (§7). The Pre-Render step in Workflow below points at it; the table at the end of Output Format previously inlined here has been moved to §6.
+  - Voice and auto-jurisdiction disclaimers remain explicitly out of scope (see "Not in scope"). This skill uses `load_visual_branding()` rather than `load_client_branding()` — the 6-key wrapper excludes `branding["voice"]` at code level, so accidental access raises `KeyError`. The CIO writes the prose; the standard wording in the **Disclaimer** section stays. Visual branding only.
 ---
+
+<!-- white-label: integration-pattern.md -->
 
 # CIO Letter Prep Pack
 
@@ -137,38 +139,15 @@ The script's own 1-bp inner gate (`ReconciliationError` on `|sum(contributions) 
 
 Per conventions §5, the async tools should not block render assembly; if they have not resolved by render time, leave a `[news pending]` placeholder and complete on resolution.
 
-### Batch B.5 — Load white-label branding (optional, pre-render)
+### Pre-Render — Load white-label branding
 
-Before composing the pack, attempt to load the active white-label client branding. This swaps the default Parallax-CG palette for the fund's own brand when configured (per `/parallax-white-label-onboard`). When no client config is present, the default palette in **Output Format** below applies and this step is a no-op.
+Load `_parallax/white-label/integration-pattern.md` and apply §2 (Loading the branding) verbatim. The loader call is `load_visual_branding()` (NOT `load_client_branding()`); the wrapper returns the 6-key visual subset and structurally excludes voice. Compute `white_label_active` per §2.
 
-```python
-import sys
-from pathlib import Path
+If `white_label_active` is True, the render in Batch C applies the docx substitution table at integration-pattern.md §6. Logo path (when present) is inserted at the cover-page header per §6 (left-aligned, ≤1.5 inch height). Semantic colors (`cg-green-700`, `cg-red-700`, `cg-amber-*`) are NEVER overridden per §1.
 
-# loader lives at _parallax/white-label/loader.py; resolve from this skill's location
-_WHITE_LABEL_DIR = Path(__file__).parent.parent / "_parallax" / "white-label"
-sys.path.insert(0, str(_WHITE_LABEL_DIR))
-from loader import load_client_branding  # noqa: E402
+If `white_label_active` is False, the **Default brand palette** table in Output Format below applies; no cover-page logo is inserted. On `logo_missing` (partial-success path per integration-pattern.md §4), palette and fonts still apply; only the cover-page logo is skipped.
 
-branding = load_client_branding()
-
-# Treat config_not_found / schema_invalid / yaml_parse_error as "no client
-# configured, use defaults". Treat logo_missing as a partial success — palette
-# and fonts are still usable, just skip the cover-page logo.
-err = branding.get("error")
-white_label_active = (
-    err is None
-    or err.startswith("logo_missing")
-)
-```
-
-If `white_label_active` is True, the render in Batch C uses the substitution table in **Output Format → White-label substitution**. Logo path (when present) is inserted at the .docx cover-page header. Semantic colors (`cg-green-700`, `cg-red-700`, `cg-amber-*`) are NEVER overridden — they signal positive/negative/warning, not brand identity.
-
-If `white_label_active` is False, the default palette applies and no logo is inserted.
-
-Record the choice in the Provenance footer: `Branding: white-label (source: <branding.source.reference>)` OR `Branding: default Parallax`.
-
-**Out-of-scope (per `Not in scope` section):** voice prose generation and auto-jurisdiction disclaimers. Even when the white-label config carries a `voice` section (post-extension to the loader), this skill does NOT use it — the CIO writes the prose; the disclaimer remains the standard wording per the **Disclaimer** section.
+Provenance line wording follows integration-pattern.md §7 (docx column). For this skill specifically: on `logo_missing`, the qualifier is `(logo unavailable, omitted from cover)`.
 
 ### Batch C — Synthesis (sequential)
 
@@ -191,7 +170,7 @@ Compose the structured pack content with these sections in order. Hand the resul
 8. **News themes** — cluster news from `get_news_synthesis` calls by `sector × directional move` (positive vs negative). Max 5 buckets. Each bucket cites ≥ 1 ticker by name. Do NOT repeat the per-mover driver text verbatim; this section is sector-themed.
 9. **Forward-outlook** — render ONLY if `house_view` is active and validated. 1 bullet per top-5 holding by current weight, framed in view-language (regime call, tilt direction, conviction notes per loader.md §3-§5). If no active view, OMIT this section entirely.
 10. **Coverage gaps** — list any holdings excluded from contribution due to missing data with their weights. List any holdings excluded from per-position analysis due to the 40-holding soft cap. List any tools that returned "data unavailable" per conventions §4.
-11. **Provenance** — small footer block (smaller font, italic): generation date, tools used (with versions if available), reconciliation-audit result formatted as `Reconciliation audit: PASS — local total {X} bps vs server {Y} bps; diff {Z} bps; tolerance 25 bps` (or `FAIL` with halt-and-report wording). Skill version + private-beta tag. **Branding line** — one line stating which palette was used: `Branding: white-label (source: <reference>)` when `white_label_active`, OR `Branding: default Parallax` when not. If `logo_missing` was the loader warning, append `(logo unavailable, omitted from cover)`.
+11. **Provenance** — small footer block (smaller font, italic): generation date, tools used (with versions if available), reconciliation-audit result formatted as `Reconciliation audit: PASS — local total {X} bps vs server {Y} bps; diff {Z} bps; tolerance 25 bps` (or `FAIL` with halt-and-report wording). Skill version + private-beta tag. **Branding line** — per integration-pattern.md §7 docx column. Default-Parallax path: `Branding: default Parallax`. White-label clean load: `Branding: white-label (source: <branding["source"]["reference"]>)`. `logo_missing`: append `(logo unavailable, omitted from cover)`.
 12. **Disclaimer** — per conventions §7. If active view: use the view-aware disclaimer per loader.md §5 rule 5; otherwise the standard wording (see Disclaimer section below).
 
 ## Output Format
@@ -220,33 +199,24 @@ Word .docx ONLY via the `docx` skill chain. The deliverable is a .docx file the 
 
 The render synthesis applies these tokens to: title (navy-900), body (neutral-900), section headings (navy-900 H1/H2 → navy-700 H3/H4 → navy-400 H5/H6), table headers (navy-900 fill + white text), even rows (neutral-100 shading), contributor "+ bps" (green-700), detractor "− bps" (red-700), provenance/disclaimer (neutral-500 + italic + 8-9pt). Funds publishing under their own brand should swap the palette in their config; the default palette is a sensible institutional-finance baseline.
 
-**White-label substitution.** When `white_label_active` (per Batch B.5), the renderer substitutes brand-identity tokens with the client's config and leaves semantic tokens (positive / negative / warning) untouched. Mapping:
+**White-label substitution.** When `white_label_active` (per Pre-Render), the renderer applies the docx substitution table at `_parallax/white-label/integration-pattern.md` §6. That table is the canonical mapping from `cg-*` tokens to `branding["colors"]` / `branding["fonts"]` / `branding["logos"]["primary"]`, and it specifies the never-overridden semantic tokens.
 
-| Default token | Substitute with | Notes |
-|---|---|---|
-| `cg-navy-900` | `branding.colors.primary` | H1/H2 fill, table header fill |
-| `cg-navy-700` | `branding.colors.secondary` (or primary if secondary missing) | H3/H4 |
-| `cg-neutral-900` | `branding.colors.text` | Body text |
-| `cg-neutral-100` | derive lighter shade from `branding.colors.background` | Alternating-row shading; if background is `#FFFFFF`, keep default `#EAEDF3` |
-| (no token; new) | `branding.logos.primary` | Inserted as cover-page header image (left-aligned, ≤ 1.5 inch height) |
-| (no token; new) | `branding.fonts.header` | Word style: Heading 1, Heading 2, Heading 3 |
-| (no token; new) | `branding.fonts.body` | Word style: Body Text, table cells |
-| `cg-green-700` | **(unchanged)** | Semantic positive — never branded |
-| `cg-red-700` | **(unchanged)** | Semantic negative — never branded |
-| `cg-amber-700` / `cg-amber-50` | **(unchanged)** | Semantic warning — never branded |
-| `cg-neutral-500` | **(unchanged)** | Muted text contrast — fund's `text` color may be too dark for muting |
+Cover-page client name follows integration-pattern.md §6: when `white_label_active` AND `client_name != ""`, the cover-page header gains the client name at H1 in the brand `branding["fonts"]["header"]`. When `client_name == ""` (legacy configs), the client name is omitted but the cover-page logo (if present) still renders.
 
-The CIO header / cover page also gains the client's name when available — read it directly from the loader's return dict:
+**Golden fixture:** Reference output at `skills/cio-letter-prep/fixtures/golden_pack_2026-04.docx` is the pre-retrofit baseline rendered with the default Parallax palette (no client config active). Post-retrofit verification: see `scripts/compare_docx.py` and the **Retrofit gate procedure** below.
 
-```python
-client_name = branding.get("client_name", "")
-```
+**Retrofit gate procedure (one-shot, best-effort).**
 
-> **Tolerate empty `client_name`.** Older configs predating the loader's `client_name` field return `""` from `branding.get("client_name", "")`; the cover-page header simply omits the client name in that case. Do NOT introduce a second `yaml.safe_load` against the same config file as a workaround — it duplicates the loader's parsing, bypasses error handling, and creates a race window between the loader's `cfg_path.exists()` check and the second read.
+The `golden_pack_2026-04.docx` fixture was rendered against live Parallax MCP data in 2026-04. That data is time-varying and not reproducible after the fact, so a fully byte-identical regeneration is not generally achievable. The gate is therefore **structural**: it asserts that the post-retrofit output uses the same fonts, palette tokens, and section / table shape as the golden — properties that depend on the SKILL.md substitution rules and the `docx` skill chain, NOT on the per-period Parallax data.
 
-Logo missing (loader returned `error: logo_missing: ...`) → render the rest of the white-label substitution but skip the cover-page logo, log a warning in the Provenance footer.
+1. Confirm `~/.parallax/client-branding/config.yaml` does NOT exist (default-Parallax path).
+2. Run `/parallax-cio-letter-prep` with any valid inputs (the simplest is the three-holding 30-day fixture documented in **Worked Numerical Example** below — synthetic prices that exercise all sections). Save output as `post-retrofit.docx`.
+3. Run `python skills/cio-letter-prep/scripts/compare_docx.py post-retrofit.docx fixtures/golden_pack_2026-04.docx`.
+4. Expected: PASS on fonts, palette, and section / table-row counts (table contents may differ because Parallax data differs across runs; the script does not assert content equality). Investigate any FAIL on the structural properties before proceeding.
 
-**Golden fixture:** Reference output at `skills/cio-letter-prep/fixtures/golden_pack_2026-04.docx`. Visual + math validation use the same fixture; CI compares structural shape (sections, table row counts, banner presence) against the golden.
+The comparison script checks: (a) `document.styles` font names for Heading 1/2/3 + Body Text, (b) palette hex values in `theme1.xml`, (c) cover-page header image presence + width-EMU within ±5% tolerance, (d) section count + table row counts.
+
+**Note on the logo check:** the current golden fixture was generated on the default-Parallax path (no client config), which produces no cover-page logo. The script's logo check therefore asserts `logo_count == 0` on both sides — meaningful only when one side has a logo. When the golden is regenerated against a white-label-active config, verify that the logo lands in a Word header part (`word/header*.xml`) rather than the document body; the script currently inspects only header parts.
 
 ## Worked Numerical Example
 
