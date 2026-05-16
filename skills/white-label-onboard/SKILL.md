@@ -52,11 +52,18 @@ Configure client branding for Parallax equity research report output.
 
 `~/.parallax/client-branding/`
 - `config.yaml` — canonical config per `_parallax/white-label/schema.yaml`
+- `DESIGN.md` — Google Labs DESIGN.md companion file emitted from the same draft (frontmatter tokens + 8-section markdown rationale); consumed by frontend coding-agent skills that want a recognized spec
 - `assets/` — downloaded logo files (logo-primary.png, favicon.ico, etc.)
 - `audit.jsonl` — append-only hash-chained log
 - `.archive/<timestamp>-<source>/` — superseded configs kept for traceability
 
 Files are written `0600`; `assets/` is `0700`; the directory is `0700` on creation.
+
+## Optional prerequisites
+
+The DESIGN.md emit path is in-process and pure Python. The optional **DESIGN.md linter** wraps `npx @google/design.md` (Google Labs CLI, published to npm). When Node 18+ is on PATH, the validator runs the linter at save time and surfaces findings in the confirmation gate. When Node is absent, the validator returns `status: "skipped"` and the save proceeds — nothing breaks; the operator just doesn't get inline lint feedback.
+
+If you want the inline lint feedback, install Node 18+ (e.g., `brew install node@20`) and run `/parallax-white-label-onboard <source>` once to warm the npm cache. To pin the version for reproducibility, run `npm install -g @google/design.md@<version>` before invoking the skill. The validator passes `-y` so first-call invocation does not block on the npm install prompt; this also means npx will silently fetch whatever the registry resolves for `@google/design.md` on a clean machine — pin the version in regulated environments.
 
 ## Integration with Downstream Skills
 

@@ -591,11 +591,22 @@ def _extract_brand_guide_prose(pdf_text: str, *, filename: str) -> Dict[str, str
         "dos_and_donts": rf'^(?:\d+\.\s*)?Do{APOS}s and Don{APOS}ts\b',
     }
     
+    # Heuristic for detecting TOC lines: heavy dot-leader pattern
+    # ("Overview .................. 5") or trailing page numbers. When a
+    # heading-matching line is structured like a TOC entry, treat it as
+    # decorative rather than a real section boundary. This prevents TOC
+    # entries from stealing the "first non-empty" slot from the real body.
+    toc_pattern = re.compile(r'\.{4,}|\s\d+\s*$')
+
     positions = []
     lines = pdf_text.split('\n')
     for i, line in enumerate(lines):
+        stripped = line.strip()
         for key, pat in patterns.items():
-            if re.match(pat, line.strip(), re.IGNORECASE):
+            if re.match(pat, stripped, re.IGNORECASE):
+                if toc_pattern.search(stripped):
+                    # TOC entry — skip, don't record a position.
+                    continue
                 if key not in found:
                     found.append(key)
                 positions.append((i, key))

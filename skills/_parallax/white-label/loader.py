@@ -71,7 +71,13 @@ _JSONSCHEMA: dict[str, Any] = {
         "branding": {
             "type": "object",
             "required": ["colors", "logos"],
-            "oneOf": [
+            # anyOf (not oneOf) so a hand-edited or partially-migrated config
+            # carrying BOTH v1 markers (fonts + colors.accent) and v2 markers
+            # (typography + colors.tertiary) still validates — _detect_schema_version
+            # disambiguates downstream by preferring v2 when both are present.
+            # Pre-check via _detect_hybrid_branding() surfaces a clearer error
+            # message in the load path when the operator should clean up the file.
+            "anyOf": [
                 {
                     # v1 schema
                     "required": ["fonts"],
@@ -299,6 +305,31 @@ def _resolve_logo_paths(
     return resolved, warnings
 
 
+def _detect_hybrid_branding(data: dict[str, Any]) -> str | None:
+    """Return a human-readable description when branding has BOTH v1 and v2
+    shape markers, else None. The anyOf schema would still accept this, but
+    the result of the v1↔v2 bridge in `_normalize_branding_v2_to_return_shape`
+    is ambiguous — clean up the file rather than guessing which shape wins.
+    """
+    branding = data.get("branding", {}) or {}
+    colors = branding.get("colors", {}) or {}
+    has_v1_color_markers = bool({"accent", "background", "text"} & set(colors.keys()))
+    has_v2_color_markers = bool({"tertiary", "neutral"} & set(colors.keys()))
+    has_v1_fonts = bool(branding.get("fonts"))
+    has_v2_typo = bool(branding.get("typography"))
+
+    conflicts = []
+    if has_v1_color_markers and has_v2_color_markers:
+        v1_keys = sorted({"accent", "background", "text"} & set(colors.keys()))
+        v2_keys = sorted({"tertiary", "neutral"} & set(colors.keys()))
+        conflicts.append(f"colors has both v1 ({', '.join(v1_keys)}) and v2 ({', '.join(v2_keys)}) keys")
+    if has_v1_fonts and has_v2_typo:
+        conflicts.append("branding has both `fonts.*` (v1) and `typography.*` (v2)")
+    if not conflicts:
+        return None
+    return "; ".join(conflicts) + ". Run /parallax-white-label-onboard to re-extract, or remove the v1 keys (accent/background/text/fonts) when migrating to v2."
+
+
 def _detect_schema_version(data: dict[str, Any]) -> int:
     metadata = data.get("metadata", {})
     if "schema_version" in metadata and isinstance(metadata["schema_version"], int):
@@ -476,7 +507,15 @@ def _build_result(
     else:
         colors = branding.get("colors", {})
         fonts = branding.get("fonts", {})
-        extra = {}
+        # v1 has no token tree, but populate empty dicts for the v2 bonus keys
+        # so consumers can read them with `[]` access without KeyError. The
+        # docstring promises this shape.
+        extra = {
+            "typography": {},
+            "rounded": {},
+            "spacing": {},
+            "components": {},
+        }
 
     error: str | None = "; ".join(logo_warnings) if logo_warnings else None
 
@@ -715,6 +754,14 @@ def load_client_branding() -> dict[str, Any]:
         return result
 
     # --- Failure point 3: schema validation ---
+    # Hybrid-shape pre-check: a hand-edited config that carries BOTH the v1
+    # font/colors keys AND the v2 typography/colors keys passes anyOf
+    # validation but signals operator confusion. Surface a clearer error
+    # than the generic jsonschema message.
+    _hybrid_branding_check = _detect_hybrid_branding(data)
+    if _hybrid_branding_check is not None:
+        logger.warning("White-label config has hybrid v1+v2 shape: %s", _hybrid_branding_check)
+        return _empty_result(f"schema_invalid: hybrid_v1_v2: {_hybrid_branding_check}")
     schema_error = _validate_schema(data, _SCHEMA)
     if schema_error is not None:
         logger.warning("White-label config schema violation: %s", schema_error)

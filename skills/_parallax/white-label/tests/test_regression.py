@@ -417,3 +417,133 @@ def test_loader_normalize_passes_literal_hex_through():
     }
     norm = loader._normalize_branding_v2_to_return_shape(cfg)
     assert norm["colors"]["text"] == "#222222"
+
+
+# ---------------------------------------------------------------------------
+# Round-8 deferred items, addressed as follow-up before merge.
+# ---------------------------------------------------------------------------
+
+def test_v1_load_includes_empty_bonus_keys():
+    """v1 file loads MUST include typography/rounded/spacing/components as
+    empty dicts (not absent) so consumers can read them with [] access.
+    Round-8 finding: docstring promised empty dicts but v1 branch was
+    setting extra={} (absence)."""
+    fixture_path = Path(__file__).parent / "fixtures" / "legacy_v1_config.yaml"
+    import tempfile, shutil as _shutil
+    with tempfile.TemporaryDirectory() as td:
+        td_path = Path(td)
+        cfg_path = td_path / "config.yaml"
+        _shutil.copy2(fixture_path, cfg_path)
+        # Need the schema available too
+        schema_src = Path(__file__).parent.parent / "schema.yaml"
+        # Monkeypatch via direct attr override
+        orig_cp = loader._CONFIG_PATH
+        orig_sp = loader._SCHEMA_PATH
+        try:
+            loader._CONFIG_PATH = cfg_path
+            loader._SCHEMA_PATH = schema_src
+            result = loader.load_client_branding()
+        finally:
+            loader._CONFIG_PATH = orig_cp
+            loader._SCHEMA_PATH = orig_sp
+
+    assert "typography" in result and result["typography"] == {}
+    assert "rounded" in result and result["rounded"] == {}
+    assert "spacing" in result and result["spacing"] == {}
+    assert "components" in result and result["components"] == {}
+
+
+def test_extract_brand_guide_prose_skips_toc_entries():
+    """Round-8 follow-up: TOC entries (heavy dot-leaders + page numbers)
+    are decorative, not section boundaries. The extractor must not record
+    them as positions so they can't steal the first-non-empty slot from
+    real body sections that follow."""
+    from extract.web_pdf import _extract_brand_guide_prose
+
+    pdf_text = """
+Acme Brand Guide
+
+Table of Contents
+Overview ............................... 5
+Colors ................................. 8
+Typography ............................ 12
+Do's and Don'ts ....................... 18
+
+(actual body starts on page 5)
+
+Overview
+This is the real overview body text describing the brand.
+
+Colors
+The palette is rooted in warm neutrals.
+
+Typography
+Public Sans for narrative.
+
+Do's and Don'ts
+Do use primary sparingly. Don't mix corner radii.
+""".strip()
+
+    res = _extract_brand_guide_prose(pdf_text, filename="acme-brand-guide.pdf")
+    # TOC entries are skipped → real body sections are picked up
+    assert "overview" in res
+    assert "real overview body text" in res["overview"]
+    assert "colors" in res
+    assert "warm neutrals" in res["colors"]
+    assert "typography" in res
+    assert "Public Sans" in res["typography"]
+
+
+def test_loader_rejects_hybrid_v1_v2_branding():
+    """Round-8 follow-up: a hand-edited config that carries BOTH v1 and v2
+    branding markers should error with a targeted message, not silently
+    pick one shape. anyOf accepts the file; the new pre-check rejects it."""
+    cfg = {
+        "metadata": {
+            "schema_version": 2,
+            "client_name": "Hybrid",
+            "extracted_at": "2026-05-16T00:00:00Z",
+            "source": {"type": "wizard", "reference": "test", "confidence": 1.0},
+        },
+        "branding": {
+            "colors": {
+                "primary": "#001122",
+                "secondary": "#334455",
+                "tertiary": "#FF6600",    # v2
+                "neutral": "#FFFFFF",      # v2
+                "accent": "#FF6600",       # v1
+                "background": "#FFFFFF",   # v1
+                "text": "#222222",         # v1
+            },
+            "logos": {"primary": "", "favicon": ""},
+            "fonts": {"header": "Inter", "body": "Roboto", "monospace": "Mono"},  # v1
+            "typography": {"h1": {"fontFamily": "Inter"}},                          # v2
+        },
+        "confidence_scores": {"primary": 1.0},
+    }
+    msg = loader._detect_hybrid_branding(cfg)
+    assert msg is not None
+    assert "v1" in msg.lower() and "v2" in msg.lower()
+    # Both kinds of conflict should be surfaced (colors AND fonts/typography)
+    assert "colors" in msg.lower()
+    assert "typography" in msg.lower() or "fonts" in msg.lower()
+
+
+def test_loader_accepts_pure_v1_and_pure_v2():
+    """The hybrid pre-check must NOT false-positive on pure v1 or pure v2
+    configs (the common case)."""
+    pure_v2 = {
+        "branding": {
+            "colors": {"primary": "#001122", "secondary": "#334455", "tertiary": "#FF6600", "neutral": "#FFFFFF"},
+            "typography": {"h1": {"fontFamily": "Inter"}},
+        },
+    }
+    assert loader._detect_hybrid_branding(pure_v2) is None
+
+    pure_v1 = {
+        "branding": {
+            "colors": {"primary": "#001122", "secondary": "#334455", "accent": "#FF6600", "background": "#FFFFFF", "text": "#222222"},
+            "fonts": {"header": "Inter", "body": "Roboto", "monospace": "Mono"},
+        },
+    }
+    assert loader._detect_hybrid_branding(pure_v1) is None

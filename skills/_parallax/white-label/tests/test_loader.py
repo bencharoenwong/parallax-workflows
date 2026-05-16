@@ -92,9 +92,14 @@ def test_happy_path(
 
     result = loader_module.load_client_branding()
 
+    # Loader return contract: 9 legacy keys (preserved for downstream PDF
+    # consumers) plus 4 bonus keys (typography/rounded/spacing/components)
+    # that v2-aware consumers can opt into. On v1 input the bonus keys are
+    # populated as empty dicts so `[]` access works without KeyError.
     assert set(result.keys()) == {
         "client_name", "colors", "logos", "fonts", "source", "confidence_scores",
         "voice", "multi_source", "error",
+        "typography", "rounded", "spacing", "components",
     }
     assert result["error"] is None
     assert result["colors"]["primary"] == "#1A2B3C"
