@@ -411,3 +411,130 @@ def test_invalid_logo_value_schema_unavailable(
     assert result["logos"]["primary"] == ""
     assert result["logos"]["favicon"] == ""
     assert result["colors"]["primary"] == "#1A2B3C"
+
+
+# ---------------------------------------------------------------------------
+# Test 10: load_visual_branding() — structural voice-leak guard
+# ---------------------------------------------------------------------------
+
+
+def test_visual_branding_excludes_voice_and_v2_keys(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    loader_module: ModuleType,
+) -> None:
+    """Visual subset returns exactly 6 keys; voice/typography/etc. are absent.
+
+    This is the structural guardrail referenced in integration-pattern.md §3:
+    voice-consuming skills call load_client_branding directly; visual skills
+    use this wrapper so a KeyError fires if anyone reaches for branding["voice"].
+    """
+    logo = tmp_path / "primary.png"
+    logo.write_bytes(b"\x89PNG")
+    config_path = _write_config(
+        tmp_path, _valid_config(primary_logo=str(logo)),
+    )
+    monkeypatch.setattr(loader_module, "_CONFIG_PATH", config_path)
+    monkeypatch.setattr(loader_module, "_SCHEMA", loader_module._JSONSCHEMA)
+
+    result = loader_module.load_visual_branding()
+
+    assert set(result.keys()) == {
+        "client_name", "colors", "logos", "fonts", "source", "error",
+    }
+    assert result["error"] is None
+    assert result["fonts"]["header"] == "Inter"
+    assert result["colors"]["primary"] == "#1A2B3C"
+
+
+def test_visual_branding_missing_config_preserves_shape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    loader_module: ModuleType,
+) -> None:
+    """No client onboarded -> 6-key shape preserved, error='config_not_found'.
+
+    Mirrors the load_client_branding contract so consumers can branch on
+    `result["error"] == "config_not_found"` without separate shape handling.
+    """
+    monkeypatch.setattr(loader_module, "_CONFIG_PATH", tmp_path / "does_not_exist.yaml")
+
+    result = loader_module.load_visual_branding()
+
+    assert set(result.keys()) == {
+        "client_name", "colors", "logos", "fonts", "source", "error",
+    }
+    assert result["error"] == "config_not_found"
+    assert result["colors"] == {}
+    assert result["logos"] == {}
+
+
+def test_visual_branding_voice_in_source_config_is_filtered(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    loader_module: ModuleType,
+) -> None:
+    """Config carries a voice block -> wrapper still excludes it.
+
+    Future client configs may carry tone/persona under `branding.voice`. The
+    visual-branding wrapper must drop it regardless of whether the source
+    config populated it. KeyError-on-access is the safety property.
+    """
+    cfg = _valid_config()
+    cfg["branding"]["voice"] = {  # type: ignore[index]
+        "enabled": True,
+        "tone": "authoritative",
+        "persona": "institutional CIO",
+    }
+    config_path = _write_config(tmp_path, cfg)
+    monkeypatch.setattr(loader_module, "_CONFIG_PATH", config_path)
+    monkeypatch.setattr(loader_module, "_SCHEMA", loader_module._JSONSCHEMA)
+
+    result = loader_module.load_visual_branding()
+
+    assert "voice" not in result
+    with pytest.raises(KeyError):
+        _ = result["voice"]
+
+
+def test_visual_branding_keys_are_subset_of_load_client_branding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    loader_module: ModuleType,
+) -> None:
+    """Drift gate: the visual subset must always be a strict subset of the full
+    loader output, so the wrapper never invents keys."""
+    monkeypatch.setattr(loader_module, "_CONFIG_PATH", tmp_path / "missing.yaml")
+
+    visual_keys = set(loader_module.load_visual_branding().keys())
+    full_keys   = set(loader_module.load_client_branding().keys())
+
+    assert visual_keys <= full_keys, (
+        f"visual keys not a subset: extra={visual_keys - full_keys}"
+    )
+    assert visual_keys == set(loader_module._VISUAL_BRANDING_KEYS)
+
+
+def test_visual_branding_propagates_logo_missing_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    loader_module: ModuleType,
+) -> None:
+    """Partial-degradation paths preserve the error string through the wrapper.
+
+    `logo_missing:*` is the one error class where colors/fonts are still
+    populated; the wrapper must surface the error string unchanged so
+    consumers can branch on `error.startswith("logo_missing")`.
+    """
+    cfg = _valid_config(primary_logo="/nonexistent/logo.png", favicon="")
+    config_path = _write_config(tmp_path, cfg)
+    monkeypatch.setattr(loader_module, "_CONFIG_PATH", config_path)
+    monkeypatch.setattr(loader_module, "_SCHEMA", loader_module._JSONSCHEMA)
+
+    result = loader_module.load_visual_branding()
+
+    assert result["error"] is not None
+    assert "logo_missing" in result["error"]
+    # Palette still usable on the partial-degradation path
+    assert result["colors"]["primary"] == "#1A2B3C"
+    assert result["fonts"]["header"] == "Inter"

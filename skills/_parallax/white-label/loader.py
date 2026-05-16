@@ -794,3 +794,43 @@ def load_client_branding() -> dict[str, Any]:
         logger.debug("White-label branding loaded cleanly from %s", config_path)
 
     return result
+
+
+_VISUAL_BRANDING_KEYS: tuple[str, ...] = (
+    "client_name",
+    "colors",
+    "logos",
+    "fonts",
+    "source",
+    "error",
+)
+
+
+def load_visual_branding() -> dict[str, Any]:
+    """
+    Visual-branding-only subset of :func:`load_client_branding`.
+
+    Returns the six keys a visual-rendering skill is permitted to read:
+    ``client_name``, ``colors``, ``logos``, ``fonts``, ``source``, ``error``.
+
+    Voice prose and v2-only token-tree keys (``typography``, ``rounded``,
+    ``spacing``, ``components``, ``multi_source``, ``confidence_scores``) are
+    excluded. This is a structural guardrail: a skill that mistakenly tries
+    to read ``branding["voice"]["tone"]`` raises ``KeyError`` instead of
+    silently inheriting voice data.
+
+    Voice-consuming skills (CIO letter, newsletter pipeline, future writing
+    skills) must continue to call :func:`load_client_branding` directly and
+    document their voice-handling contract in their own SKILL.md.
+
+    Error-state contract is identical to :func:`load_client_branding`:
+    ``error`` is ``None`` on clean load, ``"config_not_found"`` when no
+    client is onboarded, or a degradation string otherwise.
+
+    Raises:
+        KeyError: if :func:`load_client_branding` violates its return-shape
+            contract by omitting one of the visual keys. This is intentional
+            — silent fallback would mask the upstream bug.
+    """
+    full = load_client_branding()
+    return {key: full[key] for key in _VISUAL_BRANDING_KEYS}
