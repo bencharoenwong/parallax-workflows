@@ -250,3 +250,28 @@ def test_extract_brand_guide_prose():
     res2 = _extract_brand_guide_prose(text, filename="annual_report.pdf")
     assert res2 == {}
 
+
+
+def test_typography_extractor_rejects_utility_class_prefix():
+    """Round-6 gate finding: regex must NOT treat `.h1-banner` / `.code-block`
+    / `.p-4` as h1 / code / body-md rules. These are utility classes (Tailwind,
+    Bootstrap) whose names happen to share a prefix with canonical typography
+    tokens. Only exact-match class names (`.body-md`) should resolve."""
+    from extract.web_pdf import TypographyExtractor
+
+    css = """
+    .h1-banner { font-size: 99px; font-weight: 900; }
+    .code-block { font-size: 99px; font-family: "Wrong Mono"; }
+    .p-4 { padding: 1rem; font-size: 99px; }
+    h1 { font-size: 32px; font-family: "Real Display"; }
+    .body-md { font-size: 16px; font-family: "Real Body"; }
+    code { font-size: 14px; font-family: "Real Code"; }
+    """
+    scale = TypographyExtractor.extract_type_scale_from_css(css)
+    assert scale["h1"]["fontSize"] == "32px"
+    assert scale["h1"]["fontFamily"] == "Real Display"
+    assert scale["body-md"]["fontFamily"] == "Real Body"
+    assert scale["code"]["fontFamily"] == "Real Code"
+    # Utility classes must NOT have polluted the typography scale
+    assert scale["h1"]["fontSize"] != "99px"
+    assert scale["code"]["fontFamily"] != "Wrong Mono"

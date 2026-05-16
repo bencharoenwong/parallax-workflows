@@ -119,10 +119,17 @@ def _frontmatter_dict(draft: dict[str, Any]) -> dict[str, Any]:
     # → high-contrast fallback so the component is never incomplete.
     if colors_in:
         body_text = {"backgroundColor": neutral_ref}
+        # text_hex via .get() so a draft with `colors.text = {}` or
+        # `{"hex": None}` (wizard mode where operator skipped the text slot)
+        # doesn't crash with KeyError/AttributeError. Validation gate above
+        # already rejects malformed hex; missing hex falls through to the
+        # high-contrast literal fallback.
+        text_slot = colors_in.get("text") or {}
+        text_hex = text_slot.get("hex") if isinstance(text_slot, dict) else None
         if primary_ref:
             body_text["textColor"] = primary_ref
-        elif "text" in colors_in:
-            body_text["textColor"] = colors_in["text"]["hex"].upper()
+        elif text_hex:
+            body_text["textColor"] = text_hex.upper()
         else:
             body_text["textColor"] = _high_contrast_text(neutral_hex)
         out["components"]["body-text"] = body_text

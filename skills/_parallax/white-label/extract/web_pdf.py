@@ -320,17 +320,56 @@ class TypographyExtractor:
         import re
         css_text = re.sub(r'/\*.*?\*/', '', css_text, flags=re.DOTALL)
         scale = {}
-        pattern = re.compile(r'(?:\b|\.)(h[1-6]|body(?:-md)?|p|code|pre)\b[^{}]*\{([^}]+)\}', re.IGNORECASE)
+
         sel_map = {
             "h1": "h1", "h2": "h2", "h3": "h3", "h4": "h4", "h5": "h5",
             "body": "body-md", "p": "body-md", "body-md": "body-md",
-            "code": "code", "pre": "code"
+            "code": "code", "pre": "code",
         }
-        for match in pattern.finditer(css_text):
-            sel = match.group(1).lower()
-            if sel not in sel_map: continue
-            level = sel_map[sel]
-            if level in scale: continue 
+
+        # Find every rule (selectors-list { declarations }) and check whether
+        # any selector-list token EXACTLY matches one of our canonical names.
+        # Anchored on token boundaries — '.h1-banner', '.code-block', '.p-4'
+        # are utility classes that look prefix-similar but must NOT pollute
+        # the canonical typography scale (this would happen on any real
+        # Tailwind/Bootstrap site otherwise).
+        rule_pattern = re.compile(r'([^{}]+)\{([^}]+)\}', re.DOTALL)
+        for rule_match in rule_pattern.finditer(css_text):
+            selectors_blob = rule_match.group(1)
+            # Split on comma to handle "h1, .heading { ... }", then strip
+            # whitespace and pseudo-classes/combinators to isolate the
+            # outermost token (e.g. "article > h1:first-child" → "h1").
+            level = None
+            for sel_raw in selectors_blob.split(','):
+                sel = sel_raw.strip()
+                # Take the LAST CSS token of a descendant selector — it's the
+                # element being styled. Strip pseudo-classes / pseudo-elements.
+                tokens = re.split(r'\s+', sel)
+                if not tokens:
+                    continue
+                last = tokens[-1]
+                last = re.sub(r'[:].*$', '', last)         # strip pseudo
+                last = re.sub(r'\[.*?\]', '', last)        # strip attribute selectors
+                # IDs are never canonical typography names — skip.
+                if last.startswith('#'):
+                    continue
+                # For class selectors, only match when the class name EQUALS a
+                # canonical token (e.g. `.body-md` → "body-md"). Reject names
+                # that merely have the canonical as prefix (`.h1-banner`,
+                # `.code-block`) — those are utility classes, not semantic
+                # typography surfaces.
+                if last.startswith('.'):
+                    candidate = last[1:].lower()
+                else:
+                    candidate = last.lower()
+                if candidate in sel_map:
+                    level = sel_map[candidate]
+                    break
+            if level is None or level in scale:
+                continue
+
+            match = rule_match  # alias for backward compatibility with original block
+            sel = level         # retained for tracing; not used downstream
             
             block = match.group(2)
             style = {
@@ -491,9 +530,17 @@ def _extract_brand_guide_prose(pdf_text: str, *, filename: str) -> Dict[str, str
         start = line_idx + 1
         end = positions[idx+1][0] if idx + 1 < len(positions) else len(lines)
         prose = "\n".join(lines[start:end]).strip()
-        if prose:
+        if not prose:
+            continue
+        # Some PDFs put a Table of Contents up top — the TOC entry matches the
+        # heading regex but its slice ends at the next TOC entry, producing
+        # empty or stub prose. KEEP the first non-empty slice (i.e. the one
+        # that actually contains body text). Subsequent matches for the same
+        # key are usually the real body following a TOC; allow them to
+        # overwrite ONLY when the previously-stored prose was empty.
+        if key not in res or not res[key]:
             res[key] = prose
-            
+
     return res
 
 def extract_from_url(url: str) -> Dict[str, Any]:

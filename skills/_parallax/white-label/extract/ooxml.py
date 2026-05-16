@@ -59,7 +59,10 @@ def _parse_pptx_master_typography(zf) -> tuple[Dict[str, Dict[str, Any]], Dict[s
             # lvl2 → h3) are confident size signals. Deeper indent levels get
             # a lower ceiling — they're bullet styles, not heading scale.
             conf = 0.6 if level_name in LOW_CONFIDENCE_LEVELS else 0.85
-        style["fontWeight"] = 700 if b == "1" else 400
+        # DrawingML accepts xsd:boolean: "1"/"true" → bold, "0"/"false"/missing
+        # → not bold. Symmetric with the DOCX path (line ~125).
+        b_truthy = b is not None and str(b).lower() in ("1", "true")
+        style["fontWeight"] = 700 if b_truthy else 400
         if lnSpc is not None and lnSpc.get("val"):
             style["lineHeight"] = f"{int(lnSpc.get('val'))/100000:g}"
             if conf < 0.7: conf = 0.7
