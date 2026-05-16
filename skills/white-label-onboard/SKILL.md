@@ -69,7 +69,7 @@ If you want the inline lint feedback, install Node 18+ (e.g., `brew install node
 
 Two consumer classes:
 
-**Visual consumers** — `/parallax-client-review`, `/parallax-due-diligence`, `/parallax-deep-dive` and any skill that produces a PDF or formatted report. They read `branding.colors`, `branding.logos`, `branding.fonts`. They ignore `voice`.
+**Visual consumers** — Skills that produce a PDF or formatted report. They read `branding.colors`, `branding.logos`, `branding.fonts`. They ignore `voice`. Currently integrated: `/parallax-cio-letter-prep`. Planned but not yet wired: `/parallax-client-review`, `/parallax-due-diligence`, `/parallax-deep-dive` (they fall back to default Parallax styling until integrated).
 
 **Voice consumers** — letter-writing, newsletter, meeting-prep, email-drafting, and any skill that produces written content under the client's name. They read `voice.*` and apply it as a style guide before generating prose. They optionally also read `branding.*` if the output is rendered (e.g., a branded PDF letter).
 
@@ -953,6 +953,12 @@ Try it:
 ### Regenerate-from-config mode (`--regenerate-design-md`)
 
 Purpose: keep `DESIGN.md` in sync with `config.yaml` after manual edits, without re-running source extraction. Single source of truth: `config.yaml` is canonical; `DESIGN.md` is derived.
+
+**What `--regenerate-design-md` preserves and recomputes:**
+- **Preserved from config.yaml:** all color tokens, typography/font declarations, rounded/spacing values, logos, voice section (if present), `extracted_at` timestamp, source provenance, `multi_source` block.
+- **Recomputed:** DESIGN.md frontmatter YAML and 8-section markdown body. The `design_md_hash` in the audit chain is updated to reflect the new output.
+- **Not archived:** the prior `DESIGN.md` is overwritten without an `.archive/` snapshot. If you need to retain the old file, copy it manually before running this flag.
+- **v1 config behavior:** `fonts.header`/`fonts.body`/`fonts.monospace` are used as fallbacks for `typography.h1`/`body-md`/`code` slots (confidence 0.5). No `typography.*` block is required in the config.
 
 ```python
 import os, hashlib, shutil, yaml

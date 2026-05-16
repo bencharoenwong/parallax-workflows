@@ -11,6 +11,7 @@ The white-label onboarding skill provides a complete workflow for:
 3. **Confirmation** — User-facing review and approval gate before saving
 4. **Storage** — Save to a global, persistent location (`~/.parallax/client-branding/config.yaml`)
 5. **Application** — Downstream skills automatically apply branding to all PDF outputs
+6. **DESIGN.md export** — A Google Labs DESIGN.md companion file is emitted alongside `config.yaml`. This file expresses the extracted brand tokens (colors, typography, spacing, rounded) in a recognized spec format that can be handed to a designer or imported into design-system tooling that accepts Google Labs' DESIGN.md format. It is kept in sync with `config.yaml`; use `--regenerate-design-md` to refresh it after manual config edits.
 
 ## Features
 
