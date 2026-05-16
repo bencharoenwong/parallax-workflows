@@ -82,7 +82,7 @@ The `white_label_active` flag in §2 collapses these to a binary: clean or `logo
 
 Markdown skills (the 12 Tier 2 consumers) render in chat, not to .docx. "Branding" reduces to three render-time elements:
 
-1. **Header line** (when `white_label_active` AND `client_name != ""`): one line at the top of the deliverable, before any analytical content:
+1. **Header line** (when `white_label_active` AND `client_name != ""`): one line at the top of the deliverable, **below the House View Preamble if a view is active** (per `_parallax/house-view/loader.md` §5.1, the load preamble goes "at the very top"; Branding Header is content-level and follows). Before any analytical content:
    ```
    **<client_name>** report
    ```
