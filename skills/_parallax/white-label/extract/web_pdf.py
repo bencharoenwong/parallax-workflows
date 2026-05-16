@@ -47,6 +47,16 @@ def _fetch_external_stylesheets(raw_html: str, base_url: str) -> str:
 
     All errors are swallowed silently — this is best-effort enrichment, not a
     correctness path. Returns the concatenated CSS-equivalent text.
+
+    Security note (SSRF surface):
+        This function fetches arbitrary URLs harvested from `<link rel=stylesheet>`
+        elements in the supplied HTML. Run against a hostile or compromised brand
+        page, the href could point at internal endpoints (e.g.
+        `http://169.254.169.254/...` cloud metadata, or intranet probes). The
+        documented use case is operator-supplied URLs run from a personal laptop,
+        which is acceptable. If this helper is ever wrapped in a server endpoint
+        or shared-session context, the caller MUST restrict outbound hosts to a
+        public allowlist before invoking it.
     """
     import re
     import time
@@ -465,10 +475,16 @@ def extract_from_url(url: str) -> Dict[str, Any]:
             pass
 
         raw_html = ""
+        # Mirror the urllib branch's 5MB cap on the scrapling path. The downstream
+        # CSS extractors are regex-heavy and become quadratic-ish on multi-MB
+        # input. Brand-asset extraction only needs the head of the document.
+        MAX_RAW_HTML_BYTES = 5 * 1024 * 1024
         try:
             from scrapling.fetchers import Fetcher
             page = Fetcher.get(url, stealthy_headers=True, follow_redirects=True)
             raw_html = getattr(page, "html_content", "") or str(page)
+            if isinstance(raw_html, str) and len(raw_html) > MAX_RAW_HTML_BYTES:
+                raw_html = raw_html[:MAX_RAW_HTML_BYTES]
             if not page_text:
                 page_text = page.get_all_text(separator="\n", strip=True)
         except Exception:

@@ -353,15 +353,23 @@ def _config_to_draft(cfg: dict[str, Any]) -> dict[str, Any]:
     typo_in = branding.get("typography", {}) or {}
     components_in = branding.get("components", {}) or {}
 
-    # Canonical legacy color slots regardless of v1/v2 on disk
-    legacy_text = (
-        colors_in.get("text")
-        or (components_in.get("body-text", {}) or {}).get("textColor", "")
+    # Canonical legacy color slots regardless of v1/v2 on disk.
+    # Defensive: if a user hand-edited config.yaml to use a {colors.X} token
+    # reference (DESIGN.md spec encourages it inside components), we cannot
+    # resolve the literal hex here without a token-resolution pass — emit_design_md
+    # would then ValueError on the hex-validation gate. Skip token-refs and let
+    # the caller fall back to the raw color from the colors map.
+    raw_text = (components_in.get("body-text", {}) or {}).get("textColor", "")
+    legacy_text = colors_in.get("text") or (
+        raw_text if not (isinstance(raw_text, str) and raw_text.startswith("{")) else ""
     )
     legacy_background = colors_in.get("background") or colors_in.get("neutral", "")
     legacy_accent = colors_in.get("accent") or colors_in.get("tertiary", "")
 
     def _col(value: str) -> dict[str, Any]:
+        # Refuse token-refs ('{colors.primary}') — only literal hex is valid here.
+        if isinstance(value, str) and value.startswith("{"):
+            return {}
         return {"hex": value, "confidence": 1.0} if value else {}
 
     draft: dict[str, Any] = {

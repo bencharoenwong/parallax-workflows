@@ -87,37 +87,65 @@ def _frontmatter_dict(draft: dict[str, Any]) -> dict[str, Any]:
     #   secondary → caption / border accents
     #   tertiary  → primary call-to-action surface
     #   neutral   → page background
+    #
+    # Invariants the linter enforces (and tests pin):
+    #   1. Every declared color is referenced by at least one component
+    #      (no orphaned tokens).
+    #   2. Every emitted component has BOTH backgroundColor AND textColor
+    #      (incomplete components are linter errors).
     out["components"] = {}
     colors_in = draft.get("colors", {})
 
-    if "background" in colors_in:
-        body_text = {"backgroundColor": "{colors.neutral}"}
-        if "primary" in colors_in:
-            body_text["textColor"] = "{colors.primary}"
+    # Reference values used as fallbacks when a token is absent.
+    neutral_ref = "{colors.neutral}" if "background" in colors_in else "#FFFFFF"
+    neutral_hex = colors_in.get("background", {}).get("hex", "#FFFFFF")
+    primary_ref = "{colors.primary}" if "primary" in colors_in else None
+    primary_hex = colors_in.get("primary", {}).get("hex", "")
+
+    def _high_contrast_text(bg_hex: str) -> str:
+        """Pick a literal-hex text color (#000 or #FFF) that satisfies WCAG AA
+        against the given background. Used when no token-ref candidate is
+        available with sufficient contrast."""
+        try:
+            white_ratio = ColorValidator.wcag_contrast_ratio("#FFFFFF", bg_hex)
+            black_ratio = ColorValidator.wcag_contrast_ratio("#000000", bg_hex)
+        except (AttributeError, ValueError):
+            return "#000000"
+        return "#FFFFFF" if white_ratio >= black_ratio else "#000000"
+
+    # body-text — emit whenever ANY color is declared so primary/text aren't
+    # orphaned on minimal-palette drafts. backgroundColor defaults to a literal
+    # white when no neutral is declared; textColor cascades primary → text-literal
+    # → high-contrast fallback so the component is never incomplete.
+    if colors_in:
+        body_text = {"backgroundColor": neutral_ref}
+        if primary_ref:
+            body_text["textColor"] = primary_ref
         elif "text" in colors_in:
             body_text["textColor"] = colors_in["text"]["hex"].upper()
+        else:
+            body_text["textColor"] = _high_contrast_text(neutral_hex)
         out["components"]["body-text"] = body_text
 
-    if "secondary" in colors_in and "background" in colors_in:
+    # caption — emit whenever secondary is declared. backgroundColor falls back
+    # to the literal neutral hex when no neutral token exists.
+    if "secondary" in colors_in:
         out["components"]["caption"] = {
-            "backgroundColor": "{colors.neutral}",
+            "backgroundColor": neutral_ref,
             "textColor": "{colors.secondary}",
         }
 
+    # button-primary — emit whenever accent (→ tertiary) is declared. textColor
+    # picks the higher-contrast of {colors.primary}, {colors.neutral}, and
+    # falls back to a literal #000/#FFF chosen by luminance so the component
+    # always has both surface fields.
     if "accent" in colors_in:
-        # button-primary textColor: pick the higher-contrast of neutral (light
-        # paper) and primary (dark ink) against tertiary. Warm accents like
-        # #FF6600 fail WCAG against white but pass easily against dark ink;
-        # cool accents are the inverse. Compute via ColorValidator's contrast
-        # helper rather than hardcoding the assumption.
         button_primary = {"backgroundColor": "{colors.tertiary}"}
         tertiary_hex = colors_in["accent"].get("hex", "")
-        primary_hex = colors_in.get("primary", {}).get("hex", "")
-        neutral_hex = colors_in.get("background", {}).get("hex", "")
 
         candidates = [
             ("{colors.primary}", primary_hex),
-            ("{colors.neutral}", neutral_hex),
+            ("{colors.neutral}", neutral_hex if "background" in colors_in else ""),
         ]
         scored = []
         for ref, candidate_hex in candidates:
@@ -132,8 +160,9 @@ def _frontmatter_dict(draft: dict[str, Any]) -> dict[str, Any]:
         if scored:
             scored.sort(reverse=True)
             button_primary["textColor"] = scored[0][1]
-        elif "background" in colors_in:
-            button_primary["textColor"] = "{colors.neutral}"
+        else:
+            # Both candidates absent — fall back to literal high-contrast hex.
+            button_primary["textColor"] = _high_contrast_text(tertiary_hex)
 
         out["components"]["button-primary"] = button_primary
 

@@ -61,6 +61,11 @@ def test_components_body_text_wiring():
     assert frontmatter["components"]["body-text"]["textColor"] == "#000000"
 
 def test_omitting_missing_tokens():
+    """Sections that have no data are omitted from the frontmatter entirely
+    (no empty `spacing: {}` placeholders that would defeat the linter's
+    orphaned-tokens check). Components ARE always emitted when any color is
+    declared — every declared color must be referenced by at least one
+    component so the linter doesn't fire orphaned-tokens warnings."""
     draft = {
         "colors": {
             "primary": {"hex": "#111111"}
@@ -71,7 +76,11 @@ def test_omitting_missing_tokens():
     assert "spacing" not in frontmatter
     assert "rounded" not in frontmatter
     assert "typography" not in frontmatter
-    assert "components" not in frontmatter
+    # Components is now emitted (body-text references {colors.primary}) so
+    # primary is not orphaned. Verify that wiring is correct rather than
+    # asserting absence.
+    assert "components" in frontmatter
+    assert frontmatter["components"]["body-text"]["textColor"] == "{colors.primary}"
 
 def test_determinism_across_two_calls():
     draft = {

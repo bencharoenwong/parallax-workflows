@@ -207,3 +207,138 @@ def test_emit_design_md_v1_fallback_includes_h1_and_body_md():
     assert data["typography"].get("h1", {}).get("fontFamily") == "Inter"
     assert data["typography"].get("body-md", {}).get("fontFamily") == "Source Sans Pro"
     assert data["typography"].get("code", {}).get("fontFamily") == "JetBrains Mono"
+
+
+# ---------------------------------------------------------------------------
+# Round-3 review findings (gate review on f720a22 → bf4949e):
+# Component invariants — every emitted component has BOTH backgroundColor AND
+# textColor; every declared color is referenced by at least one component.
+# ---------------------------------------------------------------------------
+
+def _load_emit_module():
+    import importlib.util
+    emit_path = Path(__file__).parent.parent / "emit_design_md.py"
+    spec = importlib.util.spec_from_file_location("emit_design_md_inv", emit_path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _extract_frontmatter(text: str) -> dict:
+    return yaml.safe_load(text.split("---", 2)[1])
+
+
+def _assert_components_complete(frontmatter: dict) -> None:
+    """Every emitted component MUST have both backgroundColor and textColor."""
+    for name, comp in (frontmatter.get("components") or {}).items():
+        assert "backgroundColor" in comp, f"component {name} missing backgroundColor"
+        assert "textColor" in comp, f"component {name} missing textColor"
+
+
+def _assert_no_orphaned_colors(frontmatter: dict) -> None:
+    """Every declared color must be referenced by at least one component."""
+    colors = list((frontmatter.get("colors") or {}).keys())
+    components = frontmatter.get("components") or {}
+    # Collect token-ref strings from every component property value
+    refs = set()
+    for comp in components.values():
+        for v in comp.values():
+            if isinstance(v, str) and v.startswith("{colors."):
+                refs.add(v.split(".", 1)[1].rstrip("}"))
+    orphaned = [c for c in colors if c not in refs]
+    assert not orphaned, f"orphaned color tokens (not referenced by any component): {orphaned}"
+
+
+def test_minimal_palette_primary_only_no_orphaned():
+    """Draft with only primary color — emit_design_md must still wire it into
+    a component (body-text.textColor) so the linter doesn't fire orphaned-tokens."""
+    emit = _load_emit_module()
+    draft = {
+        "colors": {"primary": {"hex": "#001122", "confidence": 1.0}},
+        "source": {"type": "test", "reference": "min"},
+        "extracted_at": "2026-05-16",
+        "confidence_scores": {},
+    }
+    fm = _extract_frontmatter(emit.emit_design_md(
+        draft, client_name="Test", extracted_at="2026-05-16", source_refs=["min"]
+    ))
+    _assert_no_orphaned_colors(fm)
+    _assert_components_complete(fm)
+
+
+def test_minimal_palette_primary_secondary_no_orphaned():
+    """Draft with primary + secondary only (no background, accent, text) —
+    both colors must be referenced; this was the regression case."""
+    emit = _load_emit_module()
+    draft = {
+        "colors": {
+            "primary":   {"hex": "#001122", "confidence": 1.0},
+            "secondary": {"hex": "#334455", "confidence": 1.0},
+        },
+        "source": {"type": "test", "reference": "min2"},
+        "extracted_at": "2026-05-16",
+        "confidence_scores": {},
+    }
+    fm = _extract_frontmatter(emit.emit_design_md(
+        draft, client_name="Test", extracted_at="2026-05-16", source_refs=["min2"]
+    ))
+    _assert_no_orphaned_colors(fm)
+    _assert_components_complete(fm)
+
+
+def test_button_primary_complete_when_no_primary_no_background():
+    """Accent only (no primary, no background) — button-primary must still
+    have textColor via the literal-hex luminance fallback."""
+    emit = _load_emit_module()
+    draft = {
+        "colors": {"accent": {"hex": "#FF6600", "confidence": 1.0}},
+        "source": {"type": "test", "reference": "accent-only"},
+        "extracted_at": "2026-05-16",
+        "confidence_scores": {},
+    }
+    fm = _extract_frontmatter(emit.emit_design_md(
+        draft, client_name="Test", extracted_at="2026-05-16", source_refs=["accent-only"]
+    ))
+    bp = (fm.get("components") or {}).get("button-primary")
+    assert bp is not None, "button-primary should be emitted when accent is present"
+    assert "backgroundColor" in bp and "textColor" in bp
+
+
+def test_body_text_complete_when_no_primary_no_text():
+    """Background only (no primary, no text) — body-text must still have
+    textColor via the literal-hex luminance fallback (chosen against neutral)."""
+    emit = _load_emit_module()
+    draft = {
+        "colors": {"background": {"hex": "#FFFFFF", "confidence": 1.0}},
+        "source": {"type": "test", "reference": "bg-only"},
+        "extracted_at": "2026-05-16",
+        "confidence_scores": {},
+    }
+    fm = _extract_frontmatter(emit.emit_design_md(
+        draft, client_name="Test", extracted_at="2026-05-16", source_refs=["bg-only"]
+    ))
+    bt = (fm.get("components") or {}).get("body-text")
+    assert bt is not None
+    assert "backgroundColor" in bt and "textColor" in bt
+
+
+def test_config_to_draft_ignores_token_ref_textcolor():
+    """Loader's _config_to_draft must NOT pass a {colors.primary}-style ref to
+    the hex-validation gate. A user-edited config with a token-ref in
+    components.body-text.textColor should leave draft.colors.text empty rather
+    than crash downstream."""
+    cfg = {
+        "metadata": {"schema_version": 2},
+        "branding": {
+            "colors": {"primary": "#001122", "neutral": "#FFFFFF"},
+            "components": {
+                "body-text": {
+                    "backgroundColor": "{colors.neutral}",
+                    "textColor": "{colors.primary}",
+                }
+            },
+        },
+    }
+    draft = loader._config_to_draft(cfg)
+    # text slot should be absent (token-ref filtered) rather than carrying a malformed hex.
+    assert "text" not in draft.get("colors", {}), "token-ref must not leak into colors.text.hex"
