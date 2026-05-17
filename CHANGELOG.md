@@ -4,6 +4,20 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-05-17
+
+### Added
+- `skills/_parallax/white-label/integration-pattern.md` — shared §1–§9 contract that visual-rendering consumer skills JIT-load to apply branding (header, provenance line, color substitution, logo placement, fallback behavior). Single source of truth for the consumer side of the contract.
+- `load_visual_branding()` in `skills/_parallax/white-label/loader.py` — public wrapper returning the 6-key visual subset (`client_name`, `colors`, `logos`, `fonts`, `source`, `error`). Structurally excludes `voice`/typography keys so a misuse raises `KeyError` instead of silently inheriting voice data.
+- Branding Header + Provenance line wired into 16 consumer SKILL.md files via the `<!-- white-label: integration-pattern.md -->` sentinel: Tier 1 (`client-review`, `due-diligence`, `deep-dive`, `cio-letter-prep`) and Tier 2 (`should-i-buy`, `thematic-screen`, `portfolio-checkup`, `portfolio-builder`, `rebalance`, `morning-brief`, `explain-portfolio`, `scenario-analysis`, `country-deep-dive`, `pair-finder`, `peer-comparison`, `macro-outlook`).
+- `tests/test_integration_pattern_referenced.py` — drift gate enforcing that every SKILL.md carrying the sentinel pairs it with a load directive (and vice versa). Prevents silent decoupling between consumers and the shared contract.
+- `tests/test_loader.py` — loader contract gate covering `_empty_result()` / `_build_result()` shape parity (always 13 top-level keys) and `load_visual_branding()` voice-exclusion guardrail.
+- `scripts/compare_docx.py` — retrofit-gate helper used to confirm the `cio-letter-prep` move from inline branding to the JIT-loaded pattern produces byte-equivalent output.
+
+### Changed
+- `cio-letter-prep` retrofitted from inline branding instructions to consume `integration-pattern.md` JIT — eliminates duplicated branding prose across SKILL.md files.
+- `_empty_result()` and `_build_result()` in `loader.py` now unconditionally return all 13 top-level keys (the four v2 token-tree bonus keys — `typography`, `rounded`, `spacing`, `components` — are populated as empty dicts on v1 and error paths). Consumers can read them with `[]` without `KeyError`.
+
 ## 2026-05-03
 
 ### Added
