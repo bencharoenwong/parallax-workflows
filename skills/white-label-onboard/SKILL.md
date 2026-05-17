@@ -69,31 +69,27 @@ If you want the inline lint feedback, install Node 18+ (e.g., `brew install node
 
 Two consumer classes:
 
-**Visual consumers** — Skills that produce a PDF or formatted report. They read `branding.colors`, `branding.logos`, `branding.fonts`. They ignore `voice`. Currently integrated: `/parallax-cio-letter-prep`. Planned but not yet wired: `/parallax-client-review`, `/parallax-due-diligence`, `/parallax-deep-dive` (they fall back to default Parallax styling until integrated).
+**Visual consumers** — Skills that produce a PDF or formatted report. They read `branding.colors`, `branding.logos`, `branding.fonts`. They ignore `voice`. Currently integrated: Tier 1 (`/parallax-cio-letter-prep`, `/parallax-client-review`, `/parallax-due-diligence`, `/parallax-deep-dive`) and Tier 2 (`/parallax-should-i-buy`, `/parallax-thematic-screen`, `/parallax-portfolio-checkup`, `/parallax-portfolio-builder`, `/parallax-rebalance`, `/parallax-morning-brief`, `/parallax-explain-portfolio`, `/parallax-scenario-analysis`, `/parallax-country-deep-dive`, `/parallax-pair-finder`, `/parallax-peer-comparison`, `/parallax-macro-outlook`). The canonical consumer-side contract — header rendering, provenance line, color substitution, logo placement, fallback behavior — lives in `_parallax/white-label/integration-pattern.md` (§1–§9). New visual consumers should JIT-load it via the `<!-- white-label: integration-pattern.md -->` sentinel; the drift gate at `tests/test_integration_pattern_referenced.py` enforces the sentinel ↔ load-directive pairing.
 
 **Voice consumers** — letter-writing, newsletter, meeting-prep, email-drafting, and any skill that produces written content under the client's name. They read `voice.*` and apply it as a style guide before generating prose. They optionally also read `branding.*` if the output is rendered (e.g., a branded PDF letter).
 
 Both classes silently fall back to default Parallax styling/voice if the config is absent or corrupted. This skill never breaks downstream consumers.
 
-**Visual consumer loading pattern.** Always go through `loader.load_client_branding()` rather than reading raw YAML keys directly — the loader bridges v1↔v2 file shapes so downstream code keeps working through the schema migration:
+**Visual consumer loading pattern.** Visual-rendering skills call `loader.load_visual_branding()` — it returns only the six keys a visual consumer is permitted to read (`client_name`, `colors`, `logos`, `fonts`, `source`, `error`) and structurally excludes `voice`/typography/`multi_source` so a misuse (`branding["voice"]`) raises `KeyError` instead of silently inheriting voice data. Pair it with `loader.is_white_label_active(branding)` (rendering predicate — do not re-implement inline; see `integration-pattern.md` §2/§4/§8) and `loader.safe_source_reference(branding)` (display-safe Provenance source ref — §7). The full 13-key shape from `load_client_branding()` is reserved for voice consumers (CIO letter, newsletter, future writing skills) that need both visual and voice. Both wrappers bridge v1↔v2 file shapes so downstream code keeps working through the schema migration:
 
 ```python
-from skills._parallax.white_label.loader import load_client_branding
+from skills._parallax.white_label.loader import load_visual_branding
 
-result = load_client_branding()
+result = load_visual_branding()
 if result.get("error") is None:
-    # Legacy 9-key shape — works against both v1 AND v2 config.yaml on disk
+    # 6-key visual subset — works against both v1 AND v2 config.yaml on disk
     primary_color = result["colors"]["primary"]
     accent_color  = result["colors"]["accent"]   # v2: derived from colors.tertiary
     bg_color      = result["colors"]["background"]  # v2: derived from colors.neutral
     header_font   = result["fonts"]["header"]    # v2: derived from typography.h1.fontFamily
-
-    # v2-only bonus keys (empty dict on v1) — opt-in for spec-aware consumers
-    typography = result.get("typography", {})    # full token tree per DESIGN.md
-    rounded    = result.get("rounded", {})
-    spacing    = result.get("spacing", {})
-    components = result.get("components", {})
 ```
+
+For voice consumers that need the full token tree alongside voice, call `load_client_branding()` and read `result["typography"]`, `result["rounded"]`, `result["spacing"]`, `result["components"]` (empty dicts on v1 configs and on every error path — safe to access unconditionally), plus `result["voice"]`.
 
 **Do NOT** read `cfg["branding"]["colors"]["accent"]` directly — that key exists in v1 files but is named `tertiary` in v2. The loader is the single source of truth for the legacy return shape.
 
@@ -792,7 +788,7 @@ validation_summary: <validation_results>
 confidence_scores: <draft.confidence_scores>
 ```
 
-`fonts.*` is **not** emitted in v2. The loader's `_normalize_branding_v2_to_return_shape` derives the legacy `fonts.{header,body,monospace}` keys from `typography.{h1,body-md,code}.fontFamily` at read time, so downstream consumers continue to see the 9-key return shape unchanged.
+`fonts.*` is **not** emitted in v2. The loader's `_normalize_branding_v2_to_return_shape` derives the legacy `fonts.{header,body,monospace}` keys from `typography.{h1,body-md,code}.fontFamily` at read time, so downstream consumers continue to see the legacy fonts keys regardless of on-disk schema version. The full `load_client_branding()` return shape is 13 keys on every path (the four v2 token-tree keys — `typography`, `rounded`, `spacing`, `components` — are populated as empty dicts on v1 and error paths so consumers can read them unconditionally).
 
 Legacy v1 fallback (only when a downstream skill or migration explicitly passes `schema_version=1`):
 

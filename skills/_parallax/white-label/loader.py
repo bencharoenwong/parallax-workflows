@@ -8,6 +8,12 @@ Called on every skill invocation — optimised to be silent on success.
 Public interface
 ----------------
     load_client_branding() -> dict[str, Any]
+        Full 13-key shape (visual + voice + token tree). Voice consumers only.
+    load_visual_branding() -> dict[str, Any]
+        Visual-only 6-key subset (client_name, colors, logos, fonts, source,
+        error). Structurally excludes voice/typography/multi_source — accessing
+        e.g. result["voice"] raises KeyError. Use from any visual-rendering
+        consumer skill.
     build_config_from_draft(draft, validation_summary=None) -> dict[str, Any]
 
 Return shape (always 13 top-level keys, identical on success and error paths)
@@ -39,6 +45,13 @@ from typing import Any
 
 import yaml
 
+try:
+    import jsonschema as _jsonschema
+    _HAS_JSONSCHEMA = True
+except ImportError:
+    _jsonschema = None
+    _HAS_JSONSCHEMA = False
+
 # ---------------------------------------------------------------------------
 # Module constants
 # ---------------------------------------------------------------------------
@@ -46,7 +59,10 @@ import yaml
 _CONFIG_PATH: Path = Path.home() / ".parallax" / "client-branding" / "config.yaml"
 _SCHEMA_PATH: Path = Path(__file__).parent / "schema.yaml"
 
-logger = logging.getLogger(__name__)
+# Stable logger namespace regardless of how consumers import this module
+# (sys.path.insert style imports make __name__ == "loader", which is too
+# generic and collides with any other loader.py on sys.path).
+logger = logging.getLogger("parallax.white_label.loader")
 
 # ---------------------------------------------------------------------------
 # JSON Schema — derived from schema.yaml structure; embedded for zero-I/O load
@@ -271,51 +287,69 @@ def _validate_schema(data: dict[str, Any], schema: dict[str, Any]) -> str | None
     Returns None on success, human-readable error string on failure.
     Returns None (skip) if jsonschema is not installed.
     """
+    if not _HAS_JSONSCHEMA:
+        return None
     try:
-        import jsonschema
-
-        jsonschema.validate(instance=data, schema=schema)
+        _jsonschema.validate(instance=data, schema=schema)
         return None
-    except jsonschema.ValidationError as exc:
+    except _jsonschema.ValidationError as exc:
         return f"schema_invalid: {exc.message}"
-    except jsonschema.SchemaError as exc:
+    except _jsonschema.SchemaError as exc:
         return f"schema_invalid: bad schema — {exc.message}"
-    except ImportError:
-        # jsonschema not installed; treat as schema unavailable
-        return None
+
+
+_LOGO_ALLOWED_EXTS: frozenset[str] = frozenset(
+    {".png", ".jpg", ".jpeg", ".svg", ".ico", ".webp", ".gif"}
+)
 
 
 def _resolve_logo_paths(
     logos: dict[str, str],
 ) -> tuple[dict[str, str], list[str]]:
     """
-    Expand tilde and verify each logo path on disk.
+    Validate and resolve each logo path.
 
-    Missing files have their value replaced with "" and a warning string is
-    appended.  Present files are stored as fully-resolved absolute paths.
+    Rejects paths whose extension is not in `_LOGO_ALLOWED_EXTS` (blocks
+    `/etc/passwd`, `id_rsa`, `.env` and similar credential-disclosure cases)
+    and paths that do not resolve to a file on disk. Empty-string values are
+    treated as "no logo supplied" and silently resolve to "" with no warning.
+    Rejection messages name only the key and reason category — the raw path
+    is intentionally omitted from both the error string and the WARNING log,
+    so operator paths do not leak into centralized logs or Provenance.
 
     Returns (resolved_logos_dict, list_of_warning_strings).
     """
     resolved: dict[str, str] = {}
     warnings: list[str] = []
 
+    def _reject(key: str, reason: str) -> None:
+        resolved[key] = ""
+        warnings.append(f"logo_missing: {key} {reason}")
+        logger.warning("White-label logo rejected — key=%s reason=%s", key, reason)
+
     for key, raw_path in logos.items():
-        try:
-            expanded = Path(str(raw_path)).expanduser()
-        except (TypeError, ValueError) as exc:
+        if not isinstance(raw_path, str):
+            _reject(key, "invalid path value")
+            continue
+        if not raw_path:
+            # Deliberate "no logo" — not an error.
             resolved[key] = ""
-            msg = f"logo_missing: {key} invalid path value: {raw_path!r}"
-            warnings.append(msg)
-            logger.warning("White-label logo invalid path — key=%s error=%s", key, exc)
             continue
 
-        if expanded.exists():
+        try:
+            expanded = Path(raw_path).expanduser().resolve()
+        except (TypeError, ValueError, OSError):
+            _reject(key, "invalid path value")
+            continue
+
+        if expanded.suffix.lower() not in _LOGO_ALLOWED_EXTS:
+            _reject(key, "extension not in image allowlist")
+            continue
+
+        if expanded.is_file():
             resolved[key] = str(expanded)
         else:
-            resolved[key] = ""
-            msg = f"logo_missing: {key} path not found: {raw_path}"
-            warnings.append(msg)
-            logger.warning("White-label logo missing — key=%s path=%s", key, raw_path)
+            _reject(key, "path not found")
 
     return resolved, warnings
 
@@ -498,10 +532,13 @@ def _build_result(
     logo_warnings: list[str],
 ) -> dict[str, Any]:
     """
-    Assemble the canonical 9-key result dict from validated, logo-resolved data.
+    Assemble the canonical 13-key result dict from validated, logo-resolved data.
 
-    *logo_warnings* are joined into the error field when present; error is
-    None on a fully clean load.
+    The four v2 token-tree keys (typography, rounded, spacing, components) are
+    populated unconditionally — as empty dicts on v1 configs — so consumers
+    can read them with ``[]`` without ``KeyError``. *logo_warnings* are
+    joined into the error field when present; error is None on a fully clean
+    load.
     """
     branding = data.get("branding", {})
     metadata = data.get("metadata", {})
@@ -714,15 +751,23 @@ def load_client_branding() -> dict[str, Any]:
     """
     Load and validate client branding configuration.
 
-    Returns a dict whose minimum shape is 9 keys: client_name, colors, logos,
-    fonts, source, confidence_scores, voice, multi_source, error.  error is
-    None on a fully clean load, a human-readable string on any degradation.
+    Returns a dict with a fixed 13-key shape on every path (success, error,
+    schema-unavailable, v1, v2): client_name, colors, logos, fonts, source,
+    confidence_scores, voice, multi_source, error, typography, rounded,
+    spacing, components. error is None on a fully clean load, a
+    human-readable string on any degradation.
 
-    When the on-disk config is schema_version: 2, the result additionally
-    carries four bonus keys derived from the new token tree: typography,
-    rounded, spacing, components. v1 configs return empty dicts for these
-    bonus keys. Downstream consumers reading only the legacy 9 keys are
-    unaffected by the v1↔v2 distinction.
+    On v1 configs and on every error path, the four token-tree keys
+    (typography, rounded, spacing, components) are populated as empty dicts
+    so consumers can read them with ``[]`` access without ``KeyError``.
+    On v2 configs the keys carry the derived token tree. Downstream
+    consumers reading only the legacy 9 keys are unaffected by the v1↔v2
+    distinction.
+
+    Visual-rendering skills should prefer :func:`load_visual_branding`,
+    which exposes only the visual subset and refuses to leak voice/voice
+    data. Use this full-shape loader only when voice consumption is part
+    of the skill contract.
 
     Failure points:
         1. Missing config file   -> short-circuit, error="config_not_found"
@@ -794,3 +839,86 @@ def load_client_branding() -> dict[str, Any]:
         logger.debug("White-label branding loaded cleanly from %s", config_path)
 
     return result
+
+
+_VISUAL_BRANDING_KEYS: tuple[str, ...] = (
+    "client_name",
+    "colors",
+    "logos",
+    "fonts",
+    "source",
+    "error",
+)
+
+
+def load_visual_branding() -> dict[str, Any]:
+    """
+    Visual-branding-only subset of :func:`load_client_branding`.
+
+    Returns the six keys a visual-rendering skill is permitted to read:
+    ``client_name``, ``colors``, ``logos``, ``fonts``, ``source``, ``error``.
+
+    Voice prose and v2-only token-tree keys (``typography``, ``rounded``,
+    ``spacing``, ``components``, ``multi_source``, ``confidence_scores``) are
+    excluded. This is a structural guardrail: a skill that mistakenly tries
+    to read ``branding["voice"]["tone"]`` raises ``KeyError`` instead of
+    silently inheriting voice data.
+
+    Voice-consuming skills (CIO letter, newsletter pipeline, future writing
+    skills) must continue to call :func:`load_client_branding` directly and
+    document their voice-handling contract in their own SKILL.md.
+
+    Error-state contract is identical to :func:`load_client_branding`:
+    ``error`` is ``None`` on clean load, ``"config_not_found"`` when no
+    client is onboarded, or a degradation string otherwise.
+
+    Raises:
+        KeyError: if :func:`load_client_branding` violates its return-shape
+            contract by omitting one of the visual keys. This is intentional
+            — silent fallback would mask the upstream bug.
+    """
+    full = load_client_branding()
+    return {key: full[key] for key in _VISUAL_BRANDING_KEYS}
+
+
+# Error prefixes whose data is usable for white-label rendering. The match is
+# substring-anywhere (not prefix-only) so combined paths like
+# "schema_unavailable; logo_missing: …" still resolve to active.
+_ACTIVE_ERROR_TOKENS: tuple[str, ...] = ("logo_missing", "schema_unavailable")
+
+
+def is_white_label_active(branding: dict[str, Any]) -> bool:
+    """Return True when the loader produced palette/font data the consumer
+    should apply, False when the consumer should render default Parallax.
+
+    Active: error is None, or contains "logo_missing", or contains
+    "schema_unavailable" (best-effort branch). Everything else (config_not_found,
+    schema_invalid, yaml_parse_error) falls back to default Parallax.
+
+    Single source of truth for the rendering flag; consumer SKILL.md files
+    call this rather than re-implementing the predicate.
+    """
+    err = branding.get("error")
+    if err is None:
+        return True
+    return any(token in err for token in _ACTIVE_ERROR_TOKENS)
+
+
+def safe_source_reference(branding: dict[str, Any]) -> str:
+    """Display-safe representation of branding["source"]["reference"] for
+    embedding in end-client deliverables.
+
+    URLs collapse to scheme+hostname; filesystem paths collapse to basename;
+    other strings pass through. Prevents leaking pre-signed URLs, internal
+    paths, or full-source URLs into the Provenance footer.
+    """
+    ref = (branding.get("source") or {}).get("reference", "")
+    if not isinstance(ref, str) or not ref:
+        return ""
+    if ref.startswith(("http://", "https://")):
+        from urllib.parse import urlparse
+        parsed = urlparse(ref)
+        return f"{parsed.scheme}://{parsed.hostname}" if parsed.hostname else ""
+    if ref.startswith(("/", "~")):
+        return Path(ref).name
+    return ref
