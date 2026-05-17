@@ -515,6 +515,161 @@ def test_visual_branding_keys_are_subset_of_load_client_branding(
     assert visual_keys == set(loader_module._VISUAL_BRANDING_KEYS)
 
 
+@pytest.mark.parametrize(
+    "error,expected",
+    [
+        (None, True),
+        ("logo_missing: primary path not found: /tmp/x.png", True),
+        ("schema_unavailable", True),
+        ("schema_unavailable; logo_missing: primary path not found", True),
+        ("config_not_found", False),
+        ("schema_invalid: bad type", False),
+        ("yaml_parse_error: unexpected token", False),
+    ],
+)
+def test_is_white_label_active_contract(
+    error: str | None,
+    expected: bool,
+    loader_module: ModuleType,
+) -> None:
+    """Active classes (clean, logo_missing, schema_unavailable) → True;
+    fallback classes (config_not_found, schema_invalid, yaml_parse_error) → False.
+    Resolves the §2/§4/§7/§8 contract disagreement in integration-pattern.md."""
+    assert loader_module.is_white_label_active({"error": error}) is expected
+
+
+def test_schema_unavailable_with_missing_logo_is_active(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    loader_module: ModuleType,
+) -> None:
+    """The combined schema_unavailable + logo_missing path keeps white-label
+    rendering active — the loader still returns usable palette/font data."""
+    cfg = _valid_config(primary_logo="/nonexistent/logo.png", favicon="")
+    config_path = _write_config(tmp_path, cfg)
+    monkeypatch.setattr(loader_module, "_CONFIG_PATH", config_path)
+    monkeypatch.setattr(loader_module, "_SCHEMA", None)
+
+    result = loader_module.load_visual_branding()
+
+    assert "schema_unavailable" in result["error"]
+    assert "logo_missing" in result["error"]
+    assert loader_module.is_white_label_active(result) is True
+    assert result["colors"]["primary"] == "#1A2B3C"
+
+
+@pytest.mark.parametrize(
+    "filename,bytes_",
+    [
+        ("id_rsa", b"-----BEGIN PRIVATE KEY-----\n"),
+        ("credentials", b"aws_access_key_id=AKIA...\n"),
+        (".env", b"DATABASE_URL=postgres://...\n"),
+        ("passwd", b"root:x:0:0:root:/root:/bin/bash\n"),
+    ],
+)
+def test_logo_with_disallowed_extension_is_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    loader_module: ModuleType,
+    filename: str,
+    bytes_: bytes,
+) -> None:
+    """Credential-disclosure guard: paths without a whitelisted image extension
+    are rejected even when the file exists. The rejection reason — not the raw
+    filename — appears in the error string."""
+    target = tmp_path / filename
+    target.write_bytes(bytes_)
+
+    cfg = _valid_config(primary_logo=str(target), favicon="")
+    config_path = _write_config(tmp_path, cfg)
+    monkeypatch.setattr(loader_module, "_CONFIG_PATH", config_path)
+    monkeypatch.setattr(loader_module, "_SCHEMA", loader_module._JSONSCHEMA)
+
+    result = loader_module.load_client_branding()
+
+    assert result["logos"]["primary"] == ""
+    assert "extension not in image allowlist" in result["error"]
+    # Filename must not leak into the error string
+    assert filename not in result["error"]
+
+
+def test_logo_symlink_to_extensionless_file_is_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    loader_module: ModuleType,
+) -> None:
+    """A .png symlink that resolves to an extensionless file (e.g., /etc/hosts)
+    is rejected — `.resolve()` canonicalizes before the extension check."""
+    target = tmp_path / "secrets"  # no extension
+    target.write_bytes(b"sensitive\n")
+    symlink = tmp_path / "logo.png"
+    symlink.symlink_to(target)
+
+    cfg = _valid_config(primary_logo=str(symlink), favicon="")
+    config_path = _write_config(tmp_path, cfg)
+    monkeypatch.setattr(loader_module, "_CONFIG_PATH", config_path)
+    monkeypatch.setattr(loader_module, "_SCHEMA", loader_module._JSONSCHEMA)
+
+    result = loader_module.load_client_branding()
+
+    assert result["logos"]["primary"] == ""
+    assert "extension not in image allowlist" in result["error"]
+
+
+def test_empty_logo_path_is_silent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    loader_module: ModuleType,
+) -> None:
+    """Empty-string logo value (operator deliberately omitting a logo) is not
+    a missing-file error — resolves to "" without populating the error field."""
+    logo = tmp_path / "primary.png"
+    logo.write_bytes(b"\x89PNG")
+    cfg = _valid_config(primary_logo=str(logo), favicon="")
+    config_path = _write_config(tmp_path, cfg)
+    monkeypatch.setattr(loader_module, "_CONFIG_PATH", config_path)
+    monkeypatch.setattr(loader_module, "_SCHEMA", loader_module._JSONSCHEMA)
+
+    result = loader_module.load_client_branding()
+
+    assert result["error"] is None
+    assert result["logos"]["primary"] == str(logo)
+    assert result["logos"]["favicon"] == ""
+
+
+@pytest.mark.parametrize(
+    "raw_ref,expected",
+    [
+        ("", ""),
+        ("Acme Brand Deck v3", "Acme Brand Deck v3"),
+        ("https://internal.cg.com/clients/acme/brand.pdf?sig=secret", "https://internal.cg.com"),
+        ("http://10.0.0.5:8080/private/deck.pptx", "http://10.0.0.5"),
+        ("https://s3.amazonaws.com/bucket/key?X-Amz-Signature=xyz", "https://s3.amazonaws.com"),
+        ("/Users/operator/Dropbox/Clients/Acme/brand.pdf", "brand.pdf"),
+        ("~/Downloads/acme-brand.pptx", "acme-brand.pptx"),
+    ],
+)
+def test_safe_source_reference_redacts_urls_and_paths(
+    raw_ref: str,
+    expected: str,
+    loader_module: ModuleType,
+) -> None:
+    """URL refs collapse to scheme+host; filesystem refs to basename; opaque
+    strings pass through. Pre-signed URLs and internal paths must not leak."""
+    branding = {"source": {"reference": raw_ref}}
+    assert loader_module.safe_source_reference(branding) == expected
+
+
+def test_safe_source_reference_tolerates_missing_source(
+    loader_module: ModuleType,
+) -> None:
+    """Defensive: empty/missing source dict returns "" without raising."""
+    assert loader_module.safe_source_reference({}) == ""
+    assert loader_module.safe_source_reference({"source": None}) == ""
+    assert loader_module.safe_source_reference({"source": {}}) == ""
+    assert loader_module.safe_source_reference({"source": {"reference": None}}) == ""
+
+
 def test_visual_branding_propagates_logo_missing_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

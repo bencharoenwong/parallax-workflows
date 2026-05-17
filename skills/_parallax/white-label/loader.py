@@ -45,6 +45,13 @@ from typing import Any
 
 import yaml
 
+try:
+    import jsonschema as _jsonschema
+    _HAS_JSONSCHEMA = True
+except ImportError:
+    _jsonschema = None
+    _HAS_JSONSCHEMA = False
+
 # ---------------------------------------------------------------------------
 # Module constants
 # ---------------------------------------------------------------------------
@@ -52,7 +59,10 @@ import yaml
 _CONFIG_PATH: Path = Path.home() / ".parallax" / "client-branding" / "config.yaml"
 _SCHEMA_PATH: Path = Path(__file__).parent / "schema.yaml"
 
-logger = logging.getLogger(__name__)
+# Stable logger namespace regardless of how consumers import this module
+# (sys.path.insert style imports make __name__ == "loader", which is too
+# generic and collides with any other loader.py on sys.path).
+logger = logging.getLogger("parallax.white_label.loader")
 
 # ---------------------------------------------------------------------------
 # JSON Schema — derived from schema.yaml structure; embedded for zero-I/O load
@@ -277,51 +287,69 @@ def _validate_schema(data: dict[str, Any], schema: dict[str, Any]) -> str | None
     Returns None on success, human-readable error string on failure.
     Returns None (skip) if jsonschema is not installed.
     """
+    if not _HAS_JSONSCHEMA:
+        return None
     try:
-        import jsonschema
-
-        jsonschema.validate(instance=data, schema=schema)
+        _jsonschema.validate(instance=data, schema=schema)
         return None
-    except jsonschema.ValidationError as exc:
+    except _jsonschema.ValidationError as exc:
         return f"schema_invalid: {exc.message}"
-    except jsonschema.SchemaError as exc:
+    except _jsonschema.SchemaError as exc:
         return f"schema_invalid: bad schema — {exc.message}"
-    except ImportError:
-        # jsonschema not installed; treat as schema unavailable
-        return None
+
+
+_LOGO_ALLOWED_EXTS: frozenset[str] = frozenset(
+    {".png", ".jpg", ".jpeg", ".svg", ".ico", ".webp", ".gif"}
+)
 
 
 def _resolve_logo_paths(
     logos: dict[str, str],
 ) -> tuple[dict[str, str], list[str]]:
     """
-    Expand tilde and verify each logo path on disk.
+    Validate and resolve each logo path.
 
-    Missing files have their value replaced with "" and a warning string is
-    appended.  Present files are stored as fully-resolved absolute paths.
+    Rejects paths whose extension is not in `_LOGO_ALLOWED_EXTS` (blocks
+    `/etc/passwd`, `id_rsa`, `.env` and similar credential-disclosure cases)
+    and paths that do not resolve to a file on disk. Empty-string values are
+    treated as "no logo supplied" and silently resolve to "" with no warning.
+    Rejection messages name only the key and reason category — the raw path
+    is intentionally omitted from both the error string and the WARNING log,
+    so operator paths do not leak into centralized logs or Provenance.
 
     Returns (resolved_logos_dict, list_of_warning_strings).
     """
     resolved: dict[str, str] = {}
     warnings: list[str] = []
 
+    def _reject(key: str, reason: str) -> None:
+        resolved[key] = ""
+        warnings.append(f"logo_missing: {key} {reason}")
+        logger.warning("White-label logo rejected — key=%s reason=%s", key, reason)
+
     for key, raw_path in logos.items():
-        try:
-            expanded = Path(str(raw_path)).expanduser()
-        except (TypeError, ValueError) as exc:
+        if not isinstance(raw_path, str):
+            _reject(key, "invalid path value")
+            continue
+        if not raw_path:
+            # Deliberate "no logo" — not an error.
             resolved[key] = ""
-            msg = f"logo_missing: {key} invalid path value: {raw_path!r}"
-            warnings.append(msg)
-            logger.warning("White-label logo invalid path — key=%s error=%s", key, exc)
             continue
 
-        if expanded.exists():
+        try:
+            expanded = Path(raw_path).expanduser().resolve()
+        except (TypeError, ValueError, OSError):
+            _reject(key, "invalid path value")
+            continue
+
+        if expanded.suffix.lower() not in _LOGO_ALLOWED_EXTS:
+            _reject(key, "extension not in image allowlist")
+            continue
+
+        if expanded.is_file():
             resolved[key] = str(expanded)
         else:
-            resolved[key] = ""
-            msg = f"logo_missing: {key} path not found: {raw_path}"
-            warnings.append(msg)
-            logger.warning("White-label logo missing — key=%s path=%s", key, raw_path)
+            _reject(key, "path not found")
 
     return resolved, warnings
 
@@ -851,3 +879,46 @@ def load_visual_branding() -> dict[str, Any]:
     """
     full = load_client_branding()
     return {key: full[key] for key in _VISUAL_BRANDING_KEYS}
+
+
+# Error prefixes whose data is usable for white-label rendering. The match is
+# substring-anywhere (not prefix-only) so combined paths like
+# "schema_unavailable; logo_missing: …" still resolve to active.
+_ACTIVE_ERROR_TOKENS: tuple[str, ...] = ("logo_missing", "schema_unavailable")
+
+
+def is_white_label_active(branding: dict[str, Any]) -> bool:
+    """Return True when the loader produced palette/font data the consumer
+    should apply, False when the consumer should render default Parallax.
+
+    Active: error is None, or contains "logo_missing", or contains
+    "schema_unavailable" (best-effort branch). Everything else (config_not_found,
+    schema_invalid, yaml_parse_error) falls back to default Parallax.
+
+    Single source of truth for the rendering flag; consumer SKILL.md files
+    call this rather than re-implementing the predicate.
+    """
+    err = branding.get("error")
+    if err is None:
+        return True
+    return any(token in err for token in _ACTIVE_ERROR_TOKENS)
+
+
+def safe_source_reference(branding: dict[str, Any]) -> str:
+    """Display-safe representation of branding["source"]["reference"] for
+    embedding in end-client deliverables.
+
+    URLs collapse to scheme+hostname; filesystem paths collapse to basename;
+    other strings pass through. Prevents leaking pre-signed URLs, internal
+    paths, or full-source URLs into the Provenance footer.
+    """
+    ref = (branding.get("source") or {}).get("reference", "")
+    if not isinstance(ref, str) or not ref:
+        return ""
+    if ref.startswith(("http://", "https://")):
+        from urllib.parse import urlparse
+        parsed = urlparse(ref)
+        return f"{parsed.scheme}://{parsed.hostname}" if parsed.hostname else ""
+    if ref.startswith(("/", "~")):
+        return Path(ref).name
+    return ref
