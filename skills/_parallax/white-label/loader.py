@@ -8,6 +8,12 @@ Called on every skill invocation — optimised to be silent on success.
 Public interface
 ----------------
     load_client_branding() -> dict[str, Any]
+        Full 13-key shape (visual + voice + token tree). Voice consumers only.
+    load_visual_branding() -> dict[str, Any]
+        Visual-only 6-key subset (client_name, colors, logos, fonts, source,
+        error). Structurally excludes voice/typography/multi_source — accessing
+        e.g. result["voice"] raises KeyError. Use from any visual-rendering
+        consumer skill.
     build_config_from_draft(draft, validation_summary=None) -> dict[str, Any]
 
 Return shape (always 13 top-level keys, identical on success and error paths)
@@ -498,10 +504,13 @@ def _build_result(
     logo_warnings: list[str],
 ) -> dict[str, Any]:
     """
-    Assemble the canonical 9-key result dict from validated, logo-resolved data.
+    Assemble the canonical 13-key result dict from validated, logo-resolved data.
 
-    *logo_warnings* are joined into the error field when present; error is
-    None on a fully clean load.
+    The four v2 token-tree keys (typography, rounded, spacing, components) are
+    populated unconditionally — as empty dicts on v1 configs — so consumers
+    can read them with ``[]`` without ``KeyError``. *logo_warnings* are
+    joined into the error field when present; error is None on a fully clean
+    load.
     """
     branding = data.get("branding", {})
     metadata = data.get("metadata", {})
@@ -714,15 +723,23 @@ def load_client_branding() -> dict[str, Any]:
     """
     Load and validate client branding configuration.
 
-    Returns a dict whose minimum shape is 9 keys: client_name, colors, logos,
-    fonts, source, confidence_scores, voice, multi_source, error.  error is
-    None on a fully clean load, a human-readable string on any degradation.
+    Returns a dict with a fixed 13-key shape on every path (success, error,
+    schema-unavailable, v1, v2): client_name, colors, logos, fonts, source,
+    confidence_scores, voice, multi_source, error, typography, rounded,
+    spacing, components. error is None on a fully clean load, a
+    human-readable string on any degradation.
 
-    When the on-disk config is schema_version: 2, the result additionally
-    carries four bonus keys derived from the new token tree: typography,
-    rounded, spacing, components. v1 configs return empty dicts for these
-    bonus keys. Downstream consumers reading only the legacy 9 keys are
-    unaffected by the v1↔v2 distinction.
+    On v1 configs and on every error path, the four token-tree keys
+    (typography, rounded, spacing, components) are populated as empty dicts
+    so consumers can read them with ``[]`` access without ``KeyError``.
+    On v2 configs the keys carry the derived token tree. Downstream
+    consumers reading only the legacy 9 keys are unaffected by the v1↔v2
+    distinction.
+
+    Visual-rendering skills should prefer :func:`load_visual_branding`,
+    which exposes only the visual subset and refuses to leak voice/voice
+    data. Use this full-shape loader only when voice consumption is part
+    of the skill contract.
 
     Failure points:
         1. Missing config file   -> short-circuit, error="config_not_found"
