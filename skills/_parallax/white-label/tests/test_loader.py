@@ -642,7 +642,7 @@ def test_empty_logo_path_is_silent(
     [
         ("", ""),
         ("Acme Brand Deck v3", "Acme Brand Deck v3"),
-        ("https://internal.cg.com/clients/acme/brand.pdf?sig=secret", "https://internal.cg.com"),
+        ("https://internal.acme-capital.example/clients/acme/brand.pdf?sig=secret", "https://internal.acme-capital.example"),
         ("http://10.0.0.5:8080/private/deck.pptx", "http://10.0.0.5"),
         ("https://s3.amazonaws.com/bucket/key?X-Amz-Signature=xyz", "https://s3.amazonaws.com"),
         ("/Users/operator/Dropbox/Clients/Acme/brand.pdf", "brand.pdf"),
