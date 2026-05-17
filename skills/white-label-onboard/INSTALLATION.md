@@ -100,10 +100,10 @@ pytest skills/_parallax/white-label/tests/ -v
 
 **Expected output:**
 ```
-============================= 67 passed in 12s ==============================
+============================= N passed in <t>s ==============================
 ```
 
-All 67 tests (extraction, validation, loader, integration) should pass.
+All tests (extraction, validation, loader, integration, integration-pattern-referenced) should pass.
 
 ### Test: Font Detection
 
