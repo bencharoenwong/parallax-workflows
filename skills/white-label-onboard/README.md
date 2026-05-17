@@ -73,6 +73,8 @@ pdf_builder.set_font(branding["fonts"].get("header", "Helvetica"))
 - **`loader.py`** — Configuration loading and graceful degradation
   - `load_client_branding()` — Full 13-key shape (visual + voice + token tree). Voice-consumer entry point.
   - `load_visual_branding()` — 6-key visual subset (`client_name`, `colors`, `logos`, `fonts`, `source`, `error`). Structurally excludes `voice`/typography/`multi_source`. Visual-consumer entry point.
+  - `is_white_label_active(branding) -> bool` — single source of truth for the rendering predicate. Consumer skills call this instead of re-implementing the active-flag check (see `integration-pattern.md` §2/§4/§8).
+  - `safe_source_reference(branding) -> str` — display-safe Provenance source ref (URLs collapsed to scheme+hostname, paths to basename); used by `integration-pattern.md` §7.
   - Handles 4 failure modes: missing config, corrupt YAML, schema validation, missing logo files
   - Never raises exceptions; both entry points return their stable shape on every path
 
