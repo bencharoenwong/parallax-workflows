@@ -42,6 +42,9 @@ from docx.oxml.ns import qn
 LOGO_WIDTH_TOLERANCE = 0.05  # ±5% of EMU width
 HEX_PATTERN = re.compile(r"#?[0-9A-Fa-f]{6}\b")
 HEADING_STYLES = ("Heading 1", "Heading 2", "Heading 3", "Body Text")
+# Zip-bomb guard: a well-formed theme1.xml is a few kB; reject anything that
+# decompresses to >2 MB rather than reading it into memory.
+MAX_THEME_BYTES = 2 * 1024 * 1024
 
 
 # ---------------------------------------------------------------------------
@@ -75,6 +78,12 @@ def _extract_palette_hex(docx_path: Path) -> list[str]:
     with zipfile.ZipFile(docx_path) as z:
         if "word/theme/theme1.xml" not in z.namelist():
             return []
+        info = z.getinfo("word/theme/theme1.xml")
+        if info.file_size > MAX_THEME_BYTES:
+            raise ValueError(
+                f"theme1.xml decompresses to {info.file_size} bytes "
+                f"(> {MAX_THEME_BYTES} cap); refusing to read"
+            )
         theme_xml = z.read("word/theme/theme1.xml").decode("utf-8")
     hexes = HEX_PATTERN.findall(theme_xml)
     return [h.lstrip("#").upper() for h in hexes]

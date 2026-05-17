@@ -85,15 +85,10 @@ from pathlib import Path
 
 _WHITE_LABEL_DIR = Path(__file__).parent.parent / "_parallax" / "white-label"
 sys.path.insert(0, str(_WHITE_LABEL_DIR))
-from loader import load_visual_branding  # noqa: E402
+from loader import load_visual_branding, is_white_label_active, safe_source_reference  # noqa: E402
 
 branding = load_visual_branding()
-
-err = branding.get("error")
-white_label_active = (
-    err is None
-    or err.startswith("logo_missing")
-)
+white_label_active = is_white_label_active(branding)
 client_name = branding.get("client_name", "")
 ```
 

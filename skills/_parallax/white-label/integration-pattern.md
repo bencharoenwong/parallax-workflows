@@ -24,7 +24,7 @@ The structural guardrail enforcing this scope is `load_visual_branding()` in `lo
 
 ## §2 — Loading the branding
 
-Every consumer skill calls `load_visual_branding()` (not `load_client_branding()`):
+Every consumer skill calls `load_visual_branding()` (not `load_client_branding()`) and `is_white_label_active()` from the same module:
 
 ```python
 import sys
@@ -33,19 +33,14 @@ from pathlib import Path
 # loader.py lives at _parallax/white-label/loader.py
 _WHITE_LABEL_DIR = Path(__file__).parent.parent / "_parallax" / "white-label"
 sys.path.insert(0, str(_WHITE_LABEL_DIR))
-from loader import load_visual_branding  # noqa: E402
+from loader import load_visual_branding, is_white_label_active, safe_source_reference  # noqa: E402
 
 branding = load_visual_branding()
-
-err = branding.get("error")
-white_label_active = (
-    err is None
-    or err.startswith("logo_missing")
-)
+white_label_active = is_white_label_active(branding)
 client_name = branding.get("client_name", "")
 ```
 
-`white_label_active` is the rendering flag. `client_name` is safe to read with `.get(..., "")` because legacy configs predating the field return `""` rather than `KeyError`.
+`white_label_active` is the rendering flag. The predicate is centralized in `loader.py` — do NOT re-implement it inline (the `schema_unavailable` branch is easy to miss; see §4 and §8). `client_name` is safe to read with `.get(..., "")` because legacy configs predating the field return `""` rather than `KeyError`.
 
 **Do not load the YAML directly.** A second `yaml.safe_load` against the same config file bypasses the loader's error handling, schema validation, and logo resolution, and creates a race window between the loader's existence check and the second read.
 
@@ -74,7 +69,7 @@ If a future visual key (e.g. `branding["icons"]`) is added, the allowlist must b
 | `"yaml_parse_error: <details>"` | YAML corrupt | Fall back to defaults. Provenance reads `Branding: default Parallax (config unreadable)`. |
 | `"schema_unavailable"` | Loader's own schema file missing | Best-effort branding apply; Provenance reads `Branding: white-label (best-effort, schema unavailable)`. |
 
-The `white_label_active` flag in §2 collapses these to a binary: clean or `logo_missing` → render the brand; anything else → default.
+The `is_white_label_active()` helper in §2 collapses these to a binary: clean, `logo_missing`, or `schema_unavailable` → render the brand (palette/fonts usable, with best-effort caveat for `schema_unavailable`); anything else → default Parallax.
 
 ---
 
@@ -128,9 +123,11 @@ Future writing-pipeline skills (newsletter, content) that DO want voice will cal
 
 Every wired skill renders a Branding line in its Provenance footer. The line is unconditional — it appears whether or not `white_label_active`. Format:
 
+In every row below, `<ref>` is `safe_source_reference(branding)` from `loader.py` — URLs collapse to `scheme://hostname`, filesystem paths to basename. Never embed `branding["source"]["reference"]` directly; pre-signed URLs and internal paths must not reach end-client output.
+
 | Condition | Markdown skills | Docx skills (cio-letter-prep) |
 |---|---|---|
-| Clean load | `Branding: white-label (source: <branding["source"]["reference"]>)` | same |
+| Clean load | `Branding: white-label (source: <ref>)` | same |
 | `logo_missing` | `Branding: white-label (source: <ref>) (logo unavailable, omitted)` | `Branding: white-label (source: <ref>) (logo unavailable, omitted from cover)` |
 | `config_not_found` | `Branding: default Parallax` | same |
 | `schema_invalid` / `yaml_parse_error` | `Branding: default Parallax (config error)` | same |
@@ -150,7 +147,7 @@ For markdown skills the Provenance footer is the last block of the deliverable. 
 3. **Markdown logo path is environment-dependent.** Loader returns absolute local paths. Per §5 resolution: skip image embed for any path starting with `/` or `~`; add the Provenance "Logo on file" line instead.
 4. **Voice is structurally inaccessible.** `branding["voice"]` raises `KeyError` (not `None`). Do not write defensive code like `branding.get("voice", {})` — that re-introduces the model-obedience-only guardrail this wrapper exists to remove. If a skill needs voice, it must explicitly call `load_client_branding()` (full loader) and document why.
 5. **Semantic tokens are never overridden.** `cg-green-700`, `cg-red-700`, `cg-amber-*` carry meaning, not brand identity. Even when `white_label_active`, these remain unchanged. (Markdown skills have no color tokens to override; this rule applies to docx skills.)
-6. **`white_label_active` is binary, not three-valued.** Clean and `logo_missing` both count as active (palette/fonts still usable). Every other error class is "default Parallax." Do not introduce a third state.
+6. **`white_label_active` is binary, not three-valued.** Three error classes resolve to active (clean, `logo_missing`, `schema_unavailable`); every other class is default Parallax. The predicate is `loader.is_white_label_active()` — call it, don't reproduce it.
 
 ---
 

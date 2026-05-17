@@ -43,6 +43,19 @@ LOAD_DIRECTIVE_RE = re.compile(
     r"(?:load|jit-load|consume|apply)\b[^.\n]{0,200}?integration-pattern\.md",
     re.IGNORECASE,
 )
+# Words that, when they immediately precede a load-directive match, invert
+# its meaning ("no JIT-load of integration-pattern.md" must not satisfy the
+# drift gate). Checked over the 16 chars before the match.
+_NEGATION_PREFIXES = ("no ", "not ", "never ", "without ", "skip ", "skipping ")
+
+
+def _has_positive_load_directive(text: str) -> bool:
+    """True if text contains at least one non-negated load directive."""
+    for match in LOAD_DIRECTIVE_RE.finditer(text):
+        prefix = text[max(0, match.start() - 16):match.start()].lower()
+        if not any(neg in prefix for neg in _NEGATION_PREFIXES):
+            return True
+    return False
 
 
 def _collect_wired_skills() -> list[Path]:
@@ -80,10 +93,24 @@ def test_wired_skill_references_integration_pattern(skill_md: Path) -> None:
     fail to apply branding without this gate catching it at PR review.
     """
     text = skill_md.read_text(encoding="utf-8")
-    match = LOAD_DIRECTIVE_RE.search(text)
-    assert match is not None, (
+    assert _has_positive_load_directive(text), (
         f"{skill_md.relative_to(_SKILLS_ROOT.parent)} carries the white-label "
-        f"sentinel but the body has no `Load ... integration-pattern.md` "
-        f"directive. The wiring will silently skip integration-pattern.md at "
-        f"runtime. Either add the load directive or remove the sentinel."
+        f"sentinel but the body has no positive `Load ... integration-pattern.md` "
+        f"directive (negated mentions like 'no JIT-load of integration-pattern.md' "
+        f"do not count). Either add the load directive or remove the sentinel."
     )
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("Load `integration-pattern.md` §2", True),
+        ("JIT-load _parallax/white-label/integration-pattern.md before render", True),
+        ("(no JIT-load of integration-pattern.md from this skill)", False),
+        ("we do not load integration-pattern.md here", False),
+        ("Skip loading integration-pattern.md when offline", False),
+    ],
+)
+def test_negated_load_directives_do_not_satisfy_gate(text: str, expected: bool) -> None:
+    """Unit-level coverage for the negation filter."""
+    assert _has_positive_load_directive(text) is expected
