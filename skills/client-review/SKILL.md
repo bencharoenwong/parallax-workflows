@@ -15,7 +15,11 @@ gotchas:
   - Mixed-exchange portfolios may need split scoring (see shared conventions)
   - Output should be presentation-ready for client meetings
   - get_assessment prompt should incorporate all findings including macro, flags, and recommendations
+  - Pre-Render step loads white-label branding via `_parallax/white-label/loader.py` → `load_visual_branding()` (the 6-key visual subset wrapper). Voice/typography/etc. are structurally absent from the returned dict — `branding["voice"]` raises `KeyError`. The snippet is inlined per Tier 1 pilot convention (no JIT-load of integration-pattern.md from this skill). Provenance state-to-text mapping and Branding Header semantics follow `_parallax/white-label/integration-pattern.md` §5 + §7 — that doc is the canonical specification; client-review's Output Format bullets reference it rather than reproducing the table.
+  - Branding Header uses `**<client_name>** portfolio review` (skill-specific framing), not the generic `**<client_name>** report` template in integration-pattern.md §5. Intentional divergence — do not "fix" to match the generic template.
 ---
+
+<!-- white-label: integration-pattern.md -->
 
 # Client Portfolio Review
 
@@ -83,10 +87,32 @@ News (selective, async): `get_news_synthesis` for holdings >10% weight AND flagg
 2. Call `get_assessment` with comprehensive prompt incorporating: portfolio composition, factor scores, health flags (including View flags), macro context, per-holding drill-down findings, recommendations, client context, AND active house view (basis_statement + tilt vector + excludes if present).
 3. Append audit log entry per loader.md §6.
 
+### Pre-Render — Load white-label branding
+
+Before composing the Output Format, load the client's visual branding. This is inlined per Tier 1 pilot convention — the snippet is verbatim, the allowlist is enforced at code level by the loader wrapper.
+
+```python
+import sys
+from pathlib import Path
+
+_WHITE_LABEL_DIR = Path(__file__).parent.parent / "_parallax" / "white-label"
+sys.path.insert(0, str(_WHITE_LABEL_DIR))
+from loader import load_visual_branding, is_white_label_active, safe_source_reference  # noqa: E402
+
+branding = load_visual_branding()
+white_label_active = is_white_label_active(branding)
+client_name = branding.get("client_name", "")
+```
+
+`white_label_active` is the rendering flag. `client_name` may be `""` on legacy configs — tolerate without erroring (skip the Branding Header in that case per integration-pattern.md §5).
+
+The loader returns exactly six keys: `client_name`, `colors`, `logos`, `fonts`, `source`, `error`. Any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`. Load `_parallax/white-label/integration-pattern.md` for the full contract, error-state table (§4), substitution semantics (§5 + §6), and Provenance template (§7). Apply §5 + §7 when composing the Output Format below.
+
 ## Output Format
 
 Client-ready report:
-- **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (preamble)
+- **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (preamble). Per loader.md §5.1, the load preamble goes "at the very top" — it precedes the Branding Header.
+- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view active): `**<client_name>** portfolio review`. For the logo: if `branding["logos"]["primary"]` is empty (`""`, e.g., on the `logo_missing` partial-success path), render the text line only — no image, no extra Provenance note. If it is a URL (starts with `http://` / `https://`), embed `![<client_name>](<url>)` above the text line. If it starts with `/` or `~` (absolute local path, not embeddable in chat-delivered markdown per integration-pattern.md §5), skip the image embed and append `Logo on file: <basename>` as a second Provenance line.
 - **Ground-truth Integrity** (only render if any mismatch detected — table: `input_ticker`, `returned_name`, `expected_name`, status. Mismatched holdings had scores re-derived via `get_peer_snapshot` symbol-match — per loader.md §5 rule 3.)
 - **Portfolio Summary** (AUM breakdown, sector allocation, top 5 holdings; if view active, view-alignment score)
 - **Health Status** (Healthy/Monitor/Attention badge with flag summary)
@@ -98,6 +124,7 @@ Client-ready report:
 - **Suitability Assessment** (alignment with client goals AND with active house view if present; cite basis_statement)
 - **Recommended Actions** (prioritized High/Medium/Low per recommendation-matrix.md, with specific action types; rationale cites view tilts where applicable)
 - **Appendix: Methodology** (brief Parallax scoring note)
+- **Provenance** (always present): one line stating branding state. Format is the markdown column of integration-pattern.md §7 — DO NOT collapse the five error states into prose; render per the table verbatim so `schema_unavailable` correctly stays in the white-label branch rather than falling back to default Parallax. If a logo was skipped per the Branding Header rule above, append `Logo on file: <basename>` as a second Provenance line.
 
 If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
 

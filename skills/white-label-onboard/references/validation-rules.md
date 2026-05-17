@@ -175,12 +175,12 @@ else:
 
 ## Validation Workflow in Skills
 
-Downstream skills (`/parallax-client-review`, etc.) **always** call `load_client_branding()` to load saved branding. The loader never raises exceptions — all validation failures are logged but result in graceful degradation:
+Visual consumer skills (`/parallax-client-review`, `/parallax-due-diligence`, etc.) call `load_visual_branding()` to load the 6-key visual subset; voice consumers (CIO letter, newsletter) call `load_client_branding()` for the full 13-key shape. The loader never raises exceptions — all validation failures are logged but result in graceful degradation:
 
 ```python
-from skills._parallax.white_label.loader import load_client_branding
+from skills._parallax.white_label.loader import load_visual_branding
 
-branding = load_client_branding()
+branding = load_visual_branding()
 
 if branding["error"]:
     logger.warning("Client branding degraded: %s", branding["error"])

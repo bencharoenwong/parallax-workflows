@@ -13,7 +13,12 @@ gotchas:
   - Score changes haven't happened yet if the event is breaking — use get_assessment for forward-looking analysis
   - For historical events, get_score_analysis can show what actually moved
   - This skill produces FORWARD-LOOKING analysis — always caveat uncertainty
+  - JIT-load `_parallax/house-view/loader.md` if an active CIO view is present; portfolio-level skill, so apply §3 (multipliers) to replacement-candidate scoring + §4 (the user-supplied scenario is sovereign per §4 — if scenario CONTRADICTS view tilts, surface "scenario contradicts house view" banner; the Action Plan acts on the scenario, not the view) + §5 (preamble + view-aware rendering) + §6 (audit). For an ALIGNED scenario, the Action Plan is more aggressive; for a CONTRADICTING scenario, the conflict is surfaced and the user's stated framing wins.
+  - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
+  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
+
+<!-- white-label: integration-pattern.md -->
 
 # Scenario Analysis
 
@@ -30,6 +35,10 @@ Something happened (or might happen). What's exposed? What shifts? What do I do?
 ## Workflow
 
 Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call. Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, and fallback patterns.
+
+### Pre-Workflow — Load Active House View
+
+Per `_parallax/house-view/loader.md` §1 and §2: load and validate any active house view BEFORE running the workflow. If view present, capture the load preamble for rendering at the top of Output Format per §5.1, capture the tilt vector + excludes, and check whether the user-supplied scenario aligns with or contradicts the view per §4. If no active view (or validation failure): run the workflow normally with the standard disclaimer.
 
 ### Phase 1: Understand the Event (parallel)
 
@@ -82,10 +91,19 @@ Then call `get_assessment` with a prompt that:
     - Portfolio exposure ranking from step 6
     - Macro regime and tactical outlook
     - Replacement candidates and their scores
+    - Active house view if present (basis_statement + relevant tilts + alignment-vs-contradiction flag with the user-supplied scenario)
     - Ask: "Given this scenario, what specific portfolio adjustments should be considered? Prioritize by urgency and magnitude of exposure."
+
+11. **Audit log** — Append entry per loader.md §6.1 if a view was loaded.
+
+### Pre-Render — Load white-label branding
+
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format. The loader returns exactly six keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
 
 ## Output Format
 
+- **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (banner from Pre-Workflow + low-confidence warnings). If user-supplied scenario CONTRADICTS view tilts, append a "Scenario contradicts house view" line stating which tilt(s) disagree — per loader.md §4, the user's scenario is sovereign. Per loader.md §5.1 the preamble goes at the very top — it precedes the Branding Header.
+- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** scenario analysis`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to Provenance.
 - **Scenario Summary** (what happened, why it matters — 2-3 sentences)
 - **Ground-truth Integrity** *(only render if Phase 2a flagged any mismatches OR ETFs were excluded from per-position trajectory)* — table: `symbol`, `returned_name`, `expected_name`, status (⚠ MISMATCH / ETF — sector exposure only / TRUSTED). Mismatched holdings were fully excluded from the assessment prompt; ETF holdings are present in `analyze_portfolio` sector exposure but not in per-position factor trajectories.
 - **Macro Regime Impact** (how this shifts the current regime, which factors are affected)
@@ -97,5 +115,8 @@ Then call `get_assessment` with a prompt that:
 - **Action Plan** (prioritized list: what to trim/sell, what to add, what to hold — with specific weight suggestions)
 - **What to Watch** (2-3 signals that would confirm or invalidate this thesis)
 - **Confidence & Caveats** (how certain is this analysis, what could go wrong with the rotation)
+- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (5 error states; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+
+If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
 
 *"This is scenario-based analysis, not investment advice. Forward-looking assessments are inherently uncertain."*

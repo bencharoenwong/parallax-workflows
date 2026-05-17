@@ -39,12 +39,12 @@ The skill will guide you through:
 
 ### For Downstream Skills
 
-Any Parallax skill that generates PDF output automatically loads and applies client branding:
+Visual consumers (any skill that generates a PDF or formatted report) load the 6-key visual subset via `load_visual_branding()`. Voice consumers (letter / newsletter / writing skills) load the full 13-key shape via `load_client_branding()`. See `_parallax/white-label/integration-pattern.md` for the canonical consumer-side contract.
 
 ```python
-from skills._parallax.white_label.loader import load_client_branding
+from skills._parallax.white_label.loader import load_visual_branding
 
-branding = load_client_branding()
+branding = load_visual_branding()
 
 if branding["error"]:
     logger.warning("Client branding degraded: %s", branding["error"])
@@ -71,9 +71,12 @@ pdf_builder.set_font(branding["fonts"].get("header", "Helvetica"))
   - `FontValidator` — System availability via matplotlib, web-safe fallbacks
 
 - **`loader.py`** — Configuration loading and graceful degradation
-  - `load_client_branding()` — Main public API
+  - `load_client_branding()` — Full 13-key shape (visual + voice + token tree). Voice-consumer entry point.
+  - `load_visual_branding()` — 6-key visual subset (`client_name`, `colors`, `logos`, `fonts`, `source`, `error`). Structurally excludes `voice`/typography/`multi_source`. Visual-consumer entry point.
+  - `is_white_label_active(branding) -> bool` — single source of truth for the rendering predicate. Consumer skills call this instead of re-implementing the active-flag check (see `integration-pattern.md` §2/§4/§8).
+  - `safe_source_reference(branding) -> str` — display-safe Provenance source ref (URLs collapsed to scheme+hostname, paths to basename); used by `integration-pattern.md` §7.
   - Handles 4 failure modes: missing config, corrupt YAML, schema validation, missing logo files
-  - Never raises exceptions; always returns 6-key result dict
+  - Never raises exceptions; both entry points return their stable shape on every path
 
 - **`schema.yaml`** — JSON Schema for config validation
 
@@ -101,12 +104,14 @@ skills/white-label-onboard/
     ├── validator.py
     ├── loader.py
     ├── schema.yaml
+    ├── integration-pattern.md  (canonical consumer-side contract §1–§9, JIT-loaded by 16 visual consumer skills)
     └── tests/
         ├── conftest.py
         ├── test_extract.py
         ├── test_validator.py
         ├── test_loader.py
-        └── test_integration.py
+        ├── test_integration.py
+        └── test_integration_pattern_referenced.py  (drift gate: sentinel ↔ load-directive pairing)
 ```
 
 ## Configuration
@@ -154,7 +159,7 @@ confidence_scores:
   typography_h1: 0.95
 ```
 
-v1 configs (`schema_version: 1`, `colors.{accent,background,text}` + `fonts.{header,body,monospace}`) continue to load via the loader bridge — `load_client_branding()` returns the same 9-key shape for both v1 and v2.
+v1 configs (`schema_version: 1`, `colors.{accent,background,text}` + `fonts.{header,body,monospace}`) continue to load via the loader bridge — `load_client_branding()` returns the same 13-key shape on every path (v1, v2, and error). On v1 and error paths the four v2 token-tree keys (`typography`, `rounded`, `spacing`, `components`) are populated as empty dicts so consumers can read them unconditionally.
 
 ### Permission Model
 
@@ -223,12 +228,12 @@ The loader never raises exceptions. All failures are logged with severity level 
 
 ## Downstream Integration
 
-All Parallax skills that generate PDFs automatically use this skill. No additional wiring required.
+Sixteen visual consumer skills are wired against the canonical contract in `_parallax/white-label/integration-pattern.md`:
 
-Example skills that use branding:
-- `/parallax-client-review` — RM meeting report with client logo + colors
-- `/parallax-due-diligence` — Company deep-dive PDF with header branding
-- `/parallax-morning-brief` — Fund manager daily brief with header fonts
+- **Tier 1**: `/parallax-cio-letter-prep`, `/parallax-client-review`, `/parallax-due-diligence`, `/parallax-deep-dive`
+- **Tier 2**: `/parallax-should-i-buy`, `/parallax-thematic-screen`, `/parallax-portfolio-checkup`, `/parallax-portfolio-builder`, `/parallax-rebalance`, `/parallax-morning-brief`, `/parallax-explain-portfolio`, `/parallax-scenario-analysis`, `/parallax-country-deep-dive`, `/parallax-pair-finder`, `/parallax-peer-comparison`, `/parallax-macro-outlook`
+
+New visual consumers must JIT-load `integration-pattern.md` via the `<!-- white-label: integration-pattern.md -->` sentinel; `tests/test_integration_pattern_referenced.py` enforces the sentinel ↔ load-directive pairing.
 
 ## Troubleshooting
 

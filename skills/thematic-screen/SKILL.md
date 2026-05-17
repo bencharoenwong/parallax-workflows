@@ -13,7 +13,10 @@ gotchas:
   - Default top_n is 5 — adjust for broader or narrower screens
   - get_peer_snapshot called once per top pick (N calls) — fire in parallel
   - get_financials called for top 3 only
+  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
+
+<!-- white-label: integration-pattern.md -->
 
 # Thematic Screen
 
@@ -60,15 +63,21 @@ Fire both in parallel:
 
 **After C2 and C3 complete:** Append audit log entry per loader.md §6.
 
+### Pre-Render — Load white-label branding
+
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format. The loader returns exactly six keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+
 ## Output Format
 
-- **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (preamble)
+- **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (preamble). Per loader.md §5.1 the preamble goes at the very top — it precedes the Branding Header.
+- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** thematic screen`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to Provenance.
 - **Theme: [theme]** (brief investment thesis; note view conflict inline if applicable)
 - **Universe Built** (how many stocks found, key sectors; note any exclusions applied; surface divergence-assertion result per loader.md §5 rule 4)
 - **Top Picks** (table: `input_ticker`, `returned_name` (from scoring tool), `expected_name` (from get_company_info), sector, overall score, key factor strengths; if view active, add "Tilt Effect" column. **Flag any row where `returned_name ≠ expected_name` with ⚠ MISMATCH and exclude its scores from ranking** — per loader.md §5 rule 3.)
 - **Comparison Matrix** (peer comparison for lead candidate)
 - **Financial Snapshot** (revenue, margins, growth for top 3 trusted picks)
 - **Implementation Notes** (liquidity considerations, position sizing guidance)
+- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (5 error states; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
 
 If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
 
