@@ -12,7 +12,10 @@ gotchas:
   - Quality factor is a credit health proxy — deteriorating Quality score is an early warning signal for credit stress.
   - Altman Z-score computed using market-cap-based formula for public companies (Z, not Z'). Thresholds: >2.99 Safe, 1.81–2.99 Grey, <1.81 Distress.
   - If Palepu solvency section is unavailable (tool error), degrade gracefully — output remaining metrics and flag Palepu as unavailable.
+  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
+
+<!-- white-label: integration-pattern.md -->
 
 # Credit Lens
 
@@ -150,10 +153,21 @@ Example: "Quality score deteriorated 14 points over the past 52 weeks, signaling
 [Market regime from `get_telemetry` + one sentence on credit implication]
 Example: "Current market regime is recessionary — a challenging environment for credit quality; elevated default risk across all sectors."
 
-### 7. **Footer**
-```
-*Analytical output based on Parallax factor scores and public financial data. Not investment or credit advice.*
-```
+### 7. **Branding Header** (only if `white_label_active` AND `client_name != ""`)
+Single line at the very top of the rendered output: `**<client_name>** credit lens`. Logo handling per integration-pattern.md §5.
+
+### 8. **Provenance** (always present)
+One line stating branding state per integration-pattern.md §7. If a logo was skipped, append `Logo on file: <basename>` as a second Provenance line.
+
+### Pre-Render — Load white-label branding
+
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format.
+
+### 9. **Footer**
+
+**AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
+
+> *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
 
 ## Error Handling
 

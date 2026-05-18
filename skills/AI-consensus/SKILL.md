@@ -18,7 +18,10 @@ gotchas:
   - Disclaimer verbatim; use umbrella phrasing "Parallax AI Investor Profiles framework" rather than any single investor name
   - If a profile fails (cross-validation, timeout, missing data) mark as `skipped` and continue with remaining profiles
   - INSUFFICIENT_PROFILES if applicable count < 3 (per consensus-config.md minimum_applicable_count)
+  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
+
+<!-- white-label: integration-pattern.md -->
 
 # Parallax AI Investor Profiles — Consensus Meta-Skill
 
@@ -164,6 +167,22 @@ This output is an AI-inferred synthesis produced by the Parallax AI Investor Pro
 **Basket mode output:** same structure per ticker, with the per-profile matrix, super-majority signal, and factor-level agreement computed per-ticker. Output is organized ticker-by-ticker.
 
 ### Step 7 — Emit
+
+
+## Output additions (white-label branding + §9.2 disclosure)
+
+These additions apply to the rendered output ABOVE in addition to the persona-specific disclaimer shown in the output example. They are required regardless of view state.
+
+### Pre-Render — Load white-label branding
+
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format.
+
+- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line at the very top of the rendered output: `**<client_name>** AI investor consensus`. Logo handling per integration-pattern.md §5.
+- **Provenance** (always present): one line stating branding state per integration-pattern.md §7. If a logo was skipped, append `Logo on file: <basename>` as a second Provenance line.
+
+**AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below. The persona-specific disclaimer in the output example characterizes the source of the framing; the §9.2 banner characterizes the LLM-generated synthesis itself.
+
+> *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
 
 ## Graceful fallback
 

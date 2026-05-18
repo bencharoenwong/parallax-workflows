@@ -11,7 +11,10 @@ gotchas:
   - Shariah thresholds are hardcoded in this skill (AAOIFI/DJIM standards) — derive compliance from get_financials data
   - get_financial_analysis (Palepu framework) is async ~2-5 min — warn user before calling
   - Financial ratios from get_financials help verify debt/revenue compliance thresholds
+  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
+
+<!-- white-label: integration-pattern.md -->
 
 # Halal / Shariah Screen
 
@@ -70,5 +73,15 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 - **Purification Amount** (if applicable — percentage of dividends requiring purification)
 - **Alternatives** (for non-compliant holdings: scored compliant replacements in same sector)
 - **Compliant Portfolio** (if portfolio mode: restructured allocation with only halal holdings)
+- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line at the very top: `**<client_name>** Shariah screen`. Logo handling per integration-pattern.md §5.
+- **Provenance** (always present): one line stating branding state per integration-pattern.md §7. If a logo was skipped, append `Logo on file: <basename>` as a second Provenance line.
+
+### Pre-Render — Load white-label branding
+
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format.
+
+**AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
+
+> *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
 
 > These are analytical outputs based on AAOIFI/DJIM screening thresholds applied to Parallax financial data, not investment advice or a fatwa. Consult a qualified Shariah advisor for binding rulings.

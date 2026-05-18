@@ -11,7 +11,10 @@ gotchas:
   - get_docs and list_docs access the full methodology documentation
   - get_score_analysis shows trajectory — useful for explaining "why did this change"
   - Output must be accessible to non-technical clients and compliance teams
+  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
+
+<!-- white-label: integration-pattern.md -->
 
 # Score Explainer
 
@@ -55,5 +58,13 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 - **What's Driving It** (specific data points, peer comparison, methodology context)
 - **What Would Change It** (concrete conditions that would improve/worsen the score)
 - **Methodology Reference** (brief citation of the scoring methodology for credibility)
+- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line at the very top: `**<client_name>** score explainer`. Logo handling per integration-pattern.md §5.
+- **Provenance** (always present): one line stating branding state per integration-pattern.md §7. If a logo was skipped, append `Logo on file: <basename>` as a second Provenance line.
+
+### Pre-Render — Load white-label branding
+
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format.
+
+**AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
 > *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
