@@ -185,10 +185,10 @@ class TestSaveReloadRoundtrip:
 # ---------------------------------------------------------------------------
 
 
-# A trimmed but realistic Example homepage HTML stub. Pins the expected
+# A trimmed but realistic asset-manager homepage HTML stub. Pins the expected
 # extraction outputs. If the URL extraction logic changes shape, this fixture
 # catches the regression.
-_EXAMPLE_STUB_HTML = b"""
+_BRAND_STUB_HTML = b"""
 <!DOCTYPE html>
 <html>
 <head>
@@ -203,13 +203,13 @@ body { background: #FFFFFF; color: #333333; font-family: 'Calibri', sans-serif; 
 </head>
 <body>
 <header>
-<img src="https://www.example-brand.com/resources/front/template/example-brand/images/logo.png" alt="Example logo">
+<img src="https://www.example.com/assets/brand/logo.png" alt="Example Asset Management logo">
 </header>
 <main>
-<h1>Lorem ipsum dolor sit amet</h1>
-<p>Sed do eiusmod tempor incididunt ut labore.</p>
-<p>Ut enim ad minim veniam, quis nostrud exercitation.</p>
-<p>Duis aute irure dolor in reprehenderit.</p>
+<h1>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</h1>
+<p>Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+<p>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.</p>
+<p>Duis aute irure dolor in reprehenderit in voluptate velit esse.</p>
 </main>
 </body>
 </html>
@@ -252,9 +252,9 @@ class _StubResponse:
 
 
 class TestUrlFallbackRegression:
-    def test_urllib_fallback_extracts_example_brand_signature(self, monkeypatch):
+    def test_urllib_fallback_extracts_brand_signature(self, monkeypatch):
         """When defuddle and scrapling both fail, urllib pulls raw HTML and
-        the regex extractors find Example's brand signature."""
+        the regex extractors find the brand signature."""
         # Force defuddle to "fail" — replace subprocess.run with a stub that
         # returns non-zero
         from subprocess import CompletedProcess
@@ -265,11 +265,11 @@ class TestUrlFallbackRegression:
         # Force scrapling import to fail (it's not installed in this venv anyway)
         # by intercepting urllib instead — that's the path we're testing
         def fake_urlopen(req, timeout=None):
-            return _StubResponse(_EXAMPLE_STUB_HTML)
+            return _StubResponse(_BRAND_STUB_HTML)
 
         with mock.patch("subprocess.run", fake_run), \
              mock.patch("urllib.request.urlopen", fake_urlopen):
-            draft = extract_from_url("https://www.example-brand.com/")
+            draft = extract_from_url("https://www.example.com/")
 
         # Logo extracted (the brand logo, not a strategy image)
         assert "primary" in draft["logos"]
@@ -348,14 +348,14 @@ h1 { font-family: 'Inter', sans-serif; color: #5A597A; }
         assert any("Inter" in n for n in font_names), \
             f"Google Fonts path did not fire — expected 'Inter' in fonts, got {font_names}"
 
-    def test_example_voice_artifact_validates(self):
-        """Test 2: The voice extraction artifact produced from a real 2642-word
-        Example letter should pass VoiceValidator (corpus size + section
-        completeness). Validates that the Step 1.5 prompt produces output the
-        downstream consumers will accept."""
+    def test_synthetic_voice_artifact_validates(self):
+        """Test 2: A synthetic voice extraction artifact (mirroring what real
+        single-letter extraction would produce) should pass VoiceValidator
+        (corpus size + section completeness). Validates that the Step 1.5
+        prompt produces output the downstream consumers will accept."""
         from validator import VoiceValidator
 
-        artifact_path = Path(__file__).parent / "fixtures" / "voice_extraction_example_2026-01.yaml"
+        artifact_path = Path(__file__).parent / "fixtures" / "voice_extraction_synthetic_2026-01.yaml"
         assert artifact_path.exists(), "voice extraction artifact missing"
 
         voice = yaml.safe_load(artifact_path.read_text())
@@ -363,7 +363,7 @@ h1 { font-family: 'Inter', sans-serif; color: #5A597A; }
         # The artifact should be a valid populated voice section
         result = VoiceValidator.validate_voice(voice)
         assert result["status"] == "pass", \
-            f"Example voice artifact failed VoiceValidator: {result}"
+            f"Synthetic voice artifact failed VoiceValidator: {result}"
 
         # And the corpus size check should specifically pass (>= 2000 words)
         assert result["checks"]["corpus"]["status"] == "pass"
@@ -373,11 +373,10 @@ h1 { font-family: 'Inter', sans-serif; color: #5A597A; }
         # ≥3 anti-filler, ≥3 primary attributes)
         assert result["checks"]["completeness"]["status"] == "pass"
 
-        # Spot-check a few specific markers that distinguish "specific extraction"
-        # from "generic boilerplate":
-        assert any("Example" in r or "scarcity" in r or "thesis" in r
-                   for r in voice["core_rules"]), \
-            "core_rules should reference specific Example/thesis vocabulary"
+        # Spot-check that core_rules contain specific thesis vocabulary
+        # (vs generic asset-management boilerplate):
+        assert any("thesis" in r.lower() for r in voice["core_rules"]), \
+            "core_rules should reference specific thesis vocabulary"
 
         # anti_filler should include institutional-finance buzzwords
         anti_filler_text = " ".join(voice["anti_filler"]).lower()

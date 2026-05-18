@@ -63,3 +63,9 @@ evals/results/
 *.coverage
 .coverage.*
 htmlcov/
+
+# Build artifacts (partner bundles, etc.)
+dist/
+
+# Internal classification manifest (catalogs which skills are partner-safe — local only).
+skills/PERIMETER.md
