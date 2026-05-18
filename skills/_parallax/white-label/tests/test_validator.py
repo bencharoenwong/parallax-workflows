@@ -312,3 +312,29 @@ class TestDesignMdValidator:
         md = "---\ncolors:\n  primary: \"#FF0000\"\n---\n## Overview"
         res = validator.DesignMdValidator.lint(md)
         assert res["status"] in ("pass", "warn", "fail", "skipped")
+
+
+
+# ---------------------------------------------------------------------------
+# Cross-module: validator.SUPPORTED_FORMATS must stay in lockstep with
+# loader._LOGO_ALLOWED_EXTS. If a new ext is added in one but not the other,
+# users get inconsistent rejection messages (one layer allows, the other
+# refuses). This drift gate fails fast when the two go out of sync.
+# ---------------------------------------------------------------------------
+
+
+def test_logo_allowlist_parity(loader_module) -> None:
+    """validator.LogoValidator.SUPPORTED_FORMATS must equal
+    {ext.lstrip(".") for ext in loader._LOGO_ALLOWED_EXTS}.
+
+    Drift surfaces here as a parity diff rather than as a confusing
+    inconsistent-rejection bug deep in operator flow.
+    """
+    loader_exts = {ext.lstrip(".") for ext in loader_module._LOGO_ALLOWED_EXTS}
+    assert validator.LogoValidator.SUPPORTED_FORMATS == loader_exts, (
+        f"Allowlist drift detected:\n"
+        f"  loader._LOGO_ALLOWED_EXTS (sans dots): {loader_exts}\n"
+        f"  validator.SUPPORTED_FORMATS:           {validator.LogoValidator.SUPPORTED_FORMATS}\n"
+        f"  diff (loader - validator):             {loader_exts - validator.LogoValidator.SUPPORTED_FORMATS}\n"
+        f"  diff (validator - loader):             {validator.LogoValidator.SUPPORTED_FORMATS - loader_exts}"
+    )

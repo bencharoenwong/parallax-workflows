@@ -262,12 +262,20 @@ class TestUrlFallbackRegression:
         def fake_run(*args, **kwargs):
             return CompletedProcess(args, returncode=1, stdout="", stderr="not found")
 
-        # Force scrapling import to fail (it's not installed in this venv anyway)
-        # by intercepting urllib instead — that's the path we're testing
+        # Force scrapling's Fetcher.get to raise so the production code falls
+        # through to the urllib branch. (scrapling is installed in this env;
+        # without this, Fetcher.get makes a real network call to example.com
+        # and the urllib mock never fires — the historical reason this test
+        # failed on bare example.com.)
+        def fake_fetcher_get(*args, **kwargs):
+            raise RuntimeError("scrapling disabled for urllib-fallback test")
+
+        # Intercept urllib at the import site used by extract.web_pdf.
         def fake_urlopen(req, timeout=None):
             return _StubResponse(_BRAND_STUB_HTML)
 
         with mock.patch("subprocess.run", fake_run), \
+             mock.patch("scrapling.fetchers.Fetcher.get", fake_fetcher_get), \
              mock.patch("urllib.request.urlopen", fake_urlopen):
             draft = extract_from_url("https://www.example.com/")
 

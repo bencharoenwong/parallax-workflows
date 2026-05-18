@@ -151,7 +151,9 @@ class ColorValidator:
 class LogoValidator:
     """Validator for logo files: existence, format, dimensions, size."""
 
-    SUPPORTED_FORMATS = {"png", "jpg", "jpeg", "svg", "gif"}
+    # Kept in lockstep with loader._LOGO_ALLOWED_EXTS (sans leading dots).
+    # See tests/test_validator.py::test_logo_allowlist_parity for the drift gate.
+    SUPPORTED_FORMATS = {"png", "jpg", "jpeg", "svg", "gif", "ico", "webp"}
     MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
     MIN_DIMENSIONS = (200, 200)
 
