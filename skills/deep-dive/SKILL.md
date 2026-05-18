@@ -81,22 +81,7 @@ Apply graceful fallback patterns from shared conventions for any missing data.
 
 ### Pre-Render — Load white-label branding
 
-Before composing the Output Format, load the client's visual branding. Inlined per Tier 1 pilot convention.
-
-```python
-import sys
-from pathlib import Path
-
-_WHITE_LABEL_DIR = Path(__file__).parent.parent / "_parallax" / "white-label"
-sys.path.insert(0, str(_WHITE_LABEL_DIR))
-from loader import load_visual_branding, is_white_label_active, safe_source_reference  # noqa: E402
-
-branding = load_visual_branding()
-white_label_active = is_white_label_active(branding)
-client_name = branding.get("client_name", "")
-```
-
-The loader returns exactly six keys: `client_name`, `colors`, `logos`, `fonts`, `source`, `error`. Any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`. Load `_parallax/white-label/integration-pattern.md` for the full contract, error-state table (§4), substitution semantics (§5), and Provenance template (§7).
+Before composing the Output Format, JIT-load `_parallax/white-label/integration-pattern.md` and call `load_visual_branding()` per §2. The loader returns exactly six keys: `client_name`, `colors`, `logos`, `fonts`, `source`, `error`. Set `white_label_active = is_white_label_active(branding)` and `client_name = branding.get("client_name", "")` for use in the Branding Header. See §4 (error states), §5 (substitution semantics), §7 (Provenance template). Any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
 
 ## Output Format
 
