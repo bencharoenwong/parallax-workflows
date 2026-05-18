@@ -299,6 +299,8 @@ One line stating branding state per integration-pattern.md §7 markdown column (
 
 ## Disclaimer
 
+**AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
+
 If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
 
 *This is informational analysis based on Parallax factor scores. Hedge ratios assume executable liquidity; ADV, short borrow, and float are not validated by Parallax — verify externally before sizing. All outputs should be reviewed by qualified professionals before any investment decisions.*

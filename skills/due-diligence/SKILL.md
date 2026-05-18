@@ -117,6 +117,8 @@ Analyst-grade research report. Precision over brevity. Include raw data tables.
 
 Note: `get_financial_analysis` (~2-5 min) and `get_stock_report` (~1-2 min, paid) are async. Begin assembling output from instant tools while async calls resolve.
 
+**AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
+
 If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
 
 > *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*

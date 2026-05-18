@@ -126,6 +126,8 @@ Client-ready report:
 - **Appendix: Methodology** (brief Parallax scoring note)
 - **Provenance** (always present): one line stating branding state. Format is the markdown column of integration-pattern.md §7 — DO NOT collapse the five error states into prose; render per the table verbatim so `schema_unavailable` correctly stays in the white-label branch rather than falling back to default Parallax. If a logo was skipped per the Branding Header rule above, append `Logo on file: <basename>` as a second Provenance line.
 
+**AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
+
 If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
 
 > *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*

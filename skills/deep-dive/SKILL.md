@@ -119,6 +119,8 @@ The loader returns exactly six keys: `client_name`, `colors`, `logos`, `fonts`, 
 
 Append audit log entry per loader.md §6.
 
+**AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below. (The Assessment section already carries its own contextual-proximity AI disclosure per §5 rule 6; the document-level §9.2 banner is rendered here in addition, covering the synthesis across all sections.)
+
 If active view: use the view-aware disclaimer per loader.md §5. Otherwise:
 
 > *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*

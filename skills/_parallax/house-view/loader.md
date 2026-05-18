@@ -207,12 +207,11 @@ When an active view is loaded and applied, every consumer skill MUST:
 5. **View-aware disclaimer** (bottom — replaces the standard parallax-conventions §7 disclaimer):
    > *"This analysis reflects active house view '[view_name]' uploaded by [uploader_role] on [upload_date], effective [effective_date]. Tilts and excludes per the loaded view; conflicts with explicit user scope are flagged inline. Outputs should be reviewed against client suitability before any action."*
 
-6. **AI-interaction disclosure** (bottom, immediately above or below the view-aware disclaimer — REQUIRED whether or not a view is active; applies to every consumer skill output):
-   > *"This output was generated with the assistance of AI. Inputs, factor scores, and framing were produced by large-language-model analysis of structured data and prose. Review before acting."*
-   >
-   > <!-- COUNSEL-TBD — banner wording AND any methodology/provenance link are pending counsel review before v1 ship. The current text is a placeholder that satisfies the disclosure principle (AI involvement, scope of AI role, review obligation). Do not add a URL until counsel has signed off on both the destination and the phrasing; an unresolved `[methodology_url]` placeholder in client-facing output is worse than no link. Replace the whole banner wholesale with counsel-approved text at v1. -->
+6. **AI-interaction disclosure** (bottom, immediately above the view-aware disclaimer — REQUIRED whether or not a view is active; applies to every consumer skill output): Render the canonical banner from `_parallax/parallax-conventions.md §9.2`. The banner is rendered by reference, not inlined — a single source of truth in §9.2 lets counsel sign-off and the forthcoming attribution-API endpoint propagate to all consumer skills with one edit.
 
-   Skills MUST render this banner even when running without an active view — AI involvement in scoring and synthesis is independent of view state.
+   The current §9.2 banner accurately distinguishes deterministic quantitative pipelines from LLM-generated qualitative content (including the LLM-backed Parallax MCP services — news synthesis, macro commentary, assessment — as well as the orchestrating model's narrative and recommendations), and points readers at the Provenance footer and the per-output trace ID. It supersedes the earlier "AI generated factor scores" placeholder, which was technically wrong — factor scores come from CG's deterministic pipeline, not from an LLM.
+
+   Skills MUST render this banner even when running without an active view — AI involvement in scoring synthesis and narrative is independent of view state.
 
 When NO active view is loaded, skills run as today — standard output, no preamble, standard disclaimer. Rules 3 and 4 (ground-truth panel and divergence assertion) AND rule 6 (AI-interaction disclosure) apply whether or not a view is active — they are data-integrity / regulatory requirements, not view-specific features.
 

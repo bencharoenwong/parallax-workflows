@@ -177,6 +177,8 @@ Append audit log entry per loader.md §6.
 
 Keep tone calm and explanatory. The client is worried — the output should reduce anxiety with clarity, not amplify it with jargon.
 
+**AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
+
 If active view: end with the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
 
 > *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
