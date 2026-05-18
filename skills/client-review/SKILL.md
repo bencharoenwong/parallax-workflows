@@ -124,7 +124,7 @@ Client-ready report:
 - **Suitability Assessment** (alignment with client goals AND with active house view if present; cite basis_statement)
 - **Recommended Actions** (prioritized High/Medium/Low per recommendation-matrix.md, with specific action types; rationale cites view tilts where applicable)
 - **Appendix: Methodology** (brief Parallax scoring note)
-- **Provenance** (always present): one line stating branding state. Format is the markdown column of integration-pattern.md §7 — DO NOT collapse the five error states into prose; render per the table verbatim so `schema_unavailable` correctly stays in the white-label branch rather than falling back to default Parallax. If a logo was skipped per the Branding Header rule above, append `Logo on file: <basename>` as a second Provenance line.
+- **Provenance** (always present): one line stating branding state. Format is the markdown column of integration-pattern.md §7 (render per table; do not collapse) so `schema_unavailable` correctly stays in the white-label branch rather than falling back to default Parallax. If a logo was skipped per the Branding Header rule above, append `Logo on file: <basename>` as a second Provenance line.
 
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 

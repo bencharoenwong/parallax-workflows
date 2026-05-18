@@ -80,7 +80,7 @@ Present as a structured morning brief, under 800 words:
 - **Redundancy & Alignment Alerts** (only if flagged; include View Misalignment / View Excluded if view active)
 - **Holding News** (one paragraph per holding)
 - **Action Items** (what deserves attention today; if view active, prioritize toward view rebalance direction)
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (5 error states; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
 
 Lead with what matters.
 

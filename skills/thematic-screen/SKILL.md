@@ -77,7 +77,7 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 - **Comparison Matrix** (peer comparison for lead candidate)
 - **Financial Snapshot** (revenue, margins, growth for top 3 trusted picks)
 - **Implementation Notes** (liquidity considerations, position sizing guidance)
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (5 error states; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
 
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 

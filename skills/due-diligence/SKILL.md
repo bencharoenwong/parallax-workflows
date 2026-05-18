@@ -113,7 +113,7 @@ Analyst-grade research report. Precision over brevity. Include raw data tables.
 - **House View Note** (only if view active) — placed AFTER Factor Score Trajectory per loader.md §7 rendering order, via `render_view_conflict(kind="blanket", ...)`.
 - **Parallax Research Report** (link to PDF/HTML from get_stock_report)
 - **Synthesis & Key Risks** (bull case, bear case, key uncertainties)
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (5 error states; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
 
 Note: `get_financial_analysis` (~2-5 min) and `get_stock_report` (~1-2 min, paid) are async. Begin assembling output from instant tools while async calls resolve.
 

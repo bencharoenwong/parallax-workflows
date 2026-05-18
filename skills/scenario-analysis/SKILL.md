@@ -115,7 +115,7 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 - **Action Plan** (prioritized list: what to trim/sell, what to add, what to hold — with specific weight suggestions)
 - **What to Watch** (2-3 signals that would confirm or invalidate this thesis)
 - **Confidence & Caveats** (how certain is this analysis, what could go wrong with the rotation)
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (5 error states; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
 
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 

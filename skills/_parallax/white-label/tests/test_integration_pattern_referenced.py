@@ -122,7 +122,8 @@ def test_negated_load_directives_do_not_satisfy_gate(text: str, expected: bool) 
 # ---------------------------------------------------------------------------
 
 _ANALYSIS_DISCLAIMER_RE = re.compile(
-    r"informational analysis based on Parallax|scenario-based analysis, not investment advice",
+    r"informational analysis based on Parallax"
+    r"|scenario-based analysis, not investment advice",
     re.IGNORECASE,
 )
 
@@ -193,3 +194,51 @@ def test_wired_skill_renders_ai_disclosure(skill_md: Path) -> None:
 def test_nine_two_reference_pattern(text: str, expected: bool) -> None:
     """Unit-level coverage for the §9.2 reference detector."""
     assert bool(_NINE_TWO_REF_RE.search(text)) is expected
+
+
+
+# ---------------------------------------------------------------------------
+# Provenance error-state count drift gate
+# ---------------------------------------------------------------------------
+
+_HARDCODED_COUNT_RE = re.compile(
+    r"\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+error\s+states?\b",
+    re.IGNORECASE,
+)
+
+
+@pytest.mark.parametrize(
+    "skill_md", _collect_wired_skills(), ids=lambda p: p.parent.name
+)
+def test_wired_skill_no_hardcoded_error_state_count(skill_md: Path) -> None:
+    """No SKILL.md may hardcode the §7 error-state count.
+
+    Skills must reference the §7 table by directive ("render per table; do
+    not collapse"), not by count. A hardcoded count silently drifts the
+    moment the §7 table grows. Catches reintroduction at PR review.
+    """
+    text = skill_md.read_text(encoding="utf-8")
+    match = _HARDCODED_COUNT_RE.search(text)
+    assert match is None, (
+        f"{skill_md.relative_to(_SKILLS_ROOT.parent)} hardcodes an error-state "
+        f"count: '{match.group(0)}'. Replace with the count-free directive: "
+        f"'render per table; do not collapse'. The §7 table is the single "
+        f"source of truth — hardcoded counts drift silently when it grows."
+    )
+
+
+@pytest.mark.parametrize(
+    "text,expected_hardcoded",
+    [
+        ("(5 error states; do not collapse)", True),
+        ("(five error states; do not collapse)", True),
+        ("DO NOT collapse the five error states into prose", True),
+        ("seven error states", True),
+        ("(render per table; do not collapse)", False),
+        ("the §7 error-state table", False),
+        ("the error-state behaviour is documented", False),
+    ],
+)
+def test_hardcoded_count_pattern(text: str, expected_hardcoded: bool) -> None:
+    """Unit-level coverage for the hardcoded-count detector."""
+    assert bool(_HARDCODED_COUNT_RE.search(text)) is expected_hardcoded
