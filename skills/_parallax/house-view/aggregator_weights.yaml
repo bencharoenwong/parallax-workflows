@@ -1,0 +1,54 @@
+# Aggregator weights for cross_country.aggregate (heuristic_phase0).
+# v0 weights derived from MSCI ACWI market-cap shares rounded to clean fractions.
+# empirical_phase1 will replace with rolling-window beta-to-global-equity weights
+# from the calibration backtest.
+#
+# When the calibration manifest provenance.methodology_section != "GUESS" AND
+# provenance.backtest_ref is non-null, this file gets regenerated from the
+# fitted weights and saved views auto-flip to empirical_phase1.
+
+version: v0
+calibration_status: heuristic_phase0
+generated_at: 2026-05-24
+
+# UNREACHABLE handling (per BUG-009 resolution in v2 plan §4.3):
+# - If responded_weight/total_weight >= 0.60: emit aggregated value with
+#   weights renormalized over responded subset.
+# - If responded_weight/total_weight < 0.60: emit NULL with coverage_warning
+#   in provenance; pillar confidence forced to 0.0.
+# - Per-region tilts (single-market) bypass threshold.
+
+global_macro_weights:
+  # Aligned to MCP coverage per MCP_FIELD_INVENTORY.md §1 (14 countries).
+  # "Global" is excluded — it's an aggregate market, not a country (would
+  # double-count in cross_country.aggregate).
+  # Weights are MSCI ACWI-derived shares; sum normalized to 1.0 across
+  # listed markets. v0 / heuristic_phase0.
+  us: 0.56              # 0.55 base + 0.01 absorbed remainder (see comment below)
+  japan: 0.08
+  china: 0.10
+  uk: 0.04
+  germany: 0.04
+  france: 0.03
+  india: 0.04
+  canada: 0.03
+  south_korea: 0.02
+  taiwan: 0.02
+  singapore: 0.01
+  indonesia: 0.01
+  thailand: 0.005
+  malaysia: 0.005
+  # Sum: 1.00. Base shares from MSCI ACWI = 0.99; remaining 0.01 absorbed
+  # into US (the dominant market) so cross_country's responded_weight/
+  # total_weight coverage ratio uses an honest denominator of 1.0. Smaller
+  # markets keep their relative structure intact.
+  #
+  # NOT INCLUDED (out of MCP coverage as of 2026-05-24):
+  #   brazil, mexico, hong_kong, australia, switzerland, netherlands, ...
+  # If a non-covered market matters for a specific client, add it via
+  # client-specific weights overlay (future work) — do NOT add here.
+
+# Sector weights default to global_macro_weights (same market influence on
+# sector tilts as on macro tilts). Override here if sector-specific weights
+# diverge in calibrated phase.
+global_sector_weights: null  # null = inherit global_macro_weights

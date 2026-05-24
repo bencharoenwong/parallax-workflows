@@ -6,7 +6,11 @@ import hashlib
 import yaml
 import rfc8785
 
-REPO = Path("/Users/bencharoenwong/parallax-workflows")
+# Repo root resolved from this file's location so the helper works for
+# anyone cloning the repo, not just the author. This file lives at
+#   <repo>/skills/_parallax/house-view/tests/golden/generate_golden.py
+# so go up 5 levels: golden → tests → house-view → _parallax → skills → <repo>.
+REPO = Path(__file__).resolve().parent.parent.parent.parent.parent.parent
 sys.path.insert(0, str(REPO / "skills" / "_parallax" / "house-view"))
 import audit_chain
 import chain_emit

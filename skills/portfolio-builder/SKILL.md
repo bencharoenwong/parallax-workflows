@@ -41,6 +41,15 @@ Construct a portfolio from a plain-English investment thesis using Parallax MCP 
 
 Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call. Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode and fallback patterns. JIT-load `_parallax/house-view/loader.md` for active-view validation, tilt application, and conflict-resolution rules.
 
+### Pre-flight: house-view drift check
+
+JIT-load `_parallax/house-view/auto-on-load-judge-pattern.md` and follow
+its protocol. If the protocol surfaces a banner, render it before
+proceeding to this skill's main workflow.
+
+Skip this pre-flight if invoked with `--skip-drift-check` or if no active
+house view exists.
+
 ### Phase A — Parallel Initialization & Scoring
 
 Execute Steps 0–2 in parallel. All three must complete before Phase B begins. Best-effort error handling: if any step fails (timeout, validation error), flag it, continue with fallback, and proceed to Phase B.

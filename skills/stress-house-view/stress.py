@@ -360,29 +360,47 @@ def build_recommended_deltas(
     resolutions: List[Dict[str, Any]],
     cio_age_days: int,
     parallax_age_days: int,
+    include_fresh: bool = False,
 ) -> List[Dict[str, Any]]:
-    """Turn DIVERGENT_STALE cell resolutions into a list of recommended deltas.
+    """Turn DIVERGENT cell resolutions into a list of recommended deltas.
 
-    v1 emits `kind="informational"` entries only — humans apply manually
-    via /parallax-load-house-view. The structured shape is forward-compatible
+    v1 (default `include_fresh=False`) emits `kind="informational"` entries
+    only for DIVERGENT_STALE cells — humans apply manually via
+    /parallax-load-house-view. The structured shape is forward-compatible
     with a future `--apply-stress <audit-hash>` operational mode that would
     auto-populate a draft (Option B in the design doc).
+
+    When `include_fresh=True` (used by the judge skill — see
+    notes/2026-05-24-house-view-v2-plan.md §3.1 Phase 4), DIVERGENT_FRESH
+    cells are ALSO emitted with `kind="informational_fresh"`. Structural
+    fields are identical to stale deltas; only `kind` and the carried
+    `stress_state` differ. Backward-compatible: existing callers that do
+    not pass `include_fresh` see byte-identical output to today.
 
     `path` follows the load-house-view `--why <tilt-path>` convention
     (dotted, with `tilts.` prefix).
     """
     out = []
     for r in resolutions:
-        if r.get("state") != "DIVERGENT_STALE":
+        state = r.get("state")
+        if state == "DIVERGENT_STALE":
+            kind = "informational"
+        elif include_fresh and state == "DIVERGENT_FRESH":
+            kind = "informational_fresh"
+        else:
+            continue
+        dim = r.get("dim", "")
+        if not dim:
+            # Malformed resolution dict; skip rather than crash.
             continue
         out.append({
-            "kind": "informational",
-            "path": f"tilts.{r['dim']}" if not r['dim'].startswith("tilts.") else r['dim'],
+            "kind": kind,
+            "path": dim if dim.startswith("tilts.") else f"tilts.{dim}",
             "market": r.get("market"),
             "cio_value": r.get("cio_tilt"),
             "parallax_signal": r.get("parallax_view"),
             "parallax_summary": r.get("parallax_summary", ""),
-            "stress_state": r["state"],
+            "stress_state": state,
             "cio_age_days": cio_age_days,
             "parallax_age_days": parallax_age_days,
         })
@@ -468,9 +486,9 @@ def validate_recommended_deltas(
                                      f"known: {sorted(categories[category])}"})
         # kind check
         kind = d.get("kind")
-        if kind not in {"informational", "global"}:
+        if kind not in {"informational", "global", "informational_fresh"}:
             errors.append({"index": i, "field": "kind",
-                           "reason": f"kind must be 'informational' or 'global'; got {kind!r}"})
+                           "reason": f"kind must be 'informational', 'global', or 'informational_fresh'; got {kind!r}"})
         # parallax_signal type strictness for informational deltas (decision 4d)
         if kind == "informational":
             sig = d.get("parallax_signal")

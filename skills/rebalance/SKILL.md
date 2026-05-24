@@ -36,6 +36,15 @@ Generate prioritized trade recommendations using health flags, macro context, an
 
 Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, fallback patterns, and macro reasoning. JIT-load `_parallax/house-view/loader.md` for active-view validation and tilt application. JIT-load `../client-review/references/recommendation-matrix.md` for the priority system.
 
+### Pre-flight: house-view drift check
+
+JIT-load `_parallax/house-view/auto-on-load-judge-pattern.md` and follow
+its protocol. If the protocol surfaces a banner, render it before
+proceeding to this skill's main workflow.
+
+Skip this pre-flight if invoked with `--skip-drift-check` or if no active
+house view exists.
+
 ### Batch 0 — Tool Loading & Active House View
 
 Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.

@@ -157,6 +157,12 @@ Bring your own house view. The CIO memo, IC strategy doc, or macro-desk PDF that
 | `/parallax-load-house-view --why <tilt-path>` | Trace any tilt to the source span that generated it |
 | `/parallax-load-house-view --export <view_id>` | Export regulator-grade compliance bundle |
 | `/parallax-load-house-view --clear` | Remove active view |
+| `/parallax-make-house-view` | **Synthesize** a draft view from Parallax MCP signals (no CIO PDF needed). Routes through the same confirmation gate; saves with `generator_synthesis` provenance |
+| `/parallax-make-house-view --shadow-diff` | Synthesize but do NOT save; render an additive diff vs the active bank view (preserves bank-view sovereignty) |
+| `/parallax-make-house-view --markets us,japan,uk` | Restrict synthesis fan-out scope |
+| `/parallax-judge-house-view` | **Read-only** LLM-as-judge — compare saved view to current Parallax signals, classify drift severity, emit cited per-cell recommendations + bundle |
+| `/parallax-judge-house-view --json` | Structured output for cron consumption |
+| `/parallax-judge-house-view --dry` | Use mocked MCP responses (CI / testing) |
 
 **Three design choices worth knowing about:**
 
@@ -165,6 +171,8 @@ Bring your own house view. The CIO memo, IC strategy doc, or macro-desk PDF that
 3. **Audit was a design input.** Every save writes a hash-chained audit entry, an Ed25519-signed reasoning chain, and a per-tilt provenance record. `--export` produces a regulator-grade bundle. `--why tilts.factors.momentum` traces any tilt back to the source span (or rule, or manual edit) that generated it.
 
 Active view is consumed by: `portfolio-builder`, `rebalance`, `thematic-screen`, `morning-brief`, `client-review`, `explain-portfolio`. Conflict-flag-only by: `should-i-buy`, `deep-dive`. See `skills/load-house-view/samples/` for sample CIO views, `skills/_parallax/house-view/loader.md` for the multiplier mapping and conflict-resolution rules, and `skills/_parallax/house-view/README.md` for the module reference.
+
+`portfolio-builder`, `rebalance`, and `thematic-screen` JIT-load `skills/_parallax/house-view/auto-on-load-judge-pattern.md` and auto-fire `/parallax-judge-house-view --dry --json` when the active view is older than 30 days; a one-line banner surfaces only on `drift_material` severity. `morning-brief` surfaces a conditional one-liner suggesting the judge when its existing Batch B alignment check detects ≥3 misaligned holdings. `client-review` and `explain-portfolio` deliberately skip the auto-on-load drift gate (compliance + retrospective-replay contexts respectively).
 
 ### Market & Discovery
 

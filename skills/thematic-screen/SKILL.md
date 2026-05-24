@@ -34,6 +34,15 @@ Discover investment opportunities by theme using Parallax's semantic universe bu
 
 Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call. Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode and fallback patterns. JIT-load `_parallax/house-view/loader.md` for active-view validation and conflict resolution.
 
+### Pre-flight: house-view drift check
+
+JIT-load `_parallax/house-view/auto-on-load-judge-pattern.md` and follow
+its protocol. If the protocol surfaces a banner, render it before
+proceeding to this skill's main workflow.
+
+Skip this pre-flight if invoked with `--skip-drift-check` or if no active
+house view exists.
+
 ### Phase A — Setup (parallel, ~2–3 tokens)
 
 Fire both in parallel:
