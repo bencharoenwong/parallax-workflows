@@ -714,6 +714,137 @@ def test_e2e_audit_chain_tolerates_unknown_future_action(
     assert entries_after[-1]["action"] == "future_thing"
 
 
+# ---------------------------------------------------------------------------
+# Test 9 — PRODUCTION-shape phase_1 fan-out → imputed view (regression guard)
+#
+# Catches the bug class found by the no-mistakes gate review (2026-05-24):
+# the test helpers in test_integration_make_judge.py pre-shape
+# ``mcp_responses["per_market"]`` as ``list[MarketResponse]``, which lets
+# ``_imputed_view_from_maker`` work. But production ``phase_1_fan_out``
+# returns a flat ``dict[str, dict]`` keyed by ``"macro_analyst:M:C"``
+# summary strings. With the helper-shortcut absent, the old code silently
+# threw, the try/except swallowed it, and the imputed view was empty.
+# Symptom in prod: every cell = PARALLAX_SILENT regardless of MCP truth,
+# severity stays drift_minor, the auto-on-load drift gate never fires.
+#
+# This test bypasses the per_market shortcut and feeds the judge a dict
+# in the EXACT shape phase_1_fan_out produces.
+# ---------------------------------------------------------------------------
+
+
+def test_e2e_judge_consumes_production_phase_1_fan_out_shape(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Feed the judge a mock_mcp_responses dict in production fan-out shape
+    (string-keyed, no ``per_market`` shortcut). Assert the reconstruction
+    helper builds MarketResponse instances + imputed view is non-empty +
+    at least one cell resolves to a non-PARALLAX_SILENT state.
+    """
+    view_dir = tmp_path / "active-house-view"
+    report_dir = tmp_path / "judge-reports"
+    chain_dir = tmp_path / "chains"
+    monkeypatch.setenv("PARALLAX_HOUSE_VIEW_DIR", str(view_dir))
+    monkeypatch.setattr("chain_emit.DEFAULT_CHAIN_DIR", chain_dir)
+
+    # Stage 1: maker save (produces an active view to judge against)
+    base_mcp = build_mock_mcp_aligned()
+    _run_maker(base_mcp, view_dir)
+
+    # Stage 2: build production-shape mcp_responses for the judge.
+    # phase_1_fan_out in production returns keys like
+    # "macro_analyst:United States:macro_indicators" plus
+    # "get_telemetry" and "list_macro_countries".
+    us_macro = json.loads((MAKER_FIXTURES / "us_macro_indicators.json").read_text())
+    jp_tactical = json.loads((MAKER_FIXTURES / "japan_tactical.json").read_text())
+    cn_macro = json.loads((MAKER_FIXTURES / "china_macro_indicators.json").read_text())
+    telemetry = json.loads((MAKER_FIXTURES / "telemetry_full.json").read_text())
+
+    production_shape_mcp = {
+        "list_macro_countries": {
+            "success": True,
+            "markets": ["United States", "Japan", "China"],
+        },
+        "get_telemetry": telemetry,
+        "macro_analyst:United States:macro_indicators": us_macro,
+        "macro_analyst:Japan:tactical": jp_tactical,
+        "macro_analyst:China:macro_indicators": cn_macro,
+        # NOTE: no "per_market" key — that's the shortcut the test
+        # helpers used to inject. This dict matches what
+        # phase_1_fan_out actually returns from the real production
+        # path.
+    }
+
+    # Stage 3: run judge with this shape
+    cfg = judge.JudgeConfig(
+        dry=True,
+        mock_mcp_responses=production_shape_mcp,
+        explicit=True,
+        view_dir=view_dir,
+        report_dir=report_dir,
+    )
+    jr = judge.run_judge(config=cfg, llm_call_fn=None)
+
+    # The judge must produce a valid result; the reconstruction helper
+    # must have populated the imputed view.
+    assert jr.severity in ("drift_minor", "drift_moderate", "drift_material")
+
+    # The decisive assertion: at least one cell must NOT be PARALLAX_SILENT.
+    # Pre-fix, EVERY cell would be PARALLAX_SILENT because the imputed
+    # view was empty. After the fix, the reconstruction helper builds
+    # MarketResponse instances → cross_country.aggregate produces tilts
+    # → at least the per-region tilts (US/Japan/China) populate.
+    non_silent = [
+        r for r in jr.resolutions
+        if r.get("state") != "PARALLAX_SILENT"
+    ]
+    assert non_silent, (
+        "Every cell resolved to PARALLAX_SILENT despite production-shape "
+        "MCP responses being injected. This is the bug class the gate "
+        "caught: _imputed_view_from_maker's input-shape mismatch with "
+        "phase_1_fan_out's output."
+    )
+
+
+def test_e2e_judge_cli_dry_no_longer_requires_mock_mcp(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Catches gate-review Finding 2: ``--dry`` previously required
+    ``--mock-mcp`` and exit 2 without it. The auto-on-load-judge-pattern
+    instructs consumer skills to call ``/parallax-judge-house-view --dry
+    --json`` (no mock), so this synchronous failure made the entire
+    consumer drift-gate inert in production (the graceful-skip rule
+    swallowed the exit-2 silently).
+
+    Post-fix: ``--dry`` and ``--mock-mcp`` are orthogonal. ``--dry``
+    means skip LLM phase 5; ``--mock-mcp`` is test-only. ``--dry``
+    without ``--mock-mcp`` should NOT exit 2.
+    """
+    view_dir = tmp_path / "active-house-view"
+    monkeypatch.setenv("PARALLAX_HOUSE_VIEW_DIR", str(view_dir))
+
+    # Need an active view present (judge halts in phase 0 if none).
+    base_mcp = build_mock_mcp_aligned()
+    _run_maker(base_mcp, view_dir)
+
+    # Direct call to main() — simulates the CLI path.
+    # If --dry still required --mock-mcp, this would return 2 (or raise
+    # SystemExit).
+    exit_code = judge.main([
+        "--dry",
+        "--json",
+        "--view-dir", str(view_dir),
+        "--report-dir", str(tmp_path / "reports"),
+    ])
+    # Allow 0 (success) or any non-2 value (the regression we're catching
+    # was specifically exit 2 from the artificial mock-mcp requirement).
+    assert exit_code != 2, (
+        f"--dry without --mock-mcp returned exit code {exit_code} == 2. "
+        "Regression: the artificial 'dry requires mock-mcp' check was "
+        "re-introduced. Consumer auto-on-load drift gate would silently "
+        "swallow this via graceful-skip and never fire the banner."
+    )
+
+
 # ===========================================================================
 # Failure-mode E2E tests
 # ===========================================================================

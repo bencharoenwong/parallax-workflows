@@ -122,15 +122,25 @@ def run_maker_with_mocked_mcp(mcp_responses: dict[str, Any], view_dir: Path) -> 
     return res
 
 
-def run_judge_with_mocked_mcp(mcp_responses: dict[str, Any], view_dir: Path, report_dir: Path) -> judge.JudgeResult:
-    # NOTE: prior version of this helper monkey-patched
-    # ``judge._imputed_view_from_maker`` to work around two bugs in the
-    # judge orchestrator: (a) ``weights={}`` hardcoded in the caller, and
-    # (b) ``aggregated.get("tilts", {})`` looking for a non-existent
-    # subtree. Both bugs were fixed in judge.py; the patch is removed and
-    # this test now exercises the real imputed-view path end-to-end.
+def run_judge_with_mocked_mcp(
+    mcp_responses: dict[str, Any],
+    view_dir: Path,
+    report_dir: Path,
+    *,
+    skip_llm: bool = False,
+) -> judge.JudgeResult:
+    # NOTE on `dry` semantics (post-2026-05-24 gate-review fix):
+    # `dry` and `mock_mcp_responses` are now ORTHOGONAL.
+    #   - dry=True  → suppresses LLM Phase 5 (recommendations = []).
+    #   - mock_mcp_responses → swaps live MCP for canned payload.
+    # Tests that want recommendations to fire (e.g., the divergent test
+    # asserting len(recommendations) > 0) must NOT pass dry=True even
+    # while using mock responses.
+    #
+    # The `skip_llm` kwarg lets callers be explicit: tests that don't
+    # care about recommendations pass skip_llm=True (dry mode).
     config = judge.JudgeConfig(
-        dry=True,
+        dry=skip_llm,
         mock_mcp_responses=mcp_responses,
         explicit=True,
         view_dir=view_dir,

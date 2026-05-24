@@ -308,9 +308,14 @@ def phase_1_fan_out(
 
     Returns a dict keyed by ``tool:arg1:arg2:...`` summary strings.
     """
-    if config.dry:
-        if config.mock_mcp_responses is None:
-            raise ValueError("dry=True requires mock_mcp_responses")
+    # `dry` and `mock_mcp_responses` are orthogonal now (post-2026-05-24
+    # gate-review fix): `dry` means "skip LLM phase 5" (handled in
+    # run_judge's llm_call_fn gating); `mock_mcp_responses` means "use
+    # this canned payload instead of live MCP" (handled here). The
+    # earlier "dry requires mocks" constraint blocked the auto-on-load
+    # consumer pattern (`/parallax-judge-house-view --dry --json`) from
+    # ever firing in production.
+    if config.mock_mcp_responses is not None:
         return dict(config.mock_mcp_responses)
     if mcp_call_fn is None:
         # Live mode without an injected callable means the orchestrator
@@ -332,6 +337,58 @@ def phase_1_fan_out(
 # ---------------------------------------------------------------------------
 
 
+def _reconstruct_maker_responses(
+    mcp_responses: dict[str, Any],
+    maker: MakerModules,
+) -> list[Any]:
+    """Build list[MarketResponse] from phase_1_fan_out's string-keyed dict.
+
+    Production ``phase_1_fan_out`` returns a flat ``dict[str, dict]``
+    keyed by ``"macro_analyst:Market:Component"`` summary strings (and a
+    couple of top-level keys like ``"get_telemetry"`` /
+    ``"list_macro_countries"``). ``cross_country.aggregate`` consumes
+    ``list[MarketResponse]``. This helper bridges the shape gap so the
+    judge's imputed view is non-empty in real runs.
+
+    Tests that inject ``mcp_responses["per_market"]`` directly as a
+    pre-shaped list (the previous helper-shortcut path) bypass this
+    function; that path is preserved in ``_imputed_view_from_maker`` for
+    backward compatibility with existing test fixtures.
+    """
+    if not maker.available:
+        return []
+    MarketResponse = getattr(maker.cross_country, "MarketResponse", None)
+    if MarketResponse is None:
+        return []
+
+    per_market_components: dict[str, dict[str, Any]] = {}
+    for key, resp in mcp_responses.items():
+        if not isinstance(key, str) or not key.startswith("macro_analyst:"):
+            continue
+        parts = key.split(":", 2)
+        if len(parts) < 3:
+            continue
+        _, market, component = parts
+        per_market_components.setdefault(market, {})[component] = resp
+
+    responses: list[Any] = []
+    for market_name, components in per_market_components.items():
+        # Schema key derivation matches the maker's lowercase-with-underscore
+        # convention (cross_country.py treats market names as schema_key
+        # lookups against aggregator_weights.yaml).
+        schema_key = market_name.lower().replace(" ", "_")
+        partial = tuple(c for c, r in components.items() if r is None)
+        reachable = any(r is not None for r in components.values())
+        responses.append(MarketResponse(
+            market_name=market_name,
+            schema_key=schema_key,
+            components=components,
+            reachable=reachable,
+            partial_components=partial,
+        ))
+    return responses
+
+
 def _imputed_view_from_maker(
     maker: MakerModules,
     mcp_responses: dict[str, Any],
@@ -344,13 +401,27 @@ def _imputed_view_from_maker(
     if not maker.available:
         return {}
     try:
+        # Two input shapes:
+        # 1. Production: phase_1_fan_out returns dict[str, dict] keyed by
+        #    "macro_analyst:Market:Component". Reconstruct MarketResponse
+        #    list via the helper above.
+        # 2. Test injection (legacy): some tests pre-shape mcp_responses
+        #    with a "per_market" key holding list[MarketResponse]. Detect
+        #    and use directly to preserve backward compat.
+        per_market_input = mcp_responses.get("per_market")
+        if per_market_input is None:
+            per_market_input = _reconstruct_maker_responses(mcp_responses, maker)
+        telemetry_input = mcp_responses.get(
+            "telemetry",
+            mcp_responses.get("get_telemetry", {}),
+        )
         # cross_country.aggregate(per_market_responses, telemetry, weights)
         # returns top-level keys: regions, sectors, macro_regime, phi, xi,
         # psi_news_blobs, fan_out_summary, field_coverage. NOT wrapped in
         # a `tilts` subtree (verified in cross_country.py docstring).
         aggregated = maker.cross_country.aggregate(
-            mcp_responses.get("per_market", mcp_responses),
-            mcp_responses.get("telemetry", {}),
+            per_market_input,
+            telemetry_input,
             weights,
         )
         pillars = maker.pillar_compose.compute_pillars(
@@ -879,12 +950,15 @@ def run_judge(
 
     # Phase 5 — only at material+ severity. The LLM call shape is
     # injected; tests run with llm_call_fn=None and assert zero recs.
+    # When config.dry is set, force-skip LLM regardless of llm_call_fn
+    # (per the documented "--dry skips LLM phase 5" contract in the
+    # auto-on-load-judge-pattern.md consumer protocol).
     recommendations = phase_5_recommendations(
         resolutions=resolutions,
         severity=severity,
         view=view,
         mcp_responses=mcp_responses,
-        llm_call_fn=llm_call_fn,
+        llm_call_fn=None if config.dry else llm_call_fn,
     )
 
     # Phase 6 + 7
@@ -950,9 +1024,13 @@ def _build_argparser():
     p.add_argument("--json", action="store_true",
                    help="Print JSON sidecar to stdout in addition to the bundle.")
     p.add_argument("--dry", action="store_true",
-                   help="Use mocked MCP responses (requires --mock-mcp).")
+                   help="Skip the LLM-as-judge Phase 5 (drift report still "
+                        "computed via cross_country + pillar_compose; no "
+                        "recommendations emitted). Used by consumer auto-on-load "
+                        "pre-flight per auto-on-load-judge-pattern.md.")
     p.add_argument("--mock-mcp", type=str, default=None,
-                   help="Path to JSON file with mock MCP responses (with --dry).")
+                   help="Path to JSON file with mock MCP responses. Orthogonal "
+                        "to --dry (use either independently or together for tests).")
     p.add_argument("--scheduled", action="store_true",
                    help="Mark this as a scheduled / cron run for audit.")
     p.add_argument("--view-dir", type=str, default=None,
@@ -964,11 +1042,10 @@ def _build_argparser():
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_argparser().parse_args(argv)
+    # --dry and --mock-mcp are orthogonal (post-2026-05-24 gate-review fix).
+    # --dry skips LLM phase 5; --mock-mcp swaps live MCP for a canned payload.
     mock_responses = None
-    if args.dry:
-        if not args.mock_mcp:
-            print("--dry requires --mock-mcp <path>", file=sys.stderr)
-            return 2
+    if args.mock_mcp:
         mock_responses = json.loads(Path(args.mock_mcp).read_text())
     config = JudgeConfig(
         pillars_only=args.pillars_only,
