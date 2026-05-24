@@ -1,0 +1,10 @@
+schema_version: 1
+tilts:
+  tilts.factors.low_volatility:
+    derivation:
+    - confidence: 0.95
+      source_span: Strong overweight defensive factor exposure
+      type: prose_extraction
+    value: 2
+version_id: ver-00001
+view_id: view-12345
