@@ -77,7 +77,7 @@ Fire steps 1, 2, and 4 in parallel (independent). Step 3 is a dependent two-step
 
 **After C1 completes, fire C1.5, C2, and C3 in parallel** (C1.5 does NOT gate C2 or C3 — rank is established by C1 and is composite-driven, so the highest-scored trusted row for C2 and the top-3 for C3 are known the moment C1 completes):
 
-**C1.5. Annotation (no re-rank, concurrent with C2/C3):** Tags computed in this step annotate the Output Format only. **They MUST NOT change rank order, alter Top Picks membership, or override the composite score from C1.** Rank is composite-driven (per loader.md §3) to preserve auditability — Macro Tag is a read-only annotation on the rank C1 produced.
+**C1.5. Annotation (no re-rank, concurrent with C2/C3):** Reference implementation of the **Concurrent Annotation Pattern** documented in `_parallax/parallax-conventions.md §3.1`. Tags computed in this step annotate the Output Format only. **They MUST NOT change rank order, alter Top Picks membership, or override the composite score from C1.** Rank is composite-driven (per loader.md §3) to preserve auditability — Macro Tag is a read-only annotation on the rank C1 produced.
 
 - If `macro_context` is present from Phase A.3, tag each trusted row with `macro_tag ∈ {with-regime, against-regime, orthogonal}` derived from the trusted row's primary market exposure and the corresponding `macro_analyst` tactical output.
 
