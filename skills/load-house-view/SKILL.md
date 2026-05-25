@@ -124,64 +124,27 @@ Pillars are usually coarse — a prose view rarely articulates sub-factor level.
 
 > **Architectural note:** the saved house view is PURE — it carries only what the source document said + what the uploader confirmed at this gate. Parallax-derived augmentation is deferred to **just-in-time** lookup at consumer-skill use (e.g., when `/parallax-portfolio-builder` detects the active view is silent on a dimension it needs for a specific portfolio decision). The augmentation provenance lives on the consuming portfolio/screen artifact, never on the saved house view. The `gap_detect` and `gap_suggest` modules in `_parallax/house-view/` remain — they get JIT-loaded by consumer skills.
 
-Present the draft to the uploader in this format:
+> **Shared module.** The gate display + disposition loop lives in `_parallax/house-view/gate_present.py` so the in-progress `/parallax-make-house-view` skill can reuse it. This Step describes how `parallax-load-house-view` *uses* the module; the module itself is the source of truth for display rendering and disposition vocabulary. Step 3a (pre-edit snapshot persistence) and Step 3b (extraction_attempt audit logging) remain caller-side responsibilities — the module returns the snapshot in `GateResult` but never writes audit rows or `.archive/<...>/pre_edit.yaml`.
 
-```
-============================================================
-HOUSE VIEW — DRAFT FOR CONFIRMATION
-============================================================
+JIT-load `_parallax/house-view/gate_present.py` and construct a `GateContext`:
 
-Source: <filename or URL or "wizard">
-Extraction confidence: avg <X.XX>, lowest <field>: <conf>
+- `source_label`: the filename / URL / `"wizard"` identifier from Step 1.
+- `uploader_present=True` (ingest framing — "Source:" prefix, extraction verb tense).
+- `confidence_map`: per-category confidence from `extraction.extraction_confidence` (keys: `sectors`, `regions`, `factors`, `macro_regime`; the maker path additionally carries `pillars`, which this skill omits).
+- `extraction_attempt_action=True` (this skill always logs the `extraction_attempt` row per §3b below).
+- `disposition_options=["confirm", "edit", "re_extract", "reject"]`.
 
---- METADATA ---
-view_name:        <proposed name>
-uploader_role:    <captured>
-effective_date:   <captured>
-valid_through:    <captured or "computed: <date>">
-basis_statement:  <captured, truncated to 200 chars>
+Call `gate_present.run_gate_loop(draft, context, dispose_fn=..., edit_fn=...)`. The two callbacks bridge to `AskUserQuestion`:
 
---- PILLARS (quantum-factor decomposition) ---
-Ω econometrics_phase:        <value>
-Φ valuation_state:           <value>
-Ξ market_entropy:            <value>
-Ψ psychological_wavelength:  <value>
+- `dispose_fn(prompt) -> str` — print `prompt.display` verbatim, then ask `prompt.question` with `prompt.options` via `AskUserQuestion`. Return the chosen disposition keyword.
+- `edit_fn(current_draft, context) -> (edited_draft, edit_notes | None)` — loop on `AskUserQuestion` per flagged field (the LOW-CONFIDENCE block from the rendered prompt is the suggested order). After all edits land, optionally ask "One line on what you changed and why? (optional)" and pass the response as `edit_notes`. Return the post-edit draft. The module re-renders the gate and re-invokes `dispose_fn` until the uploader confirms or branches to a terminal disposition.
 
---- TILTS (only non-zero shown) ---
-sectors:          <list of sector: tilt>
-regions:          <list of region: tilt>
-factors:          <list of factor: tilt>      [auto-applied from macro_regime: <fields>]
-styles:           <list of style: tilt>
-themes:           <list of theme: tilt>
-excludes:         <list with reasons>
+The module returns a `GateResult` with `disposition` set to one of `"confirm"`, `"edited"`, `"re_extracted"`, or `"rejected"`. Branch as follows:
 
---- DROPPED (out of scope: cross-asset views) ---
-<list of non-equity views found in source, e.g., "FI: long EM LC sovereign", or "none">
-
---- MACRO REGIME ---
-growth: <value>   inflation: <value>   rates: <value>   risk_appetite: <value>
-Implied factor tilts (override at confirmation if needed): <delta list>
-
---- LOW-CONFIDENCE FIELDS (< 0.6) ---
-<list with extraction_notes excerpts>
-
---- DEGENERATE-VIEW CHECK ---
-tilt_variance: <X.XX>  [WARN if < 0.5]
-
-============================================================
-```
-
-Then ask via `AskUserQuestion`:
-
-> Confirm this house view extraction?
-> - **Confirm and save** (Recommended if extraction looks right)
-> - **Edit specific fields** — you'll be prompted for which fields
-> - **Re-extract with hint** — provide a hint to improve extraction
-> - **Reject** — abandon this ingest, no save
-
-If `Edit specific fields`: **FIRST snapshot the extractor's pre-edit draft** (see §3a below — in-memory holding buffer), then loop on `AskUserQuestion` per flagged field, then re-render the gate. When the uploader ultimately chooses `Confirm` on the re-rendered edited gate, write the `extraction_attempt` audit entry (see §3b) BEFORE proceeding to Step 4 — use `disposition="edited"` and `draft_yaml_hash` = sha256 (canonical) of the **pre-edit** holding buffer (not the post-edit confirmed draft — that hash goes into `view.yaml` via Step 4's `view_hash`). This makes the pair `extraction_attempt.draft_yaml_hash` + `save.view_hash` the audit signature of "what the extractor produced → what the uploader shipped."
-If `Re-extract with hint`: **discard the holding buffer if Edit was visited earlier** — do not write `pre_edit.yaml`. Log an `extraction_attempt` audit entry capturing the rejected draft and the hint (see §3b) with `disposition="re_extracted"`, ask for the hint, re-run Step 2 with the hint added to extraction context, re-render the gate.
-If `Reject`: **discard the holding buffer if Edit was visited earlier**. Log an `extraction_attempt` audit entry with `disposition="rejected"`, abandon, do not write.
+- **`"confirm"`** — proceed to Step 4 with `result.final_draft`. No pre-edit snapshot to persist. Write the `extraction_attempt` audit row per §3b with `disposition="confirmed"` and `draft_yaml_hash` = sha256(canonical) of `result.final_draft`.
+- **`"edited"`** — proceed to Step 3a using `result.pre_edit_snapshot` (the pristine pre-edit draft, which the module captured automatically on first entry into the edit branch) and optionally `result.edit_notes`. Then write the `extraction_attempt` audit row per §3b with `disposition="edited"` and `draft_yaml_hash` = sha256(canonical) of the **pre-edit** snapshot — not the post-edit confirmed draft (that hash goes into `view.yaml` via Step 4's `view_hash`). The pair `extraction_attempt.draft_yaml_hash` + `save.view_hash` is the audit signature of "what the extractor produced → what the uploader shipped." Proceed to Step 4 with `result.final_draft`.
+- **`"re_extracted"`** — discard any holding buffer; do not write `pre_edit.yaml`. Write the `extraction_attempt` audit row per §3b with `disposition="re_extracted"`, the rejected draft's hash, and the hint (collected via a follow-up `AskUserQuestion`). Re-run Step 2 with the hint added to extraction context and return to Step 3.
+- **`"rejected"`** — discard any holding buffer. Write the `extraction_attempt` audit row per §3b with `disposition="rejected"`. Abandon; do not write `view.yaml`.
 
 #### Step 3a — Pre-edit snapshot (Layer 2)
 

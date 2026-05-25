@@ -41,6 +41,15 @@ Construct a portfolio from a plain-English investment thesis using Parallax MCP 
 
 Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call. Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode and fallback patterns. JIT-load `_parallax/house-view/loader.md` for active-view validation, tilt application, and conflict-resolution rules.
 
+### Pre-flight: house-view drift check
+
+JIT-load `_parallax/house-view/auto-on-load-judge-pattern.md` and follow
+its protocol. If the protocol surfaces a banner, render it before
+proceeding to this skill's main workflow.
+
+Skip this pre-flight if invoked with `--skip-drift-check` or if no active
+house view exists.
+
 ### Phase A — Parallel Initialization & Scoring
 
 Execute Steps 0–2 in parallel. All three must complete before Phase B begins. Best-effort error handling: if any step fails (timeout, validation error), flag it, continue with fallback, and proceed to Phase B.
@@ -94,7 +103,9 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 - **Portfolio Factor Profile** (VALUE, QUALITY, MOMENTUM, DEFENSIVE scores — computed as weighted aggregate of per-holding `get_peer_snapshot` scores; note `quick_portfolio_scores` batch output only if all names cross-validated)
 - **Redundancy Notes** (any overlap flagged and how it was resolved; include client-computed sector concentration if `check_portfolio_redundancy` returned an empty concentration map on a clearly-concentrated portfolio)
 - **Implementation Notes** (liquidity, position sizing, suggested rebalance frequency)
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (5 error states; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+
+**AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
 If active view: use the view-aware disclaimer per loader.md §5. Otherwise:
 

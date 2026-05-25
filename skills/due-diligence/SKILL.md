@@ -77,22 +77,7 @@ If a view was loaded in Pre-Workflow:
 
 ### Pre-Render — Load white-label branding
 
-Before composing the Output Format, load the client's visual branding. Inline per Tier 1 pilot convention.
-
-```python
-import sys
-from pathlib import Path
-
-_WHITE_LABEL_DIR = Path(__file__).parent.parent / "_parallax" / "white-label"
-sys.path.insert(0, str(_WHITE_LABEL_DIR))
-from loader import load_visual_branding, is_white_label_active, safe_source_reference  # noqa: E402
-
-branding = load_visual_branding()
-white_label_active = is_white_label_active(branding)
-client_name = branding.get("client_name", "")
-```
-
-The loader returns exactly six keys: `client_name`, `colors`, `logos`, `fonts`, `source`, `error`. Any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`. Load `_parallax/white-label/integration-pattern.md` for the full contract, error-state table (§4), substitution semantics (§5), and Provenance template (§7).
+Before composing the Output Format, JIT-load `_parallax/white-label/integration-pattern.md` and call `load_visual_branding()` per §2. The loader returns exactly six keys: `client_name`, `colors`, `logos`, `fonts`, `source`, `error`. Set `white_label_active = is_white_label_active(branding)` and `client_name = branding.get("client_name", "")` for use in the Branding Header. See §4 (error states), §5 (substitution semantics), §7 (Provenance template). Any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
 
 ## Output Format
 
@@ -113,9 +98,11 @@ Analyst-grade research report. Precision over brevity. Include raw data tables.
 - **House View Note** (only if view active) — placed AFTER Factor Score Trajectory per loader.md §7 rendering order, via `render_view_conflict(kind="blanket", ...)`.
 - **Parallax Research Report** (link to PDF/HTML from get_stock_report)
 - **Synthesis & Key Risks** (bull case, bear case, key uncertainties)
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (5 error states; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
 
 Note: `get_financial_analysis` (~2-5 min) and `get_stock_report` (~1-2 min, paid) are async. Begin assembling output from instant tools while async calls resolve.
+
+**AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
 If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
 

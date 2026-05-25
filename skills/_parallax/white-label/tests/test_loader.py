@@ -77,7 +77,7 @@ def test_happy_path(
     monkeypatch: pytest.MonkeyPatch,
     loader_module: ModuleType,
 ) -> None:
-    """Valid config with real logo files -> all 8 keys present, error=None."""
+    """Valid config with real logo files -> all 13 keys present, error=None."""
     logo = tmp_path / "primary-logo.png"
     favicon = tmp_path / "favicon.ico"
     logo.write_bytes(b"\x89PNG")
@@ -693,3 +693,38 @@ def test_visual_branding_propagates_logo_missing_error(
     # Palette still usable on the partial-degradation path
     assert result["colors"]["primary"] == "#1A2B3C"
     assert result["fonts"]["header"] == "Inter"
+
+
+# ---------------------------------------------------------------------------
+# build_config_from_draft typography placeholder
+# ---------------------------------------------------------------------------
+
+
+def test_build_config_from_draft_emits_typography_placeholder(
+    loader_module: ModuleType,
+) -> None:
+    """When a draft has no typography and no fonts.* fallback, the v2 write
+    path must emit the `{body-md: {fontFamily: 'sans-serif'}}` placeholder.
+
+    This satisfies the v2 schema's `typography: minProperties: 1` constraint
+    so the resulting config remains loadable on the next read. Using the CSS
+    generic family name makes the placeholder obvious to operators reviewing
+    the saved config.
+    """
+    draft: dict[str, Any] = {
+        "colors": {
+            "primary":    {"hex": "#001122", "confidence": 1.0},
+            "secondary":  {"hex": "#334455", "confidence": 1.0},
+            "accent":     {"hex": "#FF6600", "confidence": 1.0},
+            "background": {"hex": "#FFFFFF", "confidence": 1.0},
+        },
+        # No `typography` and no `fonts` -> placeholder branch fires.
+        "logos": {"primary": {"local_path": "/tmp/logo.png", "confidence": 1.0}},
+        "source": {"type": "test", "reference": "unit"},
+        "extracted_at": "2026-05-18T00:00:00Z",
+        "confidence_scores": {"primary": 1.0},
+    }
+
+    cfg = loader_module.build_config_from_draft(draft, schema_version=2)
+
+    assert cfg["branding"]["typography"] == {"body-md": {"fontFamily": "sans-serif"}}

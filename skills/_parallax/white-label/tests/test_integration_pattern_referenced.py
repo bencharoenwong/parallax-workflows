@@ -114,3 +114,131 @@ def test_wired_skill_references_integration_pattern(skill_md: Path) -> None:
 def test_negated_load_directives_do_not_satisfy_gate(text: str, expected: bool) -> None:
     """Unit-level coverage for the negation filter."""
     assert _has_positive_load_directive(text) is expected
+
+
+
+# ---------------------------------------------------------------------------
+# §9.2 AI-interaction disclosure gate
+# ---------------------------------------------------------------------------
+
+_ANALYSIS_DISCLAIMER_RE = re.compile(
+    r"informational analysis based on Parallax"
+    r"|scenario-based analysis, not investment advice",
+    re.IGNORECASE,
+)
+
+_NINE_TWO_REF_RE = re.compile(
+    r"parallax-conventions\.md[`\s]*§9\.2",
+    re.IGNORECASE,
+)
+
+# Skills explicitly exempt from §9.2 because they emit config artifacts AND
+# gate any LLM-generated content behind an operator confirmation step before
+# downstream consumers render it. Adding a skill here must be paired with
+# updating the exemption rationale in `parallax-conventions.md §9.2` in the
+# same PR — the test gate and the spec text are co-load-bearing.
+_NINE_TWO_EXEMPT_SKILLS: frozenset[str] = frozenset({"white-label-onboard"})
+
+
+@pytest.mark.parametrize(
+    "skill_md", _collect_wired_skills(), ids=lambda p: p.parent.name
+)
+def test_wired_skill_renders_ai_disclosure(skill_md: Path) -> None:
+    """Every wired analysis-producing SKILL.md must reference §9.2.
+
+    Two-stage gate:
+    1. If skill is in `_NINE_TWO_EXEMPT_SKILLS`, skip (explicit exemption,
+       rationale documented in `parallax-conventions.md §9.2`).
+    2. Otherwise, the skill MUST carry a recognised analysis disclaimer
+       AND a §9.2 reference. A wired-but-unmatched skill fails the gate —
+       it must be either added to the exemption set with rationale, or
+       the disclaimer regex must be extended to cover its phrasing.
+       Silent skip is not an option — regulatory disclosure cannot be
+       invisible by default.
+    """
+    skill_name = skill_md.parent.name
+    if skill_name in _NINE_TWO_EXEMPT_SKILLS:
+        pytest.skip(f"{skill_name} is exempt from §9.2 (config artifact + operator gate)")
+
+    text = skill_md.read_text(encoding="utf-8")
+    assert _ANALYSIS_DISCLAIMER_RE.search(text), (
+        f"{skill_md.relative_to(_SKILLS_ROOT.parent)} carries the white-label "
+        f"sentinel but does not render any recognised analysis disclaimer "
+        f"variant. A wired skill is presumed to produce client-facing "
+        f"analysis. Resolution: either add the skill to `_NINE_TWO_EXEMPT_SKILLS` "
+        f"AND update the exemption rationale in `parallax-conventions.md §9.2` "
+        f"in the same PR; or extend `_ANALYSIS_DISCLAIMER_RE` to cover this "
+        f"skill's disclaimer phrasing. Silent skip is not permitted."
+    )
+
+    assert _NINE_TWO_REF_RE.search(text), (
+        f"{skill_md.relative_to(_SKILLS_ROOT.parent)} carries the white-label "
+        f"sentinel AND the standard analysis disclaimer but does not reference "
+        f"`parallax-conventions.md §9.2` for the AI-interaction disclosure. "
+        f"Add the directive immediately above the disclaimer block, e.g.: "
+        f"'Render `parallax-conventions.md §9.2` immediately above the "
+        f"disclaimer below.'"
+    )
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("Render `parallax-conventions.md §9.2` above the disclaimer", True),
+        ("see parallax-conventions.md §9.2 for the banner", True),
+        ("parallax-conventions.md §9.1 (standard disclaimer)", False),
+        ("conventions §9.2 (no filename)", False),
+        ("This is informational analysis based on Parallax", False),
+    ],
+)
+def test_nine_two_reference_pattern(text: str, expected: bool) -> None:
+    """Unit-level coverage for the §9.2 reference detector."""
+    assert bool(_NINE_TWO_REF_RE.search(text)) is expected
+
+
+
+# ---------------------------------------------------------------------------
+# Provenance error-state count drift gate
+# ---------------------------------------------------------------------------
+
+_HARDCODED_COUNT_RE = re.compile(
+    r"\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+error\s+states?\b",
+    re.IGNORECASE,
+)
+
+
+@pytest.mark.parametrize(
+    "skill_md", _collect_wired_skills(), ids=lambda p: p.parent.name
+)
+def test_wired_skill_no_hardcoded_error_state_count(skill_md: Path) -> None:
+    """No SKILL.md may hardcode the §7 error-state count.
+
+    Skills must reference the §7 table by directive ("render per table; do
+    not collapse"), not by count. A hardcoded count silently drifts the
+    moment the §7 table grows. Catches reintroduction at PR review.
+    """
+    text = skill_md.read_text(encoding="utf-8")
+    match = _HARDCODED_COUNT_RE.search(text)
+    assert match is None, (
+        f"{skill_md.relative_to(_SKILLS_ROOT.parent)} hardcodes an error-state "
+        f"count: '{match.group(0)}'. Replace with the count-free directive: "
+        f"'render per table; do not collapse'. The §7 table is the single "
+        f"source of truth — hardcoded counts drift silently when it grows."
+    )
+
+
+@pytest.mark.parametrize(
+    "text,expected_hardcoded",
+    [
+        ("(5 error states; do not collapse)", True),
+        ("(five error states; do not collapse)", True),
+        ("DO NOT collapse the five error states into prose", True),
+        ("seven error states", True),
+        ("(render per table; do not collapse)", False),
+        ("the §7 error-state table", False),
+        ("the error-state behaviour is documented", False),
+    ],
+)
+def test_hardcoded_count_pattern(text: str, expected_hardcoded: bool) -> None:
+    """Unit-level coverage for the hardcoded-count detector."""
+    assert bool(_HARDCODED_COUNT_RE.search(text)) is expected_hardcoded

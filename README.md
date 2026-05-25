@@ -105,7 +105,7 @@ For compliance, vendor risk, and information security reviews:
 - **Per-tilt provenance.** Every non-neutral tilt carries a derivation record: prose-extraction (with source span), macro-regime rule (with rule reference and trigger), or manual edit (with prior value and edit notes). `--why <tilt-path>` reconstructs the answer.
 - **Local-only by default.** No telemetry. No external calls during ingest beyond the LLM the operator chose. Files are written with restrictive permissions.
 
-Implementation lives in `skills/_parallax/house-view/audit_chain.py`, `chain_emit.py`, `manifest_verify.py`, `manifest_cache.py`, and `audit_export.py`. Test coverage is in the adjacent `tests/` directory; the test signing key and fixtures are deliberately public so auditors can verify round-trip on a fresh clone.
+Implementation lives in `skills/_parallax/house-view/audit_chain.py`, `chain_emit.py`, `manifest_verify.py`, `manifest_cache.py`, `audit_export.py`, `gate_present.py` (shared Step 3 confirmation gate for both writer skills), and `provenance_classes.py` (6-class registry enforcing the canonical provenance vocabulary). Test coverage is in the adjacent `tests/` directory; the test signing key and fixtures are deliberately public so auditors can verify round-trip on a fresh clone.
 
 ## Workflows
 
@@ -157,6 +157,13 @@ Bring your own house view. The CIO memo, IC strategy doc, or macro-desk PDF that
 | `/parallax-load-house-view --why <tilt-path>` | Trace any tilt to the source span that generated it |
 | `/parallax-load-house-view --export <view_id>` | Export regulator-grade compliance bundle |
 | `/parallax-load-house-view --clear` | Remove active view |
+| `/parallax-make-house-view` | **Synthesize** a draft view from Parallax MCP signals (no CIO PDF needed). Routes through the same confirmation gate; saves with `generator_synthesis` provenance |
+| `/parallax-make-house-view --shadow-diff` | Synthesize but do NOT save; render an additive diff vs the active bank view (preserves bank-view sovereignty) |
+| `/parallax-make-house-view --markets us,japan,uk` | Restrict synthesis fan-out scope |
+| `/parallax-judge-house-view` | **Read-only** LLM-as-judge — compare saved view to current Parallax signals, classify drift severity, emit cited per-cell recommendations + bundle |
+| `/parallax-judge-house-view --json` | Structured output for cron consumption |
+| `/parallax-judge-house-view --dry` | Skip the Phase 5 LLM recommendation step; return deterministic drift severity from MCP signals alone |
+| `/parallax-judge-house-view --mock-mcp <path>` | Replace live MCP fan-out with a canned JSON payload (CI / testing). Independent of `--dry` — combinable |
 
 **Three design choices worth knowing about:**
 
@@ -165,6 +172,8 @@ Bring your own house view. The CIO memo, IC strategy doc, or macro-desk PDF that
 3. **Audit was a design input.** Every save writes a hash-chained audit entry, an Ed25519-signed reasoning chain, and a per-tilt provenance record. `--export` produces a regulator-grade bundle. `--why tilts.factors.momentum` traces any tilt back to the source span (or rule, or manual edit) that generated it.
 
 Active view is consumed by: `portfolio-builder`, `rebalance`, `thematic-screen`, `morning-brief`, `client-review`, `explain-portfolio`. Conflict-flag-only by: `should-i-buy`, `deep-dive`. See `skills/load-house-view/samples/` for sample CIO views, `skills/_parallax/house-view/loader.md` for the multiplier mapping and conflict-resolution rules, and `skills/_parallax/house-view/README.md` for the module reference.
+
+`portfolio-builder`, `rebalance`, and `thematic-screen` JIT-load `skills/_parallax/house-view/auto-on-load-judge-pattern.md` and auto-fire `/parallax-judge-house-view --dry --json` when the active view is older than 30 days; a one-line banner surfaces only on `drift_material` severity. `morning-brief` surfaces a conditional one-liner suggesting the judge when its existing Batch B alignment check detects ≥3 misaligned holdings. `client-review` and `explain-portfolio` deliberately skip the auto-on-load drift gate (compliance + retrospective-replay contexts respectively).
 
 ### Market & Discovery
 
@@ -247,7 +256,19 @@ skills/
 │   └── SKILL.md
 ├── AI-consensus/               # Multi-profile super-majority meta-skill
 │   └── SKILL.md
-└── ... (18 more workflows)
+├── load-house-view/            # Ingest CIO PDF → structured house view (writer)
+│   └── SKILL.md
+├── make-house-view/            # Synthesize draft house view from MCP signals (writer)
+│   ├── SKILL.md
+│   ├── maker.py, pillar_compose.py, pillar_formulas.py,
+│   ├── cross_country.py, prose_synth.py, shadow_diff.py
+│   └── tests/
+├── judge-house-view/           # Read-only drift monitor + per-cell recommendations
+│   ├── SKILL.md
+│   ├── judge.py, drift_classify.py, recommendation.py,
+│   ├── render_judge.py, cadence.py
+│   └── tests/
+└── ... (20+ more workflows)
 ```
 
 Each `SKILL.md` is a self-contained instruction set. Claude reads it when you invoke the command, then orchestrates the Parallax MCP tools accordingly. No code execution — just structured API orchestration.
@@ -255,7 +276,7 @@ Each `SKILL.md` is a self-contained instruction set. Claude reads it when you in
 **Where things live:**
 - `skills/<workflow>/SKILL.md` — the user-invocable workflows
 - `skills/_parallax/parallax-conventions.md`, `token-costs.md`, `AI-profiles/` — genuinely shared across many skills (RIC resolution, parallel-call patterns, AI profile framework)
-- `skills/_parallax/house-view/` — house-view subsystem. Authored by `/parallax-load-house-view` (schema, audit chain, signed reasoning chains, calibration manifest verifier); also consumed by the portfolio and single-stock skills that surface view conflicts (`portfolio-builder`, `rebalance`, `client-review`, `morning-brief`, `explain-portfolio`, `thematic-screen`, `deep-dive`, `should-i-buy`). `loader.md` and `render_helpers.md` are the shared interface; `gap_detect` / `gap_suggest` are loaded by `portfolio-builder --augment-silent` only.
+- `skills/_parallax/house-view/` — house-view subsystem. Three skills participate: `/parallax-load-house-view` (writer, bank CIO ingestion — schema, audit chain, signed reasoning chains, calibration manifest verifier), `/parallax-make-house-view` (writer, MCP-driven synthesis — routes through the same gate, persists with `generator_synthesis` provenance), and `/parallax-judge-house-view` (read-only consumer, drift monitor — emits `judge` audit rows and a per-cell recommendation bundle). Also consumed by the portfolio and single-stock skills that surface view conflicts (`portfolio-builder`, `rebalance`, `client-review`, `morning-brief`, `explain-portfolio`, `thematic-screen`, `deep-dive`, `should-i-buy`). `loader.md`, `render_helpers.md`, `gate_present.py` (shared Step 3 confirmation gate), `provenance_classes.py` (canonical 6-class registry), `aggregator_weights.yaml` (cross-country weighting for the maker), `MCP_FIELD_INVENTORY.md` (Phase A0 capability map), and `auto-on-load-judge-pattern.md` (consumer drift-gate protocol — auto-fires `/parallax-judge-house-view --dry --json` for `portfolio-builder` / `rebalance` / `thematic-screen` when the active view is older than 30 days) are the shared interface; `gap_detect` / `gap_suggest` are loaded by `portfolio-builder --augment-silent` only.
 - `skills/_parallax/white-label/` — white-label branding subsystem. Authored by `/parallax-white-label-onboard`; consumed by 16 visual-rendering skills (Tier 1 + Tier 2). `integration-pattern.md` (§1–§9) is the shared consumer-side contract — header rendering, provenance line, color substitution, logo placement, fallback behavior — JIT-loaded by every consumer via the `<!-- white-label: integration-pattern.md -->` sentinel. `loader.load_visual_branding()` is the visual-consumer entry point (6-key subset; voice-exclusion guardrail), paired with `loader.is_white_label_active(branding)` (single source of truth for the rendering flag, per `integration-pattern.md` §2/§4/§8) and `loader.safe_source_reference(branding)` (display-safe Provenance source ref, per §7). The drift gate at `tests/test_integration_pattern_referenced.py` enforces sentinel ↔ load-directive pairing.
 
 **Reference templates.** The newer skills (`credit-lens`, `load-house-view`, `white-label-onboard`) carry typed dataclasses, comprehensive test suites, and explicit reference modules. If you're authoring or upgrading a skill, model on those.

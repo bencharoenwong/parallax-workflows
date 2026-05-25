@@ -238,6 +238,32 @@ For all marketing artifacts (vs-pages, alternative guides, feature comparisons),
 
 ## 9. Disclaimer
 
+### §9.1 Standard disclaimer
+
 Every workflow output must end with a disclaimer. Use the exact wording from the skill's Output Format section if one is specified, otherwise use:
 
 *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
+
+### §9.2 AI-interaction disclosure
+
+Every workflow output that contains AI-generated narrative, synthesis, or recommendations MUST render the following banner immediately above the §9.1 disclaimer (or immediately above the view-aware disclaimer when an active house view is loaded — see house-view/loader.md §5 rule 6). This applies whether or not a white-label client view is active, and whether or not a house view is loaded. The wording is a working banner pending counsel sign-off:
+
+> *AI-assisted output. Quantitative data — factor scores, financials, peer mappings, technicals, price series — is from Parallax's deterministic pipelines. Qualitative content — news synthesis, macro commentary, AI assessments, narrative framing, and recommendations — is LLM-generated, either by Parallax's MCP services (news, macro, assessment) or by the orchestrating model (narrative and recommendations). See the Provenance footer for per-source attribution and version, and the trace ID for end-to-end output attribution. Verify any specific statement before acting.*
+
+<!-- COUNSEL-TBD — final wording subject to counsel sign-off. The current text is the working banner: it accurately distinguishes deterministic quantitative pipelines from LLM-generated qualitative content (covering both Parallax MCP services like news/macro/assessment and the orchestrating model), references the Provenance footer and trace ID for attribution, and avoids a methodology URL. Do not add a URL until counsel has signed off. The trace ID surface exists today; an end-to-end attribution API endpoint is in progress — when it lands, append a one-line "Resolve a trace ID at <url>" pointer here and the change propagates to all consumer skills via this single source of truth. -->
+
+**Why §9.2 is mandatory:**
+
+- **EU AI Act Art 50(1)** (effective 2 August 2026) — providers of AI systems generating synthetic content must mark outputs as artificially generated; the trace ID + Provenance footer satisfy this marking obligation.
+- **EU AI Act Art 50(2)** — deployers of AI systems intended to interact directly with natural persons must inform users they are interacting with an AI; the "AI-assisted output" label satisfies this.
+- **HKMA GenAI Circular (19 August 2024)** + **HKMA Consumer Protection circular on GenAI (7 November 2024)** — authorised institutions must disclose the purposes and limitations of GenAI in customer-facing applications, monitor outputs, and let customers opt out / request human intervention.
+- **SFC Circular on Use of Generative AI Language Models (12 November 2024)** — for high-risk use cases (investment recommendations, advice, or research), licensed corporations must provide PROMINENT and CONTINUOUS disclosure that users are interacting with AI and that output may not be accurate. Parallax consumer-skill outputs fall in this high-risk category.
+- **FCA Consumer Duty (PS22/9)** + **April 2025 FCA AI Update** + **PRIN 7** — the UK has no AI-specific rules; AI-generated client communications must satisfy the existing "clear, fair, and not misleading" obligation and Consumer Duty's consumer understanding outcome.
+- **MAS FEAT principles** (2018, reaffirmed 2022) + **MAS AI Risk Management Guidelines** (consultation 13 November 2025 – 31 January 2026; final issuance expected 2026 with a 12-month transition period; AI Risk Management Toolkit published March 2026 under Project MindForge phase 2) — transparency required for customer-facing AI in financial advice and regulated activities.
+- **SR 11-7** (US Fed model risk guidance) — conceptual-soundness implication: a client must be able to distinguish deterministic model output (CG scoring pipeline) from the LLM synthesis layer.
+
+**§9.2 scope:** The §9.2 banner is **content-level** disclosure. **Firm-level UI obligations** — opt-out / human-intervention option (HKMA), prominent UI placement and continuous-disclosure cadence (SFC), accessibility considerations — remain the responsibility of the deploying institution and are NOT preempted by rendering §9.2 in skill output.
+
+**Exemption:** Skills that produce configuration artifacts rather than direct client-facing analysis (currently `parallax-white-label-onboard`) are exempt from rendering §9.2. The rationale is narrow: such skills must (a) emit YAML/audit artifacts rather than a finished client deliverable, AND (b) gate any LLM-generated content behind an explicit operator confirmation step before that content can flow to downstream consumer skills. `white-label-onboard` qualifies because its Step 1.5 voice extraction is LLM-driven, but the resulting voice profile is reviewed and confirmed by the operator at Step 3 before being written to `~/.parallax/client-branding/` for downstream skills to consume — at which point the downstream skill renders §9.2 in its own output. A future skill that emits LLM-generated content without an equivalent operator gate does NOT qualify for exemption, even if it produces "config" — the gate, not the artifact format, is the load-bearing condition. Adding a skill to `_NINE_TWO_EXEMPT_SKILLS` in the test gate requires updating this exemption text in the same PR.
+
+**Consumer skill reference pattern:** Skills MUST render the §9.2 banner by reference, not by inlining the text. Example Output Format directive: `Render AI-interaction disclosure per parallax-conventions.md §9.2 immediately above the disclaimer.` Inlining the banner text creates drift risk — when counsel finalizes the wording (or when the attribution API lands), the canonical §9.2 entry is edited once and all consumer skills propagate automatically.

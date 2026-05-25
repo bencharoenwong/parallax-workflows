@@ -81,22 +81,7 @@ Apply graceful fallback patterns from shared conventions for any missing data.
 
 ### Pre-Render — Load white-label branding
 
-Before composing the Output Format, load the client's visual branding. Inlined per Tier 1 pilot convention.
-
-```python
-import sys
-from pathlib import Path
-
-_WHITE_LABEL_DIR = Path(__file__).parent.parent / "_parallax" / "white-label"
-sys.path.insert(0, str(_WHITE_LABEL_DIR))
-from loader import load_visual_branding, is_white_label_active, safe_source_reference  # noqa: E402
-
-branding = load_visual_branding()
-white_label_active = is_white_label_active(branding)
-client_name = branding.get("client_name", "")
-```
-
-The loader returns exactly six keys: `client_name`, `colors`, `logos`, `fonts`, `source`, `error`. Any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`. Load `_parallax/white-label/integration-pattern.md` for the full contract, error-state table (§4), substitution semantics (§5), and Provenance template (§7).
+Before composing the Output Format, JIT-load `_parallax/white-label/integration-pattern.md` and call `load_visual_branding()` per §2. The loader returns exactly six keys: `client_name`, `colors`, `logos`, `fonts`, `source`, `error`. Set `white_label_active = is_white_label_active(branding)` and `client_name = branding.get("client_name", "")` for use in the Branding Header. See §4 (error states), §5 (substitution semantics), §7 (Provenance template). Any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
 
 ## Output Format
 
@@ -115,9 +100,11 @@ The loader returns exactly six keys: `client_name`, `colors`, `logos`, `fonts`, 
 - **News Catalyst Watch** (material items only)
 - **Assessment** *(AI-generated — Perplexity deep-research synthesis)* — includes macro + trend data; if view active, MUST end with the three-bullet tilt decomposition per Batch C contract. This is deep-dive's primary alignment surface. Render the section header with the italic parenthetical verbatim — it's the contextual-proximity AI disclosure per HKMA/SFC Nov 2024 Circular; the document-level banner (§5 rule 6) is not sufficient for the Perplexity-backed non-deterministic content in this specific section.
 - **Risk Factors** (what could go wrong)
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (5 error states; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
 
 Append audit log entry per loader.md §6.
+
+**AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below. (The Assessment section already carries its own contextual-proximity AI disclosure per §5 rule 6; the document-level §9.2 banner is rendered here in addition, covering the synthesis across all sections.)
 
 If active view: use the view-aware disclaimer per loader.md §5. Otherwise:
 

@@ -1,6 +1,11 @@
 # Parallax Workflows — Project Context
 
+**Project Type:** MCP
+**Security Gate:** required
+
 This repo contains Claude Code skills for Parallax equity research. Each skill in `skills/` orchestrates Parallax MCP tools via structured workflows.
+
+> The `**Project Type:**` and `**Security Gate:**` markers above are consumed by `~/.claude/hooks/pre-push`. They override the file-signature classifier (which would otherwise mis-classify this repo as academic because `notes/HANDOFF.md` is present). MCP scope = all 12 SEC-XX items evaluated by `security-auditor`.
 
 ## For Claude Code
 

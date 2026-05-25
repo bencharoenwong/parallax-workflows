@@ -89,24 +89,9 @@ News (selective, async): `get_news_synthesis` for holdings >10% weight AND flagg
 
 ### Pre-Render — Load white-label branding
 
-Before composing the Output Format, load the client's visual branding. This is inlined per Tier 1 pilot convention — the snippet is verbatim, the allowlist is enforced at code level by the loader wrapper.
-
-```python
-import sys
-from pathlib import Path
-
-_WHITE_LABEL_DIR = Path(__file__).parent.parent / "_parallax" / "white-label"
-sys.path.insert(0, str(_WHITE_LABEL_DIR))
-from loader import load_visual_branding, is_white_label_active, safe_source_reference  # noqa: E402
-
-branding = load_visual_branding()
-white_label_active = is_white_label_active(branding)
-client_name = branding.get("client_name", "")
-```
+Before composing the Output Format, JIT-load `_parallax/white-label/integration-pattern.md` and call `load_visual_branding()` per §2. The loader returns exactly six keys: `client_name`, `colors`, `logos`, `fonts`, `source`, `error`. Set `white_label_active = is_white_label_active(branding)` and `client_name = branding.get("client_name", "")` for use in the Branding Header. See §4 (error states), §5 + §6 (substitution semantics), §7 (Provenance template). Any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`. Apply §5 + §7 when composing the Output Format below.
 
 `white_label_active` is the rendering flag. `client_name` may be `""` on legacy configs — tolerate without erroring (skip the Branding Header in that case per integration-pattern.md §5).
-
-The loader returns exactly six keys: `client_name`, `colors`, `logos`, `fonts`, `source`, `error`. Any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`. Load `_parallax/white-label/integration-pattern.md` for the full contract, error-state table (§4), substitution semantics (§5 + §6), and Provenance template (§7). Apply §5 + §7 when composing the Output Format below.
 
 ## Output Format
 
@@ -124,7 +109,9 @@ Client-ready report:
 - **Suitability Assessment** (alignment with client goals AND with active house view if present; cite basis_statement)
 - **Recommended Actions** (prioritized High/Medium/Low per recommendation-matrix.md, with specific action types; rationale cites view tilts where applicable)
 - **Appendix: Methodology** (brief Parallax scoring note)
-- **Provenance** (always present): one line stating branding state. Format is the markdown column of integration-pattern.md §7 — DO NOT collapse the five error states into prose; render per the table verbatim so `schema_unavailable` correctly stays in the white-label branch rather than falling back to default Parallax. If a logo was skipped per the Branding Header rule above, append `Logo on file: <basename>` as a second Provenance line.
+- **Provenance** (always present): one line stating branding state. Format is the markdown column of integration-pattern.md §7 (render per table; do not collapse) so `schema_unavailable` correctly stays in the white-label branch rather than falling back to default Parallax. If a logo was skipped per the Branding Header rule above, append `Logo on file: <basename>` as a second Provenance line.
+
+**AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
 If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
 

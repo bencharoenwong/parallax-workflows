@@ -4,6 +4,48 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-05-25
+
+### Added
+- **§9.2 AI-interaction disclosure** wired into 10 previously-unwired analysis skills (`watchlist-monitor`, `score-explainer`, `earnings-quality`, `AI-buffett`, `AI-soros`, `AI-klarman`, `AI-greenblatt`, `AI-consensus`, `credit-lens`, `halal-screen`) plus `AI-ptj`. Closes the follow-up flagged under the 2026-05-18 DECISIONS entry; all 11 now reference `parallax-conventions.md §9.2` immediately above the standard disclaimer.
+- **`docs/security/audit-2026-05-25.md`** — pre-launch security audit baseline (machine-greppable SUMMARY line) consumed by the pre-push security gate.
+- **`/parallax-judge-house-view --mock-mcp <path>`** — new orthogonal flag documented in README and `skills/judge-house-view/SKILL.md`; replaces live MCP fan-out with a canned JSON payload (CI / testing). Combinable with `--dry`.
+
+### Changed
+- **`/parallax-judge-house-view --dry`** decoupled from MCP mocking. `--dry` now only suppresses the Phase 5 LLM recommendation step and returns deterministic drift severity from MCP signals; mock injection is `--mock-mcp <path>`. README §"House View" table and `skills/judge-house-view/SKILL.md` Phase 1 prose updated to match.
+- **`CLAUDE.md`** now carries `**Project Type:** MCP` and `**Security Gate:** required` markers so the pre-push hook treats this repo as production-scope rather than mis-classifying it as academic from the presence of `notes/HANDOFF.md`.
+
+### Fixed
+- **`judge.schema_key`** switched to the canonical `MARKET_TO_SCHEMA_KEY` map (single source of truth) and 3 LOW gate-review findings on that change cleared.
+
+---
+
+## 2026-05-24
+
+### Added
+- **`/parallax-make-house-view`** — new skill that synthesizes a draft house view from Parallax MCP signals (`macro_analyst` × 14 markets × 5 components + `get_telemetry`). Routes through the shared confirmation gate, saves through `/parallax-load-house-view`'s Step 4 path with `generator_synthesis` provenance class. Includes `--shadow-diff` flag (synthesize-but-don't-save; renders an additive diff against the active bank view), `--markets` scope restrictor, and `--basis` hint flag. 8 modules + 55 unit tests.
+- **`/parallax-judge-house-view`** — new read-only skill: LLM-as-judge that compares the saved view against current Parallax signals, classifies drift severity (minor/moderate/material), emits structured per-cell recommendations with a citation validator that drops hallucinated rationales. Writes a self-contained report bundle (`report.md`, `report.json`, `mcp_responses.jsonl`, `audit_entry.json`) + appends single `action="judge"` audit row (`applied=false` always) + emits reasoning chain. 7 modules + 46 unit tests.
+- **Shared infra**: `skills/_parallax/house-view/gate_present.py` (`GateContext` / `GateResult` / `run_gate_loop` extracted from `load-house-view` Step 3 for reuse by maker), `provenance_classes.py` (6-class registry + `validate_provenance_entry(mode="read"|"write")` with `parallax_data_fill` deprecation enforcement), `aggregator_weights.yaml` (v0 MSCI ACWI shares aligned to the 14 MCP-covered markets, sum 1.0), `auto-on-load-judge-pattern.md` (single source of truth for the consumer-skill drift-gate protocol), `MCP_FIELD_INVENTORY.md` (Phase A0 capability validation artifact).
+- **Consumer integration**: `portfolio-builder`, `rebalance`, `thematic-screen` JIT-load the auto-on-load pattern (fires when view_age > 30d; banner only on `drift_material`). `morning-brief` gets a conditional one-liner suggesting the judge when its existing Batch B alignment check detects ≥3 misaligned holdings.
+- **`loader.md §6.1/§6.2`** extended: `action` enum gains `generate` (maker save) and `judge` (judge run) with full conditional field tables. `schema.yaml` gets a structured `classification_taxonomy:` section enumerating all 6 provenance classes.
+- **`stress.build_recommended_deltas`** gains `include_fresh: bool = False` parameter (default preserves existing behavior; judge passes True to also emit `DIVERGENT_FRESH` cells with `kind="informational_fresh"`); `validate_recommended_deltas` allowlist extended accordingly.
+- **24 new E2E tests** across `test_e2e.py` (8 happy-path + failure-mode), `test_e2e_versioning.py` (3), `test_e2e_calibration.py` (2 + 1 xfail-strict tripwire), `test_e2e_concurrency.py` (3), `test_e2e_multi_tenant.py` (3), `test_e2e_view_status_countdown.py` (14 parametric), `test_e2e_rm_operator_workflow.py` (3), `test_integration_make_judge.py` (3) — exercising the maker↔judge cycle, multi-version evolution, calibration phase flip simulation, concurrent runs, multi-tenant isolation, view_status countdown boundaries, and full operator lifecycle.
+
+### Changed
+- `skills/load-house-view/SKILL.md` Step 3 refactored to call into shared `gate_present.run_gate_loop`. Steps 3a (pre-edit snapshot) and 3b (extraction_attempt audit logging) retained verbatim. Backward-compat locked in by `tests/test_uninstall.py::test_disable_both_yields_structural_audit_parity`.
+- Judge bundle directory naming now appends a 6-char `uuid.uuid4().hex[:6]` nonce — `{version_id}-{ts}-{nonce}` — to prevent silent overwrite when two judge runs against the same view fire within one wall-clock second (caught by `test_e2e_concurrency.py`).
+- `skills/stress-house-view/stress.py:build_recommended_deltas` hardened against malformed resolution dicts (bare `r['dim']` access now guarded with `.get('dim', '')` + early-continue, surfaced by code-reviewer pass).
+
+### Fixed
+- 8 production bugs discovered during E2E development + code-review rounds — all fixed in this changeset. See [DECISIONS.md](DECISIONS.md) entry "Make + judge as paired peer skills" for the full enumeration; the most impactful were the judge `chain_emit` silent failure (PyYAML couldn't represent `MarketResponse` dataclass instances; phase_8 try/except swallowed every reasoning chain on every real run) and the judge bundle-name collision (silent overwrite of report files for two same-second runs).
+- `skills/_parallax/house-view/tests/golden/generate_golden.py` REPO path no longer hardcoded to the author's `~` — uses `Path(__file__)` relative resolution so any contributor can regenerate the golden baseline.
+
+### Deferred (with explicit decision)
+- **Server-side `house_view_judge` MCP tool** — **CANCELLED**, not deferred. Judge stays client-side permanently; bank clients run the CLI on their side. Rationale: methodology transparency for model-validation review, zero cross-tenant blast radius, no cross-org auth plumbing. See DECISIONS.md.
+- **Maker `calibration_status` wiring** — hardcoded to `heuristic_phase0` until the calibration manifest is signed. Tripwire `xfail(strict=True)` in `test_e2e_calibration.py` will XPASS-as-failure when the wiring lands. ~1-2h to fix; gated on the calibration manifest itself being available. See DECISIONS.md.
+
+---
+
 ## 2026-05-17
 
 ### Added

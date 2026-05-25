@@ -410,3 +410,132 @@ extraction:
 # If a future change requires the canonicalization to evolve (e.g., to include
 # new top-level keys), bump `schema_version` in audit.jsonl and emit a
 # migration note — never silently alter the byte output.
+
+# ===========================================================================
+# Classification taxonomy
+# ===========================================================================
+# Enumerates the provenance classes that may appear in a per-leaf `derivation`
+# entry inside `provenance.yaml`. Referenced from:
+#   - skills/load-house-view/SKILL.md Step 4 (1b) — write-time class selection
+#   - skills/load-house-view/references/why-provenance.md — render-time
+#     emission rules for `--why <tilt-path>`
+#   - skills/_parallax/house-view/provenance_classes.py — single source of
+#     truth for required/optional fields per class (programmatic validator)
+#
+# Six classes total. Five are produced at save / generate / edit time;
+# `judge_recommendation` is emitted only by /parallax-judge-house-view into
+# its report and lands in `provenance.yaml` (as `manual_edit` referencing the
+# judge run) only if the CIO accepts the recommendation via
+# /parallax-load-house-view --edit.
+#
+# Every class shares two baseline fields:
+#   confidence : float in [0.0, 1.0], required
+#   rationale  : string ≤500 chars, required
+# Type-specific required / optional fields are listed per class below.
+
+classification_taxonomy:
+
+  prose_extraction:
+    description: |
+      Tilt value was extracted from CIO prose at ingest by the
+      extraction model. Cite the verbatim span in `source_span` so the
+      uploader (and future auditor) can trace the YAML field back to
+      exact source text.
+    fields:
+      required:
+        - confidence       # float 0.0-1.0
+        - rationale        # string ≤500 chars
+        - source_span      # string — verbatim quote from CIO prose
+      optional: []
+
+  macro_regime_rule:
+    description: |
+      Tilt was auto-mapped from `tilts.macro_regime` at ingest per
+      loader.md §3 "Macro regime mapping". `rule_ref` names the row of
+      the regime mapping table; `trigger` repeats the regime values that
+      fired the rule.
+    fields:
+      required:
+        - confidence
+        - rationale
+        - rule_ref         # string — e.g., "loader.md §3 row: recessionary+any"
+        - trigger          # string — e.g., "growth=recessionary, inflation=sticky"
+      optional: []
+
+  manual_edit:
+    description: |
+      Tilt value was set or overridden by the uploader at the
+      confirmation gate, OR carried forward from a prior version that
+      the uploader chose to retain. `prior_value` captures what was
+      there before; `edit_notes` is the uploader's free-text rationale.
+      A `manual_edit` after a `prose_extraction` supersedes the
+      extraction at render time per why-provenance.md.
+    fields:
+      required:
+        - confidence
+        - rationale
+        - prior_value      # any — prior value of the leaf (null if newly set)
+        - edit_notes       # string ≤500 chars — uploader rationale
+      optional: []
+
+  parallax_data_fill:
+    description: |
+      LEGACY. Produced by a deprecated ingest-time-augment design that
+      folded Parallax-derived values into the saved view. NEVER produced
+      at new save time — Parallax-derived overlays now happen JIT at
+      consumer-skill use, with provenance recorded on the consuming
+      portfolio/screen artifact, not on the saved view. Supported for
+      back-compat read of old views only. Distinct from
+      `generator_synthesis` (which IS the primary derivation, not a fill).
+    fields:
+      required:
+        - confidence
+        - rationale
+        - source_tools     # list[string] — MCP calls
+      optional:
+        - data_as_of       # ISO 8601 — staleness of the cited Parallax data
+
+  generator_synthesis:
+    description: |
+      Tilt was synthesized by /parallax-make-house-view from Parallax
+      MCP outputs (macro_analyst + get_telemetry). Distinct from
+      `parallax_data_fill` (deprecated legacy class): generator_synthesis
+      is the PRIMARY derivation for fields produced by the maker, not a
+      fill applied to a CIO source. The view this class derives is born
+      from Parallax data — there is no CIO prose source span to cite.
+      Replay-friendly: `source_call_args` captures the full args dict
+      per MCP call so a future audit can re-run the synthesis.
+    fields:
+      required:
+        - confidence              # float 0.0-1.0
+        - rationale               # string ≤500 chars
+        - source_tools            # list[string] — e.g., ["macro_analyst:Japan:tactical"]
+        - composition_formula     # string — e.g., "pillar_formulas.compose_omega@v1"
+        - aggregator_weights_ref  # string — hash of aggregator_weights.yaml at gen time
+        - data_as_of              # ISO 8601 — max staleness across cited sources
+      optional:
+        - source_call_args        # list[object] — full args dict per call (for replay)
+        - source_snippets         # list[string ≤200 chars]
+        - missing_inputs          # list[string] — MCP fields unavailable at compute time
+        - fan_out_summary         # object — counts of MCP calls dispatched / responded
+
+  judge_recommendation:
+    description: |
+      NOT written into view.yaml by the judge itself — /parallax-judge-house-view
+      only EMITS these records into its report (and into the audit row's
+      `recommendations` field). They become a `manual_edit` (with
+      `edit_notes` referencing the judge run) only if the CIO accepts the
+      recommendation via /parallax-load-house-view --edit. Logged in the
+      taxonomy so the future --apply-judge flow has a class to land in
+      and so the audit reader knows what shape to expect.
+    fields:
+      required:
+        - confidence              # float 0.0-1.0
+        - rationale               # string ≤500 chars
+        - judge_run_id            # string — links to audit.jsonl judge entry
+        - drift_severity          # enum: drift_minor | drift_material | drift_breaking
+        - stress_state            # string — e.g., ALIGNED | DIVERGENT_FRESH | DIVERGENT_STALE
+        - parallax_signal         # any — what Parallax said
+        - age_delta_days          # int — |cio_age_days - parallax_age_days|
+      optional:
+        - notes                   # string — judge free-text annotation

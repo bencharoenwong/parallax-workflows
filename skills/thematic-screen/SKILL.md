@@ -34,6 +34,15 @@ Discover investment opportunities by theme using Parallax's semantic universe bu
 
 Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call. Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode and fallback patterns. JIT-load `_parallax/house-view/loader.md` for active-view validation and conflict resolution.
 
+### Pre-flight: house-view drift check
+
+JIT-load `_parallax/house-view/auto-on-load-judge-pattern.md` and follow
+its protocol. If the protocol surfaces a banner, render it before
+proceeding to this skill's main workflow.
+
+Skip this pre-flight if invoked with `--skip-drift-check` or if no active
+house view exists.
+
 ### Phase A — Setup (parallel, ~2–3 tokens)
 
 Fire both in parallel:
@@ -77,7 +86,9 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 - **Comparison Matrix** (peer comparison for lead candidate)
 - **Financial Snapshot** (revenue, margins, growth for top 3 trusted picks)
 - **Implementation Notes** (liquidity considerations, position sizing guidance)
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (5 error states; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+
+**AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
 If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
 

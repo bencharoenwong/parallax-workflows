@@ -220,8 +220,29 @@ def _load_schema_or_none() -> dict[str, Any] | None:
     return None
 
 
-# Loaded once at module import.  None => "schema unavailable, skip validation".
-_SCHEMA: dict[str, Any] | None = _load_schema_or_none()
+# _SCHEMA is _SCHEMA_UNPROBED on import; _get_schema() probes schema.yaml on
+# each call when still unprobed, avoiding the upgrade-time race where
+# schema.yaml is absent at import time. Tests that monkeypatch _SCHEMA to a
+# concrete dict OR to None continue to work — the sentinel _SCHEMA_UNPROBED
+# is what triggers the re-probe, NOT a bare None (which means "explicitly
+# unavailable, skip validation").
+_SCHEMA_UNPROBED: object = object()
+_SCHEMA: dict[str, Any] | None | object = _SCHEMA_UNPROBED
+
+
+def _get_schema() -> dict[str, Any] | None:
+    """
+    Return the active schema dict, or None if schema.yaml is unavailable.
+
+    If _SCHEMA is still the _SCHEMA_UNPROBED sentinel, probe disk via
+    _load_schema_or_none() and cache the result. If _SCHEMA has been set to a
+    concrete value (dict OR None) by a prior probe or by a test monkeypatch,
+    return it directly.
+    """
+    global _SCHEMA
+    if _SCHEMA is _SCHEMA_UNPROBED:
+        _SCHEMA = _load_schema_or_none()
+    return _SCHEMA  # type: ignore[return-value]
 
 # ---------------------------------------------------------------------------
 # Private helpers
@@ -796,7 +817,8 @@ def load_client_branding() -> dict[str, Any]:
         return _empty_result(parse_error)
 
     # --- Schema unavailable branch: best-effort return, skip validation ---
-    if _SCHEMA is None:
+    active_schema = _get_schema()
+    if active_schema is None:
         logger.warning(
             "White-label schema file not found at %s — skipping validation",
             _SCHEMA_PATH,
@@ -822,7 +844,7 @@ def load_client_branding() -> dict[str, Any]:
     if _hybrid_branding_check is not None:
         logger.warning("White-label config has hybrid v1+v2 shape: %s", _hybrid_branding_check)
         return _empty_result(f"schema_invalid: hybrid_v1_v2: {_hybrid_branding_check}")
-    schema_error = _validate_schema(data, _SCHEMA)
+    schema_error = _validate_schema(data, active_schema)
     if schema_error is not None:
         logger.warning("White-label config schema violation: %s", schema_error)
         return _empty_result(schema_error)

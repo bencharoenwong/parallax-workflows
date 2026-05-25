@@ -114,9 +114,11 @@ Present as a friendly, structured report. When an active house view is loaded, J
 - **Recent News** (bullets)
 - **Analyst View** (price target range, consensus)
 - **Bottom Line** (balanced 2-sentence summary — pros and cons, not a recommendation)
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (5 error states; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
 
 Append audit log entry per loader.md §6.
+
+**AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
 If active view: use the view-aware disclaimer per loader.md §5. Otherwise:
 

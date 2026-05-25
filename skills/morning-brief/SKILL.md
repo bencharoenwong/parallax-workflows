@@ -60,6 +60,17 @@ Per `loader.md` §1-§2. If view present, capture tilt vector, excludes, prose e
 
 1. Evaluate health flags: Low Score (overall ≤5.0), Concentration (>15% single / >45% top-3), Redundancy (≥2 pairs), Value Trap (value ≤3.0).
 2. **House-view alignment** (if view active): flag holdings misaligned with view tilts (>25% off view-tilted target), holdings on `tilts.excludes`, and any active-view conflicts to highlight in Action Items.
+
+**Conditional drift suggestion:** If the Batch B alignment check above
+detected ≥3 holdings whose factor exposure conflicts with the active
+view's tilts, append a single line to the brief's "next actions"
+section: "Consider running /parallax-judge-house-view for a full
+drift analysis (≥3 holdings show view-conflict signals)."
+
+Do NOT auto-invoke the judge from morning-brief. Morning-brief already
+does its own live macro_analyst fan-out per Batch A — invoking the judge
+would duplicate that work. The one-liner is a pointer, not an action.
+
 3. For top N holdings by weight (default 3): call `get_news_synthesis` (async — don't block output).
 4. Append audit log entry per loader.md §6.
 
@@ -80,9 +91,11 @@ Present as a structured morning brief, under 800 words:
 - **Redundancy & Alignment Alerts** (only if flagged; include View Misalignment / View Excluded if view active)
 - **Holding News** (one paragraph per holding)
 - **Action Items** (what deserves attention today; if view active, prioritize toward view rebalance direction)
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (5 error states; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
 
 Lead with what matters.
+
+**AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
 If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
 

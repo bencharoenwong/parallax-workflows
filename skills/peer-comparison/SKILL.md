@@ -97,7 +97,9 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 - **House View Note** (only if view active) — render after Score Trajectory per loader.md §7.1 rendering order, via `render_view_conflict(kind="blanket", ...)`.
 - **Relative Price Performance** (comparative returns)
 - **Differentiation** (strengths and weaknesses vs peers)
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (5 error states; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+
+**AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
 If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
 
