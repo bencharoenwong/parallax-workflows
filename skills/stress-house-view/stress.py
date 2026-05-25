@@ -489,7 +489,12 @@ def validate_recommended_deltas(
         if kind not in {"informational", "global", "informational_fresh"}:
             errors.append({"index": i, "field": "kind",
                            "reason": f"kind must be 'informational', 'global', or 'informational_fresh'; got {kind!r}"})
-        # parallax_signal type strictness for informational deltas (decision 4d)
+        # parallax_signal type strictness for informational deltas (decision 4d).
+        # NOTE: deliberately NOT applied to "informational_fresh". A FRESH
+        # divergence is an observation surfaced by the judge (not a strict
+        # delta the stress skill emits), so it may carry richer non-numeric
+        # signal payloads (e.g., regime tokens, summary strings). The judge's
+        # citation validator is the relevant integrity gate for that path.
         if kind == "informational":
             sig = d.get("parallax_signal")
             if not (sig is None or isinstance(sig, (int, float))) or isinstance(sig, bool):

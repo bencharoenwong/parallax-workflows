@@ -381,16 +381,13 @@ def _reconstruct_maker_responses(
     # view's "us" key → PARALLAX_SILENT for US/UK regardless of MCP truth.
     # (Gate review of 32dab55 caught this; 2026-05-25.)
     try:
-        # Import lazily — the maker is already proven-available at this
-        # point (caller checked maker.available); fall through to the
-        # naive derivation if the map symbol moves in a future refactor.
-        import sys as _sys
-        _maker_dir = Path(__file__).resolve().parent.parent / "make-house-view"
-        if str(_maker_dir) not in _sys.path:
-            _sys.path.insert(0, str(_maker_dir))
+        # `probe_maker_modules()` (the caller's prerequisite) already
+        # injected skills/make-house-view/ into sys.path. Bare import
+        # is sufficient; defensive fallback if the symbol moves in a
+        # future maker refactor.
         from maker import MARKET_TO_SCHEMA_KEY  # type: ignore[import]
     except ImportError:
-        MARKET_TO_SCHEMA_KEY = {}  # forces fallback
+        MARKET_TO_SCHEMA_KEY = {}  # forces fallback to naive derivation
 
     def _schema_key_for(market: str) -> str:
         return MARKET_TO_SCHEMA_KEY.get(

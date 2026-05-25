@@ -816,15 +816,23 @@ def test_e2e_judge_consumes_production_phase_1_fan_out_shape(
         r for r in jr.resolutions
         if r.get("dim") == "tilts.regions.us"
     ]
-    if us_cells:  # Active view must actually carry a US tilt for this to fire.
-        us_states = {r.get("state") for r in us_cells}
-        assert us_states != {"PARALLAX_SILENT"}, (
-            "tilts.regions.us is PARALLAX_SILENT despite US prose being "
-            "present in mcp_responses. Schema_key derivation regression — "
-            "check judge._reconstruct_maker_responses uses the canonical "
-            "MARKET_TO_SCHEMA_KEY map (maker.py:88), NOT a naive "
-            "lower().replace(' ', '_')."
-        )
+    # Assert the fixture actually carries a US tilt — otherwise the
+    # check below silently no-ops and the regression guard becomes
+    # vacuous if fixture drift removes the US region. Gate review of
+    # d360c14 flagged this as Finding 2 (2026-05-25).
+    assert us_cells, (
+        "Test fixture must include a US region tilt for this regression "
+        "guard to fire. If the fixture changed, restore tilts.regions.us "
+        "or update this test to assert against a different heavy market."
+    )
+    us_states = {r.get("state") for r in us_cells}
+    assert us_states != {"PARALLAX_SILENT"}, (
+        "tilts.regions.us is PARALLAX_SILENT despite US prose being "
+        "present in mcp_responses. Schema_key derivation regression — "
+        "check judge._reconstruct_maker_responses uses the canonical "
+        "MARKET_TO_SCHEMA_KEY map (maker.py:88), NOT a naive "
+        "lower().replace(' ', '_')."
+    )
 
 
 def test_e2e_judge_cli_dry_no_longer_requires_mock_mcp(
