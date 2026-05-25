@@ -45,7 +45,7 @@ This skill compares the active CIO house view against fresh Parallax macro signa
 /parallax-judge-house-view --dry          # use mocked MCP responses (CI/tests)
 ```
 
-The `--dry` flag requires `--mock-mcp <path>` pointing at a JSON file with mock MCP responses keyed by `tool:arg1:arg2:...` summary strings.
+The `--dry` flag skips the LLM Phase 5 recommendation step and returns deterministic drift severity from MCP signals alone. `--mock-mcp <path>` is independent — it replaces the live MCP fan-out with a canned JSON payload keyed by `tool:arg1:arg2:...` summary strings (for tests or CI). Either flag can be used alone or together.
 
 ## Workflow (Phases 0-8 per v2 plan §3.1)
 
