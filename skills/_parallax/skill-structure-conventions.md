@@ -154,7 +154,7 @@ When a skill exposes a flag or mode that materially changes its output workflow 
 
 **Enforcement seam:** none today. The rule depends on author discipline and PR review. A future addition to `build-skills.sh` could lint skills with `--`-prefixed flags in Usage blocks for trigger-keyword presence in description — see the JIT-load build check above as the implementation template.
 
-PRISM-vocabulary guard: trigger phrases ship verbatim to white-label deployments via the Codex matcher index. Do not embed proprietary signal names, factor decomposition labels, or pillar vocabulary in trigger strings. Generic finance language only.
+Proprietary pillar/factor vocabulary guard: trigger phrases ship verbatim to white-label deployments via the Codex matcher index. Do not embed proprietary signal names, factor decomposition labels, or pillar vocabulary in trigger strings. Generic finance language only.
 
 ## Provenance
 
