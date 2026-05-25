@@ -371,17 +371,39 @@ def _reconstruct_maker_responses(
         _, market, component = parts
         per_market_components.setdefault(market, {})[component] = resp
 
+    # Use the maker's canonical MARKET_TO_SCHEMA_KEY map (maker.py:88) for
+    # schema_key derivation. Earlier version used `market_name.lower().
+    # replace(" ", "_")` which gave "united_states"/"united_kingdom" —
+    # WRONG: the schema uses "us"/"uk". Single-word markets (japan/china/
+    # etc.) round-tripped correctly by accident, masking the bug for the
+    # heaviest markets in the aggregator (US weight=0.56, UK weight=0.04).
+    # Symptom: imputed regions["united_states"] never matched active
+    # view's "us" key → PARALLAX_SILENT for US/UK regardless of MCP truth.
+    # (Gate review of 32dab55 caught this; 2026-05-25.)
+    try:
+        # Import lazily — the maker is already proven-available at this
+        # point (caller checked maker.available); fall through to the
+        # naive derivation if the map symbol moves in a future refactor.
+        import sys as _sys
+        _maker_dir = Path(__file__).resolve().parent.parent / "make-house-view"
+        if str(_maker_dir) not in _sys.path:
+            _sys.path.insert(0, str(_maker_dir))
+        from maker import MARKET_TO_SCHEMA_KEY  # type: ignore[import]
+    except ImportError:
+        MARKET_TO_SCHEMA_KEY = {}  # forces fallback
+
+    def _schema_key_for(market: str) -> str:
+        return MARKET_TO_SCHEMA_KEY.get(
+            market, market.lower().replace(" ", "_")
+        )
+
     responses: list[Any] = []
     for market_name, components in per_market_components.items():
-        # Schema key derivation matches the maker's lowercase-with-underscore
-        # convention (cross_country.py treats market names as schema_key
-        # lookups against aggregator_weights.yaml).
-        schema_key = market_name.lower().replace(" ", "_")
         partial = tuple(c for c, r in components.items() if r is None)
         reachable = any(r is not None for r in components.values())
         responses.append(MarketResponse(
             market_name=market_name,
-            schema_key=schema_key,
+            schema_key=_schema_key_for(market_name),
             components=components,
             reachable=reachable,
             partial_components=partial,

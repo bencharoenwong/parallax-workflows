@@ -804,6 +804,28 @@ def test_e2e_judge_consumes_production_phase_1_fan_out_shape(
         "phase_1_fan_out's output."
     )
 
+    # Stronger assertion: the US region cell SPECIFICALLY must be resolved
+    # (not PARALLAX_SILENT). Catches the schema_key derivation bug class
+    # (gate review of 32dab55 / 2026-05-25): naive lower+replace produces
+    # "united_states" but the canonical map's schema_key is "us". Single-
+    # word markets (japan/china) round-trip identically, so a test that
+    # only checks "at least one non-silent" passes via Japan/China while
+    # US silently drops. Verifying the US region specifically would have
+    # caught the bug.
+    us_cells = [
+        r for r in jr.resolutions
+        if r.get("dim") == "tilts.regions.us"
+    ]
+    if us_cells:  # Active view must actually carry a US tilt for this to fire.
+        us_states = {r.get("state") for r in us_cells}
+        assert us_states != {"PARALLAX_SILENT"}, (
+            "tilts.regions.us is PARALLAX_SILENT despite US prose being "
+            "present in mcp_responses. Schema_key derivation regression — "
+            "check judge._reconstruct_maker_responses uses the canonical "
+            "MARKET_TO_SCHEMA_KEY map (maker.py:88), NOT a naive "
+            "lower().replace(' ', '_')."
+        )
+
 
 def test_e2e_judge_cli_dry_no_longer_requires_mock_mcp(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
