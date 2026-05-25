@@ -1,6 +1,6 @@
 ---
 name: parallax-AI-soros
-description: "Applies George Soros's top-down reflexivity framework (per 'The Alchemy of Finance', 1987) to current Parallax data. Two modes: basket mode surfaces regime themes and ranked trade ideas; single-ticker mode runs the same macro workflow and checks ticker exposure via dual channels (industry exposure AND telemetry basket theme). Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized."
+description: "Applies George Soros's top-down reflexivity framework (per 'The Alchemy of Finance', 1987) to current Parallax data. Triggers: 'trade ideas based on current macro regime', 'regime-driven stock picks', 'reflexivity-lens stock ideas'. Two modes: basket mode surfaces regime themes and ranked trade ideas; single-ticker mode runs the same macro workflow and checks ticker exposure via dual channels (industry exposure AND telemetry basket theme). Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized."
 negative-triggers:
   - Bottom-up factor scoring → use /parallax-AI-buffett
   - Mechanical formula screen → use /parallax-AI-greenblatt
@@ -18,6 +18,7 @@ gotchas:
   - The dual-channel logic is load-bearing — single-channel flag is partial, not full match
   - Disclaimer verbatim per output-template.md, substituting "George Soros" for [Investor]
   - build_stock_universe is async (~15-40s) and may time out — fallback per conventions §4
+  - Telemetry basket-membership resolution: ticker → basket assignment is currently best-effort via name-match against `divergences[*].basket_name`; per-ticker basket lookup is NOT a documented field in the get_telemetry schema. Treat Channel B (single-ticker mode) matches as best-effort pending a documented convention in parallax-conventions.md.
   - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
 
