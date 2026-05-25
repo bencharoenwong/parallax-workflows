@@ -181,7 +181,7 @@ Active view is consumed by: `portfolio-builder`, `rebalance`, `thematic-screen`,
 |---|---|
 | `/parallax-macro-outlook "United States"` | Regime, macro analysis, factor implications |
 | `/parallax-country-deep-dive Japan` | Macro environment and equity opportunities |
-| `/parallax-thematic-screen "AI infrastructure"` | Discover stocks by theme |
+| `/parallax-thematic-screen "AI infrastructure"` (or `"trade ideas around energy transition"`, optionally with `--no-macro`) | Discover stocks by theme; optional macro + regime-signal overlay for trade ideas |
 | `/parallax-portfolio-builder "defensive dividend Asian equities"` | Build allocation from thesis |
 | `/parallax-watchlist-monitor AAPL.O MSFT.O NVDA.O` | Flag score changes across a list |
 | `/parallax-halal-screen AAPL.O` | Shariah compliance check |
