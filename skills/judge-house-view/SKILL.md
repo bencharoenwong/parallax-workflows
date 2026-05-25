@@ -67,7 +67,7 @@ Same recipe as the maker: 14 markets × 5 components (`macro_indicators`, `tacti
 
 **PARTIAL responses** (`success=True` with prose like "data unavailable"): treat as silent — not UNREACHABLE.
 
-In `--dry` mode, `mock_mcp_responses` is used verbatim. Live mode delegates to a runtime-injected `mcp_call_fn`.
+When `mock_mcp_responses` is provided (via `--mock-mcp <path>` or programmatic injection), it replaces the live MCP fan-out verbatim regardless of `--dry`; otherwise the runtime delegates to the injected `mcp_call_fn`. `--dry` is orthogonal — it only suppresses the Phase 5 LLM recommendation call, not the MCP source.
 
 ### Phase 2 — Per-cell diff
 

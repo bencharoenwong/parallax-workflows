@@ -4,6 +4,22 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-05-25
+
+### Added
+- **§9.2 AI-interaction disclosure** wired into 10 previously-unwired analysis skills (`watchlist-monitor`, `score-explainer`, `earnings-quality`, `AI-buffett`, `AI-soros`, `AI-klarman`, `AI-greenblatt`, `AI-consensus`, `credit-lens`, `halal-screen`) plus `AI-ptj`. Closes the follow-up flagged under the 2026-05-18 DECISIONS entry; all 11 now reference `parallax-conventions.md §9.2` immediately above the standard disclaimer.
+- **`docs/security/audit-2026-05-25.md`** — pre-launch security audit baseline (machine-greppable SUMMARY line) consumed by the pre-push security gate.
+- **`/parallax-judge-house-view --mock-mcp <path>`** — new orthogonal flag documented in README and `skills/judge-house-view/SKILL.md`; replaces live MCP fan-out with a canned JSON payload (CI / testing). Combinable with `--dry`.
+
+### Changed
+- **`/parallax-judge-house-view --dry`** decoupled from MCP mocking. `--dry` now only suppresses the Phase 5 LLM recommendation step and returns deterministic drift severity from MCP signals; mock injection is `--mock-mcp <path>`. README §"House View" table and `skills/judge-house-view/SKILL.md` Phase 1 prose updated to match.
+- **`CLAUDE.md`** now carries `**Project Type:** MCP` and `**Security Gate:** required` markers so the pre-push hook treats this repo as production-scope rather than mis-classifying it as academic from the presence of `notes/HANDOFF.md`.
+
+### Fixed
+- **`judge.schema_key`** switched to the canonical `MARKET_TO_SCHEMA_KEY` map (single source of truth) and 3 LOW gate-review findings on that change cleared.
+
+---
+
 ## 2026-05-24
 
 ### Added

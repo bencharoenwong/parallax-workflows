@@ -162,7 +162,8 @@ Bring your own house view. The CIO memo, IC strategy doc, or macro-desk PDF that
 | `/parallax-make-house-view --markets us,japan,uk` | Restrict synthesis fan-out scope |
 | `/parallax-judge-house-view` | **Read-only** LLM-as-judge — compare saved view to current Parallax signals, classify drift severity, emit cited per-cell recommendations + bundle |
 | `/parallax-judge-house-view --json` | Structured output for cron consumption |
-| `/parallax-judge-house-view --dry` | Use mocked MCP responses (CI / testing) |
+| `/parallax-judge-house-view --dry` | Skip the Phase 5 LLM recommendation step; return deterministic drift severity from MCP signals alone |
+| `/parallax-judge-house-view --mock-mcp <path>` | Replace live MCP fan-out with a canned JSON payload (CI / testing). Independent of `--dry` — combinable |
 
 **Three design choices worth knowing about:**
 
