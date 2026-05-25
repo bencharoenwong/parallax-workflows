@@ -144,8 +144,21 @@ The following patterns have been considered and rejected:
 
 - **Splitting Python infrastructure (`extract.py`, `loader.py`) into a package solely to mirror SKILL.md splits** — Python files don't load into Claude's context. Split a Python module only when the module exceeds ~800 lines AND has ≥5 distinct responsibilities. The white-label `extract/` package split was justified by both criteria; mirror-splitting smaller modules is over-engineering.
 
+## Description / Trigger Completeness
+
+When a skill exposes a flag or mode that materially changes its output workflow (examples: `--augment-silent` in portfolio-builder, basket vs. single-ticker in AI-soros, `--macro` / `--no-macro` in thematic-screen), the frontmatter `description` must include at least one natural-language trigger phrase that an operator would type without knowing the flag name. This ensures the Codex matcher surfaces the mode to white-label operators and that natural-language invocations don't silently hit the default path when the operator wanted the mode.
+
+**Rule: new flag or mode added to a skill from 2026-05-25 onward → one trigger phrase in `description` before merge.** No exceptions for "advanced" or "opt-in" modes — those are precisely the modes that get lost without a trigger phrase. The trigger phrase should be operator-vocabulary, not internal terminology (e.g., "fill house view gaps from Parallax data" not "augment silent dimensions via gap_detect").
+
+**Scope is forward-only.** A retroactive audit found 10+ existing skills with flag modes (judge-house-view, load-house-view, make-house-view, etc.) lacking trigger phrases. That backlog is NOT closed by this rule — it is accepted debt with no scheduled cleanup. New skills (added 2026-05-25 onward) must comply; existing skills are exempt until separately scoped.
+
+**Enforcement seam:** none today. The rule depends on author discipline and PR review. A future addition to `build-skills.sh` could lint skills with `--`-prefixed flags in Usage blocks for trigger-keyword presence in description — see the JIT-load build check above as the implementation template.
+
+PRISM-vocabulary guard: trigger phrases ship verbatim to white-label deployments via the Codex matcher index. Do not embed proprietary signal names, factor decomposition labels, or pillar vocabulary in trigger strings. Generic finance language only.
+
 ## Provenance
 
 - Council session: `notes/2026-05-06-1023-council-white-label-restructure.md`
 - DECISIONS.md entry: 2026-05-06 (later) — white-label-onboard restructure, Phase 2 conditional
 - Companion file: `jit-load-compliance-audit.md`
+- Description / Trigger Completeness rule added 2026-05-25 per tech-debt closeout audit covering AI-soros basket-mode invisibility and portfolio-builder --augment-silent undiscoverability.
