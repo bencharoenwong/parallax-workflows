@@ -54,7 +54,8 @@ class GateContext:
             pillars, styles, themes.
 
             BUG-005: maker extends this with a "pillars" key whose value is
-            avg(Ω, Φ, Ξ, Ψ confidences). The ingest path may omit "pillars".
+            the avg of the four framework-component confidences. The ingest
+            path may omit "pillars".
             The gate renders whatever keys are present in the LOW-CONFIDENCE
             block.
         extraction_attempt_action: True for both ingest and maker — both log
@@ -213,11 +214,11 @@ def _render_gate_display(draft: dict, context: GateContext) -> str:
         f"valid_through:    {metadata.get('valid_through', '<computed>')}",
         f"basis_statement:  {(metadata.get('basis_statement') or '')[:200]}",
         "",
-        "--- PILLARS (quantum-factor decomposition) ---",
-        f"Ω econometrics_phase:        {pillars.get('econometrics_phase', 0)}",
-        f"Φ valuation_state:           {pillars.get('valuation_state', 0)}",
-        f"Ξ market_entropy:            {pillars.get('market_entropy', 0)}",
-        f"Ψ psychological_wavelength:  {pillars.get('psychological_wavelength', 0)}",
+        "--- FRAMEWORK COMPONENTS (macro / valuation / market state / sentiment) ---",
+        f"econometrics_phase (macro):           {pillars.get('econometrics_phase', 0)}",
+        f"valuation_state (valuation):          {pillars.get('valuation_state', 0)}",
+        f"market_entropy (market state):        {pillars.get('market_entropy', 0)}",
+        f"psychological_wavelength (sentiment): {pillars.get('psychological_wavelength', 0)}",
         "",
         "--- TILTS (only non-zero shown) ---",
     ]
