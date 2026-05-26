@@ -74,7 +74,7 @@ If no source was given (wizard mode): walk the uploader through the schema inter
 
 1. **Identity:** view name, uploader role (CIO / PM / Investment Committee / Strategist / Other), basis statement, effective date, valid_through (or `auto_expire_days`).
 2. **Macro regime:** growth (slowing / steady / accelerating / null), inflation (disinflation / benign / sticky / accelerating / null), rates (cutting / holding / hiking / null), risk_appetite (risk_on / neutral / risk_off / null).
-3. **Pillars:** Ω econometrics_phase, Φ valuation_state, Ξ market_entropy, Ψ psychological_wavelength — each on -2 / -1 / 0 / +1 / +2.
+3. **Components:** `econometrics_phase` (macro backdrop), `valuation_state` (valuation), `market_entropy` (market state), `psychological_wavelength` (sentiment) — each on -2 / -1 / 0 / +1 / +2.
 4. **Factors:** value, profitability, momentum, low_volatility, trading_signals — each on -2 / -1 / 0 / +1 / +2.
 5. **Sectors:** present GICS sector keys; uploader picks the ones with a view, then sets each on the same -2 to +2 scale.
 6. **Regions:** present broad keys (developed_markets, emerging_markets, etc.); offer per-country drill-down only if the uploader names specific countries.
@@ -87,16 +87,16 @@ Default to multi-select where the schema allows. Capture `extraction_confidence`
 
 Produce a draft YAML conforming to `_parallax/house-view/schema.yaml`. For each field, also produce a `extraction_confidence` score (0.0-1.0) representing your confidence in the extraction.
 
-**Pillar extraction (quantum-factor decomposition).** Before extracting sector/region/factor tilts, read the source for pillar-level conviction and populate `tilts.pillars`:
+**Component extraction.** Before extracting sector/region/factor tilts, read the source for component-level conviction and populate `tilts.pillars` (field identifier preserved for data-contract stability):
 
-| Pillar | Look for | Map to |
+| Component | Look for | Map to |
 |---|---|---|
-| `econometrics_phase` (Ω) | Macro backdrop framing — "constructive on growth", "recessionary", "stagflation", "soft landing" | +2 very constructive → -2 recessionary/stress |
-| `valuation_state` (Φ) | Valuation commentary — "stretched multiples", "cheap vs history", "PE reasonable", "dispersion" | +2 very undervalued → -2 highly overvalued |
-| `market_entropy` (Ξ) | Technicals/vol/flows — "orderly rotation", "elevated VIX", "breadth deteriorating", "heavy issuance" | +2 low/ordered → -2 high/disordered |
-| `psychological_wavelength` (Ψ) | Sentiment/RORO — "risk-on backdrop", "frothy retail", "capitulation", "fear index elevated" | +2 very positive → -2 very negative |
+| `econometrics_phase` | Macro backdrop framing — "constructive on growth", "recessionary", "stagflation", "soft landing" | +2 very constructive → -2 recessionary/stress |
+| `valuation_state` | Valuation commentary — "stretched multiples", "cheap vs history", "PE reasonable", "dispersion" | +2 very undervalued → -2 highly overvalued |
+| `market_entropy` | Technicals/vol/flows — "orderly rotation", "elevated VIX", "breadth deteriorating", "heavy issuance" | +2 low/ordered → -2 high/disordered |
+| `psychological_wavelength` | Sentiment/RORO — "risk-on backdrop", "frothy retail", "capitulation", "fear index elevated" | +2 very positive → -2 very negative |
 
-Pillars are usually coarse — a prose view rarely articulates sub-factor level. If the source is silent on a pillar, leave at 0 and flag `pillars` extraction_confidence ≤ 0.6. Pillar scores are encoding-only (per loader.md §3): they are stored but do NOT auto-translate into factor multipliers.
+Components are usually coarse — a prose view rarely articulates sub-factor level. If the source is silent on a component, leave at 0 and flag `pillars` extraction_confidence ≤ 0.6. Component scores are encoding-only (per loader.md §3): they are stored but do NOT auto-translate into factor multipliers.
 
 **Hedged or split-sector language is a known failure mode.** When the source uses phrases like:
 - "constructive on tech but selective in semis"

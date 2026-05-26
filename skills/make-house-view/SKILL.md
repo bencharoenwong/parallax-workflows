@@ -7,18 +7,18 @@ negative-triggers:
   - Stress-testing for internal consistency → use /parallax-stress-house-view
   - Per-cell diff of two saved views → use /parallax-house-view-diff
 gotchas:
-  - JIT-load `_parallax/house-view/MCP_FIELD_INVENTORY.md` BEFORE assuming any pillar input is available. Φ / Ξ are prose-extracted; Ψ is LLM-judged. Confidence caps differ per pillar.
+  - JIT-load `_parallax/house-view/MCP_FIELD_INVENTORY.md` BEFORE assuming any component input is available. `valuation_state` / `market_entropy` are prose-extracted; `psychological_wavelength` is LLM-judged. Confidence caps differ per component.
   - The shared gate (`_parallax/house-view/gate_present.py`) is REQUIRED — there is no save path that bypasses it. `--shadow-diff` skips the gate AND the save.
   - Fan-out budget is 14 markets × 5 components = 70 macro_analyst calls + 1 list_macro_countries + 1 get_telemetry. Concurrency cap 8. Per-market timeout 45s. Hard abort when unreachable_share > 30%.
   - Reuse `audit_chain.append_entry`, `chain_emit.emit_phase_0_chain`, `provenance_classes.validate_provenance_entry`. NEVER reimplement.
   - The `generate` audit row carries ONLY: schema_version, ts, view_id, version_id, view_hash, skill, action, applied, parent_version_id, provenance_hash, source_tools, calibration_status. composition_formula / aggregator_weights_ref / source_snippets / pillar_missing_inputs MUST go in `provenance.yaml`, NOT on the audit row.
-  - Ψ judgment is Claude-only (data perimeter — telemetry contains CG-proprietary signals, do NOT dispatch to external models).
+  - `psychological_wavelength` judgment is Claude-only (data perimeter — telemetry contains CG-proprietary signals, do NOT dispatch to external models).
   - Synthesized views carry `auto_expire_days: 30` (shorter than ingested views' 90) because the underlying macro fan-out is point-in-time.
 ---
 
 # Make House View
 
-Synthesize a draft Parallax house view by orchestrating Parallax MCP tools (`list_macro_countries` + `macro_analyst` × 14 markets × 5 components + `get_telemetry`), aggregate cross-country, compose the four pillars (Ω Φ Ξ Ψ), route through the shared confirmation gate, and save through the same path `/parallax-load-house-view` uses.
+Synthesize a draft Parallax house view by orchestrating Parallax MCP tools (`list_macro_countries` + `macro_analyst` × 14 markets × 5 components + `get_telemetry`), aggregate cross-country, compose the four framework components (macro backdrop, valuation, market state, sentiment), route through the shared confirmation gate, and save through the same path `/parallax-load-house-view` uses.
 
 The synthesized view lives in `~/.parallax/active-house-view/` and is consumed by every downstream skill (portfolio-builder, rebalance, thematic-screen, etc.) exactly like an ingested view — the only difference is the provenance class (`generator_synthesis` vs `prose_extraction`) and a shorter default `auto_expire_days`.
 
@@ -57,27 +57,27 @@ If `unreachable_share > 0.30` of the fan-out, HARD ABORT (v2 plan §2.2). Aggreg
 
 Call `cross_country.aggregate(per_market_responses, telemetry, weights)`. Outputs:
 
-- `phi.value` / `phi.coverage_ok` / `phi.markets_with_data`: weighted-median of per-market Φ prose-extracted values when ≥ 60% of weight responded; else NULL + coverage_warning.
-- `xi.value` etc.: same shape for entropy.
-- `psi_news_blobs`: concatenated per-country news content for Ψ judgment.
+- `phi.value` / `phi.coverage_ok` / `phi.markets_with_data`: weighted-median of per-market `valuation_state` prose-extracted values when ≥ 60% of weight responded; else NULL + coverage_warning.
+- `xi.value` etc.: same shape for `market_entropy`.
+- `psi_news_blobs`: concatenated per-country news content for `psychological_wavelength` judgment.
 - `regions.<schema_key>`: single-market region tilts (bypass coverage threshold per BUG-009).
 - `sectors.<sector>`: cross-country weighted-median, coverage-gated.
 - `macro_regime`: inferred growth/risk tokens from telemetry.regime_tag.
 - `fan_out_summary`: market counts.
 
-### Step 5 — Pillar composition
+### Step 5 — Component composition
 
-Call `pillar_compose.compute_pillars(aggregated, telemetry)`. Returns four `PillarResult(value, confidence, missing_inputs, composition_formula, source_snippets)` objects.
+Call `pillar_compose.compute_pillars(aggregated, telemetry)`. Returns four `PillarResult(value, confidence, missing_inputs, composition_formula, source_snippets)` objects (module/class names kept as field identifiers for data-contract stability).
 
-Pillar confidence caps (MCP_FIELD_INVENTORY.md §4):
-- **Ω econometrics_phase**: ≤ 0.80 (regime_tag + cross-country growth nudge).
-- **Φ valuation_state**: ≤ 0.70 (prose-extracted from per-country macro_indicators). PROSE-BASED — assumed `telemetry.signals.valuation_z` does NOT exist (verified A0).
-- **Ξ market_entropy**: ≤ 0.50 (composite: prose entropy + normalized `len(telemetry.divergences)` as fallback proxy; `composition_formula` documents the weighting).
-- **Ψ psychological_wavelength**: ≤ 0.60. Default is heuristic bag-of-words; SKILL.md flow injects a Claude structured-output prompt via `psi_judge_fn` for production.
+Component confidence caps (MCP_FIELD_INVENTORY.md §4):
+- **`econometrics_phase` (macro backdrop)**: ≤ 0.80 (regime_tag + cross-country growth nudge).
+- **`valuation_state` (valuation)**: ≤ 0.70 (prose-extracted from per-country macro_indicators). PROSE-BASED — assumed `telemetry.signals.valuation_z` does NOT exist (verified A0).
+- **`market_entropy` (market state)**: ≤ 0.50 (composite: prose entropy + normalized `len(telemetry.divergences)` as fallback proxy; `composition_formula` documents the weighting).
+- **`psychological_wavelength` (sentiment)**: ≤ 0.60. Default is heuristic bag-of-words; SKILL.md flow injects a Claude structured-output prompt via `psi_judge_fn` for production.
 
 When `missing_inputs` is non-empty, confidence is capped at 0.35 (strictly below `gap_detect.LOW_CONFIDENCE_THRESHOLD = 0.4`) so the gap branch fires.
 
-**Ψ judgment is Claude-only.** Telemetry contains CG-proprietary signals — do NOT dispatch to external models. Structured-output schema:
+**`psychological_wavelength` judgment is Claude-only.** Telemetry contains CG-proprietary signals — do NOT dispatch to external models. Structured-output schema:
 
 ```json
 {"value": -2..+2, "reasoning": "≤200 chars", "confidence": 0.0-1.0}
@@ -159,8 +159,8 @@ Call `maker.MakerOrchestrator.save_view(...)`. This:
   view_id:        <uuid>
   version_id:     <uuid>
   effective:      <today> through <today + 30d>
-  pillars:        Ω <ω>  Φ <φ>  Ξ <ξ>  Ψ <ψ>
-  pillar conf:    Ω <c>  Φ <c>  Ξ <c>  Ψ <c>  (avg <avg>)
+  components:     econometrics_phase <e>  valuation_state <v>  market_entropy <m>  psychological_wavelength <p>
+  component conf: econometrics_phase <c>  valuation_state <c>  market_entropy <c>  psychological_wavelength <c>  (avg <avg>)
   tilts active:   <count of non-zero tilts>
   unreachable markets: <count>
 
@@ -192,7 +192,7 @@ To clear:  /parallax-load-house-view --clear
 - `maker.py` — orchestrator + save path. `MakerOrchestrator.execute_synthesis(mcp, dispose_fn, edit_fn)` is the entry point.
 - `cross_country.py` — `aggregate(per_market_responses, telemetry, weights)` with 60% coverage rule.
 - `pillar_compose.py` — `compute_pillars(aggregated, telemetry)` packaging.
-- `pillar_formulas.py` — `compute_omega / compute_phi / compute_xi / compute_psi`. Prose-based Φ/Ξ per A0 findings. Confidence caps + missing-input rule.
+- `pillar_formulas.py` — `compute_omega / compute_phi / compute_xi / compute_psi` (function names kept as field identifiers). Prose-based `valuation_state` / `market_entropy` per A0 findings. Confidence caps + missing-input rule.
 - `prose_synth.py` — deterministic YAML → markdown narrative (no LLM).
 - `shadow_diff.py` — `--shadow-diff` rendering.
 
@@ -200,5 +200,5 @@ To clear:  /parallax-load-house-view --clear
 
 - DO NOT modify any existing skill (load-house-view, house-view-diff, stress-house-view).
 - DO NOT modify any shared infra (`audit_chain.py`, `manifest_cache.py`, `chain_emit.py`, `view_status.py`, `gate_present.py`, `provenance_classes.py`). Reuse only.
-- DO NOT dispatch to external models for Ψ — Claude only (data perimeter).
+- DO NOT dispatch to external models for `psychological_wavelength` — Claude only (data perimeter).
 - The `generate` audit row format is fixed by loader.md §6.2 — adding fields requires a loader.md spec update first.
