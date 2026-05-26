@@ -19,10 +19,11 @@ A red contract test in CI surfaces drift before a customer hits it.
 | File | Endpoint | Notes |
 |---|---|---|
 | `get_telemetry.json` | `mcp__claude_ai_Parallax__get_telemetry` | Market regime, signals, divergences |
-| `analyze_portfolio.json` | `mcp__claude_ai_Parallax__analyze_portfolio` | Factor + sector + concentration |
+| `analyze_portfolio.json` | `mcp__claude_ai_Parallax__analyze_portfolio` | Factor + sector + concentration. **Minimal — full response includes additional fields** (rolling metrics, drawdown analysis, contribution attribution, performance time series) referenced as "unavailable in fallback path" by `portfolio-builder/SKILL.md` Step 6. Mock does not currently capture those keys; their exact field names need to be reconciled against a live capture. |
 | `export_price_series.json` | `mcp__claude_ai_Parallax__export_price_series` | One holding's daily OHLCV |
 | `get_company_info.json` | `mcp__claude_ai_Parallax__get_company_info` | One holding; ground-truth name oracle |
 | `check_portfolio_redundancy.json` | `mcp__claude_ai_Parallax__check_portfolio_redundancy` | **PROVISIONAL** — see below |
+| `check_portfolio_redundancy_silent_fail.json` | `mcp__claude_ai_Parallax__check_portfolio_redundancy` | **Failure-mode fixture** — models the empty-payload silent-failure on sector-concentrated portfolios. Pair with the happy-path mock when testing skills that have sanity-check gates against this mode (portfolio-builder Step 4 + Step 6 fallback, halal-screen Step 2). |
 | `get_assessment.json` | `mcp__claude_ai_Parallax__get_assessment` | AI synthesis (async, ~30-90s) |
 | `get_score_analysis.json` | `mcp__claude_ai_Parallax__get_score_analysis` | Weekly score history per ticker |
 | `get_news_synthesis.json` | `mcp__claude_ai_Parallax__get_news_synthesis` | News synthesis per ticker (async) |
@@ -65,5 +66,5 @@ When upstream Parallax MCP changes a response shape:
 
 ## Out of scope (v2)
 
-- **Error-path mocks.** Each endpoint here gets one happy-path mock. Modeling error responses ("data unavailable", quota exceeded, partial coverage) is deferred — failure-handling contracts are documented in `_parallax/coverage-matrix.md` and exercised in skill-level integration tests.
+- **Error-path mocks.** Each endpoint here gets one happy-path mock (exception: `check_portfolio_redundancy_silent_fail.json` was added 2026-05-25 to model the documented empty-payload silent-failure mode that 3 skills sanity-check against). Modeling other error responses ("data unavailable", quota exceeded, partial coverage) is deferred — failure-handling contracts are documented in `_parallax/coverage-matrix.md` and exercised in skill-level integration tests.
 - **Cross-endpoint consistency.** The mocks each pin a single endpoint in isolation; they are not jointly consistent. Integration tests within each skill use coordinated fixture sets where needed.

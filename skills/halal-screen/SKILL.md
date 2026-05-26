@@ -61,7 +61,7 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 
 **For portfolio screening:**
 1. For each holding, run the single-stock compliance check (steps 1-7 above).
-2. Call `check_portfolio_redundancy` on compliant holdings only.
+2. Call `check_portfolio_redundancy` on compliant holdings only. **Sanity-check the response** (apply only when compliant holdings count N≥8 to avoid false-positives on small compliant sets where natural concentration is expected): if compliant holdings have >60% concentration in a single sector but `sector_concentration: {}` is empty and `"well-diversified"` is returned, the tool's concentration detection has silently failed — compute concentration client-side from per-holding sectors and flag the tool bug in output. For N<8, skip the sanity-check entirely; small concentrated halal subsets are an expected screening outcome, not a tool bug. **Rationale for N=8 cutoff:** at N=8 a >60% single-sector share requires ≥5 holdings clustered in one sector, which is unlikely from natural Shariah filtering (which typically excludes ~3 sectors broadly, leaving the residual spread across ≥4–5 sectors); at N≤7 the same share can result from 4 holdings and is consistent with screening outcome, not a tool defect. Tune the cutoff only if production data shows the false-positive rate diverging from this assumption.
 3. For non-compliant holdings, call `build_stock_universe` with "[sector]" to find alternatives, then screen those alternatives through the same compliance check.
 4. Call `get_peer_snapshot` on compliant alternatives to score them.
 

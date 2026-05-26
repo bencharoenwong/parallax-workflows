@@ -72,7 +72,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 
 | Workflow | Tokens (typical) | Key cost drivers |
 |---|---|---|
-| `/parallax-thematic-screen` | **14** | Universe build + 5 snapshots + 3 financials |
+| `/parallax-thematic-screen` | **~19** (default) / **~14** (`--no-macro`) | Universe build + 5 snapshots + 3 financials + `list_macro_countries` + `macro_analyst` × up to 3 markets + `get_telemetry` regime signal. `--no-macro` reverts to the prior ~14-token baseline. |
 | `/parallax-portfolio-builder` | **36** | Universe + 10 snapshots + redundancy + validation |
 | `/parallax-portfolio-checkup` | **36** | 2x fan-out (20) + 3 macro markets (15) |
 | `/parallax-morning-brief` | **50** | Telemetry + macro + 2x fan-out + 3 news |
