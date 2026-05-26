@@ -96,13 +96,13 @@ Cell categories and the auto-decision rule for each:
 | `macro_regime.rates == "cutting"` & `factors.momentum ≥ +1` | regime-favored low-vol historically | Hard stop | refuse; emit fix suggestion |
 | `macro_regime.growth == "slowing"` & cyclical sectors (`financials`, `industrials`, `materials`) overweight | growth-slowing favors defensives | Taste | surface; do not block |
 | `excludes: [energy]` & EM commodity-exporter regions (`brazil`, `indonesia`, `mexico`, etc.) overweight | implicit re-introduction of energy beta | Taste | surface |
-| `pillars.Ω (econometrics_phase) ≤ −1` & `macro_regime.risk_appetite == "risk_on"` | regime-RORO contradiction | Hard stop | refuse |
+| `pillars.econometrics_phase ≤ −1` & `macro_regime.risk_appetite == "risk_on"` | regime-RORO contradiction | Hard stop | refuse |
 | Any cell flagged at extraction with `extraction_confidence < 0.6` and now driving a non-zero tilt | fragile extraction collapsed to directional bet | Taste | surface as "fragile" |
 
 (All trigger thresholds and pairings live in a config so the rule set is auditable
-and editable without code change. Avoid encoding any new PRISM multiplier
-relationships — these are *value*-level folk-quant checks, not pillar→factor mapping
-extensions.)
+and editable without code change. Avoid encoding any new component→factor
+multiplier relationships — these are *value*-level folk-quant checks, not
+pillar→factor mapping extensions.)
 
 Output of Phase 1: "PASS" (proceed to Phase 2) or "HARD STOP" (render table, exit
 with audit entry `action="stress_test", disposition="halted_internal"`).

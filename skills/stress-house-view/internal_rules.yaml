@@ -36,8 +36,8 @@
       - tilts.regions.chile: ">=1"
       - tilts.regions.emea: ">=1"
 
-- id: "pillar_omega_risk_on"
-  description: "A negative econometrics phase (Ω) contradicts a risk-on appetite."
+- id: "pillar_omega_risk_on"  # id retained for test-fixture stability; see DECISIONS 2026-05-25 vocabulary scrub
+  description: "A negative econometrics phase contradicts a risk-on appetite."
   class: "hard_stop"
   last_reviewed: "2026-05-14"
   confidence: 0.85

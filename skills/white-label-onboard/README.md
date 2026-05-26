@@ -298,8 +298,7 @@ class AccessibilityValidator:
 
 ## License & Attribution
 
-White-label onboarding skill for Parallax equity research platform.
-Part of the Chicago Global intelligence infrastructure.
+White-label onboarding skill for the Parallax equity research platform.
 
 ## Support
 
