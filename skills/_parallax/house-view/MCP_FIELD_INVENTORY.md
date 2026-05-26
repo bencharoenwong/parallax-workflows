@@ -6,13 +6,14 @@
 **Refresh cadence:** Monthly (CI smoke test in `tests/integration/test_mcp_field_inventory.py`)
 
 This artifact documents the **observed** shape of `macro_analyst` and
-`get_telemetry` responses, what pillar formulas can compute today vs. what
+`get_telemetry` responses, what component formulas can compute today vs. what
 requires server-side field additions, and what coverage gaps the maker must
 handle gracefully.
 
-> Pillar formulas (`pillar_formulas.py`) reference this file. If MCP surface
-> changes, regenerate this file via `python -m phase_a0_validate` and update
-> formula confidence caps + missing_inputs lists accordingly.
+> Component formulas (`pillar_formulas.py` — module name preserved as field
+> identifier) reference this file. If MCP surface changes, regenerate this
+> file via `python -m phase_a0_validate` and update formula confidence caps +
+> missing_inputs lists accordingly.
 
 ---
 
@@ -51,25 +52,25 @@ handle gracefully.
 }
 ```
 
-**Critical:** `content` is **markdown prose**, not structured fields. All pillar
+**Critical:** `content` is **markdown prose**, not structured fields. All component
 inputs are embedded in prose and require LLM extraction. The architect's
 concern about discrete `valuation_z`/`vix_percentile_12m` fields being absent
 is correct for `telemetry.signals` — those fields are NOT present there.
 **But equivalents ARE embedded in `macro_analyst.content` prose for some
-markets** (see Φ/Ξ rows below).
+markets** (see `valuation_state` / `market_entropy` rows below).
 
 ### 2.1 Available components (9 total)
 
-| Component | Tested | Pillar relevance |
+| Component | Tested | Framework-component relevance |
 |---|---|---|
-| `macro_indicators` | ✓ US, China | Ω (growth/inflation), Φ (valuation when explicit), Ξ (entropy when explicit) |
-| `tactical` | ✓ Japan | Ω (regime framing), sector tilts, region tilts |
-| `fixed_income` | ⚪ untested | rates leg of Ω |
-| `currency` | ⚪ untested | FX context for Ω |
+| `macro_indicators` | ✓ US, China | `econometrics_phase` (growth/inflation), `valuation_state` (when explicit), `market_entropy` (when explicit) |
+| `tactical` | ✓ Japan | `econometrics_phase` (regime framing), sector tilts, region tilts |
+| `fixed_income` | ⚪ untested | rates leg of `econometrics_phase` |
+| `currency` | ⚪ untested | FX context for `econometrics_phase` |
 | `sectors` | ✓ US | sector tilts (BUT: may report "data unavailable" — handle gracefully) |
 | `sector_positioning` | ⚪ untested | sector tilts (overlapping with sectors) |
-| `liquidity` | ⚪ untested | Ξ entropy candidate |
-| `news` | ⚪ untested | Ψ psychological_wavelength, themes |
+| `liquidity` | ⚪ untested | `market_entropy` candidate |
+| `news` | ⚪ untested | `psychological_wavelength`, themes |
 | `factors` | ⚪ untested | country-level factor tilts (per the tool doc, distinct from telemetry's factor_view) |
 
 **Untested components should be sampled before B1 starts** — incomplete inventory.
@@ -122,20 +123,21 @@ keyed object.** Prose-embedded numbers (z-scores, daily/MTD %, market codes).
 | `telemetry.signals.risk_appetite` | ❌ Not as discrete field. `regime_tag` is closest proxy. |
 | `telemetry.signals[*].pmi_global_z` | ❌ Not present. |
 
-**Implication:** Pillar formulas Φ and Ξ cannot use the structured-telemetry
-inputs described in v2 plan §4.2 — those don't exist. They must extract from
-`macro_analyst.content` prose or fall back to NULL with confidence 0.0.
+**Implication:** Component formulas for `valuation_state` and `market_entropy`
+cannot use the structured-telemetry inputs described in v2 plan §4.2 — those
+don't exist. They must extract from `macro_analyst.content` prose or fall
+back to NULL with confidence 0.0.
 
 ---
 
-## 4. Per-pillar availability matrix
+## 4. Per-component availability matrix
 
-| Pillar | Primary input | Observed availability | Strategy for v0 |
+| Component | Primary input | Observed availability | Strategy for v0 |
 |---|---|---|---|
-| **Ω econometrics_phase** | `regime_tag` + per-country `macro_indicators` growth tokens | ✅ HIGH — regime_tag always present; per-country growth signals reliably extractable from prose | Compute as planned; cap confidence at 0.8 (heuristic_phase0) |
-| **Φ valuation_state** | `macro_analyst.content` "Valuation metrics at X" prose | ⚠️ PARTIAL — US prose carries explicit "-1.00"; Japan tactical and China macro_indicators do NOT. Pattern is inconsistent across markets. | LLM-extract from prose when present; mark `missing_inputs=["valuation_in_prose"]` for markets without; pillar value = aggregated across markets that DO carry it, gated by 60% coverage rule (BUG-009) |
-| **Ξ market_entropy** | `macro_analyst.content` "entropy at X" prose + `telemetry.divergences` count | ⚠️ PARTIAL — US prose carries explicit "0.00"; others do not. `divergences` is a usable proxy (more = more entropy). | Composite: prose-extracted entropy where present + normalized divergence count where prose silent. Confidence ≤ 0.5. |
-| **Ψ psychological_wavelength** | `macro_analyst.content` news/sentiment + `telemetry.commentary` tone | 🟡 LLM-JUDGED — no discrete numeric input; structured-output LLM call required | LLM-judged per v2 plan §4.2; confidence ≤ 0.6 |
+| **`econometrics_phase` (macro backdrop)** | `regime_tag` + per-country `macro_indicators` growth tokens | ✅ HIGH — regime_tag always present; per-country growth signals reliably extractable from prose | Compute as planned; cap confidence at 0.8 (heuristic_phase0) |
+| **`valuation_state` (valuation)** | `macro_analyst.content` "Valuation metrics at X" prose | ⚠️ PARTIAL — US prose carries explicit "-1.00"; Japan tactical and China macro_indicators do NOT. Pattern is inconsistent across markets. | LLM-extract from prose when present; mark `missing_inputs=["valuation_in_prose"]` for markets without; component value = aggregated across markets that DO carry it, gated by 60% coverage rule (BUG-009) |
+| **`market_entropy` (market state)** | `macro_analyst.content` "entropy at X" prose + `telemetry.divergences` count | ⚠️ PARTIAL — US prose carries explicit "0.00"; others do not. `divergences` is a usable proxy (more = more entropy). | Composite: prose-extracted entropy where present + normalized divergence count where prose silent. Confidence ≤ 0.5. |
+| **`psychological_wavelength` (sentiment)** | `macro_analyst.content` news/sentiment + `telemetry.commentary` tone | 🟡 LLM-JUDGED — no discrete numeric input; structured-output LLM call required | LLM-judged per v2 plan §4.2; confidence ≤ 0.6 |
 
 ---
 
@@ -201,8 +203,8 @@ get_telemetry(fields=["commentary.paragraphs", "commentary.mechanism"])
 get_telemetry(fields=["markets"])
 ```
 
-Add results to §2.1 and §3 above. Update Ψ in §4 if news component or
-telemetry commentary expose sentiment signals more directly.
+Add results to §2.1 and §3 above. Update `psychological_wavelength` in §4 if
+news component or telemetry commentary expose sentiment signals more directly.
 
 ---
 
