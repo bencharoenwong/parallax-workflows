@@ -82,3 +82,26 @@ specific portfolio examples. The harness is public; the data isn't.
 Drop a `<name>.json` into `evals/portfolios/` with the standard holdings
 shape: `[{"symbol":"<RIC>","weight":<float>}, ...]`, weights summing to 1.0.
 Keep them small (≤15 holdings) and use generic public tickers.
+
+---
+
+## Quality evals (v2) — grading, not just timing
+
+v1 (above) times latency. v2 adds a **quality signal** for `should-i-buy`
+(design: `notes/2026-05-29-skillopt-eval-substrate-design.md`). Latency timing is
+retained (it becomes the Stage-2 Tier-3 non-regression check); v2 supersedes only
+the "no quality scoring" caveat.
+
+- `tasks/should-i-buy/core.jsonl` — core English/US-large-cap eval tasks.
+- `rollout/run_rollout.sh '<args>' [lang]` — one live stream-json rollout (~24 tokens).
+- `graders/tier1_structural.py` — deterministic structural checks (Tier-1, hard gate).
+- `graders/run_judge.py` + `judge_criteria.py` — pinned-Anthropic rubric judge (Tier-2).
+  The judge model is allowlist-guarded — non-Anthropic models abort (perimeter).
+- `baseline/run_baseline.sh [--dry-run] [-n N]` — the headline deliverable: n>=3
+  rollouts/task -> pass-rate + variance noise-floor report in `results/`.
+
+**CI runs only the pure-function unit tests — never a live rollout:**
+`cd evals && python3 -m pytest graders -q`
+
+Live rollouts (`run_rollout.sh`, `run_baseline.sh` without `--dry-run`) cost Parallax
+tokens and are run manually.
