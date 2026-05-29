@@ -40,22 +40,40 @@ def render_prompt(criterion: dict, prose: str) -> str:
     )
 
 
+def _parse_verdict(crit_id: str, returncode: int, stdout: str, stderr: str) -> dict:
+    """Pure: map a `claude -p --output-format json` result to {id, pass, reason}.
+
+    `pass` is True/False ONLY when the judge returned an explicit boolean;
+    anything else (non-zero exit, null/empty/garbage result, missing key) yields
+    `pass=None` so it is excluded from the pass-rate rather than silently counted
+    as a fail. Never raises — graceful degradation for the batch loop.
+    """
+    if returncode != 0:
+        return {"id": crit_id, "pass": None, "reason": f"judge error: {stderr.strip()[:200]}"}
+    try:
+        envelope = json.loads(stdout)
+        raw = envelope.get("result") if isinstance(envelope, dict) else None
+        verdict = json.loads(raw) if isinstance(raw, str) and raw.strip() else {}
+        val = verdict.get("pass") if isinstance(verdict, dict) else None
+        if val is True or val is False:
+            return {"id": crit_id, "pass": val, "reason": str(verdict.get("reason", ""))}
+        return {"id": crit_id, "pass": None, "reason": "judge returned no explicit pass verdict"}
+    except (json.JSONDecodeError, AttributeError, TypeError) as exc:
+        return {"id": crit_id, "pass": None, "reason": f"unparseable judge output: {exc}"}
+
+
 def judge_one(criterion: dict, prose: str, model: str) -> dict:
     """Run a single criterion through the pinned judge. Returns {id, pass, reason}."""
     check_model(model)
     prompt = render_prompt(criterion, prose)
-    proc = subprocess.run(
-        ["claude", "-p", prompt, "--model", model, "--output-format", "json"],
-        capture_output=True, text=True, timeout=180,
-    )
-    if proc.returncode != 0:
-        return {"id": criterion["id"], "pass": None, "reason": f"judge error: {proc.stderr.strip()[:200]}"}
     try:
-        envelope = json.loads(proc.stdout)
-        verdict = json.loads(envelope.get("result", "{}"))
-        return {"id": criterion["id"], "pass": bool(verdict.get("pass")), "reason": verdict.get("reason", "")}
-    except (json.JSONDecodeError, AttributeError) as exc:
-        return {"id": criterion["id"], "pass": None, "reason": f"unparseable judge output: {exc}"}
+        proc = subprocess.run(
+            ["claude", "-p", prompt, "--model", model, "--output-format", "json"],
+            capture_output=True, text=True, timeout=180,
+        )
+    except subprocess.TimeoutExpired:
+        return {"id": criterion["id"], "pass": None, "reason": "judge timeout after 180s"}
+    return _parse_verdict(criterion["id"], proc.returncode, proc.stdout, proc.stderr)
 
 
 def grade_tier2(t: Transcript, model: str = DEFAULT_JUDGE_MODEL) -> list[dict]:
