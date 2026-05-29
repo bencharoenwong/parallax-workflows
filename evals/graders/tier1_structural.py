@@ -48,14 +48,36 @@ def _section_present(prose: str, heading: str) -> bool:
     return re.search(rf"(?mi)^#+\s*{re.escape(heading)}\b", prose) is not None
 
 
+def _section_text(prose: str, heading: str) -> str:
+    """Return one section's text: from its heading to the next heading (or EOF).
+
+    Used to scope checks to a single section so content elsewhere (e.g. a
+    "Strong Buy" consensus in Analyst View) cannot leak into a Bottom Line or
+    Scores check. Returns "" if the heading is absent.
+    """
+    m = re.search(rf"(?ims)^#+\s*{re.escape(heading)}\b.*?(?=^\#+\s|\Z)", prose)
+    return m.group(0) if m else ""
+
+
+# Trend-direction phrasings accepted in The Scores section (before/after values).
+_TREND_PATTERNS = [
+    r"from\s+\d+(?:\.\d+)?\s+to\s+\d+(?:\.\d+)?",            # "from 5.8 to 7.2"
+    r"\d+(?:\.\d+)?\s*(?:→|->|—>|–>)\s*\d+(?:\.\d+)?",        # "5.8 → 7.2"
+    r"(?:up|down)\s+from\s+\d+(?:\.\d+)?",                    # "up from 5.8"
+]
+
+
 def _c_sections_present(t: Transcript, _skill: Path | None) -> Check:
     missing = [s for s in REQUIRED_SECTIONS if not _section_present(t.final_prose, s)]
     return Check("sections_present", not missing, f"missing={missing}")
 
 
 def _c_scores_trend_direction(t: Transcript, _skill: Path | None) -> Check:
-    ok = re.search(r"from\s+\d+(\.\d+)?\s+to\s+\d+(\.\d+)?", t.final_prose, re.I) is not None
-    return Check("scores_trend_direction", ok, "expects 'from X to Y'")
+    # Scope to The Scores section so an unrelated numeric range elsewhere
+    # (revenue, dates) cannot satisfy the trend requirement.
+    scores = _section_text(t.final_prose, "The Scores")
+    ok = any(re.search(p, scores, re.I) for p in _TREND_PATTERNS)
+    return Check("scores_trend_direction", ok, "trend direction (X to Y / X → Y / up from X) in The Scores")
 
 
 def _c_macro_conditional(t: Transcript, _skill: Path | None) -> Check:
@@ -76,7 +98,12 @@ def _c_provenance_present(t: Transcript, _skill: Path | None) -> Check:
 
 
 def _c_ai_disclosure_present(t: Transcript, _skill: Path | None) -> Check:
-    ok = re.search(r"AI assistance|AI-interaction|generated with AI", t.final_prose, re.I) is not None
+    # The canonical §9.2 banner opens with "AI-assisted output." — match that
+    # first, plus paraphrase fallbacks.
+    ok = re.search(
+        r"AI[\s-]?assisted|AI assistance|AI-interaction|generated with AI",
+        t.final_prose, re.I,
+    ) is not None
     return Check("ai_disclosure_present", ok, "AI-interaction disclosure (conventions §9.2)")
 
 
@@ -86,9 +113,12 @@ def _c_disclaimer_present_correct(t: Transcript, _skill: Path | None) -> Check:
 
 
 def _c_bottom_line_no_rec(t: Transcript, _skill: Path | None) -> Check:
+    # Scope the rec-token scan to the Bottom Line section only — live output's
+    # Analyst View legitimately carries "Strong Buy/Buy/Hold" consensus counts.
     has_section = _section_present(t.final_prose, "Bottom Line")
-    has_rec = any(re.search(p, t.final_prose, re.I) for p in _REC_PATTERNS)
-    return Check("bottom_line_no_rec", has_section and not has_rec, f"rec_token={has_rec}")
+    bl_text = _section_text(t.final_prose, "Bottom Line")
+    has_rec = any(re.search(p, bl_text, re.I) for p in _REC_PATTERNS)
+    return Check("bottom_line_no_rec", has_section and not has_rec, f"rec_token_in_bottom_line={has_rec}")
 
 
 def _c_orchestrator_length(t: Transcript, skill: Path | None) -> Check:

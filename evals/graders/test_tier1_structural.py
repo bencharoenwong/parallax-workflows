@@ -42,3 +42,52 @@ def test_macro_conditional_flags_missing_section_when_macro_called():
     )
     results = _result_map(grade_tier1(t, skill_path=None))
     assert results["macro_conditional"] is False
+
+
+# --- live-output robustness regressions (code-quality review, Task 4) ---
+
+def test_rec_in_analyst_view_does_not_fail_bottom_line():
+    # "Strong Buy" consensus in Analyst View must NOT trip bottom_line_no_rec.
+    from transcript import Transcript
+    t = Transcript(
+        final_prose=(
+            "## Analyst View\nConsensus: 14 Strong Buy, 8 Buy, 3 Hold.\n\n"
+            "## Bottom Line\nSolid quality but rich valuation; growth is slowing.\n"
+        ),
+        tool_calls=[],
+    )
+    assert _result_map(grade_tier1(t, skill_path=None))["bottom_line_no_rec"] is True
+
+
+def test_recommendation_inside_bottom_line_fails():
+    from transcript import Transcript
+    t = Transcript(final_prose="## Bottom Line\nWe recommend buying this stock now.\n", tool_calls=[])
+    assert _result_map(grade_tier1(t, skill_path=None))["bottom_line_no_rec"] is False
+
+
+def test_ai_disclosure_matches_canonical_92_banner():
+    from transcript import Transcript
+    t = Transcript(
+        final_prose="AI-assisted output. Quantitative data is deterministic; qualitative is LLM-generated.",
+        tool_calls=[],
+    )
+    assert _result_map(grade_tier1(t, skill_path=None))["ai_disclosure_present"] is True
+
+
+def test_scores_trend_scoped_to_scores_section():
+    # A numeric range only in Financial Health must NOT satisfy the Scores trend check.
+    from transcript import Transcript
+    t = Transcript(
+        final_prose=(
+            "## The Scores\nQuality is high.\n\n"
+            "## Financial Health\nRevenue grew from 100 to 120 billion.\n"
+        ),
+        tool_calls=[],
+    )
+    assert _result_map(grade_tier1(t, skill_path=None))["scores_trend_direction"] is False
+
+
+def test_scores_trend_accepts_arrow_notation():
+    from transcript import Transcript
+    t = Transcript(final_prose="## The Scores\nQuality 5.8 → 7.2 over 52 weeks.\n", tool_calls=[])
+    assert _result_map(grade_tier1(t, skill_path=None))["scores_trend_direction"] is True
