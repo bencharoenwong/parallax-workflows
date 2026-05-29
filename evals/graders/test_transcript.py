@@ -46,3 +46,12 @@ def test_called_tool_helper():
     t = parse_stream_json(SAMPLE)
     assert t.called("macro_analyst") is True
     assert t.called("get_news_synthesis") is False
+
+
+def test_returns_empty_prose_when_no_result_event():
+    # Interrupted/aborted run with no result event -> empty prose, no error.
+    t = parse_stream_json(
+        '{"type":"assistant","message":{"content":[{"type":"text","text":"thinking"}]}}'
+    )
+    assert t.final_prose == ""
+    assert t.tool_calls == []

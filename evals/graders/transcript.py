@@ -50,8 +50,12 @@ def parse_stream_json(raw: str) -> Transcript:
                         ToolCall(name=block.get("name", ""), input=block.get("input") or {})
                     )
         elif etype == "result":
-            # The result event carries the final assistant text in `result`.
-            final_prose = event.get("result", "") or final_prose
+            # The result event carries the final assistant text. Last non-null
+            # result wins (the final result event is authoritative), even if
+            # the CLI ever emits an empty string to signal truncation.
+            result_val = event.get("result")
+            if result_val is not None:
+                final_prose = result_val
     return Transcript(final_prose=final_prose, tool_calls=tool_calls)
 
 
