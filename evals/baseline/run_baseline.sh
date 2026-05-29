@@ -37,7 +37,9 @@ fi
 
 echo "[baseline] tasks=$N_TASKS n=$N total_rollouts=$TOTAL est_tokens=$(( TOTAL * 24 )) judge_model=$MODEL" >&2
 
-# Perimeter guard before any work.
+# Perimeter guard before any work. Runs in --dry-run too (it is an offline string
+# check, not a model call), so a bad --model aborts before listing the plan. It
+# does require the Python grader env (transcript/judge_criteria) to be importable.
 python3 evals/graders/run_judge.py --check-model --model "$MODEL" >/dev/null
 
 if [ "$DRY_RUN" -eq 1 ]; then
@@ -70,7 +72,7 @@ from run_judge import grade_tier2
 stream, task, model, runs_path = sys.argv[1:5]
 t = load_transcript(stream)
 t1 = grade_tier1(t)
-t1_frac = sum(c.passed for c in t1) / len(t1)
+t1_frac = (sum(c.passed for c in t1) / len(t1)) if t1 else 0.0
 t2 = grade_tier2(t, model)
 scored = [v for v in t2 if v["pass"] is not None]
 t2_frac = (sum(1 for v in scored if v["pass"]) / len(scored)) if scored else 0.0
