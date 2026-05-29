@@ -37,7 +37,7 @@ MODEL_FLAG=()
 
 claude -p "$PROMPT" \
   --output-format stream-json --verbose \
-  "${MODEL_FLAG[@]}" \
-  > "$OUT"
+  ${MODEL_FLAG[@]+"${MODEL_FLAG[@]}"} \
+  < /dev/null > "$OUT"
 
 echo "$OUT"
