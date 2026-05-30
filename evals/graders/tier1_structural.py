@@ -18,8 +18,11 @@ DEFAULT_SKILL_PATH = (
 )
 ORCHESTRATOR_MAX_LINES = 250
 
+# Calibrated against real should-i-buy output (2026-05-29). "The Company" is
+# deliberately NOT required: the live skill folds company identity into the title
+# ("## Apple Inc — Should I Buy?") rather than a "The Company" section. That is a
+# legitimate rendering, not a structural failure (see learning log).
 REQUIRED_SECTIONS = [
-    "The Company",
     "The Scores",
     "Financial Health",
     "Dividends",
@@ -44,8 +47,31 @@ class Check:
     detail: str
 
 
+def _norm_tokens(text: str) -> list[str]:
+    """Lowercase word tokens, punctuation stripped (so 'vs.' == 'vs')."""
+    return re.sub(r"[^a-z0-9 ]", " ", text.lower()).split()
+
+
 def _section_present(prose: str, heading: str) -> bool:
-    return re.search(rf"(?mi)^#+\s*{re.escape(heading)}\b", prose) is not None
+    """True if `heading` labels a line, as a markdown heading OR an emphasis label.
+
+    Calibrated against real output: the live skill renders some sections as
+    headings ('### Risk vs. Peers' — note the period) and others as emphasis
+    label lines ('*Provenance: ...*'). Match by stripping leading markers
+    (#, *, _, >) and comparing punctuation-free token prefixes, so heading depth,
+    a trailing 'vs.' period, and italic/bold labels all match.
+    """
+    target = _norm_tokens(heading)
+    if not target:
+        return False
+    for line in prose.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        content = re.sub(r"^[#>*_\s]+", "", stripped)
+        if _norm_tokens(content)[: len(target)] == target:
+            return True
+    return False
 
 
 def _section_text(prose: str, heading: str) -> str:

@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from transcript import load_transcript  # noqa: E402
-from tier1_structural import grade_tier1, CHECK_NAMES  # noqa: E402
+from tier1_structural import grade_tier1, CHECK_NAMES, _section_present  # noqa: E402
 
 FIX = Path(__file__).parent.parent / "fixtures" / "should-i-buy"
 
@@ -91,3 +91,23 @@ def test_scores_trend_accepts_arrow_notation():
     from transcript import Transcript
     t = Transcript(final_prose="## The Scores\nQuality 5.8 → 7.2 over 52 weeks.\n", tool_calls=[])
     assert _result_map(grade_tier1(t, skill_path=None))["scores_trend_direction"] is True
+
+
+# --- real-output format calibration (locked against live should-i-buy, 2026-05-29) ---
+
+def test_section_present_matches_italic_provenance_label():
+    # Live skill renders Provenance as "*Provenance: ...*", not a "## Provenance" heading.
+    assert _section_present("*Provenance: Branding — default Parallax. Data from pipelines.*", "Provenance") is True
+
+
+def test_section_present_tolerates_vs_period_heading():
+    # Live heading is "### Risk vs. Peers" (period after vs).
+    assert _section_present("### Risk vs. Peers\nLower volatility than peers.", "Risk vs Peers") is True
+
+
+def test_section_present_matches_plain_heading():
+    assert _section_present("## The Scores\nbody", "The Scores") is True
+
+
+def test_section_present_absent_returns_false():
+    assert _section_present("## Recent News\nbody", "Provenance") is False
