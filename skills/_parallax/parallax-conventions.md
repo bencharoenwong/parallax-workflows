@@ -20,6 +20,8 @@ Gemini CLI uses feature flags to roll out architectural changes. These can be se
 
 Parallax tools (`mcp__claude_ai_Parallax__*`) are deferred MCP tools. Before the first Parallax tool call in any session, call `ToolSearch` with query `"+Parallax"` to load the tool schemas. Without this step, tool calls will fail with "tool not found."
 
+**Empty or cancelled first batch ≠ "no data."** If the first batch of Parallax calls after `ToolSearch` comes back empty, or is interrupted by an unrelated error (a stray `ls`, a 502, a cancelled sibling call), re-fire the entire batch once before concluding the data is unavailable — schemas may not have finished registering when the first calls fired. Only after a clean re-fire still returns empty do the §4 fallback patterns apply. This is distinct from §4's per-tool empty-output retry, which applies after initialization is confirmed — this rule is batch-level and first-call-only.
+
 ---
 
 ## 0.2 Tool Parameter Reference

@@ -95,6 +95,8 @@ The directive must:
 2. State the trigger condition (when to load).
 3. Be present at the call site (not buried in the README).
 
+**Two path shapes, two bases.** `references/<file>.md` resolves relative to the skill's own directory. The shared `_parallax/<file>.md` prefix (used by 30+ Parallax skills for conventions, house-view, white-label) resolves relative to the *skills root* — `_parallax/` is a sibling of every skill directory, reachable at `~/.claude/skills/_parallax/` (a symlink to `parallax-workflows/skills/_parallax/`). If a bare `_parallax/...` path does not resolve from the current working directory (e.g. CWD is a project repo, not the skills root), fall back to the absolute `~/.claude/skills/_parallax/<file>.md` rather than hunting or paraphrasing from memory.
+
 ## Build-time check
 
 `build-skills.sh` should grow a check that:
