@@ -1,6 +1,7 @@
 # evals/graders/test_transcript.py
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -55,3 +56,28 @@ def test_returns_empty_prose_when_no_result_event():
     )
     assert t.final_prose == ""
     assert t.tool_calls == []
+
+
+def test_report_survives_trailing_signoff():
+    # Regression: skill delivers the report in an earlier assistant turn, then
+    # ends with a short sign-off. The result event captures only the sign-off;
+    # final_prose must still surface the report (longest candidate wins).
+    report = "## Bottom line\n" + ("Apple analysis. " * 200)
+    stream = "\n".join([
+        '{"type":"assistant","message":{"content":[{"type":"text","text":' + json.dumps(report) + "}]}}",
+        '{"type":"result","subtype":"success","result":"Report delivered above; audit logged."}',
+    ])
+    t = parse_stream_json(stream)
+    assert t.final_prose == report
+
+
+def test_result_wins_when_it_is_the_report():
+    # When the report IS the final turn, the result event is the longest
+    # candidate and is returned unchanged (no regression vs. earlier preamble).
+    stream = "\n".join([
+        '{"type":"assistant","message":{"content":[{"type":"text","text":"Looking up AAPL."}]}}',
+        '{"type":"result","result":' + json.dumps("## The Company\n" + "x" * 500) + "}",
+    ])
+    t = parse_stream_json(stream)
+    assert t.final_prose.startswith("## The Company")
+    assert len(t.final_prose) > 100
