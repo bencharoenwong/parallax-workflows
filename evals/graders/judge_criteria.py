@@ -30,3 +30,20 @@ CRITERIA: list[dict] = [
         "pass_when": "Numbers/figures in the prose are plausibly grounded in the called tools; no invented precise stats.",
     },
 ]
+
+
+# Two-lens raised-bar criteria (Stage 2; design-doc §4.4). Kept OUT of the
+# baseline CRITERIA list so the §5 Tier-2 noise floor stays current-spec. Run
+# alongside CRITERIA only when grading the upgraded skill (red/green check).
+TWO_LENS_CRITERIA: list[dict] = [
+    {
+        "id": "lenses_separate_reads",
+        "statement": "Each lens states its own directional read; any disagreement is surfaced, not averaged into one verdict.",
+        "pass_when": "Both a Technicals and a Fundamentals directional read are present; if they diverge, the Bottom Line names the divergence rather than blending it into a single rating.",
+    },
+    {
+        "id": "technicals_grounded",
+        "statement": "The Technicals read cites price/trend/momentum; the Fundamentals read cites financials/scores; neither borrows the other's evidence.",
+        "pass_when": "The Technicals section references trend/momentum/support-resistance (or the labeled Momentum-proxy fallback); the Fundamentals section references factor scores/financials; evidence is not cross-contaminated.",
+    },
+]

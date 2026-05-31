@@ -74,15 +74,50 @@ def _section_present(prose: str, heading: str) -> bool:
     return False
 
 
-def _section_text(prose: str, heading: str) -> str:
-    """Return one section's text: from its heading to the next heading (or EOF).
+# Section labels the skill can emit, for section-text boundary detection.
+# Includes the two-lens headers (Fundamentals/Technicals) so a nested subsection
+# is bounded by the next real section, not by bold sub-labels inside its body.
+_SECTION_LABELS = [
+    "The Company", "Fundamentals", "The Scores", "House View Note",
+    "Financial Health", "Technicals", "Macro Context", "Dividends",
+    "Risk vs Peers", "Recent News", "Analyst View", "Bottom Line", "Provenance",
+]
 
-    Used to scope checks to a single section so content elsewhere (e.g. a
-    "Strong Buy" consensus in Analyst View) cannot leak into a Bottom Line or
-    Scores check. Returns "" if the heading is absent.
+
+def _label_prefix(line: str) -> list[str]:
+    """Normalized token list of a line after stripping leading #>*_ markers."""
+    return _norm_tokens(re.sub(r"^[#>*_\s]+", "", line.strip()))
+
+
+def _section_text(prose: str, heading: str) -> str:
+    """Return one section's text: from its label line to the next section's.
+
+    Consistent with _section_present: the label may be a markdown heading
+    ('### The Scores') OR an emphasis label ('**The Scores**') — the live skill
+    renders nested lens subsections either way. The end boundary is the next
+    line whose token-prefix matches a *different* known section label (so bold
+    sub-labels inside the body, e.g. '**Quality**', do not truncate it).
+    Returns "" if the heading is absent.
     """
-    m = re.search(rf"(?ims)^#+\s*{re.escape(heading)}\b.*?(?=^\#+\s|\Z)", prose)
-    return m.group(0) if m else ""
+    target = _norm_tokens(heading)
+    if not target:
+        return ""
+    others = [_norm_tokens(s) for s in _SECTION_LABELS if _norm_tokens(s) != target]
+    lines = prose.splitlines()
+    start = None
+    for i, line in enumerate(lines):
+        if _label_prefix(line)[: len(target)] == target:
+            start = i
+            break
+    if start is None:
+        return ""
+    end = len(lines)
+    for j in range(start + 1, len(lines)):
+        pref = _label_prefix(lines[j])
+        if any(pref[: len(o)] == o for o in others):
+            end = j
+            break
+    return "\n".join(lines[start:end])
 
 
 # Trend-direction phrasings accepted in The Scores section (before/after values).
@@ -178,3 +213,24 @@ CHECK_NAMES = [
 def grade_tier1(t: Transcript, skill_path: str | Path | None = None) -> list[Check]:
     skill = Path(skill_path) if skill_path else None
     return [fn(t, skill) for fn in _CHECKS]
+
+
+# --- Two-lens raised-bar gate (Stage 2; design-doc §4.4) ---------------------
+# Deliberately NOT in _CHECKS: this is an aspirational target for the upgraded
+# skill, kept out of the §5 baseline rubric so the 0.981 noise floor stays an
+# honest current-spec number. Run via grade_two_lens() for red/green checks.
+TWO_LENS_SECTIONS = ["Technicals", "Fundamentals"]
+
+
+def _c_two_lenses_present(t: Transcript, _skill: Path | None) -> Check:
+    missing = [s for s in TWO_LENS_SECTIONS if not _section_present(t.final_prose, s)]
+    return Check("two_lenses_present", not missing, f"missing={missing}")
+
+
+TWO_LENS_CHECKS = [_c_two_lenses_present]
+
+
+def grade_two_lens(t: Transcript) -> list[Check]:
+    """Raised-bar structural gate for the two-lens upgrade. Separate from the
+    baseline grade_tier1() so it never contaminates the §5 noise floor."""
+    return [fn(t, None) for fn in TWO_LENS_CHECKS]

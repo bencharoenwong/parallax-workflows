@@ -111,3 +111,29 @@ def test_section_present_matches_plain_heading():
 
 def test_section_present_absent_returns_false():
     assert _section_present("## Recent News\nbody", "Provenance") is False
+
+
+# --- two-lens raised-bar gate (Stage 2; design-doc §4.4) ---
+
+def test_two_lens_gate_fails_on_single_verdict_output():
+    # Old skill: no Technicals/Fundamentals sections -> gate must fail (red).
+    from transcript import Transcript
+    from tier1_structural import grade_two_lens
+    t = Transcript(final_prose="## The Scores\nx\n## Financial Health\ny\n## Bottom Line\nz\n")
+    checks = grade_two_lens(t)
+    assert [c.name for c in checks] == ["two_lenses_present"]
+    assert checks[0].passed is False
+
+
+def test_two_lens_gate_passes_when_both_lenses_present():
+    from transcript import Transcript
+    from tier1_structural import grade_two_lens
+    t = Transcript(
+        final_prose=(
+            "## Fundamentals\n### The Scores\nx\n### Financial Health\ny\n"
+            "## Technicals\nTrend POSITIVE, momentum firm, support $300.\n"
+            "## Bottom Line\nFundamentals constructive, Technicals weak — mixed.\n"
+        )
+    )
+    checks = grade_two_lens(t)
+    assert checks[0].passed is True, checks[0].detail
