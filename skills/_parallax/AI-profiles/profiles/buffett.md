@@ -73,7 +73,7 @@ A `no_match` on Berkshire-like stocks (e.g., KO, AXP) would be a signal that the
 
 - **Quality ≥ 5** — Parallax Quality is calibrated differently from BKP 2018's QMJ. A threshold of 5 ("above average") catches Buffett-style stocks like KO (8) and AXP (5) while filtering out low-quality speculative names.
 - **Value ≥ 4** — Parallax Value reflects current multiples; Buffett's mega-cap holdings look expensive on this measure. A threshold of 4 ("slightly above the lowest quartile") preserves valuation discipline without being so strict it fails every Buffett holding. AAPL fails at 2; NVDA fails at 2.5.
-- **Momentum ≤ 6** — "slight negative" momentum tilt per BKP 2018. NVDA (7.2) fails; Buffett core holdings (KO 4.8, AXP 4.5, BRKb 3.0) pass.
+- **Momentum ≤ 6** — a design screen against momentum-chasing names, not a BKP-documented tilt (the paper finds momentum small / not emphasized). NVDA (7.2) fails; Buffett core holdings (KO 4.8, AXP 4.5, BRKb 3.0) pass.
 - **Defensive ≥ 7** — "strong" low-beta tilt per BKP 2018's BAB loading. KO (10), AXP (8), BRKb (10), AAPL (9.5) pass; NVDA (7.5) passes narrowly; high-beta growth names fail.
 
 ### Anchor test results (2026-04-06)
