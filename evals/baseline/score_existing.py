@@ -10,7 +10,6 @@ Task label is parsed from the filename segment after 'baseline_' up to '_r<N>'.
 """
 from __future__ import annotations
 
-import json
 import re
 import sys
 from pathlib import Path

@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from transcript import parse_stream_json, Transcript, ToolCall  # noqa: E402
+from transcript import parse_stream_json, Transcript  # noqa: E402
 
 SAMPLE = "\n".join([
     '{"type":"system","subtype":"init","tools":[]}',
