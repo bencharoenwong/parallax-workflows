@@ -76,9 +76,12 @@ def judge_one(criterion: dict, prose: str, model: str) -> dict:
     return _parse_verdict(criterion["id"], proc.returncode, proc.stdout, proc.stderr)
 
 
-def grade_tier2(t: Transcript, model: str = DEFAULT_JUDGE_MODEL) -> list[dict]:
+def grade_tier2(
+    t: Transcript, model: str = DEFAULT_JUDGE_MODEL, criteria: list[dict] | None = None
+) -> list[dict]:
     check_model(model)
-    return [judge_one(c, t.final_prose, model) for c in CRITERIA]
+    crit = criteria if criteria is not None else CRITERIA
+    return [judge_one(c, t.final_prose, model) for c in crit]
 
 
 def main() -> int:

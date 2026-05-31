@@ -18,6 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "graders"))
 from transcript import load_transcript  # noqa: E402
 from tier1_structural import grade_tier1, CHECK_NAMES  # noqa: E402
+from eval_spec import load_spec  # noqa: E402
 from aggregate_report import summarize  # noqa: E402
 
 _TASK_RE = re.compile(r"baseline_(.+?)_r\d+_")
@@ -28,12 +29,13 @@ def _task_of(path: str) -> str:
     return m.group(1) if m else Path(path).stem
 
 
-def main(paths: list[str]) -> int:
+def main(paths: list[str], skill: str = "should-i-buy") -> int:
+    spec = load_spec(skill)
     runs = []
     per_check_fail: dict[str, int] = {n: 0 for n in CHECK_NAMES}
     for p in paths:
         t = load_transcript(p)
-        checks = grade_tier1(t)
+        checks = grade_tier1(t, spec)
         frac = sum(c.passed for c in checks) / len(checks) if checks else 0.0
         for c in checks:
             if not c.passed:
@@ -55,7 +57,13 @@ def main(paths: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
+    argv = sys.argv[1:]
+    skill = "should-i-buy"
+    if "--skill" in argv:
+        i = argv.index("--skill")
+        skill = argv[i + 1]
+        argv = argv[:i] + argv[i + 2:]
+    if not argv:
         print(__doc__)
         sys.exit(2)
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(main(argv, skill))

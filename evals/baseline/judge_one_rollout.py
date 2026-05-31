@@ -17,13 +17,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "graders"))
 from transcript import load_transcript  # noqa: E402
 from run_judge import grade_tier2  # noqa: E402
+from eval_spec import load_spec  # noqa: E402
 
 _TASK_RE = re.compile(r"baseline_(.+?)_r\d+_")
 
 
-def main(stream: str, out: str, model: str = "claude-opus-4-8") -> int:
+def main(stream: str, out: str, model: str = "claude-opus-4-8",
+         skill: str = "should-i-buy") -> int:
     t = load_transcript(stream)
-    verdicts = grade_tier2(t, model)
+    verdicts = grade_tier2(t, model, criteria=load_spec(skill).tier2_criteria)
     scored = [v for v in verdicts if v["pass"] is not None]
     frac = (sum(1 for v in scored if v["pass"]) / len(scored)) if scored else 0.0
     m = _TASK_RE.search(Path(stream).name)
@@ -40,4 +42,4 @@ if __name__ == "__main__":
     if len(sys.argv) < 3:
         print(__doc__)
         sys.exit(2)
-    sys.exit(main(*sys.argv[1:4]))
+    sys.exit(main(*sys.argv[1:5]))

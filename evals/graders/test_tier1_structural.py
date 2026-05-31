@@ -17,20 +17,20 @@ def _result_map(checks):
 
 def test_golden_passes_every_check():
     t = load_transcript(FIX / "golden_aapl_en.stream.json")
-    results = _result_map(grade_tier1(t, skill_path=None))
+    results = _result_map(grade_tier1(t))
     assert all(results.values()), [n for n, p in results.items() if not p]
 
 
 def test_broken_fails_only_disclaimer():
     t = load_transcript(FIX / "broken_aapl_en.stream.json")
-    results = _result_map(grade_tier1(t, skill_path=None))
+    results = _result_map(grade_tier1(t))
     failed = [n for n, p in results.items() if not p]
     assert failed == ["disclaimer_present_correct"], failed
 
 
 def test_registry_is_enumerable():
     t = load_transcript(FIX / "golden_aapl_en.stream.json")
-    names = [c.name for c in grade_tier1(t, skill_path=None)]
+    names = [c.name for c in grade_tier1(t)]
     assert set(names) == set(CHECK_NAMES)
 
 
@@ -40,7 +40,7 @@ def test_macro_conditional_flags_missing_section_when_macro_called():
         final_prose="## The Company\nx\n## Bottom Line\npros and cons\n",
         tool_calls=[ToolCall("mcp__claude_ai_Parallax__macro_analyst", {})],
     )
-    results = _result_map(grade_tier1(t, skill_path=None))
+    results = _result_map(grade_tier1(t))
     assert results["macro_conditional"] is False
 
 
@@ -56,13 +56,13 @@ def test_rec_in_analyst_view_does_not_fail_bottom_line():
         ),
         tool_calls=[],
     )
-    assert _result_map(grade_tier1(t, skill_path=None))["bottom_line_no_rec"] is True
+    assert _result_map(grade_tier1(t))["bottom_line_no_rec"] is True
 
 
 def test_recommendation_inside_bottom_line_fails():
     from transcript import Transcript
     t = Transcript(final_prose="## Bottom Line\nWe recommend buying this stock now.\n", tool_calls=[])
-    assert _result_map(grade_tier1(t, skill_path=None))["bottom_line_no_rec"] is False
+    assert _result_map(grade_tier1(t))["bottom_line_no_rec"] is False
 
 
 def test_ai_disclosure_matches_canonical_92_banner():
@@ -71,7 +71,7 @@ def test_ai_disclosure_matches_canonical_92_banner():
         final_prose="AI-assisted output. Quantitative data is deterministic; qualitative is LLM-generated.",
         tool_calls=[],
     )
-    assert _result_map(grade_tier1(t, skill_path=None))["ai_disclosure_present"] is True
+    assert _result_map(grade_tier1(t))["ai_disclosure_present"] is True
 
 
 def test_scores_trend_scoped_to_scores_section():
@@ -84,13 +84,13 @@ def test_scores_trend_scoped_to_scores_section():
         ),
         tool_calls=[],
     )
-    assert _result_map(grade_tier1(t, skill_path=None))["scores_trend_direction"] is False
+    assert _result_map(grade_tier1(t))["scores_trend_direction"] is False
 
 
 def test_scores_trend_accepts_arrow_notation():
     from transcript import Transcript
     t = Transcript(final_prose="## The Scores\nQuality 5.8 → 7.2 over 52 weeks.\n", tool_calls=[])
-    assert _result_map(grade_tier1(t, skill_path=None))["scores_trend_direction"] is True
+    assert _result_map(grade_tier1(t))["scores_trend_direction"] is True
 
 
 # --- real-output format calibration (locked against live should-i-buy, 2026-05-29) ---
