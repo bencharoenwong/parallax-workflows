@@ -65,6 +65,25 @@ def _c_disclaimer_verbatim(t, spec) -> Check:
     return Check("disclaimer_verbatim", not missing, f"missing load-bearing phrases={missing}")
 
 
+def _c_clean_start(t, spec) -> Check:
+    """CONFORMANCE (was missing): Step 7 forbids commentary, yet 5/6 baseline
+    outputs leaked internal scratch ('Step 5 — Verdict:', 'Cross-validation
+    passed…') before the Header. The output must begin with the Header line."""
+    ok = t.final_prose.lstrip().startswith("Buffett-style profile applied")
+    first = t.final_prose.lstrip().split("\n", 1)[0][:50]
+    return Check("clean_start", ok, f"first_line={first!r}")
+
+
+def _c_synthesis_present(t, spec) -> Check:
+    """RAISED BAR: a labeled interpretive synthesis must follow the verdict for
+    EVERY result (the edited skill mandates a '**Synthesis:**' block; the old
+    skill gave NVDA an inline paragraph and KO nothing). Structural label check —
+    not a keyword list (the first cut over-fit to NVDA's 'matches/fails' phrasing
+    and false-failed KO's valid 'fits/embodies' synthesis)."""
+    ok = _section_present(t.final_prose, "Synthesis")
+    return Check("synthesis_present", ok, "labeled Synthesis block after verdict")
+
+
 _NO_HALLUC = next(c for c in CRITERIA if c["id"] == "no_hallucinated_data")  # COPIED
 
 SPEC = EvalSpec(
@@ -80,6 +99,8 @@ SPEC = EvalSpec(
         "citation_present",          # NEW
         "no_impersonation",          # NEW
         "disclaimer_verbatim",       # NEW
+        "clean_start",               # NEW conformance (rubric was missing it — caught 5/6 leak)
+        "synthesis_present",         # NEW raised-bar (synthesis required on every verdict)
         "orchestrator_length",       # GENERIC
     ],
     extra_checks={
@@ -87,6 +108,8 @@ SPEC = EvalSpec(
         "citation_present": _c_citation_present,
         "no_impersonation": _c_no_impersonation,
         "disclaimer_verbatim": _c_disclaimer_verbatim,
+        "clean_start": _c_clean_start,
+        "synthesis_present": _c_synthesis_present,
     },
     tier2_criteria=[
         _NO_HALLUC,  # COPIED

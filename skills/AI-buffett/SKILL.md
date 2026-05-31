@@ -113,12 +113,13 @@ Format the output per `skills/_parallax/AI-profiles/output-template.md`. The tem
 3. Profile characterization statement (one sentence from the profile spec body)
 4. Data table: Factor | Target | Score | 52-wk trend | Match
 5. Verdict: "Profile fit: <match/partial/no> — N of 4 factor criteria met"
-6. Methodology footer (workflow derivation, anchor-test date, legal-review date, tool sequence, token cost)
-7. Standard disclaimer (VERBATIM — substitute `[Investor]` with `Warren Buffett` and nothing else)
+6. **Synthesis (REQUIRED for every verdict, including `match`)** — 1-2 sentences naming which legs of the BKP-2018 Buffett profile the stock fits and which it misses, with the one-line takeaway. A `match` is not self-explanatory: state *why* (e.g. "cheap, high-quality, low-beta — the cluster BKP attribute Berkshire's alpha to"). Do not leave a `match` as a bare table.
+7. Methodology footer (workflow derivation, anchor-test date, legal-review date, tool sequence, token cost)
+8. Standard disclaimer (VERBATIM — substitute `[Investor]` with `Warren Buffett` and nothing else)
 
 ### Step 7 — Emit
 
-Output the rendered template. No additional commentary.
+Emit **only** the rendered template, beginning with the Header line `Buffett-style profile applied to <ticker>`. Do NOT prepend step labels, cross-validation notes, verdict working, or any reasoning — that is internal scratch and MUST NOT appear in the output. The first character of the output is the `B` of the Header.
 
 ## Output example
 
