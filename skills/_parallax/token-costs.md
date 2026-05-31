@@ -61,7 +61,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 | `/parallax-score-explainer` | **0-2** | Free if methodology-only; 2 if score data needed |
 | `/parallax-peer-comparison` | **8** | 3 score histories + 3 price series |
 | `/parallax-halal-screen` | **8** | 2 financials + Palepu |
-| `/parallax-should-i-buy` | **24** | 4 outlook aspects + 2 macro markets + news |
+| `/parallax-should-i-buy` | **29** | 4 outlook aspects + 2 macro markets + news + technicals (5) |
 | `/parallax-earnings-quality` | **24** | Palepu (5) + assessment (10) + news (5) |
 | `/parallax-due-diligence` | **31** | 4 financials + Palepu + stock report (10) |
 | `/parallax-country-deep-dive` | **34** | 3 macro calls + universe build + 5 peer snapshots |
@@ -86,7 +86,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 
 With the **Standard plan** ($2,000/month, 2,000 included tokens, $0.20 overage):
 - A daily morning brief (~50 tokens) = ~1,100 tokens/month (22 trading days)
-- 5 should-i-buy checks/week (~24 each) = ~480 tokens/month
+- 5 should-i-buy checks/week (~29 each) = ~580 tokens/month
 - 2 client reviews/week (~105 each) = ~840 tokens/month
 - **Typical active RM usage:** 2,000-3,000 tokens/month
 
