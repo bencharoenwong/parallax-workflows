@@ -168,10 +168,15 @@ CHECK_NAMES = list(CHECK_REGISTRY)
 
 
 def grade_tier1(t: Transcript, spec: EvalSpec | None = None) -> list[Check]:
-    """Run the checks in spec.check_ids. Defaults to should-i-buy when spec=None."""
+    """Run the checks in spec.check_ids. Defaults to should-i-buy when spec=None.
+
+    Resolves each id against the generic CHECK_REGISTRY overlaid with the spec's
+    skill-specific `extra_checks`.
+    """
     if spec is None:
         spec = load_spec(_DEFAULT_SKILL)
-    return [CHECK_REGISTRY[cid](t, spec) for cid in spec.check_ids]
+    registry = {**CHECK_REGISTRY, **spec.extra_checks}
+    return [registry[cid](t, spec) for cid in spec.check_ids]
 
 
 # --- Two-lens raised-bar gate (Stage 2; design-doc §4.4) ---------------------
