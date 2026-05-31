@@ -129,7 +129,7 @@ Buffett-style profile applied to KO.N
 Source: Frazzini, A., Kabiller, D., Pedersen, L. H. (2018). Buffett's Alpha. Financial Analysts Journal, 74(4), 35-55.
 (https://doi.org/10.2469/faj.v74.n4.3)
 
-Frazzini, Kabiller, Pedersen (2018) decompose Berkshire Hathaway's 1976-2017 returns into factor exposures: strong Quality, strong Value, slight negative Momentum, positive Defensive (low-beta), with ~1.6x leverage overlay at portfolio level.
+Frazzini, Kabiller, Pedersen (2018) decompose Berkshire Hathaway's 1976-2017 returns into factor exposures: strong Quality, strong Value, and positive Defensive (low-beta), with ~1.6x leverage overlay at portfolio level (momentum is not a meaningful part of the profile).
 
 | Factor    | Target    | KO.N score | 52-wk trend | Match |
 |-----------|-----------|------------|-------------|-------|

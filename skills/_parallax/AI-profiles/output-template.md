@@ -27,7 +27,7 @@ Full citation from the profile's `public_anchor.citation` frontmatter field. URL
 
 One sentence stating what the cited source documents. Example:
 
-> Frazzini, Kabiller, Pedersen (2018) decompose Berkshire Hathaway's 1976-2017 returns into factor exposures: strong Quality, strong Value, slight negative Momentum, positive Defensive (low-beta), with ~1.6x leverage overlay at portfolio level.
+> Frazzini, Kabiller, Pedersen (2018) decompose Berkshire Hathaway's 1976-2017 returns into factor exposures: strong Quality, strong Value, and positive Defensive (low-beta), with ~1.6x leverage overlay at portfolio level (momentum is not a meaningful part of the profile).
 
 ### 4. Data table (for factor-driven profiles)
 

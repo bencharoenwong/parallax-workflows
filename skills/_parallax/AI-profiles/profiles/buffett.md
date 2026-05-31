@@ -7,7 +7,7 @@ public_anchor:
   citation: "Frazzini, A., Kabiller, D., Pedersen, L. H. (2018). Buffett's Alpha. Financial Analysts Journal, 74(4), 35-55."
   doi_or_url: "https://doi.org/10.2469/faj.v74.n4.3"
   retrieved: 2026-04-06
-  notes: "Peer-reviewed factor decomposition of Berkshire Hathaway's 1976-2017 returns. Documents +Quality, +Value, −Momentum (slight), +Defensive (low-beta) factor loadings with ~1.6x leverage overlay. Thresholds reconciled for 21st-century intangibles-heavy valuations per Lev & Srivastava (2022)."
+  notes: "Peer-reviewed factor decomposition of Berkshire Hathaway's 1976-2017 returns. Documents +Quality, +Value, +Defensive (low-beta) factor loadings with ~1.6x leverage overlay; momentum is small/not emphasized in the paper (the <=6 Momentum criterion is a design screen against momentum-chasing names, not a BKP-documented tilt). Thresholds reconciled for 21st-century intangibles-heavy valuations per Lev & Srivastava (2022)."
 secondary_anchor:
   citation: "Lev, B., Srivastava, A. (2022). Explaining the Recent Failure of Value Investing. Critical Finance Review, 11(2), 333-360."
   doi_or_url: "https://doi.org/10.1561/104.00000115"
@@ -17,7 +17,7 @@ asset_class: equity
 factor_tilts:
   quality: positive_strong
   value: positive_strong
-  momentum: negative
+  momentum: neutral   # BKP document no meaningful momentum tilt; <=6 threshold is a design screen, not a paper-documented loading
   defensive: positive
 leverage_overlay: 1.6
 output_shape: single_stock_verdict
@@ -44,7 +44,7 @@ anchor_test_notes: "Tuned against KO.N (4/4 match), AXP.N (4/4 match). BRKb.N re
 
 ## What the anchor documents
 
-Frazzini, Kabiller, and Pedersen's 2018 *Financial Analysts Journal* paper "Buffett's Alpha" is the canonical peer-reviewed decomposition of Berkshire Hathaway's historical returns. Using 1976-2017 data, the authors show Berkshire's abnormal returns are largely explained by four factor exposures: strong Quality (Quality Minus Junk), strong Value (HML), slight negative Momentum, strong Defensive (low-beta, BAB). Berkshire also runs ~1.6x leverage via insurance float. After controlling for these factors and leverage, Berkshire's alpha shrinks — Buffett's outperformance can be largely replicated by systematic factor tilts at scale.
+Frazzini, Kabiller, and Pedersen's 2018 *Financial Analysts Journal* paper "Buffett's Alpha" is the canonical peer-reviewed decomposition of Berkshire Hathaway's historical returns. Using 1976-2017 data, the authors show Berkshire's abnormal returns are largely explained by exposure to strong Quality (Quality Minus Junk), strong Value (HML), and strong Defensive (low-beta, BAB) factors, plus ~1.6x leverage via insurance float. Momentum is not a documented part of the Buffett profile — Berkshire's momentum loading is small and not emphasized in the paper; the Momentum criterion in this profile is a design screen against high-momentum, growth-chasing names, not a BKP-documented tilt. After controlling for these factors and leverage, Berkshire's alpha shrinks — Buffett's outperformance can be largely replicated by systematic factor tilts at scale.
 
 **21st-century calibration.** Lev & Srivastava (2022) show that book-value-based Value factors systematically understate intangibles-heavy firms (brand, software, R&D) — the dominant source of modern earning power. Traditional HML rejects many Buffett compounders. This profile reconciles BKP 2018 with Parallax's current-multiple factors by loosening Value and Quality thresholds to levels where Buffett's actual core holdings (KO, AXP) return `match`. The drift is documented explicitly, not hidden.
 
