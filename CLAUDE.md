@@ -7,6 +7,17 @@ This repo contains Claude Code skills for Parallax equity research. Each skill i
 
 > The `**Project Type:**` and `**Security Gate:**` markers above are consumed by `~/.claude/hooks/pre-push`. They override the file-signature classifier (which would otherwise mis-classify this repo as academic because `notes/HANDOFF.md` is present). MCP scope = all 12 SEC-XX items evaluated by `security-auditor`.
 
+## ⚠️ THIS IS A PUBLIC REPOSITORY
+
+`github.com/bencharoenwong/parallax-workflows` is **public**. Nothing here — in tracked **files OR commit messages** — may leak proprietary or sensitive material. Before committing anything, confirm it contains none of:
+
+- **Proprietary methodology internals** — scoring/ensemble composition, regional routing, non-public parameter bounds, valuation-integration details, or named internal frameworks.
+- **Internal data-source / schema names** — database, warehouse, or table identifiers; internal service names. (Public Parallax MCP tool names like `get_peer_snapshot` are fine — only internal stores are sensitive.)
+- **Firm-specific / client-specific material** — hedge-fund operations, client names, white-label partners. (The "Parallax" product name itself is public.)
+- **Artifacts from the private development repo** — eval-harness metrics and findings, research results, internal security-audit detail, planning/decision/handoff notes. These live ONLY in the separate **private** repo and must be sanitized out before any change is ported here.
+
+**Commit messages are public too.** Keep them functional (describe what the code does, e.g. a security fix). Do not describe what was scrubbed, redacted, or held back — naming the redaction is itself the leak. Development happens in the private repo; only sanitized, self-contained changes land here.
+
 ## For Claude Code
 
 When a user invokes `/parallax-<workflow>`, read the corresponding `skills/<workflow>/SKILL.md` and follow it exactly. All skills share conventions in `skills/_parallax/parallax-conventions.md`.

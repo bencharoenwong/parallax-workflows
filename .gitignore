@@ -10,6 +10,20 @@ notes/
 docs/superpowers/
 LESSONS.md
 
+# Private eval SUBSTRATE (grader pipeline, per-skill configs, tasks, captured
+# rollouts) lives ONLY in the private development repo — never public here.
+# NOTE: the public evals/ benchmark harness (README.md, bench.sh, compare.sh,
+# portfolios/) is tracked and stays; only the private-substrate subpaths below
+# are ignored.
+evals/graders/
+evals/skills/
+evals/tasks/
+evals/results/
+evals/baseline/
+evals/rollout/
+evals/fixtures/
+**/eval_config.py
+
 # ---------------------------------------------------------------
 # Internal artifacts kept local. Do not remove without review.
 # ---------------------------------------------------------------
