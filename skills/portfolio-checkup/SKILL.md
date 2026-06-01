@@ -105,7 +105,7 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 Compose the complete report per **Output Format** below, then run it through the render gate in **one Bash step** before replying. Use a private `mktemp` file (never a fixed/predictable path like `/tmp/pcheckup_draft.md` — that is a world-writable-`/tmp` symlink hazard). `render_gate.py` lives in the **same directory you loaded this SKILL.md from** (the registered skill directory); use that directory's absolute path as `<skill-dir>`:
 
 ```
-DRAFT="$(mktemp "${TMPDIR:-/tmp}/pcheckup.XXXXXX.md")"
+DRAFT="$(mktemp "${TMPDIR:-/tmp}/pcheckup.XXXXXX")"
 cat > "$DRAFT" <<'REPORT'
 <your complete drafted report goes here>
 REPORT
