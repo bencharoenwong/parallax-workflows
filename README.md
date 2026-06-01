@@ -250,6 +250,7 @@ skills/
 │       └── recommendation-matrix.md
 ├── portfolio-checkup/          # Individual investor health check
 │   ├── SKILL.md
+│   ├── render_gate.py, test_render_gate.py
 │   └── references/
 │       └── health-flags.md
 ├── AI-buffett/                 # Buffett-style factor profile dispatcher
