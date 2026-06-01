@@ -1,11 +1,11 @@
 ---
-name: parallax-AI-klarman
+name: parallax-ai-klarman
 description: "Applies Seth Klarman's margin-of-safety framework (per 'Margin of Safety', 1991) to a single stock's current financials via Parallax. Four balance-sheet checks: net cash position, debt vs peers, FCF stability, valuation discount. Includes a distinctive 'no position warranted; cash is valid' output when nothing qualifies. Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized."
 negative-triggers:
-  - Bottom-up factor scoring → use /parallax-AI-buffett
-  - Mechanical formula screen → use /parallax-AI-greenblatt
-  - Top-down macro analysis → use /parallax-AI-soros
-  - Cross-profile consensus → use /parallax-AI-consensus
+  - Bottom-up factor scoring → use /parallax-ai-buffett
+  - Mechanical formula screen → use /parallax-ai-greenblatt
+  - Top-down macro analysis → use /parallax-ai-soros
+  - Cross-profile consensus → use /parallax-ai-consensus
   - Full due diligence → use /parallax-due-diligence
   - Running backtests → use /backtest
 gotchas:
@@ -31,9 +31,9 @@ Applies Seth Klarman's margin-of-safety framework to a single stock's current ba
 ## Usage
 
 ```
-/parallax-AI-klarman AAPL.O
-/parallax-AI-klarman BRKb.N
-/parallax-AI-klarman 7203.T
+/parallax-ai-klarman AAPL.O
+/parallax-ai-klarman BRKb.N
+/parallax-ai-klarman 7203.T
 ```
 
 ## Workflow

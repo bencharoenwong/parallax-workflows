@@ -7,6 +7,11 @@ import json
 import re
 import sys
 
+# Known no-space intra-word doublings from SKILL.md §10 "Common AI Errors —
+# Auto-Fix". The space-requiring regexes below only catch space-separated
+# repeats, so these concatenated forms need an explicit literal-substring check.
+_SECTION10_DOUBLINGS = ("ราราคา", "คาดว่าว่า", "ที่ที่", "จะจะ", "และและ", "การเสถียรภาพ")
+
 
 def validate(filepath: str) -> tuple[list[str], list[str]]:
     errors: list[str] = []
@@ -42,6 +47,10 @@ def validate(filepath: str) -> tuple[list[str], list[str]]:
         # Also catch doubled ASCII words (for mixed-language content)
         for m in re.finditer(r"\b([A-Za-z]{2,})\b \1\b", text):
             errors.append(f"[{key}] Doubled word: '{m.group()}'")
+        # No-space intra-word doublings (§10) that the space-requiring regexes miss.
+        for bad in _SECTION10_DOUBLINGS:
+            if bad in text:
+                errors.append(f"[{key}] Doubled (no-space) word: '{bad}'")
 
         # ECL/ES confusion
         if "Expected Credit" in text or "ผลขาดทุนด้านเครดิต" in text:

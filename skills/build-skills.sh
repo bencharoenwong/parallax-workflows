@@ -70,15 +70,44 @@ build_one() {
   printf "  ✓ %s → %s (%s)\n" "$name" "$out" "$(du -h "$out" | cut -f1)"
 }
 
+# JIT-load directive lint — assert every `references/...md` directive resolves.
+# Specced in _parallax/skill-structure-conventions.md "Build-time check" but never
+# shipped; absence let renamed/missing reference files drift silently. Resolves both
+# local (references/x.md) and cross-skill (portfolio-checkup/references/x.md,
+# ../client-review/references/x.md) forms — the latter two are NOT dangling.
+lint_jit_directives() {
+  local fail=0 skill_md skill_dir ref
+  for skill_md in */SKILL.md; do
+    skill_dir=$(dirname "$skill_md")
+    while IFS= read -r ref; do
+      [[ -z "$ref" || "$ref" == *"<"* ]] && continue   # skip placeholders like references/<name>.md
+      # Resolve from the skill dir (covers local + ../sibling) OR from skills root (covers bare cross-skill).
+      [[ -f "$skill_dir/$ref" || -f "$ref" ]] && continue
+      echo "  ✗ JIT-directive DANGLING: $skill_md -> $ref" >&2
+      fail=1
+    done < <(grep -oE '(\.\./)?[A-Za-z0-9_-]*/?references/[A-Za-z0-9_/-]+\.md' "$skill_md" | sort -u)
+  done
+  return $fail
+}
+
 # Coverage lint — gate the build on asset-class / endpoint mismatches.
 # Pass --no-lint as the first argument to skip in emergencies.
 if [[ "${1:-}" == "--no-lint" ]]; then
   shift
   echo "WARN: coverage-lint skipped (--no-lint)"
-elif [[ -x ./_parallax/scripts/coverage-lint.sh ]]; then
-  echo "Running coverage-lint…"
-  ./_parallax/scripts/coverage-lint.sh
+else
+  echo "Linting JIT-load directives…"
+  if ! lint_jit_directives; then
+    echo "FAIL: one or more references/ directives point at a missing file." >&2
+    exit 1
+  fi
+  echo "  ✓ all JIT-load directives resolve"
   echo ""
+  if [[ -x ./_parallax/scripts/coverage-lint.sh ]]; then
+    echo "Running coverage-lint…"
+    ./_parallax/scripts/coverage-lint.sh
+    echo ""
+  fi
 fi
 
 if [[ $# -eq 0 ]]; then

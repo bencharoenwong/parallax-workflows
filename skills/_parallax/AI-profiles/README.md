@@ -1,6 +1,6 @@
 # Parallax AI Investor Profiles
 
-Shared core for the `parallax-AI-*` skill family. Each profile is a markdown spec under `profiles/` that declares a workflow over Parallax MCP tools, anchored to a published academic paper or book, and consumed by a thin dispatcher skill at `skills/AI-<name>/SKILL.md`.
+Shared core for the `parallax-ai-*` skill family. Each profile is a markdown spec under `profiles/` that declares a workflow over Parallax MCP tools, anchored to a published academic paper or book, and consumed by a thin dispatcher skill at `skills/AI-<name>/SKILL.md`.
 
 ## What a profile is
 
@@ -29,14 +29,14 @@ A profile can ship ONLY if:
 
 | Skill | Typical cost per invocation |
 |---|---|
-| `parallax-AI-buffett` | ~4 tokens |
-| `parallax-AI-greenblatt` (ticker-check) | ~10-15 tokens |
-| `parallax-AI-greenblatt` (universe mode) | ~15-30 tokens |
-| `parallax-AI-klarman` | ~5-7 tokens |
-| `parallax-AI-soros` (single-ticker) | ~25-30 tokens |
-| `parallax-AI-soros` (basket mode) | ~30-40 tokens |
-| `parallax-AI-consensus` (single ticker) | ~45-55 tokens |
-| `parallax-AI-consensus` (basket of 5) | ~150-200 tokens |
+| `parallax-ai-buffett` | ~4 tokens |
+| `parallax-ai-greenblatt` (ticker-check) | ~10-15 tokens |
+| `parallax-ai-greenblatt` (universe mode) | ~15-30 tokens |
+| `parallax-ai-klarman` | ~5-7 tokens |
+| `parallax-ai-soros` (single-ticker) | ~25-30 tokens |
+| `parallax-ai-soros` (basket mode) | ~30-40 tokens |
+| `parallax-ai-consensus` (single ticker) | ~45-55 tokens |
+| `parallax-ai-consensus` (basket of 5) | ~150-200 tokens |
 
 ## In-scope v2 candidates (not implemented in v1)
 
@@ -69,4 +69,4 @@ Profiles are not gated on legal review before invocation. The disclaimer languag
 
 - `profile-schema.md` — the YAML frontmatter contract every profile must conform to
 - `output-template.md` — the required output structure, disclaimer, and citation format
-- `consensus-config.md` — thresholds and applicable-count floor for the `parallax-AI-consensus` meta-skill
+- `consensus-config.md` — thresholds and applicable-count floor for the `parallax-ai-consensus` meta-skill

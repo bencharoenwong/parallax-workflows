@@ -225,8 +225,8 @@ External integrators and skill authors frequently ask for capabilities that alre
 
 | User-phrased need | Use this | Notes |
 |---|---|---|
-| Multi-investor consensus across factor-profile lenses | `/parallax-AI-consensus` skill | Orchestrates Buffett / Klarman / Greenblatt / Soros / PTJ profile skills. **Skill-only by design** — multi-profile orchestration with judgment fusion does NOT translate to a REST contract without freezing the ensemble. |
-| Single-investor profile factor scoring | `/parallax-AI-buffett`, `-AI-soros`, `-AI-greenblatt`, `-AI-klarman`, `-AI-ptj` | Each is a standalone profile skill. Profiles ARE proprietary — see `_parallax/AI-profiles/`. |
+| Multi-investor consensus across factor-profile lenses | `/parallax-ai-consensus` skill | Orchestrates Buffett / Klarman / Greenblatt / Soros / PTJ profile skills. **Skill-only by design** — multi-profile orchestration with judgment fusion does NOT translate to a REST contract without freezing the ensemble. |
+| Single-investor profile factor scoring | `/parallax-ai-buffett`, `-ai-soros`, `-ai-greenblatt`, `-ai-klarman`, `-ai-ptj` | Each is a standalone profile skill. Profiles ARE proprietary — see `_parallax/AI-profiles/`. |
 | Peer comparison table | `get_peer_snapshot` | Symbol → `target_company` (top-level) + peer rows (`name` field). |
 
 ### Symbol resolution & search

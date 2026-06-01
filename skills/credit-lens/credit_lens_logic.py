@@ -319,6 +319,10 @@ def build_footer() -> str:
 
 
 def assemble_report(report: CreditReport) -> str:
+    """Reference/test-only renderer. The skill orchestrator (SKILL.md) owns the
+    client-facing output, including the §9.2 AI-interaction disclosure and the
+    §9.1 disclaimer; this helper emits neither. Do NOT wire into client output.
+    """
     sections = [
         build_header(report),
         "",

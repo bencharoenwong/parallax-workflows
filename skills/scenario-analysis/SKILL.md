@@ -88,7 +88,7 @@ Then call `get_assessment` with a prompt that:
 ### Phase 4: Action Plan
 10. **Synthesize** — Call `get_assessment` with a comprehensive prompt incorporating:
     - The scenario and its transmission mechanisms
-    - Portfolio exposure ranking from step 6
+    - Portfolio exposure ranking from Phase 2
     - Macro regime and tactical outlook
     - Replacement candidates and their scores
     - Active house view if present (basis_statement + relevant tilts + alignment-vs-contradiction flag with the user-supplied scenario)

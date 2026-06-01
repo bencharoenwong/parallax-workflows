@@ -1,8 +1,8 @@
 ---
-name: parallax-AI-consensus
+name: parallax-ai-consensus
 description: "Runs all installed Parallax AI Investor Profiles (Buffett, Greenblatt, Klarman, Soros, PTJ) against a single ticker or short basket (cap 5). Returns the per-profile verdict matrix, the super-majority consensus signal per consensus-config.md, and a factor-level agreement detail showing which factors/criteria were flagged by multiple profiles. Cross-profile agreement IS the high-conviction signal. Third-person framing throughout, AI-inferred from public information. NOT financial advice. NOT personalized."
 negative-triggers:
-  - Single profile only → use /parallax-AI-buffett, /parallax-AI-greenblatt, /parallax-AI-klarman, or /parallax-AI-soros
+  - Single profile only → use /parallax-ai-buffett, /parallax-ai-greenblatt, /parallax-ai-klarman, or /parallax-ai-soros
   - Broader macro outlook → use /parallax-macro-outlook
   - Portfolio analysis → use /parallax-morning-brief or /parallax-portfolio-checkup
   - Full due diligence → use /parallax-due-diligence
@@ -30,9 +30,9 @@ Runs all installed AI Investor Profiles in parallel against a ticker (or short b
 ## Usage
 
 ```
-/parallax-AI-consensus AAPL.O                         # single ticker — all 4 profiles run
-/parallax-AI-consensus BRKb.N,KO.N,AXP.N              # basket mode — cap 5 tickers
-/parallax-AI-consensus --only buffett,greenblatt AAPL # subset (rare; min 3 still required)
+/parallax-ai-consensus AAPL.O                         # single ticker — all 5 profiles run
+/parallax-ai-consensus BRKb.N,KO.N,AXP.N              # basket mode — cap 5 tickers
+/parallax-ai-consensus --only buffett,greenblatt AAPL # subset (rare; min 3 still required)
 ```
 
 ## Workflow
@@ -54,7 +54,7 @@ Call `ToolSearch` with query `"+Parallax"` to load deferred MCP tool schemas bef
 
 ### Step 1 — Parse input
 
-- Single ticker → **single-ticker mode**, 4 profiles applicable
+- Single ticker → **single-ticker mode**, 5 profiles applicable
 - Comma-separated list of 2-5 tickers → **basket mode**
 - > 5 tickers → reject: "Consensus skill takes at most 5 tickers per call. Please split your request."
 - Optional `--only <profile1>,<profile2>` flag restricts which profiles run (minimum 3 still required for a valid consensus signal)
@@ -186,8 +186,8 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 
 ## Graceful fallback
 
-- 3 of 4 profiles run successfully → consensus proceeds with `A=3` (effectively requiring unanimity per ceiling rule)
-- 2 of 4 profiles run successfully → return `INSUFFICIENT_PROFILES` (do NOT compute a 2-profile signal)
+- 3 of 5 profiles run successfully → consensus proceeds with `A=3` (effectively requiring unanimity per ceiling rule)
+- 2 of 5 profiles run successfully → return `INSUFFICIENT_PROFILES` (do NOT compute a 2-profile signal)
 - Any single profile's tool calls fail after retry → that profile is `skipped` (with fallback note) and consensus continues
 - Input ticker not resolvable → emit standard conventions §1 error and exit, do not run profiles
 

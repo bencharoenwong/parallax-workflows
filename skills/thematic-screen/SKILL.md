@@ -5,7 +5,7 @@ negative-triggers:
   - Single stock analysis → use /parallax-should-i-buy
   - Portfolio review → use /parallax-client-review
   - Peer comparison of known stock → use /parallax-peer-comparison
-  - Regime-first or reflexivity-driven trade ideas (e.g., "trade ideas in current rates regime") → use /parallax-AI-soros
+  - Regime-first or reflexivity-driven trade ideas (e.g., "trade ideas in current rates regime") → use /parallax-ai-soros
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
   - JIT-load _parallax/house-view/loader.md FIRST. Rules 3 (ground-truth panel) and 4 (divergence assertion) in §5 apply UNIVERSALLY (view or no view — data-integrity requirements). Rules 1-2 and 5 apply when a view is active. Multi-sector theme queries can collapse to a single sector — divergence assertion must fire regardless of view. The user-supplied theme is sovereign per §4 — render conflict banner if theme contradicts view tilts.

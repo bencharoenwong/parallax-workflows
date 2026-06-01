@@ -10,7 +10,7 @@ Priority is determined by the number of overlapping health flags on a single hol
 | **Medium** | 2 flags overlap on one holding | Investigate, Trim |
 | **Low** | 1 flag only | Monitor, Hold |
 
-## Health Flags (same 5 as health-flags.md)
+## Health Flags (same 5 as portfolio-checkup/references/health-flags.md)
 
 | Flag | Holding-Level Condition |
 |---|---|
