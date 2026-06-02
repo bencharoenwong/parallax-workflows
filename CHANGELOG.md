@@ -4,6 +4,21 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-05-31
+
+### Added
+- **v2 eval substrate under `evals/`** — a two-tier quality-eval harness (deterministic Tier-1 structural checks + pinned-Anthropic Tier-2 rubric judge) on a spec-driven, skill-agnostic grading engine. New `evals/graders/` (engine + CI-safe pure-function tests), `evals/skills/<skill>/eval_config.py` (per-skill `EvalSpec`), `evals/tasks/<skill>/core.jsonl` (task inputs), and `evals/fixtures/<skill>/` (golden + broken stream-json transcripts for offline tests). Skills covered: `should-i-buy` (reference baseline), `AI-buffett` (different output family), and `portfolio-checkup` (DRAFT spec only, never run). CI runs only `cd evals && python3 -m pytest graders -q` — never a live rollout. `evals/README.md` and `CONTRIBUTING.md` updated. Design doc is local-only (`notes/`, gitignored).
+- **`docs/security/audit-2026-06-01.md`** — refreshed pre-launch security audit covering the eval substrate (`CRITICAL_FAILS=0`); `audit-latest.md` symlink repointed. Consumed by the pre-push security gate.
+
+### Changed
+- **`/parallax-should-i-buy` two-lens upgrade** — output now splits into a **Fundamentals** lens (Scores + House View Note + Financial Health) and a distinct **Technicals** lens fed by a new parallel `get_technical_analysis` call (trend direction, momentum, support/resistance). The Technicals read cites price/trend/momentum only; on tool timeout it falls back to the Momentum-factor proxy and never silently disappears. Bottom Line now states each lens's directional read and names any Fundamentals↔Technicals divergence instead of blending it. Token budget rises ~24 → ~29 (`+5` for technicals); see `skills/_parallax/token-costs.md`.
+
+### Fixed
+- **`AI-buffett` BKP-2018 momentum mischaracterization** — the profile, output template, and SKILL example previously described "slight negative Momentum" as a documented Buffett factor loading. Corrected across `skills/_parallax/AI-profiles/profiles/buffett.md`, `output-template.md`, and `skills/AI-buffett/SKILL.md`: BKP-2018 document no meaningful momentum tilt; the `<=6` Momentum criterion is a *design screen* against momentum-chasing names, not a paper-documented loading.
+- **`AI-buffett` output discipline** — Steps 1–6 are now explicitly silent (entire visible response is the rendered template, first character to last; no `**Step N**` labels or narration leak), and a **Synthesis** section is now REQUIRED for every verdict including `match` (a bare table is no longer acceptable).
+
+---
+
 ## 2026-05-25
 
 ### Added

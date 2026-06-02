@@ -119,7 +119,7 @@ Implementation lives in `skills/_parallax/house-view/audit_chain.py`, `chain_emi
 
 | Command | What it does |
 |---|---|
-| `/parallax-should-i-buy AAPL` | Quick evaluation — scores, macro, dividends, news, outlook |
+| `/parallax-should-i-buy AAPL` | Quick evaluation — two-lens read (Fundamentals + Technicals), scores, macro, dividends, news, outlook |
 | `/parallax-deep-dive AAPL.O` | Full analysis with technicals and AI assessment |
 | `/parallax-due-diligence AAPL.O` | All financials, Palepu framework, Parallax research report |
 | `/parallax-earnings-quality AAPL.O` | Accruals, revenue quality, manipulation risk |
@@ -226,7 +226,7 @@ Each Parallax API call consumes tokens. Quick reference:
 
 | Workflow type | Typical tokens | Example |
 |---|---|---|
-| Quick stock check | 2–24 | `/parallax-should-i-buy` ~24 |
+| Quick stock check | 2–29 | `/parallax-should-i-buy` ~29 |
 | Deep analysis | 31–45 | `/parallax-due-diligence` ~31 |
 | Portfolio (10 holdings) | 36–105 | `/parallax-portfolio-checkup` ~36 |
 
