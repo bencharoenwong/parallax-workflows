@@ -71,6 +71,7 @@ Once RIC is confirmed, call **all of the following simultaneously**:
 | `get_peer_snapshot` | `symbol` | Factor scores + peer ranking |
 | `get_financials` | `symbol`, `statement="summary"` | Revenue/income narrative |
 | `get_score_analysis` | `symbol` | 52-week factor trend (server default) |
+| `get_technical_analysis` | `symbol` | Trend direction, momentum, support/resistance — feeds the Technicals lens. Async ~2-5s, may time out (see Technicals fallback in Output Format) |
 | `get_stock_outlook` | `symbol`, `aspect="analyst_targets"` | Price targets |
 | `get_stock_outlook` | `symbol`, `aspect="recommendations"` | Buy/hold/sell |
 | `get_stock_outlook` | `symbol`, `aspect="risk_return"` | Risk/return vs peers |
@@ -103,17 +104,19 @@ Present as a friendly, structured report. When an active house view is loaded, J
 
 - **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the house view preamble (or at the very top if no view): `**<client_name>** stock review`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to Provenance.
 - **The Company** (what they do, how big)
-- **The Scores** (simple table with plain-English interpretation; include 52-week trend direction — e.g., "Quality trending up from 5.8 to 7.2")
-  - *If view active:* check §7.3 tension condition (`total_score >= 7.0 AND view.tilts.sectors[stock_sector] <= -1`). If true, render the tension banner via `render_view_conflict(kind="score_tension", ...)` directly below the scores table.
-- **House View Note** (only if view active and stock conflicts with view) — render via `render_view_conflict(kind="blanket", ...)` per loader.md §7.1. This section appears HERE — immediately after The Scores — so the reader sees the view lens before reading the rest. Not at the bottom of the output.
-- **Financial Health** (green/yellow/red traffic light metaphor)
+- **Fundamentals** — lens header introducing the factor + financial read. Keep its two subsections explicitly labeled (do not fold them into the header):
+  - **The Scores** (simple table with plain-English interpretation; include 52-week trend direction — e.g., "Quality trending up from 5.8 to 7.2")
+    - *If view active:* check §7.3 tension condition (`total_score >= 7.0 AND view.tilts.sectors[stock_sector] <= -1`). If true, render the tension banner via `render_view_conflict(kind="score_tension", ...)` directly below the scores table.
+  - **House View Note** (only if view active and stock conflicts with view) — render via `render_view_conflict(kind="blanket", ...)` per loader.md §7.1. This appears HERE — immediately after The Scores — so the reader sees the view lens before reading the rest. Not at the bottom of the output.
+  - **Financial Health** (green/yellow/red traffic light metaphor)
+- **Technicals** — lens header (the price-action read, kept distinct from Fundamentals). From `get_technical_analysis`: trend direction (`STRONG_POSITIVE`…`STRONG_NEGATIVE`), momentum, and support/resistance levels. State a one-line directional read for the lens. The Technicals read cites price/trend/momentum only — it does not borrow factor scores or financials as evidence. *Fallback:* if `get_technical_analysis` is unavailable or times out, render the lens from the Momentum factor proxy (`get_score_analysis` momentum sub-trend) and prefix it `Technical analysis unavailable — Momentum factor proxy:`. The lens always produces a read; it never silently disappears.
 - **Macro Context** (2-3 sentences on the relevant economic environment — skip if no covered markets)
 - **Dividends** (yield, consistency, recent changes — or "Not a dividend payer" if none)
 - **Risk vs Peers** (risk/return profile relative to peer group)
   - *If view active AND `get_peer_snapshot.suggestion` returned a peer:* check §7.2 condition (peer's sector tilt ≤ -1 in view, or peer ticker on excludes). If true, render the inline token via `render_view_conflict(kind="peer_suggest", ...)` immediately under the Risk vs Peers section. Flag, do not filter — the peer stays in the table.
 - **Recent News** (bullets)
 - **Analyst View** (price target range, consensus)
-- **Bottom Line** (balanced 2-sentence summary — pros and cons, not a recommendation)
+- **Bottom Line** (balanced summary — pros and cons, not a recommendation). State each lens's directional read — Fundamentals and Technicals — explicitly. If the two lenses diverge (e.g. constructive fundamentals vs. weak price action), name the divergence rather than averaging it into one blended verdict.
 - **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
 
 Append audit log entry per loader.md §6.

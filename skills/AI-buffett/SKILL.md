@@ -113,12 +113,13 @@ Format the output per `skills/_parallax/AI-profiles/output-template.md`. The tem
 3. Profile characterization statement (one sentence from the profile spec body)
 4. Data table: Factor | Target | Score | 52-wk trend | Match
 5. Verdict: "Profile fit: <match/partial/no> — N of 4 factor criteria met"
-6. Methodology footer (workflow derivation, anchor-test date, legal-review date, tool sequence, token cost)
-7. Standard disclaimer (VERBATIM — substitute `[Investor]` with `Warren Buffett` and nothing else)
+6. **Synthesis (REQUIRED for every verdict, including `match`)** — 1-2 sentences naming which legs of the BKP-2018 Buffett profile the stock fits and which it misses, with the one-line takeaway. A `match` is not self-explanatory: state *why* (e.g. "cheap, high-quality, low-beta — the cluster BKP attribute Berkshire's alpha to"). Do not leave a `match` as a bare table.
+7. Methodology footer (workflow derivation, anchor-test date, legal-review date, tool sequence, token cost)
+8. Standard disclaimer (VERBATIM — substitute `[Investor]` with `Warren Buffett` and nothing else)
 
 ### Step 7 — Emit
 
-Output the rendered template. No additional commentary.
+**Steps 1–6 are silent.** Perform the ticker resolution, cross-validation, scoring, threshold logic, and verdict computation internally — none of that working appears in your reply. Your **entire visible response is the rendered template and nothing else**, beginning at the Header line `Buffett-style profile applied to <ticker>`. The first character you output is the `B` of "Buffett-style". Do NOT prepend `**Step N**` labels, "Cross-validation passed", "All data verified", a "Let me…" preamble, or any narration — if any such text would precede the Header, delete it. The Output example below shows the complete response, first character to last.
 
 ## Output example
 
@@ -128,7 +129,7 @@ Buffett-style profile applied to KO.N
 Source: Frazzini, A., Kabiller, D., Pedersen, L. H. (2018). Buffett's Alpha. Financial Analysts Journal, 74(4), 35-55.
 (https://doi.org/10.2469/faj.v74.n4.3)
 
-Frazzini, Kabiller, Pedersen (2018) decompose Berkshire Hathaway's 1976-2017 returns into factor exposures: strong Quality, strong Value, slight negative Momentum, positive Defensive (low-beta), with ~1.6x leverage overlay at portfolio level.
+Frazzini, Kabiller, Pedersen (2018) decompose Berkshire Hathaway's 1976-2017 returns into factor exposures: strong Quality, strong Value, and positive Defensive (low-beta), with ~1.6x leverage overlay at portfolio level (momentum is not a meaningful part of the profile).
 
 | Factor    | Target    | KO.N score | 52-wk trend | Match |
 |-----------|-----------|------------|-------------|-------|
@@ -138,6 +139,8 @@ Frazzini, Kabiller, Pedersen (2018) decompose Berkshire Hathaway's 1976-2017 ret
 | Defensive | ≥ 7       | 10         | ↑ stable    | YES   |
 
 Profile fit: match — 4 of 4 factor criteria met.
+
+**Synthesis:** KO fits all four legs of the BKP-2018 profile — high-quality (Quality 8), reasonably priced (Value 4), low-momentum (4.83), and strongly low-beta (Defensive 10) — the cheap-safe-quality cluster the paper attributes Berkshire's alpha to. It sits at the quality-and-safety end of that style rather than deep value.
 
 Workflow derived from: Frazzini, Kabiller, Pedersen (2018), "Buffett's Alpha", FAJ 74(4):35-55.
 Tool sequence: get_company_info, get_peer_snapshot, get_financials(summary), get_score_analysis(52w), explain_methodology

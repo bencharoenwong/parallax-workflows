@@ -26,6 +26,11 @@ Thanks for the interest. A few notes on what fits and what doesn't.
    pip install -r skills/_parallax/house-view/requirements.txt pytest
    pytest skills/_parallax/house-view/tests/
    ```
+   If you touch anything under `evals/`, also run the eval grader suite — the
+   CI-safe pure-function tests, never a live rollout:
+   ```bash
+   cd evals && python3 -m pytest graders -q
+   ```
 3. **For SKILL.md changes**, verify the workflow runs end-to-end in a fresh Claude Code session. The runtime caches SKILL.md content at session start, so unit-style tests don't catch SKILL.md regressions.
 4. **Keep the diff focused.** One concern per PR. Refactors that bundle multiple unrelated changes get bounced.
 
