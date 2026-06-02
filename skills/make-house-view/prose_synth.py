@@ -8,6 +8,7 @@ and the paired_yaml_hash check stays meaningful.
 Deliberately deterministic — no LLM call. The maker may later layer an
 LLM narrative on top, but this module guarantees a baseline.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -31,7 +32,9 @@ def _pillar_to_phrase(name: str, value: int) -> str:
         "econometrics_phase": "constructive" if value > 0 else "deteriorating",
         "valuation_state": "undervalued" if value > 0 else "stretched",
         "market_entropy": "orderly" if value > 0 else "disordered",
-        "psychological_wavelength": "constructive sentiment" if value > 0 else "cautious sentiment",
+        "psychological_wavelength": (
+            "constructive sentiment" if value > 0 else "cautious sentiment"
+        ),
     }.get(name, "skewed")
     magnitude = "moderately" if abs(value) == 1 else "strongly"
     return f"{name} reads as {magnitude} {direction}"
@@ -54,9 +57,7 @@ def render_prose(
     sectors = {k: v for k, v in (tilts.get("sectors") or {}).items() if v}
 
     lines: list[str] = []
-    lines.append(
-        f"# {metadata.get('view_name', 'Parallax-synthesized house view')}"
-    )
+    lines.append(f"# {metadata.get('view_name', 'Parallax-synthesized house view')}")
     lines.append("")
     lines.append(
         "*This view was synthesized deterministically from Parallax "
@@ -102,9 +103,7 @@ def render_prose(
     # --- Fan-out summary ---
     if fan_out_summary:
         lines.append("## Synthesis provenance")
-        lines.append(
-            f"- Markets queried: {fan_out_summary.get('markets_total', 0)}"
-        )
+        lines.append(f"- Markets queried: {fan_out_summary.get('markets_total', 0)}")
         lines.append(
             f"- Markets succeeded: {fan_out_summary.get('markets_succeeded', 0)}"
         )

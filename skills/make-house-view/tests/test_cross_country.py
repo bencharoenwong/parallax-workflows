@@ -1,14 +1,11 @@
 """Unit tests for cross_country.aggregate + coverage rule."""
+
 from __future__ import annotations
 
-import json
-from pathlib import Path
 
 import pytest
 
-import cross_country
 from cross_country import (
-    COVERAGE_THRESHOLD,
     MarketResponse,
     aggregate,
     aggregate_field_with_coverage,
@@ -153,7 +150,9 @@ def test_phi_silent_in_majority_caps_coverage_false():
         _build_market(
             "Japan",
             "japan",
-            {"macro_indicators": "Tactical positioning constructive; no explicit valuation read."},
+            {
+                "macro_indicators": "Tactical positioning constructive; no explicit valuation read."
+            },
         ),
         _build_market(
             "China",
@@ -215,7 +214,9 @@ def test_partial_silent_content_treated_as_silent_not_unreachable():
         _build_market(
             "United States",
             "us",
-            {"macro_indicators": "Sector ranking data remains unavailable for this reporting period."},
+            {
+                "macro_indicators": "Sector ranking data remains unavailable for this reporting period."
+            },
         ),
     ]
     agg = aggregate(markets, {})

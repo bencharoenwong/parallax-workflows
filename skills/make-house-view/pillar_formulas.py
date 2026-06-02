@@ -20,6 +20,7 @@ Confidence cap rule (BUG-003 resolution / v2 plan §4.2):
 DOES NOT call MCP. Pure compute. Caller fans-out, aggregates, then
 passes to these functions.
 """
+
 from __future__ import annotations
 
 import re
@@ -87,13 +88,28 @@ _ENTROPY_PATTERN = re.compile(
 # Risk-on / risk-off / fear / greed words for the heuristic fallback.
 # Hand-tuned conservative list — only fires when language is unambiguous.
 _PSI_POSITIVE = (
-    "risk-on", "risk on", "constructive", "bullish", "greed",
-    "optimism", "complacent", "euphoric", "roro on",
+    "risk-on",
+    "risk on",
+    "constructive",
+    "bullish",
+    "greed",
+    "optimism",
+    "complacent",
+    "euphoric",
+    "roro on",
 )
 _PSI_NEGATIVE = (
-    "risk-off", "risk off", "fear", "capitulation", "bearish",
-    "panic", "pessimism", "flight to quality", "haven bid",
-    "stressed", "stress",
+    "risk-off",
+    "risk off",
+    "fear",
+    "capitulation",
+    "bearish",
+    "panic",
+    "pessimism",
+    "flight to quality",
+    "haven bid",
+    "stressed",
+    "stress",
 )
 
 
@@ -372,7 +388,9 @@ def compute_xi(
     elif prose_value is not None:
         blended = float(prose_value)
         formula = "pillar_formulas.compute_xi@v1:prose_entropy_only(no_proxy)"
-        confidence = min(MARKET_ENTROPY_CONFIDENCE_CAP, 0.20 + 0.06 * len(markets_with_data))
+        confidence = min(
+            MARKET_ENTROPY_CONFIDENCE_CAP, 0.20 + 0.06 * len(markets_with_data)
+        )
     elif proxy_value is not None:
         blended = proxy_value
         formula = "pillar_formulas.compute_xi@v1:divergence_proxy_only"
@@ -401,7 +419,9 @@ def compute_xi(
 # ---------------------------------------------------------------------------
 
 
-def _heuristic_psi_score(prose_blobs: list[str], commentary_headline: str | None) -> tuple[int, str]:
+def _heuristic_psi_score(
+    prose_blobs: list[str], commentary_headline: str | None
+) -> tuple[int, str]:
     """Conservative bag-of-words sentiment. Returns (value, snippet).
 
     Default implementation when no llm callback is supplied. Counts
@@ -449,7 +469,9 @@ def compute_psi(
     telemetry: dict[str, Any] | None,
     inventory: dict[str, Any] | None = None,
     *,
-    psychological_judge_fn: Callable[[list[str], str | None], tuple[int, str, float]] | None = None,
+    psychological_judge_fn: (
+        Callable[[list[str], str | None], tuple[int, str, float]] | None
+    ) = None,
 ) -> PillarResult:
     """psychological_wavelength.
 

@@ -24,6 +24,7 @@ Design notes:
   skills/load-house-view/SKILL.md Step 4 verbatim, with action="generate"
   and provenance class generator_synthesis.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -36,7 +37,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any, Callable
 
 import yaml
 
@@ -201,7 +202,9 @@ class MCPResponses:
 class MakerResult:
     """Final result of `execute_synthesis`."""
 
-    disposition: str  # "confirm" | "edited" | "regenerated" | "abandoned" | "shadow_diff"
+    disposition: (
+        str  # "confirm" | "edited" | "regenerated" | "abandoned" | "shadow_diff"
+    )
     draft_view: dict[str, Any] | None
     view_id: str | None = None
     version_id: str | None = None
@@ -364,7 +367,10 @@ class MakerOrchestrator:
         elapsed = time.monotonic() - t0
         logger.info(
             "maker.fan_out.complete: %d requests in %.2fs (markets=%d, components=%d)",
-            len(requests), elapsed, len(covered_markets), len(self.options.components),
+            len(requests),
+            elapsed,
+            len(covered_markets),
+            len(self.options.components),
         )
 
         per_market: list[MarketResponse] = []
@@ -383,7 +389,9 @@ class MakerOrchestrator:
             per_market.append(
                 MarketResponse(
                     market_name=market,
-                    schema_key=MARKET_TO_SCHEMA_KEY.get(market, market.lower().replace(" ", "_")),
+                    schema_key=MARKET_TO_SCHEMA_KEY.get(
+                        market, market.lower().replace(" ", "_")
+                    ),
                     components=comp_responses,
                     reachable=any_reachable,
                     partial_components=tuple(partial),
@@ -412,7 +420,10 @@ class MakerOrchestrator:
         psychological_judge_fn: Callable | None = None,
     ) -> dict[str, PillarResult]:
         return pillar_compose.compute_pillars(
-            aggregated, telemetry, inventory=None, psychological_judge_fn=psychological_judge_fn
+            aggregated,
+            telemetry,
+            inventory=None,
+            psychological_judge_fn=psychological_judge_fn,
         )
 
     # ---- Step 6: package the draft view ----
@@ -440,8 +451,10 @@ class MakerOrchestrator:
 
         macro_regime = aggregated.get("macro_regime") or {}
 
-        now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
-            "+00:00", "Z"
+        now_iso = (
+            datetime.now(timezone.utc)
+            .isoformat(timespec="seconds")
+            .replace("+00:00", "Z")
         )
 
         basis = (
@@ -526,8 +539,10 @@ class MakerOrchestrator:
     ) -> gate_present.GateContext:
         pillar_conf = pillar_compose.pillar_confidence_average(pillars)
         extraction_conf = view["extraction"]["extraction_confidence"]
-        now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
-            "+00:00", "Z"
+        now_iso = (
+            datetime.now(timezone.utc)
+            .isoformat(timespec="seconds")
+            .replace("+00:00", "Z")
         )
         return gate_present.GateContext(
             source_label=f"Parallax synthesis {now_iso}",
@@ -569,9 +584,7 @@ class MakerOrchestrator:
         view["metadata"]["view_hash"] = view_hash
 
         # 1b/1c. Provenance + provenance_hash.
-        provenance_data = _build_provenance(
-            view, pillars, aggregated, covered_markets
-        )
+        provenance_data = _build_provenance(view, pillars, aggregated, covered_markets)
         provenance_canonical = _jcs_dumps(provenance_data)
         provenance_hash = hashlib.sha256(provenance_canonical).hexdigest()
         view["metadata"]["provenance_hash"] = provenance_hash
@@ -640,9 +653,9 @@ class MakerOrchestrator:
         # 11. Append audit entry (loader.md §6.1/§6.2 — generate row).
         source_tools = _build_source_tools_list(mcp_responses, covered_markets)
         audit_entry_payload: dict[str, Any] = {
-            "ts": datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
-                "+00:00", "Z"
-            ),
+            "ts": datetime.now(timezone.utc)
+            .isoformat(timespec="seconds")
+            .replace("+00:00", "Z"),
             "view_id": view["metadata"]["view_id"],
             "version_id": version_id,
             "view_hash": view_hash,
@@ -723,10 +736,12 @@ class MakerOrchestrator:
         mcp: MCPRunner,
         *,
         dispose_fn: Callable[[gate_present.GatePrompt], str] | None = None,
-        edit_fn: Callable[
-            [dict, gate_present.GateContext], tuple[dict, str | None]
-        ] | None = None,
-        psychological_judge_fn: Callable[[list[str], str | None], tuple[int, str, float]] | None = None,
+        edit_fn: (
+            Callable[[dict, gate_present.GateContext], tuple[dict, str | None]] | None
+        ) = None,
+        psychological_judge_fn: (
+            Callable[[list[str], str | None], tuple[int, str, float]] | None
+        ) = None,
     ) -> MakerResult:
         """End-to-end Steps 1-8 driver.
 
@@ -767,7 +782,9 @@ class MakerOrchestrator:
         aggregated = self.aggregate(per_market, telemetry)
 
         # Step 5
-        pillars = self.compose_pillars(aggregated, telemetry, psychological_judge_fn=psychological_judge_fn)
+        pillars = self.compose_pillars(
+            aggregated, telemetry, psychological_judge_fn=psychological_judge_fn
+        )
 
         # Step 6 is OPTIONAL — only fold gap_suggest residuals when the maker
         # leaves leaves silent. v2 plan §2.1 step 6 explicitly defers.
@@ -913,9 +930,7 @@ def _jcs_dumps(data: Any) -> bytes:
 
         return rfc8785.dumps(data)
     except ImportError:  # pragma: no cover
-        return json.dumps(data, sort_keys=True, separators=(",", ":")).encode(
-            "utf-8"
-        )
+        return json.dumps(data, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -933,8 +948,8 @@ def _build_provenance(
 
     Per schema.yaml `generator_synthesis` class spec.
     """
-    now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
-        "+00:00", "Z"
+    now_iso = (
+        datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     )
     aggregator_weights_ref = "aggregator_weights.yaml#global_macro_weights.v0"
     out: dict[str, Any] = {}
@@ -948,14 +963,12 @@ def _build_provenance(
         "xi": ("tilts.pillars.market_entropy", "macro_indicators"),
         "psi": ("tilts.pillars.psychological_wavelength", "news"),
     }
-    tilts_pillars = (view.get("tilts") or {}).get("pillars") or {}
+    _tilts_pillars = (view.get("tilts") or {}).get("pillars") or {}
     for letter, (path, primary_comp) in pillar_name_map.items():
         p = pillars[letter]
         if p.value == 0 and not p.missing_inputs:
             continue
-        source_tools = [
-            f"macro_analyst:{m}:{primary_comp}" for m in covered_markets
-        ]
+        source_tools = [f"macro_analyst:{m}:{primary_comp}" for m in covered_markets]
         if letter in ("omega", "psi", "xi"):
             source_tools.append("get_telemetry")
         entry = {

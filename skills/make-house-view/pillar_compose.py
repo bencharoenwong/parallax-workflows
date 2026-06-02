@@ -4,6 +4,7 @@ Returns a dict {pillar_letter: PillarResult} so the maker can package
 the four pillars uniformly + compute an aggregate pillar confidence
 for the GateContext.
 """
+
 from __future__ import annotations
 
 import sys
@@ -28,7 +29,9 @@ def compute_pillars(
     telemetry: dict[str, Any] | None,
     inventory: dict[str, Any] | None = None,
     *,
-    psychological_judge_fn: Callable[[list[str], str | None], tuple[int, str, float]] | None = None,
+    psychological_judge_fn: (
+        Callable[[list[str], str | None], tuple[int, str, float]] | None
+    ) = None,
 ) -> dict[str, PillarResult]:
     """Run all four compute_* in a documented order.
 
@@ -47,7 +50,10 @@ def compute_pillars(
         "phi": compute_phi(aggregated, telemetry, inventory),
         "xi": compute_xi(aggregated, telemetry, inventory),
         "psi": compute_psi(
-            aggregated, telemetry, inventory, psychological_judge_fn=psychological_judge_fn
+            aggregated,
+            telemetry,
+            inventory,
+            psychological_judge_fn=psychological_judge_fn,
         ),
     }
 

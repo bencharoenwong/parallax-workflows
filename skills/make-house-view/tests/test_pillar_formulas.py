@@ -2,6 +2,7 @@
 
 Per v2 plan §4.2 + MCP_FIELD_INVENTORY.md §4 + §5.1.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -50,7 +51,9 @@ def test_valuation_pattern_tolerates_variants(prose, expected):
 
 
 def test_entropy_pattern_matches():
-    result = _scan_prose_for_signed_number(_ENTROPY_PATTERN, "Market entropy at 0.50 — orderly.")
+    result = _scan_prose_for_signed_number(
+        _ENTROPY_PATTERN, "Market entropy at 0.50 — orderly."
+    )
     assert result is not None
     val, _ = result
     assert val == pytest.approx(0.5)
@@ -104,7 +107,14 @@ def test_omega_recession_maps_negative():
 
 
 def test_phi_silent_in_all_markets_returns_zero_confidence_with_missing():
-    aggregated = {"phi": {"value": None, "coverage_ok": False, "markets_with_data": [], "snippets": []}}
+    aggregated = {
+        "phi": {
+            "value": None,
+            "coverage_ok": False,
+            "markets_with_data": [],
+            "snippets": [],
+        }
+    }
     p = compute_phi(aggregated, None)
     assert p.value == 0
     assert p.confidence <= MISSING_INPUT_CONFIDENCE_CAP
@@ -165,7 +175,14 @@ def test_xi_combines_prose_and_divergence_proxy():
 
 
 def test_xi_divergence_proxy_only_when_prose_silent():
-    aggregated = {"xi": {"value": None, "coverage_ok": False, "markets_with_data": [], "snippets": []}}
+    aggregated = {
+        "xi": {
+            "value": None,
+            "coverage_ok": False,
+            "markets_with_data": [],
+            "snippets": [],
+        }
+    }
     telemetry = {"divergences": list(range(45))}  # → -2
     p = compute_xi(aggregated, telemetry)
     assert "entropy_prose_silent_in_all_markets" in p.missing_inputs
@@ -176,7 +193,14 @@ def test_xi_divergence_proxy_only_when_prose_silent():
 
 
 def test_xi_missing_divergences_flags_input():
-    aggregated = {"xi": {"value": 1.0, "coverage_ok": True, "markets_with_data": ["us"], "snippets": []}}
+    aggregated = {
+        "xi": {
+            "value": 1.0,
+            "coverage_ok": True,
+            "markets_with_data": ["us"],
+            "snippets": [],
+        }
+    }
     p = compute_xi(aggregated, {})  # telemetry has no divergences
     assert "telemetry.divergences" in p.missing_inputs
     assert p.confidence <= MISSING_INPUT_CONFIDENCE_CAP

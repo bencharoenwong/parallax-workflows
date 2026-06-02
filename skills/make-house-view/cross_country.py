@@ -20,9 +20,9 @@ PARTIAL handling (MCP_FIELD_INVENTORY.md §5.4):
 
 Pure-compute module — no MCP calls.
 """
+
 from __future__ import annotations
 
-import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -62,9 +62,16 @@ DEFAULT_WEIGHTS_PATH = _SHARED_DIR / "aggregator_weights.yaml"
 
 # Sector keys we attempt to extract per-market.
 _SECTOR_KEYS = (
-    "energy", "materials", "industrials", "consumer_discretionary",
-    "consumer_staples", "health_care", "financials",
-    "information_technology", "communication_services", "utilities",
+    "energy",
+    "materials",
+    "industrials",
+    "consumer_discretionary",
+    "consumer_staples",
+    "health_care",
+    "financials",
+    "information_technology",
+    "communication_services",
+    "utilities",
     "real_estate",
 )
 

@@ -22,6 +22,7 @@ then inspect ~/.parallax/active-house-view/ for the produced artifacts.
 The maker's B1 smoke run already validated this path against live MCP
 (see DECISIONS.md 2026-05-24).
 """
+
 from __future__ import annotations
 
 import copy
@@ -129,6 +130,7 @@ def _judge_dry(
         report_dir=report_dir,
     )
     if llm_call_fn is None:
+
         def llm_call_fn(*_a, **_kw):
             return {
                 "recommendations": [
@@ -139,6 +141,7 @@ def _judge_dry(
                     }
                 ]
             }
+
     return judge.run_judge(config=cfg, llm_call_fn=llm_call_fn)
 
 
@@ -297,16 +300,16 @@ def test_e2e_consumer_skill_drift_gate_protocol(
     # Scenario C: graceful-skip contract is documented + executable
     pattern_md = (SHARED_DIR / "auto-on-load-judge-pattern.md").read_text()
     # Required contract phrases per v2 plan §7 + the pattern file itself
-    assert "not installed; drift check skipped" in pattern_md, (
-        "Pattern file must document the graceful-skip preamble note"
-    )
-    assert "Do NOT fail" in pattern_md, (
-        "Pattern file must say 'Do NOT fail' for the judge-missing case"
-    )
+    assert (
+        "not installed; drift check skipped" in pattern_md
+    ), "Pattern file must document the graceful-skip preamble note"
+    assert (
+        "Do NOT fail" in pattern_md
+    ), "Pattern file must say 'Do NOT fail' for the judge-missing case"
     # The pattern names the >30d cadence threshold for auto-on-load fire
-    assert "30 days" in pattern_md or "30d" in pattern_md or "view_age" in pattern_md, (
-        "Pattern file must specify the view-age threshold"
-    )
+    assert (
+        "30 days" in pattern_md or "30d" in pattern_md or "view_age" in pattern_md
+    ), "Pattern file must specify the view-age threshold"
 
     # The 3 consumer SKILL.md files must JIT-load the shared pattern
     # (NOT inline it). This is the single-source-of-truth invariant.
@@ -365,19 +368,19 @@ def test_e2e_captured_fixtures_still_parse_through_maker(
         if fx.name == "telemetry_full.json":
             tl = json.loads(fx.read_text())
             assert tl.get("success") is True, f"{fx.name}: success != True"
-            assert isinstance(tl.get("regime_tag"), str), (
-                f"{fx.name}: regime_tag missing or not a string"
-            )
-            assert isinstance(tl.get("signals"), list), (
-                f"{fx.name}: signals missing or not a list"
-            )
+            assert isinstance(
+                tl.get("regime_tag"), str
+            ), f"{fx.name}: regime_tag missing or not a string"
+            assert isinstance(
+                tl.get("signals"), list
+            ), f"{fx.name}: signals missing or not a list"
             continue
         # macro_analyst fixture
         resp = json.loads(fx.read_text())
         assert resp.get("success") is True, f"{fx.name}: success != True"
-        assert isinstance(resp.get("content"), str) and resp["content"], (
-            f"{fx.name}: content is missing or empty"
-        )
+        assert (
+            isinstance(resp.get("content"), str) and resp["content"]
+        ), f"{fx.name}: content is missing or empty"
         assert resp.get("market"), f"{fx.name}: market is missing"
         assert resp.get("component"), f"{fx.name}: component is missing"
         assert resp.get("report_date"), f"{fx.name}: report_date is missing"
@@ -396,10 +399,7 @@ def test_e2e_captured_fixtures_still_parse_through_maker(
     for category, subdict in tilts.items():
         if isinstance(subdict, dict):
             flat_values.extend(subdict.values())
-    assert any(
-        isinstance(v, (int, float)) and v != 0
-        for v in flat_values
-    ), (
+    assert any(isinstance(v, (int, float)) and v != 0 for v in flat_values), (
         "Synthesized view has no non-zero tilts — fixtures may be stale or "
         "the maker pipeline is silently producing an empty view. Check "
         "MCP_FIELD_INVENTORY.md and re-capture fixtures from live MCP."
@@ -429,9 +429,7 @@ def test_e2e_shadow_diff_path_does_not_modify_active_view(
 
     # Seed an active view (the bank's view) so shadow_diff has an anchor.
     view_dir.mkdir(parents=True, exist_ok=True)
-    bank_view = yaml.safe_load(
-        (MAKER_FIXTURES / "bank_view_anchor.yaml").read_text()
-    )
+    bank_view = yaml.safe_load((MAKER_FIXTURES / "bank_view_anchor.yaml").read_text())
     (view_dir / "view.yaml").write_text(yaml.safe_dump(bank_view, sort_keys=False))
     bank_view_bytes_before = (view_dir / "view.yaml").read_bytes()
     assert not (view_dir / "audit.jsonl").exists()
@@ -452,21 +450,21 @@ def test_e2e_shadow_diff_path_does_not_modify_active_view(
     )
 
     # Invariants
-    assert res.disposition == "shadow_diff", (
-        f"Expected disposition='shadow_diff', got {res.disposition!r}"
-    )
-    assert isinstance(res.shadow_diff_report, str) and res.shadow_diff_report, (
-        "shadow_diff_report should be non-empty"
-    )
+    assert (
+        res.disposition == "shadow_diff"
+    ), f"Expected disposition='shadow_diff', got {res.disposition!r}"
+    assert (
+        isinstance(res.shadow_diff_report, str) and res.shadow_diff_report
+    ), "shadow_diff_report should be non-empty"
     # The "additive" framing is the point — verify the rendered report
     # uses the additive vocabulary, not corrective.
     report = res.shadow_diff_report
-    assert "ADDITIVE" in report or "additive" in report.lower(), (
-        "Shadow-diff report must use additive framing"
-    )
-    assert "sovereign" in report.lower() or "bank's view" in report.lower(), (
-        "Shadow-diff report must acknowledge bank-view sovereignty"
-    )
+    assert (
+        "ADDITIVE" in report or "additive" in report.lower()
+    ), "Shadow-diff report must use additive framing"
+    assert (
+        "sovereign" in report.lower() or "bank's view" in report.lower()
+    ), "Shadow-diff report must acknowledge bank-view sovereignty"
 
     # Active view + audit log unmodified
     assert (view_dir / "view.yaml").read_bytes() == bank_view_bytes_before
@@ -504,9 +502,9 @@ def test_e2e_judge_report_bundle_complete(
 
     # The orchestrator returns the actual bundle dir it wrote to
     bundle = res.report_dir
-    assert bundle is not None and Path(bundle).is_dir(), (
-        f"Expected report_dir to exist, got {bundle}"
-    )
+    assert (
+        bundle is not None and Path(bundle).is_dir()
+    ), f"Expected report_dir to exist, got {bundle}"
     bundle = Path(bundle)
 
     required = {"report.md", "report.json", "mcp_responses.jsonl", "audit_entry.json"}
@@ -524,11 +522,16 @@ def test_e2e_judge_report_bundle_complete(
     # report.json carries the structured payload that cron consumers parse
     report_json = json.loads((bundle / "report.json").read_text())
     assert "severity" in report_json
-    assert report_json["severity"] in ("drift_minor", "drift_moderate", "drift_material")
+    assert report_json["severity"] in (
+        "drift_minor",
+        "drift_moderate",
+        "drift_material",
+    )
 
     # mcp_responses.jsonl is one-line-per-call (replay-able)
     mcp_lines = [
-        line for line in (bundle / "mcp_responses.jsonl").read_text().splitlines()
+        line
+        for line in (bundle / "mcp_responses.jsonl").read_text().splitlines()
         if line.strip()
     ]
     assert len(mcp_lines) > 0, "mcp_responses.jsonl is empty"
@@ -561,7 +564,9 @@ def test_e2e_reasoning_chain_emitted_for_make_and_judge(
     maker_res = _run_maker(base_mcp, view_dir)
     assert maker_res.disposition == "confirm"
 
-    chain_files_after_make = list(chain_dir.rglob("*.yaml")) if chain_dir.exists() else []
+    chain_files_after_make = (
+        list(chain_dir.rglob("*.yaml")) if chain_dir.exists() else []
+    )
     assert len(chain_files_after_make) >= 1, (
         f"Expected ≥1 reasoning chain after maker save; got "
         f"{chain_files_after_make}"
@@ -573,12 +578,12 @@ def test_e2e_reasoning_chain_emitted_for_make_and_judge(
     # programmatic signal that catches the bug class directly (without
     # relying on counting yaml files, which would miss a partial-write
     # or a write-to-wrong-dir failure).
-    assert jr.chain_emit_failed is False, (
-        f"Judge chain emission failed; diagnostics: {jr.diagnostics}"
-    )
-    assert jr.chain_path is not None and Path(jr.chain_path).exists(), (
-        f"Judge chain_path should point to a real file; got {jr.chain_path}"
-    )
+    assert (
+        jr.chain_emit_failed is False
+    ), f"Judge chain emission failed; diagnostics: {jr.diagnostics}"
+    assert (
+        jr.chain_path is not None and Path(jr.chain_path).exists()
+    ), f"Judge chain_path should point to a real file; got {jr.chain_path}"
 
     chain_files_after_judge = list(chain_dir.rglob("*.yaml"))
     assert len(chain_files_after_judge) > len(chain_files_after_make), (
@@ -644,15 +649,14 @@ def test_e2e_partial_coverage_below_threshold_yields_null_aggregates(
     # tilts BYPASS the threshold per v2 plan §4.3, so japan's tilt may
     # still be set.
     tilts = view_data.get("tilts", {})
-    regions = tilts.get("regions") or {}
+    _regions = tilts.get("regions") or {}
     # Japan responded — its per-region tilt may or may not surface
     # depending on prose extraction success; either is valid.
     # The critical check: sectors should be largely empty/zero since
     # they're coverage-gated.
     sectors = tilts.get("sectors") or {}
     nonzero_sectors = sum(
-        1 for v in sectors.values()
-        if isinstance(v, (int, float)) and v != 0
+        1 for v in sectors.values() if isinstance(v, (int, float)) and v != 0
     )
     assert nonzero_sectors == 0, (
         f"Sectors aggregated despite below-coverage MCP; got "
@@ -793,10 +797,7 @@ def test_e2e_judge_consumes_production_phase_1_fan_out_shape(
     # view was empty. After the fix, the reconstruction helper builds
     # MarketResponse instances → cross_country.aggregate produces tilts
     # → at least the per-region tilts (US/Japan/China) populate.
-    non_silent = [
-        r for r in jr.resolutions
-        if r.get("state") != "PARALLAX_SILENT"
-    ]
+    non_silent = [r for r in jr.resolutions if r.get("state") != "PARALLAX_SILENT"]
     assert non_silent, (
         "Every cell resolved to PARALLAX_SILENT despite production-shape "
         "MCP responses being injected. This is the bug class the gate "
@@ -812,10 +813,7 @@ def test_e2e_judge_consumes_production_phase_1_fan_out_shape(
     # only checks "at least one non-silent" passes via Japan/China while
     # US silently drops. Verifying the US region specifically would have
     # caught the bug.
-    us_cells = [
-        r for r in jr.resolutions
-        if r.get("dim") == "tilts.regions.us"
-    ]
+    us_cells = [r for r in jr.resolutions if r.get("dim") == "tilts.regions.us"]
     # Assert the fixture actually carries a US tilt — otherwise the
     # check below silently no-ops and the regression guard becomes
     # vacuous if fixture drift removes the US region. Gate review of
@@ -859,12 +857,16 @@ def test_e2e_judge_cli_dry_no_longer_requires_mock_mcp(
     # Direct call to main() — simulates the CLI path.
     # If --dry still required --mock-mcp, this would return 2 (or raise
     # SystemExit).
-    exit_code = judge.main([
-        "--dry",
-        "--json",
-        "--view-dir", str(view_dir),
-        "--report-dir", str(tmp_path / "reports"),
-    ])
+    exit_code = judge.main(
+        [
+            "--dry",
+            "--json",
+            "--view-dir",
+            str(view_dir),
+            "--report-dir",
+            str(tmp_path / "reports"),
+        ]
+    )
     # Allow 0 (success) or any non-2 value (the regression we're catching
     # was specifically exit 2 from the artificial mock-mcp requirement).
     assert exit_code != 2, (
@@ -898,8 +900,7 @@ def test_e2e_consumer_skill_with_no_active_view_skips_pre_flight(
 
     status = view_status.compute_status(view_dir)
     assert status.state == "none", (
-        f"Expected state='none' for empty/missing view dir; got "
-        f"{status.state!r}"
+        f"Expected state='none' for empty/missing view dir; got " f"{status.state!r}"
     )
     assert status.tilts_apply is False
     # Banner should be informational (not error-coded) — consumer skills
@@ -946,9 +947,9 @@ def test_e2e_judge_against_expired_view_still_runs(
 
     # view_status must classify as expired
     status = view_status.compute_status(view_dir)
-    assert status.state == "expired", (
-        f"Expected state='expired' for past valid_through; got {status.state!r}"
-    )
+    assert (
+        status.state == "expired"
+    ), f"Expected state='expired' for past valid_through; got {status.state!r}"
     # tilts_apply=False on expired views per the loader spec — consumer
     # skills should NOT apply tilts from an expired view.
     assert status.tilts_apply is False
@@ -1056,7 +1057,8 @@ def test_e2e_maker_re_save_handles_existing_active_view(
 
     audit_after_first = (view_dir / "audit.jsonl").read_text().strip().split("\n")
     first_save_count = sum(
-        1 for line in audit_after_first
+        1
+        for line in audit_after_first
         if json.loads(line).get("action") in ("save", "generate")
     )
 
@@ -1066,7 +1068,7 @@ def test_e2e_maker_re_save_handles_existing_active_view(
     second = _run_maker(base_mcp, view_dir)
     assert second.disposition == "confirm"
     second_view_data = yaml.safe_load((view_dir / "view.yaml").read_text())
-    second_view_id = second_view_data["metadata"].get("view_id")
+    _second_view_id = second_view_data["metadata"].get("view_id")
     second_version_id = second_view_data["metadata"].get("version_id")
 
     # Auditability invariant: the prior save's audit row is still present
@@ -1074,7 +1076,8 @@ def test_e2e_maker_re_save_handles_existing_active_view(
     # destructive overwrite of the audit log).
     audit_after_second = (view_dir / "audit.jsonl").read_text().strip().split("\n")
     second_save_count = sum(
-        1 for line in audit_after_second
+        1
+        for line in audit_after_second
         if json.loads(line).get("action") in ("save", "generate")
     )
     assert second_save_count > first_save_count, (
@@ -1088,9 +1091,9 @@ def test_e2e_maker_re_save_handles_existing_active_view(
 
     # The two saves should have distinct version_ids (fresh syntheses
     # don't share version_id even when they happen back-to-back).
-    assert second_version_id != first_version_id, (
-        "Second save produced identical version_id — UUID generation broken"
-    )
+    assert (
+        second_version_id != first_version_id
+    ), "Second save produced identical version_id — UUID generation broken"
 
 
 # ---------------------------------------------------------------------------
@@ -1122,23 +1125,31 @@ def test_e2e_view_status_state_machine_covers_documented_states(
     assert status_malformed.tilts_apply is False
 
     # State: not_yet_effective (effective_date in the future)
-    (view_dir / "view.yaml").write_text(yaml.safe_dump({
-        "metadata": {
-            "view_name": "Future view",
-            "effective_date": "2099-01-01",
-            "valid_through": "2099-12-31",
-        }
-    }))
+    (view_dir / "view.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "metadata": {
+                    "view_name": "Future view",
+                    "effective_date": "2099-01-01",
+                    "valid_through": "2099-12-31",
+                }
+            }
+        )
+    )
     assert view_status.compute_status(view_dir).state == "not_yet_effective"
 
     # State: expired (valid_through in the past)
-    (view_dir / "view.yaml").write_text(yaml.safe_dump({
-        "metadata": {
-            "view_name": "Expired view",
-            "effective_date": "2019-01-01",
-            "valid_through": "2019-12-31",
-        }
-    }))
+    (view_dir / "view.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "metadata": {
+                    "view_name": "Expired view",
+                    "effective_date": "2019-01-01",
+                    "valid_through": "2019-12-31",
+                }
+            }
+        )
+    )
     status_expired = view_status.compute_status(view_dir)
     assert status_expired.state == "expired"
     assert status_expired.tilts_apply is False
@@ -1146,13 +1157,17 @@ def test_e2e_view_status_state_machine_covers_documented_states(
     # State: active (effective today, well within valid_through).
     # Use a wide window so today (2026-05-24 per session date) falls
     # inside it without hitting the critical/warning countdowns.
-    (view_dir / "view.yaml").write_text(yaml.safe_dump({
-        "metadata": {
-            "view_name": "Active view",
-            "effective_date": "2026-05-01",
-            "valid_through": "2027-12-31",
-        }
-    }))
+    (view_dir / "view.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "metadata": {
+                    "view_name": "Active view",
+                    "effective_date": "2026-05-01",
+                    "valid_through": "2027-12-31",
+                }
+            }
+        )
+    )
     status_active = view_status.compute_status(view_dir)
     assert status_active.state == "active"
     assert status_active.tilts_apply is True
@@ -1163,4 +1178,3 @@ def test_e2e_view_status_state_machine_covers_documented_states(
     # skills can present a useful preamble — without asserting the exact
     # day boundary (which would brittle-couple to internal constants).
     assert isinstance(status_active.banner, str) and status_active.banner
-
