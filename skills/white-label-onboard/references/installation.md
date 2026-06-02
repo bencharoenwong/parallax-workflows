@@ -373,8 +373,8 @@ The loader does NOT handle credentials. If your extraction source requires authe
 ## Support
 
 For issues not covered here:
-- Check `README.md` for usage overview
-- See `references/validation-rules.md` for validation details
+- Check `overview.md` (sibling in this `references/` directory) for usage overview
+- See `validation-rules.md` for validation details
 - Review test files for code examples
 - Open an issue on the parallax-workflows repository
 

@@ -67,62 +67,13 @@ If you want the inline lint feedback, install Node 18+ (e.g., `brew install node
 
 ## Integration with Downstream Skills
 
-Two consumer classes:
+Two consumer classes: **visual** (PDF/report skills, read colors/logos/fonts) and **voice** (letter/newsletter/writing skills, read `voice.*`). Both fall back silently to defaults if config is absent.
 
-**Visual consumers** — Skills that produce a PDF or formatted report. They read `branding.colors`, `branding.logos`, `branding.fonts`. They ignore `voice`. Currently integrated: Tier 1 (`/parallax-cio-letter-prep`, `/parallax-client-review`, `/parallax-due-diligence`, `/parallax-deep-dive`) and Tier 2 (`/parallax-should-i-buy`, `/parallax-thematic-screen`, `/parallax-portfolio-checkup`, `/parallax-portfolio-builder`, `/parallax-rebalance`, `/parallax-morning-brief`, `/parallax-explain-portfolio`, `/parallax-scenario-analysis`, `/parallax-country-deep-dive`, `/parallax-pair-finder`, `/parallax-peer-comparison`, `/parallax-macro-outlook`). The canonical consumer-side contract — header rendering, provenance line, color substitution, logo placement, fallback behavior — lives in `_parallax/white-label/integration-pattern.md` (§1–§9). New visual consumers should JIT-load it via the `<!-- white-label: integration-pattern.md -->` sentinel; the drift gate at `tests/test_integration_pattern_referenced.py` enforces the sentinel ↔ load-directive pairing.
+Visual consumers call `loader.load_visual_branding()` (6-key visual subset). Voice consumers call `loader.load_client_branding()` (full 13-key shape including voice + v2 token tree).
 
-**Voice consumers** — letter-writing, newsletter, meeting-prep, email-drafting, and any skill that produces written content under the client's name. They read `voice.*` and apply it as a style guide before generating prose. They optionally also read `branding.*` if the output is rendered (e.g., a branded PDF letter).
+Currently integrated: **Tier 1** (`/parallax-cio-letter-prep`, `/parallax-client-review`, `/parallax-due-diligence`, `/parallax-deep-dive`) and **Tier 2** (`/parallax-should-i-buy`, `/parallax-thematic-screen`, `/parallax-portfolio-checkup`, `/parallax-portfolio-builder`, `/parallax-rebalance`, `/parallax-morning-brief`, `/parallax-explain-portfolio`, `/parallax-scenario-analysis`, `/parallax-country-deep-dive`, `/parallax-pair-finder`, `/parallax-peer-comparison`, `/parallax-macro-outlook`). New visual consumers must JIT-load `_parallax/white-label/integration-pattern.md` via the `<!-- white-label: integration-pattern.md -->` sentinel; the drift gate at `tests/test_integration_pattern_referenced.py` enforces sentinel ↔ load-directive pairing.
 
-Both classes silently fall back to default Parallax styling/voice if the config is absent or corrupted. This skill never breaks downstream consumers.
-
-**Visual consumer loading pattern.** Visual-rendering skills call `loader.load_visual_branding()` — it returns only the six keys a visual consumer is permitted to read (`client_name`, `colors`, `logos`, `fonts`, `source`, `error`) and structurally excludes `voice`/typography/`multi_source` so a misuse (`branding["voice"]`) raises `KeyError` instead of silently inheriting voice data. Pair it with `loader.is_white_label_active(branding)` (rendering predicate — do not re-implement inline; see `integration-pattern.md` §2/§4/§8) and `loader.safe_source_reference(branding)` (display-safe Provenance source ref — §7). The full 13-key shape from `load_client_branding()` is reserved for voice consumers (CIO letter, newsletter, future writing skills) that need both visual and voice. Both wrappers bridge v1↔v2 file shapes so downstream code keeps working through the schema migration:
-
-```python
-from skills._parallax.white_label.loader import load_visual_branding
-
-result = load_visual_branding()
-if result.get("error") is None:
-    # 6-key visual subset — works against both v1 AND v2 config.yaml on disk
-    primary_color = result["colors"]["primary"]
-    accent_color  = result["colors"]["accent"]   # v2: derived from colors.tertiary
-    bg_color      = result["colors"]["background"]  # v2: derived from colors.neutral
-    header_font   = result["fonts"]["header"]    # v2: derived from typography.h1.fontFamily
-```
-
-For voice consumers that need the full token tree alongside voice, call `load_client_branding()` and read `result["typography"]`, `result["rounded"]`, `result["spacing"]`, `result["components"]` (empty dicts on v1 configs and on every error path — safe to access unconditionally), plus `result["voice"]`.
-
-**Do NOT** read `cfg["branding"]["colors"]["accent"]` directly — that key exists in v1 files but is named `tertiary` in v2. The loader is the single source of truth for the legacy return shape.
-
-**Voice consumer loading pattern:**
-```python
-import yaml, os
-config_path = os.path.expanduser("~/.parallax/client-branding/config.yaml")
-voice = None
-if os.path.exists(config_path):
-    with open(config_path) as f:
-        cfg = yaml.safe_load(f)
-    if cfg.get("voice", {}).get("enabled"):
-        voice = cfg["voice"]
-
-# In the prose-generation prompt, prepend something like:
-if voice:
-    style_block = f"""
-    Write in the voice of {cfg['metadata']['client_name']}. Their register is
-    {voice['tone']['register']}. Primary attributes: {', '.join(voice['tone']['primary_attributes'])}.
-    Avoid: {', '.join(voice['tone']['avoid_attributes'])}.
-
-    Non-negotiable rules:
-    {chr(10).join('- ' + r for r in voice['core_rules'])}
-
-    Phrases to delete on sight (anti-filler):
-    {chr(10).join('- ' + p for p in voice['anti_filler'])}
-
-    How they describe themselves: {voice['company_context']}
-    """
-    prompt = style_block + "\n\n" + content_prompt
-```
-
-**Drafted-vs-Sent feedback loop.** Voice consumer skills SHOULD save the AI draft + the human-edited final version after each session as an entry in `voice.drafted_vs_sent`. This is the highest-quality voice calibration data and improves future outputs. Implementation deferred until at least one voice consumer is wired up.
+> Full loader API + visual/voice loading patterns + voice prompt-prepend template: see `references/integration-contract.md`.
 
 ## Workflow
 
@@ -192,41 +143,15 @@ Use one `AskUserQuestion` per numbered group below. Do not ask all fields in a s
 
 Assemble the `draft` dict from wizard answers. Skip any field the user leaves blank and flag it as missing with confidence 0.0.
 
-**URL mode:**
+**URL mode:** `draft = extract_from_url(url)`. If `draft` contains `"error"`, surface it: `"Extraction returned partial results due to: <error>. Review and edit before confirming."`
 
-```python
-draft = extract_from_url(url)
-```
+**PDF mode:** `draft = extract_from_pdf(pdf_path)`. Reads up to 5 pages by default. If the brand guide appears to be a dedicated multi-page document and extraction confidence is low (<0.6 average), offer to read more pages or switch to wizard mode.
 
-If `draft` contains `"error"`, surface it: "Extraction returned partial results due to: <error>. Review and edit before confirming."
+**PPTX mode:** `draft = extract_from_pptx(pptx_path)`. Reads `ppt/theme/theme1.xml` directly, so colors and fonts come from the canonical OOXML theme declarations (confidence 0.9). Body text from every text frame is aggregated into `draft["voice_corpus"]` for the voice extraction step. The OOXML slot mapping is fixed: `accent1`→primary, `accent2`→secondary, `accent3`→accent, `dk1`→text, `lt1`→background. If the deck uses a heavily customized theme that overrides these slots inline, theme XML may understate the actual on-slide colors — flag this and offer wizard override.
 
-**PDF mode:**
+**DOCX mode:** `draft = extract_from_docx(docx_path)`. Identical pattern via `word/theme/theme1.xml`. Body text from all paragraphs (skipping headers/footers) aggregated into `draft["voice_corpus"]`. Word's defaults are commonly Calibri (header) + Cambria (body); if the document inherits defaults rather than declaring custom fonts, the extracted values reflect the default theme — note this in `notes`.
 
-```python
-draft = extract_from_pdf(pdf_path)
-```
-
-PDF extraction reads up to 5 pages by default (per the extract module). If the brand guide appears to be a dedicated multi-page document and extraction confidence is low (<0.6 average), offer: "Low confidence on PDF extraction. Shall I read more pages or switch to wizard mode to confirm values manually?"
-
-**PPTX mode:**
-
-```python
-draft = extract_from_pptx(pptx_path)
-```
-
-`extract_from_pptx` reads `ppt/theme/theme1.xml` directly, so colors and fonts come from the canonical OOXML theme declarations (confidence 0.9). Body text from every text frame is aggregated into `draft["voice_corpus"]` for the voice extraction step. The OOXML slot mapping is fixed: `accent1`→primary, `accent2`→secondary, `accent3`→accent, `dk1`→text, `lt1`→background. If the deck uses a heavily customized theme that overrides these slots inline, theme XML may understate the actual on-slide colors — flag this and offer wizard override.
-
-**DOCX mode:**
-
-```python
-draft = extract_from_docx(docx_path)
-```
-
-Identical pattern via `word/theme/theme1.xml`. Body text from all paragraphs (skipping headers/footers) aggregated into `draft["voice_corpus"]`. Word's defaults are commonly Calibri (header) + Cambria (body); if the document inherits defaults rather than declaring custom fonts, the extracted values reflect the default theme — note this in `notes`.
-
-**Folder mode:**
-
-Folder mode is NOT a blind iteration. The operator's folder may contain a mix of branded marketing material (newsletters, decks, brochures), voice-only material (memos, white papers, blog exports, transcripts), and irrelevant files (logos as standalone images, spreadsheets, raw data). The LLM must inventory and classify before extracting, and confirm with the operator when the folder is mixed or ambiguous.
+**Folder mode.** Folder mode is NOT a blind iteration. The operator's folder may contain a mix of branded marketing material (newsletters, decks, brochures), voice-only material (memos, white papers, blog exports, transcripts), and irrelevant files (logos as standalone images, spreadsheets, raw data). The LLM must inventory and classify before extracting, and confirm with the operator when the folder is mixed or ambiguous.
 
 **Step F-1 — Inventory the folder.** List every file (recursive one level by default; ask the operator if deeper recursion is wanted for large structures). Capture filename, extension, and size. Group by type:
 
@@ -272,83 +197,9 @@ Confirm? Or change classification for any file?
 
 For ambiguous items (the `?` rows), ask one `AskUserQuestion` per file with the choices: include for visual + voice / include for voice only / skip.
 
-**Step F-4 — Extract per classification.**
+**Step F-4 — Extract per classification.** Iterate `classified_files`, dispatching `.pptx`/`.docx`/`.pdf` to their extractors for branded items, calling extractors then discarding visual fields for voice-only OOXML, and using the Read tool for text-only voice files. Merge OOXML drafts via `merge_drafts(drafts) + cross_validate_visual(drafts)` when there are 2+; for voice-only folders, seed an empty visual draft with `source.type = "folder-voice-only"`. Append voice-only corpus chunks to the merged draft's `voice_corpus` and re-truncate at the 3000-word cap.
 
-```python
-import os
-from pathlib import Path
-folder = Path(folder_path)
-drafts: list = []
-voice_only_corpus_chunks: list[str] = []  # text from non-OOXML voice-only files
-
-for f, classification in classified_files.items():
-    if classification == "skip":
-        continue
-    if classification in ("branded_visual_voice", "branded"):
-        if f.suffix.lower() == ".pptx":
-            drafts.append(extract_from_pptx(str(f)))
-        elif f.suffix.lower() == ".docx":
-            drafts.append(extract_from_docx(str(f)))
-        elif f.suffix.lower() == ".pdf":
-            drafts.append(extract_from_pdf(str(f)))
-    elif classification == "voice_only":
-        if f.suffix.lower() in (".pptx", ".docx", ".pdf"):
-            # extract for voice corpus only — discard the (likely-default) visual fields
-            d = (extract_from_pptx if f.suffix.lower() == ".pptx"
-                 else extract_from_docx if f.suffix.lower() == ".docx"
-                 else extract_from_pdf)(str(f))
-            voice_only_corpus_chunks.append(d.get("voice_corpus", {}).get("text", ""))
-        else:
-            # Text-only file — use Read tool, strip markup if HTML/EML, append
-            text = read_text_file(str(f))  # operator-side helper; see below
-            voice_only_corpus_chunks.append(text)
-
-if not drafts and not voice_only_corpus_chunks:
-    # Empty supported-file inventory; surface error and offer wizard fallback
-    ...
-
-# Merge OOXML drafts (visual + voice)
-if len(drafts) == 1:
-    draft = drafts[0]
-elif len(drafts) > 1:
-    draft = merge_drafts(drafts)
-    xv = cross_validate_visual(drafts)
-    draft["multi_source"] = {
-        "sources": [d["source"] for d in drafts],
-        "mismatches": xv["mismatches"],
-        "agreements": xv["agreements"],
-    }
-else:
-    # Voice-only folder — start with an empty visual draft
-    from datetime import datetime, timezone
-    draft = {
-        "colors": {}, "logos": {}, "fonts": {},
-        "source": {"type": "folder-voice-only", "reference": str(folder)},
-        "extracted_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "confidence_scores": {},
-        "voice_corpus": {"text": "", "word_count": 0, "truncated": False},
-    }
-
-# Append voice-only corpus chunks to draft's voice_corpus
-if voice_only_corpus_chunks:
-    extra_text = "\n\n".join(voice_only_corpus_chunks)
-    existing = draft.get("voice_corpus", {}).get("text", "")
-    combined = (existing + "\n\n" + extra_text).strip()
-    # Truncate again if needed (3000-word cap matches _voice_corpus_from_text)
-    words = combined.split()
-    if len(words) > 3000:
-        combined = " ".join(words[:3000])
-        truncated = True
-    else:
-        truncated = False
-    draft["voice_corpus"] = {
-        "text": combined,
-        "word_count": len(words),
-        "truncated": truncated,
-    }
-```
-
-`read_text_file` is an inline helper — operator just uses the Read tool for `.md`/`.txt`/`.html`/`.eml`, strips HTML tags if present (BeautifulSoup or simple regex), strips email headers if `.eml`, returns the body. No new Python dependency required for v1.
+> Full Python (F-4 loop + voice-only corpus append + 3000-word truncation): see `references/workflow-code.md` § Step 1 — Folder extraction.
 
 **Background frameworks (cited inline so an LLM reading this skill has the grounding):**
 
@@ -360,77 +211,15 @@ The voice extraction in Step 1.5 follows three named patterns documented in `DEC
 
 The skill blends them: Genesys 4-phase backbone → Rezvani schema as the output target → Lago voice section embedded inside.
 
-**Multi-source mode (URL + folder, or any 2+ sources):**
+**Multi-source mode (URL + folder, or any 2+ sources):** iterate `args`, dispatch each to its extractor, call `merge_drafts(drafts) + cross_validate_visual(drafts)` and store mismatches/agreements in `draft["multi_source"]`. Mismatches are NOT auto-resolved here — they surface in the Step 3 confirmation gate.
 
-```python
-drafts = []
-for arg in args:
-    if arg.startswith("http"):
-        drafts.append(extract_from_url(arg))
-    elif arg.endswith(".pptx"):
-        drafts.append(extract_from_pptx(arg))
-    elif arg.endswith(".docx"):
-        drafts.append(extract_from_docx(arg))
-    elif arg.endswith(".pdf"):
-        drafts.append(extract_from_pdf(arg))
-    elif Path(arg).is_dir():
-        # Recurse via folder mode helper
-        ...
-
-draft = merge_drafts(drafts)
-cross_validation = cross_validate_visual(drafts)
-draft["multi_source"] = {
-    "sources": [d["source"] for d in drafts],
-    "mismatches": cross_validation["mismatches"],
-    "agreements": cross_validation["agreements"],
-}
-```
-
-Mismatches are NOT auto-resolved here. They surface in the Step 3 confirmation gate.
-
-**Draft structure after extraction:**
-
-All extraction modes produce a `draft` dict with this shape:
-```python
-{
-    "colors": {
-        "primary": {"hex": "#...", "confidence": 0.95},
-        "secondary": {"hex": "#...", "confidence": 0.90},
-        "accent": {"hex": "#...", "confidence": 0.85},
-        "background": {"hex": "#FFFFFF", "confidence": 0.75},
-        "text": {"hex": "#333333", "confidence": 0.70},
-    },
-    "logos": {
-        "primary": {"url": "https://...", "confidence": 0.90},  # or "path": "..."
-        "favicon": {"url": "https://...", "confidence": 0.80},
-    },
-    "fonts": {
-        "header": {"name": "Montserrat", "confidence": 0.85},
-        "body": {"name": "Open Sans", "confidence": 0.80},
-        "monospace": {"name": "Courier New", "confidence": 0.70},
-    },
-    "source": {"type": "url"|"pdf"|"pptx"|"docx"|"wizard"|"multi", "reference": "..."},
-    "extracted_at": "2026-04-30T00:00:00Z",
-    "confidence_scores": {...},
-    "voice_corpus": {                         # only present for sources with body text
-        "text": "...",                        # cleaned, optionally truncated to ~3000 words
-        "word_count": 0,
-        "truncated": False,
-    },
-    # Only present for multi-source extraction:
-    "multi_source": {
-        "sources": [...],
-        "mismatches": [{"field": "...", "values": [...]}, ...],
-        "agreements": [{"field": "...", "value": ...}, ...],
-    },
-}
-```
+> Full Python (multi-source dispatch loop) and the full `draft` dict shape: see `references/workflow-code.md` § Step 1 — Multi-source extraction and § Draft structure after extraction.
 
 Missing fields (empty dict values or absent keys) are acceptable — they will surface as warnings at Step 2 and can be filled at Step 3.
 
 ### Step 1.5 — Voice extraction (only when corpus is available)
 
-**Skip this step entirely if `draft["voice_corpus"]["word_count"] < 500`.** Below that floor, voice extraction is unreliable; set `draft["voice"] = {"enabled": False}` and continue to Step 2. Surface the gap to the user: "Voice section not populated — corpus is only `<N>` words, below the 500-word minimum. Add more sample documents to enable voice extraction."
+**Skip this step entirely if `draft["voice_corpus"]["word_count"] < 500`.** Below that floor, voice extraction is unreliable; set `draft["voice"] = {"enabled": False}` and continue to Step 2. Surface the gap to the user: `"Voice section not populated — corpus is only <N> words, below the 500-word minimum. Add more sample documents to enable voice extraction."`
 
 **When corpus is sufficient,** drive voice extraction via in-skill prompting (no Python — this is LLM-native work). Read the corpus from `draft["voice_corpus"]["text"]` and prompt yourself with the structure below, then write the resulting fields into `draft["voice"]`.
 
@@ -481,29 +270,9 @@ Set `draft["voice"]["enabled"] = True`, `draft["voice"]["source_corpus"]["word_c
 
 Before validation, audit the draft for thinness and proactively offer to supplement. The operator may have given just a URL not realizing that adding a sample folder dramatically improves voice extraction; saving a thin config without surfacing the gap is a UX failure.
 
-**Audit checks:**
+Audit checks: count brand colors, count fonts, check voice corpus word count, voice enabled flag, logo presence. Each thinness condition (colors_thin / fonts_missing / logo_missing / voice_corpus_thin / voice_corpus_low / voice_disabled_unexpectedly) appends a tuple to the `audit` list with a human-readable description.
 
-```python
-audit = []
-n_brand_colors = sum(1 for r in ["primary", "secondary", "accent"] if r in draft.get("colors", {}))
-n_fonts = len(draft.get("fonts", {}))
-voice_words = draft.get("voice_corpus", {}).get("word_count", 0)
-voice_enabled = draft.get("voice", {}).get("enabled", False)
-has_logo = "primary" in draft.get("logos", {})
-
-if n_brand_colors < 2:
-    audit.append(("colors_thin", f"only {n_brand_colors} brand color(s) extracted"))
-if n_fonts == 0:
-    audit.append(("fonts_missing", "no fonts extracted (URL extraction often misses externally-hosted CSS)"))
-if not has_logo:
-    audit.append(("logo_missing", "no logo extracted"))
-if voice_words < 500:
-    audit.append(("voice_corpus_thin", f"voice corpus is only {voice_words} words; voice extraction skipped (need ≥500)"))
-elif voice_words < 2000:
-    audit.append(("voice_corpus_low", f"voice corpus is {voice_words} words; below recommended 2000 for high-confidence voice extraction"))
-if not voice_enabled and voice_words >= 500:
-    audit.append(("voice_disabled_unexpectedly", "voice corpus was sufficient but voice section is not enabled"))
-```
+> Full Python (audit checks): see `references/workflow-code.md` § Step 1.75 — Completeness audit.
 
 **If any audit item fires AND the operator is in single-source mode**, surface them clearly via `AskUserQuestion` BEFORE the confirmation gate:
 
@@ -523,48 +292,22 @@ if not voice_enabled and voice_words >= 500:
 
 ### Step 2 — Validate assets
 
-Run all validators in parallel (no inter-dependency). Collect results into a `validation_results` dict.
+Run all validators in parallel (no inter-dependency). Collect results into a `validation_results` dict. Validators:
 
-**Color contrast (WCAG AA):**
-```python
-text_color = draft["colors"].get("text", {}).get("hex", "#333333")
-bg_color   = draft["colors"].get("background", {}).get("hex", "#FFFFFF")
-contrast   = ColorValidator.validate_text_contrast(text_color, bg_color)
-# contrast = {"status": "pass"|"warn"|"fail", "ratio": float, "recommendation": str|None}
-```
+- **Color contrast (WCAG AA)** — `ColorValidator.validate_text_contrast(text_hex, bg_hex)` → `{"status": "pass"|"warn"|"fail", "ratio": float, "recommendation": str|None}`
+- **Individual hex format** — `ColorValidator.is_valid_hex(hex_val)` per color slot
+- **Logo dimensions/format** — `LogoValidator.validate_logo(path)` for local logos only; URLs marked `"pending"` until Step 4 download
+- **Font availability** — `FontValidator.validate_font(font_name)` per font slot
+- **Voice section** — `VoiceValidator.validate_voice(draft.get("voice", {"enabled": False}))` → `{"status": "pass"|"warn"|"fail"|"skipped", "checks": {...}}`. `status: "skipped"` is the default when voice extraction was bypassed (visual-only sources) — informational, never an error. Do NOT block the save on a skipped voice section.
 
-**Individual hex validation:**
-```python
-for role in ["primary", "secondary", "accent", "background", "text"]:
-    hex_val = draft["colors"].get(role, {}).get("hex", "")
-    if hex_val:
-        valid = ColorValidator.is_valid_hex(hex_val)
-        # If not valid: fail that color slot
-```
+> Full code per validator: see `references/workflow-code.md` § Step 2 — Per-validator code blocks.
 
-**Logo validation** (only if the logo has been downloaded to a local path; skip for URLs until Step 4):
-```python
-if "path" in draft["logos"].get("primary", {}):
-    logo_result = LogoValidator.validate_logo(draft["logos"]["primary"]["path"])
-# For URLs: mark as "pending" — validate after download in Step 4
-```
+**Validation rules:**
+- `fail` on: invalid hex format, logo file >5MB, logo format unsupported
+- `warn` on: WCAG contrast 3.0–4.49, logo dimensions <200×200, font not on system
+- `pass` on: all checks clear
 
-**Font validation:**
-```python
-for role in ["header", "body", "monospace"]:
-    font_name = draft["fonts"].get(role, {}).get("name", "")
-    if font_name:
-        font_result = FontValidator.validate_font(font_name)
-```
-
-**Voice validation** (skip when `draft["voice"]["enabled"]` is False):
-```python
-from skills._parallax.white_label.validator import VoiceValidator
-voice_result = VoiceValidator.validate_voice(draft.get("voice", {"enabled": False}))
-# voice_result = {"status": "pass"|"warn"|"fail"|"skipped", "checks": {"corpus": {...}, "completeness": {...}}}
-```
-
-`status: "skipped"` is the default when voice extraction was bypassed (corpus too small or visual-only sources). It is informational, not an error. Do NOT block the save on a skipped voice section — visual-only configs remain valid for visual-only downstream consumers.
+Validation warnings and failures are informational only. They never block the save. Surface them clearly at Step 3 so the user can make an informed choice.
 
 **Assemble validation summary table:**
 
@@ -580,19 +323,7 @@ fonts.body         system availability     pass
 fonts.monospace    system availability     pass
 ```
 
-**Validation rules:**
-- `fail` on: invalid hex format, logo file >5MB, logo format unsupported
-- `warn` on: WCAG contrast 3.0–4.49, logo dimensions <200×200, font not on system
-- `pass` on: all checks clear
-
-Validation warnings and failures are informational only. They never block the save. Surface them clearly at Step 3 so the user can make an informed choice.
-
-**Confidence summary:**
-Compute average confidence across all extracted fields:
-```python
-avg_conf = sum(draft["confidence_scores"].values()) / max(len(draft["confidence_scores"]), 1)
-lowest_field = min(draft["confidence_scores"], key=draft["confidence_scores"].get, default="n/a")
-```
+Compute `avg_conf` and `lowest_field` from `draft["confidence_scores"]` for the Step 3 summary header.
 
 ### Step 3 — Confirmation gate (REQUIRED before save)
 
@@ -712,202 +443,47 @@ Before any I/O:
 
 #### 4b. Download logos to local assets/
 
-```python
-import os, urllib.request
-assets_dir = os.path.expanduser("~/.parallax/client-branding/assets")
-os.makedirs(assets_dir, mode=0o700, exist_ok=True)
-```
+For each logo with a URL (not already a local path), download to `~/.parallax/client-branding/assets/` as `logo-primary.<ext>` / `favicon.<ext>`, then set `draft["logos"]["<role>"]["local_path"]`. On download failure: warn and preserve URL only. After successful downloads, re-run `LogoValidator.validate_logo(dest)` and append to the validation summary.
 
-For each logo with a URL (not already a local path):
-```python
-# Primary logo
-if "url" in draft["logos"].get("primary", {}):
-    ext = Path(urlparse(url).path).suffix or ".png"
-    dest = f"{assets_dir}/logo-primary{ext}"
-    urllib.request.urlretrieve(url, dest)
-    draft["logos"]["primary"]["local_path"] = dest
-
-# Favicon
-if "url" in draft["logos"].get("favicon", {}):
-    ext = Path(urlparse(url).path).suffix or ".ico"
-    dest = f"{assets_dir}/favicon{ext}"
-    urllib.request.urlretrieve(url, dest)
-    draft["logos"]["favicon"]["local_path"] = dest
-```
-
-On download failure: warn ("Logo download failed: <error>. URL preserved in config; local copy unavailable.") and set `local_path` to None. Do not abort the save.
-
-After download, re-run `LogoValidator.validate_logo(dest)` on each successfully downloaded file. Append results to the validation summary in config.
+> Full code: see `references/workflow-code.md` § Step 4b — Download logos to local assets/.
 
 #### 4c. Construct config.yaml
 
 **Use `build_config_from_draft(draft, schema_version=2)` from `loader.py` — do not hand-assemble the config dict.** The builder is the single source of truth for the v2 shape (decisions 3A, 5A: drops `fonts.*`, emits `colors.tertiary` and flat `colors.neutral`, wires `components.body-text`). It also handles the `voice` section and the `multi_source` provenance block — no post-build mutation needed.
 
-```python
-from skills._parallax.white_label.loader import build_config_from_draft
-
-config = build_config_from_draft(
-    draft,
-    client_name=draft.get("client_name", ""),
-    extracted_by=draft.get("extracted_by", ""),
-    notes=draft.get("notes", ""),
-    validation_summary=validation_results,   # from Step 2; updated with post-download logo checks
-    schema_version=2,
-)
-```
-
-For reference, the v2 config shape looks like (do NOT hand-write this — call the builder):
-
-```yaml
-metadata:
-  schema_version: 2
-  client_name: <draft.client_name>
-  extracted_at: <draft.extracted_at>
-  source: <draft.source>
-branding:
-  colors:
-    primary: <hex>
-    secondary: <hex>
-    tertiary: <hex>           # was 'accent' in v1
-    neutral: <hex>            # flat hex; was 'background' in v1
-  logos:
-    primary: <local_path or url>
-    favicon: <local_path or url>
-  typography:
-    h1:      { fontFamily, fontSize, fontWeight, lineHeight, letterSpacing }
-    h2..h5:  { ... }
-    body-md: { ... }
-    code:    { ... }          # was 'fonts.monospace' in v1
-  rounded:   { sm, md, lg, full }
-  spacing:   { xs, sm, md, lg, xl }
-  components:
-    body-text:
-      backgroundColor: "{colors.neutral}"
-      textColor: <hex>        # text-on-neutral pair; was 'colors.text' in v1
-validation_summary: <validation_results>
-confidence_scores: <draft.confidence_scores>
-```
-
-`fonts.*` is **not** emitted in v2. The loader's `_normalize_branding_v2_to_return_shape` derives the legacy `fonts.{header,body,monospace}` keys from `typography.{h1,body-md,code}.fontFamily` at read time, so downstream consumers continue to see the legacy fonts keys regardless of on-disk schema version. The full `load_client_branding()` return shape is 13 keys on every path (the four v2 token-tree keys — `typography`, `rounded`, `spacing`, `components` — are populated as empty dicts on v1 and error paths so consumers can read them unconditionally).
-
-Legacy v1 fallback (only when a downstream skill or migration explicitly passes `schema_version=1`):
-
-```python
-config = build_config_from_draft(draft, schema_version=1, validation_summary=validation_results)
-# Emits the old shape: colors.accent / colors.background / colors.text + fonts.{header,body,monospace}
-```
+v2 emits: `metadata`, `branding.{colors[primary|secondary|tertiary|neutral], logos, typography[h1..h5|body-md|code], rounded, spacing, components.body-text}`, `validation_summary`, `confidence_scores`. `fonts.*` is NOT in v2 — the loader bridges v1↔v2 at read time so consumers always see `fonts.{header,body,monospace}` derived from `typography.{h1,body-md,code}.fontFamily`.
 
 Compute `config_hash = sha256(yaml.safe_dump(config["branding"], sort_keys=True).encode()).hexdigest()`.
 
+> Full code (builder call + v2 yaml shape + v1 legacy fallback): see `references/workflow-code.md` § Step 4c — Construct config.yaml.
+
 #### 4d. Archive existing config (if present)
 
-```python
-existing = os.path.expanduser("~/.parallax/client-branding/config.yaml")
-if os.path.exists(existing):
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    archive_dir = os.path.expanduser(f"~/.parallax/client-branding/.archive/{ts}")
-    os.makedirs(archive_dir, mode=0o700, exist_ok=True)
-    shutil.copy2(existing, f"{archive_dir}/config.yaml")
-```
+Copy any existing `config.yaml` to `~/.parallax/client-branding/.archive/<YYYYMMDDTHHMMSSZ>/config.yaml` before overwriting. Archive failures are non-blocking — log and continue.
 
-Archive failures are non-blocking — log a warning but do not abort.
+> Full code: see `references/workflow-code.md` § Step 4d — Archive existing config.
 
-#### 4e. Write files
+#### 4e. Write files (atomic-swap pattern)
 
-Write to a staging directory first, then atomic-swap:
+Write `config.yaml` to a staging directory, then `shutil.move` to the live path. Enforce `0600` on config.yaml and `0700` on assets/. On write failure: report cleanly and DO NOT proceed to Step 4e' or Step 4f — the previous active config remains unchanged.
 
-```python
-staging_dir = os.path.expanduser("~/.parallax/client-branding/.staging")
-os.makedirs(staging_dir, mode=0o700, exist_ok=True)
-
-# Write config.yaml to staging
-config_path = f"{staging_dir}/config.yaml"
-with open(config_path, "w") as f:
-    yaml.safe_dump(config, f, sort_keys=False, allow_unicode=True)
-
-# Move from staging to active (atomic)
-shutil.move(f"{staging_dir}/config.yaml",
-            os.path.expanduser("~/.parallax/client-branding/config.yaml"))
-
-# Enforce permissions
-os.chmod(os.path.expanduser("~/.parallax/client-branding/config.yaml"), 0o600)
-os.chmod(assets_dir, 0o700)
-```
-
-On write failure: report "Save failed: <file> write error. No files written. Safe to retry." Do not proceed to Step 4e' or Step 4f.
+> Full code: see `references/workflow-code.md` § Step 4e — Staging write + atomic-swap.
 
 #### 4e'. Write DESIGN.md (Google Labs spec)
 
-Emit the DESIGN.md companion file from the in-memory draft and write it atomically alongside `config.yaml`:
+Emit `DESIGN.md` from the draft via `emit_design_md(draft, client_name=..., extracted_at=..., source_refs=[...])`, write to staging, atomic-move to `~/.parallax/client-branding/DESIGN.md`, chmod `0600`. Compute `design_md_hash` (sha256) for the audit entry. `emit_design_md` raises `ValueError` on invalid hex tokens — treat as write failure, do not proceed to Step 4f.
 
-```python
-from skills._parallax.white_label.emit_design_md import emit_design_md
-import hashlib
-
-design_md_text = emit_design_md(
-    draft,
-    client_name=config["metadata"]["client_name"],
-    extracted_at=config["metadata"]["extracted_at"],
-    source_refs=[config["metadata"]["source"]["reference"]] if isinstance(config["metadata"].get("source"), dict) else [],
-)
-
-design_staging = f"{staging_dir}/DESIGN.md"
-with open(design_staging, "w", encoding="utf-8") as f:
-    f.write(design_md_text)
-shutil.move(design_staging, os.path.expanduser("~/.parallax/client-branding/DESIGN.md"))
-os.chmod(os.path.expanduser("~/.parallax/client-branding/DESIGN.md"), 0o600)
-
-design_md_hash = hashlib.sha256(design_md_text.encode("utf-8")).hexdigest()
-lint_status = validation_results.get("design_md", {}).get("status", "skipped")
-```
-
-`emit_design_md` raises `ValueError` on invalid hex tokens in the draft — caller should have validated at Step 2 already, but if it raises here, treat as a write failure and surface the path of the bad hex. Do not proceed to Step 4f.
+> Full code: see `references/workflow-code.md` § Step 4e' — Write DESIGN.md.
 
 #### 4f. Append hash-chained audit entry
 
 **Audit-entry schema bump (intentional chain discontinuity).** With the DESIGN.md emit at Step 4e', save entries now include `design_md_hash` and `lint_status`. The chain hash is `sha256(prior-line-bytes)`, so the first new-shape entry after a v1 audit log will appear as a chain break to any downstream verifier comparing entry shape across the bump. This is intentional: keep the prior chain readable for forensics but treat entries before this point as belonging to the v1 audit schema. If a verifier exists, gate it on `entry.get("design_md_hash") is not None` to detect schema-2 entries; absent that field, treat the entry as v1.
 
-```python
-import json, hashlib
-
-audit_path = os.path.expanduser("~/.parallax/client-branding/audit.jsonl")
-
-# Read last entry hash for chaining
-prev_hash = "0" * 64
-if os.path.exists(audit_path):
-    with open(audit_path) as f:
-        lines = [l.strip() for l in f if l.strip()]
-    if lines:
-        prev_hash = hashlib.sha256(lines[-1].encode()).hexdigest()
-
-entry = {
-    "schema_version": 1,
-    "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-    "skill": "parallax-white-label-onboard",
-    "action": "save",
-    "applied": True,
-    "source": config["metadata"]["source"],
-    "config_hash": config_hash,
-    "client_name": config["metadata"]["client_name"],
-    "prev_entry_hash": prev_hash,
-    "validation_status": {
-        "colors": {k: v.get("status") for k, v in validation_results.get("colors", {}).items()},
-        "logos":  {k: v.get("status") for k, v in validation_results.get("logos",  {}).items()},
-        "fonts":  {k: v.get("status") for k, v in validation_results.get("fonts",  {}).items()},
-    },
-    "disposition": disposition,   # "confirmed" | "edited"
-    "draft_yaml_hash": draft_yaml_hash,
-    "design_md_hash": design_md_hash,   # sha256 of DESIGN.md text written at Step 4e'
-    "lint_status": lint_status,         # "pass" | "warn" | "fail" | "skipped"
-}
-
-with open(audit_path, "a") as f:
-    f.write(json.dumps(entry, separators=(",", ":")) + "\n")
-
-os.chmod(audit_path, 0o600)
-```
+Read the last line of `audit.jsonl`, sha256 it to get `prev_entry_hash`, then append a new entry with `action: "save"`, `applied: true`, the config_hash, client_name, validation_status, disposition, draft_yaml_hash, design_md_hash, and lint_status. Chmod `audit.jsonl` to `0600`.
 
 **Every extraction attempt that does not result in a save also appends an audit entry** (`action: "extraction_attempt"`, `applied: false`) with `disposition`: `confirmed` / `edited` / `re_extracted` / `rejected`. This includes aborted sessions.
+
+> Full code: see `references/workflow-code.md` § Step 4f — Append hash-chained audit entry.
 
 ### Step 5 — Confirmation summary
 
@@ -942,9 +518,13 @@ Try it:
 
 | Flag | Behavior |
 |---|---|
-| `--status` | Read `config.yaml`, render status block below. If no config: print "No active client branding configured." |
+| `--status` | Read `config.yaml`, render status block. If no config: print "No active client branding configured." |
 | `--clear` | Ask for explicit confirmation ("Type YES to remove client branding"). On confirm: archive `config.yaml`, `DESIGN.md`, and `assets/` to `.archive/<timestamp>-clear/`, remove live files. Append `{"action":"clear"}` audit entry. |
 | `--regenerate-design-md` | Re-emit `DESIGN.md` from the current `config.yaml` without re-extracting from source. See section below. |
+
+> Status block output template: see `references/status-format.md`.
+
+If `config.yaml` fails to load (YAML parse error, missing required keys), the `--status` mode shows: `"! Config corrupted or outdated. Re-run /parallax-white-label-onboard to reconfigure."`
 
 ### Regenerate-from-config mode (`--regenerate-design-md`)
 
@@ -956,124 +536,15 @@ Purpose: keep `DESIGN.md` in sync with `config.yaml` after manual edits, without
 - **Not archived:** the prior `DESIGN.md` is overwritten without an `.archive/` snapshot. If you need to retain the old file, copy it manually before running this flag.
 - **v1 config behavior:** `fonts.header`/`fonts.body`/`fonts.monospace` are used as fallbacks for `typography.h1`/`body-md`/`code` slots (confidence 0.5). No `typography.*` block is required in the config.
 
-```python
-import os, hashlib, shutil, yaml
-from datetime import datetime, timezone
-from skills._parallax.white_label.emit_design_md import emit_design_md
+Implementation: load `config.yaml`, validate required keys (`branding.colors.primary` AND either `branding.typography.h1` OR `branding.fonts.header`), call `_config_to_draft(cfg)` from `loader.py` to reconstruct a synthetic draft, call `emit_design_md`, atomic-write to `DESIGN.md`, append `action: "regenerate_design_md"` audit entry.
 
-config_path = os.path.expanduser("~/.parallax/client-branding/config.yaml")
-if not os.path.exists(config_path):
-    print("No active branding to regenerate from. Run /parallax-white-label-onboard first.")
-    return
-
-with open(config_path) as f:
-    cfg = yaml.safe_load(f) or {}
-
-# Validate minimum required keys for emission
-required_ok = (
-    cfg.get("branding", {}).get("colors", {}).get("primary")
-    and (
-        cfg.get("branding", {}).get("typography", {}).get("h1")
-        or cfg.get("branding", {}).get("fonts", {}).get("header")
-    )
-)
-if not required_ok:
-    missing = []
-    if not cfg.get("branding", {}).get("colors", {}).get("primary"):
-        missing.append("branding.colors.primary")
-    if not (cfg.get("branding", {}).get("typography", {}).get("h1") or cfg.get("branding", {}).get("fonts", {}).get("header")):
-        missing.append("branding.typography.h1 or branding.fonts.header")
-    print(f"Cannot regenerate — config.yaml missing required keys: {missing}. Re-run /parallax-white-label-onboard to repair.")
-    return
-
-# Reconstruct a synthetic draft (the inverse of build_config_from_draft)
-draft = _config_to_draft(cfg)  # in loader.py; mirrors build_config_from_draft
-
-design_md_text = emit_design_md(
-    draft,
-    client_name=cfg.get("metadata", {}).get("client_name", ""),
-    extracted_at=cfg.get("metadata", {}).get("extracted_at", ""),
-    source_refs=[(cfg.get("metadata", {}).get("source") or {}).get("reference", "regenerated-from-config")],
-)
-
-# Atomic write
-design_md_path = os.path.expanduser("~/.parallax/client-branding/DESIGN.md")
-staging = design_md_path + ".staging"
-with open(staging, "w", encoding="utf-8") as f:
-    f.write(design_md_text)
-shutil.move(staging, design_md_path)
-os.chmod(design_md_path, 0o600)
-
-# Audit entry
-audit_path = os.path.expanduser("~/.parallax/client-branding/audit.jsonl")
-prev_hash = "0" * 64
-if os.path.exists(audit_path):
-    with open(audit_path) as f:
-        lines = [l.strip() for l in f if l.strip()]
-    if lines:
-        prev_hash = hashlib.sha256(lines[-1].encode()).hexdigest()
-
-entry = {
-    "schema_version": 1,
-    "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-    "skill": "parallax-white-label-onboard",
-    "action": "regenerate_design_md",
-    "applied": True,
-    "design_md_hash": hashlib.sha256(design_md_text.encode("utf-8")).hexdigest(),
-    "prev_entry_hash": prev_hash,
-}
-import json
-with open(audit_path, "a") as f:
-    f.write(json.dumps(entry, separators=(",", ":")) + "\n")
-os.chmod(audit_path, 0o600)
-
-print("DESIGN.md regenerated from config.yaml. Sources unchanged.")
-```
+> Full Python (validation + draft reconstruction + atomic write + audit entry): see `references/workflow-code.md` § Regenerate-from-config — Python block.
 
 Hard errors (printed + return, no partial emit):
 - `config.yaml` not present → "No active branding to regenerate from. Run /parallax-white-label-onboard first."
 - `config.yaml` present but missing `branding.colors.primary` or both typography & fonts → "Cannot regenerate — config.yaml missing required keys: ...". Do not write a partial `DESIGN.md`.
 
 Behavior on a v1 config (no `typography.*` block): emitter takes `fonts.header` / `fonts.body` / `fonts.monospace` as the `typography.h1.fontFamily` / `body-md.fontFamily` / `code.fontFamily` defaults (with confidence-neutral 0.5).
-
-### Status block (output of `--status`)
-
-```
-Active client branding
-──────────────────────
-Client:       <client_name>
-Source:       <type>: <reference>
-Configured:   <extracted_at>
-
-Colors:
-  Primary:    <hex> — <swatch text approximation>
-  Secondary:  <hex>
-  Accent:     <hex>
-  Background: <hex>
-  Text:       <hex>
-  Contrast:   <ratio>:1 (<pass|warn|fail>)
-
-Logos:
-  Primary:    <local path | not configured>
-  Favicon:    <local path | not configured>
-
-Fonts:
-  Header:     <name>
-  Body:       <name>
-  Monospace:  <name>
-
-Voice:
-  Enabled:    <yes | no>
-  Register:   <e.g., formal-institutional>
-  Tone:       <comma-list of primary_attributes | not configured>
-  Corpus:     <N words from M documents | not configured>
-  Confidence: <X.XX | not configured>
-
-Validation:   <N pass, N warn, N fail>
-Audit chain:  <ok | not yet initialized>
-```
-
-If `config.yaml` fails to load (YAML parse error, missing required keys), show: "! Config corrupted or outdated. Re-run /parallax-white-label-onboard to reconfigure."
 
 ---
 
@@ -1109,3 +580,16 @@ A successful workflow produces:
 - When voice was extracted: `cfg["voice"]["enabled"] is True`, `cfg["voice"]["positioning"]` is a non-empty string, `len(cfg["voice"]["core_rules"]) >= 2`, `len(cfg["voice"]["anti_filler"]) >= 3`, and `cfg["voice"]["source_corpus"]["word_count"] >= 500`
 - When multi-source was used: `cfg["multi_source"]["sources"]` lists every input, mismatches were either resolved at the gate or recorded; no silent merges
 - When voice was NOT extracted: `cfg["voice"]["enabled"] is False` and downstream voice consumers fall back to defaults silently
+
+---
+
+## See also
+
+- `references/workflow-code.md` — full Python for Steps 1–4 + regenerate-from-config
+- `references/status-format.md` — `--status` output template
+- `references/integration-contract.md` — visual + voice consumer loading patterns, voice prompt-prepend template
+- `references/overview.md` — architecture, data flow, test inventory (was top-level `README.md`)
+- `references/installation.md` — setup, dependencies, troubleshooting (was top-level `INSTALLATION.md`)
+- `references/validation-rules.md` — color/logo/font validation reference
+- `references/supported-fonts.md` — web-safe fonts + fallback chains
+- `_parallax/white-label/integration-pattern.md` — canonical consumer-side contract for visual rendering (§1–§9)

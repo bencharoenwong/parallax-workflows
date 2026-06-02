@@ -92,10 +92,13 @@ URL/PDF/Wizard → Extract → Normalize → Validate → Confirm Gate → Save 
 
 ```
 skills/white-label-onboard/
-├── README.md (this file)
 ├── SKILL.md (orchestration / entry point)
-├── INSTALLATION.md (setup instructions)
 ├── references/
+│   ├── overview.md (this file — architecture, data flow, test inventory)
+│   ├── installation.md (setup, dependencies, troubleshooting)
+│   ├── workflow-code.md (full Python for Steps 1–4 + regenerate-from-config)
+│   ├── status-format.md (--status output template)
+│   ├── integration-contract.md (visual + voice consumer loading patterns)
 │   ├── validation-rules.md (color/logo/font validation reference)
 │   └── supported-fonts.md (web-safe fonts + fallback chains)
 └── (Python modules in skills/_parallax/white-label/)
@@ -303,7 +306,7 @@ White-label onboarding skill for the Parallax equity research platform.
 ## Support
 
 For issues, questions, or feature requests:
-- Check `INSTALLATION.md` for setup help
-- Review `references/validation-rules.md` for validation details
-- See `references/supported-fonts.md` for font recommendations
+- Check `installation.md` (sibling in this `references/` directory) for setup help
+- Review `validation-rules.md` for validation details
+- See `supported-fonts.md` for font recommendations
 - Consult test files for usage examples

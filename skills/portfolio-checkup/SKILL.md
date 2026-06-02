@@ -100,7 +100,29 @@ If a view is active, after computing verified-holdings factor aggregates apply l
 
 Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format. The loader returns exactly six keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
 
+### Render — deterministic gate (LAST step, mandatory)
+
+Compose the complete report per **Output Format** below, then run it through the render gate in **one Bash step** before replying. Use a private `mktemp` file (never a fixed/predictable path like `/tmp/pcheckup_draft.md` — that is a world-writable-`/tmp` symlink hazard). `render_gate.py` lives in the **same directory you loaded this SKILL.md from** (the registered skill directory); use that directory's absolute path as `<skill-dir>`:
+
+```
+DRAFT="$(mktemp "${TMPDIR:-/tmp}/pcheckup.XXXXXX")"
+cat > "$DRAFT" <<'REPORT'
+<your complete drafted report goes here>
+REPORT
+python3 "<skill-dir>/render_gate.py" < "$DRAFT"; rm -f "$DRAFT"
+```
+
+**Your entire final message is exactly that command's stdout** — nothing before it (no "composing", no step notes, no scratch computation), nothing after it.
+
+`render_gate.py` is pure-stdlib and deterministically drops anything before the first rendered header (House View Preamble / Branding Header / Portfolio Health Status / Portfolio Checkup title) — a safety net so a stray preamble can never reach the user. Same operator-agnostic-helper pattern as `view_status.py` / `loader.py` (a real Bash tool call, not prose).
+
 ## Output Format
+
+**Begin the response immediately with the rendered report — no preamble.** Do not emit step-completion notes ("Step A.5 complete", "All data gathered", "Composing the checkup"), scratch computation tables, cross-validation status lines, or config-probe results ("white-label: config_not_found") before the report. All intermediate computation stays internal. When no house view and no white-label client are active (the default), the **first line of the output is the Portfolio Health Status header**, in this exact form:
+
+`## Portfolio Health Status: <🟢|🟡|🔴> **<Healthy|Monitor|Attention>** — <N> of 5 flags raised`
+
+(When a house view or white-label client is active, the House View Preamble / Branding Header precede this line per the rules below; the no-preamble rule still applies — those are rendered output, not internal scaffold.)
 
 - **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (banner from Pre-Workflow + low-confidence warnings). Per loader.md §5.1 the preamble goes at the very top — it precedes the Branding Header.
 - **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** portfolio checkup`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to Provenance.

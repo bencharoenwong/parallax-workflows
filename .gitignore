@@ -10,6 +10,10 @@ notes/
 docs/superpowers/
 LESSONS.md
 
+# evals/ harness + per-skill eval specs are public tooling (tracked). Only local
+# rollout captures are ignored (see evals/results/ below). Private research
+# findings/metrics never enter this repo — see CLAUDE.md public-repo rule.
+
 # ---------------------------------------------------------------
 # Internal artifacts kept local. Do not remove without review.
 # ---------------------------------------------------------------
