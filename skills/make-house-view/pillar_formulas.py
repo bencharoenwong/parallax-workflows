@@ -10,7 +10,7 @@ Critical context (MCP_FIELD_INVENTORY.md §3.2 + §4):
   proxy as fallback. Confidence ≤ 0.5.
 - psychological_wavelength is LLM-judged from news + telemetry.commentary tone.
   Confidence ≤ 0.6. Default implementation here is a heuristic prose scan
-  (Claude-side); a caller passing `psi_judge_fn` callback can substitute richer judgment.
+  (Claude-side); a caller passing `psychological_judge_fn` callback can substitute richer judgment.
 
 Confidence cap rule (BUG-003 resolution / v2 plan §4.2):
 - If missing_inputs is non-empty: confidence = min(confidence, 0.35).
@@ -31,10 +31,10 @@ from typing import Any, Callable
 MISSING_INPUT_CONFIDENCE_CAP = 0.35
 
 # Per-pillar hard caps from MCP_FIELD_INVENTORY.md §4.
-OMEGA_CONFIDENCE_CAP = 0.8
-PHI_CONFIDENCE_CAP = 0.7
-XI_CONFIDENCE_CAP = 0.5
-PSI_CONFIDENCE_CAP = 0.6
+ECONOMETRICS_PHASE_CONFIDENCE_CAP = 0.8
+VALUATION_STATE_CONFIDENCE_CAP = 0.7
+MARKET_ENTROPY_CONFIDENCE_CAP = 0.5
+PSYCHOLOGICAL_CONFIDENCE_CAP = 0.6
 
 
 @dataclass(frozen=True)
@@ -215,11 +215,11 @@ def compute_omega(
 
     # Confidence: high when both sources present, halved when only regime_tag.
     if not missing:
-        confidence = OMEGA_CONFIDENCE_CAP
+        confidence = ECONOMETRICS_PHASE_CONFIDENCE_CAP
     elif len(missing) == 1 and "growth" in missing[0]:
-        confidence = OMEGA_CONFIDENCE_CAP * 0.75
+        confidence = ECONOMETRICS_PHASE_CONFIDENCE_CAP * 0.75
     else:
-        confidence = OMEGA_CONFIDENCE_CAP * 0.4
+        confidence = ECONOMETRICS_PHASE_CONFIDENCE_CAP * 0.4
 
     confidence = _apply_missing_cap(confidence, missing)
 
@@ -244,8 +244,7 @@ def compute_phi(
 ) -> PillarResult:
     """valuation_state.
 
-    Reads `aggregated.phi_per_market` — a dict
-    {market_name: {value: float, prose_snippet: str}} produced by
+    Reads `aggregated["phi"]` — a dict produced by
     cross_country.aggregate, which scanned each market's macro_indicators
     prose for "Valuation metrics at X" patterns.
 
@@ -280,10 +279,10 @@ def compute_phi(
         confidence = 0.0
     else:
         # Confidence scales with coverage breadth: more markets with prose
-        # data → higher confidence, capped at PHI_CONFIDENCE_CAP.
+        # data → higher confidence, capped at VALUATION_STATE_CONFIDENCE_CAP.
         n_markets = len(markets_with_data)
         # 1 market → 0.3, 3 markets → 0.55, 6+ → 0.7.
-        confidence = min(PHI_CONFIDENCE_CAP, 0.2 + 0.10 * n_markets)
+        confidence = min(VALUATION_STATE_CONFIDENCE_CAP, 0.2 + 0.10 * n_markets)
 
     confidence = _apply_missing_cap(confidence, missing)
 
@@ -338,7 +337,7 @@ def compute_xi(
       - If prose value is available (any market): weight prose 0.65,
         divergence-proxy 0.35.
       - If prose silent everywhere: rely on divergence-proxy entirely
-        (still capped at XI_CONFIDENCE_CAP).
+        (still capped at MARKET_ENTROPY_CONFIDENCE_CAP).
       - If telemetry.divergences missing: missing_inputs += ['telemetry.divergences'].
 
     composition_formula notes the proxy weighting explicitly.
@@ -369,15 +368,15 @@ def compute_xi(
         )
         # More markets present → higher confidence within the XI cap.
         n = len(markets_with_data)
-        confidence = min(XI_CONFIDENCE_CAP, 0.25 + 0.08 * n)
+        confidence = min(MARKET_ENTROPY_CONFIDENCE_CAP, 0.25 + 0.08 * n)
     elif prose_value is not None:
         blended = float(prose_value)
         formula = "pillar_formulas.compute_xi@v1:prose_entropy_only(no_proxy)"
-        confidence = min(XI_CONFIDENCE_CAP, 0.20 + 0.06 * len(markets_with_data))
+        confidence = min(MARKET_ENTROPY_CONFIDENCE_CAP, 0.20 + 0.06 * len(markets_with_data))
     elif proxy_value is not None:
         blended = proxy_value
         formula = "pillar_formulas.compute_xi@v1:divergence_proxy_only"
-        confidence = min(XI_CONFIDENCE_CAP, 0.30)
+        confidence = min(MARKET_ENTROPY_CONFIDENCE_CAP, 0.30)
         missing.append("entropy_prose_silent_in_all_markets")
     else:
         blended = 0.0
@@ -450,7 +449,7 @@ def compute_psi(
     telemetry: dict[str, Any] | None,
     inventory: dict[str, Any] | None = None,
     *,
-    psi_judge_fn: Callable[[list[str], str | None], tuple[int, str, float]] | None = None,
+    psychological_judge_fn: Callable[[list[str], str | None], tuple[int, str, float]] | None = None,
 ) -> PillarResult:
     """psychological_wavelength.
 
@@ -458,7 +457,7 @@ def compute_psi(
         aggregated: must carry `aggregated.psi_news_blobs` (list[str]) — the
             per-country news component content concatenations.
         telemetry: optional, used for `commentary.headline`.
-        psi_judge_fn: optional callback returning (value, snippet, confidence).
+        psychological_judge_fn: optional callback returning (value, snippet, confidence).
             When None, falls back to a conservative bag-of-words heuristic
             (kept simple to avoid silently disagreeing with a richer judgment
             chain — the maker SKILL is expected to inject a Claude-side
@@ -483,14 +482,14 @@ def compute_psi(
             source_snippets=[],
         )
 
-    if psi_judge_fn is not None:
-        value, snippet, raw_conf = psi_judge_fn(news_blobs, headline)
-        confidence = min(PSI_CONFIDENCE_CAP, max(0.0, raw_conf))
+    if psychological_judge_fn is not None:
+        value, snippet, raw_conf = psychological_judge_fn(news_blobs, headline)
+        confidence = min(PSYCHOLOGICAL_CONFIDENCE_CAP, max(0.0, raw_conf))
         formula = "pillar_formulas.compute_psi@v1:llm_judged"
     else:
         value, snippet = _heuristic_psi_score(news_blobs, headline)
         # Heuristic is intentionally weak — cap below PSI cap.
-        confidence = min(PSI_CONFIDENCE_CAP * 0.6, 0.35)
+        confidence = min(PSYCHOLOGICAL_CONFIDENCE_CAP * 0.6, 0.35)
         formula = "pillar_formulas.compute_psi@v1:bag_of_words_heuristic"
 
     if not news_blobs:
@@ -512,10 +511,10 @@ def compute_psi(
 __all__ = [
     "PillarResult",
     "MISSING_INPUT_CONFIDENCE_CAP",
-    "OMEGA_CONFIDENCE_CAP",
-    "PHI_CONFIDENCE_CAP",
-    "XI_CONFIDENCE_CAP",
-    "PSI_CONFIDENCE_CAP",
+    "ECONOMETRICS_PHASE_CONFIDENCE_CAP",
+    "VALUATION_STATE_CONFIDENCE_CAP",
+    "MARKET_ENTROPY_CONFIDENCE_CAP",
+    "PSYCHOLOGICAL_CONFIDENCE_CAP",
     "compute_omega",
     "compute_phi",
     "compute_xi",

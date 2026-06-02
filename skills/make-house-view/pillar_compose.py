@@ -28,7 +28,7 @@ def compute_pillars(
     telemetry: dict[str, Any] | None,
     inventory: dict[str, Any] | None = None,
     *,
-    psi_judge_fn: Callable[[list[str], str | None], tuple[int, str, float]] | None = None,
+    psychological_judge_fn: Callable[[list[str], str | None], tuple[int, str, float]] | None = None,
 ) -> dict[str, PillarResult]:
     """Run all four compute_* in a documented order.
 
@@ -47,7 +47,7 @@ def compute_pillars(
         "phi": compute_phi(aggregated, telemetry, inventory),
         "xi": compute_xi(aggregated, telemetry, inventory),
         "psi": compute_psi(
-            aggregated, telemetry, inventory, psi_judge_fn=psi_judge_fn
+            aggregated, telemetry, inventory, psychological_judge_fn=psychological_judge_fn
         ),
     }
 

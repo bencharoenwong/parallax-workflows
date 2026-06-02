@@ -409,10 +409,10 @@ class MakerOrchestrator:
         aggregated: dict[str, Any],
         telemetry: dict[str, Any] | None,
         *,
-        psi_judge_fn: Callable | None = None,
+        psychological_judge_fn: Callable | None = None,
     ) -> dict[str, PillarResult]:
         return pillar_compose.compute_pillars(
-            aggregated, telemetry, inventory=None, psi_judge_fn=psi_judge_fn
+            aggregated, telemetry, inventory=None, psychological_judge_fn=psychological_judge_fn
         )
 
     # ---- Step 6: package the draft view ----
@@ -726,7 +726,7 @@ class MakerOrchestrator:
         edit_fn: Callable[
             [dict, gate_present.GateContext], tuple[dict, str | None]
         ] | None = None,
-        psi_judge_fn: Callable[[list[str], str | None], tuple[int, str, float]] | None = None,
+        psychological_judge_fn: Callable[[list[str], str | None], tuple[int, str, float]] | None = None,
     ) -> MakerResult:
         """End-to-end Steps 1-8 driver.
 
@@ -737,7 +737,7 @@ class MakerOrchestrator:
                 shadow_diff=True, the gate is skipped (no save).
                 When None and shadow_diff=False, raise — the gate REQUIRES
                 a disposition path.
-            psi_judge_fn: optional structured-output Claude call wrapped as
+            psychological_judge_fn: optional structured-output Claude call wrapped as
                 callable. Defaults to bag-of-words heuristic.
 
         Returns: MakerResult with the disposition + paths + pillars.
@@ -767,7 +767,7 @@ class MakerOrchestrator:
         aggregated = self.aggregate(per_market, telemetry)
 
         # Step 5
-        pillars = self.compose_pillars(aggregated, telemetry, psi_judge_fn=psi_judge_fn)
+        pillars = self.compose_pillars(aggregated, telemetry, psychological_judge_fn=psychological_judge_fn)
 
         # Step 6 is OPTIONAL — only fold gap_suggest residuals when the maker
         # leaves leaves silent. v2 plan §2.1 step 6 explicitly defers.

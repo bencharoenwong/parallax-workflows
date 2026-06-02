@@ -8,10 +8,10 @@ import pytest
 
 from pillar_formulas import (
     MISSING_INPUT_CONFIDENCE_CAP,
-    OMEGA_CONFIDENCE_CAP,
-    PHI_CONFIDENCE_CAP,
-    PSI_CONFIDENCE_CAP,
-    XI_CONFIDENCE_CAP,
+    ECONOMETRICS_PHASE_CONFIDENCE_CAP,
+    VALUATION_STATE_CONFIDENCE_CAP,
+    PSYCHOLOGICAL_CONFIDENCE_CAP,
+    MARKET_ENTROPY_CONFIDENCE_CAP,
     PillarResult,
     compute_omega,
     compute_phi,
@@ -73,7 +73,7 @@ def test_omega_high_confidence_when_regime_and_growth_present():
     # selective rotation maps to +1; growth expansion nudges +0.5 → +2 after round.
     assert p.value in (1, 2)
     assert p.missing_inputs == []
-    assert p.confidence == pytest.approx(OMEGA_CONFIDENCE_CAP)
+    assert p.confidence == pytest.approx(ECONOMETRICS_PHASE_CONFIDENCE_CAP)
 
 
 def test_omega_capped_when_regime_missing():
@@ -138,7 +138,7 @@ def test_phi_full_coverage_high_confidence():
     p = compute_phi(aggregated, None)
     assert p.value == -1
     assert p.missing_inputs == []
-    assert p.confidence <= PHI_CONFIDENCE_CAP
+    assert p.confidence <= VALUATION_STATE_CONFIDENCE_CAP
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +161,7 @@ def test_xi_combines_prose_and_divergence_proxy():
     # 0.65*0.5 + 0.35*0 = 0.325 → round to 0
     assert p.value == 0
     assert "0.65*prose_entropy" in p.composition_formula
-    assert p.confidence <= XI_CONFIDENCE_CAP
+    assert p.confidence <= MARKET_ENTROPY_CONFIDENCE_CAP
 
 
 def test_xi_divergence_proxy_only_when_prose_silent():
@@ -206,7 +206,7 @@ def test_psi_heuristic_with_news_blobs():
     p = compute_psi(aggregated, telemetry)
     assert p.value >= 1  # positive sentiment
     assert p.missing_inputs == []
-    assert p.confidence <= PSI_CONFIDENCE_CAP
+    assert p.confidence <= PSYCHOLOGICAL_CONFIDENCE_CAP
 
 
 def test_psi_with_llm_callback_uses_callback_value():
@@ -219,11 +219,11 @@ def test_psi_with_llm_callback_uses_callback_value():
     p = compute_psi(
         {"psi_news_blobs": ["whatever"]},
         {"commentary": {"headline": "x"}},
-        psi_judge_fn=fake_judge,
+        psychological_judge_fn=fake_judge,
     )
-    assert called, "psi_judge_fn must be called when supplied"
+    assert called, "psychological_judge_fn must be called when supplied"
     assert p.value == -1
-    assert p.confidence == pytest.approx(min(PSI_CONFIDENCE_CAP, 0.55))
+    assert p.confidence == pytest.approx(min(PSYCHOLOGICAL_CONFIDENCE_CAP, 0.55))
 
 
 # ---------------------------------------------------------------------------

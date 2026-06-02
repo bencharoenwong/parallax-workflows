@@ -342,42 +342,42 @@ def aggregate(
             succeeded.append(m)
 
     # --- prose extraction per market ---
-    phi_per_market: dict[str, float] = {}
+    valuation_per_market: dict[str, float] = {}
     phi_snippets: list[str] = []
     for m in succeeded:
         val, snippet = market_response_phi(m)
         if val is not None:
-            phi_per_market[m.schema_key] = val
+            valuation_per_market[m.schema_key] = val
             if snippet:
                 phi_snippets.append(snippet)
 
     phi_val, phi_cov_ok, phi_markets = aggregate_field_with_coverage(
-        phi_per_market, weight_map
+        valuation_per_market, weight_map
     )
-    if not phi_per_market:
+    if not valuation_per_market:
         phi_cov_ok = False
         phi_val = None
 
     # --- prose extraction per market ---
-    xi_per_market: dict[str, float] = {}
+    entropy_per_market: dict[str, float] = {}
     xi_snippets: list[str] = []
     for m in succeeded:
         val, snippet = market_response_xi(m)
         if val is not None:
-            xi_per_market[m.schema_key] = val
+            entropy_per_market[m.schema_key] = val
             if snippet:
                 xi_snippets.append(snippet)
 
     xi_val, _xi_cov_ok, xi_markets = aggregate_field_with_coverage(
-        xi_per_market, weight_map
+        entropy_per_market, weight_map
     )
 
     # --- news blobs ---
-    psi_blobs: list[str] = []
+    news_blobs: list[str] = []
     for m in succeeded:
         blob = market_response_news_blob(m)
         if blob:
-            psi_blobs.append(f"[{m.market_name}] {blob[:1200]}")
+            news_blobs.append(f"[{m.market_name}] {blob[:1200]}")
 
     # --- Per-region tilts (single-market, bypass coverage) ---
     regions: dict[str, int] = {}
@@ -428,7 +428,7 @@ def aggregate(
             "markets_with_data": xi_markets,
             "snippets": xi_snippets,
         },
-        "psi_news_blobs": psi_blobs,
+        "psi_news_blobs": news_blobs,
         "macro_regime": macro_regime,
         "regions": regions,
         "sectors": sectors_aggregated,
