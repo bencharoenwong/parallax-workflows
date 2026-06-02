@@ -1,19 +1,12 @@
 """Eval spec for /parallax-portfolio-checkup.
 
-Same FAMILY as should-i-buy (structured English research output, MCP tools, shared
-conventions: §9.2 AI-disclosure, "not investment advice" disclaimer, Provenance
-line via integration-pattern §7, conditional Macro Context). So it reuses the
-GENERIC checks that AI-buffett (a different family) could not:
-
-Reuse tally vs should-i-buy:
-  Tier-1: sections_present, macro_conditional, ai_disclosure_present,
-          disclaimer_present_correct, provenance_present, orchestrator_length
-          = 6 GENERIC (copied). consider_no_directive = NEW (analogue of
-          bottom_line_no_rec, scoped to the "Consider" section). Reuse 6/7.
-  Tier-2: no_hallucinated_data = COPIED; health_status_consistent,
-          consider_as_questions, plain_language = NEW. Reuse 1/4.
-Finding: reuse tracks FAMILY — portfolio-checkup (should-i-buy's family) reuses
-6/7 tier-1 vs AI-buffett's 2/6. The generator is per-family.
+Same output family as should-i-buy (structured English research output, MCP tools,
+shared conventions: §9.2 AI-disclosure, "not investment advice" disclaimer,
+Provenance line, conditional Macro Context). It uses the generic structured-English
+checks (sections_present, macro_conditional, ai_disclosure_present,
+disclaimer_present_correct, provenance_present, orchestrator_length) and adds
+skill-specific ones: consider_no_directive (Tier-1) and health_status_consistent,
+consider_as_questions, plain_language (Tier-2).
 """
 from __future__ import annotations
 

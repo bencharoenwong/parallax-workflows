@@ -7,7 +7,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 ## 2026-05-31
 
 ### Added
-- **v2 eval substrate under `evals/`** — a two-tier quality-eval harness (deterministic Tier-1 structural checks + pinned-Anthropic Tier-2 rubric judge) on a spec-driven, skill-agnostic grading engine. New `evals/graders/` (engine + CI-safe pure-function tests), `evals/skills/<skill>/eval_config.py` (per-skill `EvalSpec`), `evals/tasks/<skill>/core.jsonl` (task inputs), and `evals/fixtures/<skill>/` (golden + broken stream-json transcripts for offline tests). Skills covered: `should-i-buy` (calibrated baseline, Tier-1 noise floor 0.981), `AI-buffett` (different output family — reuses 2/6 Tier-1 checks), and `portfolio-checkup` (DRAFT spec only, never run). CI runs only `cd evals && python3 -m pytest graders -q` — never a live rollout. `evals/README.md` and `CONTRIBUTING.md` updated. Design doc is local-only (`notes/`, gitignored).
+- **v2 eval substrate under `evals/`** — a two-tier quality-eval harness (deterministic Tier-1 structural checks + pinned-Anthropic Tier-2 rubric judge) on a spec-driven, skill-agnostic grading engine. New `evals/graders/` (engine + CI-safe pure-function tests), `evals/skills/<skill>/eval_config.py` (per-skill `EvalSpec`), `evals/tasks/<skill>/core.jsonl` (task inputs), and `evals/fixtures/<skill>/` (golden + broken stream-json transcripts for offline tests). Skills covered: `should-i-buy` (reference baseline), `AI-buffett` (different output family), and `portfolio-checkup` (DRAFT spec only, never run). CI runs only `cd evals && python3 -m pytest graders -q` — never a live rollout. `evals/README.md` and `CONTRIBUTING.md` updated. Design doc is local-only (`notes/`, gitignored).
 - **`docs/security/audit-2026-06-01.md`** — refreshed pre-launch security audit covering the eval substrate (`CRITICAL_FAILS=0`); `audit-latest.md` symlink repointed. Consumed by the pre-push security gate.
 
 ### Changed
@@ -15,7 +15,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 ### Fixed
 - **`AI-buffett` BKP-2018 momentum mischaracterization** — the profile, output template, and SKILL example previously described "slight negative Momentum" as a documented Buffett factor loading. Corrected across `skills/_parallax/AI-profiles/profiles/buffett.md`, `output-template.md`, and `skills/AI-buffett/SKILL.md`: BKP-2018 document no meaningful momentum tilt; the `<=6` Momentum criterion is a *design screen* against momentum-chasing names, not a paper-documented loading.
-- **`AI-buffett` output discipline** — Steps 1–6 are now explicitly silent (entire visible response is the rendered template, first character to last; no `**Step N**` labels or narration leak), and a **Synthesis** section is now REQUIRED for every verdict including `match` (a bare table is no longer acceptable). Measured: synthesis presence 0%→100%, leak 83% clean.
+- **`AI-buffett` output discipline** — Steps 1–6 are now explicitly silent (entire visible response is the rendered template, first character to last; no `**Step N**` labels or narration leak), and a **Synthesis** section is now REQUIRED for every verdict including `match` (a bare table is no longer acceptable).
 
 ---
 

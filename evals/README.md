@@ -105,8 +105,8 @@ evals/
 │   ├── transcript.py       # stream-json → final-prose extraction
 │   └── test_*.py           # pure-function unit tests (the only thing CI runs)
 ├── skills/              # per-skill eval specs (one eval_config.py each)
-│   ├── should-i-buy/       # calibrated baseline (Tier-1 noise floor 0.981)
-│   ├── AI-buffett/         # different output family — 2/6 tier-1 checks reused
+│   ├── should-i-buy/       # reference baseline spec
+│   ├── AI-buffett/         # different output family — its own checks
 │   └── portfolio-checkup/  # DRAFT — spec only, never run live
 ├── tasks/<skill>/core.jsonl  # eval task inputs per skill
 ├── fixtures/<skill>/       # golden + broken stream-json transcripts (offline tests)
@@ -116,14 +116,11 @@ evals/
 
 ### Skills with evals
 
-- `should-i-buy` — the calibrated baseline; Tier-1 pass-rate noise floor 0.981.
+- `should-i-buy` — the reference baseline spec.
 - `AI-buffett` — a different output family (plain-line labels, citation/verdict
-  contract); reuses only 2/6 Tier-1 checks and 1/4 Tier-2 criteria from
-  should-i-buy, which is the point: the *engine* generalizes, the *criteria*
-  mostly do not.
-- `portfolio-checkup` — **DRAFT spec only, never run.** Same family as
-  should-i-buy (reuses 6/7 Tier-1 checks); committed as a templatability data
-  point, not an active eval.
+  contract); declares its own required sections and skill-specific checks.
+- `portfolio-checkup` — **DRAFT spec only, never run.** Same output family as
+  should-i-buy.
 
 ### Key scripts
 
@@ -153,7 +150,3 @@ what *this* skill's output must contain:
 2. Add task inputs at `evals/tasks/<skill>/core.jsonl`.
 3. For offline regression, drop golden + broken stream-json transcripts under
    `evals/fixtures/<skill>/` and assert against them in a `graders/test_*.py`.
-
-The docstring in each existing `eval_config.py` records its reuse tally vs
-`should-i-buy` — reuse tracks output *family*, so expect a near-family skill to
-reuse most checks and a different-family skill to reuse few.

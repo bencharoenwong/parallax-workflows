@@ -1,7 +1,7 @@
-"""Eval spec for /parallax-should-i-buy — the calibrated baseline (Tier-1 0.981).
+"""Eval spec for /parallax-should-i-buy — the reference baseline.
 
-Values lifted verbatim from the pre-refactor tier1_structural.py so the noise
-floor is byte-identical after generalization.
+Values lifted verbatim from the pre-refactor tier1_structural.py so the checks
+are unchanged after generalization.
 """
 from __future__ import annotations
 

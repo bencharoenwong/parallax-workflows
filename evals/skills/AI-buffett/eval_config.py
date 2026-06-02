@@ -1,15 +1,10 @@
 """Eval spec for /parallax-ai-buffett.
 
-Reuse tally vs should-i-buy (the templatability measurement):
-  Tier-1: sections_present, orchestrator_length = GENERIC (copied mechanism;
-          required_sections is per-skill config). verdict_present, citation_present,
-          no_impersonation, disclaimer_verbatim = NEW (the output contract differs:
-          plain-line labels not headings; "not financial advice" not "not investment
-          advice"; "AI-inferred" not "AI-assisted"; arrow trends not "X to Y").
-  Tier-2: no_hallucinated_data = COPIED from should-i-buy; verdict_consistent_with_table,
-          citation_grounded, no_impersonation_judge = NEW.
-Finding: even the nearest-neighbour skill reuses only 2/6 tier-1 checks and 1/4
-tier-2 criteria directly — the engine generalizes, the criteria mostly do not.
+AI-buffett's output contract differs from should-i-buy (plain-line labels not
+headings; "not financial advice"; "AI-inferred"; arrow trends), so it declares
+its own required sections and adds skill-specific checks: verdict_present,
+citation_present, no_impersonation, disclaimer_verbatim (Tier-1) and
+verdict_consistent_with_table, citation_grounded, no_impersonation_judge (Tier-2).
 """
 from __future__ import annotations
 
