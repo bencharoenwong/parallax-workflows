@@ -20,9 +20,9 @@ PARTIAL handling (MCP_FIELD_INVENTORY.md §5.4):
 
 Pure-compute module — no MCP calls.
 """
+
 from __future__ import annotations
 
-import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -62,9 +62,16 @@ DEFAULT_WEIGHTS_PATH = _SHARED_DIR / "aggregator_weights.yaml"
 
 # Sector keys we attempt to extract per-market.
 _SECTOR_KEYS = (
-    "energy", "materials", "industrials", "consumer_discretionary",
-    "consumer_staples", "health_care", "financials",
-    "information_technology", "communication_services", "utilities",
+    "energy",
+    "materials",
+    "industrials",
+    "consumer_discretionary",
+    "consumer_staples",
+    "health_care",
+    "financials",
+    "information_technology",
+    "communication_services",
+    "utilities",
     "real_estate",
 )
 
@@ -153,7 +160,7 @@ def _get_content(component_response: dict[str, Any] | None) -> str:
 def market_response_phi(
     market: MarketResponse,
 ) -> tuple[float | None, str | None]:
-    """Extract Φ valuation float for one market from its macro_indicators prose.
+    """Extract valuation float for one market from its macro_indicators prose.
 
     Returns (value, snippet) or (None, None) if silent.
     """
@@ -168,7 +175,7 @@ def market_response_phi(
 
 
 def market_response_xi(market: MarketResponse) -> tuple[float | None, str | None]:
-    """Extract Ξ entropy float for one market from its macro_indicators prose."""
+    """Extract entropy float for one market from its macro_indicators prose."""
     content = _get_content(market.components.get("macro_indicators"))
     if _is_silent_content(content):
         return None, None
@@ -221,7 +228,7 @@ def market_response_sectors(
 
 
 def market_response_news_blob(market: MarketResponse) -> str:
-    """Concatenated news/sentiment prose for Ψ judgment."""
+    """Concatenated news/sentiment prose for judgment."""
     news = market.components.get("news")
     return _get_content(news)
 
@@ -341,43 +348,43 @@ def aggregate(
         else:
             succeeded.append(m)
 
-    # --- Φ prose extraction per market ---
-    phi_per_market: dict[str, float] = {}
+    # --- prose extraction per market ---
+    valuation_per_market: dict[str, float] = {}
     phi_snippets: list[str] = []
     for m in succeeded:
         val, snippet = market_response_phi(m)
         if val is not None:
-            phi_per_market[m.schema_key] = val
+            valuation_per_market[m.schema_key] = val
             if snippet:
                 phi_snippets.append(snippet)
 
     phi_val, phi_cov_ok, phi_markets = aggregate_field_with_coverage(
-        phi_per_market, weight_map
+        valuation_per_market, weight_map
     )
-    if not phi_per_market:
+    if not valuation_per_market:
         phi_cov_ok = False
         phi_val = None
 
-    # --- Ξ prose extraction per market ---
-    xi_per_market: dict[str, float] = {}
+    # --- prose extraction per market ---
+    entropy_per_market: dict[str, float] = {}
     xi_snippets: list[str] = []
     for m in succeeded:
         val, snippet = market_response_xi(m)
         if val is not None:
-            xi_per_market[m.schema_key] = val
+            entropy_per_market[m.schema_key] = val
             if snippet:
                 xi_snippets.append(snippet)
 
     xi_val, _xi_cov_ok, xi_markets = aggregate_field_with_coverage(
-        xi_per_market, weight_map
+        entropy_per_market, weight_map
     )
 
-    # --- Ψ news blobs ---
-    psi_blobs: list[str] = []
+    # --- news blobs ---
+    news_blobs: list[str] = []
     for m in succeeded:
         blob = market_response_news_blob(m)
         if blob:
-            psi_blobs.append(f"[{m.market_name}] {blob[:1200]}")
+            news_blobs.append(f"[{m.market_name}] {blob[:1200]}")
 
     # --- Per-region tilts (single-market, bypass coverage) ---
     regions: dict[str, int] = {}
@@ -428,7 +435,7 @@ def aggregate(
             "markets_with_data": xi_markets,
             "snippets": xi_snippets,
         },
-        "psi_news_blobs": psi_blobs,
+        "psi_news_blobs": news_blobs,
         "macro_regime": macro_regime,
         "regions": regions,
         "sectors": sectors_aggregated,

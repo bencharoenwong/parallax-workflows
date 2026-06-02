@@ -73,7 +73,7 @@ Component confidence caps (MCP_FIELD_INVENTORY.md §4):
 - **`econometrics_phase` (macro backdrop)**: ≤ 0.80 (regime_tag + cross-country growth nudge).
 - **`valuation_state` (valuation)**: ≤ 0.70 (prose-extracted from per-country macro_indicators). PROSE-BASED — assumed `telemetry.signals.valuation_z` does NOT exist (verified A0).
 - **`market_entropy` (market state)**: ≤ 0.50 (composite: prose entropy + normalized `len(telemetry.divergences)` as fallback proxy; `composition_formula` documents the weighting).
-- **`psychological_wavelength` (sentiment)**: ≤ 0.60. Default is heuristic bag-of-words; SKILL.md flow injects a Claude structured-output prompt via `psi_judge_fn` for production.
+- **`psychological_wavelength` (sentiment)**: ≤ 0.60. Default is heuristic bag-of-words; SKILL.md flow injects a Claude structured-output prompt via `psychological_judge_fn` for production.
 
 When `missing_inputs` is non-empty, confidence is capped at 0.35 (strictly below `gap_detect.LOW_CONFIDENCE_THRESHOLD = 0.4`) so the gap branch fires.
 

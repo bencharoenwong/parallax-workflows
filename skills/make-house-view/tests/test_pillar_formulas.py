@@ -2,16 +2,17 @@
 
 Per v2 plan §4.2 + MCP_FIELD_INVENTORY.md §4 + §5.1.
 """
+
 from __future__ import annotations
 
 import pytest
 
 from pillar_formulas import (
     MISSING_INPUT_CONFIDENCE_CAP,
-    OMEGA_CONFIDENCE_CAP,
-    PHI_CONFIDENCE_CAP,
-    PSI_CONFIDENCE_CAP,
-    XI_CONFIDENCE_CAP,
+    ECONOMETRICS_PHASE_CONFIDENCE_CAP,
+    VALUATION_STATE_CONFIDENCE_CAP,
+    PSYCHOLOGICAL_CONFIDENCE_CAP,
+    MARKET_ENTROPY_CONFIDENCE_CAP,
     PillarResult,
     compute_omega,
     compute_phi,
@@ -50,7 +51,9 @@ def test_valuation_pattern_tolerates_variants(prose, expected):
 
 
 def test_entropy_pattern_matches():
-    result = _scan_prose_for_signed_number(_ENTROPY_PATTERN, "Market entropy at 0.50 — orderly.")
+    result = _scan_prose_for_signed_number(
+        _ENTROPY_PATTERN, "Market entropy at 0.50 — orderly."
+    )
     assert result is not None
     val, _ = result
     assert val == pytest.approx(0.5)
@@ -61,7 +64,7 @@ def test_entropy_pattern_matches():
 
 
 # ---------------------------------------------------------------------------
-# Ω econometrics_phase
+# econometrics_phase
 # ---------------------------------------------------------------------------
 
 
@@ -73,7 +76,7 @@ def test_omega_high_confidence_when_regime_and_growth_present():
     # selective rotation maps to +1; growth expansion nudges +0.5 → +2 after round.
     assert p.value in (1, 2)
     assert p.missing_inputs == []
-    assert p.confidence == pytest.approx(OMEGA_CONFIDENCE_CAP)
+    assert p.confidence == pytest.approx(ECONOMETRICS_PHASE_CONFIDENCE_CAP)
 
 
 def test_omega_capped_when_regime_missing():
@@ -99,12 +102,19 @@ def test_omega_recession_maps_negative():
 
 
 # ---------------------------------------------------------------------------
-# Φ valuation_state
+# valuation_state
 # ---------------------------------------------------------------------------
 
 
 def test_phi_silent_in_all_markets_returns_zero_confidence_with_missing():
-    aggregated = {"phi": {"value": None, "coverage_ok": False, "markets_with_data": [], "snippets": []}}
+    aggregated = {
+        "phi": {
+            "value": None,
+            "coverage_ok": False,
+            "markets_with_data": [],
+            "snippets": [],
+        }
+    }
     p = compute_phi(aggregated, None)
     assert p.value == 0
     assert p.confidence <= MISSING_INPUT_CONFIDENCE_CAP
@@ -138,11 +148,11 @@ def test_phi_full_coverage_high_confidence():
     p = compute_phi(aggregated, None)
     assert p.value == -1
     assert p.missing_inputs == []
-    assert p.confidence <= PHI_CONFIDENCE_CAP
+    assert p.confidence <= VALUATION_STATE_CONFIDENCE_CAP
 
 
 # ---------------------------------------------------------------------------
-# Ξ market_entropy
+# market_entropy
 # ---------------------------------------------------------------------------
 
 
@@ -161,11 +171,18 @@ def test_xi_combines_prose_and_divergence_proxy():
     # 0.65*0.5 + 0.35*0 = 0.325 → round to 0
     assert p.value == 0
     assert "0.65*prose_entropy" in p.composition_formula
-    assert p.confidence <= XI_CONFIDENCE_CAP
+    assert p.confidence <= MARKET_ENTROPY_CONFIDENCE_CAP
 
 
 def test_xi_divergence_proxy_only_when_prose_silent():
-    aggregated = {"xi": {"value": None, "coverage_ok": False, "markets_with_data": [], "snippets": []}}
+    aggregated = {
+        "xi": {
+            "value": None,
+            "coverage_ok": False,
+            "markets_with_data": [],
+            "snippets": [],
+        }
+    }
     telemetry = {"divergences": list(range(45))}  # → -2
     p = compute_xi(aggregated, telemetry)
     assert "entropy_prose_silent_in_all_markets" in p.missing_inputs
@@ -176,14 +193,21 @@ def test_xi_divergence_proxy_only_when_prose_silent():
 
 
 def test_xi_missing_divergences_flags_input():
-    aggregated = {"xi": {"value": 1.0, "coverage_ok": True, "markets_with_data": ["us"], "snippets": []}}
+    aggregated = {
+        "xi": {
+            "value": 1.0,
+            "coverage_ok": True,
+            "markets_with_data": ["us"],
+            "snippets": [],
+        }
+    }
     p = compute_xi(aggregated, {})  # telemetry has no divergences
     assert "telemetry.divergences" in p.missing_inputs
     assert p.confidence <= MISSING_INPUT_CONFIDENCE_CAP
 
 
 # ---------------------------------------------------------------------------
-# Ψ psychological_wavelength
+# psychological_wavelength
 # ---------------------------------------------------------------------------
 
 
@@ -206,7 +230,7 @@ def test_psi_heuristic_with_news_blobs():
     p = compute_psi(aggregated, telemetry)
     assert p.value >= 1  # positive sentiment
     assert p.missing_inputs == []
-    assert p.confidence <= PSI_CONFIDENCE_CAP
+    assert p.confidence <= PSYCHOLOGICAL_CONFIDENCE_CAP
 
 
 def test_psi_with_llm_callback_uses_callback_value():
@@ -219,11 +243,11 @@ def test_psi_with_llm_callback_uses_callback_value():
     p = compute_psi(
         {"psi_news_blobs": ["whatever"]},
         {"commentary": {"headline": "x"}},
-        psi_judge_fn=fake_judge,
+        psychological_judge_fn=fake_judge,
     )
-    assert called, "psi_judge_fn must be called when supplied"
+    assert called, "psychological_judge_fn must be called when supplied"
     assert p.value == -1
-    assert p.confidence == pytest.approx(min(PSI_CONFIDENCE_CAP, 0.55))
+    assert p.confidence == pytest.approx(min(PSYCHOLOGICAL_CONFIDENCE_CAP, 0.55))
 
 
 # ---------------------------------------------------------------------------

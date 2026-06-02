@@ -1,14 +1,11 @@
 """Unit tests for cross_country.aggregate + coverage rule."""
+
 from __future__ import annotations
 
-import json
-from pathlib import Path
 
 import pytest
 
-import cross_country
 from cross_country import (
-    COVERAGE_THRESHOLD,
     MarketResponse,
     aggregate,
     aggregate_field_with_coverage,
@@ -138,12 +135,12 @@ def test_aggregate_region_tilt_emits_single_market_bypass():
 
 
 # ---------------------------------------------------------------------------
-# Φ aggregation across markets uses 60% rule
+# aggregation across markets uses 60% rule
 # ---------------------------------------------------------------------------
 
 
 def test_phi_silent_in_majority_caps_coverage_false():
-    """Only US has Φ prose — well below 60% coverage → coverage_ok False."""
+    """Only US has prose — well below 60% coverage → coverage_ok False."""
     markets = [
         _build_market(
             "United States",
@@ -153,7 +150,9 @@ def test_phi_silent_in_majority_caps_coverage_false():
         _build_market(
             "Japan",
             "japan",
-            {"macro_indicators": "Tactical positioning constructive; no explicit valuation read."},
+            {
+                "macro_indicators": "Tactical positioning constructive; no explicit valuation read."
+            },
         ),
         _build_market(
             "China",
@@ -210,15 +209,17 @@ def test_unreachable_markets_counted_in_fan_out_summary():
 
 def test_partial_silent_content_treated_as_silent_not_unreachable():
     """A successful response with 'data remains unavailable' content
-    shouldn't contribute Φ but the market remains reachable."""
+    shouldn't contribute but the market remains reachable."""
     markets = [
         _build_market(
             "United States",
             "us",
-            {"macro_indicators": "Sector ranking data remains unavailable for this reporting period."},
+            {
+                "macro_indicators": "Sector ranking data remains unavailable for this reporting period."
+            },
         ),
     ]
     agg = aggregate(markets, {})
-    # Market is reachable, but Φ has no contribution from US.
+    # Market is reachable, but has no contribution from US.
     assert agg["fan_out_summary"]["markets_unreachable"] == 0
     assert "us" not in agg["phi"]["markets_with_data"]
