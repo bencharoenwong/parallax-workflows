@@ -138,12 +138,12 @@ def test_aggregate_region_tilt_emits_single_market_bypass():
 
 
 # ---------------------------------------------------------------------------
-# Φ aggregation across markets uses 60% rule
+# aggregation across markets uses 60% rule
 # ---------------------------------------------------------------------------
 
 
 def test_phi_silent_in_majority_caps_coverage_false():
-    """Only US has Φ prose — well below 60% coverage → coverage_ok False."""
+    """Only US has prose — well below 60% coverage → coverage_ok False."""
     markets = [
         _build_market(
             "United States",
@@ -210,7 +210,7 @@ def test_unreachable_markets_counted_in_fan_out_summary():
 
 def test_partial_silent_content_treated_as_silent_not_unreachable():
     """A successful response with 'data remains unavailable' content
-    shouldn't contribute Φ but the market remains reachable."""
+    shouldn't contribute but the market remains reachable."""
     markets = [
         _build_market(
             "United States",
@@ -219,6 +219,6 @@ def test_partial_silent_content_treated_as_silent_not_unreachable():
         ),
     ]
     agg = aggregate(markets, {})
-    # Market is reachable, but Φ has no contribution from US.
+    # Market is reachable, but has no contribution from US.
     assert agg["fan_out_summary"]["markets_unreachable"] == 0
     assert "us" not in agg["phi"]["markets_with_data"]

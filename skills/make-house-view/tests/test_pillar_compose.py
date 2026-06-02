@@ -52,7 +52,7 @@ def test_compose_end_to_end_with_fixtures():
         assert -2 <= p.value <= 2, f"{name} value out of range: {p.value}"
         assert 0.0 <= p.confidence <= 1.0, f"{name} confidence out of range"
 
-    # Ω should have meaningful value — regime_tag + growth nudge available.
+    # should have meaningful value — regime_tag + growth nudge available.
     assert pillars["omega"].value != 0 or "regime_tag" in str(pillars["omega"].missing_inputs)
 
 

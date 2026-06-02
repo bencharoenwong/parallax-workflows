@@ -153,7 +153,7 @@ def _get_content(component_response: dict[str, Any] | None) -> str:
 def market_response_phi(
     market: MarketResponse,
 ) -> tuple[float | None, str | None]:
-    """Extract Φ valuation float for one market from its macro_indicators prose.
+    """Extract valuation float for one market from its macro_indicators prose.
 
     Returns (value, snippet) or (None, None) if silent.
     """
@@ -168,7 +168,7 @@ def market_response_phi(
 
 
 def market_response_xi(market: MarketResponse) -> tuple[float | None, str | None]:
-    """Extract Ξ entropy float for one market from its macro_indicators prose."""
+    """Extract entropy float for one market from its macro_indicators prose."""
     content = _get_content(market.components.get("macro_indicators"))
     if _is_silent_content(content):
         return None, None
@@ -221,7 +221,7 @@ def market_response_sectors(
 
 
 def market_response_news_blob(market: MarketResponse) -> str:
-    """Concatenated news/sentiment prose for Ψ judgment."""
+    """Concatenated news/sentiment prose for judgment."""
     news = market.components.get("news")
     return _get_content(news)
 
@@ -341,7 +341,7 @@ def aggregate(
         else:
             succeeded.append(m)
 
-    # --- Φ prose extraction per market ---
+    # --- prose extraction per market ---
     phi_per_market: dict[str, float] = {}
     phi_snippets: list[str] = []
     for m in succeeded:
@@ -358,7 +358,7 @@ def aggregate(
         phi_cov_ok = False
         phi_val = None
 
-    # --- Ξ prose extraction per market ---
+    # --- prose extraction per market ---
     xi_per_market: dict[str, float] = {}
     xi_snippets: list[str] = []
     for m in succeeded:
@@ -372,7 +372,7 @@ def aggregate(
         xi_per_market, weight_map
     )
 
-    # --- Ψ news blobs ---
+    # --- news blobs ---
     psi_blobs: list[str] = []
     for m in succeeded:
         blob = market_response_news_blob(m)

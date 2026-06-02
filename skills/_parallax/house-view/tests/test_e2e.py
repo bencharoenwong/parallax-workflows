@@ -143,7 +143,7 @@ def _judge_dry(
 
 
 def _mutate_us_to_divergent(maker_res: maker.MakerResult) -> maker.MakerResult:
-    """Flip US prose to indicate severe deterioration with explicit Φ/Ξ values
+    """Flip US prose to indicate severe deterioration with explicit valuation_state/market_entropy values
     pulled in the opposite direction from the aligned fixture's prose. Used
     to drive the judge into drift_moderate/material territory.
     """

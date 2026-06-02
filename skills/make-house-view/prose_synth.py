@@ -76,13 +76,7 @@ def render_prose(
     ):
         v = int(pillars.get(name, 0) or 0)
         phrase = _pillar_to_phrase(name, v)
-        symbol = {
-            "econometrics_phase": "Ω",
-            "valuation_state": "Φ",
-            "market_entropy": "Ξ",
-            "psychological_wavelength": "Ψ",
-        }[name]
-        pillar_lines.append(f"- **{symbol} {name}** ({v:+d}) — {phrase}.")
+        pillar_lines.append(f"- **{name}** ({v:+d}) — {phrase}.")
         if pillar_missing_inputs and pillar_missing_inputs.get(name):
             missing = ", ".join(pillar_missing_inputs[name])
             pillar_lines.append(

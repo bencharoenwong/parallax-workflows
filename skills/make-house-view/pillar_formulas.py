@@ -1,16 +1,16 @@
-"""Pillar formulas: compute Ω / Φ / Ξ / Ψ from aggregated MCP outputs.
+"""Pillar formulas: compute the four component scores from aggregated MCP outputs.
 
 Each `compute_*` function returns a `PillarResult(value, confidence, missing_inputs)`.
 
 Critical context (MCP_FIELD_INVENTORY.md §3.2 + §4):
-- Φ and Ξ inputs are NOT discrete telemetry fields. They live in
-  `macro_analyst.content` prose as patterns like "Valuation metrics at -1.00".
-- Φ extraction is PROSE-BASED with regex tolerance for the live shape.
-- Ξ is COMPOSITE: prose-extracted entropy + normalized divergence count
+- valuation_state and market_entropy inputs are NOT discrete telemetry fields.
+  They live in `macro_analyst.content` prose as patterns like "Valuation metrics at -1.00".
+- valuation_state extraction is PROSE-BASED with regex tolerance for the live shape.
+- market_entropy is COMPOSITE: prose-extracted entropy + normalized divergence count
   proxy as fallback. Confidence ≤ 0.5.
-- Ψ is LLM-judged from news + telemetry.commentary tone. Confidence ≤ 0.6.
-  Default Ψ implementation here is heuristic prose scan (Claude-side); a
-  caller passing `psi_judge_fn` callback can substitute richer judgment.
+- psychological_wavelength is LLM-judged from news + telemetry.commentary tone.
+  Confidence ≤ 0.6. Default implementation here is a heuristic prose scan
+  (Claude-side); a caller passing `psi_judge_fn` callback can substitute richer judgment.
 
 Confidence cap rule (BUG-003 resolution / v2 plan §4.2):
 - If missing_inputs is non-empty: confidence = min(confidence, 0.35).
@@ -84,7 +84,7 @@ _ENTROPY_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-# Risk-on / risk-off / fear / greed words for the Ψ heuristic fallback.
+# Risk-on / risk-off / fear / greed words for the heuristic fallback.
 # Hand-tuned conservative list — only fires when language is unambiguous.
 _PSI_POSITIVE = (
     "risk-on", "risk on", "constructive", "bullish", "greed",
@@ -137,7 +137,7 @@ def _apply_missing_cap(confidence: float, missing_inputs: list[str]) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Ω econometrics_phase — HIGH confidence (regime_tag + growth)
+# econometrics_phase — HIGH confidence (regime_tag + growth)
 # ---------------------------------------------------------------------------
 
 # regime_tag → omega value map. Conservative; ambiguous tags → 0.
@@ -173,7 +173,7 @@ def compute_omega(
     telemetry: dict[str, Any] | None,
     inventory: dict[str, Any] | None = None,
 ) -> PillarResult:
-    """Ω econometrics_phase.
+    """econometrics_phase.
 
     Primary input: telemetry.regime_tag (always present in healthy telemetry).
     Secondary: cross_country growth signal from aggregated.macro_regime.growth.
@@ -233,7 +233,7 @@ def compute_omega(
 
 
 # ---------------------------------------------------------------------------
-# Φ valuation_state — PROSE-EXTRACTED from macro_analyst.content
+# valuation_state — PROSE-EXTRACTED from macro_analyst.content
 # ---------------------------------------------------------------------------
 
 
@@ -242,7 +242,7 @@ def compute_phi(
     telemetry: dict[str, Any] | None,
     inventory: dict[str, Any] | None = None,
 ) -> PillarResult:
-    """Φ valuation_state.
+    """valuation_state.
 
     Reads `aggregated.phi_per_market` — a dict
     {market_name: {value: float, prose_snippet: str}} produced by
@@ -297,7 +297,7 @@ def compute_phi(
 
 
 # ---------------------------------------------------------------------------
-# Ξ market_entropy — COMPOSITE: prose + divergence-count proxy
+# market_entropy — COMPOSITE: prose + divergence-count proxy
 # ---------------------------------------------------------------------------
 
 
@@ -327,7 +327,7 @@ def compute_xi(
     telemetry: dict[str, Any] | None,
     inventory: dict[str, Any] | None = None,
 ) -> PillarResult:
-    """Ξ market_entropy (COMPOSITE).
+    """market_entropy (COMPOSITE).
 
     Two inputs:
     (a) `aggregated.xi.value` (float, scaled -2..+2): cross-country prose-
@@ -398,7 +398,7 @@ def compute_xi(
 
 
 # ---------------------------------------------------------------------------
-# Ψ psychological_wavelength — LLM-judged (default: heuristic prose scan)
+# psychological_wavelength — LLM-judged (default: heuristic prose scan)
 # ---------------------------------------------------------------------------
 
 
@@ -452,7 +452,7 @@ def compute_psi(
     *,
     psi_judge_fn: Callable[[list[str], str | None], tuple[int, str, float]] | None = None,
 ) -> PillarResult:
-    """Ψ psychological_wavelength.
+    """psychological_wavelength.
 
     Args:
         aggregated: must carry `aggregated.psi_news_blobs` (list[str]) — the

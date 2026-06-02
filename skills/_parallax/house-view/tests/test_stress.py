@@ -224,7 +224,7 @@ def test_rule_pillar_omega_riskoff_riskon_triggers(mock_view, sample_rules_path)
     """(ID: rule-006) ★★★ triggers as Hard stop"""
     rules_content = sample_rules_path.read_text() + """
     - id: "pillar_omega_risk_on"
-      description: "A negative econometrics phase (Ω) contradicts a risk-on appetite."
+      description: "A negative econometrics phase contradicts a risk-on appetite."
       class: "hard_stop"
       last_reviewed: "2026-05-14"
       confidence: 0.85

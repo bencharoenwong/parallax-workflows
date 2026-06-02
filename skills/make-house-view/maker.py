@@ -463,7 +463,7 @@ class MakerOrchestrator:
         # Per-category extraction confidence approximated from fan-out success.
         category_conf = max(0.0, min(0.9, 0.4 + 0.5 * succeed_ratio))
 
-        # Compute Φ/Ξ specific confidence from pillar-level confidence.
+        # Compute valuation_state/market_entropy specific confidence from pillar-level confidence.
         view = {
             "metadata": {
                 "schema_version": 1,
