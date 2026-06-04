@@ -192,11 +192,12 @@ A family of standalone skills that apply famous investors' workflow shapes (not 
 
 | Command | Workflow | Anchor |
 |---|---|---|
-| `/parallax-AI-buffett <ticker>` | Bottom-up single-stock; Quality + Value + Defensive factor profile | Frazzini-Kabiller-Pedersen (2018), *FAJ*; reconciled for 21st-century intangibles via Lev-Srivastava (2022) |
-| `/parallax-AI-greenblatt [ticker]` | Magic Formula: ROC + earnings yield → top-decile basket | Greenblatt (2006); Gray-Carlisle (2012) |
-| `/parallax-AI-klarman <ticker>` | Balance-sheet-first margin-of-safety checks (incl. "no position warranted; cash is valid") | Klarman, *Margin of Safety* (1991) |
-| `/parallax-AI-soros [ticker]` | Top-down macro → regime themes → dual-channel ticker exposure | Soros, *Alchemy of Finance* (1987); Drobny (2006) |
-| `/parallax-AI-consensus <ticker or basket>` | Runs all 4 profiles in parallel; surfaces super-majority + factor-level agreement | Meta-skill |
+| `/parallax-ai-buffett <ticker>` | Bottom-up single-stock; Quality + Value + Defensive factor profile | Frazzini-Kabiller-Pedersen (2018), *FAJ*; reconciled for 21st-century intangibles via Lev-Srivastava (2022) |
+| `/parallax-ai-greenblatt [ticker]` | Magic Formula: ROC + earnings yield → top-decile basket | Greenblatt (2006); Gray-Carlisle (2012) |
+| `/parallax-ai-klarman <ticker>` | Balance-sheet-first margin-of-safety checks (incl. "no position warranted; cash is valid") | Klarman, *Margin of Safety* (1991) |
+| `/parallax-ai-soros [ticker]` | Top-down macro → regime themes → dual-channel ticker exposure | Soros, *Alchemy of Finance* (1987); Drobny (2006) |
+| `/parallax-ai-ptj <ticker>` | Tri-channel confluence: technical setup + macro-regime alignment + volatility risk/reward | Schwager, *Market Wizards* (1989) |
+| `/parallax-ai-consensus <ticker or basket>` | Runs all 5 profiles in parallel; surfaces super-majority + factor-level agreement | Meta-skill |
 
 **Framing and legal posture:**
 - All profiles framed in third person ("Buffett-style," never "Buffett says")
