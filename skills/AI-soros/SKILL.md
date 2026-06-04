@@ -1,11 +1,11 @@
 ---
-name: parallax-AI-soros
+name: parallax-ai-soros
 description: "Applies George Soros's top-down reflexivity framework (per 'The Alchemy of Finance', 1987) to current Parallax data. Triggers: 'trade ideas based on current macro regime', 'regime-driven stock picks', 'reflexivity-lens stock ideas'. Two modes: basket mode surfaces regime themes and ranked trade ideas; single-ticker mode runs the same macro workflow and checks ticker exposure via dual channels (industry exposure AND telemetry basket theme). Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized."
 negative-triggers:
-  - Bottom-up factor scoring → use /parallax-AI-buffett
-  - Mechanical formula screen → use /parallax-AI-greenblatt
-  - Balance-sheet-first checks → use /parallax-AI-klarman
-  - Cross-profile consensus → use /parallax-AI-consensus
+  - Bottom-up factor scoring → use /parallax-ai-buffett
+  - Mechanical formula screen → use /parallax-ai-greenblatt
+  - Balance-sheet-first checks → use /parallax-ai-klarman
+  - Cross-profile consensus → use /parallax-ai-consensus
   - Full macro outlook without a persona lens → use /parallax-macro-outlook
   - Morning brief for a portfolio → use /parallax-morning-brief
 gotchas:
@@ -31,9 +31,9 @@ Top-down reflexivity lens: regime identification → thematic exposure → ranke
 ## Usage
 
 ```
-/parallax-AI-soros                         # basket mode — regime themes + ranked ideas
-/parallax-AI-soros AAPL.O                  # single-ticker mode — dual-channel exposure check
-/parallax-AI-soros --markets US,JP,EU      # basket mode with explicit market list
+/parallax-ai-soros                         # basket mode — regime themes + ranked ideas
+/parallax-ai-soros AAPL.O                  # single-ticker mode — dual-channel exposure check
+/parallax-ai-soros --markets US,JP,EU      # basket mode with explicit market list
 ```
 
 ## Workflow
@@ -55,7 +55,7 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 
 - Zero tickers → **basket mode**
 - Exactly one ticker → **single-ticker mode**
-- Multiple tickers → reject: "Soros profile takes zero or one ticker. Use /parallax-AI-consensus for multi-ticker."
+- Multiple tickers → reject: "Soros profile takes zero or one ticker. Use /parallax-ai-consensus for multi-ticker."
 
 ### Step 2 — Macro workflow (runs in BOTH modes)
 

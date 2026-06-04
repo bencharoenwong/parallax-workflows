@@ -113,11 +113,11 @@ User picks Investor profile → ask one question:
 
 | If they say… | Run |
 |---|---|
-| Buffett / quality+value | `/parallax-AI-buffett` |
-| Greenblatt / magic formula | `/parallax-AI-greenblatt` |
-| Klarman / margin of safety | `/parallax-AI-klarman` |
-| Soros / macro reflexivity | `/parallax-AI-soros` |
-| All / consensus / compare | `/parallax-AI-consensus` |
+| Buffett / quality+value | `/parallax-ai-buffett` |
+| Greenblatt / magic formula | `/parallax-ai-greenblatt` |
+| Klarman / margin of safety | `/parallax-ai-klarman` |
+| Soros / macro reflexivity | `/parallax-ai-soros` |
+| All / consensus / compare | `/parallax-ai-consensus` |
 
 These are AI-inferred profiles using public information — every output is third-person
 ("Buffett-style," never "Buffett says") and cites its academic or biographical anchor.
@@ -169,7 +169,7 @@ Always 2-3 options. Never 6.
 - **Greeting + payload shortcut.** If the greeting carries an obvious payload, skip
   the menu and route directly. Priority order (first match wins):
   - Investor-lens keyword + ticker (Buffett / Greenblatt / Klarman / Soros) →
-    matching `/parallax-AI-<name> <ticker>`, then nudges
+    matching `/parallax-ai-<name> <ticker>`, then nudges
   - Two or more tickers (e.g. "Hi Parallax, AAPL vs MSFT") →
     `/parallax-peer-comparison` with the list, then nudges
   - Single ticker (e.g. "Hi Parallax, NVDA?") → `/parallax-should-i-buy <ticker>`,

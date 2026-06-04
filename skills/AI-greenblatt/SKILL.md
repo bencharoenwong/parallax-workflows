@@ -1,11 +1,11 @@
 ---
-name: parallax-AI-greenblatt
+name: parallax-ai-greenblatt
 description: "Applies Joel Greenblatt's Magic Formula (per 'The Little Book That Beats the Market', 2006; academic replication Gray & Carlisle 2012) to Parallax data. Two modes: universe mode returns a top-decile ranked basket; ticker-check mode reports whether a single stock falls in the top decile of its peer universe by combined ROC + earnings yield rank. Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized. Accepts no args (universe mode) or a single ticker."
 negative-triggers:
-  - Bottom-up factor scoring without the mechanical formula → use /parallax-AI-buffett
-  - Balance-sheet-first special situations → use /parallax-AI-klarman
-  - Top-down macro analysis → use /parallax-AI-soros
-  - Cross-profile consensus → use /parallax-AI-consensus
+  - Bottom-up factor scoring without the mechanical formula → use /parallax-ai-buffett
+  - Balance-sheet-first special situations → use /parallax-ai-klarman
+  - Top-down macro analysis → use /parallax-ai-soros
+  - Cross-profile consensus → use /parallax-ai-consensus
   - Full due diligence → use /parallax-due-diligence
   - Running backtests → use /backtest
 gotchas:
@@ -31,9 +31,9 @@ Applies Joel Greenblatt's Magic Formula (ROC rank + earnings yield rank, combine
 ## Usage
 
 ```
-/parallax-AI-greenblatt                    # universe mode — default US equity universe
-/parallax-AI-greenblatt AAPL               # ticker-check mode — is AAPL in the top decile?
-/parallax-AI-greenblatt AAPL.O             # RIC format also accepted
+/parallax-ai-greenblatt                    # universe mode — default US equity universe
+/parallax-ai-greenblatt AAPL               # ticker-check mode — is AAPL in the top decile?
+/parallax-ai-greenblatt AAPL.O             # RIC format also accepted
 ```
 
 ## Workflow
@@ -55,7 +55,7 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 
 - No ticker → **universe mode**
 - Exactly one ticker → **ticker-check mode**
-- Multiple tickers → reject: "Greenblatt profile takes zero or one ticker. For multi-ticker checks use /parallax-AI-consensus."
+- Multiple tickers → reject: "Greenblatt profile takes zero or one ticker. For multi-ticker checks use /parallax-ai-consensus."
 
 ### Step 2 — Universe mode workflow
 

@@ -1,5 +1,5 @@
 ---
-name: parallax-AI-buffett
+name: parallax-ai-buffett
 description: "Applies the Buffett-style factor profile (per Frazzini-Kabiller-Pedersen 2018, 'Buffett's Alpha', FAJ), reconciled for 21st-century intangibles-heavy valuations per Lev-Srivastava 2022, to a single stock's current Parallax factor scores. Returns a match/partial/no-match verdict based on Quality, Value, Momentum, and Defensive factor criteria. Third-person framing, academic citation, AI-inferred from public information. NOT financial advice. NOT personalized. Accepts plain tickers or RIC format."
 negative-triggers:
   - Portfolio-level analysis → use /parallax-morning-brief or /parallax-portfolio-checkup
@@ -7,8 +7,8 @@ negative-triggers:
   - Quick stock evaluation without a specific investor lens → use /parallax-should-i-buy
   - Peer comparison → use /parallax-peer-comparison
   - Running backtests → use /backtest
-  - Other investor profiles → use /parallax-AI-soros, /parallax-AI-greenblatt, /parallax-AI-klarman
-  - Cross-profile consensus → use /parallax-AI-consensus
+  - Other investor profiles → use /parallax-ai-soros, /parallax-ai-greenblatt, /parallax-ai-klarman
+  - Cross-profile consensus → use /parallax-ai-consensus
 gotchas:
   - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
   - JIT-load _parallax/AI-profiles/profile-schema.md for the dispatcher workflow and cross-validation gate
@@ -31,9 +31,9 @@ Applies the Buffett-style factor profile documented in Frazzini, Kabiller, and P
 ## Usage
 
 ```
-/parallax-AI-buffett AAPL
-/parallax-AI-buffett BRKb.N
-/parallax-AI-buffett 005930.KS
+/parallax-ai-buffett AAPL
+/parallax-ai-buffett BRKb.N
+/parallax-ai-buffett 005930.KS
 ```
 
 Accepts plain tickers (auto-resolved to RIC via `get_company_info`) or RIC format directly.

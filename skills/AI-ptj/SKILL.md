@@ -1,13 +1,13 @@
 ---
-name: parallax-AI-ptj
+name: parallax-ai-ptj
 description: "Applies Paul Tudor Jones's trend-following + macro-overlay framework (per Schwager's 'Market Wizards', 1989) to evaluate single-stock technical setup, macroeconomic regime alignment, and volatility-driven risk/reward asymmetry. Evaluates ticker across three independent conviction channels (Technical, Macro, Volatility). Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized."
 negative-triggers:
-  - Bottom-up factor scoring → use /parallax-AI-buffett
-  - Mechanical formula screen → use /parallax-AI-greenblatt
-  - Balance-sheet-first checks → use /parallax-AI-klarman
+  - Bottom-up factor scoring → use /parallax-ai-buffett
+  - Mechanical formula screen → use /parallax-ai-greenblatt
+  - Balance-sheet-first checks → use /parallax-ai-klarman
   - Macro regime screening without ticker focus → use /parallax-macro-outlook
-  - Cross-profile consensus → use /parallax-AI-consensus
-  - Multiple tickers → use /parallax-AI-consensus
+  - Cross-profile consensus → use /parallax-ai-consensus
+  - Multiple tickers → use /parallax-ai-consensus
 gotchas:
   - JIT-load _parallax/parallax-conventions.md, profile-schema.md, output-template.md, profiles/ptj.md
   - PTJ is single-ticker mode only — reject multiple tickers with redirect to AI-consensus
@@ -29,8 +29,8 @@ Trend-following + macro-overlay framework: technical momentum validation → mac
 ## Usage
 
 ```
-/parallax-AI-ptj AAPL.O                    # single-ticker mode — tri-channel evaluation
-/parallax-AI-ptj JPM.N                     # evaluate ticker for PTJ-style confluence
+/parallax-ai-ptj AAPL.O                    # single-ticker mode — tri-channel evaluation
+/parallax-ai-ptj JPM.N                     # evaluate ticker for PTJ-style confluence
 ```
 
 ## Workflow
@@ -50,7 +50,7 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 
 ### Step 1 — Parse input
 
-Accept exactly one ticker. Reject multiple tickers: "PTJ profile evaluates single stocks. Use /parallax-AI-consensus for multi-ticker comparison."
+Accept exactly one ticker. Reject multiple tickers: "PTJ profile evaluates single stocks. Use /parallax-ai-consensus for multi-ticker comparison."
 
 Resolve RIC per `parallax-conventions.md §1`.
 

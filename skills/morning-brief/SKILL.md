@@ -58,7 +58,7 @@ Per `loader.md` §1-§2. If view present, capture tilt vector, excludes, prose e
 
 ### Batch B — Conditional + news (after Batch A)
 
-1. Evaluate health flags: Low Score (overall ≤5.0), Concentration (>15% single / >45% top-3), Redundancy (≥2 pairs), Value Trap (value ≤3.0).
+1. Evaluate health flags: Low Score (overall ≤5.0), Concentration (>15% single / >45% top-3), Redundancy (≥2 pairs), Value Trap (value ≤3.0), Macro Misalignment (overweight in sectors with negative tactical outlook — the 5th flag per `portfolio-checkup/references/health-flags.md`).
 2. **House-view alignment** (if view active): flag holdings misaligned with view tilts (>25% off view-tilted target), holdings on `tilts.excludes`, and any active-view conflicts to highlight in Action Items.
 
 **Conditional drift suggestion:** If the Batch B alignment check above

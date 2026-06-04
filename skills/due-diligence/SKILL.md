@@ -73,7 +73,7 @@ If a view was loaded in Pre-Workflow:
 1. From the company's sector (via `get_company_info`) and the captured tilt vector, determine whether a §7 conflict surfaces.
 2. Compose §7.1 House View Note via `render_view_conflict(kind="blanket", ...)` — placed AFTER the Factor Score Trajectory section in Output Format. Do NOT reproduce the template inline; invoke the helper per `_parallax/house-view/render_helpers.md`.
 3. If primary stock total score ≥ 7 AND its sector tilt ≤ -1, compose §7.3 Tension Banner via `render_view_conflict(kind="score_tension", ...)` — placed BETWEEN the scores table and the §7.1 note in Output Format.
-4. Append the §6 audit log entry per loader.md §6.1 (all required fields: `schema_version`, `ts`, `view_id`, `version_id`, `skill`, `action`, `applied`, plus `query_summary` / `conflicts_count` / `output_summary_hash` when `action=="consume"`; and `applied_reason` whenever `applied=false` — for due-diligence the canonical reason string is `"single-stock consumer (loader.md §7)"`). The three-field summary above (view_id + skill + timestamp) is a mnemonic, not the full spec.
+4. Append the §6 audit log entry per loader.md §6.1 (all required fields: `schema_version`, `ts`, `view_id`, `version_id`, `skill`, `action`, `applied`, plus `query_summary` / `conflicts_count` / `output_summary_hash` when `action=="consume"`; and `applied_reason` whenever `applied=false` — for due-diligence the canonical reason string is `"single-stock consumer (loader.md §7.1/§7.2/§7.3)"`). The three-field summary above (view_id + skill + timestamp) is a mnemonic, not the full spec.
 
 ### Pre-Render — Load white-label branding
 
