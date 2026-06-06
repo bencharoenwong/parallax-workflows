@@ -1,23 +1,27 @@
 ---
 name: parallax-credit-lens
 description: "Credit risk assessment for publicly traded companies: leverage, coverage, liquidity, solvency (Palepu), Altman Z-score, and credit health signals vs. peer medians. Symbol in RIC format (AAPL.O, JPM.N). NOT for portfolio credit risk (use /parallax-scenario-analysis), not for private companies (use /parallax-credit-risk when available)."
-negative-triggers:
-  - Private company credit analysis → use /parallax-credit-risk (document ingestion)
-  - Portfolio credit concentration → use /parallax-scenario-analysis
-  - Single stock fundamental analysis → use /parallax-deep-dive
-gotchas:
-  - RIC format required (AAPL.O, not AAPL). Exchange suffix is critical.
-  - JIT-load _parallax/parallax-conventions.md for parallel execution patterns and RIC resolution.
-  - get_financial_analysis is async (2-5 min) — do not block on other calls.
-  - Quality factor is a credit health proxy — deteriorating Quality score is an early warning signal for credit stress.
-  - Altman Z-score computed using market-cap-based formula for public companies (Z, not Z'). Thresholds: >2.99 Safe, 1.81–2.99 Grey, <1.81 Distress.
-  - If Palepu solvency section is unavailable (tool error), degrade gracefully — output remaining metrics and flag Palepu as unavailable.
-  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # Credit Lens
+
+## When not to use
+
+- Private company credit analysis → use /parallax-credit-risk (document ingestion)
+- Portfolio credit concentration → use /parallax-scenario-analysis
+- Single stock fundamental analysis → use /parallax-deep-dive
+
+## Gotchas
+
+- RIC format required (AAPL.O, not AAPL). Exchange suffix is critical.
+- JIT-load _parallax/parallax-conventions.md for parallel execution patterns and RIC resolution.
+- get_financial_analysis is async (2-5 min) — do not block on other calls.
+- Quality factor is a credit health proxy — deteriorating Quality score is an early warning signal for credit stress.
+- Altman Z-score computed using market-cap-based formula for public companies (Z, not Z'). Thresholds: >2.99 Safe, 1.81–2.99 Grey, <1.81 Distress.
+- If Palepu solvency section is unavailable (tool error), degrade gracefully — output remaining metrics and flag Palepu as unavailable.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 
 Credit risk assessment for publicly traded companies using Parallax MCP tools.
 

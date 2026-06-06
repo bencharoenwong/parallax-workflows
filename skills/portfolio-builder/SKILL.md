@@ -1,30 +1,34 @@
 ---
 name: parallax-portfolio-builder
 description: "Build a portfolio from a natural language investment thesis. Constructs universe, scores, checks redundancy, and outputs allocation-ready list via Parallax MCP tools. Supports `--augment-silent` mode to fill active house view gaps from Parallax data for the current portfolio (saved view never mutates). Trigger for that mode: 'fill house view gaps from Parallax data for this portfolio'. NOT for analyzing existing portfolios (use /parallax-client-review), not for screening without allocation (use /parallax-thematic-screen)."
-negative-triggers:
-  - Analyzing existing portfolio → use /parallax-client-review
-  - Screening without allocation → use /parallax-thematic-screen
-  - Single stock analysis → use /parallax-should-i-buy
-  - Rebalancing existing portfolio → use /parallax-rebalance
-gotchas:
-  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
-  - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §3 (multipliers), §4 (conflict resolution), §5 (output rendering), §6 (audit)
-  - When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
-  - build_stock_universe returns relevance-ranked results — re-rank by factor scores for quality
-  - Run redundancy check BEFORE finalizing allocation to avoid sector concentration
-  - analyze_portfolio responses often exceed 180K chars. Use streaming JSON extraction (Step 6) instead of waiting for full response; stream validation results progressively to user as they arrive.
-  - Weights should sum to ~1.0 in final output
-  - Include both the allocation table AND the factor rationale for each pick
-  - The saved house view never carries Parallax-derived overlays. When the active view is silent on a dimension this portfolio decision needs, EITHER (a) treat as neutral [default — non-blocking, RM-fan-out-safe] OR (b) JIT-augment via --augment-silent flag with provenance tagged per holding [auditable]. Never fold augmentation back into the saved view.
-  - **View-status banner is REQUIRED first thing in output when active view exists** — never bury after the holdings table. If execution gets compressed, this is the section that must NOT be dropped. RM uses the banner as the primary signal that the view is active and what's being applied.
-  - **Phase A Parallelization:** View load and universe build run in parallel (view load is fast; universe build is the latency bottleneck). Both complete before Phase B begins.
-  - **Operator verification:** see [examples/testing-posture.md](../../examples/testing-posture.md)
-  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # Portfolio Builder
+
+## When not to use
+
+- Analyzing existing portfolio → use /parallax-client-review
+- Screening without allocation → use /parallax-thematic-screen
+- Single stock analysis → use /parallax-should-i-buy
+- Rebalancing existing portfolio → use /parallax-rebalance
+
+## Gotchas
+
+- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
+- JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §3 (multipliers), §4 (conflict resolution), §5 (output rendering), §6 (audit)
+- When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
+- build_stock_universe returns relevance-ranked results — re-rank by factor scores for quality
+- Run redundancy check BEFORE finalizing allocation to avoid sector concentration
+- analyze_portfolio responses often exceed 180K chars. Use streaming JSON extraction (Step 6) instead of waiting for full response; stream validation results progressively to user as they arrive.
+- Weights should sum to ~1.0 in final output
+- Include both the allocation table AND the factor rationale for each pick
+- The saved house view never carries Parallax-derived overlays. When the active view is silent on a dimension this portfolio decision needs, EITHER (a) treat as neutral [default — non-blocking, RM-fan-out-safe] OR (b) JIT-augment via --augment-silent flag with provenance tagged per holding [auditable]. Never fold augmentation back into the saved view.
+- **View-status banner is REQUIRED first thing in output when active view exists** — never bury after the holdings table. If execution gets compressed, this is the section that must NOT be dropped. RM uses the banner as the primary signal that the view is active and what's being applied.
+- **Phase A Parallelization:** View load and universe build run in parallel (view load is fast; universe build is the latency bottleneck). Both complete before Phase B begins.
+- **Operator verification:** see [examples/testing-posture.md](../../examples/testing-posture.md)
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 
 Construct a portfolio from a plain-English investment thesis using Parallax MCP tools.
 

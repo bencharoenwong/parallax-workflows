@@ -1,26 +1,30 @@
 ---
 name: parallax-macro-outlook
 description: "Full macro regime analysis with optional equity screening: country coverage, economic outlook, regime signals, factor tilt implications, and top-scoring equities in the target market via Parallax MCP tools. NOT for portfolio-level morning briefs (use /parallax-morning-brief), not for single stock analysis (use /parallax-deep-dive)."
-negative-triggers:
-  - Portfolio morning brief → use /parallax-morning-brief
-  - Single stock analysis → use /parallax-deep-dive or /parallax-should-i-buy
-  - Thematic screening across all markets → use /parallax-thematic-screen
-  - Reacting to a specific news event → use /parallax-scenario-analysis
-gotchas:
-  - list_macro_countries shows available coverage — check before querying a country
-  - check_macro_health verifies data freshness — run first to avoid stale analysis
-  - macro_analyst summary call returns all 9 components inline — do not make separate per-component calls
-  - get_telemetry shows how macro regime affects the scoring engine
-  - Smaller/EM markets may have fewer scored equities — set expectations
-  - JIT-load `_parallax/house-view/loader.md` if an active CIO view is present. macro-outlook is a pure macro skill (no portfolio holdings, no single-stock anchor), so neither §3 multipliers nor §7 single-stock conflict-surfacing fit cleanly. Apply a **macro-regime-alignment mode** (defined inline below — call it §7.4 by analogy) — render a divergence note when the view's stated macro regime contradicts live `get_telemetry.regime`. No scoring math is altered. Standard surface: §2 (load + validate), §5 (preamble), §6 (audit log).
-  - **§7.4 macro-regime-alignment mode (this skill's pattern, not in loader.md):** if the active view's basis_statement or stated macro regime (e.g., "recessionary", "expansion", "stagflation", from `view.macro_regime` if present) materially conflicts with the regime returned by `get_telemetry.regime`, render a "View regime: <X> | Live regime: <Y>" line directly under the House View Preamble at the very top of Output Format. The user is informed of the disagreement; the analytical content still reflects live data (live wins for macro narrative). If no view, or view is silent on macro regime, omit the line.
-  - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
-  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # Macro Outlook
+
+## When not to use
+
+- Portfolio morning brief → use /parallax-morning-brief
+- Single stock analysis → use /parallax-deep-dive or /parallax-should-i-buy
+- Thematic screening across all markets → use /parallax-thematic-screen
+- Reacting to a specific news event → use /parallax-scenario-analysis
+
+## Gotchas
+
+- list_macro_countries shows available coverage — check before querying a country
+- check_macro_health verifies data freshness — run first to avoid stale analysis
+- macro_analyst summary call returns all 9 components inline — do not make separate per-component calls
+- get_telemetry shows how macro regime affects the scoring engine
+- Smaller/EM markets may have fewer scored equities — set expectations
+- JIT-load `_parallax/house-view/loader.md` if an active CIO view is present. macro-outlook is a pure macro skill (no portfolio holdings, no single-stock anchor), so neither §3 multipliers nor §7 single-stock conflict-surfacing fit cleanly. Apply a **macro-regime-alignment mode** (defined inline below — call it §7.4 by analogy) — render a divergence note when the view's stated macro regime contradicts live `get_telemetry.regime`. No scoring math is altered. Standard surface: §2 (load + validate), §5 (preamble), §6 (audit log).
+- **§7.4 macro-regime-alignment mode (this skill's pattern, not in loader.md):** if the active view's basis_statement or stated macro regime (e.g., "recessionary", "expansion", "stagflation", from `view.macro_regime` if present) materially conflicts with the regime returned by `get_telemetry.regime`, render a "View regime: <X> | Live regime: <Y>" line directly under the House View Preamble at the very top of Output Format. The user is informed of the disagreement; the analytical content still reflects live data (live wins for macro narrative). If no view, or view is silent on macro regime, omit the line.
+- When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 
 Deep macro regime analysis with optional equity opportunity screening. Covers any of Parallax's 40+ global markets.
 

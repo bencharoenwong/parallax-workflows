@@ -1,25 +1,29 @@
 ---
 name: parallax-deep-dive
 description: "Deep dive on a single position: company profile, peer comparison, financials, score trends, macro context, technicals, dividends, news, and AI assessment via Parallax MCP tools. Symbol in RIC format. NOT for quick stock checks (use /parallax-should-i-buy), not for portfolio-level analysis (use /parallax-morning-brief)."
-negative-triggers:
-  - Quick stock check → use /parallax-should-i-buy
-  - Portfolio analysis → use /parallax-morning-brief
-  - Full due diligence with Palepu → use /parallax-due-diligence
-  - Peer comparison only → use /parallax-peer-comparison
-gotchas:
-  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
-  - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §7.1/§7.2/§7.3 (single-stock conflict surfacing — blanket note + peer-suggest token + score-tension banner), §6 (audit). Do NOT apply tilts — single-stock skills surface conflicts only; peer suggestions are flagged but never filtered. The get_assessment prompt should include the active view (basis_statement + relevant tilts) so the AI assessment can address view alignment in prose — that is deep-dive's primary alignment surface. §7.1/§7.2/§7.3 inline flags are additive polish on top.
-  - When rendering §7.1/§7.2/§7.3 flags, JIT-load _parallax/house-view/render_helpers.md and route every token through `render_view_conflict()`.
-  - When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
-  - get_assessment is async and uses Perplexity — may take 30-90s
-  - get_assessment prompt should incorporate macro context, score trends, and dividend profile alongside existing data
-  - For non-US symbols, apply HK ambiguity cross-check from shared conventions
-  - Pre-Render step loads white-label branding via `_parallax/white-label/loader.py` → `load_visual_branding()` (the 6-key visual subset wrapper). Voice/typography/etc. are structurally absent — `branding["voice"]` raises `KeyError`. Snippet inlined per Tier 1 pilot convention (no JIT-load of integration-pattern.md from this skill). Provenance state-to-text mapping and Branding Header semantics follow integration-pattern.md §5 + §7.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # Position Deep Dive
+
+## When not to use
+
+- Quick stock check → use /parallax-should-i-buy
+- Portfolio analysis → use /parallax-morning-brief
+- Full due diligence with Palepu → use /parallax-due-diligence
+- Peer comparison only → use /parallax-peer-comparison
+
+## Gotchas
+
+- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
+- JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §7.1/§7.2/§7.3 (single-stock conflict surfacing — blanket note + peer-suggest token + score-tension banner), §6 (audit). Do NOT apply tilts — single-stock skills surface conflicts only; peer suggestions are flagged but never filtered. The get_assessment prompt should include the active view (basis_statement + relevant tilts) so the AI assessment can address view alignment in prose — that is deep-dive's primary alignment surface. §7.1/§7.2/§7.3 inline flags are additive polish on top.
+- When rendering §7.1/§7.2/§7.3 flags, JIT-load _parallax/house-view/render_helpers.md and route every token through `render_view_conflict()`.
+- When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
+- get_assessment is async and uses Perplexity — may take 30-90s
+- get_assessment prompt should incorporate macro context, score trends, and dividend profile alongside existing data
+- For non-US symbols, apply HK ambiguity cross-check from shared conventions
+- Pre-Render step loads white-label branding via `_parallax/white-label/loader.py` → `load_visual_branding()` (the 6-key visual subset wrapper). Voice/typography/etc. are structurally absent — `branding["voice"]` raises `KeyError`. Snippet inlined per Tier 1 pilot convention (no JIT-load of integration-pattern.md from this skill). Provenance state-to-text mapping and Branding Header semantics follow integration-pattern.md §5 + §7.
 
 Thorough single-position analysis for fund managers using Parallax MCP tools.
 

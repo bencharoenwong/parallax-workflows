@@ -1,27 +1,31 @@
 ---
 name: parallax-client-review
 description: "RIA/wealth advisor client portfolio review: full analysis, redundancy, health flags, macro context, per-holding drill-down, prioritized recommendations, and AI assessment via Parallax MCP tools. Holdings as [{symbol, weight}]. NOT for fund manager briefs (use /parallax-morning-brief), not for quick stock checks (use /parallax-should-i-buy)."
-negative-triggers:
-  - Fund manager morning brief → use /parallax-morning-brief
-  - Single stock analysis → use /parallax-should-i-buy
-gotchas:
-  - JIT-load _parallax/parallax-conventions.md for fallback patterns and parallel execution
-  - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §3 (multipliers), §4 (conflict resolution), §5 (output rendering), §6 (audit). The view shapes the suitability assessment AND the recommendations: holdings misaligned with view get higher priority for trimming, view-aligned holdings get implicit support.
-  - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
-  - JIT-load references/recommendation-matrix.md for priority classification and drill-down criteria
-  - Holdings in RIC format, weights sum to ~1.0
-  - analyze_portfolio called twice — once with lens "performance", once with "concentration". WARNING: responses often exceed 180K chars (daily time series). If output is truncated or too large, fall back to `check_portfolio_redundancy` (concentration) + `quick_portfolio_scores` (factor tilt) + individual `get_stock_outlook` with aspect "risk_return" (performance)
-  - Per-holding drill-down capped at 8 holdings to manage latency
-  - Mixed-exchange portfolios may need split scoring (see shared conventions)
-  - Output should be presentation-ready for client meetings
-  - get_assessment prompt should incorporate all findings including macro, flags, and recommendations
-  - Pre-Render step loads white-label branding via `_parallax/white-label/loader.py` → `load_visual_branding()` (the 6-key visual subset wrapper). Voice/typography/etc. are structurally absent from the returned dict — `branding["voice"]` raises `KeyError`. The snippet is inlined per Tier 1 pilot convention (no JIT-load of integration-pattern.md from this skill). Provenance state-to-text mapping and Branding Header semantics follow `_parallax/white-label/integration-pattern.md` §5 + §7 — that doc is the canonical specification; client-review's Output Format bullets reference it rather than reproducing the table.
-  - Branding Header uses `**<client_name>** portfolio review` (skill-specific framing), not the generic `**<client_name>** report` template in integration-pattern.md §5. Intentional divergence — do not "fix" to match the generic template.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # Client Portfolio Review
+
+## When not to use
+
+- Fund manager morning brief → use /parallax-morning-brief
+- Single stock analysis → use /parallax-should-i-buy
+
+## Gotchas
+
+- JIT-load _parallax/parallax-conventions.md for fallback patterns and parallel execution
+- JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §3 (multipliers), §4 (conflict resolution), §5 (output rendering), §6 (audit). The view shapes the suitability assessment AND the recommendations: holdings misaligned with view get higher priority for trimming, view-aligned holdings get implicit support.
+- When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
+- JIT-load references/recommendation-matrix.md for priority classification and drill-down criteria
+- Holdings in RIC format, weights sum to ~1.0
+- analyze_portfolio called twice — once with lens "performance", once with "concentration". WARNING: responses often exceed 180K chars (daily time series). If output is truncated or too large, fall back to `check_portfolio_redundancy` (concentration) + `quick_portfolio_scores` (factor tilt) + individual `get_stock_outlook` with aspect "risk_return" (performance)
+- Per-holding drill-down capped at 8 holdings to manage latency
+- Mixed-exchange portfolios may need split scoring (see shared conventions)
+- Output should be presentation-ready for client meetings
+- get_assessment prompt should incorporate all findings including macro, flags, and recommendations
+- Pre-Render step loads white-label branding via `_parallax/white-label/loader.py` → `load_visual_branding()` (the 6-key visual subset wrapper). Voice/typography/etc. are structurally absent from the returned dict — `branding["voice"]` raises `KeyError`. The snippet is inlined per Tier 1 pilot convention (no JIT-load of integration-pattern.md from this skill). Provenance state-to-text mapping and Branding Header semantics follow `_parallax/white-label/integration-pattern.md` §5 + §7 — that doc is the canonical specification; client-review's Output Format bullets reference it rather than reproducing the table.
+- Branding Header uses `**<client_name>** portfolio review` (skill-specific framing), not the generic `**<client_name>** report` template in integration-pattern.md §5. Intentional divergence — do not "fix" to match the generic template.
 
 Presentation-ready portfolio review with health flags and prioritized recommendations for wealth advisors.
 

@@ -104,10 +104,24 @@ check_cio_letter_prep_structure() {
     echo "FAIL  $skill_md: missing or malformed YAML frontmatter (expected leading --- ... --- block)"
   else
     local key
-    for key in name description negative-triggers gotchas; do
+    for key in name description; do
       if ! grep -qE "^${key}:" <<< "$frontmatter"; then
         violations=$((violations + 1))
         echo "FAIL  $skill_md: frontmatter missing required key '${key}:'"
+      fi
+    done
+    # agentskills.io spec: only name/description/license/compatibility/metadata/
+    # allowed-tools may appear top-level. House content lives in body sections.
+    for key in negative-triggers gotchas user-invocable triggers; do
+      if grep -qE "^${key}:" <<< "$frontmatter"; then
+        violations=$((violations + 1))
+        echo "FAIL  $skill_md: forbidden frontmatter key '${key}:' (move to '## When not to use' / '## Gotchas' body sections)"
+      fi
+    done
+    for section in '^## When not to use' '^## Gotchas'; do
+      if ! grep -qE "$section" "$skill_md"; then
+        violations=$((violations + 1))
+        echo "FAIL  $skill_md: missing body section matching '$section'"
       fi
     done
   fi

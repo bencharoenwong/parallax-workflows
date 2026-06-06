@@ -1,22 +1,26 @@
 ---
 name: parallax-halal-screen
 description: "Shariah-compliant stock screening: filter for halal investments, check compliance flags, explain screening criteria, and suggest compliant alternatives via Parallax MCP tools. NOT for general thematic screening (use /parallax-thematic-screen), not for portfolio construction (use /parallax-portfolio-builder)."
-negative-triggers:
-  - General thematic screening → use /parallax-thematic-screen
-  - Portfolio construction → use /parallax-portfolio-builder
-  - Non-compliance screening → use /parallax-earnings-quality
-gotchas:
-  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
-  - explain_methodology does NOT support shariah/halal — valid concepts are value, quality, momentum, defensive, tactical, overall, factor_weighting, scoring
-  - Shariah thresholds are hardcoded in this skill (AAOIFI/DJIM standards) — derive compliance from get_financials data
-  - get_financial_analysis (Palepu framework) is async ~2-5 min — warn user before calling
-  - Financial ratios from get_financials help verify debt/revenue compliance thresholds
-  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # Halal / Shariah Screen
+
+## When not to use
+
+- General thematic screening → use /parallax-thematic-screen
+- Portfolio construction → use /parallax-portfolio-builder
+- Non-compliance screening → use /parallax-earnings-quality
+
+## Gotchas
+
+- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
+- explain_methodology does NOT support shariah/halal — valid concepts are value, quality, momentum, defensive, tactical, overall, factor_weighting, scoring
+- Shariah thresholds are hardcoded in this skill (AAOIFI/DJIM standards) — derive compliance from get_financials data
+- get_financial_analysis (Palepu framework) is async ~2-5 min — warn user before calling
+- Financial ratios from get_financials help verify debt/revenue compliance thresholds
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 
 Screen stocks and portfolios for Shariah compliance using AAOIFI/DJIM screening thresholds applied to Parallax financial data.
 

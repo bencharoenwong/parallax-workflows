@@ -1,24 +1,28 @@
 ---
 name: parallax-country-deep-dive
 description: "Country or region deep dive: macro environment, available equity coverage, top-scoring stocks, and investment opportunities via Parallax MCP tools. NOT for US-centric analysis (use /parallax-macro-outlook), not for thematic screening (use /parallax-thematic-screen)."
-negative-triggers:
-  - US macro analysis → use /parallax-macro-outlook
-  - Thematic screening across all markets → use /parallax-thematic-screen
-  - Single stock analysis → use /parallax-deep-dive
-gotchas:
-  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
-  - list_macro_countries first to confirm the country is covered
-  - build_stock_universe can filter by geography via natural language
-  - Not all 40+ markets have full macro coverage — check_macro_health confirms
-  - Smaller markets may have fewer scored equities
-  - JIT-load `_parallax/house-view/loader.md` if an active CIO view is present; this is a regional-screen skill, so apply §3 (multipliers — region/sector tilts bias the top-opportunities ranking) and §5 (preamble + view-aware sections) and §6 (audit). The view does NOT override the country-specific macro narrative (the country's own data is sovereign for the macro sections); it biases the equity-selection ranking only.
-  - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
-  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # Country Deep Dive
+
+## When not to use
+
+- US macro analysis → use /parallax-macro-outlook
+- Thematic screening across all markets → use /parallax-thematic-screen
+- Single stock analysis → use /parallax-deep-dive
+
+## Gotchas
+
+- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
+- list_macro_countries first to confirm the country is covered
+- build_stock_universe can filter by geography via natural language
+- Not all 40+ markets have full macro coverage — check_macro_health confirms
+- Smaller markets may have fewer scored equities
+- JIT-load `_parallax/house-view/loader.md` if an active CIO view is present; this is a regional-screen skill, so apply §3 (multipliers — region/sector tilts bias the top-opportunities ranking) and §5 (preamble + view-aware sections) and §6 (audit). The view does NOT override the country-specific macro narrative (the country's own data is sovereign for the macro sections); it biases the equity-selection ranking only.
+- When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 
 Macro + equity opportunity analysis for a specific country or region.
 

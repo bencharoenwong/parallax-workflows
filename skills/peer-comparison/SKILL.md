@@ -1,25 +1,29 @@
 ---
 name: parallax-peer-comparison
 description: "Research analyst peer comparison: peer snapshot, exported data, score trend analysis, and relative price performance via Parallax MCP tools. Symbol in RIC format. NOT for single stock analysis (use /parallax-deep-dive), not for portfolio analysis (use /parallax-morning-brief)."
-negative-triggers:
-  - Single stock deep dive → use /parallax-deep-dive
-  - Portfolio analysis → use /parallax-morning-brief
-  - Full due diligence → use /parallax-due-diligence
-gotchas:
-  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
-  - Identifies top 2 peers automatically from get_peer_snapshot
-  - "Peer symbols from get_peer_snapshot may lack RIC suffixes. Before passing to Batch B tools, resolve each peer symbol to RIC format using the exchange suffix table in parallax-conventions.md (e.g., GM → GM.N, F → F.N). Single-letter symbols will fail without the suffix."
-  - Makes 3 calls each for score trends and price series (primary + 2 peers)
-  - export_peer_comparison and export_price_series return structured JSON
-  - JIT-load `_parallax/house-view/loader.md` if an active CIO view is present. Peer-comparison is single-stock per `loader.md` §7 (read-only consumers): tilts are NOT applied to factor scoring or peer ranking. Render the FULL §7 surface: (a) §7.3 Score-vs-View Tension Banner inline between the Factor Comparison Matrix and Score Trajectory when primary stock total ≥ 7 AND its sector tilt ≤ -1; (b) §7.2 Peer-suggest conflict token under the Factor Comparison Matrix for any peer in a view-UW sector (tilt ≤ -1) or on the excludes list — flag, do not filter; the peer stays in the matrix; (c) §7.1 House View Note after Score Trajectory via `render_view_conflict(kind="blanket", ...)`; (d) §6 audit log entry per loader.md §6.1.
-  - When rendering §7.1/§7.2/§7.3 tokens, JIT-load `_parallax/house-view/render_helpers.md` and route every token through `render_view_conflict()`.
-  - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
-  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # Peer Comparison
+
+## When not to use
+
+- Single stock deep dive → use /parallax-deep-dive
+- Portfolio analysis → use /parallax-morning-brief
+- Full due diligence → use /parallax-due-diligence
+
+## Gotchas
+
+- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
+- Identifies top 2 peers automatically from get_peer_snapshot
+- Peer symbols from get_peer_snapshot may lack RIC suffixes. Before passing to Batch B tools, resolve each peer symbol to RIC format using the exchange suffix table in parallax-conventions.md (e.g., GM → GM.N, F → F.N). Single-letter symbols will fail without the suffix.
+- Makes 3 calls each for score trends and price series (primary + 2 peers)
+- export_peer_comparison and export_price_series return structured JSON
+- JIT-load `_parallax/house-view/loader.md` if an active CIO view is present. Peer-comparison is single-stock per `loader.md` §7 (read-only consumers): tilts are NOT applied to factor scoring or peer ranking. Render the FULL §7 surface: (a) §7.3 Score-vs-View Tension Banner inline between the Factor Comparison Matrix and Score Trajectory when primary stock total ≥ 7 AND its sector tilt ≤ -1; (b) §7.2 Peer-suggest conflict token under the Factor Comparison Matrix for any peer in a view-UW sector (tilt ≤ -1) or on the excludes list — flag, do not filter; the peer stays in the matrix; (c) §7.1 House View Note after Score Trajectory via `render_view_conflict(kind="blanket", ...)`; (d) §6 audit log entry per loader.md §6.1.
+- When rendering §7.1/§7.2/§7.3 tokens, JIT-load `_parallax/house-view/render_helpers.md` and route every token through `render_view_conflict()`.
+- When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 
 Structured peer comparison analysis for research analysts.
 

@@ -1,26 +1,30 @@
 ---
 name: parallax-rebalance
 description: "Portfolio rebalancing with health flags and macro context: analyze current state, flag issues, generate prioritized trade instructions with score rationale via Parallax MCP tools. Holdings as [{symbol, weight}]. NOT for initial portfolio construction (use /parallax-portfolio-builder), not for diagnostic-only review (use /parallax-client-review)."
-negative-triggers:
-  - Building a new portfolio from scratch → use /parallax-portfolio-builder
-  - Diagnostic review without trade recommendations → use /parallax-client-review
-  - Single stock analysis → use /parallax-should-i-buy
-gotchas:
-  - JIT-load _parallax/parallax-conventions.md for fallback patterns and parallel execution
-  - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §3 (multipliers), §4 (conflict resolution), §5 (output rendering), §6 (audit). Tilts in the view become trade-direction signals: rebalancing should move portfolio toward view-tilted weights.
-  - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
-  - JIT-load ../client-review/references/recommendation-matrix.md for priority classification. If missing, use inline fallback: High=3+ flags (trim/exit), Medium=2 flags (investigate/trim), Low=1 flag (monitor/hold)
-  - Health flags feed directly into trade action determination — High priority = strong trim/exit
-  - analyze_portfolio with lens "performance" and "concentration" gives the full diagnostic. WARNING: responses often exceed 180K chars (daily time series). If output is truncated or too large, fall back to `check_portfolio_redundancy` (concentration) + `quick_portfolio_scores` (factor tilt)
-  - build_stock_universe can find replacement candidates for positions being trimmed
-  - Output must include specific buy/sell/trim quantities, not just vague suggestions
-  - For portfolios with 10+ holdings, prioritize score trend scans for top/bottom 5 by weight to manage latency
-  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # Portfolio Rebalance
+
+## When not to use
+
+- Building a new portfolio from scratch → use /parallax-portfolio-builder
+- Diagnostic review without trade recommendations → use /parallax-client-review
+- Single stock analysis → use /parallax-should-i-buy
+
+## Gotchas
+
+- JIT-load _parallax/parallax-conventions.md for fallback patterns and parallel execution
+- JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §3 (multipliers), §4 (conflict resolution), §5 (output rendering), §6 (audit). Tilts in the view become trade-direction signals: rebalancing should move portfolio toward view-tilted weights.
+- When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
+- JIT-load ../client-review/references/recommendation-matrix.md for priority classification. If missing, use inline fallback: High=3+ flags (trim/exit), Medium=2 flags (investigate/trim), Low=1 flag (monitor/hold)
+- Health flags feed directly into trade action determination — High priority = strong trim/exit
+- analyze_portfolio with lens "performance" and "concentration" gives the full diagnostic. WARNING: responses often exceed 180K chars (daily time series). If output is truncated or too large, fall back to `check_portfolio_redundancy` (concentration) + `quick_portfolio_scores` (factor tilt)
+- build_stock_universe can find replacement candidates for positions being trimmed
+- Output must include specific buy/sell/trim quantities, not just vague suggestions
+- For portfolios with 10+ holdings, prioritize score trend scans for top/bottom 5 by weight to manage latency
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 
 Generate prioritized trade recommendations using health flags, macro context, and Parallax scores.
 

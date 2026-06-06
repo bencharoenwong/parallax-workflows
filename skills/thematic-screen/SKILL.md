@@ -1,30 +1,34 @@
 ---
 name: parallax-thematic-screen
 description: "Thematic stock screen and trade-idea generation: build a stock universe from a theme, score top picks, layer optional macro context and regime signals, compare peers, and check financials via Parallax MCP tools. Triggers: 'screen for [theme]', 'trade ideas around X', 'thematic ideas for Y', 'stocks in Z theme', 'new ideas in [sector]'. NOT for single stock analysis (use /parallax-should-i-buy), not for portfolio review (use /parallax-client-review)."
-negative-triggers:
-  - Single stock analysis → use /parallax-should-i-buy
-  - Portfolio review → use /parallax-client-review
-  - Peer comparison of known stock → use /parallax-peer-comparison
-  - Regime-first or reflexivity-driven trade ideas (e.g., "trade ideas in current rates regime") → use /parallax-ai-soros
-gotchas:
-  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
-  - JIT-load _parallax/house-view/loader.md FIRST. Rules 3 (ground-truth panel) and 4 (divergence assertion) in §5 apply UNIVERSALLY (view or no view — data-integrity requirements). Rules 1-2 and 5 apply when a view is active. Multi-sector theme queries can collapse to a single sector — divergence assertion must fire regardless of view. The user-supplied theme is sovereign per §4 — render conflict banner if theme contradicts view tilts.
-  - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
-  - build_stock_universe searches ~65K company descriptions by semantic similarity
-  - Default top_n is 5 — adjust for broader or narrower screens
-  - get_peer_snapshot called once per top pick (N calls) — fire in parallel
-  - get_financials called for top 3 only
-  - macro_analyst depends on list_macro_countries — fire as Phase A step 3 batch per conventions (3a → 3b). Cap at 3 markets per screen. Skip step 3 if invoked with `--no-macro` or if no covered markets are relevant to the theme.
-  - get_telemetry may return "Admin org not configured" or fail — graceful skip per parallax-conventions.md. If unavailable, omit the Regime Signal sub-line in the Macro Context section (do NOT abort the screen). No `--no-telemetry` flag is exposed: failure is already safe (telemetry-None → no Regime Signal sub-line) and the single-call latency does not justify a separate flag surface.
-  - Macro context renders as SOFT annotation. When house view is active, view tilts remain sovereign per loader.md §4 — macro_analyst output supplements but never silently re-ranks. When no view is active, macro context may drive country/sector emphasis in the Output Format only; ranking is still composite-driven.
-  - If the user-supplied theme is itself a macro-condition phrase, macro overlay may read as self-confirming. Render a banner suggesting /parallax-macro-outlook for macro-first analysis, then proceed. **Trigger criterion (deterministic, case-insensitive):** theme string contains any of `rates`, `inflation`, `recession`, `tariff`, `tariffs`, `yield curve`, `currency`, `USD`, `dollar`, `credit spread`, `GDP`, `monetary policy`, `fiscal`, `Fed`, `central bank`, `regime`, `cycle`, AND does not also contain a sector/industry word (`tech`, `energy`, `healthcare`, `financials`, `industrials`, `materials`, `utilities`, `staples`, `discretionary`, `REIT`, `biotech`, `software`, etc.). List is a starting heuristic; extend per deployment context.
-  - Telemetry semantics: `get_telemetry` returns BASKET-LEVEL regime signals (`regime_tag`, `divergences[]` with basket-level z-scores, `commentary.headline`) — NOT per-ticker confidence. The schema does not expose per-name signal. Render only: (a) `regime_tag`, (b) top 1-3 divergence basket names with sign, (c) `commentary.headline` — in the Macro Context section. Do NOT tag individual Top Picks rows with a "Confidence" annotation derived from telemetry; any per-name tag would be hallucinated from basket-level data. Do NOT propagate raw proprietary framework-component names or factor-decomposition values from telemetry even if exposed.
-  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # Thematic Screen
+
+## When not to use
+
+- Single stock analysis → use /parallax-should-i-buy
+- Portfolio review → use /parallax-client-review
+- Peer comparison of known stock → use /parallax-peer-comparison
+- Regime-first or reflexivity-driven trade ideas (e.g., "trade ideas in current rates regime") → use /parallax-ai-soros
+
+## Gotchas
+
+- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
+- JIT-load _parallax/house-view/loader.md FIRST. Rules 3 (ground-truth panel) and 4 (divergence assertion) in §5 apply UNIVERSALLY (view or no view — data-integrity requirements). Rules 1-2 and 5 apply when a view is active. Multi-sector theme queries can collapse to a single sector — divergence assertion must fire regardless of view. The user-supplied theme is sovereign per §4 — render conflict banner if theme contradicts view tilts.
+- When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
+- build_stock_universe searches ~65K company descriptions by semantic similarity
+- Default top_n is 5 — adjust for broader or narrower screens
+- get_peer_snapshot called once per top pick (N calls) — fire in parallel
+- get_financials called for top 3 only
+- macro_analyst depends on list_macro_countries — fire as Phase A step 3 batch per conventions (3a → 3b). Cap at 3 markets per screen. Skip step 3 if invoked with `--no-macro` or if no covered markets are relevant to the theme.
+- get_telemetry may return "Admin org not configured" or fail — graceful skip per parallax-conventions.md. If unavailable, omit the Regime Signal sub-line in the Macro Context section (do NOT abort the screen). No `--no-telemetry` flag is exposed: failure is already safe (telemetry-None → no Regime Signal sub-line) and the single-call latency does not justify a separate flag surface.
+- Macro context renders as SOFT annotation. When house view is active, view tilts remain sovereign per loader.md §4 — macro_analyst output supplements but never silently re-ranks. When no view is active, macro context may drive country/sector emphasis in the Output Format only; ranking is still composite-driven.
+- If the user-supplied theme is itself a macro-condition phrase, macro overlay may read as self-confirming. Render a banner suggesting /parallax-macro-outlook for macro-first analysis, then proceed. **Trigger criterion (deterministic, case-insensitive):** theme string contains any of `rates`, `inflation`, `recession`, `tariff`, `tariffs`, `yield curve`, `currency`, `USD`, `dollar`, `credit spread`, `GDP`, `monetary policy`, `fiscal`, `Fed`, `central bank`, `regime`, `cycle`, AND does not also contain a sector/industry word (`tech`, `energy`, `healthcare`, `financials`, `industrials`, `materials`, `utilities`, `staples`, `discretionary`, `REIT`, `biotech`, `software`, etc.). List is a starting heuristic; extend per deployment context.
+- Telemetry semantics: `get_telemetry` returns BASKET-LEVEL regime signals (`regime_tag`, `divergences[]` with basket-level z-scores, `commentary.headline`) — NOT per-ticker confidence. The schema does not expose per-name signal. Render only: (a) `regime_tag`, (b) top 1-3 divergence basket names with sign, (c) `commentary.headline` — in the Macro Context section. Do NOT tag individual Top Picks rows with a "Confidence" annotation derived from telemetry; any per-name tag would be hallucinated from basket-level data. Do NOT propagate raw proprietary framework-component names or factor-decomposition values from telemetry even if exposed.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 
 Discover investment opportunities by theme using Parallax's semantic universe builder.
 

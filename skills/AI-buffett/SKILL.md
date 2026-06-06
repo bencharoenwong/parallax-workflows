@@ -1,30 +1,34 @@
 ---
 name: parallax-ai-buffett
 description: "Applies the Buffett-style factor profile (per Frazzini-Kabiller-Pedersen 2018, 'Buffett's Alpha', FAJ), reconciled for 21st-century intangibles-heavy valuations per Lev-Srivastava 2022, to a single stock's current Parallax factor scores. Returns a match/partial/no-match verdict based on Quality, Value, Momentum, and Defensive factor criteria. Third-person framing, academic citation, AI-inferred from public information. NOT financial advice. NOT personalized. Accepts plain tickers or RIC format."
-negative-triggers:
-  - Portfolio-level analysis → use /parallax-morning-brief or /parallax-portfolio-checkup
-  - Full due diligence → use /parallax-due-diligence
-  - Quick stock evaluation without a specific investor lens → use /parallax-should-i-buy
-  - Peer comparison → use /parallax-peer-comparison
-  - Running backtests → use /backtest
-  - Other investor profiles → use /parallax-ai-soros, /parallax-ai-greenblatt, /parallax-ai-klarman
-  - Cross-profile consensus → use /parallax-ai-consensus
-gotchas:
-  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
-  - JIT-load _parallax/AI-profiles/profile-schema.md for the dispatcher workflow and cross-validation gate
-  - JIT-load _parallax/AI-profiles/output-template.md for the required output structure and disclaimer
-  - JIT-load _parallax/AI-profiles/profiles/buffett.md for the profile spec (frontmatter + narrative)
-  - Cross-validation gate (spec §6.4) is NON-BYPASSABLE — refuse to render on name mismatch
-  - Disclaimer language is verbatim — do NOT paraphrase "not financial advice," "AI-inferred," or "consult a qualified financial advisor"
-  - NEVER use first-person impersonation of Buffett — always frame as "Buffett-style" or "the BKP 2018 factor profile"
-  - Profile is derived from public academic sources only (BKP 2018 + Lev-Srivastava 2022) — no private data, no get_assessment
-  - Thresholds are calibrated for 21st-century intangibles-heavy valuations — KO/AXP return match, BRK parent and AAPL return partial (documented)
-  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # Parallax AI Buffett Profile
+
+## When not to use
+
+- Portfolio-level analysis → use /parallax-morning-brief or /parallax-portfolio-checkup
+- Full due diligence → use /parallax-due-diligence
+- Quick stock evaluation without a specific investor lens → use /parallax-should-i-buy
+- Peer comparison → use /parallax-peer-comparison
+- Running backtests → use /backtest
+- Other investor profiles → use /parallax-ai-soros, /parallax-ai-greenblatt, /parallax-ai-klarman
+- Cross-profile consensus → use /parallax-ai-consensus
+
+## Gotchas
+
+- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
+- JIT-load _parallax/AI-profiles/profile-schema.md for the dispatcher workflow and cross-validation gate
+- JIT-load _parallax/AI-profiles/output-template.md for the required output structure and disclaimer
+- JIT-load _parallax/AI-profiles/profiles/buffett.md for the profile spec (frontmatter + narrative)
+- Cross-validation gate (spec §6.4) is NON-BYPASSABLE — refuse to render on name mismatch
+- Disclaimer language is verbatim — do NOT paraphrase "not financial advice," "AI-inferred," or "consult a qualified financial advisor"
+- NEVER use first-person impersonation of Buffett — always frame as "Buffett-style" or "the BKP 2018 factor profile"
+- Profile is derived from public academic sources only (BKP 2018 + Lev-Srivastava 2022) — no private data, no get_assessment
+- Thresholds are calibrated for 21st-century intangibles-heavy valuations — KO/AXP return match, BRK parent and AAPL return partial (documented)
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 
 Applies the Buffett-style factor profile documented in Frazzini, Kabiller, and Pedersen's 2018 *Financial Analysts Journal* paper "Buffett's Alpha" to a single stock's current Parallax factor scores.
 

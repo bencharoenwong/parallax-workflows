@@ -1,22 +1,7 @@
 ---
 name: parallax-should-i-buy
 description: "Quick stock evaluation: company overview, Parallax factor scores, financial health, score trends, macro context, dividends, news, and analyst outlook. Plain language output. Accepts plain ticker (AAPL) or RIC (AAPL.O). NOT for portfolio analysis (use /parallax-morning-brief), not for full due diligence (use /parallax-due-diligence), not for backtesting (use /backtest)."
-negative-triggers:
-  - Portfolio-level analysis → use /parallax-morning-brief
-  - Full research report → use /parallax-due-diligence
-  - Running backtests → use /backtest
-  - Peer comparison deep dive → use /parallax-peer-comparison
-gotchas:
-  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
-  - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §7.1/§7.2/§7.3 (single-stock conflict surfacing — blanket note + peer-suggest token + score-tension banner), §6 (audit). Do NOT apply tilts — single-stock skills surface conflicts only; peer suggestions are flagged but never filtered.
-  - When rendering §7.1/§7.2/§7.3 flags, JIT-load _parallax/house-view/render_helpers.md and route every token through `render_view_conflict()`. Do not hand-construct the string.
-  - LANGUAGE PILOT — if a second positional arg is supplied AND is not `en`, Step 5 (Translate output) is MANDATORY — do not skip. Route `zh-CN`/`zh-TW`/`zh-HK` to `/translate-chinese-finance`, `th` to `/translate-thai-finance`. The variant must be passed as a delimited routing block ABOVE the prose body — NOT as a prose sentence the translator could echo. Use exactly this shape (the marker line and the dashed separator are required so the translator skips the block):
-
-        ROUTING DIRECTIVE — DO NOT TRANSLATE OR ECHO THIS BLOCK:
-          target_variant: zh-HK            # one of: zh-CN | zh-TW | zh-HK | (omit for Thai)
-          source_language: en
-          begin_content_below_separator: true
-        ---
+---
 
         <rendered prose body starts here>
 
@@ -33,6 +18,24 @@ gotchas:
 <!-- white-label: integration-pattern.md -->
 
 # Should I Buy
+
+## When not to use
+
+- Portfolio-level analysis → use /parallax-morning-brief
+- Full research report → use /parallax-due-diligence
+- Running backtests → use /backtest
+- Peer comparison deep dive → use /parallax-peer-comparison
+
+## Gotchas
+
+- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
+- JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §7.1/§7.2/§7.3 (single-stock conflict surfacing — blanket note + peer-suggest token + score-tension banner), §6 (audit). Do NOT apply tilts — single-stock skills surface conflicts only; peer suggestions are flagged but never filtered.
+- When rendering §7.1/§7.2/§7.3 flags, JIT-load _parallax/house-view/render_helpers.md and route every token through `render_view_conflict()`. Do not hand-construct the string.
+- LANGUAGE PILOT — if a second positional arg is supplied AND is not `en`, Step 5 (Translate output) is MANDATORY — do not skip. Route `zh-CN`/`zh-TW`/`zh-HK` to `/translate-chinese-finance`, `th` to `/translate-thai-finance`. The variant must be passed as a delimited routing block ABOVE the prose body — NOT as a prose sentence the translator could echo. Use exactly this shape (the marker line and the dashed separator are required so the translator skips the block):
+      ROUTING DIRECTIVE — DO NOT TRANSLATE OR ECHO THIS BLOCK:
+        target_variant: zh-HK            # one of: zh-CN | zh-TW | zh-HK | (omit for Thai)
+        source_language: en
+        begin_content_below_separator: true
 
 Quick, plain-language stock evaluation using Parallax MCP tools.
 

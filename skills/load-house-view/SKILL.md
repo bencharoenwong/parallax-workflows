@@ -1,30 +1,34 @@
 ---
 name: parallax-load-house-view
 description: "Ingest a CIO house view (PDF / text / URL / wizard) into the Parallax workflow system. Extracts structured tilts and excludes, presents a confirmation gate, then saves the view to ~/.parallax/active-house-view/ where every portfolio skill auto-loads it. Use to set, update, re-pair, extend, or clear the active house view. NOT for portfolio construction (use /parallax-portfolio-builder), not for one-off scenario exploration (just describe inline to the relevant skill)."
-negative-triggers:
-  - Building a portfolio → use /parallax-portfolio-builder
-  - One-off scenario / what-if → describe inline to the portfolio skill, don't load as a view
-  - Single-stock evaluation → use /parallax-should-i-buy
-gotchas:
-  - JIT-load _parallax/house-view/schema.yaml before extraction — it is the single source of truth for the YAML shape
-  - JIT-load _parallax/house-view/loader.md to see what consumer skills will validate (helps you produce a valid view first time). Note: loader.md §3 (Multiplier mapping) is a normative replay dependency per reasoning chain spec — changes to multiplier values, factor ordering, or composite formula MUST coincide with a `skill_version` bump and break replay byte-identity for chains pinned to prior versions.
-  - PDF input — use the Read tool with `pages` parameter for >10 pages; do NOT defuddle PDFs (we want figure context)
-  - URL input — use the defuddle skill if Bash is available, else WebFetch
-  - Confirmation gate is REQUIRED — the uploader must explicitly confirm extracted YAML before save (uploader_confirmed=true). Saving without confirmation breaks downstream loaders.
-  - Always compute view_hash from the canonical tilts body per schema.yaml §"view_hash computation" — sorted keys, no comments, no empty fields
-  - Ask uploader_role and basis_statement via AskUserQuestion — these are required-at-institutional fields and need explicit human input
-  - Auto-applied macro_regime → factor tilts (loader.md §3) MUST be surfaced to the uploader at the gate, not silently applied
-  - Confirmation gate persists a pre-edit snapshot (Step 3a) when uploader chooses 'Edit specific fields' — writes extractor's pristine draft to `.archive/<version>/pre_edit.yaml` alongside the superseded view. No-edit confirmations skip this.
-  - Every extraction attempt (Step 3b) logs an `extraction_attempt` audit entry to `audit.jsonl` — whether or not it becomes a save. Capture disposition (confirmed/edited/re_extracted/rejected) + draft_yaml_hash per loader.md §6.2.
-  - Save (Step 4 step 10) computes a `version_diff` block vs `parent_version_id` and stashes it on the save audit entry. Only when this save supersedes a prior version.
-  - Calibration manifest: Invoke `manifest_cache.load_manifest()` during Step 4 (Write Phase) to resolve active calibration. Handle `DeadStateNoFallback` or signature errors by logging a warning and falling back to the bundled-values default.
-  - Reasoning Chains: Every save MUST invoke `chain_emit.emit_chain()` (or `emit_phase_0_chain()`) to produce a compliance artifact at `~/.parallax/reasoning-chains/`.
-  - Compliance Export: Use `--export <view_id>` to generate a regulator-grade bundle. Validates hash-chain integrity before packaging.
-  - `--why <tilt-path>` is on-demand. Reads `provenance.yaml` first when present; the latest derivation entry for the leaf controls the answer. If type is `macro_regime_rule`, cite `rule_ref` + `trigger`. If type is `prose_extraction` or no `provenance.yaml` exists (legacy view), fall back to the prose.md targeted re-read. The saved house view never carries Parallax-derived overlays — augmentation happens just-in-time at consumer-skill use, with provenance recorded on the consuming portfolio/screen artifact, not on the view itself.
-  - **Operator verification:** see [examples/testing-posture.md](../../examples/testing-posture.md)
 ---
 
 # Load House View
+
+## When not to use
+
+- Building a portfolio → use /parallax-portfolio-builder
+- One-off scenario / what-if → describe inline to the portfolio skill, don't load as a view
+- Single-stock evaluation → use /parallax-should-i-buy
+
+## Gotchas
+
+- JIT-load _parallax/house-view/schema.yaml before extraction — it is the single source of truth for the YAML shape
+- JIT-load _parallax/house-view/loader.md to see what consumer skills will validate (helps you produce a valid view first time). Note: loader.md §3 (Multiplier mapping) is a normative replay dependency per reasoning chain spec — changes to multiplier values, factor ordering, or composite formula MUST coincide with a `skill_version` bump and break replay byte-identity for chains pinned to prior versions.
+- PDF input — use the Read tool with `pages` parameter for >10 pages; do NOT defuddle PDFs (we want figure context)
+- URL input — use the defuddle skill if Bash is available, else WebFetch
+- Confirmation gate is REQUIRED — the uploader must explicitly confirm extracted YAML before save (uploader_confirmed=true). Saving without confirmation breaks downstream loaders.
+- Always compute view_hash from the canonical tilts body per schema.yaml §"view_hash computation" — sorted keys, no comments, no empty fields
+- Ask uploader_role and basis_statement via AskUserQuestion — these are required-at-institutional fields and need explicit human input
+- Auto-applied macro_regime → factor tilts (loader.md §3) MUST be surfaced to the uploader at the gate, not silently applied
+- Confirmation gate persists a pre-edit snapshot (Step 3a) when uploader chooses 'Edit specific fields' — writes extractor's pristine draft to `.archive/<version>/pre_edit.yaml` alongside the superseded view. No-edit confirmations skip this.
+- Every extraction attempt (Step 3b) logs an `extraction_attempt` audit entry to `audit.jsonl` — whether or not it becomes a save. Capture disposition (confirmed/edited/re_extracted/rejected) + draft_yaml_hash per loader.md §6.2.
+- Save (Step 4 step 10) computes a `version_diff` block vs `parent_version_id` and stashes it on the save audit entry. Only when this save supersedes a prior version.
+- Calibration manifest: Invoke `manifest_cache.load_manifest()` during Step 4 (Write Phase) to resolve active calibration. Handle `DeadStateNoFallback` or signature errors by logging a warning and falling back to the bundled-values default.
+- Reasoning Chains: Every save MUST invoke `chain_emit.emit_chain()` (or `emit_phase_0_chain()`) to produce a compliance artifact at `~/.parallax/reasoning-chains/`.
+- Compliance Export: Use `--export <view_id>` to generate a regulator-grade bundle. Validates hash-chain integrity before packaging.
+- `--why <tilt-path>` is on-demand. Reads `provenance.yaml` first when present; the latest derivation entry for the leaf controls the answer. If type is `macro_regime_rule`, cite `rule_ref` + `trigger`. If type is `prose_extraction` or no `provenance.yaml` exists (legacy view), fall back to the prose.md targeted re-read. The saved house view never carries Parallax-derived overlays — augmentation happens just-in-time at consumer-skill use, with provenance recorded on the consuming portfolio/screen artifact, not on the view itself.
+- **Operator verification:** see [examples/testing-posture.md](../../examples/testing-posture.md)
 
 Ingest a CIO house view (PDF / text / URL / wizard) into the Parallax workflow system.
 

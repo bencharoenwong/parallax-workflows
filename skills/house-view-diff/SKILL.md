@@ -1,16 +1,20 @@
 ---
 name: parallax-house-view-diff
 description: "Interface spec for verifying that a house view changes downstream portfolio output. Describes the dual-leg paired-call protocol and output contract. Calibration and reference runner are internal to Parallax."
-negative-triggers:
-  - Just loading a view → use /parallax-load-house-view
-  - General portfolio building → use /parallax-portfolio-builder
-gotchas:
-  - This skill is a SPEC, not an executable runner. Consumers implementing the protocol provide their own execution + calibration.
-  - JIT-load _parallax/house-view/tests/portfolio_diff_harness.md for the protocol definition.
-  - Output MUST follow the `<diff_output>` JSON contract defined in the protocol spec.
 ---
 
 # House View Diff — Interface Spec
+
+## When not to use
+
+- Just loading a view → use /parallax-load-house-view
+- General portfolio building → use /parallax-portfolio-builder
+
+## Gotchas
+
+- This skill is a SPEC, not an executable runner. Consumers implementing the protocol provide their own execution + calibration.
+- JIT-load _parallax/house-view/tests/portfolio_diff_harness.md for the protocol definition.
+- Output MUST follow the `<diff_output>` JSON contract defined in the protocol spec.
 
 Defines the protocol shape for verifying that an active house view shifts the output of a downstream consumer skill.
 

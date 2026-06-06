@@ -1,26 +1,30 @@
 ---
 name: parallax-judge-house-view
 description: "Read-only LLM-as-judge that compares the saved CIO house view against current Parallax macro signals, classifies drift severity (minor / moderate / material), and recommends per-cell updates with cited rationale. Emits a self-contained report bundle and a single audit row; NEVER modifies the active view. NOT for synthesizing a view from scratch (use /parallax-make-house-view), not for portfolio construction (use /parallax-portfolio-builder), not for one-off scenario reactions (use /parallax-scenario-analysis)."
-negative-triggers:
-  - Synthesizing a new house view from MCP signals → use /parallax-make-house-view
-  - Building a portfolio from a thesis → use /parallax-portfolio-builder
-  - Editing the saved view → use /parallax-load-house-view --edit
-  - One-off scenario / what-if → describe inline to the portfolio skill, don't run the judge
-  - Internal-consistency stress test (CIO contradictions inside the view itself) → use /parallax-stress-house-view
-gotchas:
-  - This skill is READ-ONLY against the active house view. It never writes to view.yaml or provenance.yaml. Only audit.jsonl gets a new row (action="judge", applied=false ALWAYS) and the judge-reports bundle directory gets a new entry.
-  - JIT-load `_parallax/house-view/loader.md` for the audit-row schema (§6.1 / §6.2) and the conditional fields for action="judge".
-  - JIT-load `_parallax/house-view/schema.yaml` for the view structure + `classification_taxonomy.judge_recommendation` (judge does NOT write this class into provenance.yaml — it only emits it in the report; promotion happens via /parallax-load-house-view --edit).
-  - JIT-load `_parallax/house-view/MCP_FIELD_INVENTORY.md` to understand what the maker can actually extract — informs which cells the judge can confidently recommend on.
-  - JIT-load `_parallax/parallax-conventions.md` for MCP tool conventions and batch patterns.
-  - Phase 5 LLM recommendations go through `recommendation.validate_citation` post-call. Recommendations whose rationale does NOT contain a >=30-char verbatim substring of the source snippet are DROPPED and replaced with a "judge declined to recommend (citation check failed)" placeholder. This is the single biggest hallucination control — do NOT bypass it.
-  - The judge does NOT use `gate_present.run_gate_loop` — there is no confirmation gate. It's a read-only report.
-  - Maker shared modules (`cross_country`, `pillar_compose`, `pillar_formulas`) are imported lazily; if Phase B1 hasn't shipped, the orchestrator surfaces the gap in diagnostics and falls back to PARALLAX_SILENT for cells where the imputed view can't be computed.
-  - Server-side `house_view_judge` MCP tool: CANCELLED (2026-05-24). The judge is client-side permanently — bank clients run this skill / CLI on their own side. See v2 plan §3.2 for rationale (transparency for model-validation review, zero cross-tenant blast radius). Do NOT resurrect the server-side framing without a new architectural decision.
-  - Auto-on-load triggers (portfolio-builder, rebalance, thematic-screen) suppress the run when `view_age_days < cadence.AUTO_ON_LOAD_MIN_AGE_DAYS` (30 days). Banner only at drift_material.
 ---
 
 # Judge Active House View
+
+## When not to use
+
+- Synthesizing a new house view from MCP signals → use /parallax-make-house-view
+- Building a portfolio from a thesis → use /parallax-portfolio-builder
+- Editing the saved view → use /parallax-load-house-view --edit
+- One-off scenario / what-if → describe inline to the portfolio skill, don't run the judge
+- Internal-consistency stress test (CIO contradictions inside the view itself) → use /parallax-stress-house-view
+
+## Gotchas
+
+- This skill is READ-ONLY against the active house view. It never writes to view.yaml or provenance.yaml. Only audit.jsonl gets a new row (action="judge", applied=false ALWAYS) and the judge-reports bundle directory gets a new entry.
+- JIT-load `_parallax/house-view/loader.md` for the audit-row schema (§6.1 / §6.2) and the conditional fields for action="judge".
+- JIT-load `_parallax/house-view/schema.yaml` for the view structure + `classification_taxonomy.judge_recommendation` (judge does NOT write this class into provenance.yaml — it only emits it in the report; promotion happens via /parallax-load-house-view --edit).
+- JIT-load `_parallax/house-view/MCP_FIELD_INVENTORY.md` to understand what the maker can actually extract — informs which cells the judge can confidently recommend on.
+- JIT-load `_parallax/parallax-conventions.md` for MCP tool conventions and batch patterns.
+- Phase 5 LLM recommendations go through `recommendation.validate_citation` post-call. Recommendations whose rationale does NOT contain a >=30-char verbatim substring of the source snippet are DROPPED and replaced with a "judge declined to recommend (citation check failed)" placeholder. This is the single biggest hallucination control — do NOT bypass it.
+- The judge does NOT use `gate_present.run_gate_loop` — there is no confirmation gate. It's a read-only report.
+- Maker shared modules (`cross_country`, `pillar_compose`, `pillar_formulas`) are imported lazily; if Phase B1 hasn't shipped, the orchestrator surfaces the gap in diagnostics and falls back to PARALLAX_SILENT for cells where the imputed view can't be computed.
+- Server-side `house_view_judge` MCP tool: CANCELLED (2026-05-24). The judge is client-side permanently — bank clients run this skill / CLI on their own side. See v2 plan §3.2 for rationale (transparency for model-validation review, zero cross-tenant blast radius). Do NOT resurrect the server-side framing without a new architectural decision.
+- Auto-on-load triggers (portfolio-builder, rebalance, thematic-screen) suppress the run when `view_age_days < cadence.AUTO_ON_LOAD_MIN_AGE_DAYS` (30 days). Banner only at drift_material.
 
 This skill compares the active CIO house view against fresh Parallax macro signals, classifies drift severity, and recommends per-cell updates with cited rationale. It is **read-only**: the active view is never modified. The output is one append-only audit row, one report bundle, and one reasoning chain.
 

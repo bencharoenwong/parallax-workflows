@@ -1,7 +1,6 @@
 ---
 name: translate-thai-finance
 description: Translate financial content (stock reports, CIO reports, macro reports) to Thai with correct code-switching, terminology, and natural phrasing. Use when translating text to Thai for institutional finance audiences.
-user-invocable: true
 ---
 
 # Thai Financial Translation Skill

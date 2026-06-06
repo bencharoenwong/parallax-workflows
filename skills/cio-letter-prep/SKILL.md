@@ -1,40 +1,44 @@
 ---
 name: parallax-cio-letter-prep
 description: "Monthly CIO letter prep pack for fund managers: period attribution via daily contribution analysis, top contributors / detractors with evidence-backed drivers, macro snapshot, news themes, and a conditional forward-outlook. Output is Word .docx for the CIO to edit and send. Provide current_portfolio, prior_portfolio, trade_log, period_start, period_end. Symbols in RIC format. NOT for individual stock analysis (use /parallax-deep-dive), not for daily fund-manager check-ins (use /parallax-morning-brief), not for retail/RIA reviews (use /parallax-client-review)."
-negative-triggers:
-  - Single stock analysis → use /parallax-should-i-buy or /parallax-deep-dive
-  - Daily fund manager brief → use /parallax-morning-brief
-  - RIA / wealth-advisor client review → use /parallax-client-review
-  - Reactive drawdown attribution after a single event → use /parallax-explain-portfolio
-  - Backtesting a strategy → use /backtest
-  - Period > 365 days → split into quarterly windows manually (export_price_series caps at 365 days)
-gotchas:
-  - JIT-load `_parallax/parallax-conventions.md` for RIC, symbol cross-validation, parallel exec, fallbacks, news async, macro reasoning, and disclaimer
-  - JIT-load `_parallax/house-view/loader.md` ONLY if `house_view` is supplied AND forward-outlook will render. House view is scoped to the forward-outlook section ONLY — retrospective sections (header, attribution, contributors, detractors, trade narrative, macro, news) are always view-agnostic. No view → omit forward-outlook entirely; never retrofit view language onto retrospective prose.
-  - Attribution method is "daily contribution analysis" (NOT "time-weighted" / TWR — that's a different industry term for return calculation, and conflating them confuses practitioners). Math: daily weights from `prior_portfolio + trade_log`, sum (daily_weight × daily_return) per holding. Naive `weight × period_return` is silently wrong when positions change mid-period.
-  - **Server-side numbers are canonical.** `analyze_portfolio.company_contribution` produces the LP-facing numbers; `scripts/contribution.py` is the local reconciliation audit. If `|local − server| > 25 bps` on total return, halt rendering with an audit-failed error. The 25-bp tolerance accommodates known rebalance-date convention skew between Parallax server-side and local math; tighter agreement would require aligning conventions in v2.
-  - `scripts/contribution.py` enforces a 1-bp inner reconciliation gate (`|sum(contributions) − portfolio_total_return| > 1bp` → `ReconciliationError`). On gate fire, surface the diff and abort. Never catch-and-discard.
-  - `prior_portfolio` and `trade_log` are HARD-REQUIRED. Reject incomplete invocations with the accepted-shape examples in Inputs. No silent degradation to position-only contribution.
-  - `daily_prices` MUST be total-return prices (dividends reinvested). `export_price_series` returns TR-adjusted closes; do not mix in raw closes from any other source.
-  - Per-mover fan-out cap: 5 contributors + 5 detractors = 10 names max. Do not exceed.
-  - Soft cap on holdings: 40. Auto-truncate to top 40 by current weight; surface "Holdings 41-N (X% weight) excluded from per-position analysis". Daily contribution math runs over the FULL set; only per-mover fan-out is truncated.
-  - `macro_analyst` parameter is `market` (not `country`). Cap macro coverage at 3 markets.
-  - Period must be ≤ 365 days (`export_price_series` limit). For longer periods, reject with a v2-roadmap note.
-  - Output is Word .docx ONLY via the `docx` skill chain. Markdown is an intermediate artifact, never the deliverable.
-  - Materiality tiers for excluded holdings: ≤5% total → in-line "Coverage gap" note above contributors table; >5% → high-visibility WARNING banner at top; any single holding >10% → reject the attribution section entirely.
-  - Driver-field fallback hierarchy: (1) news event with date from `get_news_synthesis`, (2) factor score change from `get_score_analysis`, (3) sector / peer movement from `analyze_portfolio` (this skill never calls `get_peer_snapshot` directly), (4) default phrase ("Price appreciation in line with [sector / market]" or "Multiple expansion / contraction"). Never render an empty driver slot.
-  - Empty contributor / detractor side: if all holdings have positive (negative) contribution, render the populated table only; suppress the empty side rather than rendering "No detractors" prose.
-  - Single-holding portfolio: top-5 collapses to top-1 (or top-N for N < 5); render valid for N ∈ [1, 5].
-  - Duplicate symbol in input portfolio: reject at validation with "Duplicate symbol {sym}" — no auto-dedup.
-  - Mid-period delisting (price series ends before period_end): treat as a coverage gap (drop from rankings + surface per the materiality tiers), not a hard ValueError.
-  - This skill is private-beta gated; excluded from default `build-skills.sh` builds. Confirm enablement before running for new customers.
-  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step; that doc carries the loader call (`load_visual_branding`), error-state contract, docx substitution table (§6), and Provenance template (§7). The Pre-Render step in Workflow below points at it; the table at the end of Output Format previously inlined here has been moved to §6.
-  - Voice and auto-jurisdiction disclaimers remain explicitly out of scope (see "Not in scope"). This skill uses `load_visual_branding()` rather than `load_client_branding()` — the 6-key wrapper excludes `branding["voice"]` at code level, so accidental access raises `KeyError`. The CIO writes the prose; the standard wording in the **Disclaimer** section stays. Visual branding only.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # CIO Letter Prep Pack
+
+## When not to use
+
+- Single stock analysis → use /parallax-should-i-buy or /parallax-deep-dive
+- Daily fund manager brief → use /parallax-morning-brief
+- RIA / wealth-advisor client review → use /parallax-client-review
+- Reactive drawdown attribution after a single event → use /parallax-explain-portfolio
+- Backtesting a strategy → use /backtest
+- Period > 365 days → split into quarterly windows manually (export_price_series caps at 365 days)
+
+## Gotchas
+
+- JIT-load `_parallax/parallax-conventions.md` for RIC, symbol cross-validation, parallel exec, fallbacks, news async, macro reasoning, and disclaimer
+- JIT-load `_parallax/house-view/loader.md` ONLY if `house_view` is supplied AND forward-outlook will render. House view is scoped to the forward-outlook section ONLY — retrospective sections (header, attribution, contributors, detractors, trade narrative, macro, news) are always view-agnostic. No view → omit forward-outlook entirely; never retrofit view language onto retrospective prose.
+- Attribution method is "daily contribution analysis" (NOT "time-weighted" / TWR — that's a different industry term for return calculation, and conflating them confuses practitioners). Math: daily weights from `prior_portfolio + trade_log`, sum (daily_weight × daily_return) per holding. Naive `weight × period_return` is silently wrong when positions change mid-period.
+- **Server-side numbers are canonical.** `analyze_portfolio.company_contribution` produces the LP-facing numbers; `scripts/contribution.py` is the local reconciliation audit. If `|local − server| > 25 bps` on total return, halt rendering with an audit-failed error. The 25-bp tolerance accommodates known rebalance-date convention skew between Parallax server-side and local math; tighter agreement would require aligning conventions in v2.
+- `scripts/contribution.py` enforces a 1-bp inner reconciliation gate (`|sum(contributions) − portfolio_total_return| > 1bp` → `ReconciliationError`). On gate fire, surface the diff and abort. Never catch-and-discard.
+- `prior_portfolio` and `trade_log` are HARD-REQUIRED. Reject incomplete invocations with the accepted-shape examples in Inputs. No silent degradation to position-only contribution.
+- `daily_prices` MUST be total-return prices (dividends reinvested). `export_price_series` returns TR-adjusted closes; do not mix in raw closes from any other source.
+- Per-mover fan-out cap: 5 contributors + 5 detractors = 10 names max. Do not exceed.
+- Soft cap on holdings: 40. Auto-truncate to top 40 by current weight; surface "Holdings 41-N (X% weight) excluded from per-position analysis". Daily contribution math runs over the FULL set; only per-mover fan-out is truncated.
+- `macro_analyst` parameter is `market` (not `country`). Cap macro coverage at 3 markets.
+- Period must be ≤ 365 days (`export_price_series` limit). For longer periods, reject with a v2-roadmap note.
+- Output is Word .docx ONLY via the `docx` skill chain. Markdown is an intermediate artifact, never the deliverable.
+- Materiality tiers for excluded holdings: ≤5% total → in-line "Coverage gap" note above contributors table; >5% → high-visibility WARNING banner at top; any single holding >10% → reject the attribution section entirely.
+- Driver-field fallback hierarchy: (1) news event with date from `get_news_synthesis`, (2) factor score change from `get_score_analysis`, (3) sector / peer movement from `analyze_portfolio` (this skill never calls `get_peer_snapshot` directly), (4) default phrase ("Price appreciation in line with [sector / market]" or "Multiple expansion / contraction"). Never render an empty driver slot.
+- Empty contributor / detractor side: if all holdings have positive (negative) contribution, render the populated table only; suppress the empty side rather than rendering "No detractors" prose.
+- Single-holding portfolio: top-5 collapses to top-1 (or top-N for N < 5); render valid for N ∈ [1, 5].
+- Duplicate symbol in input portfolio: reject at validation with "Duplicate symbol {sym}" — no auto-dedup.
+- Mid-period delisting (price series ends before period_end): treat as a coverage gap (drop from rankings + surface per the materiality tiers), not a hard ValueError.
+- This skill is private-beta gated; excluded from default `build-skills.sh` builds. Confirm enablement before running for new customers.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step; that doc carries the loader call (`load_visual_branding`), error-state contract, docx substitution table (§6), and Provenance template (§7). The Pre-Render step in Workflow below points at it; the table at the end of Output Format previously inlined here has been moved to §6.
+- Voice and auto-jurisdiction disclaimers remain explicitly out of scope (see "Not in scope"). This skill uses `load_visual_branding()` rather than `load_client_branding()` — the 6-key wrapper excludes `branding["voice"]` at code level, so accidental access raises `KeyError`. The CIO writes the prose; the standard wording in the **Disclaimer** section stays. Visual branding only.
 
 Generate a structured Word document that a fund-manager CIO can edit and send to LPs as the period letter. The pack covers the period dates, gross return / drawdown / vol, attribution snapshot, top 5 contributors and bottom 5 detractors with evidence-backed drivers, trade-log narrative, macro snapshot, news themes, a conditional forward-outlook (only if a house view is active), coverage gaps, and the standard disclaimer.
 

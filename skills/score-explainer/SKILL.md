@@ -1,22 +1,26 @@
 ---
 name: parallax-score-explainer
 description: "Explain Parallax scores, factors, and methodology in plain language. Why does a stock score this way? What would change it? Uses methodology docs and score data. NOT for stock analysis (use /parallax-should-i-buy), not for deep dives (use /parallax-deep-dive)."
-negative-triggers:
-  - Stock analysis with buy/sell framing → use /parallax-should-i-buy
-  - Full position analysis → use /parallax-deep-dive
-  - Portfolio diagnostics → use /parallax-portfolio-checkup
-gotchas:
-  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
-  - explain_methodology takes a topic string — be specific (e.g., "quality score", "momentum factor")
-  - get_docs and list_docs access the full methodology documentation
-  - get_score_analysis shows trajectory — useful for explaining "why did this change"
-  - Output must be accessible to non-technical clients and compliance teams
-  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # Score Explainer
+
+## When not to use
+
+- Stock analysis with buy/sell framing → use /parallax-should-i-buy
+- Full position analysis → use /parallax-deep-dive
+- Portfolio diagnostics → use /parallax-portfolio-checkup
+
+## Gotchas
+
+- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
+- explain_methodology takes a topic string — be specific (e.g., "quality score", "momentum factor")
+- get_docs and list_docs access the full methodology documentation
+- get_score_analysis shows trajectory — useful for explaining "why did this change"
+- Output must be accessible to non-technical clients and compliance teams
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 
 Plain-language explanations of Parallax scores, factors, and methodology.
 

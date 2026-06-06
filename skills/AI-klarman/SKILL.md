@@ -1,30 +1,34 @@
 ---
 name: parallax-ai-klarman
 description: "Applies Seth Klarman's margin-of-safety framework (per 'Margin of Safety', 1991) to a single stock's current financials via Parallax. Four balance-sheet checks: net cash position, debt vs peers, FCF stability, valuation discount. Includes a distinctive 'no position warranted; cash is valid' output when nothing qualifies. Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized."
-negative-triggers:
-  - Bottom-up factor scoring → use /parallax-ai-buffett
-  - Mechanical formula screen → use /parallax-ai-greenblatt
-  - Top-down macro analysis → use /parallax-ai-soros
-  - Cross-profile consensus → use /parallax-ai-consensus
-  - Full due diligence → use /parallax-due-diligence
-  - Running backtests → use /backtest
-gotchas:
-  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallback patterns
-  - JIT-load _parallax/AI-profiles/profile-schema.md and output-template.md
-  - JIT-load _parallax/AI-profiles/profiles/klarman.md for the profile spec
-  - Klarman profile is balance-sheet-first — requires get_financials(balance_sheet) AND get_financials(cash_flow) AND get_financials(ratios), 4 periods each
-  - 3 statements × 4 periods would be 12 calls, but Parallax returns 4 periods per call → 3 calls + get_peer_snapshot + get_company_info = ~5 tokens
-  - Compute net cash from balance sheet (cash - total debt), not from the ratios summary
-  - The "no position warranted" output IS valid output — do not treat it as a failure
-  - NEVER use first-person impersonation; always "Klarman-style"
-  - Disclaimer verbatim per output-template.md, substituting "Seth Klarman" for [Investor]
-  - Value threshold is intentionally loose (≥ 4) per Lev-Srivastava 2022 intangibles caveat — do not tighten without re-anchoring
-  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # Parallax AI Klarman Profile
+
+## When not to use
+
+- Bottom-up factor scoring → use /parallax-ai-buffett
+- Mechanical formula screen → use /parallax-ai-greenblatt
+- Top-down macro analysis → use /parallax-ai-soros
+- Cross-profile consensus → use /parallax-ai-consensus
+- Full due diligence → use /parallax-due-diligence
+- Running backtests → use /backtest
+
+## Gotchas
+
+- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallback patterns
+- JIT-load _parallax/AI-profiles/profile-schema.md and output-template.md
+- JIT-load _parallax/AI-profiles/profiles/klarman.md for the profile spec
+- Klarman profile is balance-sheet-first — requires get_financials(balance_sheet) AND get_financials(cash_flow) AND get_financials(ratios), 4 periods each
+- 3 statements × 4 periods would be 12 calls, but Parallax returns 4 periods per call → 3 calls + get_peer_snapshot + get_company_info = ~5 tokens
+- Compute net cash from balance sheet (cash - total debt), not from the ratios summary
+- The "no position warranted" output IS valid output — do not treat it as a failure
+- NEVER use first-person impersonation; always "Klarman-style"
+- Disclaimer verbatim per output-template.md, substituting "Seth Klarman" for [Investor]
+- Value threshold is intentionally loose (≥ 4) per Lev-Srivastava 2022 intangibles caveat — do not tighten without re-anchoring
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 
 Applies Seth Klarman's margin-of-safety framework to a single stock's current balance sheet, cash flow, and peer-relative valuation.
 

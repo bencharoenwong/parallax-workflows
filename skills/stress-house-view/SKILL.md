@@ -1,20 +1,24 @@
 ---
 name: parallax-stress-house-view
 description: "Stress-test the active CIO house view against fresh Parallax macro data and internal consistency. Emits a per-run report and a hash-chained audit entry. Optionally hands off to /parallax-load-house-view --edit to incorporate updates. NOT for portfolio construction (use /parallax-portfolio-builder), not for one-off scenario reactions (use /parallax-scenario-analysis)."
-negative-triggers:
-  - Building a portfolio from a thesis → use /parallax-portfolio-builder
-  - Reacting to a one-off scenario (e.g. rate hike) → use /parallax-scenario-analysis
-  - Loading or editing a house view → use /parallax-load-house-view
-gotchas:
-  - This skill is read-only against the active house view. It never modifies the view directly.
-  - The --edit handoff to /parallax-load-house-view is a separate confirmation gate.
-  - JIT-load `_parallax/house-view/stress-test-design.md` for the 6 stress-test principles.
-  - JIT-load `_parallax/house-view/schema.yaml` for view structure.
-  - JIT-load `_parallax/house-view/loader.md` for audit log schema.
-  - JIT-load `_parallax/parallax-conventions.md` for MCP tool conventions.
 ---
 
 # Stress-Test Active House View
+
+## When not to use
+
+- Building a portfolio from a thesis → use /parallax-portfolio-builder
+- Reacting to a one-off scenario (e.g. rate hike) → use /parallax-scenario-analysis
+- Loading or editing a house view → use /parallax-load-house-view
+
+## Gotchas
+
+- This skill is read-only against the active house view. It never modifies the view directly.
+- The --edit handoff to /parallax-load-house-view is a separate confirmation gate.
+- JIT-load `_parallax/house-view/stress-test-design.md` for the 6 stress-test principles.
+- JIT-load `_parallax/house-view/schema.yaml` for view structure.
+- JIT-load `_parallax/house-view/loader.md` for audit log schema.
+- JIT-load `_parallax/parallax-conventions.md` for MCP tool conventions.
 
 This skill compares the active CIO house view against fresh Parallax macro data and internal consistency rules. It produces a structured, CIO-facing report that classifies every divergence and surfaces key decision points.
 

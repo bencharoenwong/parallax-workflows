@@ -1,22 +1,26 @@
 ---
 name: parallax-watchlist-monitor
 description: "Monitor a watchlist of tickers: flag score changes, news alerts, technical shifts, and analyst updates via Parallax MCP tools. Provide list of symbols. NOT for single stock analysis (use /parallax-deep-dive), not for portfolio diagnostics (use /parallax-morning-brief)."
-negative-triggers:
-  - Single stock deep dive → use /parallax-deep-dive
-  - Portfolio with weights → use /parallax-morning-brief or /parallax-client-review
-  - Building a portfolio → use /parallax-portfolio-builder
-gotchas:
-  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallback patterns, and the §0.2 integer-param serialization caveat
-  - This is a surveillance skill — optimized for breadth over depth
-  - get_score_analysis with 4-8 weeks is sufficient for detecting recent changes — fire all in parallel. `weeks` is non-default here and must be passed as a typed integer at the call site (see conventions §0.2)
-  - Only call get_news_synthesis for names with significant score changes (saves API calls)
-  - Rank output by magnitude of change — most-changed at top
-  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # Watchlist Monitor
+
+## When not to use
+
+- Single stock deep dive → use /parallax-deep-dive
+- Portfolio with weights → use /parallax-morning-brief or /parallax-client-review
+- Building a portfolio → use /parallax-portfolio-builder
+
+## Gotchas
+
+- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallback patterns, and the §0.2 integer-param serialization caveat
+- This is a surveillance skill — optimized for breadth over depth
+- get_score_analysis with 4-8 weeks is sufficient for detecting recent changes — fire all in parallel. `weeks` is non-default here and must be passed as a typed integer at the call site (see conventions §0.2)
+- Only call get_news_synthesis for names with significant score changes (saves API calls)
+- Rank output by magnitude of change — most-changed at top
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 
 Surveillance scan across a list of tickers — flag what's changed, what needs attention.
 

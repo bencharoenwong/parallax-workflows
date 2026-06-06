@@ -1,24 +1,28 @@
 ---
 name: parallax-due-diligence
 description: "Full research analyst due diligence: all financial statements, Palepu framework, technicals, news, score trends, and full Parallax research report via Parallax MCP tools. Symbol in RIC format. NOT for quick checks (use /parallax-should-i-buy), not for position deep dives without Palepu (use /parallax-deep-dive)."
-negative-triggers:
-  - Quick stock evaluation → use /parallax-should-i-buy
-  - Position deep dive (no Palepu) → use /parallax-deep-dive
-  - Peer comparison only → use /parallax-peer-comparison
-gotchas:
-  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
-  - get_financial_analysis (Palepu) is async ~2-5 min
-  - get_stock_report is async ~1-2 min and is a PAID endpoint
-  - Wait for each async step before proceeding
-  - This is the most thorough and expensive workflow — use for serious research only
-  - JIT-load _parallax/house-view/loader.md and apply §7 (single-stock, read-only consumers) — due-diligence is a single-stock skill, so tilts are NOT applied to scores or to the assessment prompt. Workflow: §2 validation, §7.1 House View Note rendered AFTER the Factor Score Trajectory section (per render_helpers.md template via `render_view_conflict(kind="blanket", ...)`), §7.3 Score-vs-View Tension Banner inline at scores when primary stock total score ≥7 AND its sector tilt ≤-1, §6 audit log entry. §7.2 (peer-suggest token) is N/A here — due-diligence does not surface `get_peer_snapshot.suggestion`.
-  - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
-  - Pre-Render step loads white-label branding via `_parallax/white-label/loader.py` → `load_visual_branding()` (the 6-key visual subset wrapper). Voice/typography/etc. are structurally absent — `branding["voice"]` raises `KeyError`. Snippet inlined per Tier 1 pilot convention (no JIT-load of integration-pattern.md from this skill). Provenance state-to-text mapping and Branding Header semantics follow integration-pattern.md §5 + §7 — render per that table.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # Full Due Diligence
+
+## When not to use
+
+- Quick stock evaluation → use /parallax-should-i-buy
+- Position deep dive (no Palepu) → use /parallax-deep-dive
+- Peer comparison only → use /parallax-peer-comparison
+
+## Gotchas
+
+- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
+- get_financial_analysis (Palepu) is async ~2-5 min
+- get_stock_report is async ~1-2 min and is a PAID endpoint
+- Wait for each async step before proceeding
+- This is the most thorough and expensive workflow — use for serious research only
+- JIT-load _parallax/house-view/loader.md and apply §7 (single-stock, read-only consumers) — due-diligence is a single-stock skill, so tilts are NOT applied to scores or to the assessment prompt. Workflow: §2 validation, §7.1 House View Note rendered AFTER the Factor Score Trajectory section (per render_helpers.md template via `render_view_conflict(kind="blanket", ...)`), §7.3 Score-vs-View Tension Banner inline at scores when primary stock total score ≥7 AND its sector tilt ≤-1, §6 audit log entry. §7.2 (peer-suggest token) is N/A here — due-diligence does not surface `get_peer_snapshot.suggestion`.
+- When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
+- Pre-Render step loads white-label branding via `_parallax/white-label/loader.py` → `load_visual_branding()` (the 6-key visual subset wrapper). Voice/typography/etc. are structurally absent — `branding["voice"]` raises `KeyError`. Snippet inlined per Tier 1 pilot convention (no JIT-load of integration-pattern.md from this skill). Provenance state-to-text mapping and Branding Header semantics follow integration-pattern.md §5 + §7 — render per that table.
 
 Comprehensive analyst-grade due diligence using all available Parallax tools.
 

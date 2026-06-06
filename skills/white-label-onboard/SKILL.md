@@ -1,34 +1,38 @@
+---
 name: parallax-white-label-onboard
 description: "Configure white-label client branding for Parallax report output. Extracts colors, logos, fonts AND writing voice from a folder of client collateral (PowerPoint, Word docs), a website URL, a PDF brand guide, or guided wizard intake. Multi-source ingestion supported: when more than one source is provided, mismatches between sources are flagged at the confirmation gate rather than silently resolved. Validates visual assets against WCAG accessibility standards and voice section against corpus-size and completeness thresholds, presents a confirmation gate, then saves branding to ~/.parallax/client-branding/ where downstream skills inject it: visual goes into client-review, due-diligence, and deep-dive PDFs; voice goes into letter-writing, newsletter, and meeting-prep skills. Use to onboard a new client brand, update an existing one, or audit what branding is currently active."
-negative-triggers:
-  - Generating a client report → use /parallax-client-review (it loads the saved branding automatically)
-  - One-off color/font question → answer inline, don't save as config
-  - Portfolio construction → use /parallax-portfolio-builder
-  - Single-prompt voice rewrite of one piece of content → use /humanizer or /chicago-global-voice; this skill is for persistent client brand state
-gotchas:
-  - JIT-load _parallax/white-label/schema.yaml before extraction — it is the single source of truth for config.yaml shape
-  - JIT-load _parallax/white-label/extract.py and _parallax/white-label/validator.py before running Steps 1 and 2
-  - URL input — use defuddle (Bash: `defuddle parse <url> --md`) if available, else WebFetch; do NOT defuddle PDFs
-  - PDF input — use the Read tool with `pages` parameter; read up to first 10 pages unless the brand guide is clearly deeper
-  - PPTX input — extract.extract_from_pptx() reads OOXML theme XML directly (precise colors/fonts) and aggregates slide text for voice corpus. Requires python-pptx
-  - DOCX input — extract.extract_from_docx() same pattern via word/theme/theme1.xml. Requires python-docx
-  - Folder input — when given a directory, run all .pptx/.docx/.pdf files inside it through their respective extractors and merge_drafts() the result before validation
-  - Voice extraction is LLM-driven (NOT regex) — extract.py only assembles the corpus. SKILL.md Step 1.5 prompts the model to fill the voice schema using the Lago 7-section template
-  - Voice corpus must be ≥500 words for credible extraction; ≥2000 words is recommended. VoiceValidator.validate_corpus_size enforces this with warn/fail. Below the floor, refuse to populate voice or surface a hard warning
-  - Wizard mode is triggered by invoking with no argument — guide intake via AskUserQuestion, one prompt per group
-  - Confirmation gate is REQUIRED — config must not be written until the user explicitly confirms
-  - Validation warnings (warn/fail) never block the save — surface them and let the user decide
-  - Logo download: always download to assets/ during save so downstream PDF generation has local files; external URLs in config are a fallback reference only
-  - Audit entries must be written even for aborted sessions (extraction_attempt with disposition=rejected)
-  - If config.yaml exists and is corrupted or fails yaml.safe_load, warn and offer to overwrite; do not crash
-  - Pre-edit snapshot: when user chooses "Edit specific fields," serialize the pre-edit draft to .archive/ before applying edits — mirrors load-house-view Layer 2 pattern
-  - config.yaml permissions: 0600. assets/ directory: 0700. Parent directory ~/.parallax/client-branding/: 0700 on creation.
-  - Cross-validate extracted company name vs. source — extractor may misidentify which brand it found
-  - File paths in schema.yaml use tilde notation (~/.parallax/...); expand to absolute path at runtime
-
 ---
 
 # White-Label Client Onboarding
+
+## When not to use
+
+- Generating a client report → use /parallax-client-review (it loads the saved branding automatically)
+- One-off color/font question → answer inline, don't save as config
+- Portfolio construction → use /parallax-portfolio-builder
+- Single-prompt voice rewrite of one piece of content → use /humanizer or /chicago-global-voice; this skill is for persistent client brand state
+
+## Gotchas
+
+- JIT-load _parallax/white-label/schema.yaml before extraction — it is the single source of truth for config.yaml shape
+- JIT-load _parallax/white-label/extract.py and _parallax/white-label/validator.py before running Steps 1 and 2
+- URL input — use defuddle (Bash: `defuddle parse <url> --md`) if available, else WebFetch; do NOT defuddle PDFs
+- PDF input — use the Read tool with `pages` parameter; read up to first 10 pages unless the brand guide is clearly deeper
+- PPTX input — extract.extract_from_pptx() reads OOXML theme XML directly (precise colors/fonts) and aggregates slide text for voice corpus. Requires python-pptx
+- DOCX input — extract.extract_from_docx() same pattern via word/theme/theme1.xml. Requires python-docx
+- Folder input — when given a directory, run all .pptx/.docx/.pdf files inside it through their respective extractors and merge_drafts() the result before validation
+- Voice extraction is LLM-driven (NOT regex) — extract.py only assembles the corpus. SKILL.md Step 1.5 prompts the model to fill the voice schema using the Lago 7-section template
+- Voice corpus must be ≥500 words for credible extraction; ≥2000 words is recommended. VoiceValidator.validate_corpus_size enforces this with warn/fail. Below the floor, refuse to populate voice or surface a hard warning
+- Wizard mode is triggered by invoking with no argument — guide intake via AskUserQuestion, one prompt per group
+- Confirmation gate is REQUIRED — config must not be written until the user explicitly confirms
+- Validation warnings (warn/fail) never block the save — surface them and let the user decide
+- Logo download: always download to assets/ during save so downstream PDF generation has local files; external URLs in config are a fallback reference only
+- Audit entries must be written even for aborted sessions (extraction_attempt with disposition=rejected)
+- If config.yaml exists and is corrupted or fails yaml.safe_load, warn and offer to overwrite; do not crash
+- Pre-edit snapshot: when user chooses "Edit specific fields," serialize the pre-edit draft to .archive/ before applying edits — mirrors load-house-view Layer 2 pattern
+- config.yaml permissions: 0600. assets/ directory: 0700. Parent directory ~/.parallax/client-branding/: 0700 on creation.
+- Cross-validate extracted company name vs. source — extractor may misidentify which brand it found
+- File paths in schema.yaml use tilde notation (~/.parallax/...); expand to absolute path at runtime
 
 Configure client branding for Parallax equity research report output.
 

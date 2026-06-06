@@ -1,22 +1,26 @@
 ---
 name: parallax-make-house-view
 description: "Synthesize a draft Parallax house view by orchestrating macro_analyst + get_telemetry MCP outputs across the 14 covered markets, route the draft through the shared confirmation gate, and save through the same path /parallax-load-house-view uses. The synthesized view carries `generator_synthesis` provenance (distinct from ingested views' `prose_extraction`) and lands in `~/.parallax/active-house-view/` like any other house view. Use when the bank has no CIO take to ingest, when prepping a Parallax baseline for shadow-comparison against an active bank view, or to populate a fresh deployment. NOT for ingesting an existing CIO PDF (use /parallax-load-house-view), not for stress-testing an active view (use /parallax-stress-house-view), not for judging an active view against current Parallax signals (use /parallax-judge-house-view)."
-negative-triggers:
-  - Ingesting a CIO PDF / URL / wizard input → use /parallax-load-house-view
-  - Judging an active view against live signals → use /parallax-judge-house-view
-  - Stress-testing for internal consistency → use /parallax-stress-house-view
-  - Per-cell diff of two saved views → use /parallax-house-view-diff
-gotchas:
-  - JIT-load `_parallax/house-view/MCP_FIELD_INVENTORY.md` BEFORE assuming any component input is available. `valuation_state` / `market_entropy` are prose-extracted; `psychological_wavelength` is LLM-judged. Confidence caps differ per component.
-  - The shared gate (`_parallax/house-view/gate_present.py`) is REQUIRED — there is no save path that bypasses it. `--shadow-diff` skips the gate AND the save.
-  - Fan-out budget is 14 markets × 5 components = 70 macro_analyst calls + 1 list_macro_countries + 1 get_telemetry. Concurrency cap 8. Per-market timeout 45s. Hard abort when unreachable_share > 30%.
-  - Reuse `audit_chain.append_entry`, `chain_emit.emit_phase_0_chain`, `provenance_classes.validate_provenance_entry`. NEVER reimplement.
-  - The `generate` audit row carries ONLY: schema_version, ts, view_id, version_id, view_hash, skill, action, applied, parent_version_id, provenance_hash, source_tools, calibration_status. composition_formula / aggregator_weights_ref / source_snippets / pillar_missing_inputs MUST go in `provenance.yaml`, NOT on the audit row.
-  - `psychological_wavelength` judgment is Claude-only (data perimeter — telemetry contains CG-proprietary signals, do NOT dispatch to external models).
-  - Synthesized views carry `auto_expire_days: 30` (shorter than ingested views' 90) because the underlying macro fan-out is point-in-time.
 ---
 
 # Make House View
+
+## When not to use
+
+- Ingesting a CIO PDF / URL / wizard input → use /parallax-load-house-view
+- Judging an active view against live signals → use /parallax-judge-house-view
+- Stress-testing for internal consistency → use /parallax-stress-house-view
+- Per-cell diff of two saved views → use /parallax-house-view-diff
+
+## Gotchas
+
+- JIT-load `_parallax/house-view/MCP_FIELD_INVENTORY.md` BEFORE assuming any component input is available. `valuation_state` / `market_entropy` are prose-extracted; `psychological_wavelength` is LLM-judged. Confidence caps differ per component.
+- The shared gate (`_parallax/house-view/gate_present.py`) is REQUIRED — there is no save path that bypasses it. `--shadow-diff` skips the gate AND the save.
+- Fan-out budget is 14 markets × 5 components = 70 macro_analyst calls + 1 list_macro_countries + 1 get_telemetry. Concurrency cap 8. Per-market timeout 45s. Hard abort when unreachable_share > 30%.
+- Reuse `audit_chain.append_entry`, `chain_emit.emit_phase_0_chain`, `provenance_classes.validate_provenance_entry`. NEVER reimplement.
+- The `generate` audit row carries ONLY: schema_version, ts, view_id, version_id, view_hash, skill, action, applied, parent_version_id, provenance_hash, source_tools, calibration_status. composition_formula / aggregator_weights_ref / source_snippets / pillar_missing_inputs MUST go in `provenance.yaml`, NOT on the audit row.
+- `psychological_wavelength` judgment is Claude-only (data perimeter — telemetry contains CG-proprietary signals, do NOT dispatch to external models).
+- Synthesized views carry `auto_expire_days: 30` (shorter than ingested views' 90) because the underlying macro fan-out is point-in-time.
 
 Synthesize a draft Parallax house view by orchestrating Parallax MCP tools (`list_macro_countries` + `macro_analyst` × 14 markets × 5 components + `get_telemetry`), aggregate cross-country, compose the four framework components (macro backdrop, valuation, market state, sentiment), route through the shared confirmation gate, and save through the same path `/parallax-load-house-view` uses.
 

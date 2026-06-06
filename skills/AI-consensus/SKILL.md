@@ -1,29 +1,33 @@
 ---
 name: parallax-ai-consensus
 description: "Runs all installed Parallax AI Investor Profiles (Buffett, Greenblatt, Klarman, Soros, PTJ) against a single ticker or short basket (cap 5). Returns the per-profile verdict matrix, the super-majority consensus signal per consensus-config.md, and a factor-level agreement detail showing which factors/criteria were flagged by multiple profiles. Cross-profile agreement IS the high-conviction signal. Third-person framing throughout, AI-inferred from public information. NOT financial advice. NOT personalized."
-negative-triggers:
-  - Single profile only → use /parallax-ai-buffett, /parallax-ai-greenblatt, /parallax-ai-klarman, or /parallax-ai-soros
-  - Broader macro outlook → use /parallax-macro-outlook
-  - Portfolio analysis → use /parallax-morning-brief or /parallax-portfolio-checkup
-  - Full due diligence → use /parallax-due-diligence
-  - Running backtests → use /backtest
-gotchas:
-  - JIT-load _parallax/parallax-conventions.md, profile-schema.md, output-template.md, consensus-config.md
-  - JIT-load ALL installed profile specs under _parallax/AI-profiles/profiles/ — buffett.md, greenblatt.md, klarman.md, soros.md, ptj.md
-  - Do NOT re-implement profile logic — invoke each profile dispatcher's workflow as documented in skills/AI-<name>/SKILL.md
-  - Cap basket input at 5 tickers per call. For single-ticker queries, all 5 profiles are applicable (Soros and PTJ run single-ticker dual/tri-channel modes)
-  - Super-majority math uses ceiling rounding per consensus-config.md — required = ceil(0.75 × applicable)
-  - Partial matches do NOT count toward the super-majority signal but DO count toward factor-level agreement surfacing
-  - Factor-level agreement is the highest-value section — do not skip it
-  - Disclaimer verbatim; use umbrella phrasing "Parallax AI Investor Profiles framework" rather than any single investor name
-  - If a profile fails (cross-validation, timeout, missing data) mark as `skipped` and continue with remaining profiles
-  - INSUFFICIENT_PROFILES if applicable count < 3 (per consensus-config.md minimum_applicable_count)
-  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # Parallax AI Investor Profiles — Consensus Meta-Skill
+
+## When not to use
+
+- Single profile only → use /parallax-ai-buffett, /parallax-ai-greenblatt, /parallax-ai-klarman, or /parallax-ai-soros
+- Broader macro outlook → use /parallax-macro-outlook
+- Portfolio analysis → use /parallax-morning-brief or /parallax-portfolio-checkup
+- Full due diligence → use /parallax-due-diligence
+- Running backtests → use /backtest
+
+## Gotchas
+
+- JIT-load _parallax/parallax-conventions.md, profile-schema.md, output-template.md, consensus-config.md
+- JIT-load ALL installed profile specs under _parallax/AI-profiles/profiles/ — buffett.md, greenblatt.md, klarman.md, soros.md, ptj.md
+- Do NOT re-implement profile logic — invoke each profile dispatcher's workflow as documented in skills/AI-<name>/SKILL.md
+- Cap basket input at 5 tickers per call. For single-ticker queries, all 5 profiles are applicable (Soros and PTJ run single-ticker dual/tri-channel modes)
+- Super-majority math uses ceiling rounding per consensus-config.md — required = ceil(0.75 × applicable)
+- Partial matches do NOT count toward the super-majority signal but DO count toward factor-level agreement surfacing
+- Factor-level agreement is the highest-value section — do not skip it
+- Disclaimer verbatim; use umbrella phrasing "Parallax AI Investor Profiles framework" rather than any single investor name
+- If a profile fails (cross-validation, timeout, missing data) mark as `skipped` and continue with remaining profiles
+- INSUFFICIENT_PROFILES if applicable count < 3 (per consensus-config.md minimum_applicable_count)
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 
 Runs all installed AI Investor Profiles in parallel against a ticker (or short basket), aggregates the verdicts, computes the super-majority consensus signal, and surfaces factor-level agreement detail.
 

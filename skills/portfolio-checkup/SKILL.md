@@ -1,26 +1,30 @@
 ---
 name: parallax-portfolio-checkup
 description: "Individual investor portfolio checkup: health flags, factor scores, redundancy, macro context, and plain-language recommendations via Parallax MCP tools. Holdings as [{symbol, weight}]. NOT for fund manager briefs (use /parallax-morning-brief), not for client reviews (use /parallax-client-review)."
-negative-triggers:
-  - Fund manager morning brief → use /parallax-morning-brief
-  - Client portfolio review (RIA) → use /parallax-client-review
-  - Single stock analysis → use /parallax-should-i-buy
-  - Portfolio with significant ETF allocation → equity scope only in v1; ETF holdings will fail V2 scoring and may silently mismap in V1. ETF-aware health-check is on the v2 roadmap; for now use /parallax-explain-portfolio (which handles ETFs via etf_profile pre-classification) for ETF-heavy portfolios.
-gotchas:
-  - JIT-load _parallax/parallax-conventions.md for RIC resolution (§1), symbol cross-validation (§2), parallel execution (§3), and fallback patterns (§4)
-  - JIT-load references/health-flags.md for the 5-flag health system, thresholds, and mixed-exchange fallback
-  - Holdings must be in RIC format with weights summing to ~1.0
-  - Per-holding `get_peer_snapshot` + `get_company_info` cross-validation is the primary scoring path (matches morning-brief V2 pattern). `quick_portfolio_scores` is the V1 fallback — known symbol-mapping bugs for non-US numeric tickers (HK / TW / KR), so retail portfolios with mixed exchanges silently mismap without the cross-validation gate.
-  - Mixed-exchange portfolios may have partial scoring coverage — apply split-and-merge fallback
-  - Plain language output — no finance jargon. Surface name mismatches in user-friendly terms ("Some holdings could not be verified") rather than technical jargon.
-  - JIT-load `_parallax/house-view/loader.md` if an active CIO view is present; this is a portfolio-level skill, so apply §3 (multipliers) to factor scoring of verified holdings, §4 (conflict resolution if user-stated preferences contradict view), §5 (preamble + view-aware sections), §6 (audit log). The view biases the recommendations in **Consider** — view-aligned tilts get implicit support; view-misaligned holdings get a gentle question framing. Health flags themselves are unchanged by the view; the view adds context, not a sixth flag.
-  - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
-  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # Portfolio Checkup
+
+## When not to use
+
+- Fund manager morning brief → use /parallax-morning-brief
+- Client portfolio review (RIA) → use /parallax-client-review
+- Single stock analysis → use /parallax-should-i-buy
+- Portfolio with significant ETF allocation → equity scope only in v1; ETF holdings will fail V2 scoring and may silently mismap in V1. ETF-aware health-check is on the v2 roadmap; for now use /parallax-explain-portfolio (which handles ETFs via etf_profile pre-classification) for ETF-heavy portfolios.
+
+## Gotchas
+
+- JIT-load _parallax/parallax-conventions.md for RIC resolution (§1), symbol cross-validation (§2), parallel execution (§3), and fallback patterns (§4)
+- JIT-load references/health-flags.md for the 5-flag health system, thresholds, and mixed-exchange fallback
+- Holdings must be in RIC format with weights summing to ~1.0
+- Per-holding `get_peer_snapshot` + `get_company_info` cross-validation is the primary scoring path (matches morning-brief V2 pattern). `quick_portfolio_scores` is the V1 fallback — known symbol-mapping bugs for non-US numeric tickers (HK / TW / KR), so retail portfolios with mixed exchanges silently mismap without the cross-validation gate.
+- Mixed-exchange portfolios may have partial scoring coverage — apply split-and-merge fallback
+- Plain language output — no finance jargon. Surface name mismatches in user-friendly terms ("Some holdings could not be verified") rather than technical jargon.
+- JIT-load `_parallax/house-view/loader.md` if an active CIO view is present; this is a portfolio-level skill, so apply §3 (multipliers) to factor scoring of verified holdings, §4 (conflict resolution if user-stated preferences contradict view), §5 (preamble + view-aware sections), §6 (audit log). The view biases the recommendations in **Consider** — view-aligned tilts get implicit support; view-misaligned holdings get a gentle question framing. Health flags themselves are unchanged by the view; the view adds context, not a sixth flag.
+- When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 
 Plain-language portfolio health check with health flags for individual investors.
 

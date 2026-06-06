@@ -1,25 +1,29 @@
 ---
 name: parallax-morning-brief
 description: "Fund manager morning brief: market regime, macro outlook, portfolio health, and key holding news via Parallax MCP tools. Provide portfolio as [{symbol, weight}] in RIC format. NOT for individual stock analysis (use /parallax-should-i-buy), not for backtesting (use /backtest)."
-negative-triggers:
-  - Single stock analysis → use /parallax-should-i-buy or /parallax-deep-dive
-  - Running backtests → use /backtest
-  - Client portfolio review → use /parallax-client-review
-  - Thematic screening → use /parallax-thematic-screen
-gotchas:
-  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
-  - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §3 (multipliers), §4 (conflict resolution), §5 (output rendering), §6 (audit). Morning brief uses the view to (a) frame the macro snapshot in view-language, (b) flag holdings misaligned with view tilts, (c) prioritize action items toward view rebalance direction.
-  - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
-  - get_telemetry and macro_analyst are fast-response (low latency) but not free — macro_analyst costs 5 tokens; get_news_synthesis may take 30-90s per holding
-  - macro_analyst parameter is `market` (not `country`); e.g., `macro_analyst(market="United States")`
-  - The macro_analyst summary call returns all components inline including tactical — do not make separate per-component calls
-  - Health flags (from portfolio-checkup/references/health-flags.md) apply here too — flag portfolios needing attention
-  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # Morning Brief
+
+## When not to use
+
+- Single stock analysis → use /parallax-should-i-buy or /parallax-deep-dive
+- Running backtests → use /backtest
+- Client portfolio review → use /parallax-client-review
+- Thematic screening → use /parallax-thematic-screen
+
+## Gotchas
+
+- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
+- JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §3 (multipliers), §4 (conflict resolution), §5 (output rendering), §6 (audit). Morning brief uses the view to (a) frame the macro snapshot in view-language, (b) flag holdings misaligned with view tilts, (c) prioritize action items toward view rebalance direction.
+- When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
+- get_telemetry and macro_analyst are fast-response (low latency) but not free — macro_analyst costs 5 tokens; get_news_synthesis may take 30-90s per holding
+- macro_analyst parameter is `market` (not `country`); e.g., `macro_analyst(market="United States")`
+- The macro_analyst summary call returns all components inline including tactical — do not make separate per-component calls
+- Health flags (from portfolio-checkup/references/health-flags.md) apply here too — flag portfolios needing attention
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 
 Generate a structured fund manager morning brief by orchestrating Parallax MCP tools.
 

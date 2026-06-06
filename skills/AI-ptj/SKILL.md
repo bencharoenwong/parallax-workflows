@@ -1,28 +1,32 @@
 ---
 name: parallax-ai-ptj
 description: "Applies Paul Tudor Jones's trend-following + macro-overlay framework (per Schwager's 'Market Wizards', 1989) to evaluate single-stock technical setup, macroeconomic regime alignment, and volatility-driven risk/reward asymmetry. Evaluates ticker across three independent conviction channels (Technical, Macro, Volatility). Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized."
-negative-triggers:
-  - Bottom-up factor scoring → use /parallax-ai-buffett
-  - Mechanical formula screen → use /parallax-ai-greenblatt
-  - Balance-sheet-first checks → use /parallax-ai-klarman
-  - Macro regime screening without ticker focus → use /parallax-macro-outlook
-  - Cross-profile consensus → use /parallax-ai-consensus
-  - Multiple tickers → use /parallax-ai-consensus
-gotchas:
-  - JIT-load _parallax/parallax-conventions.md, profile-schema.md, output-template.md, profiles/ptj.md
-  - PTJ is single-ticker mode only — reject multiple tickers with redirect to AI-consensus
-  - Channels T, M, V are evaluated independently; verdict requires 3 for match, 2 for partial
-  - get_technical_analysis is async (~2-5s) — may time out; fallback to score_analysis Momentum proxy per §4
-  - macro_analyst requires list_macro_countries first; cap at 3 markets (home + up to 2 exposure markets)
-  - NEVER use first-person impersonation ("PTJ would buy"); always frame as "PTJ-style lens identifies" or "Profile flags"
-  - Disclaimer verbatim per output-template.md, substituting "Paul Tudor Jones" for [Investor]
-  - Cross-validation gate is NON-BYPASSABLE — symbol mismatch between get_company_info and get_peer_snapshot halts rendering
-  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # Parallax AI PTJ Profile
+
+## When not to use
+
+- Bottom-up factor scoring → use /parallax-ai-buffett
+- Mechanical formula screen → use /parallax-ai-greenblatt
+- Balance-sheet-first checks → use /parallax-ai-klarman
+- Macro regime screening without ticker focus → use /parallax-macro-outlook
+- Cross-profile consensus → use /parallax-ai-consensus
+- Multiple tickers → use /parallax-ai-consensus
+
+## Gotchas
+
+- JIT-load _parallax/parallax-conventions.md, profile-schema.md, output-template.md, profiles/ptj.md
+- PTJ is single-ticker mode only — reject multiple tickers with redirect to AI-consensus
+- Channels T, M, V are evaluated independently; verdict requires 3 for match, 2 for partial
+- get_technical_analysis is async (~2-5s) — may time out; fallback to score_analysis Momentum proxy per §4
+- macro_analyst requires list_macro_countries first; cap at 3 markets (home + up to 2 exposure markets)
+- NEVER use first-person impersonation ("PTJ would buy"); always frame as "PTJ-style lens identifies" or "Profile flags"
+- Disclaimer verbatim per output-template.md, substituting "Paul Tudor Jones" for [Investor]
+- Cross-validation gate is NON-BYPASSABLE — symbol mismatch between get_company_info and get_peer_snapshot halts rendering
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 
 Trend-following + macro-overlay framework: technical momentum validation → macro regime check → volatility-based risk/reward asymmetry assessment.
 

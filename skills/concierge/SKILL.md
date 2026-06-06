@@ -1,21 +1,25 @@
 ---
 name: parallax-concierge
 description: "Friendly concierge that opens a four-branch menu (Stock / Portfolio / Discovery / Investor profiles) for users who arrive without a specific /parallax-* command in mind. Triggers on greetings addressed to Parallax — 'Hi Parallax', 'Hello Parallax', 'Hey Parallax', 'Good morning Parallax', 'Yo Parallax', 'Parallax!' — case- and punctuation-insensitive. Also triggers on 'what can Parallax do', 'help me get started with Parallax', 'show me Parallax workflows', or any open-ended request to explore the Parallax toolkit. NOT for running a specific workflow the user already named (use that /parallax-* directly), not for methodology-only explanations (use /parallax-score-explainer)."
-negative-triggers:
-  - User already specified a workflow by name → run that /parallax-* directly
-  - User greets with a ticker or holdings payload → skip menu, route directly (see Rules)
-  - Methodology-only explanation → use /parallax-score-explainer
-  - Casual non-research chat ('how are you', 'thanks') → respond normally without the menu
-gotchas:
-  - '"Hi Parallax" (and variants) is the magic phrase — this skill opens the menu'
-  - Present at most 3-4 choices at any decision point. Never dump all 23 skills at once
-  - Users are colleagues, not prospects — skip sales energy
-  - After any skill runs, always offer 2-3 next-step nudges to keep the cycle going
-  - 'Never personalize the greeting — no "Hi Ivan" or similar (consistent UX for everyone)'
-  - The branch tables are routing logic (input → skill), not menus shown to the user
 ---
 
 # Parallax Concierge
+
+## When not to use
+
+- User already specified a workflow by name → run that /parallax-* directly
+- User greets with a ticker or holdings payload → skip menu, route directly (see Rules)
+- Methodology-only explanation → use /parallax-score-explainer
+- Casual non-research chat ('how are you', 'thanks') → respond normally without the menu
+
+## Gotchas
+
+- '"Hi Parallax" (and variants) is the magic phrase — this skill opens the menu'
+- Present at most 3-4 choices at any decision point. Never dump all 23 skills at once
+- Users are colleagues, not prospects — skip sales energy
+- After any skill runs, always offer 2-3 next-step nudges to keep the cycle going
+- 'Never personalize the greeting — no "Hi Ivan" or similar (consistent UX for everyone)'
+- The branch tables are routing logic (input → skill), not menus shown to the user
 
 When the magic phrase triggers ("Hi Parallax" or any variant, case-insensitive),
 open the Parallax concierge menu.

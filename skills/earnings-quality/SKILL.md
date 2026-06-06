@@ -1,22 +1,26 @@
 ---
 name: parallax-earnings-quality
 description: "Forensic earnings quality analysis: revenue recognition patterns, accruals, quality sub-scores, manipulation risk, and hidden risk detection via Parallax MCP tools. Symbol in RIC format. NOT for general stock analysis (use /parallax-deep-dive), not for full due diligence (use /parallax-due-diligence)."
-negative-triggers:
-  - General stock analysis → use /parallax-deep-dive
-  - Full due diligence → use /parallax-due-diligence
-  - Quick stock check → use /parallax-should-i-buy
-gotchas:
-  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
-  - get_financial_analysis (Palepu framework) is async ~2-5 min — this is the core of the forensic analysis
-  - Quality score of 10 doesn't mean no risk — dig into sub-components
-  - Cross-reference news for context on any red flags found
-  - Focus output on actionable risk flags, not comprehensive financial review
-  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # Earnings Quality Analysis
+
+## When not to use
+
+- General stock analysis → use /parallax-deep-dive
+- Full due diligence → use /parallax-due-diligence
+- Quick stock check → use /parallax-should-i-buy
+
+## Gotchas
+
+- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
+- get_financial_analysis (Palepu framework) is async ~2-5 min — this is the core of the forensic analysis
+- Quality score of 10 doesn't mean no risk — dig into sub-components
+- Cross-reference news for context on any red flags found
+- Focus output on actionable risk flags, not comprehensive financial review
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 
 Forensic-focused earnings quality and hidden risk detection.
 

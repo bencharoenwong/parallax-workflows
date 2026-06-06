@@ -1,31 +1,35 @@
 ---
 name: parallax-explain-portfolio
 description: "Reactive portfolio performance attribution: decompose a drawdown into market/regime, factor/thematic, and stock-specific components. Also called 'drawdown attribution' or 'performance attribution' in PM/RIA vocabulary. Uses score-vs-price divergence to determine if the loss is fundamental or transient, then gives conditional advice. Triggered when a client asks 'why am I down X%?'. Holdings as [{symbol, weight}]. NOT for proactive health checks (use /parallax-portfolio-checkup), not for forward-looking reviews (use /parallax-client-review), not for hypothetical scenarios (use /parallax-scenario-analysis)."
-negative-triggers:
-  - Proactive portfolio health check → use /parallax-portfolio-checkup
-  - Scheduled client meeting prep → use /parallax-client-review
-  - Hypothetical scenario / news event → use /parallax-scenario-analysis
-  - Rebalancing trade recommendations → use /parallax-rebalance
-  - Single stock analysis → use /parallax-should-i-buy
-gotchas:
-  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks
-  - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §5 (output rendering), §6 (audit). For attribution, the view provides additional context: a drawdown in a view-tilted-overweight sector is "expected pain from view exposure"; a drawdown in a view-tilted-underweight sector raises "why was this still held?" — surface in the verdict.
-  - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
-  - Holdings must be in RIC format with weights summing to ~1.0
-  - export_price_series returns daily OHLCV — use close prices for return calculation
-  - get_telemetry regime_tag and mechanism fields are the key attribution inputs
-  - Score-vs-price divergence is the core insight — scores stable + price down = transient; scores falling + price down = fundamental
-  - Score data is weekly (get_score_analysis) vs daily price data — there may be a ~7 day lag. Acknowledge this gap in the divergence analysis, especially if major news broke after the last score data point.
-  - The client said a number ("down 4%") — verify it against actual computed returns before attributing
-  - Cap news calls at top 3 detractors to manage token cost
-  - quick_portfolio_scores may fail for concentrated/niche portfolios — fall back to get_score_analysis (Step 3) as the primary factor source
-  - get_peer_snapshot may return a different company as target (see Convention #2) — extract the queried stock's scores from the peer list, not from the target_company field
-  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # Explain Portfolio
+
+## When not to use
+
+- Proactive portfolio health check → use /parallax-portfolio-checkup
+- Scheduled client meeting prep → use /parallax-client-review
+- Hypothetical scenario / news event → use /parallax-scenario-analysis
+- Rebalancing trade recommendations → use /parallax-rebalance
+- Single stock analysis → use /parallax-should-i-buy
+
+## Gotchas
+
+- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks
+- JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §5 (output rendering), §6 (audit). For attribution, the view provides additional context: a drawdown in a view-tilted-overweight sector is "expected pain from view exposure"; a drawdown in a view-tilted-underweight sector raises "why was this still held?" — surface in the verdict.
+- When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
+- Holdings must be in RIC format with weights summing to ~1.0
+- export_price_series returns daily OHLCV — use close prices for return calculation
+- get_telemetry regime_tag and mechanism fields are the key attribution inputs
+- Score-vs-price divergence is the core insight — scores stable + price down = transient; scores falling + price down = fundamental
+- Score data is weekly (get_score_analysis) vs daily price data — there may be a ~7 day lag. Acknowledge this gap in the divergence analysis, especially if major news broke after the last score data point.
+- The client said a number ("down 4%") — verify it against actual computed returns before attributing
+- Cap news calls at top 3 detractors to manage token cost
+- quick_portfolio_scores may fail for concentrated/niche portfolios — fall back to get_score_analysis (Step 3) as the primary factor source
+- get_peer_snapshot may return a different company as target (see Convention #2) — extract the queried stock's scores from the peer list, not from the target_company field
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 
 Reactive performance attribution when a client asks "why am I down?" Decomposes the loss into market/regime, factor/thematic, and stock-specific layers, then determines if the drawdown is fundamental or noise.
 

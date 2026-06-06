@@ -1,28 +1,32 @@
 ---
 name: parallax-pair-finder
 description: "Long/short equity pair builder: given one leg, suggest top-3 counter-leg candidates from peers; given both legs, report residual factor / sector / macro / dollar / beta exposure. Symbols in RIC format. NOT for single-stock analysis (use /parallax-deep-dive), not for peer comparison tables (use /parallax-peer-comparison), not for portfolio analysis (use /parallax-morning-brief)."
-negative-triggers:
-  - Single stock deep dive → use /parallax-deep-dive
-  - Generic peer table only → use /parallax-peer-comparison
-  - Multi-position portfolio analysis → use /parallax-morning-brief
-  - Long-only stock screening → use /parallax-thematic-screen
-gotchas:
-  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
-  - JIT-load references/residual-math.md for factor-net, beta, and hedge-ratio formulas
-  - "Default selection criterion (mode B): closest peer with worst total score for short candidates; closest peer with best total score for long candidates"
-  - Suggestion mode (one leg given) uses single export_peer_comparison call to guarantee cross-sectionally comparable factor scores across all candidates
-  - Evaluate mode (both legs given) MUST flag score-comparability uncertainty when short_ric is NOT in long's peer set (cross-sector pair)
-  - "v1 scope cuts: no revenue-geography mix (use domicile/listing-currency only), no share counts (dollar/beta-neutral ratios only), no cross-sector suggestions (within-sector peers only). Evaluate mode accepts cross-sector pairs but flags them."
-  - "Liquidity disclaimer is MANDATORY in every output: ADV / borrow / float not validated by Parallax — verify externally before sizing."
-  - "Output gate (HARD HALT): refuse to render hedge ratios if benchmark price series is null or has < 60 observations. Do NOT substitute pair-relative regression beta and emit a caveat — that pattern is BANNED for primary deliverables. Halt with named failure reason and operator-action options."
-  - JIT-load `_parallax/house-view/loader.md` if an active CIO view is present. Pair-finder is dual-single-stock per `loader.md` §7 (read-only consumers): tilts are NOT applied to candidate ranking or score subtraction. The view surfaces as: (a) §7.3 score-vs-view tension banner per leg (if leg's total ≥ 7 AND leg's sector tilt ≤ -1 in view), (b) §7.1 House View Note rendered once per pair after the per-pair detail, (c) §6 audit log per pair evaluated. §7.2 peer-suggest token N/A — pair-finder constructs its own candidate set from `export_peer_comparison`, not via `get_peer_snapshot.suggestion`.
-  - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
-  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # Pair Finder
+
+## When not to use
+
+- Single stock deep dive → use /parallax-deep-dive
+- Generic peer table only → use /parallax-peer-comparison
+- Multi-position portfolio analysis → use /parallax-morning-brief
+- Long-only stock screening → use /parallax-thematic-screen
+
+## Gotchas
+
+- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
+- JIT-load references/residual-math.md for factor-net, beta, and hedge-ratio formulas
+- Default selection criterion (mode B): closest peer with worst total score for short candidates; closest peer with best total score for long candidates
+- Suggestion mode (one leg given) uses single export_peer_comparison call to guarantee cross-sectionally comparable factor scores across all candidates
+- Evaluate mode (both legs given) MUST flag score-comparability uncertainty when short_ric is NOT in long's peer set (cross-sector pair)
+- v1 scope cuts: no revenue-geography mix (use domicile/listing-currency only), no share counts (dollar/beta-neutral ratios only), no cross-sector suggestions (within-sector peers only). Evaluate mode accepts cross-sector pairs but flags them.
+- Liquidity disclaimer is MANDATORY in every output: ADV / borrow / float not validated by Parallax — verify externally before sizing.
+- Output gate (HARD HALT): refuse to render hedge ratios if benchmark price series is null or has < 60 observations. Do NOT substitute pair-relative regression beta and emit a caveat — that pattern is BANNED for primary deliverables. Halt with named failure reason and operator-action options.
+- JIT-load `_parallax/house-view/loader.md` if an active CIO view is present. Pair-finder is dual-single-stock per `loader.md` §7 (read-only consumers): tilts are NOT applied to candidate ranking or score subtraction. The view surfaces as: (a) §7.3 score-vs-view tension banner per leg (if leg's total ≥ 7 AND leg's sector tilt ≤ -1 in view), (b) §7.1 House View Note rendered once per pair after the per-pair detail, (c) §6 audit log per pair evaluated. §7.2 peer-suggest token N/A — pair-finder constructs its own candidate set from `export_peer_comparison`, not via `get_peer_snapshot.suggestion`.
+- When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 
 Long/short equity pair construction for fundamental PMs. Given one leg of a thesis, suggest the other leg from peers and report what residual exposure survives the hedge. Given both legs, report the residual.
 

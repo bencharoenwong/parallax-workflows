@@ -1,30 +1,34 @@
 ---
 name: parallax-ai-greenblatt
 description: "Applies Joel Greenblatt's Magic Formula (per 'The Little Book That Beats the Market', 2006; academic replication Gray & Carlisle 2012) to Parallax data. Two modes: universe mode returns a top-decile ranked basket; ticker-check mode reports whether a single stock falls in the top decile of its peer universe by combined ROC + earnings yield rank. Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized. Accepts no args (universe mode) or a single ticker."
-negative-triggers:
-  - Bottom-up factor scoring without the mechanical formula → use /parallax-ai-buffett
-  - Balance-sheet-first special situations → use /parallax-ai-klarman
-  - Top-down macro analysis → use /parallax-ai-soros
-  - Cross-profile consensus → use /parallax-ai-consensus
-  - Full due diligence → use /parallax-due-diligence
-  - Running backtests → use /backtest
-gotchas:
-  - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks
-  - JIT-load _parallax/AI-profiles/profile-schema.md for the dispatcher workflow and cross-validation gate
-  - JIT-load _parallax/AI-profiles/output-template.md for the required output structure and verbatim disclaimer
-  - JIT-load _parallax/AI-profiles/profiles/greenblatt.md for the profile spec
-  - Universe mode is default when no ticker is provided; ticker-check mode activates with a single ticker
-  - build_stock_universe is ~5 tokens; budget accordingly
-  - Exclude financials and utilities from default universe per Greenblatt's original rule
-  - NEVER use first-person impersonation — always "Greenblatt-style" or "Magic Formula"
-  - Disclaimer verbatim; substitute "Joel Greenblatt" for [Investor] in the disclaimer block
-  - Profile is derived from public book + academic replication only — no get_assessment, no score_total
-  - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 ---
 
 <!-- white-label: integration-pattern.md -->
 
 # Parallax AI Greenblatt Profile
+
+## When not to use
+
+- Bottom-up factor scoring without the mechanical formula → use /parallax-ai-buffett
+- Balance-sheet-first special situations → use /parallax-ai-klarman
+- Top-down macro analysis → use /parallax-ai-soros
+- Cross-profile consensus → use /parallax-ai-consensus
+- Full due diligence → use /parallax-due-diligence
+- Running backtests → use /backtest
+
+## Gotchas
+
+- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks
+- JIT-load _parallax/AI-profiles/profile-schema.md for the dispatcher workflow and cross-validation gate
+- JIT-load _parallax/AI-profiles/output-template.md for the required output structure and verbatim disclaimer
+- JIT-load _parallax/AI-profiles/profiles/greenblatt.md for the profile spec
+- Universe mode is default when no ticker is provided; ticker-check mode activates with a single ticker
+- build_stock_universe is ~5 tokens; budget accordingly
+- Exclude financials and utilities from default universe per Greenblatt's original rule
+- NEVER use first-person impersonation — always "Greenblatt-style" or "Magic Formula"
+- Disclaimer verbatim; substitute "Joel Greenblatt" for [Investor] in the disclaimer block
+- Profile is derived from public book + academic replication only — no get_assessment, no score_total
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 
 Applies Joel Greenblatt's Magic Formula (ROC rank + earnings yield rank, combined, top decile) to Parallax data.
 
