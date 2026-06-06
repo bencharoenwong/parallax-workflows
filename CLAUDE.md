@@ -20,7 +20,7 @@ This repo contains Claude Code skills for Parallax equity research. Each skill i
 
 ## For Claude Code
 
-When a user invokes `/parallax-<workflow>`, read the corresponding `skills/<workflow>/SKILL.md` and follow it exactly. All skills share conventions in `skills/_parallax/parallax-conventions.md`.
+When a user invokes `/parallax-<workflow>`, read the corresponding `skills/parallax-<workflow>/SKILL.md` (directory name matches the skill name) and follow it exactly. All skills share conventions in `skills/_parallax/parallax-conventions.md`.
 
 ## Conventions
 
@@ -33,15 +33,15 @@ When a user invokes `/parallax-<workflow>`, read the corresponding `skills/<work
 
 ```
 skills/
-├── _parallax/           # Shared: conventions, token costs, AI profile framework
-├── should-i-buy/        # Quick stock eval (accepts plain tickers)
-├── deep-dive/           # Full analysis + AI assessment
-├── due-diligence/       # Financials + Palepu + Parallax research report
-├── client-review/       # RM meeting prep with talk tracks
-├── portfolio-checkup/   # Individual investor health check
-├── morning-brief/       # Fund manager daily brief
-├── AI-buffett/          # Buffett-style factor profile
-├── AI-consensus/        # Multi-profile meta-skill
+├── _parallax/                   # Shared: conventions, token costs, AI profile framework
+├── parallax-should-i-buy/       # Quick stock eval (accepts plain tickers)
+├── parallax-deep-dive/          # Full analysis + AI assessment
+├── parallax-due-diligence/      # Financials + Palepu + Parallax research report
+├── parallax-client-review/      # RM meeting prep with talk tracks
+├── parallax-portfolio-checkup/  # Individual investor health check
+├── parallax-morning-brief/      # Fund manager daily brief
+├── parallax-ai-buffett/         # Buffett-style factor profile
+├── parallax-ai-consensus/       # Multi-profile meta-skill
 └── ... (16 more)
 ```
 

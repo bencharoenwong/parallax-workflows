@@ -6,7 +6,7 @@ Thanks for the interest. A few notes on what fits and what doesn't.
 
 - **Bug reports.** Open an issue with: command run, expected output, actual output, and the relevant `SKILL.md` filename if you're touching a specific workflow.
 - **Documentation fixes.** Typos, broken links, unclear instructions — PRs welcome.
-- **New sample CIO views** for `skills/load-house-view/samples/`. We use these in regression coverage; the more variety, the better.
+- **New sample CIO views** for `skills/parallax-load-house-view/samples/`. We use these in regression coverage; the more variety, the better.
 - **Test coverage** for the Python modules under `skills/_parallax/house-view/`. New tests should go in the adjacent `tests/` directory and follow the existing fixture conventions.
 - **Workflow forks.** If you've built a useful variant of one of the skills (different output format, different tool sequence, different audience), open an issue describing it. We may add a pointer in the README.
 
@@ -43,11 +43,11 @@ Thanks for the interest. A few notes on what fits and what doesn't.
 ## Reference templates
 
 When adding or substantially upgrading a skill, mirror the structure of one of the newer skills:
-- `skills/credit-lens/` — typed dataclasses (`AltmanInputs`, `CreditReport`, `Flag`, `MetricRow`), pure scoring functions, comprehensive test classes (`TestReportBuilders`, `TestEdgeCases`, `TestAbsoluteFlagging`).
-- `skills/load-house-view/` — multi-stage workflow with schema, validation, audit chain, and signed reasoning chains. Use as the reference for any skill that needs persistence + audit guarantees.
+- `skills/parallax-credit-lens/` — typed dataclasses (`AltmanInputs`, `CreditReport`, `Flag`, `MetricRow`), pure scoring functions, comprehensive test classes (`TestReportBuilders`, `TestEdgeCases`, `TestAbsoluteFlagging`).
+- `skills/parallax-load-house-view/` — multi-stage workflow with schema, validation, audit chain, and signed reasoning chains. Use as the reference for any skill that needs persistence + audit guarantees.
 - `skills/_parallax/white-label/` — extraction + validation pattern, modular tests under `tests/`. When wiring a new visual-rendering consumer skill, JIT-load `_parallax/white-label/integration-pattern.md` (the canonical §1–§9 consumer-side contract) via the `<!-- white-label: integration-pattern.md -->` sentinel; the drift gate at `tests/test_integration_pattern_referenced.py` enforces the sentinel ↔ load-directive pairing and will fail the build on silent drift.
 
-Older skills (`deep-dive`, `peer-comparison`, `due-diligence`, `should-i-buy`) predate this discipline and remain SKILL.md-only — that is fine for prompt-orchestration skills with no Python plumbing. **Don't refactor them mechanically just to match.** Upgrade only when a real reason to touch them surfaces (a bug, a new feature, observed user friction).
+Older skills (`parallax-deep-dive`, `parallax-peer-comparison`, `parallax-due-diligence`, `parallax-should-i-buy`) predate this discipline and remain SKILL.md-only — that is fine for prompt-orchestration skills with no Python plumbing. **Don't refactor them mechanically just to match.** Upgrade only when a real reason to touch them surfaces (a bug, a new feature, observed user friction).
 
 ## License
 

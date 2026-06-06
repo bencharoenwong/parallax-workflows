@@ -17,7 +17,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 SPEC = EvalSpec(
     name="should-i-buy",
     command="/parallax-should-i-buy",
-    skill_md_path=_REPO_ROOT / "skills" / "should-i-buy" / "SKILL.md",
+    skill_md_path=_REPO_ROOT / "skills" / "parallax-should-i-buy" / "SKILL.md",
     # "The Company" deliberately NOT required: the live skill folds company
     # identity into the title rather than a standalone section.
     required_sections=[

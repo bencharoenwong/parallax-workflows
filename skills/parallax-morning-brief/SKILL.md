@@ -22,7 +22,7 @@ description: "Fund manager morning brief: market regime, macro outlook, portfoli
 - get_telemetry and macro_analyst are fast-response (low latency) but not free — macro_analyst costs 5 tokens; get_news_synthesis may take 30-90s per holding
 - macro_analyst parameter is `market` (not `country`); e.g., `macro_analyst(market="United States")`
 - The macro_analyst summary call returns all components inline including tactical — do not make separate per-component calls
-- Health flags (from portfolio-checkup/references/health-flags.md) apply here too — flag portfolios needing attention
+- Health flags (from parallax-portfolio-checkup/references/health-flags.md) apply here too — flag portfolios needing attention
 - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 
 Generate a structured fund manager morning brief by orchestrating Parallax MCP tools.
@@ -62,7 +62,7 @@ Per `loader.md` §1-§2. If view present, capture tilt vector, excludes, prose e
 
 ### Batch B — Conditional + news (after Batch A)
 
-1. Evaluate health flags: Low Score (overall ≤5.0), Concentration (>15% single / >45% top-3), Redundancy (≥2 pairs), Value Trap (value ≤3.0), Macro Misalignment (overweight in sectors with negative tactical outlook — the 5th flag per `portfolio-checkup/references/health-flags.md`).
+1. Evaluate health flags: Low Score (overall ≤5.0), Concentration (>15% single / >45% top-3), Redundancy (≥2 pairs), Value Trap (value ≤3.0), Macro Misalignment (overweight in sectors with negative tactical outlook — the 5th flag per `parallax-portfolio-checkup/references/health-flags.md`).
 2. **House-view alignment** (if view active): flag holdings misaligned with view tilts (>25% off view-tilted target), holdings on `tilts.excludes`, and any active-view conflicts to highlight in Action Items.
 
 **Conditional drift suggestion:** If the Batch B alignment check above

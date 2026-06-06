@@ -10,7 +10,7 @@
 #   `_parallax/coverage-matrix.md` for the canonical tool/asset-class table.
 #
 # Bug class B — skill-specific scaffolding drift (currently scoped to
-#   `cio-letter-prep`): the skill ships with required helper scripts, contract
+#   `parallax-cio-letter-prep`): the skill ships with required helper scripts, contract
 #   tests, MCP mocks, and frontmatter sections. If any of those go missing or
 #   the SKILL.md stops citing them, the runtime is silently degraded.
 #
@@ -25,20 +25,20 @@
 #   5. Skip lines tagged `<!-- coverage-lint: ignore-next -->` (escape
 #      hatch for prose discussions of the bug class).
 #
-# What this lints (class B — only fires if `skills/cio-letter-prep/` exists):
-#   1. SKILL.md exists and frontmatter contains name/description/
-#      negative-triggers/gotchas keys.
+# What this lints (class B — only fires if `skills/parallax-cio-letter-prep/` exists):
+#   1. SKILL.md exists, frontmatter contains name/description and no forbidden
+#      keys, and the '## When not to use' / '## Gotchas' body sections exist.
 #   2. SKILL.md body cites: parallax-conventions, contribution.py, and the
 #      MCP contract tests (test_mcp_contracts or mcp_mocks).
 #   3. scripts/contribution.py, scripts/test_contribution.py, and
 #      scripts/test_mcp_contracts.py exist.
 #   4. scripts/mcp_mocks/ contains ≥ 9 .json files.
-#   5. (Optional) `pytest skills/cio-letter-prep/scripts/ -q` passes.
+#   5. (Optional) `pytest skills/parallax-cio-letter-prep/scripts/ -q` passes.
 #      Skipped with a warning if pytest is not on PATH.
 #
 # Usage:
 #   ./skills/_parallax/scripts/coverage-lint.sh         # lint all skills
-#   ./skills/_parallax/scripts/coverage-lint.sh pair-finder explain-portfolio
+#   ./skills/_parallax/scripts/coverage-lint.sh parallax-pair-finder parallax-explain-portfolio
 #
 # Exit:
 #   0 — clean
@@ -78,11 +78,11 @@ checked=0
 
 # ----- Class B: skill-specific scaffolding (cio-letter-prep) ------------------
 #
-# Fires only if `skills/cio-letter-prep/` exists, so older branches and
+# Fires only if `skills/parallax-cio-letter-prep/` exists, so older branches and
 # checkouts predating the skill stay clean. Increments the unified
 # `violations` counter; emits `FAIL  <path>: <reason>` lines.
 check_cio_letter_prep_structure() {
-  local root="skills/cio-letter-prep"
+  local root="skills/parallax-cio-letter-prep"
   local skill_md="$root/SKILL.md"
   local scripts_dir="$root/scripts"
   # Mocks moved to shared location under _parallax/scripts/ in feat/contract-tests-shared
@@ -231,7 +231,7 @@ for skill_md in "${SKILLS[@]}"; do
 done
 
 # ----- Class B invocation: only when the skill is present in this checkout ----
-if [[ -d "skills/cio-letter-prep" ]]; then
+if [[ -d "skills/parallax-cio-letter-prep" ]]; then
   check_cio_letter_prep_structure
 fi
 
