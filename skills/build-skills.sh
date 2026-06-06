@@ -103,6 +103,12 @@ else
   fi
   echo "  ✓ all JIT-load directives resolve"
   echo ""
+  echo "Validating agentskills.io spec compliance…"
+  if ! python3 ./_parallax/scripts/spec-validate.py $(ls -d */ | while read -r d; do [[ -f "$d/SKILL.md" ]] && echo "$d"; done); then
+    echo "FAIL: one or more skills violate the agentskills.io spec." >&2
+    exit 1
+  fi
+  echo ""
   if [[ -x ./_parallax/scripts/coverage-lint.sh ]]; then
     echo "Running coverage-lint…"
     ./_parallax/scripts/coverage-lint.sh
