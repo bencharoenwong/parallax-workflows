@@ -29,14 +29,16 @@ Below these thresholds, keep the SKILL.md monolithic. Splitting too early fragme
 
 The orchestrator is the file the model reads at every invocation. It contains:
 
-1. **Frontmatter** — `name`, `description`, `negative-triggers`, `gotchas`
-2. **Usage** — how to invoke (CLI examples)
-3. **Where artifacts live** — paths the skill reads/writes
-4. **Integration with downstream skills** — the consumer contract
-5. **Workflow skeleton** — Steps 0 → N as numbered headings, each with a one-paragraph summary AND an explicit `→ Load references/<file>.md` directive when the step's full content lives in references/
-6. **Operational modes** — `--status`, `--clear`, etc., one row each
-7. **Success criteria** — what "done" looks like
-8. **Failure modes the operator MUST know without loading anything else** — security gates, compliance gates, irreversible-action warnings
+1. **Frontmatter** — `name` and `description` only (agentskills.io spec; see "Spec compliance" below)
+2. **`## When not to use`** — negative triggers, first body section after the H1
+3. **`## Gotchas`** — operational gotchas + JIT-load directives, second body section
+4. **Usage** — how to invoke (CLI examples)
+5. **Where artifacts live** — paths the skill reads/writes
+6. **Integration with downstream skills** — the consumer contract
+7. **Workflow skeleton** — Steps 0 → N as numbered headings, each with a one-paragraph summary AND an explicit `→ Load references/<file>.md` directive when the step's full content lives in references/
+8. **Operational modes** — `--status`, `--clear`, etc., one row each
+9. **Success criteria** — what "done" looks like
+10. **Failure modes the operator MUST know without loading anything else** — security gates, compliance gates, irreversible-action warnings
 
 Target: ≤250 lines. The orchestrator should be navigable in one screen-scroll.
 
@@ -80,13 +82,14 @@ Run validators in parallel. → Load references/step-3-validation.md for the
 full validator catalog and per-validator gate logic.
 ```
 
-Or as a frontmatter gotcha:
+Or as a bullet in the `## Gotchas` body section:
 
-```yaml
-gotchas:
-  - JIT-load references/voice-frameworks.md before composing the voice block
-    in Step 1.5 — it carries the Lago 7-section template + Rezvani Tone Matrix
-    + Genesys 4-phase reference that the prompt is built on.
+```markdown
+## Gotchas
+
+- JIT-load references/voice-frameworks.md before composing the voice block
+  in Step 1.5 — it carries the Lago 7-section template + Rezvani Tone Matrix
+  + Genesys 4-phase reference that the prompt is built on.
 ```
 
 The directive must:
@@ -164,3 +167,16 @@ Proprietary pillar/factor vocabulary guard: trigger phrases ship verbatim to whi
 - DECISIONS.md entry: 2026-05-06 (later) — white-label-onboard restructure, Phase 2 conditional
 - Companion file: `jit-load-compliance-audit.md`
 - Description / Trigger Completeness rule added 2026-05-25 per tech-debt closeout audit covering AI-soros basket-mode invisibility and portfolio-builder --augment-silent undiscoverability.
+
+## Spec compliance (agentskills.io)
+
+Every skill in this repo conforms to the [agentskills.io specification](https://agentskills.io/specification):
+
+- **Frontmatter** may contain only the spec's top-level keys: `name`, `description`, `license`, `compatibility`, `metadata`, `allowed-tools`. House content (negative triggers, gotchas) lives in the `## When not to use` and `## Gotchas` body sections — never in frontmatter. This also eliminates the YAML-quoting hazard of markdown prose inside YAML lists.
+- **`name`** is 1–64 chars of lowercase `a-z0-9-` (no leading/trailing/consecutive hyphens) and **must match the skill's directory name**.
+- **`description`** is 1–1024 chars and carries both what the skill does and when to use it (including the NOT-for routing clauses).
+- **Body** target stays ≤250 lines per the orchestrator rule above (spec recommends <500).
+
+Known accepted deviations:
+
+- Shared `_parallax/...` references resolve outside the individual skill directory (the spec recommends references one level deep inside the skill). The shared-conventions architecture is deliberate; `.skill` packaging for claude.ai inlines or excludes these as needed.

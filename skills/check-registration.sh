@@ -17,12 +17,10 @@ cd "$(dirname "$0")"
 reg_root="$HOME/.claude/skills"
 forks=0 unreg=0 ok=0
 
-lc() { printf '%s' "$1" | tr 'A-Z' 'a-z'; }
-
 for d in */; do
   s=${d%/}
   [[ -f "$s/SKILL.md" ]] || continue
-  reg="$reg_root/parallax-$(lc "$s")"
+  reg="$reg_root/$s"
   if [[ -L "$reg" ]]; then
     ok=$((ok+1))
   elif [[ -d "$reg" ]]; then

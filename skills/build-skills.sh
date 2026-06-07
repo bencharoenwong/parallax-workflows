@@ -33,7 +33,7 @@ KNOWN_SKILLS="translate-chinese-finance translate-thai-finance"
 
 # Private beta — opt-in only, not built by default.
 # Skills here are gated until pilot customers complete one full usage cycle.
-PRIVATE_BETA_SKILLS="cio-letter-prep"
+PRIVATE_BETA_SKILLS="parallax-cio-letter-prep"
 
 is_private_beta() {
   local name="$1"
@@ -73,7 +73,7 @@ build_one() {
 # JIT-load directive lint — assert every `references/...md` directive resolves.
 # Specced in _parallax/skill-structure-conventions.md "Build-time check" but never
 # shipped; absence let renamed/missing reference files drift silently. Resolves both
-# local (references/x.md) and cross-skill (portfolio-checkup/references/x.md,
+# local (references/x.md) and cross-skill (parallax-portfolio-checkup/references/x.md,
 # ../client-review/references/x.md) forms — the latter two are NOT dangling.
 lint_jit_directives() {
   local fail=0 skill_md skill_dir ref
@@ -102,6 +102,12 @@ else
     exit 1
   fi
   echo "  ✓ all JIT-load directives resolve"
+  echo ""
+  echo "Validating agentskills.io spec compliance…"
+  if ! python3 ./_parallax/scripts/spec-validate.py $(ls -d */ | while read -r d; do [[ -f "$d/SKILL.md" ]] && echo "$d"; done); then
+    echo "FAIL: one or more skills violate the agentskills.io spec." >&2
+    exit 1
+  fi
   echo ""
   if [[ -x ./_parallax/scripts/coverage-lint.sh ]]; then
     echo "Running coverage-lint…"

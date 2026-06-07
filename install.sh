@@ -33,25 +33,26 @@ else
     echo "  Symlinked  _parallax (shared conventions + house-view loader/schema)"
 fi
 
-# Copy each skill with parallax- prefix
+# Copy each skill under its own name (dir name == frontmatter name per agentskills.io spec)
 for skill_dir in "$SCRIPT_DIR"/skills/*/; do
     skill_name=$(basename "$skill_dir")
     [ "$skill_name" = "_parallax" ] && continue
+    [ -f "$skill_dir/SKILL.md" ] || continue
 
-    target="$SKILLS_DIR/parallax-$skill_name"
+    target="$SKILLS_DIR/$skill_name"
 
     # If the target is already a symlink pointing at this repo's skill dir,
     # skip — edits in the repo propagate automatically. Avoids `cp`-into-self errors.
     if [ -L "$target" ] && [ "$(readlink "$target")" = "${skill_dir%/}" ]; then
-        echo "  Symlinked  parallax-$skill_name (dev mode — edits live from repo)"
+        echo "  Symlinked  $skill_name (dev mode — edits live from repo)"
         continue
     fi
 
     mkdir -p "$target"
     cp -r "$skill_dir"* "$target/"
-    echo "  Installed  parallax-$skill_name"
+    echo "  Installed  $skill_name"
 done
 
 echo ""
-echo "Done! $(ls -d "$SCRIPT_DIR"/skills/*/ | grep -v _parallax | wc -l | tr -d ' ') workflows installed."
+echo "Done! $(ls -d "$SCRIPT_DIR"/skills/*/ | grep -v _parallax | grep -cv '__pycache__' | tr -d ' ') workflows installed."
 echo "Try: /parallax-should-i-buy AAPL"

@@ -1,7 +1,6 @@
 ---
 name: translate-chinese-finance
 description: Translate financial content (stock reports, CIO reports, macro reports) to Chinese — Simplified (zh-CN) or Traditional (zh-TW/zh-HK) — with correct code-switching, terminology, and natural phrasing. Use when translating text to Chinese for institutional finance audiences.
-user-invocable: true
 ---
 
 # Chinese Financial Translation Skill
