@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # Rebuild .skill packages for upload to claude.ai.
-# Usage: ./build-skills.sh [skill-name ...]
+# Usage: ./build-skills.sh [--no-lint] [--normalize] [skill-name ...]
 # No args = build all KNOWN_SKILLS (general-release set).
+#   --no-lint    skip lint/validation (emergencies only)
+#   --normalize  rewrite SKILL.md frontmatter to spec-clean form first
+#                (folds ported client-convention fields; see
+#                _parallax/scripts/spec-normalize.py)
 #
 # Output: ~/Downloads/<skill-name>.skill
 #
@@ -90,10 +94,34 @@ lint_jit_directives() {
   return $fail
 }
 
-# Coverage lint — gate the build on asset-class / endpoint mismatches.
-# Pass --no-lint as the first argument to skip in emergencies.
-if [[ "${1:-}" == "--no-lint" ]]; then
+# Flags (must precede skill names).
+RUN_LINT=1
+NORMALIZE=0
+while [[ "${1:-}" == --* ]]; do
+  case "$1" in
+    --no-lint)   RUN_LINT=0 ;;
+    --normalize) NORMALIZE=1 ;;
+    *) echo "unknown flag: $1" >&2; exit 2 ;;
+  esac
   shift
+done
+
+all_skill_dirs() {
+  ls -d */ | while read -r d; do [[ -f "$d/SKILL.md" ]] && echo "$d"; done
+}
+
+# Spec normalization — fold ported client-convention frontmatter fields
+# (user-invocable, argument-hint, negative-triggers) into spec-clean form
+# before validation. Opt-in: rewrites source files.
+if [[ $NORMALIZE -eq 1 ]]; then
+  echo "Normalizing SKILL.md frontmatter to spec…"
+  python3 ./_parallax/scripts/spec-normalize.py $(all_skill_dirs)
+  echo ""
+fi
+
+# Coverage lint — gate the build on asset-class / endpoint mismatches.
+# Pass --no-lint to skip in emergencies.
+if [[ $RUN_LINT -eq 0 ]]; then
   echo "WARN: coverage-lint skipped (--no-lint)"
 else
   echo "Linting JIT-load directives…"
@@ -104,8 +132,11 @@ else
   echo "  ✓ all JIT-load directives resolve"
   echo ""
   echo "Validating agentskills.io spec compliance…"
-  if ! python3 ./_parallax/scripts/spec-validate.py $(ls -d */ | while read -r d; do [[ -f "$d/SKILL.md" ]] && echo "$d"; done); then
+  if ! python3 ./_parallax/scripts/spec-validate.py $(all_skill_dirs); then
     echo "FAIL: one or more skills violate the agentskills.io spec." >&2
+    echo "      If the failure is ported client-convention frontmatter" >&2
+    echo "      (user-invocable / negative-triggers / argument-hint), run:" >&2
+    echo "      ./build-skills.sh --normalize" >&2
     exit 1
   fi
   echo ""
