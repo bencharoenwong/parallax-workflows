@@ -1104,6 +1104,54 @@ def _read_active_view(view_dir: Path) -> dict[str, Any] | None:
         return None
 
 
+def _load_view_bundle(path: Path) -> dict[str, Any]:
+    """Load a saved view bundle for --compare.
+
+    `path` may be a bundle directory (reads `view.yaml` inside) or a direct
+    `view.yaml` file. Raises ValueError with a human-readable message if the
+    path is missing, unparseable, or not a valid house-view bundle (no `tilts`).
+    """
+    path = Path(path).expanduser().resolve()
+    if path.is_dir():
+        candidate = path / "view.yaml"
+    elif path.is_file():
+        candidate = path
+    else:
+        raise ValueError(f"compare: path does not exist: {path}")
+
+    try:
+        with open(candidate, "r", encoding="utf-8") as f:
+            view = yaml.safe_load(f)
+    except Exception as exc:
+        raise ValueError(f"compare: failed to read view from {candidate}: {exc}") from exc
+
+    if not isinstance(view, dict):
+        raise ValueError(f"compare: {candidate} did not parse as a YAML mapping")
+    if not isinstance(view.get("tilts"), dict):
+        raise ValueError(
+            f"compare: {candidate} has a missing or non-mapping 'tilts' field — "
+            "is this a valid house-view bundle?"
+        )
+    return view
+
+
+def run_compare(left: Path, right: Path) -> str:
+    """--compare entry point: load two saved view bundles and render a neutral diff.
+
+    No MCP, no synthesis, no gate, no save, no audit row. Pure file diff.
+    """
+    left_view = _load_view_bundle(left)
+    right_view = _load_view_bundle(right)
+    from shadow_diff import render_compare
+
+    return render_compare(
+        left_view,
+        right_view,
+        left_name=Path(left).name,
+        right_name=Path(right).name,
+    )
+
+
 def _read_parent_version_id(view_dir: Path) -> str | None:
     v = _read_active_view(view_dir)
     if v is None:
@@ -1168,4 +1216,5 @@ __all__ = [
     "MARKET_TO_SCHEMA_KEY",
     "HARDCODED_COVERAGE",
     "render_status",
+    "run_compare",
 ]
