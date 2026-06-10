@@ -38,7 +38,7 @@ ANALYZE_PORTFOLIO_SCHEMA = {
     "as_of": (str, OPTIONAL),
     # --- new fields required by cio-letter-prep ---
     "portfolio_summary": ({
-        "total_return": NUM,
+        "total_return": (NUM, OPTIONAL),
         "annualized_return": (NUM, OPTIONAL),
         "benchmark_return": (NUM, OPTIONAL),
     }, OPTIONAL),
@@ -69,6 +69,7 @@ ANALYZE_PORTFOLIO_SCHEMA = {
         "weight": NUM,
     }], OPTIONAL),
     "portfolio_scores": (dict, OPTIONAL),
+    "rolling_metrics": (dict, OPTIONAL),
 }
 
 
