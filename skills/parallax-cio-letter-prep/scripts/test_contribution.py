@@ -22,6 +22,7 @@ All expected values are HAND-COMPUTED in the test comments, not reverse-derived.
 from __future__ import annotations
 
 import math
+import datetime # Added for new test
 
 import pytest
 
@@ -658,3 +659,42 @@ def test_inconsistent_current_portfolio_extra_symbol_raises():
     msg = str(excinfo.value)
     # Either AAPL.O (off by 0.1) or TSLA.O (off by 0.1) should be named — both fail.
     assert "AAPL.O" in msg or "TSLA.O" in msg
+
+
+def test_prices_start_after_period_start_raises():
+    """T1a: daily_prices starting after period_start → ValueError with clear message.
+
+    Scenario: period is 2026-01-01 to 2026-01-31 but export_price_series only
+    returned prices from 2026-01-06 onward (5-day gap at the start). The
+    contribution engine must raise ValueError rather than silently using whatever
+    prices it has.
+    """
+    import datetime
+
+    period_start = "2026-01-01"
+    period_end = "2026-01-15"
+    # daily_prices starts 5 days AFTER period_start
+    gap_start = datetime.date(2026, 1, 6)
+    period_end_date = datetime.date(2026, 1, 15)
+    n_days = (period_end_date - gap_start).days + 2  # include period_end + 1 extra
+
+    base_price = 100.0
+    dates = [(gap_start + datetime.timedelta(days=i)).isoformat() for i in range(n_days)]
+    prices = [{"date": d, "close": base_price * (1 + 0.001 * i)} for i, d in enumerate(dates)]
+
+    prior_portfolio = {"AAPL.O": 1.0}
+    current_portfolio = {"AAPL.O": 1.0}
+    trade_log = []
+    daily_prices_for_symbol = {d_price["date"]: d_price["close"] for d_price in prices}
+    daily_prices = {"AAPL.O": daily_prices_for_symbol}
+
+    with pytest.raises(ValueError, match="period_start"):
+        from contribution import daily_contribution
+        daily_contribution(
+            prior_portfolio=prior_portfolio,
+            current_portfolio=current_portfolio,
+            trade_log=trade_log,
+            daily_prices=daily_prices,
+            period_start=period_start,
+            period_end=period_end,
+        )

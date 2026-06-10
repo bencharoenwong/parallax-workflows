@@ -14,7 +14,7 @@ description: "Monthly CIO letter prep pack for fund managers: period attribution
 - RIA / wealth-advisor client review → use /parallax-client-review
 - Reactive drawdown attribution after a single event → use /parallax-explain-portfolio
 - Backtesting a strategy → use /backtest
-- Period > 365 days → split into quarterly windows manually (export_price_series caps at 365 days)
+- Period start more than 365 days before today → export_price_series trailing-window cannot reach it; split into quarterly windows or adjust start date
 
 ## Gotchas
 
@@ -28,7 +28,7 @@ description: "Monthly CIO letter prep pack for fund managers: period attribution
 - Per-mover fan-out cap: 5 contributors + 5 detractors = 10 names max. Do not exceed.
 - Soft cap on holdings: 40. Auto-truncate to top 40 by current weight; surface "Holdings 41-N (X% weight) excluded from per-position analysis". Daily contribution math runs over the FULL set; only per-mover fan-out is truncated.
 - `macro_analyst` parameter is `market` (not `country`). Cap macro coverage at 3 markets.
-- Period must be ≤ 365 days (`export_price_series` limit). For longer periods, reject with a v2-roadmap note.
+- Period start must be within the trailing 365-day window from today (\`export_price_series\` limit — trailing from today, no start/end anchor). For periods starting >365 days ago, reject with a v2-roadmap note.
 - Output is Word .docx ONLY via the `docx` skill chain. Markdown is an intermediate artifact, never the deliverable.
 - Materiality tiers for excluded holdings: ≤5% total → in-line "Coverage gap" note above contributors table; >5% → high-visibility WARNING banner at top; any single holding >10% → reject the attribution section entirely.
 - Driver-field fallback hierarchy: (1) news event with date from `get_news_synthesis`, (2) factor score change from `get_score_analysis`, (3) sector / peer movement from `analyze_portfolio` (this skill never calls `get_peer_snapshot` directly), (4) default phrase ("Price appreciation in line with [sector / market]" or "Multiple expansion / contraction"). Never render an empty driver slot.
@@ -84,7 +84,7 @@ Fire all rows below in a single tool-call turn. Every row is independent. Per co
 |---|---|---|
 | `mcp__claude_ai_Parallax__get_telemetry` | fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences | Market regime context for the period header. |
 | `mcp__claude_ai_Parallax__analyze_portfolio` | Construct the `portfolio` array as one entry at `period_start` carrying `prior_portfolio` weights, plus one entry per distinct trade date in `trade_log` carrying the cumulative-post-trade weights as of that date. The final entry's weights MUST equal `current_portfolio`. `start_date=period_start`, `end_date=period_end`, `benchmark=<input or "ACWI.OQ">`, `fields=["portfolio_summary","performance_metrics","drawdown_analysis","portfolio_scores","concentration_metrics","company_contribution","sector_contribution","sector_allocation","time_period_returns","latest_holdings"]`. For the common single-rebalance case (one trade date `D`), the array has 2 entries: `[{date: period_start, ...prior}, {date: D, ...current}]`. | **Single multi-date call.** Server-side `company_contribution` is canonical; current+prior factor exposures via `latest_holdings` + `sector_allocation` over time. `scripts/contribution.py` runs as the reconciliation audit (Batch B step 1). |
-| `mcp__claude_ai_Parallax__export_price_series` | `symbol=<each holding>`, `days=<min(period_days, 365)>` | One call per holding (parallel). Returns TR-adjusted closes. Fires for the FULL holdings set (input to local audit) — Batch B fan-out is the truncated set, not this. |
+| `mcp__claude_ai_Parallax__export_price_series` | `symbol=<each holding>`, `days=<min((today - period_start).days + 5, 365)>` | One call per holding (parallel). Returns TR-adjusted closes. Trailing window anchored to period_start (today must be within 365 days of period_start); slice fetched prices to [period_start, period_end] before passing to contribution.py. Fires for the FULL holdings set (input to local audit) — Batch B fan-out is the truncated set, not this. |
 | `mcp__claude_ai_Parallax__get_company_info` | `symbol="<comma-joined RICs>"` | **Single call**, comma-separated. FREE, instant. Returns all holdings' names for cross-validation per conventions §2. |
 | `mcp__claude_ai_Parallax__check_portfolio_redundancy` | `holdings=current_portfolio` | Surfaced under coverage gaps if low coverage; otherwise informs trade-narrative quality. |
 
@@ -100,7 +100,7 @@ If `export_price_series` fails for a holding, mark that holding as price-unavail
 # Illustrative — template-fill from JSON inputs at runtime, do not copy {...} literally
 python -c "
 import json, sys
-sys.path.insert(0, 'skills/cio-letter-prep/scripts')
+sys.path.insert(0, 'skills/parallax-cio-letter-prep/scripts')
 from contribution import daily_contribution, ReconciliationError
 result = daily_contribution(
     prior_portfolio=PRIOR_PORTFOLIO,        # dict from prior_portfolio input
@@ -207,7 +207,7 @@ The render synthesis applies these tokens to: title (navy-900), body (neutral-90
 
 Cover-page client name follows integration-pattern.md §6: when `white_label_active` AND `client_name != ""`, the cover-page header gains the client name at H1 in the brand `branding["fonts"]["header"]`. When `client_name == ""` (legacy configs), the client name is omitted but the cover-page logo (if present) still renders.
 
-**Golden fixture:** Reference output at `skills/cio-letter-prep/fixtures/golden_pack_2026-04.docx` is the pre-retrofit baseline rendered with the default Parallax palette (no client config active). Post-retrofit verification: see `scripts/compare_docx.py` and the **Retrofit gate procedure** below.
+**Golden fixture:** Reference output at `skills/parallax-cio-letter-prep/fixtures/golden_pack_2026-04.docx` is the pre-retrofit baseline rendered with the default Parallax palette (no client config active). Post-retrofit verification: see `scripts/compare_docx.py` and the **Retrofit gate procedure** below.
 
 **Retrofit gate procedure (one-shot, best-effort).**
 
@@ -215,7 +215,7 @@ The `golden_pack_2026-04.docx` fixture was rendered against live Parallax MCP da
 
 1. Confirm `~/.parallax/client-branding/config.yaml` does NOT exist (default-Parallax path).
 2. Run `/parallax-cio-letter-prep` with any valid inputs (the simplest is the three-holding 30-day fixture documented in **Worked Numerical Example** below — synthetic prices that exercise all sections). Save output as `post-retrofit.docx`.
-3. Run `python skills/cio-letter-prep/scripts/compare_docx.py post-retrofit.docx fixtures/golden_pack_2026-04.docx`.
+3. Run `python skills/parallax-cio-letter-prep/scripts/compare_docx.py post-retrofit.docx fixtures/golden_pack_2026-04.docx`.
 4. Expected: PASS on fonts, palette, and section / table-row counts (table contents may differ because Parallax data differs across runs; the script does not assert content equality). Investigate any FAIL on the structural properties before proceeding.
 
 The comparison script checks: (a) `document.styles` font names for Heading 1/2/3 + Body Text, (b) palette hex values in `theme1.xml`, (c) cover-page header image presence + width-EMU within ±5% tolerance, (d) section count + table row counts.

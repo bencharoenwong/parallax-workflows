@@ -62,7 +62,7 @@ Phase 2 is staged into two parallel turns: **2a classification + ground-truth** 
 
 | Tool | Parameters | Notes |
 |---|---|---|
-| `analyze_portfolio` | holdings, lens "concentration" | Sector/factor exposures. WARNING: may exceed 180K chars — fall back to `check_portfolio_redundancy` if truncated. Server-side ETF handling: ETFs included here without per-skill branching. |
+| `analyze_portfolio` | `portfolio=[{date: <today ISO>, symbol: <ric>, weight: <w>}]`, `fields=["concentration_metrics","sector_allocation","company_contribution","factor_exposures"]` | Sector/factor exposures. The parameters `holdings` and `lens` do not exist in the deployed schema. WARNING: may exceed 180K chars — fall back to `check_portfolio_redundancy` if truncated or on MCP schema validation error. Server-side ETF handling: ETFs included here without per-skill branching. |
 | `etf_profile` | per holding, plain ticker — **all N calls fan out in parallel within 2a** | **Asset-class oracle.** Non-error response → ETF; error response (`{"error": "No profile data found"}`) → equity. Free / instant per `_parallax/token-costs.md`. Mirrors `explain-portfolio` Step 1a. |
 | `get_company_info` | per holding — **all N calls fan out in parallel within 2a** | **Ground-truth name oracle** for cross-validation per conventions §2. Per-holding only — do NOT use comma-joined: comma-joined calls fail-empty on partial coverage, which is risky for arbitrary user-supplied portfolios where any single unresolved RIC silently zeroes the entire batch. |
 

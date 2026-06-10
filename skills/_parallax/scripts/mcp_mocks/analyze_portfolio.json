@@ -1,28 +1,37 @@
 {
-  "factor_exposures": {
-    "VALUE": 5.8,
-    "QUALITY": 7.2,
-    "MOMENTUM": 4.6,
-    "DEFENSIVE": 6.1
-  },
-  "sector_exposures": {
-    "Information Technology": 0.32,
-    "Financials": 0.18,
-    "Health Care": 0.15,
-    "Consumer Staples": 0.12,
-    "Energy": 0.10,
-    "Industrials": 0.08,
-    "Other": 0.05
-  },
-  "concentration": {
-    "top1_weight": 0.22,
-    "top3_weight": 0.51,
-    "hhi": 0.118
-  },
-  "risk_metrics": {
-    "weighted_beta": 1.05,
-    "volatility_estimate": 0.164
-  },
+  "factor_exposures": { "VALUE": 5.8, "QUALITY": 7.2, "MOMENTUM": 4.6, "DEFENSIVE": 6.1 },
+  "sector_exposures": { "Information Technology": 0.32, "Financials": 0.18, "Health Care": 0.15, "Consumer Staples": 0.12, "Energy": 0.10, "Industrials": 0.08, "Other": 0.05 },
+  "concentration": { "top1_weight": 0.22, "top3_weight": 0.51, "hhi": 0.118 },
+  "risk_metrics": { "weighted_beta": 1.05, "volatility_estimate": 0.164 },
   "holdings_count": 8,
-  "as_of": "2026-04-30"
+  "as_of": "2026-04-30",
+  "portfolio_summary": {
+    "total_return": 0.0842,
+    "annualized_return": 0.1124,
+    "benchmark_return": 0.0631
+  },
+  "performance_metrics": {
+    "portfolio": {
+      "annualized_volatility": 0.1540,
+      "sharpe_ratio": 0.73
+    }
+  },
+  "drawdown_analysis": {
+    "portfolio": {
+      "max_drawdown": -0.0612,
+      "recovery_days": 14
+    }
+  },
+  "company_contribution": [
+    { "symbol": "AAPL.O", "name": "Apple Inc.", "contribution": 0.0312, "weight": 0.22 },
+    { "symbol": "MSFT.O", "name": "Microsoft Corp.", "contribution": 0.0198, "weight": 0.18 }
+  ],
+  "sector_allocation": { "Information Technology": 0.32, "Financials": 0.18, "Health Care": 0.15 },
+  "sector_contribution": { "Information Technology": 0.0415, "Financials": 0.0112 },
+  "time_period_returns": { "1m": 0.0212, "3m": 0.0842, "6m": 0.1124 },
+  "latest_holdings": [
+    { "symbol": "AAPL.O", "name": "Apple Inc.", "weight": 0.22 },
+    { "symbol": "MSFT.O", "name": "Microsoft Corp.", "weight": 0.18 }
+  ],
+  "portfolio_scores": { "VALUE": 5.8, "QUALITY": 7.2, "MOMENTUM": 4.6 }
 }

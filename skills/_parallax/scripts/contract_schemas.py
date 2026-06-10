@@ -40,6 +40,39 @@ ANALYZE_PORTFOLIO_SCHEMA = {
     "risk_metrics": (dict, OPTIONAL),
     "holdings_count": (int, OPTIONAL),
     "as_of": (str, OPTIONAL),
+    # --- new fields required by cio-letter-prep ---
+    "portfolio_summary": ({
+        "total_return": NUM,
+        "annualized_return": (NUM, OPTIONAL),
+        "benchmark_return": (NUM, OPTIONAL),
+    }, OPTIONAL),
+    "performance_metrics": ({
+        "portfolio": {
+            "annualized_volatility": NUM,
+            "sharpe_ratio": (NUM, OPTIONAL),
+        },
+    }, OPTIONAL),
+    "drawdown_analysis": ({
+        "portfolio": {
+            "max_drawdown": NUM,
+            "recovery_days": (int, OPTIONAL),
+        },
+    }, OPTIONAL),
+    "company_contribution": ([{
+        "symbol": str,
+        "name": str,
+        "contribution": NUM,
+        "weight": NUM,
+    }], OPTIONAL),
+    "sector_allocation": (dict, OPTIONAL),
+    "sector_contribution": (dict, OPTIONAL),
+    "time_period_returns": (dict, OPTIONAL),
+    "latest_holdings": ([{
+        "symbol": str,
+        "name": (str, OPTIONAL),
+        "weight": NUM,
+    }], OPTIONAL),
+    "portfolio_scores": (dict, OPTIONAL),
 }
 
 
