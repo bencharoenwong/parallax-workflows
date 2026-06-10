@@ -1,6 +1,6 @@
 ---
 name: parallax-ai-buffett
-description: "Applies the Buffett-style factor profile (per Frazzini-Kabiller-Pedersen 2018, 'Buffett's Alpha', FAJ), reconciled for 21st-century intangibles-heavy valuations per Lev-Srivastava 2022, to a single stock's current Parallax factor scores. Returns a match/partial/no-match verdict based on Quality, Value, Momentum, and Defensive factor criteria. Third-person framing, academic citation, AI-inferred from public information. NOT financial advice. NOT personalized. Accepts plain tickers or RIC format."
+description: "Applies the Buffett-style factor profile (per Frazzini-Kabiller-Pedersen 2018, 'Buffett's Alpha', FAJ), reconciled for 21st-century intangibles-heavy valuations per Lev-Srivastava 2022, to a single stock's current Parallax factor scores. Returns a match/partial/no-match verdict based on Quality, Value, Momentum, and Defensive factor criteria. Third-person framing, academic citation, AI-inferred from public information. NOT financial advice. NOT personalized. Accepts plain tickers or RIC format. NOT for portfolio-level health check (use /parallax-portfolio-checkup). For all five profiles simultaneously use /parallax-ai-consensus."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -147,6 +147,7 @@ Profile fit: match — 4 of 4 factor criteria met.
 **Synthesis:** KO fits all four legs of the BKP-2018 profile — high-quality (Quality 8), reasonably priced (Value 4), low-momentum (4.83), and strongly low-beta (Defensive 10) — the cheap-safe-quality cluster the paper attributes Berkshire's alpha to. It sits at the quality-and-safety end of that style rather than deep value.
 
 Workflow derived from: Frazzini, Kabiller, Pedersen (2018), "Buffett's Alpha", FAJ 74(4):35-55.
+Last anchor-tested: 2026-04-06 (KO.N, AXP.N) | Last legal review: pending
 Tool sequence: get_company_info, get_peer_snapshot, get_financials(summary), get_score_analysis(52w), explain_methodology
 Token cost: 4 tokens
 

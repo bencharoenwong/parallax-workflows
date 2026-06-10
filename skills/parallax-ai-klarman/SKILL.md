@@ -1,6 +1,6 @@
 ---
 name: parallax-ai-klarman
-description: "Applies Seth Klarman's margin-of-safety framework (per 'Margin of Safety', 1991) to a single stock's current financials via Parallax. Four balance-sheet checks: net cash position, debt vs peers, FCF stability, valuation discount. Includes a distinctive 'no position warranted; cash is valid' output when nothing qualifies. Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized."
+description: "Applies Seth Klarman's margin-of-safety framework (per 'Margin of Safety', 1991) to a single stock's current financials via Parallax. Four balance-sheet checks: net cash position, debt vs peers, FCF stability, valuation discount. Includes a distinctive 'no position warranted; cash is valid' output when nothing qualifies. Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized. Accepts plain tickers or RIC format. NOT for portfolio-level health check (use /parallax-portfolio-checkup). For all five profiles simultaneously use /parallax-ai-consensus."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -149,6 +149,7 @@ Profile fit: <match / partial_match / no_match> — <count> of 4 checks passed.
 [Optional: "No position warranted on this ticker per margin-of-safety principles. Cash is a valid stance."]
 
 Workflow derived from: Klarman, S. (1991). Margin of Safety.
+Last anchor-tested: 2026-04-07 (BRKb.N, NVDA.O) | Last legal review: pending
 Tool sequence: get_company_info, get_peer_snapshot, get_financials(balance_sheet/cash_flow/ratios, 4 periods)
 Token cost: ~5 tokens
 

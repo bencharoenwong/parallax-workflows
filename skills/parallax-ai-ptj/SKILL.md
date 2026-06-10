@@ -1,6 +1,6 @@
 ---
 name: parallax-ai-ptj
-description: "Applies Paul Tudor Jones's trend-following + macro-overlay framework (per Schwager's 'Market Wizards', 1989) to evaluate single-stock technical setup, macroeconomic regime alignment, and volatility-driven risk/reward asymmetry. Evaluates ticker across three independent conviction channels (Technical, Macro, Volatility). Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized."
+description: "Applies Paul Tudor Jones's trend-following + macro-overlay framework (per Schwager's 'Market Wizards', 1989) to evaluate single-stock technical setup, macroeconomic regime alignment, and volatility-driven risk/reward asymmetry. Evaluates ticker across three independent conviction channels (Technical, Macro, Volatility). Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized. Accepts plain tickers or RIC format. NOT for bottom-up factor analysis (use /parallax-deep-dive). For all five profiles simultaneously use /parallax-ai-consensus."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -176,6 +176,7 @@ Profile fit: <match / partial_match / no_match>
 Setup quality: <Grade A / B / C / D>
 
 Workflow derived from: Schwager (1989); Covel (2004).
+Last anchor-tested: PENDING | Last legal review: pending
 Tool sequence: list_macro_countries, get_company_info, get_technical_analysis, macro_analyst × N (N ≤ 3), get_score_analysis, get_stock_outlook, get_peer_snapshot
 Token cost: ~20-25 tokens (3 macro markets) / ~14-16 tokens (1 macro market)
 
