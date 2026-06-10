@@ -4,6 +4,38 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-06-10
+
+### Added
+- **`/parallax-make-house-view --compare <a> <b>`** — neutral view-level diff of two saved house-view bundles (bundle dir or bare `view.yaml`), e.g. two different ingested firm views. Renders per-cell tilt divergence plus an excludes diff with symmetric left/right naming; reuses the existing `diff_views` core unchanged and needs no Parallax connection at runtime (pure local file diff). 22 new tests + a second fixture view. Also fixes the SKILL.md routing note that mis-pointed per-cell view diffs at `/parallax-house-view-diff` (that skill compares portfolio *outputs* under a view, not views themselves).
+
+---
+
+## 2026-06-07
+
+### Added
+- **`build-skills.sh --normalize`** — folds client-convention frontmatter (`user-invocable`, `argument-hint`, `negative-triggers`) into agentskills.io spec-clean form via the new idempotent `_parallax/scripts/spec-normalize.py` (negative-trigger items move into a `## When not to use` body section; nothing silently dropped; spec-clean files left byte-identical; 7 tests). The build flag loop also gains `--no-lint`, and spec-validate failures now print an actionable hint pointing at `--normalize`.
+- **agentskills.io spec validator in the build** (PR #35) — new `_parallax/scripts/spec-validate.py` checks every skill's frontmatter against the spec (allowed keys, name format and directory match, description/compatibility length, metadata shape); wired into `build-skills.sh` ahead of coverage-lint and fails the build on any violation.
+
+### Changed
+- **Skill directories renamed to match frontmatter names** (PR #35) — the spec requires the skill name to equal its parent directory name; repo dirs were short aliases (`AI-buffett`, `should-i-buy`) registered under prefixed symlinks. Now the directory IS the skill name (`parallax-ai-buffett`, `parallax-should-i-buy`), so a clone of this repo is a valid skills collection as-is. `install.sh` and `check-registration.sh` drop the prefixing logic; build lint, eval configs, cross-skill references, and docs updated to the new paths.
+
+### Fixed
+- **Frontmatter YAML repaired across 10 skills** (PR #35) — frontmatter now carries only spec keys; house-convention `negative-triggers`/`gotchas` content moved verbatim into `## When not to use` / `## Gotchas` body sections. Previously the YAML was unparseable in 10 skills (markdown prose inside YAML lists) and body fragments surfaced as live skill descriptions. `coverage-lint.sh` now forbids the old top-level keys and requires the body sections.
+
+---
+
+## 2026-06-04
+
+### Added
+- **Two build guards that make registration drift visible** (PR #33): a JIT-load directive lint in `build-skills.sh` (hard-fails on dangling `references/` paths; resolves both local and cross-skill forms) and `check-registration.sh` (flags registered skills that have drifted from a symlink into a diverging copy).
+
+### Fixed
+- **AI-profile slug casing normalized to lowercase `parallax-ai-*`** across the 6 AI-* skills, concierge routing, thematic-screen, and shared references (PR #33) — frontmatter names now match the registered/invocable slugs; previously 6 concierge routes dispatched to nothing. README follow-up in PR #34: lowercase slugs in the AI-profile table, missing `parallax-ai-ptj` row added, consensus meta-skill corrected to "all 5 profiles".
+- **Stale citations and count drift batch** (PR #33): conventions §0.1→§0.2 references, due-diligence `applied_reason` citation, client-review + peer-comparison cross-skill paths, scenario-analysis step→phase wording, AI-consensus profile count 4→5, morning-brief now surfaces the 5th health flag (macro misalignment), translate-thai validator catches no-space doubled-word forms it previously missed, credit-lens reference renderer marked test-only.
+
+---
+
 ## 2026-05-31
 
 ### Added
