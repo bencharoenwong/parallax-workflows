@@ -60,10 +60,10 @@ Every `skills/parallax-ai-<name>/SKILL.md` dispatcher runs this exact sequence. 
 ### Step 0: JIT-load dependencies
 
 Before any Parallax tool call in the session:
-- JIT-load `skills/_parallax/parallax-conventions.md` (RIC resolution, parallel execution, fallback patterns, HK ambiguity)
-- JIT-load `skills/_parallax/AI-profiles/profile-schema.md` (this file)
-- JIT-load `skills/_parallax/AI-profiles/output-template.md` (render contract)
-- JIT-load `skills/_parallax/AI-profiles/profiles/<profile_id>.md` (the specific profile)
+- JIT-load `_parallax/parallax-conventions.md` (RIC resolution, parallel execution, fallback patterns, HK ambiguity)
+- JIT-load `_parallax/AI-profiles/profile-schema.md` (this file)
+- JIT-load `_parallax/AI-profiles/output-template.md` (render contract)
+- JIT-load `_parallax/AI-profiles/profiles/<profile_id>.md` (the specific profile)
 
 Before the first Parallax tool call, call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas.
 
