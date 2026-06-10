@@ -1,4 +1,4 @@
-"""Comprehensive test suite for /parallax-credit-lens logic. Run: pytest skills/credit-lens/tests/test_credit_lens.py -v"""
+"""Comprehensive test suite for /parallax-credit-lens logic. Run: pytest skills/parallax-credit-lens/tests/test_credit_lens.py -v"""
 
 from __future__ import annotations
 
@@ -164,15 +164,15 @@ class TestAltmanZScore:
         ta = 1000.0
         tl = 500.0
         inputs = AltmanInputs(
-            working_capital=100.0,     # X1 = 0.10
-            retained_earnings=200.0,   # X2 = 0.20
-            ebit=150.0,                # X3 = 0.15
+            working_capital=100.0,  # X1 = 0.10
+            retained_earnings=200.0,  # X2 = 0.20
+            ebit=150.0,  # X3 = 0.15
             total_assets=ta,
             total_liabilities=tl,
-            revenue=800.0,             # X5 = 0.80
-            market_cap=600.0,          # X4 = 1.20
+            revenue=800.0,  # X5 = 0.80
+            market_cap=600.0,  # X4 = 1.20
         )
-        expected = 1.2*0.10 + 1.4*0.20 + 3.3*0.15 + 0.6*1.20 + 1.0*0.80
+        expected = 1.2 * 0.10 + 1.4 * 0.20 + 3.3 * 0.15 + 0.6 * 1.20 + 1.0 * 0.80
         z, _, _ = compute_altman_z(inputs)
         assert abs(z - expected) < 1e-9
 
@@ -201,11 +201,11 @@ class TestAltmanZScore:
 
     def test_altman_z_nan_market_cap_returns_unavailable(self) -> None:
         import math
-        inputs = self._safe_inputs(market_cap=float('nan'))
+
+        inputs = self._safe_inputs(market_cap=float("nan"))
         z, variant, flag = compute_altman_z(inputs)
         assert math.isnan(z)
         assert flag == Flag.UNAVAILABLE
-
 
 
 class TestAbsoluteFlagging:
@@ -270,43 +270,59 @@ class TestPeerRelativeFlagging:
 
     def test_high_bad_below_peer_median_is_green(self) -> None:
         # value=2.0, peer_median=3.0, peer_p75=4.5 → below median → GREEN
-        result = flag_metric(2.0, peer_median=3.0, peer_p75=4.5, metric_key="debt_ebitda")
+        result = flag_metric(
+            2.0, peer_median=3.0, peer_p75=4.5, metric_key="debt_ebitda"
+        )
         assert result == Flag.GREEN
 
     def test_high_bad_between_median_and_p75_is_amber(self) -> None:
         # value=3.8, peer_median=3.0, peer_p75=4.5 → between → AMBER
         # but also check absolute: 3.8 > 3.5 → AMBER absolute too
-        result = flag_metric(3.8, peer_median=3.0, peer_p75=4.5, metric_key="debt_ebitda")
+        result = flag_metric(
+            3.8, peer_median=3.0, peer_p75=4.5, metric_key="debt_ebitda"
+        )
         assert result == Flag.AMBER
 
     def test_high_bad_above_p75_is_red(self) -> None:
         # value=5.5, peer_median=3.0, peer_p75=4.5 → above p75 → RED
-        result = flag_metric(5.5, peer_median=3.0, peer_p75=4.5, metric_key="debt_ebitda")
+        result = flag_metric(
+            5.5, peer_median=3.0, peer_p75=4.5, metric_key="debt_ebitda"
+        )
         assert result == Flag.RED
 
     def test_low_bad_above_peer_median_is_green(self) -> None:
         # value=25.0, peer_median=10.0, peer_p75=6.0 (p75 is lower threshold)
-        result = flag_metric(25.0, peer_median=10.0, peer_p75=6.0, metric_key="interest_coverage")
+        result = flag_metric(
+            25.0, peer_median=10.0, peer_p75=6.0, metric_key="interest_coverage"
+        )
         assert result == Flag.GREEN
 
     def test_low_bad_between_median_and_p75_is_amber(self) -> None:
         # value=8.0, peer_median=10.0, peer_p75=6.0
-        result = flag_metric(8.0, peer_median=10.0, peer_p75=6.0, metric_key="interest_coverage")
+        result = flag_metric(
+            8.0, peer_median=10.0, peer_p75=6.0, metric_key="interest_coverage"
+        )
         assert result == Flag.AMBER
 
     def test_low_bad_below_p75_is_red(self) -> None:
         # value=4.0, peer_median=10.0, peer_p75=6.0 → below p75 threshold
-        result = flag_metric(4.0, peer_median=10.0, peer_p75=6.0, metric_key="interest_coverage")
+        result = flag_metric(
+            4.0, peer_median=10.0, peer_p75=6.0, metric_key="interest_coverage"
+        )
         assert result == Flag.RED
 
     def test_no_peer_data_falls_back_to_absolute_only(self) -> None:
         # debt_ebitda=2.0 → absolute GREEN (< 3.5)
-        result = flag_metric(2.0, peer_median=None, peer_p75=None, metric_key="debt_ebitda")
+        result = flag_metric(
+            2.0, peer_median=None, peer_p75=None, metric_key="debt_ebitda"
+        )
         assert result == Flag.GREEN
 
     def test_partial_peer_data_skips_peer_comparison(self) -> None:
         # peer comparison skipped → falls through to absolute only: 6.0 > 5.0 (strictly) → RED
-        result = flag_metric(6.0, peer_median=3.0, peer_p75=None, metric_key="debt_ebitda")
+        result = flag_metric(
+            6.0, peer_median=3.0, peer_p75=None, metric_key="debt_ebitda"
+        )
         assert result == Flag.RED
 
 
@@ -314,11 +330,15 @@ class TestPeerPercentileAssertion:
     def test_low_bad_inverted_peer_percentiles_raises_error(self) -> None:
         # Inverted: p75 (10.0) > median (5.0) — violates low_bad assumption
         with pytest.raises(ValueError, match="peer_p75.*must be"):
-            flag_metric(7.0, peer_median=5.0, peer_p75=10.0, metric_key="interest_coverage")
+            flag_metric(
+                7.0, peer_median=5.0, peer_p75=10.0, metric_key="interest_coverage"
+            )
 
     def test_low_bad_correct_peer_percentiles_no_error(self) -> None:
         # Correct: p75 (6.0) <= median (10.0)
-        result = flag_metric(8.0, peer_median=10.0, peer_p75=6.0, metric_key="interest_coverage")
+        result = flag_metric(
+            8.0, peer_median=10.0, peer_p75=6.0, metric_key="interest_coverage"
+        )
         assert result == Flag.AMBER
 
 
@@ -327,7 +347,9 @@ class TestConservativeRule:
     def test_absolute_red_overrides_peer_green(self) -> None:
         # debt_ebitda=5.5 → absolute RED (>5.0)
         # peer_median=6.0, peer_p75=7.0 → value 5.5 is below peer median → peer GREEN
-        result = flag_metric(5.5, peer_median=6.0, peer_p75=7.0, metric_key="debt_ebitda")
+        result = flag_metric(
+            5.5, peer_median=6.0, peer_p75=7.0, metric_key="debt_ebitda"
+        )
         assert result == Flag.RED
 
     def test_peer_red_overrides_absolute_green(self) -> None:
@@ -335,17 +357,23 @@ class TestConservativeRule:
         # peer: 4.6 > peer_p75=4.0 → RED
         # absolute: 4.6 > 3.5 but < 5.0 → AMBER
         # result should be RED (more conservative)
-        result = flag_metric(4.6, peer_median=2.0, peer_p75=4.0, metric_key="debt_ebitda")
+        result = flag_metric(
+            4.6, peer_median=2.0, peer_p75=4.0, metric_key="debt_ebitda"
+        )
         assert result == Flag.RED
 
     def test_both_agree_green(self) -> None:
         # debt_ebitda=1.0 → absolute GREEN, peer below median → peer GREEN
-        result = flag_metric(1.0, peer_median=2.0, peer_p75=3.5, metric_key="debt_ebitda")
+        result = flag_metric(
+            1.0, peer_median=2.0, peer_p75=3.5, metric_key="debt_ebitda"
+        )
         assert result == Flag.GREEN
 
     def test_both_agree_red(self) -> None:
         # debt_ebitda=6.0 → absolute RED, above peer p75 → peer RED
-        result = flag_metric(6.0, peer_median=2.0, peer_p75=4.0, metric_key="debt_ebitda")
+        result = flag_metric(
+            6.0, peer_median=2.0, peer_p75=4.0, metric_key="debt_ebitda"
+        )
         assert result == Flag.RED
 
 
@@ -856,7 +884,9 @@ class TestErrorDegradation:
     def test_peer_group_too_small_no_p75(self) -> None:
         """peer_p75=None gracefully skips peer comparison, uses absolute only."""
         # interest_coverage=2.0 → absolute AMBER (between 1.5 and 3.0)
-        result = flag_metric(2.0, peer_median=5.0, peer_p75=None, metric_key="interest_coverage")
+        result = flag_metric(
+            2.0, peer_median=5.0, peer_p75=None, metric_key="interest_coverage"
+        )
         assert result == Flag.AMBER
 
 
@@ -870,15 +900,17 @@ class TestEdgeCases:
 
     def test_altman_z_all_zeros_raises_on_zero_assets(self) -> None:
         with pytest.raises(ValueError):
-            compute_altman_z(AltmanInputs(
-                working_capital=0.0,
-                retained_earnings=0.0,
-                ebit=0.0,
-                total_assets=0.0,
-                total_liabilities=1.0,
-                revenue=0.0,
-                market_cap=1.0,
-            ))
+            compute_altman_z(
+                AltmanInputs(
+                    working_capital=0.0,
+                    retained_earnings=0.0,
+                    ebit=0.0,
+                    total_assets=0.0,
+                    total_liabilities=1.0,
+                    revenue=0.0,
+                    market_cap=1.0,
+                )
+            )
 
     def test_altman_z_negative_retained_earnings_allowed(self) -> None:
         """Negative retained earnings (accumulated deficit) should not raise."""
@@ -943,14 +975,16 @@ class TestEdgeCases:
 
     def test_build_metrics_table_with_unavailable_flag(self) -> None:
         """UNAVAILABLE flag renders without crashing."""
-        rows = [MetricRow(
-            category="Altman Z",
-            flag=Flag.UNAVAILABLE,
-            metric_label="Z-score",
-            metric_value="N/A",
-            peer_median_label="—",
-            interpretation="Insufficient data",
-        )]
+        rows = [
+            MetricRow(
+                category="Altman Z",
+                flag=Flag.UNAVAILABLE,
+                metric_label="Z-score",
+                metric_value="N/A",
+                peer_median_label="—",
+                interpretation="Insufficient data",
+            )
+        ]
         table = build_metrics_table(rows)
         assert "Altman Z" in table
         assert "UNAVAILABLE" in table

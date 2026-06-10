@@ -43,15 +43,15 @@ Runs all installed AI Investor Profiles in parallel against a ticker (or short b
 
 ### Step 0 — JIT-load dependencies
 
-1. `skills/_parallax/parallax-conventions.md`
-2. `skills/_parallax/AI-profiles/profile-schema.md`
-3. `skills/_parallax/AI-profiles/output-template.md`
-4. `skills/_parallax/AI-profiles/consensus-config.md`
+1. `_parallax/parallax-conventions.md`
+2. `_parallax/AI-profiles/profile-schema.md`
+3. `_parallax/AI-profiles/output-template.md`
+4. `_parallax/AI-profiles/consensus-config.md`
 5. ALL installed profile specs:
-   - `skills/_parallax/AI-profiles/profiles/buffett.md`
-   - `skills/_parallax/AI-profiles/profiles/greenblatt.md`
-   - `skills/_parallax/AI-profiles/profiles/klarman.md`
-   - `skills/_parallax/AI-profiles/profiles/soros.md`
+   - `_parallax/AI-profiles/profiles/buffett.md`
+   - `_parallax/AI-profiles/profiles/greenblatt.md`
+   - `_parallax/AI-profiles/profiles/klarman.md`
+   - `_parallax/AI-profiles/profiles/soros.md`
 6. Each profile's dispatcher (`skills/parallax-ai-<name>/SKILL.md`) for workflow reference.
 
 Call `ToolSearch` with query `"+Parallax"` to load deferred MCP tool schemas before the first Parallax call.

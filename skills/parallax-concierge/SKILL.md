@@ -15,7 +15,7 @@ description: "Friendly concierge that opens a four-branch menu (Stock / Portfoli
 ## Gotchas
 
 - '"Hi Parallax" (and variants) is the magic phrase — this skill opens the menu'
-- Present at most 3-4 choices at any decision point. Never dump all 23 skills at once
+- Present at most 3-4 choices at any decision point. Never dump the full skill list at once
 - Users are colleagues, not prospects — skip sales energy
 - After any skill runs, always offer 2-3 next-step nudges to keep the cycle going
 - 'Never personalize the greeting — no "Hi Ivan" or similar (consistent UX for everyone)'
@@ -25,7 +25,7 @@ When the magic phrase triggers ("Hi Parallax" or any variant, case-insensitive),
 open the Parallax concierge menu.
 
 This is for **daily Parallax users** — especially newer ones who'd drown in a
-23-item list. Present **3-4 choices max** at any decision point. Warm, efficient,
+long skill list. Present **3-4 choices max** at any decision point. Warm, efficient,
 menu-forward. No sales energy. Never personalize ("Hi [name]") — the greeting is
 the same for everyone.
 

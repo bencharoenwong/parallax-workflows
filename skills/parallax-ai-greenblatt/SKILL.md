@@ -48,10 +48,10 @@ Execute using `mcp__claude_ai_Parallax__*` tools.
 
 Before the first Parallax tool call:
 
-1. Load `skills/_parallax/parallax-conventions.md` — RIC resolution, parallel execution, fallback patterns.
-2. Load `skills/_parallax/AI-profiles/profile-schema.md` — dispatcher workflow and cross-validation gate.
-3. Load `skills/_parallax/AI-profiles/output-template.md` — required output structure and disclaimer.
-4. Load `skills/_parallax/AI-profiles/profiles/greenblatt.md` — profile spec.
+1. Load `_parallax/parallax-conventions.md` — RIC resolution, parallel execution, fallback patterns.
+2. Load `_parallax/AI-profiles/profile-schema.md` — dispatcher workflow and cross-validation gate.
+3. Load `_parallax/AI-profiles/output-template.md` — required output structure and disclaimer.
+4. Load `_parallax/AI-profiles/profiles/greenblatt.md` — profile spec.
 
 Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas.
 
@@ -168,6 +168,6 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 
 ## Graceful fallback
 
-If `build_stock_universe` returns fewer than 10 names, the top-decile calculation is unreliable. Expand the universe query once; if expansion fails, return `INSUFFICIENT_UNIVERSE` and decline to render a verdict. In ticker-check mode, this means the Phase 3 consensus meta-skill should treat the profile as `skipped`.
+If `build_stock_universe` returns fewer than 10 names, the top-decile calculation is unreliable. Expand the universe query once; if expansion fails, return `INSUFFICIENT_UNIVERSE` and decline to render a verdict. In ticker-check mode, this means the /parallax-ai-consensus meta-skill should treat the profile as `skipped`.
 
 If `get_financials(ratios)` fails for a subset of universe members, drop those names from the ranking and note the coverage loss in the methodology footer.

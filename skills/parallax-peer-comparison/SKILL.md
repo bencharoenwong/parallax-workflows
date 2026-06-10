@@ -70,7 +70,7 @@ This adds 3 FREE/instant calls (per `_parallax/coverage-matrix.md`).
 #### B.1 — Trends + price series (parallel)
 
 Fire all 6 calls simultaneously:
-- `get_score_analysis` for primary + top 2 peers (3 calls). If the user supplied `weeks=N` in the invocation, pass it as `weeks` as int N (non-default — see conventions §0.1); otherwise rely on the server default of 52.
+- `get_score_analysis` for primary + top 2 peers (3 calls). If the user supplied `weeks=N` in the invocation, pass it as `weeks` as int N (non-default — see conventions §0.2); otherwise rely on the server default of 52.
 - For each leg classified as **equity** in B.0 → `export_price_series(symbol=<ric>, days=<N>, format="json")`. Default `days=100`.
 - For each leg classified as **ETF** in B.0 → `etf_daily_price(symbol=<plain_ticker>, start_date=<today − days>, end_date=<today>)`.
 

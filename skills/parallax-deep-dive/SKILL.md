@@ -1,6 +1,6 @@
 ---
 name: parallax-deep-dive
-description: "Deep dive on a single position: company profile, peer comparison, financials, score trends, macro context, technicals, dividends, news, and AI assessment via Parallax MCP tools. Symbol in RIC format. NOT for quick stock checks (use /parallax-should-i-buy), not for portfolio-level analysis (use /parallax-morning-brief)."
+description: "Deep dive on a single position: company profile, peer comparison, financials, score trends, macro context, technicals, dividends, news, and AI assessment via Parallax MCP tools. Symbol in RIC format. NOT for quick stock checks (use /parallax-should-i-buy), not for portfolio-level analysis (use /parallax-morning-brief), not for statement-level forensic audit or Palepu framework analysis (use /parallax-due-diligence)."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -53,13 +53,13 @@ Per `loader.md` §1-§2 + §7.1/§7.2/§7.3. If view present, capture tilt vecto
 | `get_company_info` | `symbol` | Sector, market cap, description |
 | `get_peer_snapshot` | `symbol` | Factor scores + peer ranking |
 | `get_financials` | `symbol`, `statement="summary"` | Revenue/income narrative |
-| `get_financials` | `symbol`, `statement="ratios"`, `periods` as int 1 (latest period only, non-default — see conventions §0.1) | Key ratios: margins, ROE, P/E |
+| `get_financials` | `symbol`, `statement="ratios"`, `periods` as int 1 (latest period only, non-default — see conventions §0.2) | Key ratios: margins, ROE, P/E |
 | `get_score_analysis` | `symbol` | 52-week factor trend (server default) |
 | `get_technical_analysis` | `symbol` | Trend, momentum, support/resistance |
 | `get_stock_outlook` | `symbol`, `aspect="analyst_targets"` | Price targets |
 | `get_stock_outlook` | `symbol`, `aspect="recommendations"` | Buy/hold/sell |
 | `get_stock_outlook` | `symbol`, `aspect="risk_return"` | Risk/return vs peers |
-| `get_stock_outlook` | `symbol`, `aspect="dividends"`, `limit` as int 8 (non-default; default is 20 — see conventions §0.1) | Dividend history |
+| `get_stock_outlook` | `symbol`, `aspect="dividends"`, `limit` as int 8 (non-default; default is 20 — see conventions §0.2) | Dividend history |
 | `get_news_synthesis` | `symbol` | Async — don't block output |
 
 ### Batch B — Macro context (after Batch A)
@@ -108,7 +108,7 @@ Before composing the Output Format, JIT-load `_parallax/white-label/integration-
 
 Append audit log entry per loader.md §6.
 
-**AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below. (The Assessment section already carries its own contextual-proximity AI disclosure per §5 rule 6; the document-level §9.2 banner is rendered here in addition, covering the synthesis across all sections.)
+**AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below. (The Assessment section already carries its own contextual-proximity AI disclosure per HKMA/SFC Nov 2024 Circular; the document-level §9.2 banner is rendered here in addition, covering the synthesis across all sections.)
 
 If active view: use the view-aware disclaimer per loader.md §5. Otherwise:
 

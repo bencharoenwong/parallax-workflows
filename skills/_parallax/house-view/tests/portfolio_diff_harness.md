@@ -1,6 +1,6 @@
 # Portfolio Diff Harness — Interface Specification
 
-This document defines the protocol shape for verifying that a house view changes the output of a downstream consumer skill (e.g. `portfolio-builder`). Calibration parameters and auxiliary probe fixtures are internal to the reference implementation and not part of this public interface.
+This document defines the protocol shape for verifying that a house view changes the output of a downstream consumer skill (e.g. `parallax-portfolio-builder`). Calibration parameters and auxiliary probe fixtures are internal to the reference implementation and not part of this public interface.
 
 ## Protocol: Dual-Leg Diff
 
