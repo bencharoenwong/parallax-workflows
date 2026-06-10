@@ -4,6 +4,59 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-06-10: "Compare two house views" ships as `--compare` on make-house-view — no new skill, house-view-diff untouched
+
+**Why:** The ask was "compare two *different* house views" (e.g. two ingested firm views). Because the house-view family already carries three comparison surfaces — `house-view-diff` (portfolio output with vs. without the active view), `judge-house-view` (active view vs. live Parallax signals), and `make-house-view --shadow-diff` (fresh synthesis vs. active bank view) — this was treated as a redundancy question before a build question: an 8-agent read-only capability audit mapped the ask onto three candidate targets and source-verified each. Two were already covered: same-firm cross-version compare ships as `load-house-view --version-history` (per-version `version_diff` chain), and portfolio-output-under-two-views is `house-view-diff` with both legs pointed at non-empty bundle dirs (in-contract diff-without-verdict mode). The one genuine gap: view-level compare of two *arbitrary saved* views — `--shadow-diff` hardwires its right operand to the fresh synthesis, `judge`'s right operand is live signals, and `version_diff` only works within one view family. That gap is a rendering fold-in on `make-house-view`'s already-symmetric `diff_views` core, not a new skill.
+
+**Impact:**
+- `shadow_diff.py` gains `render_compare` + `diff_excludes` (+ helpers); **`diff_views` and `render_shadow_diff` are unchanged** — compare re-reads the existing diff buckets with neutral semantics (`added` = right-only, `bank_only` = left-only) and adds an excludes-list diff the shadow path never needed.
+- `maker.py` gains module-level `run_compare(left, right)` + `_load_view_bundle` (accepts a bundle dir or a bare `view.yaml`; validates `tilts` is a dict; non-dict `metadata` degrades gracefully). `execute_synthesis` / `MakerOptions` / `MakerResult` untouched — compare is not synthesis.
+- `--compare` needs nothing from Parallax at runtime: pure local file diff (verified — no MCP/network/synthesis reachable from the call path).
+- Output renders tilts + excludes divergence only; the optional pillar-confidence block stays out of cross-view output.
+- 22 new tests (`tests/test_compare.py`) + a second fixture view calibrated against the real anchor fixture; SKILL.md fixes the mis-routed "per-cell diff → house-view-diff" bullet (house-view-diff compares portfolio *outputs*, not views); README command-table row.
+
+**Alternatives:** [DROP] **New `parallax-compare-house-views` skill** — rejected; two of its three would-be modes are already shipped surfaces, and the third is one rendering function on an existing symmetric core. [DROP] **Extend `house-view-diff`** — rejected as a category error: that skill is the portfolio-*output* comparator; view-level tilt compare belongs with the view-diff core in make-house-view. [DROP] **Ride `execute_synthesis` with a dummy MCP runner** (the original blueprint shape) — rejected; compare is not synthesis, and a standalone function avoids threading a fake runner through options/result types. [DROP] **Graded PASS/WEAK/KILL verdict for two real views** — deferred, not built; the existing bands mean "shift vs. an empty baseline," and a two-real-views divergence verdict needs new calibration that nothing currently demands.
+
+**Flip conditions:** (a) An operator actually asks for a graded divergence verdict between two firms' views → that is a new calibration decision; ship its own DECISIONS entry. (b) The snapshot-store work lands with arbitrary version-pair selection → revisit whether non-adjacent same-family pairs route to `--compare` or stay in `--version-history`. (c) Cross-view output ever needs the pillar-confidence block → deliberate perimeter decision per the 2026-05-25 entry's pattern, not a silent addition.
+
+---
+
+## 2026-06-07: Spec-validator friction on ported skills resolved with an explicit `--normalize` build flag, not a softer validator
+
+**Why:** The agentskills.io spec validator (PR #35) is a hard build stop, and skills ported from client conventions carry frontmatter the spec rejects (`user-invocable`, `argument-hint`, `negative-triggers`). Hand-fixing each ported skill repeats the same mechanical edits and risks silently dropping negative-trigger content. A one-command normalizer keeps the validator strict while making the port path cheap.
+
+**Impact:** New `_parallax/scripts/spec-normalize.py` rewrites SKILL.md in place: drops `user-invocable`/`argument-hint`, moves `negative-triggers` items into a `## When not to use` body section (created after the H1 if absent; missing items appended if the section exists — content is never silently dropped). Idempotent: spec-clean files are left byte-identical. 7 tests. `build-skills.sh` gains a proper flag loop (`--no-lint`, `--normalize`), a shared `all_skill_dirs` helper, and an actionable hint on spec-validate failure pointing at `--normalize`. Source files remain the spec-clean single source of truth.
+
+**Alternatives:** [DROP] **Keep hand-editing each ported skill at the validator stop** — rejected; recurring mechanical work with a silent-content-loss failure mode. [DROP] **Soften the validator to warnings for client-convention keys** — rejected; forfeits the spec-clean guarantee the validator exists to enforce. [DROP] **Normalize automatically inside every build** — rejected; an in-place source rewrite should be an explicit operator action, not a silent build side effect.
+
+**Flip conditions:** (a) Client-convention ports become routine → wire `--normalize` into the port pipeline rather than leaving it manual. (b) The agentskills spec grows native support for negative-trigger metadata → update the normalizer mapping (or retire the relocation) in the same change that adopts the new spec field.
+
+---
+
+## 2026-06-07: agentskills.io spec compliance — directory IS the skill name, frontmatter spec-clean, validator gates the build
+
+**Why:** Two coupled defects made the repo non-portable as a skills collection. (1) Repo directories were short aliases (`AI-buffett`, `should-i-buy`) registered under prefixed symlinks, violating the spec rule that a skill's name equals its parent directory name — and the alias↔slug indirection was the root enabler of the slug-casing mismatch class fixed in PR #33. (2) Ten skills carried house-convention frontmatter (`negative-triggers`, `gotchas` as YAML lists holding markdown prose) that was unparseable YAML, so body fragments surfaced as live skill descriptions. The decision (PR #35): make a clone of this repo a valid skills collection as-is — rename every directory to its skill name, restrict frontmatter to spec keys with the house-convention content moved verbatim into `## When not to use` / `## Gotchas` body sections, and gate the build on a spec validator so neither defect can silently return.
+
+**Impact:** 126-file rename pass (`parallax-ai-buffett`, `parallax-should-i-buy`, …); `install.sh` and `check-registration.sh` drop the prefixing logic; new `_parallax/scripts/spec-validate.py` (allowed keys, name/directory match, description and compatibility length, metadata shape) wired into `build-skills.sh` ahead of coverage-lint as a hard stop; `coverage-lint.sh` forbids the old top-level keys and requires the body sections; `skill-structure-conventions.md` documents the rules. Follow-on: ported skills arriving with client-convention frontmatter are handled by `--normalize` (see the entry above) rather than by weakening the validator.
+
+**Alternatives:** [DROP] **Keep alias directories + prefixing install logic** — rejected; a clone was not a valid collection, and the name/dir indirection is what let frontmatter names drift from invocable slugs in the first place. [DROP] **Teach the validator to accept the house-convention keys** — rejected; those keys are what broke YAML parsing, and the spec key-set is the portability contract for cross-runtime ports. Content was relocated verbatim, never dropped. [DROP] **Validator as warning-only** — rejected; warnings had already failed to keep frontmatter parseable.
+
+**Flip conditions:** (a) The agentskills spec changes its allowed key-set → update `spec-validate.py` in the same change that adopts the new spec. (b) A runtime emerges that requires non-spec frontmatter keys at the source level (not foldable at port time) → revisit whether source stays spec-clean with a build-time transform, mirroring the `--normalize` direction.
+
+---
+
+## 2026-06-04: The 2026-06-01 library-audit fix program lands as one structural batch — guards before content fixes
+
+**Why:** A 35-skill convention audit (2026-06-01, one reader agent per skill) traced every P0 to a single systemic cause: registered copies drifting from repo source, compounded by a name-case mismatch between frontmatter (`parallax-AI-*`) and the invocable lowercase slugs — concierge had 6 routes dispatching to nothing, and the live AI-profile skills were serving a stale pre-disclosure version. The audit's recommended order was deliberately structural-first: ship the two build guards that would have caught the drift (a JIT-load directive lint and a registration fork detector), then land the content fixes under their protection, so the same class of defect cannot accumulate silently again.
+
+**Impact:** PR #33 — lowercase slug normalization across the 6 AI-* skills, concierge routing, thematic-screen, and shared references; `build-skills.sh` JIT-directive lint (hard-fails dangling `references/` paths, resolves local and cross-skill forms — the cross-skill form is explicitly handled because the audit's own pre-flight grep false-positived on it); new `check-registration.sh` fork detector; stale §-citation batch; AI-consensus profile count 4→5; morning-brief 5th health flag (macro misalignment) surfaced; translate-thai doubled-word detection fixed for no-space forms; credit-lens reference renderer marked test-only. PR #34 — README AI-profile table brought into line (lowercase slugs, PTJ row, "all 5 profiles").
+
+**Alternatives:** [DROP] **Content fixes without the guards** — rejected; the audit showed the guards spec'd in `skill-structure-conventions.md` had simply never shipped, which is why the drift stayed invisible. Fixing content alone reverts to the same blind state. [DROP] **Fix the registered copies in place instead of re-pointing them at the repo** — rejected; editing copies entrenches the fork topology that caused the P0s. The registration side moves to symlinks so repo edits propagate.
+
+**Flip conditions:** (a) `check-registration.sh` flags a fork again → treat as a registration-topology incident first, content bug second. (b) The directory-name spec work (PR #35) changes what "correctly registered" means → keep the detector's definition in sync (it was updated in #35 to drop prefixing).
+
+---
+
 ## 2026-05-31: v2 eval substrate — spec-driven skill-agnostic engine, two-tier grading, should-i-buy two-lens upgrade, AI-buffett momentum correction
 
 **Why:** Skill-quality regressions on SKILL.md edits are invisible to the v1 latency harness (it times wall-clock, not output correctness), and the runtime caches SKILL.md at session start so unit tests don't catch them either. The goal was a *trustworthy noise-floor baseline* — a pass-rate a real skill change can be measured against — rather than a harness that rubber-stamps passing scores. Three coupled decisions landed together:
