@@ -19,7 +19,7 @@ A red contract test in CI surfaces drift before a customer hits it.
 | File | Endpoint | Notes |
 |---|---|---|
 | `get_telemetry.json` | `mcp__claude_ai_Parallax__get_telemetry` | Market regime, signals, divergences |
-| `analyze_portfolio.json` | `mcp__claude_ai_Parallax__analyze_portfolio` | Factor + sector + concentration. **Minimal — full response includes additional fields** (rolling metrics, drawdown analysis, contribution attribution, performance time series) referenced as "unavailable in fallback path" by `portfolio-builder/SKILL.md` Step 6. Mock does not currently capture those keys; their exact field names need to be reconciled against a live capture. |
+| `analyze_portfolio.json` | `mcp__claude_ai_Parallax__analyze_portfolio` | Factor + sector + concentration, plus extended fields (company_contribution, portfolio_summary, drawdown_analysis, performance_metrics, latest_holdings, sector_allocation, time_period_returns) used by cio-letter-prep Batch B. Schema updated 2026-06-10 to reflect the corrected `portfolio` + `fields` call shape. |
 | `export_price_series.json` | `mcp__claude_ai_Parallax__export_price_series` | One holding's daily OHLCV |
 | `get_company_info.json` | `mcp__claude_ai_Parallax__get_company_info` | One holding; ground-truth name oracle |
 | `check_portfolio_redundancy.json` | `mcp__claude_ai_Parallax__check_portfolio_redundancy` | **PROVISIONAL** — see below |

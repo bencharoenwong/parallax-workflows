@@ -6,6 +6,12 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 ## 2026-06-10
 
+### Fixed
+- **`analyze_portfolio` call shape corrected** across `parallax-client-review`, `parallax-rebalance`, and `parallax-scenario-analysis` — skills were passing `holdings=[...]` / `lens="..."` parameters that do not exist in the MCP schema. Corrected to `portfolio=[{date, symbol, weight}]` + `fields=[...]` (the documented schema). Skills were silently no-oping on every portfolio analysis call.
+- **`parallax-cio-letter-prep` stale paths** — Batch B JIT-load directives and test imports referenced `skills/cio-letter-prep/` (pre-rename path). Updated to `skills/parallax-cio-letter-prep/` throughout.
+- **`parallax-cio-letter-prep` retrospective window formula** — `date_end` for retrospective periods was set to `period_start` instead of today, producing a zero-length window. Fixed to `date_end = today`.
+- **`analyze_portfolio` contract schema extended** — `contract_schemas.py` now covers the seven additional response fields consumed by `cio-letter-prep` Batch B: `company_contribution`, `portfolio_summary`, `drawdown_analysis`, `performance_metrics`, `latest_holdings`, `sector_allocation`, `time_period_returns`. Mock updated to match.
+
 ### Added
 - **`/parallax-make-house-view --compare <a> <b>`** — neutral view-level diff of two saved house-view bundles (bundle dir or bare `view.yaml`), e.g. two different ingested firm views. Renders per-cell tilt divergence plus an excludes diff with symmetric left/right naming; reuses the existing `diff_views` core unchanged and needs no Parallax connection at runtime (pure local file diff). 22 new tests + a second fixture view. Also fixes the SKILL.md routing note that mis-pointed per-cell view diffs at `/parallax-house-view-diff` (that skill compares portfolio *outputs* under a view, not views themselves).
 
