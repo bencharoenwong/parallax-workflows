@@ -317,7 +317,7 @@ Options (mirrors autoplan, adapted to a view update):
 - Auto-update view without explicit CIO confirmation
 - Stress against non-Parallax data (Bloomberg / FactSet / internal)
 - ETF-universe-level stress (Parallax `etf_*` tools) — different problem
-- Multi-CIO ensembles (compare two house views to each other) — different problem
+- Multi-CIO ensembles (compare two house views to each other) — handled by `/parallax-make-house-view --compare`; out of scope for the stress-test skill
 
 ---
 
