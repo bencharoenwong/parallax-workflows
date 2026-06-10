@@ -32,11 +32,7 @@ ANALYZE_PORTFOLIO_SCHEMA = {
         "DEFENSIVE": NUM,
     }, OPTIONAL),
     "sector_exposures": (dict, OPTIONAL),  # sector name -> weight; arbitrary keys
-    "concentration": ({
-        "top1_weight": NUM,
-        "top3_weight": NUM,
-        "hhi": (NUM, OPTIONAL),
-    }, OPTIONAL),
+    "concentration_metrics": (dict, OPTIONAL),
     "risk_metrics": (dict, OPTIONAL),
     "holdings_count": (int, OPTIONAL),
     "as_of": (str, OPTIONAL),
@@ -48,13 +44,13 @@ ANALYZE_PORTFOLIO_SCHEMA = {
     }, OPTIONAL),
     "performance_metrics": ({
         "portfolio": {
-            "annualized_volatility": NUM,
+            "annualized_volatility": (NUM, OPTIONAL),
             "sharpe_ratio": (NUM, OPTIONAL),
         },
     }, OPTIONAL),
     "drawdown_analysis": ({
         "portfolio": {
-            "max_drawdown": NUM,
+            "max_drawdown": (NUM, OPTIONAL),
             "recovery_days": (int, OPTIONAL),
         },
     }, OPTIONAL),
