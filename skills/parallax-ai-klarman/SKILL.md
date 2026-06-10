@@ -48,10 +48,10 @@ Execute using `mcp__claude_ai_Parallax__*` tools.
 
 Before the first Parallax tool call:
 
-1. Load `skills/_parallax/parallax-conventions.md`
-2. Load `skills/_parallax/AI-profiles/profile-schema.md`
-3. Load `skills/_parallax/AI-profiles/output-template.md`
-4. Load `skills/_parallax/AI-profiles/profiles/klarman.md`
+1. Load `_parallax/parallax-conventions.md`
+2. Load `_parallax/AI-profiles/profile-schema.md`
+3. Load `_parallax/AI-profiles/output-template.md`
+4. Load `_parallax/AI-profiles/profiles/klarman.md`
 
 Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas.
 

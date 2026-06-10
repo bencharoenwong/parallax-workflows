@@ -175,7 +175,7 @@ Compose the structured pack content with these sections in order. Hand the resul
 9. **Forward-outlook** — render ONLY if `house_view` is active and validated. 1 bullet per top-5 holding by current weight, framed in view-language (regime call, tilt direction, conviction notes per loader.md §3-§5). If no active view, OMIT this section entirely.
 10. **Coverage gaps** — list any holdings excluded from contribution due to missing data with their weights. List any holdings excluded from per-position analysis due to the 40-holding soft cap. List any tools that returned "data unavailable" per conventions §4.
 11. **Provenance** — small footer block (smaller font, italic): generation date, tools used (with versions if available), reconciliation-audit result formatted as `Reconciliation audit: PASS — local total {X} bps vs server {Y} bps; diff {Z} bps; tolerance 25 bps` (or `FAIL` with halt-and-report wording). Skill version + private-beta tag. **Branding line** — per integration-pattern.md §7 docx column. Default-Parallax path: `Branding: default Parallax`. White-label clean load: `Branding: white-label (source: <branding["source"]["reference"]>)`. `logo_missing`: append `(logo unavailable, omitted from cover)`.
-12. **Disclaimer** — per conventions §7. If active view: use the view-aware disclaimer per loader.md §5 rule 5; otherwise the standard wording (see Disclaimer section below).
+12. **Disclaimer** — per conventions §9.1. If active view: use the view-aware disclaimer per loader.md §5 rule 5; otherwise the standard wording (see Disclaimer section below).
 
 ## Output Format
 

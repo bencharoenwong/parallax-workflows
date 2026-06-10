@@ -1,4 +1,4 @@
-"""Comprehensive test suite for /parallax-credit-lens logic. Run: pytest skills/credit-lens/tests/test_credit_lens.py -v"""
+"""Comprehensive test suite for /parallax-credit-lens logic. Run: pytest skills/parallax-credit-lens/tests/test_credit_lens.py -v"""
 
 from __future__ import annotations
 

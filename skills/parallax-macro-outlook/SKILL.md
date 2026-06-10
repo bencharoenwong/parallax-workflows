@@ -13,6 +13,7 @@ description: "Full macro regime analysis with optional equity screening: country
 - Single stock analysis → use /parallax-deep-dive or /parallax-should-i-buy
 - Thematic screening across all markets → use /parallax-thematic-screen
 - Reacting to a specific news event → use /parallax-scenario-analysis
+- Regime-driven directional trade ideas for a specific ticker → use /parallax-ai-soros
 
 ## Gotchas
 
@@ -21,8 +22,8 @@ description: "Full macro regime analysis with optional equity screening: country
 - macro_analyst summary call returns all 9 components inline — do not make separate per-component calls
 - get_telemetry shows how macro regime affects the scoring engine
 - Smaller/EM markets may have fewer scored equities — set expectations
-- JIT-load `_parallax/house-view/loader.md` if an active CIO view is present. macro-outlook is a pure macro skill (no portfolio holdings, no single-stock anchor), so neither §3 multipliers nor §7 single-stock conflict-surfacing fit cleanly. Apply a **macro-regime-alignment mode** (defined inline below — call it §7.4 by analogy) — render a divergence note when the view's stated macro regime contradicts live `get_telemetry.regime`. No scoring math is altered. Standard surface: §2 (load + validate), §5 (preamble), §6 (audit log).
-- **§7.4 macro-regime-alignment mode (this skill's pattern, not in loader.md):** if the active view's basis_statement or stated macro regime (e.g., "recessionary", "expansion", "stagflation", from `view.macro_regime` if present) materially conflicts with the regime returned by `get_telemetry.regime`, render a "View regime: <X> | Live regime: <Y>" line directly under the House View Preamble at the very top of Output Format. The user is informed of the disagreement; the analytical content still reflects live data (live wins for macro narrative). If no view, or view is silent on macro regime, omit the line.
+- JIT-load `_parallax/house-view/loader.md` if an active CIO view is present. macro-outlook is a pure macro skill (no portfolio holdings, no single-stock anchor), so neither §3 multipliers nor §7 single-stock conflict-surfacing fit cleanly. Apply a **macro-regime-alignment mode** (defined inline below — call it §7.4 by analogy) — render a divergence note when the view's stated macro regime contradicts live `get_telemetry.regime_tag`. No scoring math is altered. Standard surface: §2 (load + validate), §5 (preamble), §6 (audit log).
+- **§7.4 macro-regime-alignment mode (this skill's pattern, not in loader.md):** if the active view's basis_statement or stated macro regime (e.g., "recessionary", "expansion", "stagflation", from `view.macro_regime` if present) materially conflicts with the regime returned by `get_telemetry.regime_tag`, render a "View regime: <X> | Live regime: <Y>" line directly under the House View Preamble at the very top of Output Format. The user is informed of the disagreement; the analytical content still reflects live data (live wins for macro narrative). If no view, or view is silent on macro regime, omit the line.
 - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
 - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 
@@ -73,7 +74,7 @@ If a view was loaded in Pre-Workflow:
 
 1. Extract view's stated macro regime: prefer `view.macro_regime` if present; otherwise scan `basis_statement` for regime keywords ("recessionary", "expansion", "stagflation", "soft landing", "hard landing", "reflationary", "disinflationary"). If no regime statement can be extracted, skip the alignment check (regime alignment is opt-in based on view content).
 2. Compare to `get_telemetry.regime_tag` returned in Batch A.
-3. If regimes materially diverge (e.g., view says "recessionary" but live says "expansion"), prepare a one-line divergence note for Output Format rendering: `View regime: <view_regime> | Live regime: <live_regime> — note the disagreement; analytical content below reflects live data per loader.md §4 (data sovereignty).`
+3. If regimes materially diverge (e.g., view says "recessionary" but live says "expansion"), prepare a one-line divergence note for Output Format rendering: `View regime: <view_regime> | Live regime: <live_regime> — note the disagreement; analytical content below reflects live data.`
 4. Append the §6 audit log entry per loader.md §6.1.
 
 ### Pre-Render — Load white-label branding

@@ -1,6 +1,6 @@
 ---
 name: parallax-house-view-diff
-description: "Interface spec for verifying that a house view changes downstream portfolio output. Describes the dual-leg paired-call protocol and output contract. Calibration and reference runner are internal to Parallax."
+description: "Interface spec for verifying that a house view actually changes downstream portfolio output. Trigger: 'did the house view shift my portfolio output?' Describes the dual-leg paired-call protocol and output contract. NOT for loading or making a view (use /parallax-load-house-view or /parallax-make-house-view), not for comparing two saved views (use /parallax-make-house-view --compare). Calibration and reference runner are internal to Parallax."
 ---
 
 # House View Diff — Interface Spec
@@ -9,6 +9,7 @@ description: "Interface spec for verifying that a house view changes downstream 
 
 - Just loading a view → use /parallax-load-house-view
 - General portfolio building → use /parallax-portfolio-builder
+- Comparing two saved house-view bundles side by side → use /parallax-make-house-view --compare
 
 ## Gotchas
 

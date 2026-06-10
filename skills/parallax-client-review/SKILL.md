@@ -77,7 +77,7 @@ For each drill-down holding (parallel):
 
 | Tool | Parameters |
 |---|---|
-| `get_score_analysis` | `symbol`, `weeks` as int 26 (26-week lookback, non-default — see conventions §0.1) |
+| `get_score_analysis` | `symbol`, `weeks` as int 26 (26-week lookback, non-default — see conventions §0.2) |
 | `get_stock_outlook` | `symbol`, `aspect="risk_return"` |
 | `get_peer_snapshot` | `symbol` |
 

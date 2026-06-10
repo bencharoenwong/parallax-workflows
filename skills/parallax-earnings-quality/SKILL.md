@@ -22,8 +22,6 @@ description: "Forensic earnings quality analysis: revenue recognition patterns, 
 - Focus output on actionable risk flags, not comprehensive financial review
 - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
 
-Forensic-focused earnings quality and hidden risk detection.
-
 ## Usage
 
 ```

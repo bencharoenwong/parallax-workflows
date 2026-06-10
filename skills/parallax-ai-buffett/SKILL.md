@@ -44,16 +44,16 @@ Accepts plain tickers (auto-resolved to RIC via `get_company_info`) or RIC forma
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. This dispatcher is generic — all differentiation for the Buffett profile lives in `skills/_parallax/AI-profiles/profiles/buffett.md`.
+Execute using `mcp__claude_ai_Parallax__*` tools. This dispatcher is generic — all differentiation for the Buffett profile lives in `_parallax/AI-profiles/profiles/buffett.md`.
 
 ### Step 0 — JIT-load dependencies
 
 Before the first Parallax tool call in the session:
 
-1. Load `skills/_parallax/parallax-conventions.md` — RIC resolution, parallel execution, fallback patterns, HK ambiguity.
-2. Load `skills/_parallax/AI-profiles/profile-schema.md` — dispatcher workflow + cross-validation gate.
-3. Load `skills/_parallax/AI-profiles/output-template.md` — required output structure and disclaimer.
-4. Load `skills/_parallax/AI-profiles/profiles/buffett.md` — Buffett profile spec.
+1. Load `_parallax/parallax-conventions.md` — RIC resolution, parallel execution, fallback patterns, HK ambiguity.
+2. Load `_parallax/AI-profiles/profile-schema.md` — dispatcher workflow + cross-validation gate.
+3. Load `_parallax/AI-profiles/output-template.md` — required output structure and disclaimer.
+4. Load `_parallax/AI-profiles/profiles/buffett.md` — Buffett profile spec.
 
 Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
 
@@ -110,7 +110,7 @@ Count passed factors (out of 4):
 
 ### Step 6 — Render through output template
 
-Format the output per `skills/_parallax/AI-profiles/output-template.md`. The template requires, in order:
+Format the output per `_parallax/AI-profiles/output-template.md`. The template requires, in order:
 
 1. Header: `Buffett-style profile applied to <ticker>`
 2. Citation block (full BKP 2018 citation + DOI)
@@ -174,4 +174,4 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 
 ## Graceful fallback
 
-Apply the graceful fallback patterns from `parallax-conventions.md §4`. If any required tool call fails after retry, mark the relevant section as "Data unavailable" and compute the verdict using available factors only. A verdict computed on <4 factors must be flagged as "partial data — N of M factor criteria available" and CANNOT be rendered as `match` even if all available factors pass. Consumers downstream (e.g., the Phase 3 consensus meta-skill) should treat such outputs as `partial_match` at best.
+Apply the graceful fallback patterns from `parallax-conventions.md §4`. If any required tool call fails after retry, mark the relevant section as "Data unavailable" and compute the verdict using available factors only. A verdict computed on <4 factors must be flagged as "partial data — N of M factor criteria available" and CANNOT be rendered as `match` even if all available factors pass. Consumers downstream (e.g., the /parallax-ai-consensus meta-skill) should treat such outputs as `partial_match` at best.
