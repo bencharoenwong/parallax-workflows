@@ -159,7 +159,7 @@ When `PARALLAX_LOADER_V2=1`, portfolio consumer skills call `get_peer_snapshot` 
 4. **Partial results**: if one or more holdings timed out or errored, compute the weighted average over successful calls only — renormalise weights to sum to 1.0 over successful holdings and annotate the composite as partial.
 5. **Apply tilts**: if an active view is present, apply the §3 factor-tilt multipliers to the composites.
 
-**For 10+ holdings**: parallelise all fan-out calls (cap 8 concurrent calls); if N≥2 calls time out, mark those holdings as "scores unavailable" and fall back to health-flags-only scoring for the missing positions.
+**For 10+ holdings**: parallelise all fan-out calls (cap 8 concurrent calls); if N≥2 calls time out, mark those holdings as "scores unavailable" and fall back to health-flags-only scoring for the missing positions (per `skills/parallax-portfolio-checkup/references/health-flags.md`).
 
 ---
 
