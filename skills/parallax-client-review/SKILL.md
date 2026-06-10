@@ -19,7 +19,7 @@ description: "RIA/wealth advisor client portfolio review: full analysis, redunda
 - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
 - JIT-load references/recommendation-matrix.md for priority classification and drill-down criteria
 - Holdings in RIC format, weights sum to ~1.0
-- analyze_portfolio called twice — once with lens "performance", once with "concentration". WARNING: responses often exceed 180K chars (daily time series). If output is truncated or too large, fall back to `check_portfolio_redundancy` (concentration) + `quick_portfolio_scores` (factor tilt) + individual `get_stock_outlook` with aspect "risk_return" (performance)
+- analyze_portfolio called twice — once for performance/returns fields, once for concentration/attribution fields (split to manage response size). **Required call shape:** `portfolio=[{date: <today ISO>, symbol: <ric>, weight: <w>}, ...]` with `fields=[...]`. The parameters `holdings` and `lens` do not exist in the deployed schema. **Fallback** (on MCP schema validation error OR truncated/oversized response): `check_portfolio_redundancy` (concentration) + `quick_portfolio_scores` (factor tilt) + individual `get_stock_outlook` with `aspect="risk_return"` (performance).
 - Per-holding drill-down capped at 8 holdings to manage latency
 - Mixed-exchange portfolios may need split scoring (see shared conventions)
 - Output should be presentation-ready for client meetings
@@ -51,8 +51,8 @@ Per `loader.md` §1-§2. If view present, capture tilt vector, excludes, basis_s
 
 | Tool | Parameters | Notes |
 |---|---|---|
-| `analyze_portfolio` | `holdings`, lens="performance" | Returns/risk metrics |
-| `analyze_portfolio` | `holdings`, lens="concentration" | Concentration analysis |
+| `analyze_portfolio` | `portfolio=[{date: <today ISO>, symbol: <ric>, weight: <w>}]`, `fields=["performance_metrics","rolling_metrics","drawdown_analysis","portfolio_summary","time_period_returns"]` | Returns/risk metrics. Build portfolio array from provided holdings; use today's date as as-of date (point-in-time review). |
+| `analyze_portfolio` | `portfolio=[{date: <today ISO>, symbol: <ric>, weight: <w>}]`, `fields=["concentration_metrics","sector_allocation","company_contribution"]` | Concentration and attribution analysis. Two separate calls with distinct field subsets to stay under the 180K-char response ceiling. |
 | `check_portfolio_redundancy` | `holdings` | Overlap detection |
 | `get_peer_snapshot` | per holding | **Primary scoring source** for `PARALLAX_LOADER_V2=1`. Aggregate scores client-side per `loader.md` §3b. |
 | `get_company_info` | per holding (parallel) | **Ground-truth oracle** per loader.md §5 rule 3 (required universally). Records `expected_name`. |

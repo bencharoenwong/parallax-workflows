@@ -16,44 +16,106 @@ GET_TELEMETRY_SCHEMA = {
         "headline": str,
         "mechanism": str,
     },
-    "divergences": [{
-        "ticker": str,
-        "factor": str,
-        "magnitude": NUM,
-    }],
+    "divergences": [
+        {
+            "ticker": str,
+            "factor": str,
+            "magnitude": NUM,
+        }
+    ],
 }
 
 
 ANALYZE_PORTFOLIO_SCHEMA = {
-    "factor_exposures": {
-        "VALUE": NUM,
-        "QUALITY": NUM,
-        "MOMENTUM": NUM,
-        "DEFENSIVE": NUM,
-    },
-    "sector_exposures": dict,  # sector name -> weight; arbitrary keys
-    "concentration": ({
-        "top1_weight": NUM,
-        "top3_weight": NUM,
-        "hhi": (NUM, OPTIONAL),
-    }, OPTIONAL),
+    "factor_exposures": (
+        {
+            "VALUE": NUM,
+            "QUALITY": NUM,
+            "MOMENTUM": NUM,
+            "DEFENSIVE": NUM,
+        },
+        OPTIONAL,
+    ),
+    "sector_exposures": (dict, OPTIONAL),  # sector name -> weight; arbitrary keys
+    "concentration_metrics": (dict, OPTIONAL),
     "risk_metrics": (dict, OPTIONAL),
     "holdings_count": (int, OPTIONAL),
     "as_of": (str, OPTIONAL),
+    # --- new fields required by cio-letter-prep ---
+    "portfolio_summary": (
+        {
+            "total_return": (NUM, OPTIONAL),
+            "annualized_return": (NUM, OPTIONAL),
+            "benchmark_return": (NUM, OPTIONAL),
+        },
+        OPTIONAL,
+    ),
+    "performance_metrics": (
+        {
+            "portfolio": (
+                {
+                    "annualized_volatility": (NUM, OPTIONAL),
+                    "sharpe_ratio": (NUM, OPTIONAL),
+                },
+                OPTIONAL,
+            ),
+        },
+        OPTIONAL,
+    ),
+    "drawdown_analysis": (
+        {
+            "portfolio": (
+                {
+                    "max_drawdown": (NUM, OPTIONAL),
+                    "recovery_days": (int, OPTIONAL),
+                },
+                OPTIONAL,
+            ),
+        },
+        OPTIONAL,
+    ),
+    "company_contribution": (
+        [
+            {
+                "symbol": str,
+                "name": (str, OPTIONAL),
+                "contribution": NUM,
+                "weight": NUM,
+            }
+        ],
+        OPTIONAL,
+    ),
+    "sector_allocation": (dict, OPTIONAL),
+    "sector_contribution": (dict, OPTIONAL),
+    "time_period_returns": (dict, OPTIONAL),
+    "latest_holdings": (
+        [
+            {
+                "symbol": str,
+                "name": (str, OPTIONAL),
+                "weight": NUM,
+            }
+        ],
+        OPTIONAL,
+    ),
+    "portfolio_scores": (dict, OPTIONAL),
+    "rolling_metrics": (dict, OPTIONAL),
 }
 
 
 EXPORT_PRICE_SERIES_SCHEMA = {
     "symbol": str,
     "currency": (str, OPTIONAL),
-    "prices": [{
-        "date": str,
-        "open": (NUM, OPTIONAL),
-        "high": (NUM, OPTIONAL),
-        "low": (NUM, OPTIONAL),
-        "close": NUM,
-        "volume": (NUM, OPTIONAL),
-    }],
+    "prices": [
+        {
+            "date": str,
+            "open": (NUM, OPTIONAL),
+            "high": (NUM, OPTIONAL),
+            "low": (NUM, OPTIONAL),
+            "close": NUM,
+            "volume": (NUM, OPTIONAL),
+        }
+    ],
 }
 
 
@@ -76,13 +138,15 @@ GET_COMPANY_INFO_SCHEMA = {
 # schema below is best-inference from the function name and conventions; refresh
 # against the live MCP response when wiring it into a new skill's contract test.
 CHECK_PORTFOLIO_REDUNDANCY_SCHEMA = {
-    "overlap_pairs": [{
-        "symbol_a": str,
-        "symbol_b": str,
-        "overlap_score": NUM,
-        "shared_factors": ([str], OPTIONAL),
-        "shared_sector": (str, OPTIONAL),
-    }],
+    "overlap_pairs": [
+        {
+            "symbol_a": str,
+            "symbol_b": str,
+            "overlap_score": NUM,
+            "shared_factors": ([str], OPTIONAL),
+            "shared_sector": (str, OPTIONAL),
+        }
+    ],
     "coverage_pct": (NUM, OPTIONAL),
     "holdings_analyzed": (int, OPTIONAL),
     "holdings_total": (int, OPTIONAL),
@@ -103,14 +167,16 @@ GET_SCORE_ANALYSIS_SCHEMA = {
     "symbol": str,
     "name": (str, OPTIONAL),
     "weeks": (int, OPTIONAL),
-    "history": [{
-        "date": str,
-        "VALUE": NUM,
-        "QUALITY": NUM,
-        "MOMENTUM": NUM,
-        "DEFENSIVE": NUM,
-        "OVERALL": (NUM, OPTIONAL),
-    }],
+    "history": [
+        {
+            "date": str,
+            "VALUE": NUM,
+            "QUALITY": NUM,
+            "MOMENTUM": NUM,
+            "DEFENSIVE": NUM,
+            "OVERALL": (NUM, OPTIONAL),
+        }
+    ],
 }
 
 
