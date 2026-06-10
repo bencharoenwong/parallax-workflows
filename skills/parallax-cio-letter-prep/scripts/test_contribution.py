@@ -669,8 +669,6 @@ def test_prices_start_after_period_start_raises():
     contribution engine must raise ValueError rather than silently using whatever
     prices it has.
     """
-    import datetime
-
     period_start = "2026-01-01"
     period_end = "2026-01-15"
     # daily_prices starts 5 days AFTER period_start
@@ -689,7 +687,6 @@ def test_prices_start_after_period_start_raises():
     daily_prices = {"AAPL.O": daily_prices_for_symbol}
 
     with pytest.raises(ValueError, match="period_start"):
-        from contribution import daily_contribution
         daily_contribution(
             prior_portfolio=prior_portfolio,
             current_portfolio=current_portfolio,
