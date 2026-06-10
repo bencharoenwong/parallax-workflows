@@ -43,16 +43,16 @@ ANALYZE_PORTFOLIO_SCHEMA = {
         "benchmark_return": (NUM, OPTIONAL),
     }, OPTIONAL),
     "performance_metrics": ({
-        "portfolio": {
+        "portfolio": ({
             "annualized_volatility": (NUM, OPTIONAL),
             "sharpe_ratio": (NUM, OPTIONAL),
-        },
+        }, OPTIONAL),
     }, OPTIONAL),
     "drawdown_analysis": ({
-        "portfolio": {
+        "portfolio": ({
             "max_drawdown": (NUM, OPTIONAL),
             "recovery_days": (int, OPTIONAL),
-        },
+        }, OPTIONAL),
     }, OPTIONAL),
     "company_contribution": ([{
         "symbol": str,
