@@ -25,13 +25,13 @@ GET_TELEMETRY_SCHEMA = {
 
 
 ANALYZE_PORTFOLIO_SCHEMA = {
-    "factor_exposures": {
+    "factor_exposures": ({
         "VALUE": NUM,
         "QUALITY": NUM,
         "MOMENTUM": NUM,
         "DEFENSIVE": NUM,
-    },
-    "sector_exposures": dict,  # sector name -> weight; arbitrary keys
+    }, OPTIONAL),
+    "sector_exposures": (dict, OPTIONAL),  # sector name -> weight; arbitrary keys
     "concentration": ({
         "top1_weight": NUM,
         "top3_weight": NUM,

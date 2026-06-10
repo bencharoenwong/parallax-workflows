@@ -664,7 +664,7 @@ def test_inconsistent_current_portfolio_extra_symbol_raises():
 def test_prices_start_after_period_start_raises():
     """T1a: daily_prices starting after period_start → ValueError with clear message.
 
-    Scenario: period is 2026-01-01 to 2026-01-31 but export_price_series only
+    Scenario: period is 2026-01-01 to 2026-01-15 but export_price_series only
     returned prices from 2026-01-06 onward (5-day gap at the start). The
     contribution engine must raise ValueError rather than silently using whatever
     prices it has.
