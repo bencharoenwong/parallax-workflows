@@ -19,7 +19,7 @@ description: "Runs all installed Parallax AI Investor Profiles (Buffett, Greenbl
 
 - JIT-load _parallax/parallax-conventions.md, profile-schema.md, output-template.md, consensus-config.md
 - JIT-load ALL installed profile specs under _parallax/AI-profiles/profiles/ — buffett.md, greenblatt.md, klarman.md, soros.md, ptj.md
-- Do NOT re-implement profile logic — invoke each profile dispatcher's workflow as documented in skills/AI-<name>/SKILL.md
+- Do NOT re-implement profile logic — invoke each profile dispatcher's workflow as documented in skills/parallax-ai-<name>/SKILL.md
 - Cap basket input at 5 tickers per call. For single-ticker queries, all 5 profiles are applicable (Soros and PTJ run single-ticker dual/tri-channel modes)
 - Super-majority math uses ceiling rounding per consensus-config.md — required = ceil(0.75 × applicable)
 - Partial matches do NOT count toward the super-majority signal but DO count toward factor-level agreement surfacing
@@ -52,7 +52,7 @@ Runs all installed AI Investor Profiles in parallel against a ticker (or short b
    - `skills/_parallax/AI-profiles/profiles/greenblatt.md`
    - `skills/_parallax/AI-profiles/profiles/klarman.md`
    - `skills/_parallax/AI-profiles/profiles/soros.md`
-6. Each profile's dispatcher (`skills/AI-<name>/SKILL.md`) for workflow reference.
+6. Each profile's dispatcher (`skills/parallax-ai-<name>/SKILL.md`) for workflow reference.
 
 Call `ToolSearch` with query `"+Parallax"` to load deferred MCP tool schemas before the first Parallax call.
 

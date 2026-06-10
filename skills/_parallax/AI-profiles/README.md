@@ -1,6 +1,6 @@
 # Parallax AI Investor Profiles
 
-Shared core for the `parallax-ai-*` skill family. Each profile is a markdown spec under `profiles/` that declares a workflow over Parallax MCP tools, anchored to a published academic paper or book, and consumed by a thin dispatcher skill at `skills/AI-<name>/SKILL.md`.
+Shared core for the `parallax-ai-*` skill family. Each profile is a markdown spec under `profiles/` that declares a workflow over Parallax MCP tools, anchored to a published academic paper or book, and consumed by a thin dispatcher skill at `skills/parallax-ai-<name>/SKILL.md`.
 
 ## What a profile is
 
@@ -23,7 +23,8 @@ A profile can ship ONLY if:
 | `greenblatt` | **SHIPPED** | Greenblatt, *The Little Book That Beats the Market* (2006); Gray & Carlisle, *Quantitative Value* (2012) | Mechanical screen: ROC + earnings yield → top-decile basket |
 | `klarman` | **SHIPPED** | Klarman, *Margin of Safety* (1991) | Bottom-up special situations: balance sheet + cash rationality |
 | `soros` | **SHIPPED** | Soros, *The Alchemy of Finance* (1987); Drobny, *Inside the House of Money* (2006) | Top-down macro → regime themes → dual-channel ticker exposure |
-| `AI-consensus` | **SHIPPED** | Meta-skill | Runs all 4 profiles in parallel; surfaces super-majority signal + factor-level agreement |
+| `ptj` | **SHIPPED** | Schwager, *Market Wizards* (1989) | Tri-channel confluence: technical setup + macro-regime alignment + volatility risk/reward |
+| `parallax-ai-consensus` | **SHIPPED** | Meta-skill | Runs all 5 profiles in parallel; surfaces super-majority signal + factor-level agreement |
 
 ## v1 token cost summary
 
@@ -35,8 +36,9 @@ A profile can ship ONLY if:
 | `parallax-ai-klarman` | ~5-7 tokens |
 | `parallax-ai-soros` (single-ticker) | ~25-30 tokens |
 | `parallax-ai-soros` (basket mode) | ~30-40 tokens |
-| `parallax-ai-consensus` (single ticker) | ~45-55 tokens |
-| `parallax-ai-consensus` (basket of 5) | ~150-200 tokens |
+| `parallax-ai-ptj` (single-ticker) | ~14-16 tokens |
+| `parallax-ai-consensus` (single ticker) | ~60-70 tokens |
+| `parallax-ai-consensus` (basket of 5) | ~180-240 tokens |
 
 ## In-scope v2 candidates (not implemented in v1)
 
@@ -57,7 +59,7 @@ Re-litigating any of the above requires a new public anchor that meets the inclu
 1. Identify a public anchor meeting the inclusion criteria above.
 2. Create `profiles/<name>.md` conforming to `profile-schema.md`.
 3. Run the profile manually against the namesake's known holdings (anchor test). If the namesake's own holdings don't return `match`, the rubric is wrong — fix before proceeding.
-4. Create `skills/AI-<name>/SKILL.md` as a thin dispatcher following the pattern in `skills/AI-buffett/SKILL.md`.
+4. Create `skills/parallax-ai-<name>/SKILL.md` as a thin dispatcher following the pattern in `skills/parallax-ai-buffett/SKILL.md`.
 5. Commit profile + dispatcher together.
 6. Update the "In-scope profiles" table in this README.
 

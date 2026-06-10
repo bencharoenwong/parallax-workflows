@@ -1,6 +1,6 @@
 # Parallax AI Investor Profile — Schema Contract
 
-This file is JIT-loaded by every `skills/AI-<name>/SKILL.md` dispatcher. It defines:
+This file is JIT-loaded by every `skills/parallax-ai-<name>/SKILL.md` dispatcher. It defines:
 1. The YAML frontmatter contract a profile spec must conform to
 2. The dispatcher workflow steps every profile runs at invocation time
 3. The pre-render cross-validation check required by spec §6.4
@@ -55,7 +55,7 @@ Optional fields are ignored by dispatchers unless the dispatcher explicitly cons
 
 ## 2. Dispatcher workflow
 
-Every `skills/AI-<name>/SKILL.md` dispatcher runs this exact sequence. The dispatcher is generic — all differentiation lives in the profile spec.
+Every `skills/parallax-ai-<name>/SKILL.md` dispatcher runs this exact sequence. The dispatcher is generic — all differentiation lives in the profile spec.
 
 ### Step 0: JIT-load dependencies
 

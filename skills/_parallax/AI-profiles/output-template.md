@@ -1,6 +1,6 @@
 # Parallax AI Investor Profile — Output Template
 
-This file is JIT-loaded by every `skills/AI-<name>/SKILL.md` dispatcher. It defines the REQUIRED structure of any profile's output. No profile may deviate from this structure. No profile may remove or soften the disclaimer language.
+This file is JIT-loaded by every `skills/parallax-ai-<name>/SKILL.md` dispatcher. It defines the REQUIRED structure of any profile's output. No profile may deviate from this structure. No profile may remove or soften the disclaimer language.
 
 ## Required output structure
 
