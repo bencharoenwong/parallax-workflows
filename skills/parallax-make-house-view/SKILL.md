@@ -1,6 +1,6 @@
 ---
 name: parallax-make-house-view
-description: "Synthesize a draft Parallax house view by orchestrating macro_analyst + get_telemetry MCP outputs across the 14 covered markets, route the draft through the shared confirmation gate, and save through the same path /parallax-load-house-view uses. The synthesized view carries `generator_synthesis` provenance (distinct from ingested views' `prose_extraction`) and lands in `~/.parallax/active-house-view/` like any other house view. Use when the bank has no CIO take to ingest, when prepping a Parallax baseline for shadow-comparison against an active bank view, or to populate a fresh deployment. NOT for ingesting an existing CIO PDF (use /parallax-load-house-view), not for stress-testing an active view (use /parallax-stress-house-view), not for judging an active view against current Parallax signals (use /parallax-judge-house-view)."
+description: "Synthesize a draft Parallax house view by orchestrating macro_analyst + get_telemetry MCP outputs across the 14 covered markets, route the draft through the shared confirmation gate, and save through the same path /parallax-load-house-view uses. The synthesized view carries `generator_synthesis` provenance (distinct from ingested views' `prose_extraction`) and lands in `~/.parallax/active-house-view/` like any other house view. Use when the bank has no CIO take to ingest, when prepping a Parallax baseline for shadow-comparison against an active bank view, or to populate a fresh deployment. NOT for ingesting an existing CIO PDF (use /parallax-load-house-view), not for stress-testing an active view (use /parallax-stress-house-view), not for judging an active view against current Parallax signals (use /parallax-judge-house-view). Pass --compare <view_a> <view_b> to diff two saved view bundles cell-by-cell (e.g. UBS vs Goldman) with no synthesis."
 ---
 
 # Make House View
@@ -10,12 +10,14 @@ description: "Synthesize a draft Parallax house view by orchestrating macro_anal
 - Ingesting a CIO PDF / URL / wizard input → use /parallax-load-house-view
 - Judging an active view against live signals → use /parallax-judge-house-view
 - Stress-testing for internal consistency → use /parallax-stress-house-view
-- Per-cell diff of two saved views → use /parallax-house-view-diff
+- Per-cell **tilt** diff of two saved views (e.g. UBS vs Goldman) → use /parallax-make-house-view --compare
+- Diff of two **portfolio outputs** (view vs baseline) → use /parallax-house-view-diff
 
 ## Gotchas
 
 - JIT-load `_parallax/house-view/MCP_FIELD_INVENTORY.md` BEFORE assuming any component input is available. `valuation_state` / `market_entropy` are prose-extracted; `psychological_wavelength` is LLM-judged. Confidence caps differ per component.
 - The shared gate (`_parallax/house-view/gate_present.py`) is REQUIRED — there is no save path that bypasses it. `--shadow-diff` skips the gate AND the save.
+- `--compare` is a pure structural file diff of two saved bundles: it skips MCP, synthesis, the gate, the save, the audit row, AND all output disclaimers. It never emits a pillar-confidence block (keep pillar internals out of any cross-firm output).
 - Fan-out budget is 14 markets × 5 components = 70 macro_analyst calls + 1 list_macro_countries + 1 get_telemetry. Concurrency cap 8. Per-market timeout 45s. Hard abort when unreachable_share > 30%.
 - Reuse `audit_chain.append_entry`, `chain_emit.emit_phase_0_chain`, `provenance_classes.validate_provenance_entry`. NEVER reimplement.
 - The `generate` audit row carries ONLY: schema_version, ts, view_id, version_id, view_hash, skill, action, applied, parent_version_id, provenance_hash, source_tools, calibration_status. composition_formula / aggregator_weights_ref / source_snippets / pillar_missing_inputs MUST go in `provenance.yaml`, NOT on the audit row.
@@ -34,6 +36,7 @@ The synthesized view lives in `~/.parallax/active-house-view/` and is consumed b
 /parallax-make-house-view --basis "<hint>"             # bias synthesis with a textual hint
 /parallax-make-house-view --markets us,japan,uk        # restrict fan-out scope (cost / debug)
 /parallax-make-house-view --status                     # show last-generated view metadata
+/parallax-make-house-view --compare <path_a> <path_b>  # diff two saved view bundles; no MCP, no synthesis, no save
 ```
 
 ## Workflow
@@ -187,6 +190,14 @@ To clear:  /parallax-load-house-view --clear
 
 `/parallax-make-house-view --shadow-diff` runs Steps 1-6, then short-circuits Step 7/8. Instead of routing through the gate, it loads the currently-active bank view and renders an ADDITIVE diff via `shadow_diff.render_shadow_diff`. No save. The framing is critical — the bank's view is sovereign, the synthesis is offered as data to consider, never as a correction.
 
+## Compare mode
+
+`/parallax-make-house-view --compare <path_a> <path_b>` loads two **saved** view bundles from disk (each arg may be a bundle directory or a `view.yaml` path) and renders a NEUTRAL per-cell diff of their tilts and excludes. It short-circuits **before Step 1** — no MCP calls, no synthesis, no gate, no save, no audit row. Invoke `maker.run_compare(Path(path_a), Path(path_b))` and render the returned string.
+
+Unlike `--shadow-diff` (which synthesizes a Parallax view and frames it as *additive* against the *sovereign* active bank view), `--compare` treats both inputs as equally sovereign: symmetric `left_only` / `right_only` / `agree` / `disagree` buckets, no synthesis, and **no pillar-confidence block** (pillar tilt cells appear like any other cell, but the confidence/computation internals never do).
+
+Disambiguation: `--shadow-diff` = synth-vs-active (synthesis runs); `/parallax-judge-house-view` = active-view-vs-live-signals; `/parallax-house-view-diff` = portfolio-OUTPUT diff (Leg A vs Leg B weights, not a tilt-cell diff).
+
 ## Status mode
 
 `/parallax-make-house-view --status` shows last-generated view metadata + the standard `view_status.banner` (same banner the loader emits). No MCP calls.
@@ -198,7 +209,7 @@ To clear:  /parallax-load-house-view --clear
 - `pillar_compose.py` — `compute_pillars(aggregated, telemetry)` packaging.
 - `pillar_formulas.py` — `compute_omega / compute_phi / compute_xi / compute_psi` (function names kept as field identifiers). Prose-based `valuation_state` / `market_entropy` per A0 findings. Confidence caps + missing-input rule.
 - `prose_synth.py` — deterministic YAML → markdown narrative (no LLM).
-- `shadow_diff.py` — `--shadow-diff` rendering.
+- `shadow_diff.py` — `--shadow-diff` rendering (`render_shadow_diff`) + `--compare` rendering (`render_compare` / `diff_excludes`). `maker.run_compare(left, right)` is the `--compare` entry point.
 
 ## Hard constraints
 

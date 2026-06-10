@@ -174,4 +174,156 @@ def render_shadow_diff(
     return "\n".join(lines)
 
 
-__all__ = ["diff_views", "render_shadow_diff"]
+# ---------------------------------------------------------------------------
+# Compare mode (--compare): symmetric per-cell diff of two SAVED views.
+#
+# Distinct from shadow-diff: neither view is authoritative (no synthesis, no
+# "bank is sovereign" framing). Reuses the symmetric diff_views core unchanged
+# and re-reads its buckets with neutral semantics:
+#   diff_views(left, right)["added"]     = present in RIGHT, silent in LEFT  -> right_only
+#   diff_views(left, right)["bank_only"] = present in LEFT, silent in RIGHT  -> left_only
+# Excludes are diffed separately (diff_excludes) because _flatten_tilts treats
+# tilts.excludes as a single list-valued leaf, which is not a meaningful cell.
+# ---------------------------------------------------------------------------
+
+
+def _flatten_excludes(view: dict[str, Any] | None) -> set[str]:
+    """Return the set of exclude identifiers for a view.
+
+    Reads `tilts.excludes` (canonical per schema.yaml); falls back to a
+    top-level `excludes` key (the location `_compute_view_hash` also tolerates).
+    """
+    view = view or {}
+    tilts = view.get("tilts") or {}
+    excludes = tilts.get("excludes")
+    if excludes is None:
+        excludes = view.get("excludes")
+    if not isinstance(excludes, list):
+        return set()
+    return {str(x) for x in excludes}
+
+
+def diff_excludes(
+    left_view: dict[str, Any] | None, right_view: dict[str, Any] | None
+) -> dict[str, list[str]]:
+    """Symmetric diff of two views' exclude lists.
+
+    Returns sorted lists keyed `common` / `left_only` / `right_only`.
+    """
+    left_set = _flatten_excludes(left_view)
+    right_set = _flatten_excludes(right_view)
+    return {
+        "common": sorted(left_set & right_set),
+        "left_only": sorted(left_set - right_set),
+        "right_only": sorted(right_set - left_set),
+    }
+
+
+def _compare_display_name(
+    view: dict[str, Any] | None, fallback_name: str | None, default: str
+) -> str:
+    meta = (view or {}).get("metadata")
+    name = meta.get("view_name") if isinstance(meta, dict) else None
+    return name or fallback_name or default
+
+
+def _is_excludes_path(path: str) -> bool:
+    """tilts.excludes is a list leaf from _flatten_tilts; diff_excludes owns it."""
+    return path == "tilts.excludes" or path == "excludes"
+
+
+def render_compare(
+    left_view: dict[str, Any] | None,
+    right_view: dict[str, Any] | None,
+    *,
+    left_name: str | None = None,
+    right_name: str | None = None,
+) -> str:
+    """Render a NEUTRAL per-cell diff of two saved house views.
+
+    Neither view is treated as authoritative. No synthesis, no pillar block,
+    no "sovereign"/"additive" framing — this is a structural file diff. Tilts
+    use symmetric left_only/right_only/agree/disagree buckets; excludes are a
+    separate section.
+    """
+    left_display = _compare_display_name(left_view, left_name, "View A")
+    right_display = _compare_display_name(right_view, right_name, "View B")
+
+    tilt = diff_views(left_view or {}, right_view or {})
+
+    def _without_excludes(bucket: dict[str, Any]) -> dict[str, Any]:
+        return {p: v for p, v in bucket.items() if not _is_excludes_path(p)}
+
+    agree = _without_excludes(tilt["agree"])
+    disagree = _without_excludes(tilt["disagree"])
+    right_only = _without_excludes(tilt["added"])  # present in RIGHT, silent in LEFT
+    left_only = _without_excludes(tilt["bank_only"])  # present in LEFT, silent in RIGHT
+    ex = diff_excludes(left_view, right_view)
+
+    def _fmt(val: Any) -> str:
+        return f"{val:+d}" if isinstance(val, int) else str(val)
+
+    lines: list[str] = []
+    lines.append("=" * 60)
+    lines.append(f"COMPARE — {left_display} (left) vs {right_display} (right)")
+    lines.append("=" * 60)
+    lines.append("")
+    lines.append(
+        "Per-cell diff of two saved house views. Neither view is authoritative."
+    )
+    lines.append("")
+    lines.append(
+        f"Left cells set: {len(left_only) + len(agree) + len(disagree)}   "
+        f"Right cells set: {len(right_only) + len(agree) + len(disagree)}"
+    )
+    lines.append("")
+
+    lines.append("--- AGREE (both views hold the same value) ---")
+    if agree:
+        for path, val in agree.items():
+            lines.append(f"  = {path}: {_fmt(val)}")
+    else:
+        lines.append("  (no overlap)")
+    lines.append("")
+
+    lines.append(f"--- LEFT ONLY (held by {left_display}; right is silent) ---")
+    if left_only:
+        for path, val in left_only.items():
+            lines.append(f"  L {path}: {_fmt(val)}")
+    else:
+        lines.append("  (none)")
+    lines.append("")
+
+    lines.append(f"--- RIGHT ONLY (held by {right_display}; left is silent) ---")
+    if right_only:
+        for path, val in right_only.items():
+            lines.append(f"  R {path}: {_fmt(val)}")
+    else:
+        lines.append("  (none)")
+    lines.append("")
+
+    lines.append("--- DISAGREE (both hold a value; they differ) ---")
+    if disagree:
+        for path, both in disagree.items():
+            lines.append(f"  ≠ {path}: left={both['bank']}, right={both['synthesized']}")
+    else:
+        lines.append("  (no disagreements)")
+    lines.append("")
+
+    if ex["common"] or ex["left_only"] or ex["right_only"]:
+        lines.append("--- EXCLUDES ---")
+        lines.append(f"  both:       {', '.join(ex['common']) or '(none)'}")
+        lines.append(f"  left only:  {', '.join(ex['left_only']) or '(none)'}")
+        lines.append(f"  right only: {', '.join(ex['right_only']) or '(none)'}")
+        lines.append("")
+
+    lines.append("=" * 60)
+    return "\n".join(lines)
+
+
+__all__ = [
+    "diff_views",
+    "render_shadow_diff",
+    "diff_excludes",
+    "render_compare",
+]

@@ -160,6 +160,7 @@ Bring your own house view. The CIO memo, IC strategy doc, or macro-desk PDF that
 | `/parallax-make-house-view` | **Synthesize** a draft view from Parallax MCP signals (no CIO PDF needed). Routes through the same confirmation gate; saves with `generator_synthesis` provenance |
 | `/parallax-make-house-view --shadow-diff` | Synthesize but do NOT save; render an additive diff vs the active bank view (preserves bank-view sovereignty) |
 | `/parallax-make-house-view --markets us,japan,uk` | Restrict synthesis fan-out scope |
+| `/parallax-make-house-view --compare <view_a> <view_b>` | Diff two **saved** view bundles cell-by-cell — tilts + excludes (e.g. UBS vs Goldman). No MCP, no synthesis, no save; neither view treated as authoritative |
 | `/parallax-judge-house-view` | **Read-only** LLM-as-judge — compare saved view to current Parallax signals, classify drift severity, emit cited per-cell recommendations + bundle |
 | `/parallax-judge-house-view --json` | Structured output for cron consumption |
 | `/parallax-judge-house-view --dry` | Skip the Phase 5 LLM recommendation step; return deterministic drift severity from MCP signals alone |
