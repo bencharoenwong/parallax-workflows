@@ -39,6 +39,7 @@ from contribution import (
 # Helpers for building synthetic price series
 # --------------------------------------------------------------------------
 
+
 def _date(day: int) -> str:
     """day 0 -> 2026-01-01, day 30 -> 2026-01-31."""
     return f"2026-01-{day + 1:02d}"
@@ -57,6 +58,7 @@ def _flat_then_jump_series(start: float, end: float, days: int) -> dict[str, flo
 # --------------------------------------------------------------------------
 # Test 1: Held entire period, 3 holdings, 30 return-days, no trades
 # --------------------------------------------------------------------------
+
 
 def test_held_entire_period_no_trades():
     """3 holdings, equal weights, no trades over 30 return-days.
@@ -78,7 +80,7 @@ def test_held_entire_period_no_trades():
     days = 30
     aapl = _flat_then_jump_series(100.0, 130.0, days)  # price[d] = 100 + d
     msft = _flat_then_jump_series(100.0, 100.0, days)  # flat
-    jpm = _flat_then_jump_series(100.0, 70.0, days)    # price[d] = 100 - d
+    jpm = _flat_then_jump_series(100.0, 70.0, days)  # price[d] = 100 - d
 
     daily_prices = {"AAPL.O": aapl, "MSFT.O": msft, "JPM.N": jpm}
 
@@ -88,12 +90,14 @@ def test_held_entire_period_no_trades():
     # Hand-computed expected sums (using fractions to keep precision):
     aapl_ret_sum = sum(1.0 / k for k in range(100, 130))  # k = 100..129
     msft_ret_sum = 0.0
-    jpm_ret_sum = sum(-1.0 / k for k in range(71, 101))   # k = 71..100
+    jpm_ret_sum = sum(-1.0 / k for k in range(71, 101))  # k = 71..100
 
     expected_aapl_contrib = (1 / 3) * aapl_ret_sum
     expected_msft_contrib = (1 / 3) * msft_ret_sum
     expected_jpm_contrib = (1 / 3) * jpm_ret_sum
-    expected_total = expected_aapl_contrib + expected_msft_contrib + expected_jpm_contrib
+    expected_total = (
+        expected_aapl_contrib + expected_msft_contrib + expected_jpm_contrib
+    )
 
     result = daily_contribution(
         prior_portfolio=prior,
@@ -120,6 +124,7 @@ def test_held_entire_period_no_trades():
 # --------------------------------------------------------------------------
 # Test 2: Add a 4th holding mid-period
 # --------------------------------------------------------------------------
+
 
 def test_added_mid_period():
     """3 holdings at start. New holding NVDA enters such that it earns
@@ -202,6 +207,7 @@ def test_added_mid_period():
 # --------------------------------------------------------------------------
 # Test 3: Exit a holding mid-period; freed weight redistributed
 # --------------------------------------------------------------------------
+
 
 def test_exited_mid_period():
     """4 holdings at start, equal 0.25 each. JPM is exited on day 10
@@ -288,6 +294,7 @@ def test_exited_mid_period():
 # --------------------------------------------------------------------------
 # Test 4: Dividend / total-return-prices assumption
 # --------------------------------------------------------------------------
+
 
 def test_total_return_prices_assumption_correct():
     """With TR-prices (dividends reinvested), a 5% dividend appears as a
@@ -393,6 +400,7 @@ def test_non_total_return_prices_break_math_negative_control():
 # Test 5: Reconciliation gate fires on broken contributions
 # --------------------------------------------------------------------------
 
+
 def test_reconciliation_gate_catches_broken_contributions():
     """Run a clean computation, then simulate a downstream bug by mutating
     one contribution. validate_contributions() must raise ReconciliationError.
@@ -439,7 +447,9 @@ def test_reconciliation_gate_carries_diff_and_tolerance():
     total = 0.08 + 0.001  # 10bp above the contributions sum
 
     with pytest.raises(ReconciliationError) as excinfo:
-        validate_contributions(contributions=contributions, portfolio_total_return=total)
+        validate_contributions(
+            contributions=contributions, portfolio_total_return=total
+        )
     err = excinfo.value
     # sum(contribs) - total = 0.08 - 0.081 = -0.001
     assert math.isclose(err.diff, -0.001, abs_tol=1e-12)
@@ -449,6 +459,7 @@ def test_reconciliation_gate_carries_diff_and_tolerance():
 # --------------------------------------------------------------------------
 # Test 6: Input validation
 # --------------------------------------------------------------------------
+
 
 def test_missing_prices_for_held_holding():
     """A holding present in prior_portfolio with no daily_prices entry => ValueError."""
@@ -520,9 +531,19 @@ def test_trade_log_out_of_order_raises():
 
     trade_log = [
         # day 20 first, day 10 second -> out of order
-        {"symbol": "AAPL.O", "action": "trim", "date": _date(20), "weight_delta": -0.05},
+        {
+            "symbol": "AAPL.O",
+            "action": "trim",
+            "date": _date(20),
+            "weight_delta": -0.05,
+        },
         {"symbol": "MSFT.O", "action": "add", "date": _date(20), "weight_delta": +0.05},
-        {"symbol": "AAPL.O", "action": "trim", "date": _date(10), "weight_delta": -0.05},
+        {
+            "symbol": "AAPL.O",
+            "action": "trim",
+            "date": _date(10),
+            "weight_delta": -0.05,
+        },
         {"symbol": "MSFT.O", "action": "add", "date": _date(10), "weight_delta": +0.05},
     ]
 
@@ -547,6 +568,7 @@ def test_weight_sum_tolerance_constant_is_named():
 # Test 7: Cross-check current_portfolio against reconstructed ending weights
 # --------------------------------------------------------------------------
 
+
 def test_inconsistent_current_portfolio_raises():
     """current_portfolio that disagrees with trade reconstruction by > 1e-3
     must raise ValueError, with a message identifying the offending symbol,
@@ -564,7 +586,12 @@ def test_inconsistent_current_portfolio_raises():
     # Reconstructed ending: AAPL=0.4, MSFT=0.35, JPM=0.25
     prior = {"AAPL.O": 0.5, "MSFT.O": 0.25, "JPM.N": 0.25}
     trade_log = [
-        {"symbol": "AAPL.O", "action": "trim", "date": _date(14), "weight_delta": -0.10},
+        {
+            "symbol": "AAPL.O",
+            "action": "trim",
+            "date": _date(14),
+            "weight_delta": -0.10,
+        },
         {"symbol": "MSFT.O", "action": "add", "date": _date(14), "weight_delta": +0.10},
     ]
 
@@ -606,7 +633,12 @@ def test_consistent_current_portfolio_within_tolerance_passes():
 
     prior = {"AAPL.O": 0.5, "MSFT.O": 0.25, "JPM.N": 0.25}
     trade_log = [
-        {"symbol": "AAPL.O", "action": "trim", "date": _date(14), "weight_delta": -0.10},
+        {
+            "symbol": "AAPL.O",
+            "action": "trim",
+            "date": _date(14),
+            "weight_delta": -0.10,
+        },
         {"symbol": "MSFT.O", "action": "add", "date": _date(14), "weight_delta": +0.10},
     ]
 
@@ -677,8 +709,12 @@ def test_prices_start_after_period_start_raises():
     n_days = (period_end_date - gap_start).days + 2  # include period_end + 1 extra
 
     base_price = 100.0
-    dates = [(gap_start + datetime.timedelta(days=i)).isoformat() for i in range(n_days)]
-    prices = [{"date": d, "close": base_price * (1 + 0.001 * i)} for i, d in enumerate(dates)]
+    dates = [
+        (gap_start + datetime.timedelta(days=i)).isoformat() for i in range(n_days)
+    ]
+    prices = [
+        {"date": d, "close": base_price * (1 + 0.001 * i)} for i, d in enumerate(dates)
+    ]
 
     prior_portfolio = {"AAPL.O": 1.0}
     current_portfolio = {"AAPL.O": 1.0}
