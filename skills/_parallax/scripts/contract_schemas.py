@@ -60,7 +60,7 @@ ANALYZE_PORTFOLIO_SCHEMA = {
     }, OPTIONAL),
     "company_contribution": ([{
         "symbol": str,
-        "name": str,
+        "name": (str, OPTIONAL),
         "contribution": NUM,
         "weight": NUM,
     }], OPTIONAL),

@@ -9,7 +9,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 ### Fixed
 - **`analyze_portfolio` call shape corrected** across `parallax-client-review`, `parallax-rebalance`, and `parallax-scenario-analysis` — skills were passing `holdings=[...]` / `lens="..."` parameters that do not exist in the MCP schema. Corrected to `portfolio=[{date, symbol, weight}]` + `fields=[...]` (the documented schema). Skills were silently no-oping on every portfolio analysis call.
 - **`parallax-cio-letter-prep` stale paths** — Batch B JIT-load directives and test imports referenced `skills/cio-letter-prep/` (pre-rename path). Updated to `skills/parallax-cio-letter-prep/` throughout.
-- **`parallax-cio-letter-prep` retrospective window formula** — `date_end` for retrospective periods was set to `period_start` instead of today, producing a zero-length window. Fixed to `date_end = today`.
+- **`parallax-cio-letter-prep` retrospective window formula** — the `days` argument passed to `export_price_series` used `period_days` directly, producing an incorrect series window for retrospective periods. Fixed to `(today - period_start).days + 5` (capped at 365) so the series span is anchored to the period start date relative to today.
 - **`analyze_portfolio` contract schema extended** — `contract_schemas.py` now covers the seven additional response fields consumed by `cio-letter-prep` Batch B: `company_contribution`, `portfolio_summary`, `drawdown_analysis`, `performance_metrics`, `latest_holdings`, `sector_allocation`, `time_period_returns`. Mock updated to match.
 
 ### Added
