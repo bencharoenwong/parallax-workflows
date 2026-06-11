@@ -50,7 +50,6 @@ for _p in (_THIS_DIR, _HOUSE_VIEW_DIR, _STRESS_DIR):
         sys.path.insert(0, str(_p))
 
 import rfc8785  # noqa: E402
-import yaml  # noqa: E402
 
 import audit_chain  # noqa: E402  (from _parallax/house-view/)
 import chain_emit  # noqa: E402

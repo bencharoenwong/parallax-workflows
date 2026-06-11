@@ -27,10 +27,9 @@ for _path in (SHARED_DIR, MAKER_DIR, JUDGE_DIR):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
-import maker
-import judge
-import gate_present
-from cross_country import MarketResponse
+import maker  # noqa: E402
+import judge  # noqa: E402
+import gate_present  # noqa: E402
 
 
 def build_mock_mcp_aligned() -> dict[str, Any]:

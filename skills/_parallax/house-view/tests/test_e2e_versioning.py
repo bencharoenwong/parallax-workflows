@@ -12,7 +12,6 @@ shape. This mirrors the pattern in test_uninstall.py's
 """
 from __future__ import annotations
 
-import copy
 import datetime
 import hashlib
 import json

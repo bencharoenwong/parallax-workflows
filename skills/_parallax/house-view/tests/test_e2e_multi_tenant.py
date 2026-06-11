@@ -368,8 +368,8 @@ def test_e2e_env_var_and_explicit_view_dir_priority(
     # depending on the maker-generated valid_through window — all of these
     # are non-"none", which is what matters)
     assert status_b_explicit.state != "none", (
-        f"compute_status(view_dir=tenant_b) returned state='none' even "
-        f"though tenant_b has a saved view.yaml. Explicit override broken."
+        "compute_status(view_dir=tenant_b) returned state='none' even "
+        "though tenant_b has a saved view.yaml. Explicit override broken."
     )
 
     # 3. No explicit → env var wins → tenant_a (which is empty) → state=none
