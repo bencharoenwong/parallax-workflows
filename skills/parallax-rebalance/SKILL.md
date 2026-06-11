@@ -79,7 +79,7 @@ Per `loader.md` §1-§2: read view if present, validate hash and expiry. If view
 
 ### Batch C — Health flags + trade decisions
 
-1. Evaluate the 5 health flags per holding — canonical thresholds in `parallax-portfolio-checkup/references/health-flags.md`: Low Score (≤5.0), Concentration (>15%), Redundancy (≥2 pairs), Value Trap (value ≤3.0), Macro Misalignment.
+1. Evaluate the 5 health flags — canonical definitions and thresholds in `parallax-portfolio-checkup/references/health-flags.md`: Low Score (portfolio overall ≤5.0, verified-holdings weighted average), Concentration (any single holding >15% OR top-3 >45%), Redundancy (≥2 pairs), Value Trap (portfolio value ≤3.0, verified-holdings weighted average), Macro Misalignment (overweight in sectors with negative tactical outlook). Low Score and Value Trap evaluate at portfolio level; attribute Concentration, Redundancy, and Macro Misalignment triggers to the specific holdings involved for per-holding flag counts.
 2. **House-view alignment check** (if view active): for each holding, compute view-tilted target weight using loader.md §3 multipliers; flag holdings >25% off target as "View Misalignment." For holdings on `tilts.excludes`, flag as "View Excluded — must trim."
 3. Assign priority per recommendation-matrix.md (count View Misalignment / View Excluded as flags):
    - **High** (3+ flags or View Excluded): Strong trim/exit candidate

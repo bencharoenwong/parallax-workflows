@@ -23,7 +23,7 @@ description: "Full macro regime analysis with optional equity screening: country
 - macro_analyst summary call returns all 9 components inline — do not make separate per-component calls
 - get_telemetry shows how macro regime affects the scoring engine
 - Smaller/EM markets may have fewer scored equities — set expectations
-- JIT-load `_parallax/house-view/loader.md` if an active CIO view is present. macro-outlook answers the regime question, so neither §3 multipliers nor §7 single-stock conflict-surfacing apply: the macro narrative reflects live data, and the optional Batch C equity census is **deliberately untilted** — it is an illustrative exhibit of which equities score well in this regime, not a discovery ranking. A user who wants the view-tilted "what should I buy in [country]" ranking belongs in /parallax-country-deep-dive (that skill applies §3 to its Top Opportunities by design). Apply a **macro-regime-alignment mode** (defined inline below — call it §7.4 by analogy) — render a divergence note when the view's stated macro regime contradicts live `get_telemetry.regime_tag`. No scoring math is altered. Standard surface: §2 (load + validate), §5 (preamble), §6 (audit log).
+- JIT-load `_parallax/house-view/loader.md` UNCONDITIONALLY — §5 rule 3 (ground-truth check), rule 6 (AI disclosure), and §6 (audit log) apply whether or not a view is active. macro-outlook answers the regime question, so neither §3 multipliers nor §7 single-stock conflict-surfacing apply: the macro narrative reflects live data, and the optional Batch C equity census is **deliberately untilted** — it is an illustrative exhibit of which equities score well in this regime, not a discovery ranking. A user who wants the view-tilted "what should I buy in [country]" ranking belongs in /parallax-country-deep-dive (that skill applies §3 to its Top Opportunities by design). Apply a **macro-regime-alignment mode** (defined inline below — call it §7.4 by analogy) — render a divergence note when the view's stated macro regime contradicts live `get_telemetry.regime_tag`. No scoring math is altered. Standard surface: §2 (load + validate), §5 (preamble), §6 (audit log).
 - **§7.4 macro-regime-alignment mode (this skill's pattern, not in loader.md):** if the active view's basis_statement or stated macro regime (e.g., "recessionary", "expansion", "stagflation", from `view.macro_regime` if present) materially conflicts with the regime returned by `get_telemetry.regime_tag`, render a "View regime: <X> | Live regime: <Y>" line directly under the House View Preamble at the very top of Output Format. The user is informed of the disagreement; the analytical content still reflects live data (live wins for macro narrative). If no view, or view is silent on macro regime, omit the line.
 - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
 - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
@@ -45,7 +45,7 @@ Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-c
 
 ### Pre-Workflow — Load Active House View
 
-Per `_parallax/house-view/loader.md` §1 and §2: load and validate any active house view BEFORE running the workflow. If view present, capture the load preamble for rendering at the top of Output Format per §5.1, and capture `view.macro_regime` (or equivalent regime statement from basis_statement) — applied in Post-Workflow §7.4 regime-alignment check. If no active view (or validation failure): run the workflow normally with the standard disclaimer.
+Per `_parallax/house-view/loader.md` §1 and §2: load and validate any active house view BEFORE running the workflow. If view present, capture the load preamble for rendering at the top of Output Format per §5.1, and capture `view.macro_regime` (or equivalent regime statement from basis_statement) — applied in Post-Workflow §7.4 regime-alignment check. If no active view (or validation failure): run the workflow normally with the standard disclaimer. Loader.md §5 rule 3 (ground-truth check), rule 6 (AI disclosure), and §6 (audit) still apply on the no-view path.
 
 ### Batch 0 — Tool Loading
 
@@ -69,14 +69,15 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 
 If requested: call `build_stock_universe` with `query="[country] equities"`. For top 5: `get_peer_snapshot` AND `get_company_info` per symbol (all parallel — `get_company_info` is the ground-truth oracle per loader.md §5 rule 3, required view or no view whenever per-holding scores render). Cross-check each `get_peer_snapshot.target_company` against the name-of-record; on mismatch, flag ⚠ MISMATCH and recover per rule 3. For top 3: `get_score_analysis` 26 weeks (parallel). The census stays untilted regardless of view state (see Gotchas — tilted discovery is /parallax-country-deep-dive's job).
 
-### Post-Workflow — §7.4 Regime alignment check
+### Post-Workflow — §7.4 Regime alignment check + §6 audit
 
 If a view was loaded in Pre-Workflow:
 
 1. Extract view's stated macro regime: prefer `view.macro_regime` if present; otherwise scan `basis_statement` for regime keywords ("recessionary", "expansion", "stagflation", "soft landing", "hard landing", "reflationary", "disinflationary"). If no regime statement can be extracted, skip the alignment check (regime alignment is opt-in based on view content).
 2. Compare to `get_telemetry.regime_tag` returned in Batch A.
 3. If regimes materially diverge (e.g., view says "recessionary" but live says "expansion"), prepare a one-line divergence note for Output Format rendering: `View regime: <view_regime> | Live regime: <live_regime> — note the disagreement; analytical content below reflects live data.`
-4. Append the §6 audit log entry per loader.md §6.1.
+
+**Always** append the §6 audit log entry per loader.md §6.1 — view or no view (`applied=false` with `applied_reason: "no_view"` when none, `view_id`/`version_id` null per §6.1; include `ground_truth_mismatches` per §6.2 when any Batch C row was flagged).
 
 ### Pre-Render — Load white-label branding
 
