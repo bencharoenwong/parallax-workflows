@@ -193,4 +193,4 @@ Always 2-3 options. Never 6.
 
 Render AI-interaction disclosure per parallax-conventions.md §9.2 immediately above the disclaimer.
 
-*This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions.*
+*This concierge is a routing interface that navigates to Parallax research skills; it does not generate investment analysis or opinions. All sub-skill outputs are informational only, not investment advice, and should be reviewed by qualified professionals before any investment decisions.*
