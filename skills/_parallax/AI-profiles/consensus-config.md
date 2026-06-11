@@ -52,7 +52,7 @@ If `A < minimum_applicable_count`, the signal is `INSUFFICIENT_PROFILES` (not `N
 
 ## Why these defaults
 
-- **75% super-majority** — High enough to be informative (random-chance consensus is ~25% with 4 independent binary verdicts), low enough to survive one profile disagreeing in a structurally different way.
+- **75% super-majority** — High enough to be informative (random-chance consensus is ~19% with 5 independent binary verdicts; P(4+ out of 5 at p=0.5) = 6/32 ≈ 19%), low enough to survive one profile disagreeing in a structurally different way.
 - **Minimum 3 applicable** — With only 2 profiles returning verdicts, "consensus" is just agreement between 2 sources, which is not informative. 3 is the lowest count where structural diversity can meaningfully be observed.
 - **Ceiling rounding** — Rounds UP the required matches. This makes the threshold strictly conservative: 75% of 3 = 2.25 rounds to 3 (unanimity), not 2. Prevents the threshold from silently weakening when the applicable count is small.
 
