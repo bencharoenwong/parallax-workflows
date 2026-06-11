@@ -44,13 +44,12 @@ from typing import Any, Callable
 # Local module path setup — same pattern as stress.py.
 _THIS_DIR = Path(__file__).resolve().parent
 _HOUSE_VIEW_DIR = _THIS_DIR.parent / "_parallax" / "house-view"
-_STRESS_DIR = _THIS_DIR.parent / "stress-house-view"
+_STRESS_DIR = _THIS_DIR.parent / "parallax-stress-house-view"
 for _p in (_THIS_DIR, _HOUSE_VIEW_DIR, _STRESS_DIR):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
 import rfc8785  # noqa: E402
-import yaml  # noqa: E402
 
 import audit_chain  # noqa: E402  (from _parallax/house-view/)
 import chain_emit  # noqa: E402
@@ -81,7 +80,7 @@ DEFAULT_REPORT_DIR = Path(
 # Maker modules live in skills/make-house-view/ (hyphenated, not a Python
 # package). Follow the same sys.path injection pattern stress.py uses to
 # import shared infra (see stress.py: _HOUSE_VIEW_DIR + sys.path.insert).
-_MAKER_DIR = Path(__file__).resolve().parent.parent / "make-house-view"
+_MAKER_DIR = Path(__file__).resolve().parent.parent / "parallax-make-house-view"
 
 
 @dataclass

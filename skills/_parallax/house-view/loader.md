@@ -70,7 +70,7 @@ The `view_status` helper emits the banner directly; this table documents the tie
 | `N ≥ 14` | `active` | "Active house view: '...' — N days remaining." | true |
 | `tilt_variance < 0.5` across non-zero tilts | (orthogonal warning, emitted in addition to the helper banner) | "Minimal differentiation; tilts will have weak portfolio effect." | n/a |
 
-**Active-view banner is REQUIRED on every consumer skill load preamble.** It is not a "first call per session" courtesy — every load surfaces it. The portfolio-builder gotcha already enforces this for one skill; the helper makes it cheap to enforce everywhere.
+**Active-view banner is REQUIRED on every consumer skill load preamble.** It is not a "first call per session" courtesy — every load surfaces it. The parallax-portfolio-builder gotcha already enforces this for one skill; the helper makes it cheap to enforce everywhere.
 
 **Why the helper, not inline math:** date arithmetic and threshold comparisons in markdown are an operator-LLM trust assumption. Shelling out to `view_status` (pure stdlib + PyYAML, no network) returns the same banner whether the operator is Claude / GPT / Gemini / local model. See `tests/test_view_status.py` for the boundary cases (9 / 10 / 13 / 14 days).
 
@@ -80,7 +80,7 @@ The `view_status` helper emits the banner directly; this table documents the tie
 
 ### Framework components
 
-The four components (`econometrics_phase`, `valuation_state`, `market_entropy`, `psychological_wavelength` — kept as field identifiers for data-contract stability) are **encoding-only**. Extractors populate them at ingest from CIO prose (see `skills/load-house-view/SKILL.md`); they are stored in `view.yaml` for forward-compatibility but are NOT translated into factor multipliers, universe effects, or consumer-skill output by the current loader.
+The four components (`econometrics_phase`, `valuation_state`, `market_entropy`, `psychological_wavelength` — kept as field identifiers for data-contract stability) are **encoding-only**. Extractors populate them at ingest from CIO prose (see `skills/parallax-load-house-view/SKILL.md`); they are stored in `view.yaml` for forward-compatibility but are NOT translated into factor multipliers, universe effects, or consumer-skill output by the current loader.
 
 Rationale: MCP equity-only scope doesn't yet carry expected-return / volatility inputs needed for a full multi-component composite. Asset-class component weights are deployment-specific judgment calls that downstream users should calibrate themselves. Guessing at a partial formula risks silently miscalibrating portfolio math.
 
@@ -159,7 +159,7 @@ When `PARALLAX_LOADER_V2=1`, portfolio consumer skills call `get_peer_snapshot` 
 4. **Partial results**: if one or more holdings timed out or errored, compute the weighted average over successful calls only — renormalise weights to sum to 1.0 over successful holdings and annotate the composite as partial.
 5. **Apply tilts**: if an active view is present, apply the §3 factor-tilt multipliers to the composites.
 
-**For 10+ holdings**: parallelise all fan-out calls (cap at 8 concurrent calls, matching the `PARALLAX_LOADER_V2` default used by make-house-view and judge-house-view); if N≥2 calls time out, mark those holdings as "scores unavailable" and fall back to health-flags-only scoring (per `parallax-portfolio-checkup/references/health-flags.md`) for the missing positions.
+**For 10+ holdings**: parallelise all fan-out calls (cap at 8 concurrent calls, matching the `PARALLAX_LOADER_V2` default used by parallax-make-house-view and parallax-judge-house-view); if N≥2 calls time out, mark those holdings as "scores unavailable" and fall back to health-flags-only scoring (per `parallax-portfolio-checkup/references/health-flags.md`) for the missing positions.
 
 ---
 
@@ -212,7 +212,7 @@ When an active view is loaded and applied, every consumer skill MUST:
 
 2. **Conflict banners** — render inline at the section where the conflict arose (e.g., universe selection, allocation), not bundled at the end.
 
-3. **Ground-truth panel** (REQUIRED when any per-holding score is rendered): next to every factor score, show the company name that the scoring tool actually returned (from `get_peer_snapshot.target_company` or `quick_portfolio_scores.holdings_analyzed[].company_name`) and the input ticker. If the returned name does not match the `get_company_info` name-of-record for the input ticker, flag the row **loudly** (e.g., `⚠ MISMATCH: score attributed to <X>, expected <Y>`). Never display scores as authoritative when the name-mismatch is present — the score belongs to a different company.
+3. **Ground-truth check** (REQUIRED when any per-holding score is rendered): for every scored holding, cross-check the company name the scoring tool actually returned (from `get_peer_snapshot.target_company` or `quick_portfolio_scores.holdings_analyzed[].company_name`) against the `get_company_info` name-of-record for the input ticker. The **check** is unconditional — every score, every run. The **display** is compact: when all names match, no ground-truth table is rendered. When ANY mismatch is detected, render a ground-truth integrity table covering all scored holdings (input ticker, returned name, expected name, status) and flag each mismatched row **loudly** (e.g., `⚠ MISMATCH: score attributed to <X>, expected <Y>`). Never display scores as authoritative when a name-mismatch is present — the score belongs to a different company — and never silently drop a detected mismatch.
 
 4. **Divergence assertion on universe composition** (REQUIRED for skills that call `build_stock_universe` with multi-sector or multi-theme tilts): after the call returns, compute the sector distribution of the result. If the caller requested N≥2 sectors/themes in the tilt-prepended query and the returned distribution has `max_sector_share / total > 0.6`, emit a **fail-loud warning** and **by default re-issue the call as N parallel per-sector (or per-theme) queries and merge the results** (deduplicating by symbol, keeping the highest rank). Only fall back to refusing to render the portfolio when the per-sector re-issue *also* produces skewed output (e.g., some sectors return zero results). Do not silently proceed. This does NOT apply to legitimately concentrated tilts where only 1 sector/theme was requested (e.g., "100% energy" from a pure-energy view). *Rationale: in practice the universal-universe query collapses to whichever sector the embedding-based matcher considers most prototypical for the tilt language ("defensive" → biotech-heavy Healthcare), so per-sector re-issue is the only path that actually reflects the view's multi-sector intent.*
 
@@ -225,7 +225,7 @@ When an active view is loaded and applied, every consumer skill MUST:
 
    Skills MUST render this banner even when running without an active view — AI involvement in scoring synthesis and narrative is independent of view state.
 
-When NO active view is loaded, skills run as today — standard output, no preamble, standard disclaimer. Rules 3 and 4 (ground-truth panel and divergence assertion) AND rule 6 (AI-interaction disclosure) apply whether or not a view is active — they are data-integrity / regulatory requirements, not view-specific features.
+When NO active view is loaded, skills run as today — standard output, no preamble, standard disclaimer. Rules 3 and 4 (ground-truth check and divergence assertion) AND rule 6 (AI-interaction disclosure) apply whether or not a view is active — they are data-integrity / regulatory requirements, not view-specific features.
 
 ---
 
@@ -253,7 +253,7 @@ Every consume event appends one JSONL line to `~/.parallax/active-house-view/aud
 | `failure_reason` | `applied == false` AND validation failed | string | Human-readable reason tied to a specific §2 failure row (drift / uploader_unconfirmed / expired / not_yet_effective). |
 | `attempted_version_id` | `applied == false` AND `failure_reason` is non-null | string (uuid v4) OR `null` | Version ID read from `view.yaml` before validation failed; `null` only when `view.yaml` was unreadable or missing. Lets auditors reconstruct "which version was in a broken state at this timestamp" when the top-level `version_id` had to be null. |
 | `applied_reason` | `applied == false` AND validation passed | string | Why tilts weren't applied despite a valid view. Typical values: `"single-stock consumer (loader.md §7.1/§7.2/§7.3)"`, `"divergence refusal (loader.md §5 rule 4)"`, `"operational action (no consume)"`. |
-| `parent_version_id` | `action == "save"` AND this save supersedes a prior version | string (uuid v4) | Immediate predecessor's `version_id`. |
+| `parent_version_id` | (`action == "save"` AND this save supersedes a prior version) OR `action == "generate"` | string (uuid v4) OR `null` | Immediate predecessor's `version_id`. On `generate`: the superseded view's `version_id` when the synthesis replaces an existing view in the target directory, else `null`. |
 | `version_diff` | `action == "save"` AND `parent_version_id` is non-null | object | Flat diff of `tilts` + `excludes` subtrees vs parent, keyed by dotted path to `[old_value, new_value]`. Cap 40 entries. |
 | `version_diff_truncated` | `version_diff` was truncated | bool | True if diff exceeded 40 entries. |
 | `disposition` | `action == "extraction_attempt"` | string (enum) | One of: `confirmed`, `edited`, `re_extracted`, `rejected`. |
@@ -271,6 +271,8 @@ Every consume event appends one JSONL line to `~/.parallax/active-house-view/aud
 | `validation_errors` | `action == "stress_test"` AND `disposition` ∈ {`validation_failed`, `schema_unreadable`} | list of `{index, field, reason}` objects | Each error: `index` (int delta position or null for schema-level errors), `field` (delta field name or null), `reason` (human-readable string). For `schema_unreadable`, a single error with `index=null, field=null, reason="schema_unreadable: <exc_class>: <message>"`. |
 | `stress_summary` | `action == "stress_test"` | object | Counts and aggregate metadata: `{internal_pass, internal_taste_count, cio_age_days, parallax_age_days, age_delta, external_markets_queried, tilted_markets, uncovered_markets_in_view, states, cio_challenges, taste_decisions, cross_dimension_themes}`. |
 | `recommended_deltas` | `action == "stress_test"` (optional) | list of objects | One entry per divergent-stale cell. Each: `{kind: "informational" \| "global", path, market (nullable), cio_value, parallax_signal, parallax_summary, stress_state, cio_age_days, parallax_age_days}`. `path` follows the `--why <tilt-path>` convention (`tilts.<category>.<dim>[.<sub>]`). v1 emits only `kind: "informational"`; v2's `/parallax-load-house-view --apply-stress <audit-hash>` will read this field to pre-populate a draft. |
+| `view_hash` | `action == "generate"` | string (sha256 hex) | Canonical hash of the generated view body per schema.yaml §"view_hash computation". Matches `metadata.view_hash` written into the saved `view.yaml`, correlating the `generate` row to the saved bundle. |
+| `provenance_hash` | `action == "generate"` | string (sha256 hex) | Hash of the canonical `provenance.yaml` emitted alongside the generated view. Pairs the audit row with the per-leaf `generator_synthesis` entries without duplicating them onto the row (see the forbidden-keys rule below). |
 | `source_tools` | `action == "generate"` | list of string | `["tool:arg1:arg2", ...]` summary of MCP calls used in synthesis (e.g., `["macro_analyst:Japan:tactical", "get_telemetry:overview"]`). Identifies which Parallax surfaces fed this generation; pairs with the `generator_synthesis` provenance class in schema.yaml. |
 | `calibration_status` | `action == "generate"` | string (enum) | One of: `heuristic_phase0`, `empirical_phase1`. Mirrors `metadata.calibration_status` written into `view.yaml` for the generated view. Until the empirical calibration backtest lands, every `generate` row carries `heuristic_phase0`. |
 | (forbidden on `generate`) | `action == "generate"` | — | `composition_formula`, `aggregator_weights_ref`, `source_snippets`, `pillar_missing_inputs` MUST NOT appear on the audit row. They live on the per-leaf `generator_synthesis` entry in `provenance.yaml` (schema.yaml §"Classification taxonomy"). Putting them on the audit row would violate §6.3 (no skill-specific custom keys) and create a second source of truth for synthesis evidence. |

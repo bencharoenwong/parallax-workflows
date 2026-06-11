@@ -116,6 +116,4 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
-If active view: use the view-aware disclaimer per loader.md §5. Otherwise:
-
-> *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
+If active view: use the view-aware disclaimer per loader.md §5. Otherwise: render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.

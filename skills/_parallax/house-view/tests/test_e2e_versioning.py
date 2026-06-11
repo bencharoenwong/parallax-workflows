@@ -12,7 +12,6 @@ shape. This mirrors the pattern in test_uninstall.py's
 """
 from __future__ import annotations
 
-import copy
 import datetime
 import hashlib
 import json
@@ -27,8 +26,8 @@ import rfc8785
 import yaml
 
 REPO = Path(__file__).resolve().parent.parent.parent.parent.parent
-MAKER_DIR = REPO / "skills" / "make-house-view"
-JUDGE_DIR = REPO / "skills" / "judge-house-view"
+MAKER_DIR = REPO / "skills" / "parallax-make-house-view"
+JUDGE_DIR = REPO / "skills" / "parallax-judge-house-view"
 SHARED_DIR = REPO / "skills" / "_parallax" / "house-view"
 MAKER_FIXTURES = MAKER_DIR / "tests" / "fixtures"
 

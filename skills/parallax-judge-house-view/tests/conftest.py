@@ -16,7 +16,7 @@ REPO_ROOT = SKILL_DIR.parent.parent
 for p in (
     SKILL_DIR,
     REPO_ROOT / "skills" / "_parallax" / "house-view",
-    REPO_ROOT / "skills" / "stress-house-view",
+    REPO_ROOT / "skills" / "parallax-stress-house-view",
 ):
     sp = str(p)
     if sp not in sys.path:

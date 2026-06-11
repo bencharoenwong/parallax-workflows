@@ -36,8 +36,8 @@ import pytest
 import yaml
 
 REPO = Path(__file__).resolve().parent.parent.parent.parent.parent
-MAKER_DIR = REPO / "skills" / "make-house-view"
-JUDGE_DIR = REPO / "skills" / "judge-house-view"
+MAKER_DIR = REPO / "skills" / "parallax-make-house-view"
+JUDGE_DIR = REPO / "skills" / "parallax-judge-house-view"
 SHARED_DIR = REPO / "skills" / "_parallax" / "house-view"
 MAKER_FIXTURES = MAKER_DIR / "tests" / "fixtures"
 
@@ -313,7 +313,7 @@ def test_e2e_consumer_skill_drift_gate_protocol(
 
     # The 3 consumer SKILL.md files must JIT-load the shared pattern
     # (NOT inline it). This is the single-source-of-truth invariant.
-    for consumer in ("portfolio-builder", "rebalance", "thematic-screen"):
+    for consumer in ("parallax-portfolio-builder", "parallax-rebalance", "parallax-thematic-screen"):
         skill_md = (REPO / "skills" / consumer / "SKILL.md").read_text()
         assert "auto-on-load-judge-pattern.md" in skill_md, (
             f"{consumer}/SKILL.md must JIT-load auto-on-load-judge-pattern.md, "
@@ -322,7 +322,7 @@ def test_e2e_consumer_skill_drift_gate_protocol(
 
     # Morning-brief is the exception — it uses a conditional one-liner,
     # not the shared pattern (per v2 plan §7 row 4).
-    brief_md = (REPO / "skills" / "morning-brief" / "SKILL.md").read_text()
+    brief_md = (REPO / "skills" / "parallax-morning-brief" / "SKILL.md").read_text()
     assert "auto-on-load-judge-pattern.md" not in brief_md, (
         "morning-brief must NOT JIT-load the shared pattern — its "
         "integration is a conditional one-liner suggesting the judge, "

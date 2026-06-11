@@ -1,7 +1,8 @@
 # Auto-on-load house-view drift check
 
-JIT-loaded by portfolio-builder, rebalance, and thematic-screen. Single
-source of truth so changes to the pattern don't require touching 3 files.
+JIT-loaded by parallax-portfolio-builder, parallax-rebalance, and
+parallax-thematic-screen. Single source of truth so changes to the
+pattern don't require touching 3 files.
 
 ## When to fire
 

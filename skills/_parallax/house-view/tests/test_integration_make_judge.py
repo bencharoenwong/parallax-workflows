@@ -16,8 +16,8 @@ from unittest.mock import patch
 import pytest
 
 REPO = Path(__file__).resolve().parent.parent.parent.parent.parent
-MAKER_DIR = REPO / "skills" / "make-house-view"
-JUDGE_DIR = REPO / "skills" / "judge-house-view"
+MAKER_DIR = REPO / "skills" / "parallax-make-house-view"
+JUDGE_DIR = REPO / "skills" / "parallax-judge-house-view"
 SHARED_DIR = REPO / "skills" / "_parallax" / "house-view"
 MAKER_FIXTURES = MAKER_DIR / "tests" / "fixtures"
 JUDGE_FIXTURES = JUDGE_DIR / "tests" / "fixtures"
@@ -27,10 +27,9 @@ for _path in (SHARED_DIR, MAKER_DIR, JUDGE_DIR):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
-import maker
-import judge
-import gate_present
-from cross_country import MarketResponse
+import maker  # noqa: E402
+import judge  # noqa: E402
+import gate_present  # noqa: E402
 
 
 def build_mock_mcp_aligned() -> dict[str, Any]:

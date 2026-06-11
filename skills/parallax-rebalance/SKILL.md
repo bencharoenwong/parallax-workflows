@@ -62,7 +62,7 @@ Per `loader.md` §1-§2: read view if present, validate hash and expiry. If view
 | `analyze_portfolio` | `portfolio=[{date: <today ISO>, symbol: <ric>, weight: <w>}]`, `fields=["performance_metrics","rolling_metrics","drawdown_analysis","portfolio_summary","time_period_returns"]` | Returns/risk metrics. Build portfolio array from provided holdings; use today's date as as-of date. **Timeout fallback:** skip if exceeds 30s; fall back to `check_portfolio_redundancy` + `quick_portfolio_scores`. If MCP schema validation fails, use fallback immediately. |
 | `analyze_portfolio` | `portfolio=[{date: <today ISO>, symbol: <ric>, weight: <w>}]`, `fields=["concentration_metrics","sector_allocation","company_contribution"]` | Concentration and attribution. Two separate field-subset calls to manage response size. **Timeout fallback:** skip if exceeds 30s. |
 | `get_peer_snapshot` | per holding | **Primary scoring source** for `PARALLAX_LOADER_V2=1`. **Timeout handling:** fire in parallel; if N≥2 calls timeout, mark those holdings as "scores unavailable" and continue with health-flags-only scoring. Collect successful scores only. Aggregate client-side per `loader.md` §3b. **For 10+ holdings:** prioritize top/bottom 5 by weight; timeout on remaining holdings is acceptable — fall back to health flags for those positions. |
-| `get_company_info` | per holding | **Ground-truth panel oracle** per loader.md §5 rule 3 — records `expected_name` for mismatch check against `get_peer_snapshot.target_company`. **Timeout handling:** if timeout, mark holding as "name verification unavailable" and flag ⚠ UNVERIFIED. |
+| `get_company_info` | per holding | **Ground-truth check oracle** per loader.md §5 rule 3 — records `expected_name` for mismatch check against `get_peer_snapshot.target_company`. **Timeout handling:** if timeout, mark holding as "name verification unavailable" and flag ⚠ UNVERIFIED. |
 | `check_portfolio_redundancy` | `holdings` | Overlap detection. **Timeout fallback:** if exceeds 20s, flag "redundancy check skipped" and continue. |
 | `list_macro_countries` | — | Check market coverage. **Timeout fallback:** skip if exceeds 5s. |
 | `quick_portfolio_scores`| `holdings` | **Legacy/V1 path only**. Do NOT use if `PARALLAX_LOADER_V2=1` and view active. **Timeout fallback:** if exceeds 10s, degrade to health-flags-only scoring. |
@@ -121,6 +121,4 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
-If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise:
-
-> *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
+If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise: render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.

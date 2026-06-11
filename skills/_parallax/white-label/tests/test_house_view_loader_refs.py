@@ -42,12 +42,12 @@ _LOADER_MD: Path = _REPO_ROOT / "skills" / "_parallax" / "house-view" / "loader.
 # The six most-edited consumer skills. Update this list (and add a test case)
 # when a new skill becomes load-bearing for loader.md references.
 _HIGH_CHURN_SKILLS: tuple[str, ...] = (
-    "morning-brief",
-    "portfolio-builder",
-    "should-i-buy",
-    "deep-dive",
-    "client-review",
-    "rebalance",
+    "parallax-morning-brief",
+    "parallax-portfolio-builder",
+    "parallax-should-i-buy",
+    "parallax-deep-dive",
+    "parallax-client-review",
+    "parallax-rebalance",
 )
 
 # ---------------------------------------------------------------------------
