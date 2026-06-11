@@ -176,7 +176,7 @@ Profile fit: <match / partial_match / no_match>
 Setup quality: <Grade A / B / C / D>
 
 Workflow derived from: Schwager (1989); Covel (2004).
-Last anchor-tested: 2026-04-07 NVDA.O/JPM.N | Last legal review: pending
+Last anchor-tested: 2026-04-07 (NVDA.O, JPM.N) | Last legal review: pending
 Tool sequence: list_macro_countries, get_company_info, get_technical_analysis, macro_analyst × N (N ≤ 3), get_score_analysis, get_stock_outlook, get_peer_snapshot
 Token cost: ~20-25 tokens (3 macro markets) / ~14-16 tokens (1 macro market)
 
