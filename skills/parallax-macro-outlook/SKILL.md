@@ -1,6 +1,6 @@
 ---
 name: parallax-macro-outlook
-description: "Full macro regime analysis with optional equity screening: country coverage, economic outlook, regime signals, factor tilt implications, and top-scoring equities in the target market via Parallax MCP tools. NOT for portfolio-level morning briefs (use /parallax-morning-brief), not for single stock analysis (use /parallax-deep-dive)."
+description: "Full macro regime analysis with optional equity screening: country coverage, economic outlook, regime signals, factor tilt implications, and top-scoring equities in the target market via Parallax MCP tools. Anchored on the regime question ('what is the regime in [market]?'). NOT for country/region equity discovery ('what should I buy in [country]?' — use /parallax-country-deep-dive), not for portfolio-level morning briefs (use /parallax-morning-brief), not for single stock analysis (use /parallax-deep-dive)."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -9,6 +9,7 @@ description: "Full macro regime analysis with optional equity screening: country
 
 ## When not to use
 
+- Country/region equity discovery ("what should I buy in [country]?") → use /parallax-country-deep-dive — that skill answers the allocation question with a view-tilted ranking; this skill answers the regime question, and its optional equity census is deliberately untilted
 - Portfolio morning brief → use /parallax-morning-brief
 - Single stock analysis → use /parallax-deep-dive or /parallax-should-i-buy
 - Thematic screening across all markets → use /parallax-thematic-screen
@@ -22,7 +23,7 @@ description: "Full macro regime analysis with optional equity screening: country
 - macro_analyst summary call returns all 9 components inline — do not make separate per-component calls
 - get_telemetry shows how macro regime affects the scoring engine
 - Smaller/EM markets may have fewer scored equities — set expectations
-- JIT-load `_parallax/house-view/loader.md` if an active CIO view is present. macro-outlook is a pure macro skill (no portfolio holdings, no single-stock anchor), so neither §3 multipliers nor §7 single-stock conflict-surfacing fit cleanly. Apply a **macro-regime-alignment mode** (defined inline below — call it §7.4 by analogy) — render a divergence note when the view's stated macro regime contradicts live `get_telemetry.regime_tag`. No scoring math is altered. Standard surface: §2 (load + validate), §5 (preamble), §6 (audit log).
+- JIT-load `_parallax/house-view/loader.md` if an active CIO view is present. macro-outlook answers the regime question, so neither §3 multipliers nor §7 single-stock conflict-surfacing apply: the macro narrative reflects live data, and the optional Batch C equity census is **deliberately untilted** — it is an illustrative exhibit of which equities score well in this regime, not a discovery ranking. A user who wants the view-tilted "what should I buy in [country]" ranking belongs in /parallax-country-deep-dive (that skill applies §3 to its Top Opportunities by design). Apply a **macro-regime-alignment mode** (defined inline below — call it §7.4 by analogy) — render a divergence note when the view's stated macro regime contradicts live `get_telemetry.regime_tag`. No scoring math is altered. Standard surface: §2 (load + validate), §5 (preamble), §6 (audit log).
 - **§7.4 macro-regime-alignment mode (this skill's pattern, not in loader.md):** if the active view's basis_statement or stated macro regime (e.g., "recessionary", "expansion", "stagflation", from `view.macro_regime` if present) materially conflicts with the regime returned by `get_telemetry.regime_tag`, render a "View regime: <X> | Live regime: <Y>" line directly under the House View Preamble at the very top of Output Format. The user is informed of the disagreement; the analytical content still reflects live data (live wins for macro narrative). If no view, or view is silent on macro regime, omit the line.
 - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
 - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
@@ -66,7 +67,7 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 
 ### Batch C — Equity opportunities (optional, after Batch B)
 
-If requested: call `build_stock_universe` with "[country] equities". For top 5: `get_peer_snapshot` (parallel). For top 3: `get_score_analysis` 26 weeks (parallel).
+If requested: call `build_stock_universe` with `query="[country] equities"`. For top 5: `get_peer_snapshot` AND `get_company_info` per symbol (all parallel — `get_company_info` is the ground-truth oracle per loader.md §5 rule 3, required view or no view whenever per-holding scores render). Cross-check each `get_peer_snapshot.target_company` against the name-of-record; on mismatch, flag ⚠ MISMATCH and recover per rule 3. For top 3: `get_score_analysis` 26 weeks (parallel). The census stays untilted regardless of view state (see Gotchas — tilted discovery is /parallax-country-deep-dive's job).
 
 ### Post-Workflow — §7.4 Regime alignment check
 
@@ -90,7 +91,8 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 - **Deep Dive** (macro indicators, fixed income, tactical components as requested)
 - **Factor Regime Interaction** (which factors are favored/disfavored in this environment)
 - **Positioning Implications** (what this means for portfolio construction)
-- **Top Equity Opportunities** (if equity screening included: table with symbol, name, sector, score, trend)
+- **Ground-truth Integrity** (only if equity screening included AND any mismatch detected — table: `input_ticker`, `returned_name`, `expected_name`, status, per loader.md §5 rule 3)
+- **Top Equity Opportunities** (if equity screening included: table with symbol, name, sector, score, trend — names are the `get_company_info` names-of-record; ⚠ MISMATCH rows flagged inline; untilted by design)
 - **Data Freshness** (when macro data was last updated)
 - **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
 

@@ -64,9 +64,9 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 | `/parallax-should-i-buy` | **29** | 4 outlook aspects + 2 macro markets + news + technicals (5) |
 | `/parallax-earnings-quality` | **24** | Palepu (5) + assessment (10) + news (5) |
 | `/parallax-due-diligence` | **31** | 4 financials + Palepu + stock report (10) |
-| `/parallax-country-deep-dive` | **34** | 3 macro calls + universe build + 5 peer snapshots |
+| `/parallax-country-deep-dive` | **29** | 1 macro summary call (SKILL.md mandates summary mode, not per-component) + universe build + 5 peer snapshots + 5 company-info ground-truth checks + 3 score trends |
 | `/parallax-deep-dive` | **45** | Assessment (10) + technicals (5) + 3 macro markets |
-| `/parallax-macro-outlook` | **41** | 4 macro calls + telemetry (1); less without equities (28) |
+| `/parallax-macro-outlook` | **46** | 4 macro calls + telemetry (1) + 5 company-info ground-truth checks in equities mode; without equities (28) |
 
 ### Portfolio Workflows (10 holdings)
 
