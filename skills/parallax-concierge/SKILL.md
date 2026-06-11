@@ -72,6 +72,8 @@ Route based on their answer (this table is internal routing — don't show it to
 | Due diligence / research report | `/parallax-due-diligence` |
 | Earnings / accruals / red flags | `/parallax-earnings-quality` |
 | Peers / compare | `/parallax-peer-comparison` |
+| Credit risk / lender or bond-holder lens | `/parallax-credit-lens` |
+| Hedge it / pair trade for a name | `/parallax-pair-finder` |
 | Why does it score / explain factor | `/parallax-score-explainer` |
 | Investor-style read | route to 🎩 Investor profile branch |
 
@@ -90,8 +92,20 @@ User picks Portfolio → ask one question:
 | Morning brief / daily | `/parallax-morning-brief` |
 | Rebalance / trades | `/parallax-rebalance` |
 | Stress test / what if | `/parallax-scenario-analysis` |
+| CIO / quarterly letter prep | `/parallax-cio-letter-prep` |
 
 Ask for holdings if not provided.
+
+**House-view operations** (internal routing — these are CIO/operator workflows, reachable from any branch when the ask is about the house view itself, not a portfolio):
+
+| If they say… | Run |
+|---|---|
+| Load / update / ingest our CIO view | `/parallax-load-house-view` |
+| Is the view stale / judge it vs live signals | `/parallax-judge-house-view` |
+| Synthesize a Parallax baseline view | `/parallax-make-house-view` |
+| Stress-test the view for contradictions | `/parallax-stress-house-view` |
+| Portfolio with vs without the view | `/parallax-house-view-diff` |
+| Compare two firms' views | `/parallax-make-house-view --compare` |
 
 ## 🌍 Discovery branch
 
