@@ -13,8 +13,8 @@ REPO = Path(__file__).resolve().parent.parent.parent.parent.parent
 SKILLS_DIR = REPO / "skills"
 DISABLED_DIR = SKILLS_DIR / ".disabled"
 SHARED_DIR = REPO / "skills" / "_parallax" / "house-view"
-MAKER_DIR = REPO / "skills" / "make-house-view"
-JUDGE_DIR = REPO / "skills" / "judge-house-view"
+MAKER_DIR = REPO / "skills" / "parallax-make-house-view"
+JUDGE_DIR = REPO / "skills" / "parallax-judge-house-view"
 
 for _path in (SHARED_DIR, MAKER_DIR, JUDGE_DIR):
     if str(_path) not in sys.path:
@@ -150,7 +150,7 @@ def test_disable_maker_leaves_judge_functional(tmp_path: Path, monkeypatch: pyte
     monkeypatch.setenv("PARALLAX_HOUSE_VIEW_DIR", str(tmp_path))
     seed_active_view_from_golden(tmp_path)
 
-    with temporarily_disabled("make-house-view"):
+    with temporarily_disabled("parallax-make-house-view"):
         import judge
         
         config = judge.JudgeConfig(
@@ -175,7 +175,7 @@ def test_disable_judge_leaves_maker_functional_and_consumers_skip_gracefully(tmp
     """
     monkeypatch.setenv("PARALLAX_HOUSE_VIEW_DIR", str(tmp_path))
 
-    with temporarily_disabled("judge-house-view"):
+    with temporarily_disabled("parallax-judge-house-view"):
         import maker
         import gate_present
         
@@ -209,7 +209,7 @@ def test_disable_judge_leaves_maker_functional_and_consumers_skip_gracefully(tmp
         pattern_md = (SHARED_DIR / "auto-on-load-judge-pattern.md").read_text()
         assert "not installed; drift check skipped" in pattern_md
         assert ("Do NOT fail" in pattern_md) or ("graceful" in pattern_md.lower())
-        assert not (SKILLS_DIR / "judge-house-view").exists()
+        assert not (SKILLS_DIR / "parallax-judge-house-view").exists()
 
 def test_disable_both_yields_structural_audit_parity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """With both make and judge disabled, load-house-view's ingest output
@@ -231,7 +231,7 @@ def test_disable_both_yields_structural_audit_parity(tmp_path: Path, monkeypatch
     """
     monkeypatch.setenv("PARALLAX_HOUSE_VIEW_DIR", str(tmp_path))
 
-    with temporarily_disabled("make-house-view"), temporarily_disabled("judge-house-view"):
+    with temporarily_disabled("parallax-make-house-view"), temporarily_disabled("parallax-judge-house-view"):
         run_load_house_view_against_fixture(
             fixture=None,
             view_dir=tmp_path,

@@ -46,8 +46,8 @@ import pytest
 import yaml
 
 REPO = Path(__file__).resolve().parent.parent.parent.parent.parent
-MAKER_DIR = REPO / "skills" / "make-house-view"
-JUDGE_DIR = REPO / "skills" / "judge-house-view"
+MAKER_DIR = REPO / "skills" / "parallax-make-house-view"
+JUDGE_DIR = REPO / "skills" / "parallax-judge-house-view"
 SHARED_DIR = REPO / "skills" / "_parallax" / "house-view"
 MAKER_FIXTURES = MAKER_DIR / "tests" / "fixtures"
 

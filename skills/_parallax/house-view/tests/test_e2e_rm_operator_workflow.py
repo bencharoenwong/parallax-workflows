@@ -49,8 +49,8 @@ import rfc8785
 import yaml
 
 REPO = Path(__file__).resolve().parent.parent.parent.parent.parent
-MAKER_DIR = REPO / "skills" / "make-house-view"
-JUDGE_DIR = REPO / "skills" / "judge-house-view"
+MAKER_DIR = REPO / "skills" / "parallax-make-house-view"
+JUDGE_DIR = REPO / "skills" / "parallax-judge-house-view"
 SHARED_DIR = REPO / "skills" / "_parallax" / "house-view"
 MAKER_FIXTURES = MAKER_DIR / "tests" / "fixtures"
 
@@ -523,7 +523,7 @@ def test_e2e_morning_brief_conditional_suggestion_contract(
     Batch B, or rewrites it in a way that masks the alignment-check
     dependency.
     """
-    brief_md = (REPO / "skills" / "morning-brief" / "SKILL.md").read_text()
+    brief_md = (REPO / "skills" / "parallax-morning-brief" / "SKILL.md").read_text()
 
     # (1) Trigger phrase: a ≥3 holdings quantifier in some form.
     # Accept "≥3 holdings", ">=3 holdings", "3 or more holdings", or

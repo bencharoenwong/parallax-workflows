@@ -13,7 +13,7 @@ import yaml
 import sys
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
-_STRESS_DIR = _REPO_ROOT / "skills" / "stress-house-view"
+_STRESS_DIR = _REPO_ROOT / "skills" / "parallax-stress-house-view"
 _HOUSE_VIEW_DIR = _REPO_ROOT / "skills" / "_parallax" / "house-view"
 for _p in (_HOUSE_VIEW_DIR, _STRESS_DIR):
     if str(_p) not in sys.path:
