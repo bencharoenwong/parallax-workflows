@@ -6,6 +6,9 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 ## 2026-06-11
 
+### Added
+- **`docs/security/audit-2026-06-11.md`** — refreshed security audit covering the PRs #44/#45/#46 merge range, including the public-repo information-disclosure perimeter check (`CRITICAL_FAILS=0`); `audit-latest.md` symlink repointed. Consumed by the pre-push security gate.
+
 ### Changed
 - **country-deep-dive vs macro-outlook boundary rewritten as allocation-vs-regime** — country-deep-dive answers "what should I buy in [country/region]?" (view-tilted Top Opportunities per loader.md §3); macro-outlook answers "what is the regime in [market]?" (optional equity census deliberately untilted, §7.4 alignment-note only). Both descriptions and "When not to use" sections cross-route on this boundary; the false "NOT for US-centric analysis" clause is gone; both skills carry a do-not-harmonize note so the deliberate house-view divergence survives future consistency passes.
 - **`loader.md` §5 rule 3 gains the mismatch-recovery protocol** — exclude mismatched holdings from portfolio aggregates (§3b renormalisation); re-derive per-holding display scores by symbol match from `get_peer_snapshot.peer_list[]` when available, else mark "scores unavailable". Previously stated only in individual consumer SKILL.md files. `applied_reason` in §6.2 now covers the no-view consume row (`"no_view"`) that §6.1 already anticipated.
