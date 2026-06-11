@@ -17,7 +17,7 @@ description: "Thematic stock screen and trade-idea generation: build a stock uni
 ## Gotchas
 
 - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
-- JIT-load _parallax/house-view/loader.md FIRST. Rules 3 (ground-truth panel) and 4 (divergence assertion) in §5 apply UNIVERSALLY (view or no view — data-integrity requirements). Rules 1-2 and 5 apply when a view is active. Multi-sector theme queries can collapse to a single sector — divergence assertion must fire regardless of view. The user-supplied theme is sovereign per §4 — render conflict banner if theme contradicts view tilts.
+- JIT-load _parallax/house-view/loader.md FIRST. Rules 3 (ground-truth check) and 4 (divergence assertion) in §5 apply UNIVERSALLY (view or no view — data-integrity requirements). Rules 1-2 and 5 apply when a view is active. Multi-sector theme queries can collapse to a single sector — divergence assertion must fire regardless of view. The user-supplied theme is sovereign per §4 — render conflict banner if theme contradicts view tilts.
 - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
 - build_stock_universe searches ~65K company descriptions by semantic similarity
 - Default top_n is 5 — adjust for broader or narrower screens

@@ -70,7 +70,7 @@ The `view_status` helper emits the banner directly; this table documents the tie
 | `N ≥ 14` | `active` | "Active house view: '...' — N days remaining." | true |
 | `tilt_variance < 0.5` across non-zero tilts | (orthogonal warning, emitted in addition to the helper banner) | "Minimal differentiation; tilts will have weak portfolio effect." | n/a |
 
-**Active-view banner is REQUIRED on every consumer skill load preamble.** It is not a "first call per session" courtesy — every load surfaces it. The portfolio-builder gotcha already enforces this for one skill; the helper makes it cheap to enforce everywhere.
+**Active-view banner is REQUIRED on every consumer skill load preamble.** It is not a "first call per session" courtesy — every load surfaces it. The parallax-portfolio-builder gotcha already enforces this for one skill; the helper makes it cheap to enforce everywhere.
 
 **Why the helper, not inline math:** date arithmetic and threshold comparisons in markdown are an operator-LLM trust assumption. Shelling out to `view_status` (pure stdlib + PyYAML, no network) returns the same banner whether the operator is Claude / GPT / Gemini / local model. See `tests/test_view_status.py` for the boundary cases (9 / 10 / 13 / 14 days).
 
@@ -80,7 +80,7 @@ The `view_status` helper emits the banner directly; this table documents the tie
 
 ### Framework components
 
-The four components (`econometrics_phase`, `valuation_state`, `market_entropy`, `psychological_wavelength` — kept as field identifiers for data-contract stability) are **encoding-only**. Extractors populate them at ingest from CIO prose (see `skills/load-house-view/SKILL.md`); they are stored in `view.yaml` for forward-compatibility but are NOT translated into factor multipliers, universe effects, or consumer-skill output by the current loader.
+The four components (`econometrics_phase`, `valuation_state`, `market_entropy`, `psychological_wavelength` — kept as field identifiers for data-contract stability) are **encoding-only**. Extractors populate them at ingest from CIO prose (see `skills/parallax-load-house-view/SKILL.md`); they are stored in `view.yaml` for forward-compatibility but are NOT translated into factor multipliers, universe effects, or consumer-skill output by the current loader.
 
 Rationale: MCP equity-only scope doesn't yet carry expected-return / volatility inputs needed for a full multi-component composite. Asset-class component weights are deployment-specific judgment calls that downstream users should calibrate themselves. Guessing at a partial formula risks silently miscalibrating portfolio math.
 
@@ -159,7 +159,7 @@ When `PARALLAX_LOADER_V2=1`, portfolio consumer skills call `get_peer_snapshot` 
 4. **Partial results**: if one or more holdings timed out or errored, compute the weighted average over successful calls only — renormalise weights to sum to 1.0 over successful holdings and annotate the composite as partial.
 5. **Apply tilts**: if an active view is present, apply the §3 factor-tilt multipliers to the composites.
 
-**For 10+ holdings**: parallelise all fan-out calls (cap at 8 concurrent calls, matching the `PARALLAX_LOADER_V2` default used by make-house-view and judge-house-view); if N≥2 calls time out, mark those holdings as "scores unavailable" and fall back to health-flags-only scoring (per `parallax-portfolio-checkup/references/health-flags.md`) for the missing positions.
+**For 10+ holdings**: parallelise all fan-out calls (cap at 8 concurrent calls, matching the `PARALLAX_LOADER_V2` default used by parallax-make-house-view and parallax-judge-house-view); if N≥2 calls time out, mark those holdings as "scores unavailable" and fall back to health-flags-only scoring (per `parallax-portfolio-checkup/references/health-flags.md`) for the missing positions.
 
 ---
 

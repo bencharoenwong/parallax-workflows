@@ -54,7 +54,7 @@ Per `loader.md` §1-§2. If view present, capture tilt vector, excludes, prose e
 | `get_telemetry` | fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences | Market regime |
 | `macro_analyst` | market (default: US), no component | Macro summary (returns all components inline including tactical — do not make separate per-component calls) |
 | `get_peer_snapshot` | per holding — **all N calls fan out in parallel within Batch A** | **Primary scoring source** for `PARALLAX_LOADER_V2=1`. Aggregate scores client-side per `loader.md` §3b. |
-| `get_company_info` | per holding — **all N calls fan out in parallel within Batch A** | **Ground-truth panel oracle** per loader.md §5 rule 3 (required universally, view or no view). Records `expected_name` to cross-check against `get_peer_snapshot.target_company`. |
+| `get_company_info` | per holding — **all N calls fan out in parallel within Batch A** | **Ground-truth check oracle** per loader.md §5 rule 3 (required universally, view or no view). Records `expected_name` to cross-check against `get_peer_snapshot.target_company`. |
 | `check_portfolio_redundancy` | `holdings` | Overlap detection |
 | `quick_portfolio_scores` | `holdings` | **Legacy/V1 path only**. Do NOT use if `PARALLAX_LOADER_V2=1` and view active. |
 
