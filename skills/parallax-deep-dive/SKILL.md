@@ -23,7 +23,7 @@ description: "Deep dive on a single position: company profile, peer comparison, 
 - get_assessment is async and uses Perplexity — may take 30-90s
 - get_assessment prompt should incorporate macro context, score trends, and dividend profile alongside existing data
 - For non-US symbols, apply HK ambiguity cross-check from shared conventions
-- Pre-Render step loads white-label branding via `_parallax/white-label/loader.py` → `load_visual_branding()` (the 6-key visual subset wrapper). Voice/typography/etc. are structurally absent — `branding["voice"]` raises `KeyError`. Snippet inlined per Tier 1 pilot convention (no JIT-load of integration-pattern.md from this skill). Provenance state-to-text mapping and Branding Header semantics follow integration-pattern.md §5 + §7.
+- Pre-Render step loads white-label branding via `_parallax/white-label/loader.py` → `load_visual_branding()` (the 6-key visual subset wrapper). Voice/typography/etc. are structurally absent — `branding["voice"]` raises `KeyError`. Provenance state-to-text mapping and Branding Header semantics follow integration-pattern.md §5 + §7.
 
 Thorough single-position analysis for fund managers using Parallax MCP tools.
 
