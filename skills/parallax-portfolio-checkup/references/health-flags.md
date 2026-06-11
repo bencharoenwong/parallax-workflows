@@ -2,7 +2,7 @@
 
 ## Health Flags
 
-5 flags evaluated against portfolio data. Each flag is binary (triggered or not).
+5 flags evaluated against portfolio data. Each flag is binary (triggered or not). The portfolio-level (verified-holdings weighted-average) definitions below are the canon used by `parallax-portfolio-checkup`. `parallax-client-review` and `parallax-rebalance` apply the same taxonomy and threshold values at **holding level** — their binding holding-level conditions live in `parallax-client-review/references/recommendation-matrix.md`; keep the two files in sync when changing any threshold value.
 
 | Flag | Condition | Source (V2 primary / V1 fallback) | Threshold |
 |---|---|---|---|

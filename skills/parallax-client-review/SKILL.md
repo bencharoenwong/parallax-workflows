@@ -67,7 +67,7 @@ Derive home markets from RIC suffixes. Call `macro_analyst` with component="tact
 
 ### Batch C — Health flags + drill-down (after A + B)
 
-1. Evaluate 5 health flags per holding: Low Score (≤5.0), Concentration (>15%), Redundancy (≥2 pairs), Value Trap (value ≤3.0), Macro Misalignment.
+1. Evaluate the 5 health flags **per holding** — binding flag conditions in `references/recommendation-matrix.md` (same taxonomy and threshold values as `parallax-portfolio-checkup/references/health-flags.md`, whose canonical portfolio-level weighted-average definitions apply to portfolio-checkup, not here): Low Score (holding total score ≤5.0), Concentration (holding weight >15%, or holding among the top-3 when their combined weight >45%), Redundancy (holding is part of a redundant pair), Value Trap (holding value score ≤3.0), Macro Misalignment (holding's sector has a negative tactical outlook). Per-holding flag counts drive priority and drill-down selection.
 2. **House-view alignment** (if view active): add View Misalignment (>25% off view-tilted target) and View Excluded (on tilts.excludes) as additional flags. Surface a portfolio-level "view alignment score" (% of weight in view-aligned positions).
 3. Flag redundancy as low-confidence if coverage <60%.
 4. Assign health status: **Healthy** (0) · **Monitor** (1-2) · **Attention** (3+). View Excluded counts as Attention regardless of other flags.

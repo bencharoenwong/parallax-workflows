@@ -10,12 +10,14 @@ Priority is determined by the number of overlapping health flags on a single hol
 | **Medium** | 2 flags overlap on one holding | Investigate, Trim |
 | **Low** | 1 flag only | Monitor, Hold |
 
-## Health Flags (same 5 as parallax-portfolio-checkup/references/health-flags.md)
+## Health Flags
+
+Same taxonomy and threshold values as `parallax-portfolio-checkup/references/health-flags.md`, applied at **holding level** so flags can be counted per holding for priority assignment. health-flags.md's canonical definitions are portfolio-level (verified-holdings weighted averages) and apply to parallax-portfolio-checkup; the holding-level conditions below are binding for parallax-client-review and parallax-rebalance.
 
 | Flag | Holding-Level Condition |
 |---|---|
 | Low Score | Holding total score ≤ 5.0 |
-| Concentration | Holding weight >15% |
+| Concentration | Holding weight >15%, OR holding among the top-3 when their combined weight >45% |
 | Redundancy | Holding is part of a redundant pair |
 | Value Trap | Holding value score ≤ 3.0 |
 | Macro Misalignment | Holding's sector flagged unfavourable by `macro_analyst` tactical |
