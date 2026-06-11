@@ -182,6 +182,8 @@ The chain artifact lands in `~/.parallax/reasoning-chains/<YYYY-MM>/<run_id>.yam
 
 Primary output is the markdown report at `~/.parallax/judge-reports/<bundle>/report.md`. In `--json` mode, the JSON sidecar is also written to stdout for downstream consumption. The audit row is the canonical machine surface.
 
+**AI-interaction disclosure:** `report.md` ends with the banner rendered per `parallax-conventions.md` §9.2. The per-cell judgments and Phase 5 recommendations are LLM-generated and the report is read directly by a natural person (the CIO/operator), so §9.2 applies even though this is an operator-facing artifact — the skill does NOT qualify for the config-artifact exemption (it emits an analysis report, not a gated configuration bundle; see conventions §9.2 exemption rationale). The `--json` sidecar is machine-consumed and carries no banner.
+
 ## Not on the roadmap
 
 - **Server-side `house_view_judge` MCP tool** — **CANCELLED, not deferred.** The judge runs client-side only. Bank clients schedule their own cron against `/parallax-judge-house-view --json` on their side. Rationale: methodology transparency for model-validation review (same reason maker is client-side), and zero cross-tenant blast radius from a broken judge run. See v2 plan §3.2.

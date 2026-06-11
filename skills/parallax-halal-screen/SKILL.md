@@ -43,8 +43,9 @@ These are the standard Shariah compliance thresholds used in this skill. They ar
 ```
 /parallax-halal-screen AAPL.O
 /parallax-halal-screen [{"symbol":"AAPL.O","weight":0.25},{"symbol":"JPM.N","weight":0.25},{"symbol":"JNJ.N","weight":0.25},{"symbol":"XOM.N","weight":0.25}]
-/parallax-halal-screen "build halal portfolio in Southeast Asian equities"
 ```
+
+Two modes: single-stock compliance check, or screening of existing holdings. Building a compliant portfolio from a universe is not a mode of this skill — use `/parallax-portfolio-builder` with a halal constraint, then screen the result here.
 
 ## Workflow
 
@@ -86,6 +87,6 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
-> *"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
+Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 
 > These are analytical outputs based on AAOIFI/DJIM screening thresholds applied to Parallax financial data, not investment advice or a fatwa. Consult a qualified Shariah advisor for binding rulings.

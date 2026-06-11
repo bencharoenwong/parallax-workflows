@@ -121,9 +121,13 @@ def test_negated_load_directives_do_not_satisfy_gate(text: str, expected: bool) 
 # §9.2 AI-interaction disclosure gate
 # ---------------------------------------------------------------------------
 
+# Matches either an inline disclaimer variant (bespoke wording stays inline
+# per conventions §9.1, e.g. pair-finder / scenario-analysis) or the standard
+# by-reference directive (`... parallax-conventions.md §9.1`).
 _ANALYSIS_DISCLAIMER_RE = re.compile(
     r"informational analysis based on Parallax"
-    r"|scenario-based analysis, not investment advice",
+    r"|scenario-based analysis, not investment advice"
+    r"|parallax-conventions\.md[`\s]*§9\.1",
     re.IGNORECASE,
 )
 
@@ -132,12 +136,29 @@ _NINE_TWO_REF_RE = re.compile(
     re.IGNORECASE,
 )
 
+# The full standard §9.1 sentence. Lives ONLY in parallax-conventions.md —
+# skills render it by reference (conventions §9.1 "Consumer skill reference
+# pattern"). Bespoke disclaimers (pair-finder, scenario-analysis, concierge)
+# do not contain this exact sentence and are unaffected.
+_NINE_ONE_CANONICAL_SENTENCE = (
+    "This is informational analysis based on Parallax factor scores, "
+    "not investment advice. All outputs should be reviewed by qualified "
+    "professionals before any investment decisions."
+)
+
 # Skills explicitly exempt from §9.2 because they emit config artifacts AND
 # gate any LLM-generated content behind an operator confirmation step before
-# downstream consumers render it. Adding a skill here must be paired with
-# updating the exemption rationale in `parallax-conventions.md §9.2` in the
-# same PR — the test gate and the spec text are co-load-bearing.
-_NINE_TWO_EXEMPT_SKILLS: frozenset[str] = frozenset({"white-label-onboard"})
+# downstream consumers render it. Entries are full skill directory names
+# (`parallax-*`) — they are compared against `skill_md.parent.name`. Adding
+# a skill here must be paired with updating the exemption rationale in
+# `parallax-conventions.md §9.2` in the same PR — the test gate and the spec
+# text are co-load-bearing.
+_NINE_TWO_EXEMPT_SKILLS: frozenset[str] = frozenset(
+    {
+        "parallax-white-label-onboard",
+        "parallax-make-house-view",
+    }
+)
 
 
 @pytest.mark.parametrize(
@@ -194,6 +215,46 @@ def test_wired_skill_renders_ai_disclosure(skill_md: Path) -> None:
 def test_nine_two_reference_pattern(text: str, expected: bool) -> None:
     """Unit-level coverage for the §9.2 reference detector."""
     assert bool(_NINE_TWO_REF_RE.search(text)) is expected
+
+
+def test_exempt_entries_match_existing_skill_dirs() -> None:
+    """Every exemption entry must name a real skill directory.
+
+    Guards against the dead-entry failure mode: an entry that doesn't match
+    any `skill_md.parent.name` silently never fires, and the skill it was
+    meant to exempt fails (or worse, a rename strands the exemption while
+    the test appears green because the skill also lost its sentinel).
+    """
+    existing = {p.parent.name for p in _SKILLS_ROOT.glob("*/SKILL.md")}
+    dead = _NINE_TWO_EXEMPT_SKILLS - existing
+    assert not dead, (
+        f"_NINE_TWO_EXEMPT_SKILLS entries with no matching skill directory: "
+        f"{sorted(dead)}. Entries must be full directory names (parallax-*). "
+        f"Fix the entry or remove it (and update the exemption rationale in "
+        f"parallax-conventions.md §9.2 in the same PR)."
+    )
+
+
+def test_no_skill_inlines_standard_disclaimer() -> None:
+    """§9.1 standard wording must not be inlined in any SKILL.md.
+
+    Per conventions §9.1 "Consumer skill reference pattern": the canonical
+    sentence lives only in parallax-conventions.md; skills render it by
+    reference so a counsel-driven wording change propagates with one edit.
+    Bespoke disclaimers (different wording, owned by the skill) are allowed —
+    this gate only matches the exact standard sentence.
+    """
+    offenders = [
+        skill_md.parent.name
+        for skill_md in sorted(_SKILLS_ROOT.glob("*/SKILL.md"))
+        if _NINE_ONE_CANONICAL_SENTENCE in skill_md.read_text(encoding="utf-8")
+    ]
+    assert not offenders, (
+        f"SKILL.md files inlining the standard §9.1 disclaimer: {offenders}. "
+        f"Replace the inline blockquote with the by-reference directive, "
+        f"e.g.: 'Render the standard disclaimer verbatim from "
+        f"`parallax-conventions.md` §9.1.'"
+    )
 
 
 

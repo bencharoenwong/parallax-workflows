@@ -62,7 +62,7 @@ Because the formula is explicitly mechanical, this profile has zero discretion �
 
 - **Greenblatt's discretionary judgment.** Greenblatt runs Gotham Capital as a discretionary value investor; the Magic Formula is his simplified systematic version for retail. Not a full replica.
 - **Intangibles-adjusted EY.** Per Lev & Srivastava (2022), traditional earnings yield understates intangibles-heavy firms. The formula is applied as published — not intangibles-adjusted — so high-quality compounders may rank lower than a modernized version would place them.
-- **Small-cap premium.** Gray & Carlisle (2012) show the outperformance is stronger in small-caps. This profile runs on whatever universe is queried; default is mid-to-large-cap US equities.
+- **Small-cap premium.** Gray & Carlisle (2012) show the outperformance is stronger in small-caps. This profile runs on whatever universe is queried. The dispatcher's production default is sector-scoped ("US large-cap consumer staples") because broad universe queries — e.g., all mid-to-large-cap US equities — consistently time out against the async universe builder (see the dispatcher SKILL.md query-scoping rule). For a broad Magic Formula screen, the dispatcher runs sector-by-sector and merges the rankings.
 - **Sector exclusions enforcement.** Greenblatt's book excludes financials and utilities. Default universe build excludes them; custom queries may not.
 - **Holding period / rebalancing.** Formula implies annual rebalance; profile is stateless (current ranks only).
 
@@ -83,4 +83,4 @@ Greenblatt's Magic Formula has public replication sites. Expected behavior:
 
 ## Thresholds (to be tuned during anchor test)
 
-The ROC and EY percentiles are computed within the queried universe. The thresholds above are the formula itself — they aren't adjustable. What IS adjustable is the universe definition (market cap cutoffs, sector exclusions, geography). Task 4 anchor test will establish a sensible default.
+The ROC and EY percentiles are computed within the queried universe. The thresholds above are the formula itself — they aren't adjustable. What IS adjustable is the universe definition (market cap cutoffs, sector exclusions, geography). The dispatcher's default universe is sector-scoped for production reliability (see "Small-cap premium" above); broad screens go through the dispatcher's sector-by-sector merge path.
