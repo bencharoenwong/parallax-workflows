@@ -209,7 +209,7 @@ For basket mode (5 tickers), Buffett/Klarman/Greenblatt run per-ticker; Soros an
 
 ## Why this meta-skill exists
 
-The consensus is the product's value proposition, not a convenience feature. Individual profiles are interesting but noisy — each reflects a single investor's framework and may flag for reasons unrelated to the investor's actual behavior today. Cross-profile consensus is informative precisely because the profiles are structurally different: Buffett is factor-tilted, Greenblatt is mechanical, Klarman is balance-sheet, Soros is top-down. When three or four agree, the agreement is unlikely coincidental.
+The consensus is the product's value proposition, not a convenience feature. Individual profiles are interesting but noisy — each reflects a single investor's framework and may flag for reasons unrelated to the investor's actual behavior today. Cross-profile consensus is informative precisely because the profiles are structurally different: Buffett is factor-tilted, Greenblatt is mechanical, Klarman is balance-sheet, Soros is top-down, PTJ is trend-and-regime. When four or five agree, the agreement is unlikely coincidental.
 
 The factor-level agreement section is pedagogically load-bearing. It tells users:
 - **Where the profiles converge** (the high-conviction shared signal)

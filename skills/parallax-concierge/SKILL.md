@@ -46,7 +46,7 @@ When the magic phrase arrives, respond in exactly this shape:
 **🔍 Stock** — research a single name
 **📊 Portfolio** — work with your holdings
 **🌍 Discovery** — hunt for ideas, screen by theme, read the macro regime
-**🎩 Investor profile** — Buffett / Greenblatt / Klarman / Soros style read
+**🎩 Investor profile** — Buffett / Greenblatt / Klarman / Soros / PTJ style read
 
 Pick a branch, or just describe what you're trying to do.
 
@@ -113,7 +113,7 @@ User picks Discovery → ask one question:
 User picks Investor profile → ask one question:
 
 > "Which lens — Buffett (quality+value), Greenblatt (magic formula), Klarman
-> (margin of safety), Soros (macro reflexivity), or all four?"
+> (margin of safety), Soros (macro reflexivity), PTJ (trend-following), or all five?"
 
 | If they say… | Run |
 |---|---|
@@ -121,6 +121,7 @@ User picks Investor profile → ask one question:
 | Greenblatt / magic formula | `/parallax-ai-greenblatt` |
 | Klarman / margin of safety | `/parallax-ai-klarman` |
 | Soros / macro reflexivity | `/parallax-ai-soros` |
+| PTJ / trend-following / macro-overlay | `/parallax-ai-ptj` |
 | All / consensus / compare | `/parallax-ai-consensus` |
 
 These are AI-inferred profiles using public information — every output is third-person
@@ -155,7 +156,7 @@ Prioritize in this order:
 - "Check how your current book looks in this regime?"
 
 **After an Investor-profile skill:**
-- "Run the other three profiles for consensus, or move on?"
+- "Run the other four profiles for consensus, or move on?"
 - "Compare against peers in the same factor space?"
 
 Always 2-3 options. Never 6.
@@ -172,7 +173,7 @@ Always 2-3 options. Never 6.
 - **If they name a skill directly**, skip routing and run it.
 - **Greeting + payload shortcut.** If the greeting carries an obvious payload, skip
   the menu and route directly. Priority order (first match wins):
-  - Investor-lens keyword + ticker (Buffett / Greenblatt / Klarman / Soros) →
+  - Investor-lens keyword + ticker (Buffett / Greenblatt / Klarman / Soros / PTJ) →
     matching `/parallax-ai-<name> <ticker>`, then nudges
   - Two or more tickers (e.g. "Hi Parallax, AAPL vs MSFT") →
     `/parallax-peer-comparison` with the list, then nudges
@@ -190,6 +191,6 @@ Always 2-3 options. Never 6.
 
 ## Disclaimer
 
-All outputs from invoked workflows carry their own disclaimers and should be
-independently verified before any investment decision. The concierge itself is a
-router — it does not generate investment opinions.
+Render AI-interaction disclosure per parallax-conventions.md §9.2 immediately above the disclaimer.
+
+*This concierge is a routing interface that navigates to Parallax research skills; it does not generate investment analysis or opinions. All sub-skill outputs are informational only, not investment advice, and should be reviewed by qualified professionals before any investment decisions.*
