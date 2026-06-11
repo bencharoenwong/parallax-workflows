@@ -4,6 +4,19 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-06-11
+
+### Fixed
+- **AI-profile `description` routing clauses** — all five profile SKILL.md files (`parallax-ai-buffett`, `parallax-ai-greenblatt`, `parallax-ai-klarman`, `parallax-ai-ptj`, `parallax-ai-soros`) and `parallax-ai-consensus` now carry `NOT for...` / `For all five profiles use /parallax-ai-consensus` routing clauses in their frontmatter `description`. Prevents misdirected invocations (single-profile slug when consensus is wanted, AI-profile when portfolio health check is wanted).
+- **Anchor-tested / legal-review footer lines added to all five profiles** — `Last anchor-tested` and `Last legal review` footer lines now appear in every profile's output template section, making the compliance posture visible per render rather than only in `AI-profiles/README.md`.
+- **Greenblatt methodology footer placeholder replaced** — both output modes (`universe` and `ticker-check`) previously rendered a bare "Methodology footer" placeholder. Replaced with the actual workflow citation, anchor-test date, tool sequence, and token cost (`~10-30 tokens` universe / `~10-15 tokens` ticker-check).
+- **Soros single-ticker mode missing tool sequence and token cost** — the single-ticker output template was missing the methodology footer entirely. Added `Workflow derived from`, `Last anchor-tested`, `Tool sequence`, and `Token cost: ~25-30 tokens`.
+- **`/parallax-house-view-diff` token cost row corrected** — `token-costs.md` row now reads `2× child` (not `0`) and spells out the arithmetic (`2 × 36 = 72 tokens` example with `/parallax-portfolio-builder`).
+- **`loader.md` concurrent call cap note tightened** — cap description now explicitly notes it matches the `PARALLAX_LOADER_V2` default used by `make-house-view` and `judge-house-view`; path reference for `health-flags.md` corrected to relative form.
+- **AI-profiles README token cost table** — `parallax-ai-greenblatt` universe mode updated from `~15-30` to `~10-30` tokens to match the value now in the SKILL.md.
+
+---
+
 ## 2026-06-10
 
 ### Fixed

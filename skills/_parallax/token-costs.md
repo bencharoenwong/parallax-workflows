@@ -87,7 +87,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 | Workflow | Tokens (typical) | Key cost drivers |
 |---|---|---|
 | `/parallax-load-house-view` | **0** | File I/O only — no chargeable MCP calls |
-| `/parallax-house-view-diff` | **0** (2× child cost) | Runs two portfolio workflow legs (Leg A without view, Leg B with view); actual user cost is 2× the child workflow's cost (e.g. ~72 tokens for `/parallax-portfolio-builder`) |
+| `/parallax-house-view-diff` | **2× child** | Runs the target skill twice (Leg A without view, Leg B with view) — no additional Parallax tokens beyond the child, but total cost doubles: e.g. 2 × 36 = **72 tokens** with `/parallax-portfolio-builder`. |
 | `/parallax-stress-house-view` | **~30** (scales with tilted markets) | `check_macro_health` (5) + `get_telemetry` (1) + `macro_analyst` × tilted markets (5 each); cap 12 markets |
 | `/parallax-judge-house-view` | **~352** | Same recipe as make: 14 markets × 5 components + telemetry |
 | `/parallax-make-house-view` | **~352** (scales with `--markets`) | `list_macro_countries` (0) + `get_telemetry` (1) + `macro_analyst` × 14 markets × 5 components (350); `--markets` flag reduces the market set and scales cost proportionally |

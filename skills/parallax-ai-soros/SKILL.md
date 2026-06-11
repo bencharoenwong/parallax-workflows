@@ -1,6 +1,6 @@
 ---
 name: parallax-ai-soros
-description: "Applies George Soros's top-down reflexivity framework (per 'The Alchemy of Finance', 1987) to current Parallax data. Triggers: 'trade ideas based on current macro regime', 'regime-driven stock picks', 'reflexivity-lens stock ideas'. Two modes: basket mode surfaces regime themes and ranked trade ideas; single-ticker mode runs the same macro workflow and checks ticker exposure via dual channels (industry exposure AND telemetry basket theme). Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized."
+description: "Applies George Soros's top-down reflexivity framework (per 'The Alchemy of Finance', 1987) to current Parallax data. Triggers: 'trade ideas based on current macro regime', 'regime-driven stock picks', 'reflexivity-lens stock ideas'. Two modes: basket mode surfaces regime themes and ranked trade ideas; single-ticker mode runs the same macro workflow and checks ticker exposure via dual channels (industry exposure AND telemetry basket theme). Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized. Accepts plain tickers or RIC format. NOT for bottom-up factor analysis (use /parallax-deep-dive). For all five profiles simultaneously use /parallax-ai-consensus."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -136,6 +136,7 @@ Ranked trade ideas:
 [same structure]
 
 Workflow derived from: Soros (1987); Drobny (2006).
+Last anchor-tested: 2026-04-07 (NVDA.O, TSLA.O) | Last legal review: pending
 Tool sequence: list_macro_countries, macro_analyst × N, get_telemetry, build_stock_universe × N, get_peer_snapshot × M
 Token cost: ~25-40 tokens
 
@@ -172,6 +173,9 @@ Profile fit: <match / partial_match / no_match>
   - no_match: neither channel flagged (Soros-style lens has no current view)
 
 Workflow derived from: Soros (1987); Drobny (2006).
+Last anchor-tested: 2026-04-07 (NVDA.O, TSLA.O) | Last legal review: pending
+Tool sequence: list_macro_countries, macro_analyst × N, get_company_info, get_telemetry, get_peer_snapshot
+Token cost: ~25-30 tokens (single-ticker mode)
 
 ---
 This output is an AI-inferred interpretation of George Soros's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by George Soros or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.

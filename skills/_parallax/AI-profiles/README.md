@@ -32,7 +32,7 @@ A profile can ship ONLY if:
 |---|---|
 | `parallax-ai-buffett` | ~4 tokens |
 | `parallax-ai-greenblatt` (ticker-check) | ~10-15 tokens |
-| `parallax-ai-greenblatt` (universe mode) | ~15-30 tokens |
+| `parallax-ai-greenblatt` (universe mode) | ~10-30 tokens |
 | `parallax-ai-klarman` | ~5-7 tokens |
 | `parallax-ai-soros` (single-ticker) | ~25-30 tokens |
 | `parallax-ai-soros` (basket mode) | ~30-40 tokens |

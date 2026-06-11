@@ -1,6 +1,6 @@
 ---
 name: parallax-ai-greenblatt
-description: "Applies Joel Greenblatt's Magic Formula (per 'The Little Book That Beats the Market', 2006; academic replication Gray & Carlisle 2012) to Parallax data. Two modes: universe mode returns a top-decile ranked basket; ticker-check mode reports whether a single stock falls in the top decile of its peer universe by combined ROC + earnings yield rank. Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized. Accepts no args (universe mode) or a single ticker."
+description: "Applies Joel Greenblatt's Magic Formula (per 'The Little Book That Beats the Market', 2006; academic replication Gray & Carlisle 2012) to Parallax data. Two modes: universe mode returns a top-decile ranked basket; ticker-check mode reports whether a single stock falls in the top decile of its peer universe by combined ROC + earnings yield rank. Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized. Accepts no args (universe mode) or a single ticker. NOT for portfolio-level health check (use /parallax-portfolio-checkup). For all five profiles simultaneously use /parallax-ai-consensus."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -120,7 +120,10 @@ Top decile by combined ROC + earnings yield rank:
 | 2    | YYY.O   | 4        | 3       | 7        | Technology      |
 | ...  | ...     | ...      | ...     | ...      | ...             |
 
-Methodology footer (tool sequence, token cost, anchor-test date)
+Workflow derived from: Greenblatt, J. (2006). The Little Book That Beats the Market; Gray & Carlisle (2012).
+Last anchor-tested: 2026-04-06 (CSCO.O, MSFT.O, NVDA.O) | Last legal review: pending
+Tool sequence: build_stock_universe, get_peer_snapshot × N, get_financials(ratios) × N
+Token cost: ~10-30 tokens (universe mode) / ~10-15 tokens (ticker-check mode)
 
 ---
 This output is an AI-inferred interpretation of Joel Greenblatt's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by Joel Greenblatt or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.
@@ -142,7 +145,10 @@ Universe size: <N>
 
 Profile fit: <match/partial_match/no_match> — <ticker> is in the [top 10% | top 25% | below top 25%] of the peer universe by Greenblatt combined rank.
 
-Methodology footer
+Workflow derived from: Greenblatt, J. (2006). The Little Book That Beats the Market; Gray & Carlisle (2012).
+Last anchor-tested: 2026-04-06 (CSCO.O, MSFT.O, NVDA.O) | Last legal review: pending
+Tool sequence: get_peer_snapshot, get_financials(ratios) × N
+Token cost: ~10-15 tokens
 
 ---
 This output is an AI-inferred interpretation of Joel Greenblatt's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by Joel Greenblatt or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.
