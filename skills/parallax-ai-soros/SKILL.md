@@ -136,7 +136,7 @@ Ranked trade ideas:
 [same structure]
 
 Workflow derived from: Soros (1987); Drobny (2006).
-Last anchor-tested: 2026-04-07 | Last legal review: pending
+Last anchor-tested: 2026-04-07 NVDA.O/TSLA.O | Last legal review: pending
 Tool sequence: list_macro_countries, macro_analyst × N, get_telemetry, build_stock_universe × N, get_peer_snapshot × M
 Token cost: ~25-40 tokens
 
@@ -173,7 +173,7 @@ Profile fit: <match / partial_match / no_match>
   - no_match: neither channel flagged (Soros-style lens has no current view)
 
 Workflow derived from: Soros (1987); Drobny (2006).
-Last anchor-tested: 2026-04-07 | Last legal review: pending
+Last anchor-tested: 2026-04-07 NVDA.O/TSLA.O | Last legal review: pending
 Tool sequence: list_macro_countries, macro_analyst × N, get_company_info, get_telemetry, get_peer_snapshot
 Token cost: ~25-30 tokens (single-ticker mode)
 
