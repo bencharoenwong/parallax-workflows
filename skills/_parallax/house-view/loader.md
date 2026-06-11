@@ -149,6 +149,18 @@ These deltas STACK with explicit factor tilts — uploader can override at confi
 **Equity-only scope note (always shown at ingest):**
 > "This system applies house view within equity portfolios only. Macro regime signals are interpreted as within-equity factor tilts (e.g., recession → overweight DEFENSIVE). Cross-asset allocation (fixed income, FX, credit, commodities, alternatives) is deliberately outside scope. If the source document carries views on non-equity asset classes (full TAA workbooks typically do), those views are NOT captured by this schema and must be applied via a separate allocation layer."
 
+### §3b. Client-side portfolio score aggregation (`PARALLAX_LOADER_V2`)
+
+When `PARALLAX_LOADER_V2=1`, portfolio consumer skills call `get_peer_snapshot` per holding (fanned out in parallel) rather than `quick_portfolio_scores`. Aggregate the per-holding scores client-side as follows:
+
+1. **Collect** `VALUE`, `QUALITY`, `MOMENTUM`, `DEFENSIVE` from each successful `get_peer_snapshot` response. Apply the factor alias collapse from §3 above (`quality → profitability`, `defensive → low_volatility`) before aggregating.
+2. **Weight** each factor score by the holding's portfolio weight.
+3. **Sum** the weighted scores: `portfolio_VALUE = Σ(weight_i × value_i)` etc.
+4. **Partial results**: if one or more holdings timed out or errored, compute the weighted average over successful calls only — renormalise weights to sum to 1.0 over successful holdings and annotate the composite as partial.
+5. **Apply tilts**: if an active view is present, apply the §3 factor-tilt multipliers to the composites.
+
+**For 10+ holdings**: parallelise all fan-out calls (cap 8 concurrent calls); if N≥2 calls time out, mark those holdings as "scores unavailable" and fall back to health-flags-only scoring for the missing positions (per `skills/parallax-portfolio-checkup/references/health-flags.md`).
+
 ---
 
 ## 4. Conflict resolution: user constraints vs. view tilts

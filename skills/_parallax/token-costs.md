@@ -82,6 +82,18 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 | `/parallax-rebalance` | **76** | 10 score trends + replacements + validation re-score |
 | `/parallax-client-review` | **105** | 8 drill-downs + 5 news + assessment + 2x analyze |
 
+### House View Workflows
+
+| Workflow | Tokens (typical) | Key cost drivers |
+|---|---|---|
+| `/parallax-load-house-view` | **0** | File I/O only — no chargeable MCP calls |
+| `/parallax-house-view-diff` | **0** (2× child cost) | Runs two portfolio workflow legs (Leg A without view, Leg B with view); actual user cost is 2× the child workflow's cost (e.g. ~72 tokens for `/parallax-portfolio-builder`) |
+| `/parallax-stress-house-view` | **~30** (scales with tilted markets) | `check_macro_health` (5) + `get_telemetry` (1) + `macro_analyst` × tilted markets (5 each); cap 12 markets |
+| `/parallax-judge-house-view` | **~352** | Same recipe as make: 14 markets × 5 components + telemetry |
+| `/parallax-make-house-view` | **~352** (scales with `--markets`) | `list_macro_countries` (0) + `get_telemetry` (1) + `macro_analyst` × 14 markets × 5 components (350); `--markets` flag reduces the market set and scales cost proportionally |
+
+> **Cost gotcha:** `/parallax-make-house-view` and `/parallax-judge-house-view` are the costliest workflows in the library at ~$70 each at Standard plan overage rates ($0.20/token). Run them intentionally — not as part of a routine check. For lightweight view assessment without full re-synthesis, prefer `/parallax-stress-house-view`.
+
 ### Cost Context
 
 With the **Standard plan** ($2,000/month, 2,000 included tokens, $0.20 overage):
