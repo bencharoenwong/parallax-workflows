@@ -44,6 +44,17 @@ Any skill calling `macro_analyst` or `build_stock_universe` with `country=` or `
 
 ---
 
+## 0.3 Validation before reporting done
+
+Before reporting any Parallax workflow complete:
+
+1. **Data integrity** — confirm the MCP batch returned real data, not an init race (per §0.1: an empty or interrupted first batch is re-fired in full before "no data" is concluded). Empty ≠ done.
+2. **House-view integrity** — when a house view is active, confirm the `view_status` banner was actually rendered in the output and not silently dropped. The `malformed` / `expired` / `critical` states MUST surface to the operator verbatim (loader.md §2.6) — never swallow an integrity failure to make a workflow look clean.
+
+Integrity failures are flagged explicitly in the output, not omitted. This is the Parallax-domain instance of the completion-claim discipline in `CLAUDE.verification.md` ("a passing metric is necessary, not sufficient"; verify, don't eyeball).
+
+---
+
 ## 1. RIC Resolution
 
 Parallax tools require Reuters Instrument Codes (RICs). When the user provides a plain ticker:
