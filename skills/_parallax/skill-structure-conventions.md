@@ -161,6 +161,14 @@ When a skill exposes a flag or mode that materially changes its output workflow 
 
 Proprietary pillar/factor vocabulary guard: trigger phrases ship verbatim to white-label deployments via the Codex matcher index. Do not embed proprietary signal names, factor decomposition labels, or pillar vocabulary in trigger strings. Generic finance language only.
 
+## Canonical source & path resolution
+
+`parallax-workflows/` is the single source of truth for every `parallax-*` skill and for the shared `_parallax/` conventions, house-view modules, schemas, and white-label loaders. `~/.claude/skills/` consumes them as symlinks into this repo — but symlink coverage is **partial**: `_parallax`, `parallax-should-i-buy`, and most consumer skills are symlinked, while a few (e.g. `parallax-template`, `parallax-deck-prep`) are `~/.claude`-native real directories. Treat that split as a hazard, not a convenience.
+
+1. **Resolve before you read or edit.** Before a should-i-buy / two-lens / house-view workflow JIT-loads any `_parallax/...` path, resolve it to the canonical `parallax-workflows/skills/_parallax/` file. Do not assume the installed skill directory contains it — `ls -l` / `readlink` the path when unsure (a directory symlink resolves its children through canonical; a native fork does not).
+2. **Never edit a forked or non-canonical copy.** Edits to shared conventions or to any symlinked skill land in `parallax-workflows`, never in a `~/.claude` copy that happens to be a real directory. A change written to a fork drifts silently from canonical and is invisible to every other consumer.
+3. **Verify the unit you graded is the unit that runs.** When auditing or editing a registered skill, first confirm whether `~/.claude/skills/<name>` is a symlink (edit canonical) or a native dir (edit in place, and flag whether it should be migrated to canonical). `cp -R` of a dir-symlink re-links to the same target — use `cp -RL` for a true throwaway copy. (Mirrors the "measure the deployed unit; check the directory symlink" rule in `CLAUDE.verification.md`.)
+
 ## Provenance
 
 - Council session: `notes/2026-05-06-1023-council-white-label-restructure.md`
