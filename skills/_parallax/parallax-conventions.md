@@ -4,6 +4,18 @@ Shared patterns for all `parallax-*` skills. JIT-load from any skill that calls 
 
 ---
 
+## 0.0 Pre-flight (before any data gathering)
+
+Run this once at the top of any should-i-buy / two-lens / house-view / portfolio workflow, **before the first data call** — not as a mid-run recovery:
+
+1. **Resolve paths.** Resolve every `_parallax/...` conventions and house-view path to the canonical `parallax-workflows` copy (see `skill-structure-conventions.md` → "Canonical source & path resolution"). Do not assume the installed skill directory contains them.
+2. **Confirm MCP readiness.** Call `ToolSearch` with `"+Parallax"` and confirm the `mcp__claude_ai_Parallax__*` schemas have registered before the first tool call (§0.1). Treat an empty/interrupted first batch as a schema-registration race, not "no data" — re-fire the full batch once (§0.1).
+3. **Abort cleanly on a gap.** If a required convention/house-view file cannot be resolved, or the Parallax tools have still not registered after the §0.1 re-fire, **stop and tell the operator exactly what is missing.** Do not silently proceed on partial inputs or fall through to fabricated data.
+
+Most should-i-buy failures trace to one of two causes this pre-flight removes — missing convention/house-view files, and MCP calls racing schema registration. Converting those mid-run recoveries into one up-front check is what prevents sessions that burn the turn budget before producing output. This is the open-side complement to §0.3 (validation before reporting done).
+
+---
+
 ## 0. Feature Flags
 
 Gemini CLI uses feature flags to roll out architectural changes. These can be set via environment variables or documented at the session start.
@@ -49,7 +61,7 @@ Any skill calling `macro_analyst` or `build_stock_universe` with `country=` or `
 Before reporting any Parallax workflow complete:
 
 1. **Data integrity** — confirm the MCP batch returned real data, not an init race (per §0.1: an empty or interrupted first batch is re-fired in full before "no data" is concluded). Empty ≠ done.
-2. **House-view integrity** — when a house view is active, confirm the `view_status` banner was actually rendered in the output and not silently dropped. The `malformed` / `expired` / `critical` states MUST surface to the operator verbatim (loader.md §2.6) — never swallow an integrity failure to make a workflow look clean.
+2. **House-view integrity** — when a house view is active, confirm the `view_status` banner was actually rendered in the output and not silently dropped. The `malformed` / `expired` / `critical` states MUST surface to the operator verbatim (loader.md §2 "Load-time validation", item 6) — never swallow an integrity failure to make a workflow look clean.
 
 Integrity failures are flagged explicitly in the output, not omitted. This is the Parallax-domain instance of the completion-claim discipline in `CLAUDE.verification.md` ("a passing metric is necessary, not sufficient"; verify, don't eyeball).
 
