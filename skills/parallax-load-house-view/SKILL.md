@@ -274,7 +274,7 @@ To clear:  /parallax-load-house-view --clear
 
 ### Status block (output of `--status`)
 
-The first line is the `view_status` helper's `banner` field, surfaced verbatim. The block below follows on the next lines. The helper emits one of seven states (`none`, `malformed`, `not_yet_effective`, `expired`, `critical`, `warning`, `active`) — see `_parallax/house-view/view_status.py` and loader.md §2.6 for the full taxonomy and wording. Do not paraphrase the banner.
+The first line is the `view_status` helper's `banner` field, surfaced verbatim. The block below follows on the next lines. The helper emits one of seven states (`none`, `malformed`, `not_yet_effective`, `expired`, `critical`, `warning`, `active`) — see `_parallax/house-view/view_status.py` and loader.md §2 for the full taxonomy and wording. Do not paraphrase the banner.
 
 ```
 <view_status.banner>
