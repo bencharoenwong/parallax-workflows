@@ -4,6 +4,27 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-06-14: Conventions-hardening + gate-integrity batch — pre-flight/validate-before-done, a section-ref lint, and full gate test coverage
+
+**Why.** A run of live-session failures and a post-merge multi-agent review surfaced four classes of latent risk: (1) should-i-buy workflows failing mid-run on missing convention files or MCP calls racing schema registration; (2) section cross-references that outlive their headings (three stale `§2.6` pointers, then fourteen stale `§5.1` pointers, none caught by manual review); (3) the pre-push gate's test command silently covering only ~285 of ~905 tests; (4) the gate's own agent hanging for hours on its LLM steps.
+
+**Impact.**
+- **§0.0 Pre-flight / §0.3 Validation-before-done** (parallax-conventions) + **Canonical source & path resolution** (skill-structure-conventions): an up-front path/MCP-readiness gate and a close-side integrity gate, plus an explicit rule to resolve `_parallax/...` to the canonical repo and never edit a `~/.claude`-native fork.
+- **`section-ref-lint.py`** hard-gates `<file>.md §N` references in `build-skills.sh`; it immediately caught the 14-skill `§5.1` dangler. A `### §5.1` anchor was added to `loader.md`, three `§2.6` refs retargeted to `§2`.
+- **`run-gate-tests.sh`** runs one pytest process per top-level test root → full coverage (905 tests, 7 suites); auto-discovery + a ≤1-conftest-per-root assertion make future partial coverage fail loud.
+- Gate agent set to **opencode / opencode-go/glm-5.1** per-repo via `.no-mistakes.yaml`.
+
+**Alternatives.**
+- `[DROP]` `--import-mode=importlib` for the conftest collision — **tested, still collides** on the `tests.conftest` plugin name (the `tests/` dirs aren't packages and parent dirs are hyphenated, blocking `__init__.py`/namespace fixes too). Per-process isolation is the fix.
+- `[DROP]` a hardcoded suite list in the runner — reintroduces the silent-miss risk being fixed; auto-discovery instead.
+- `[DROP]` renumbering the §0 cluster so `§0`/`§0.0` are numerically distinct — `§0.1`/`§0.2` are referenced by ~12 sibling skills; reordered (Feature Flags above Pre-flight) with zero number changes instead.
+- `[DROP]` intra-file `§N.M` checking in the lint — ~870 in-repo tokens, too many implicit cross-doc refs; scoped to the unambiguous cross-file `X.md §N` form.
+- `[DROP]` gate agent `kimi-k2.6` — rejects `tool_choice=required` (gate-incompatible per `opencode.jsonc`); `codex` is rate-limited, `claude` OOMs under multi-session load.
+
+**Flip conditions.** If a future top-level dir legitimately needs >1 conftest, the runner's assertion fires loudly — split that root's suites rather than relax the guard. If the no-mistakes gate's LLM steps stop hanging (v1.29+), the deterministic `commands.test` runner stays regardless (it's strictly better than an LLM test agent). If `parallax-workflows` test infra adopts a monorepo `pyproject.toml` with working `importlib`+namespace packages, the per-process runner can collapse back to one invocation.
+
+**Verification.** `run-gate-tests.sh` → 905 tests green across 7 suites; `section-ref-lint.py` clean on the repo with a red-green proof. PRs #48–#52 landed via documented origin bypass (review passed clean ≥3×; gate LLM steps hung — review value delivered, only pipeline completion wedged).
+
 ## 2026-06-11: Redundancy rulings — no shared portfolio-scoring file (canonical homes already exist), and country-deep-dive stays (boundary rewritten as allocation-vs-regime)
 
 **Why:** The two structural items from the 2026-06-10 audit's redundancy matrix. **Set 3 (client-review vs morning-brief, FOLD_IN, high confidence):** the audit proposed extracting a shared `_parallax/portfolio-scoring-core.md` because four portfolio skills (client-review, morning-brief, explain-portfolio, rebalance) maintained lockstep copies of the V2 scoring rows, mismatch protocol, health flags, and integrity block. By execution time the premise had narrowed: loader.md §3b (client-side V2 aggregation) landed in PR #41, the compact ground-truth protocol landed in loader.md §5 rule 3 (PR #44), and the health-flag system already had a canonical home in `parallax-portfolio-checkup/references/health-flags.md`. Every piece of the proposed shared core now has exactly one spec home — a new file would add a fifth source of truth, not remove one. **Set 5 (macro-outlook vs country-deep-dive, REDUNDANT verdict, medium confidence):** the audit recommended retiring country-deep-dive because the call chains are near-identical and the documented boundary ("US vs non-US") is false. The owner ruling goes the other way — KEEP DISTINCT — because the two skills answer different questions: macro-outlook answers "what is the regime in [market]?" (its equity census is an illustrative, deliberately untilted exhibit), country-deep-dive answers "what should I buy in [country/region]?" (a discovery surface whose Top Opportunities ranking is view-tilted by design, per loader.md §3). The §3-vs-§7.4 house-view divergence the audit read as incoherence is load-bearing once the boundary is stated correctly: a regime read must not be view-biased; a discovery ranking should be.
