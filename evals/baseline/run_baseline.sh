@@ -26,6 +26,8 @@ done
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$REPO_ROOT"
+# Default TASKS points to should-i-buy; edit this variable to target a different
+# skill's core.jsonl (e.g. "evals/tasks/morning-brief/core.jsonl").
 TASKS="evals/tasks/should-i-buy/core.jsonl"
 N_TASKS=$(grep -c . "$TASKS")
 TOTAL=$(( N * N_TASKS ))

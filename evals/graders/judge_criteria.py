@@ -1,11 +1,11 @@
-"""Editable Tier-2 rubric criteria for /parallax-should-i-buy.
+"""Baseline Tier-2 rubric criteria used by the /parallax-* eval substrate.
 
-Each criterion is a binary the deterministic Tier-1 checks cannot see. Add a
-target by appending a dict — no code change. Every criterion must clear the
-well-definedness bar (anchored / decidable / low-variance) per design §4.1.
-All criteria below are current-spec conformance (NOT aspirational — the
-two-lens example in §4.4 is deliberately excluded from this baseline list).
+Each criterion is a binary the deterministic Tier-1 checks cannot see. Criteria
+are shared across skills via the SPEC.tier2_criteria list in each eval_config.py.
+Every criterion must clear the well-definedness bar (anchored / decidable /
+low-variance) per design §4.1.
 """
+
 from __future__ import annotations
 
 CRITERIA: list[dict] = [
