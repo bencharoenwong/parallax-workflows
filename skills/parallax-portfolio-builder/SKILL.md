@@ -101,6 +101,24 @@ Begin only after Phase A completes. Steps 3–6 have tight dependencies; execute
 
 Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format. The loader returns exactly six keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
 
+### Render — deterministic gate (LAST step, mandatory)
+
+Compose the complete report per **Output Format** below, then run it through the shared render gate in **one Bash step** before replying. Use a private `mktemp` file (never a fixed/predictable path — `/tmp` symlink hazard). The shared gate is `_parallax/render_gate.py`, a sibling of the directory you loaded this SKILL.md from; pass this skill's key (use the loaded directory's absolute path as `<skill-dir>`):
+
+```
+DRAFT="$(mktemp "${TMPDIR:-/tmp}/builder.XXXXXX")"
+cat > "$DRAFT" <<'REPORT'
+<your complete drafted report goes here>
+REPORT
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill portfolio-builder < "$DRAFT"; rm -f "$DRAFT"
+```
+
+**Your entire final message is exactly that command's stdout** — nothing before it (no step/batch-completion notes, no scratch computation, no "no active house view" / white-label config-probe narration), nothing after it.
+
+**Degraded-state rule:** if an async tool (e.g. `get_assessment`, `get_news_synthesis`) times out or returns no data, render the pending/unavailable note INSIDE the relevant section or the Provenance line — NOT as a preamble above the report — so it is part of the rendered body and survives the gate. (The gate also hoists a leaked degraded note as a backstop.)
+
+`_parallax/render_gate.py` is pure-stdlib and deterministically drops anything before the first rendered block (House View Preamble banner / Branding Header / Ground-truth Integrity / this skill's title or first rendered section), preserving the active-house-view banner in every `view_status` state. Same operator-agnostic-helper pattern as `view_status.py` / `loader.py` (a real Bash tool call, not prose).
+
 ## Output Format
 
 - **House View Preamble** (REQUIRED FIRST when view active — render BEFORE any other section, never bury after the holdings table) — Per loader.md §5. MUST include: short view_id (first 8 chars), view_name, `effective_date → valid_through`, and a one-line summary `Applying tilts: <comma list of non-zero tilt names with values>`. If `--augment-silent` was used, append `JIT-augmented: <list of dim paths>`. This preamble is the user's primary signal that the view is active and what it's doing. If execution gets token-compressed, KEEP this section — drop other sections first if needed.
