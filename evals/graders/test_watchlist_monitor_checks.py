@@ -1,6 +1,7 @@
 """Unit tests for the watchlist-monitor eval spec's NEW checks (clean_start,
 score_changes_quantified). Red/green before any live spend.
 """
+
 from __future__ import annotations
 
 import sys
@@ -61,7 +62,9 @@ def test_summary_table_under_watchlist_scan_label():
     # The skill heads the table "Watchlist Scan" in ~2/6 runs instead of "Watchlist
     # Summary" — both sections_present (summary not required) and score_changes_quantified
     # (accepts either header) must still pass.
-    scan = GOLDEN.replace("## Watchlist Summary", "## Watchlist Scan — 7 names, 8-week window")
+    scan = GOLDEN.replace(
+        "## Watchlist Summary", "## Watchlist Scan — 7 names, 8-week window"
+    )
     res = _results(scan)
     assert res["score_changes_quantified"] is True, "Scan-headed table must be accepted"
     assert res["sections_present"] is True
@@ -69,8 +72,12 @@ def test_summary_table_under_watchlist_scan_label():
 
 # --- clean_start --------------------------------------------
 
+
 def test_clean_start_red_on_score_scan_step_leak():
-    leaked = "Score Scan: fetching get_score_analysis for 7 symbols in parallel...\n\n" + GOLDEN
+    leaked = (
+        "Score Scan: fetching get_score_analysis for 7 symbols in parallel...\n\n"
+        + GOLDEN
+    )
     assert _results(leaked)["clean_start"] is False
 
 
@@ -89,6 +96,7 @@ def test_clean_start_green_on_summary_open():
 
 
 # --- score_changes_quantified (NEW) ----------------------------------------
+
 
 def test_score_changes_red_when_summary_has_no_numbers():
     qualitative = GOLDEN.replace(

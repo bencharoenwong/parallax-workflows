@@ -2,6 +2,7 @@
 trade_recs_quantified) and its VERBATIM-COPIED macro_conditional. Red/green before
 any live spend. Mirrors the other per-skill test files.
 """
+
 from __future__ import annotations
 
 import sys
@@ -11,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from eval_spec import load_spec  # noqa: E402
 from tier1_structural import grade_tier1  # noqa: E402
-from transcript import Transcript, ToolCall  # noqa: E402
+from transcript import ToolCall, Transcript  # noqa: E402
 
 SPEC = load_spec("rebalance")
 _MACRO = [ToolCall("mcp__claude_ai_Parallax__macro_analyst", {})]
@@ -81,13 +82,18 @@ def test_sections_present_tolerates_before_after_label_drift():
 
 # --- clean_start --------------------------------------------
 
+
 def test_clean_start_red_on_preflight_drift_leak():
-    leaked = "Pre-flight: house-view drift check — no active view, skipping.\n\n" + GOLDEN
+    leaked = (
+        "Pre-flight: house-view drift check — no active view, skipping.\n\n" + GOLDEN
+    )
     assert _results(leaked)["clean_start"] is False
 
 
 def test_clean_start_red_on_view_probe_leak():
-    leaked = "No active house view, white-label inactive. Building trade list.\n\n" + GOLDEN
+    leaked = (
+        "No active house view, white-label inactive. Building trade list.\n\n" + GOLDEN
+    )
     assert _results(leaked)["clean_start"] is False
 
 
@@ -101,6 +107,7 @@ def test_clean_start_green_on_current_assessment_open():
 
 
 # --- trade_recs_quantified (NEW) -------------------------------------------
+
 
 def test_trade_recs_red_when_vague_no_weights():
     vague = GOLDEN.replace(
@@ -119,6 +126,7 @@ def test_trade_recs_red_when_section_absent():
 
 
 # --- macro_conditional (COPIED verbatim — rebalance keeps "Macro Context") --
+
 
 def test_macro_conditional_red_when_called_but_no_section():
     no_macro = GOLDEN.replace(

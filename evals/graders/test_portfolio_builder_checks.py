@@ -1,6 +1,7 @@
 """Unit tests for the portfolio-builder eval spec's NEW checks (clean_start,
 holdings_allocated) and the dropped macro_conditional. Red/green before live spend.
 """
+
 from __future__ import annotations
 
 import sys
@@ -64,13 +65,19 @@ def test_macro_conditional_not_in_spec():
 
 # --- clean_start --------------------------------------------
 
+
 def test_clean_start_red_on_phase_step_leak():
-    leaked = "Phase A complete — universe built (42 candidates), scoring done. Selecting.\n\n" + GOLDEN
+    leaked = (
+        "Phase A complete — universe built (42 candidates), scoring done. Selecting.\n\n"
+        + GOLDEN
+    )
     assert _results(leaked)["clean_start"] is False
 
 
 def test_clean_start_red_on_view_probe_leak():
-    leaked = "No active house view, white-label inactive → default Parallax.\n\n" + GOLDEN
+    leaked = (
+        "No active house view, white-label inactive → default Parallax.\n\n" + GOLDEN
+    )
     assert _results(leaked)["clean_start"] is False
 
 
@@ -84,6 +91,7 @@ def test_clean_start_green_on_investment_thesis_open():
 
 
 # --- holdings_allocated (NEW) ----------------------------------------------
+
 
 def test_holdings_allocated_red_without_weights():
     no_w = GOLDEN.replace(

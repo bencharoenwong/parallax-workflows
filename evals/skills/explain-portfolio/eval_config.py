@@ -12,6 +12,7 @@ clean_start, orchestrator_length.
 Tier-2: no_hallucinated_data, regime_specific, divergence_logic_sound,
 advice_matches_verdict, return_reconciled_with_client.
 """
+
 from __future__ import annotations
 
 import re
@@ -20,8 +21,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "graders"))
 from eval_spec import EvalSpec  # noqa: E402
-from tier1_structural import Check, _section_text, _section_present  # noqa: E402
 from judge_criteria import CRITERIA  # noqa: E402
+from tier1_structural import Check, _section_text  # noqa: E402
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -29,21 +30,36 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 # Regime" / "The Key Question" use token-prefix matching to tolerate the "Context" /
 # ": Noise or Signal?" trailers.
 _REQUIRED_SECTIONS = [
-    "What Happened", "Performance Attribution", "Market & Regime",
-    "Factor Exposure", "Top Detractors", "The Key Question",
-    "What To Do", "Provenance",
+    "What Happened",
+    "Performance Attribution",
+    "Market & Regime",
+    "Factor Exposure",
+    "Top Detractors",
+    "The Key Question",
+    "What To Do",
+    "Provenance",
 ]
 _SECTION_LABELS = [
-    "House View Preamble", "Branding Header", "What Happened",
-    "Performance Attribution", "Market & Regime Context", "Factor Exposure",
-    "Top Detractors", "The Key Question: Noise or Signal?", "What To Do", "Provenance",
+    "House View Preamble",
+    "Branding Header",
+    "What Happened",
+    "Performance Attribution",
+    "Market & Regime Context",
+    "Factor Exposure",
+    "Top Detractors",
+    "The Key Question: Noise or Signal?",
+    "What To Do",
+    "Provenance",
 ]
 
 _REGIME_TERMS = re.compile(
     r"\b(regime|risk-?off|risk-?on|rotation|macro|tactical|sell-?off|selloff|"
-    r"rally|drawdown|volatility|rates?|inflation|defensive|cyclical)\b", re.I,
+    r"rally|drawdown|volatility|rates?|inflation|defensive|cyclical)\b",
+    re.I,
 )
-_VERDICT_TOKENS = re.compile(r"\b(transient|fundamental|ambiguous|noise|signal|mixed)\b", re.I)
+_VERDICT_TOKENS = re.compile(
+    r"\b(transient|fundamental|ambiguous|noise|signal|mixed)\b", re.I
+)
 _PCT = re.compile(r"-?\d+(?:\.\d+)?\s*%")
 
 
@@ -55,7 +71,11 @@ def _c_regime_context_grounded(t, spec) -> Check:
     sec = _section_text(t.final_prose, "Market & Regime", spec.section_labels)
     body = "\n".join(sec.splitlines()[1:]) if sec else ""  # drop header line
     ok = bool(body.strip()) and _REGIME_TERMS.search(body) is not None
-    return Check("regime_context_grounded", ok, f"section_present={bool(sec)} body_terms={bool(_REGIME_TERMS.search(body))}")
+    return Check(
+        "regime_context_grounded",
+        ok,
+        f"section_present={bool(sec)} body_terms={bool(_REGIME_TERMS.search(body))}",
+    )
 
 
 def _c_divergence_verdict(t, spec) -> Check:
@@ -66,7 +86,9 @@ def _c_divergence_verdict(t, spec) -> Check:
         return Check("divergence_verdict", False, "Key Question section absent")
     body = "\n".join(sec.splitlines()[1:])
     ok = _VERDICT_TOKENS.search(body) is not None
-    return Check("divergence_verdict", ok, f"verdict_token={bool(_VERDICT_TOKENS.search(body))}")
+    return Check(
+        "divergence_verdict", ok, f"verdict_token={bool(_VERDICT_TOKENS.search(body))}"
+    )
 
 
 def _c_return_quantified(t, spec) -> Check:
@@ -74,7 +96,11 @@ def _c_return_quantified(t, spec) -> Check:
     A qualitative description with no percentage figure fails."""
     sec = _section_text(t.final_prose, "What Happened", spec.section_labels)
     ok = bool(sec) and _PCT.search(sec) is not None
-    return Check("return_quantified", ok, f"section_present={bool(sec)} pct={bool(_PCT.search(sec))}")
+    return Check(
+        "return_quantified",
+        ok,
+        f"section_present={bool(sec)} pct={bool(_PCT.search(sec))}",
+    )
 
 
 # Scaffold tokens that must NOT open the response; headers/titles that legitimately may.
@@ -127,15 +153,15 @@ SPEC = EvalSpec(
     required_sections=_REQUIRED_SECTIONS,
     section_labels=_SECTION_LABELS,
     check_ids=[
-        "sections_present",             # COPIED
-        "regime_context_grounded",      # ADAPTED
-        "ai_disclosure_present",        # COPIED (§9.2)
-        "disclaimer_present_correct",   # COPIED (§9.1)
-        "provenance_present",           # COPIED
-        "return_quantified",            # NEW
-        "divergence_verdict",           # NEW
-        "clean_start",                  # NEW
-        "orchestrator_length",          # COPIED
+        "sections_present",  # COPIED
+        "regime_context_grounded",  # ADAPTED
+        "ai_disclosure_present",  # COPIED (§9.2)
+        "disclaimer_present_correct",  # COPIED (§9.1)
+        "provenance_present",  # COPIED
+        "return_quantified",  # NEW
+        "divergence_verdict",  # NEW
+        "clean_start",  # NEW
+        "orchestrator_length",  # COPIED
     ],
     extra_checks={
         "regime_context_grounded": _c_regime_context_grounded,

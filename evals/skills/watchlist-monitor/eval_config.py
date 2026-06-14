@@ -10,6 +10,7 @@ provenance_present, score_changes_quantified, clean_start, orchestrator_length.
 Tier-2: no_hallucinated_data, score_change_consistent, alerts_ranked_by_magnitude,
 actions_target_movers.
 """
+
 from __future__ import annotations
 
 import re
@@ -18,8 +19,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "graders"))
 from eval_spec import EvalSpec  # noqa: E402
-from tier1_structural import Check, _section_text  # noqa: E402
 from judge_criteria import CRITERIA  # noqa: E402
+from tier1_structural import Check, _section_text  # noqa: E402
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -31,11 +32,18 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 # Its presence + numeric content is enforced more strongly by score_changes_quantified,
 # which accepts either header.
 _REQUIRED_SECTIONS = [
-    "Alerts", "Recommended Actions", "Provenance",
+    "Alerts",
+    "Recommended Actions",
+    "Provenance",
 ]
 _SECTION_LABELS = [
-    "Branding Header", "Watchlist Summary", "Watchlist Scan", "Alerts",
-    "Stable Names", "Recommended Actions", "Provenance",
+    "Branding Header",
+    "Watchlist Summary",
+    "Watchlist Scan",
+    "Alerts",
+    "Stable Names",
+    "Recommended Actions",
+    "Provenance",
 ]
 
 # A decimal score (7.2) or a signed change (+1.3 / -0.8) — a quantified summary/alert.
@@ -46,10 +54,15 @@ def _c_score_changes_quantified(t, spec) -> Check:
     """Checks that the Watchlist Summary or Watchlist Scan table is present and contains
     numeric score data (decimal scores or signed score changes). A purely qualitative
     summary with no numbers fails. Accepts either header variant."""
-    sec = (_section_text(t.final_prose, "Watchlist Summary", spec.section_labels)
-           or _section_text(t.final_prose, "Watchlist Scan", spec.section_labels))
+    sec = _section_text(
+        t.final_prose, "Watchlist Summary", spec.section_labels
+    ) or _section_text(t.final_prose, "Watchlist Scan", spec.section_labels)
     ok = bool(sec) and _SCORE_NUM.search(sec) is not None
-    return Check("score_changes_quantified", ok, f"summary_present={bool(sec)} numeric={bool(_SCORE_NUM.search(sec))}")
+    return Check(
+        "score_changes_quantified",
+        ok,
+        f"summary_present={bool(sec)} numeric={bool(_SCORE_NUM.search(sec))}",
+    )
 
 
 # Scaffold tokens that must NOT open the response; titles/headers that legitimately may.
@@ -60,8 +73,7 @@ _LEAK_START = re.compile(
     r"symbols? (loaded|parsed|scanned))"
 )
 _OK_START = re.compile(
-    r"(?i)^\s*(?:#{1,4}\s*.*\b|\*\*\s*)"
-    r"(watchlist (monitor|summary|scan))\b"
+    r"(?i)^\s*(?:#{1,4}\s*.*\b|\*\*\s*)" r"(watchlist (monitor|summary|scan))\b"
 )
 _HR_OR_BLANK = re.compile(r"^[-*_ ]{0,}$|^[-*_ ]{3,}$")
 
@@ -96,13 +108,13 @@ SPEC = EvalSpec(
     required_sections=_REQUIRED_SECTIONS,
     section_labels=_SECTION_LABELS,
     check_ids=[
-        "sections_present",             # COPIED
-        "ai_disclosure_present",        # COPIED (§9.2)
-        "disclaimer_present_correct",   # COPIED (§9.1)
-        "provenance_present",           # COPIED
-        "score_changes_quantified",     # NEW
-        "clean_start",                  # NEW
-        "orchestrator_length",          # COPIED
+        "sections_present",  # COPIED
+        "ai_disclosure_present",  # COPIED (§9.2)
+        "disclaimer_present_correct",  # COPIED (§9.1)
+        "provenance_present",  # COPIED
+        "score_changes_quantified",  # NEW
+        "clean_start",  # NEW
+        "orchestrator_length",  # COPIED
         # macro_conditional DROPPED: this skill has no macro tool or macro section.
     ],
     extra_checks={

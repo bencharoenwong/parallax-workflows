@@ -11,6 +11,7 @@ clean_start, orchestrator_length.
 Tier-2: no_hallucinated_data, health_status_consistent, recommendations_cite_findings,
 suitability_tailored_to_client.
 """
+
 from __future__ import annotations
 
 import re
@@ -19,8 +20,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "graders"))
 from eval_spec import EvalSpec  # noqa: E402
-from tier1_structural import Check, _section_text, _section_present  # noqa: E402
 from judge_criteria import CRITERIA  # noqa: E402
+from tier1_structural import Check, _section_text  # noqa: E402
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -28,16 +29,30 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 # white-label client). Conditional sections (House View Preamble, Branding Header,
 # Ground-truth Integrity, House View Alignment) are intentionally NOT required.
 _REQUIRED_SECTIONS = [
-    "Portfolio Summary", "Health Status", "Factor Analysis",
-    "Concentration & Redundancy", "Per-Holding Analysis",
-    "Suitability Assessment", "Recommended Actions", "Provenance",
+    "Portfolio Summary",
+    "Health Status",
+    "Factor Analysis",
+    "Concentration & Redundancy",
+    "Per-Holding Analysis",
+    "Suitability Assessment",
+    "Recommended Actions",
+    "Provenance",
 ]
 _SECTION_LABELS = [
-    "House View Preamble", "Branding Header", "Ground-truth Integrity",
-    "Portfolio Summary", "Health Status", "Performance vs Benchmark",
-    "Factor Analysis", "Concentration & Redundancy", "House View Alignment",
-    "Per-Holding Analysis", "Suitability Assessment", "Recommended Actions",
-    "Appendix: Methodology", "Provenance",
+    "House View Preamble",
+    "Branding Header",
+    "Ground-truth Integrity",
+    "Portfolio Summary",
+    "Health Status",
+    "Performance vs Benchmark",
+    "Factor Analysis",
+    "Concentration & Redundancy",
+    "House View Alignment",
+    "Per-Holding Analysis",
+    "Suitability Assessment",
+    "Recommended Actions",
+    "Appendix: Methodology",
+    "Provenance",
 ]
 
 # Directive recommendation vocabulary (references/recommendation-matrix.md).
@@ -46,7 +61,8 @@ _ACTION = re.compile(r"\b(trim|exit|hold|investigate|reweight|monitor|reduce)\b"
 # Macro / regime terms that should surface in Factor Analysis when macro ran.
 _MACRO_TERMS = re.compile(
     r"\b(macro|regime|tactical|stagflation|inflation|rate cut|rate hike|"
-    r"cpi|fomc|outlook|tilt|overweight|underweight)\b", re.I,
+    r"cpi|fomc|outlook|tilt|overweight|underweight)\b",
+    re.I,
 )
 
 
@@ -55,7 +71,9 @@ def _c_macro_in_factor_analysis(t, spec) -> Check:
     Passes vacuously if macro_analyst was not called."""
     called = t.called("macro_analyst")
     if not called:
-        return Check("macro_in_factor_analysis", True, "macro_analyst not called (vacuous)")
+        return Check(
+            "macro_in_factor_analysis", True, "macro_analyst not called (vacuous)"
+        )
     fa = _section_text(t.final_prose, "Factor Analysis", spec.section_labels)
     ok = _MACRO_TERMS.search(fa) is not None
     return Check("macro_in_factor_analysis", ok, f"macro_called=True macro_in_FA={ok}")
@@ -69,7 +87,8 @@ def _c_recommendations_actionable(t, spec) -> Check:
         return Check("recommendations_actionable", False, "Recommended Actions absent")
     ok = bool(_PRIORITY.search(text) and _ACTION.search(text))
     return Check(
-        "recommendations_actionable", ok,
+        "recommendations_actionable",
+        ok,
         f"priority={bool(_PRIORITY.search(text))} action={bool(_ACTION.search(text))}",
     )
 
@@ -123,14 +142,14 @@ SPEC = EvalSpec(
     required_sections=_REQUIRED_SECTIONS,
     section_labels=_SECTION_LABELS,
     check_ids=[
-        "sections_present",             # COPIED
-        "macro_in_factor_analysis",     # ADAPTED (from macro_conditional)
-        "ai_disclosure_present",        # COPIED (§9.2 "AI-assisted output")
-        "disclaimer_present_correct",   # COPIED (§9.1 "not investment advice")
-        "provenance_present",           # COPIED
-        "recommendations_actionable",   # NEW
-        "clean_start",                  # NEW
-        "orchestrator_length",          # COPIED
+        "sections_present",  # COPIED
+        "macro_in_factor_analysis",  # ADAPTED (from macro_conditional)
+        "ai_disclosure_present",  # COPIED (§9.2 "AI-assisted output")
+        "disclaimer_present_correct",  # COPIED (§9.1 "not investment advice")
+        "provenance_present",  # COPIED
+        "recommendations_actionable",  # NEW
+        "clean_start",  # NEW
+        "orchestrator_length",  # COPIED
     ],
     extra_checks={
         "macro_in_factor_analysis": _c_macro_in_factor_analysis,

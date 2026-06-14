@@ -5,6 +5,7 @@ are shared across skills via the SPEC.tier2_criteria list in each eval_config.py
 Every criterion must clear the well-definedness bar (anchored / decidable /
 low-variance) per design §4.1.
 """
+
 from __future__ import annotations
 
 CRITERIA: list[dict] = [

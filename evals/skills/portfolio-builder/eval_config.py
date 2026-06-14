@@ -14,6 +14,7 @@ NOTE: if build_stock_universe returns nothing the skill renders "Universe Built:
 and skips Selected Holdings by design. A capture hitting that path causes holdings_allocated
 and sections_present to fail; triage as the empty-universe path, not an output defect.
 """
+
 from __future__ import annotations
 
 import re
@@ -22,8 +23,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "graders"))
 from eval_spec import EvalSpec  # noqa: E402
-from tier1_structural import Check, _section_text  # noqa: E402
 from judge_criteria import CRITERIA  # noqa: E402
+from tier1_structural import Check, _section_text  # noqa: E402
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -31,13 +32,24 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 # conditional (only if overlap flagged) -> section_labels only. View-Effect Summary +
 # House View Preamble are view-only.
 _REQUIRED_SECTIONS = [
-    "Investment Thesis", "Universe Built", "Selected Holdings",
-    "Portfolio Factor Profile", "Implementation Notes", "Provenance",
+    "Investment Thesis",
+    "Universe Built",
+    "Selected Holdings",
+    "Portfolio Factor Profile",
+    "Implementation Notes",
+    "Provenance",
 ]
 _SECTION_LABELS = [
-    "House View Preamble", "Branding Header", "Investment Thesis", "Universe Built",
-    "Selected Holdings", "View-Effect Summary", "Portfolio Factor Profile",
-    "Redundancy Notes", "Implementation Notes", "Provenance",
+    "House View Preamble",
+    "Branding Header",
+    "Investment Thesis",
+    "Universe Built",
+    "Selected Holdings",
+    "View-Effect Summary",
+    "Portfolio Factor Profile",
+    "Redundancy Notes",
+    "Implementation Notes",
+    "Provenance",
 ]
 
 _PCT = re.compile(r"\d+(?:\.\d+)?\s*%")
@@ -50,9 +62,15 @@ def _c_holdings_allocated(t, spec) -> Check:
     empty-universe degradation path (triage, not a fix)."""
     sec = _section_text(t.final_prose, "Selected Holdings", spec.section_labels)
     if not sec:
-        return Check("holdings_allocated", False, "Selected Holdings absent (empty-universe? triage)")
+        return Check(
+            "holdings_allocated",
+            False,
+            "Selected Holdings absent (empty-universe? triage)",
+        )
     has_w, has_s = bool(_PCT.search(sec)), bool(_SCORE_NUM.search(sec))
-    return Check("holdings_allocated", has_w and has_s, f"weight_pct={has_w} score_num={has_s}")
+    return Check(
+        "holdings_allocated", has_w and has_s, f"weight_pct={has_w} score_num={has_s}"
+    )
 
 
 # Scaffold tokens that must NOT open the response; titles/headers that legitimately may.
@@ -100,13 +118,13 @@ SPEC = EvalSpec(
     required_sections=_REQUIRED_SECTIONS,
     section_labels=_SECTION_LABELS,
     check_ids=[
-        "sections_present",             # COPIED
-        "ai_disclosure_present",        # COPIED (§9.2)
-        "disclaimer_present_correct",   # COPIED (§9.1)
-        "provenance_present",           # COPIED
-        "holdings_allocated",           # NEW
-        "clean_start",                  # NEW
-        "orchestrator_length",          # COPIED
+        "sections_present",  # COPIED
+        "ai_disclosure_present",  # COPIED (§9.2)
+        "disclaimer_present_correct",  # COPIED (§9.1)
+        "provenance_present",  # COPIED
+        "holdings_allocated",  # NEW
+        "clean_start",  # NEW
+        "orchestrator_length",  # COPIED
         # macro_conditional DROPPED: this skill has no macro tool or macro section in the default path.
     ],
     extra_checks={

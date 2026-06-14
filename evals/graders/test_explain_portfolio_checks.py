@@ -2,6 +2,7 @@
 (clean_start, return_quantified, divergence_verdict, regime_context_grounded).
 Red/green before any live spend. Mirrors the other per-skill test files.
 """
+
 from __future__ import annotations
 
 import sys
@@ -11,15 +12,19 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from eval_spec import load_spec  # noqa: E402
 from tier1_structural import grade_tier1  # noqa: E402
-from transcript import Transcript, ToolCall  # noqa: E402
+from transcript import ToolCall, Transcript  # noqa: E402
 
 SPEC = load_spec("explain-portfolio")
-_REGIME = [ToolCall("mcp__claude_ai_Parallax__get_telemetry", {}),
-           ToolCall("mcp__claude_ai_Parallax__macro_analyst", {})]
+_REGIME = [
+    ToolCall("mcp__claude_ai_Parallax__get_telemetry", {}),
+    ToolCall("mcp__claude_ai_Parallax__macro_analyst", {}),
+]
 
 
 def _results(prose: str, calls=None) -> dict:
-    t = Transcript(final_prose=prose, tool_calls=calls if calls is not None else _REGIME)
+    t = Transcript(
+        final_prose=prose, tool_calls=calls if calls is not None else _REGIME
+    )
     return {c.name: c.passed for c in grade_tier1(t, SPEC)}
 
 
@@ -68,13 +73,20 @@ def test_golden_passes_every_check():
 
 # --- clean_start --------------------------------------------
 
+
 def test_clean_start_red_on_asset_class_preclassification_leak():
-    leaked = "Asset-class pre-classification: all 4 holdings are equities, routing to export_price_series.\n\n" + GOLDEN
+    leaked = (
+        "Asset-class pre-classification: all 4 holdings are equities, routing to export_price_series.\n\n"
+        + GOLDEN
+    )
     assert _results(leaked)["clean_start"] is False
 
 
 def test_clean_start_red_on_view_probe_leak():
-    leaked = "No active house view, white-label inactive. Computing attribution.\n\n" + GOLDEN
+    leaked = (
+        "No active house view, white-label inactive. Computing attribution.\n\n"
+        + GOLDEN
+    )
     assert _results(leaked)["clean_start"] is False
 
 
@@ -89,12 +101,16 @@ def test_clean_start_green_on_what_happened_open():
 
 def test_clean_start_green_on_drawdown_attribution_title():
     # The skill's description names "drawdown attribution" as a synonym — a clean title.
-    titled = GOLDEN.replace("# Explain Portfolio — Drawdown Attribution",
-                            '# Drawdown Attribution — "Why am I down this quarter?"', 1)
+    titled = GOLDEN.replace(
+        "# Explain Portfolio — Drawdown Attribution",
+        '# Drawdown Attribution — "Why am I down this quarter?"',
+        1,
+    )
     assert _results(titled)["clean_start"] is True
 
 
 # --- return_quantified (NEW) -----------------------------------------------
+
 
 def test_return_quantified_red_without_a_percentage():
     vague = GOLDEN.replace(
@@ -105,6 +121,7 @@ def test_return_quantified_red_without_a_percentage():
 
 
 # --- divergence_verdict (NEW; header self-match guard) ---------------------
+
 
 def test_divergence_verdict_red_when_body_has_no_classification():
     # Header 'Noise or Signal?' must NOT self-satisfy — only the body counts.
@@ -121,6 +138,7 @@ def test_divergence_verdict_green_on_body_classification():
 
 
 # --- regime_context_grounded (ADAPTED from macro_conditional) --------------
+
 
 def test_regime_red_when_tool_called_but_section_empty():
     silent = GOLDEN.replace(

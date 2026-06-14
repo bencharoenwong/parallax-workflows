@@ -4,6 +4,7 @@ Verifies the matchers fire correctly (red on the failure mode, green on a
 conforming output) BEFORE any live rollout spends Parallax tokens. Mirrors the
 inline-Transcript fixture style of test_tier1_structural.py.
 """
+
 from __future__ import annotations
 
 import sys
@@ -13,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from eval_spec import load_spec  # noqa: E402
 from tier1_structural import grade_tier1  # noqa: E402
-from transcript import Transcript, ToolCall  # noqa: E402
+from transcript import ToolCall, Transcript  # noqa: E402
 
 SPEC = load_spec("client-review")
 _MACRO = [ToolCall("mcp__claude_ai_Parallax__macro_analyst", {})]
@@ -70,8 +71,11 @@ def test_golden_passes_every_check():
 
 # --- clean_start ---------------------------
 
+
 def test_clean_start_red_on_scaffold_preamble():
-    leaked = "**Step A.5 → Batch C complete.** Verified-holdings aggregates.\n\n" + GOLDEN
+    leaked = (
+        "**Step A.5 → Batch C complete.** Verified-holdings aggregates.\n\n" + GOLDEN
+    )
     assert _results(leaked)["clean_start"] is False
 
 
@@ -88,6 +92,7 @@ def test_clean_start_green_on_portfolio_summary_open():
 
 # --- recommendations_actionable (NEW directive check) ----------------------
 
+
 def test_recommendations_actionable_red_when_no_priority_or_action():
     vague = GOLDEN.replace(
         "- **High — Trim NVDA**: 15% weight + Low Score 4.2.\n"
@@ -103,6 +108,7 @@ def test_recommendations_actionable_red_when_section_absent():
 
 
 # --- macro_in_factor_analysis (ADAPTED from macro_conditional) -------------
+
 
 def test_macro_red_when_called_but_absent_from_factor_analysis():
     silent = GOLDEN.replace(
