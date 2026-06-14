@@ -35,11 +35,11 @@ import sys
 
 # --- COMMON anchors: must survive the strip for every skill (C1, C4) ---------
 
-# House View Preamble banner — matches EVERY real `view_status.py` banner state
-# (verified against the helper): active "Active house view: ...", warning/critical
-# "Active view ..." / "⚠ Active view ...", not_yet_effective/expired/malformed
-# "House view ..." / "! House view ...", and the "Legacy view:" warning. Optional
-# leading blockquote, status emoji or "!", and bold.
+# House View Preamble banner — matches every `view_status.py` banner state: active
+# "Active house view: ...", warning/critical "Active view ..." / "⚠ Active view ...",
+# not_yet_effective/expired/malformed "House view ..." / "! House view ...". Also the
+# loader.md §2 "Legacy view:" load-preamble warning (emitted by the loader, not the
+# helper). Optional leading blockquote, status emoji or "!", and bold.
 _HOUSE_VIEW = (
     r"^\s{0,3}>?\s*(?:🟢|🟡|🔴|⚠|ℹ️|!)?\s*\*{0,2}\s*"
     r"(?:active\s+(?:house\s+)?view|house\s+view|legacy\s+view)\b"
