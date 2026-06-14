@@ -59,7 +59,7 @@ Fire in parallel (concurrency cap 8, per-call timeout 45s):
 
 Per-market timeout: 45s. A market that doesn't respond on ANY component within timeout is `UNREACHABLE` (use `stress.classify_mcp_meta_state` semantics). A market that returns a successful response with content like "Sector ranking data remains unavailable for this reporting period" is treated as **silent for that component**, not UNREACHABLE for the market (per MCP_FIELD_INVENTORY.md §5.4).
 
-If `unreachable_share > 0.30` of the fan-out, HARD ABORT (v2 plan §2.2). Aggregation can't recover from that level of degradation.
+If `unreachable_share > 0.30` of the fan-out, HARD ABORT. Aggregation can't recover from that level of degradation. <!-- rationale: notes/2026-05-24-house-view-v2-plan.md §2.2 -->
 
 ### Step 4 — Cross-country aggregation
 

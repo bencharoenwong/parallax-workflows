@@ -131,6 +131,12 @@ else
   fi
   echo "  ✓ all JIT-load directives resolve"
   echo ""
+  echo "Linting cross-file section references (§N.M)…"
+  if ! python3 ./_parallax/scripts/section-ref-lint.py; then
+    echo "FAIL: one or more <file>.md §N references point at a missing section or file." >&2
+    exit 1
+  fi
+  echo ""
   echo "Validating agentskills.io spec compliance…"
   if ! python3 ./_parallax/scripts/spec-validate.py $(all_skill_dirs); then
     echo "FAIL: one or more skills violate the agentskills.io spec." >&2
