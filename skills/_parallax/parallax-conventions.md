@@ -4,6 +4,17 @@ Shared patterns for all `parallax-*` skills. JIT-load from any skill that calls 
 
 ---
 
+## 0. Feature Flags
+
+Gemini CLI uses feature flags to roll out architectural changes. These can be set via environment variables or documented at the session start.
+
+- **`PARALLAX_LOADER_V2=1`** (Phase 0 rewrite):
+  - **Universe Construction**: Replaces single-shot tilt-prepended `build_stock_universe` calls with N parallel per-tilt calls + client-side merge/dedupe. Required for multi-sector/multi-theme views to prevent universe collapse (Q-A).
+  - **Portfolio Scoring**: Replaces batch `quick_portfolio_scores` with per-holding `get_peer_snapshot` aggregation + `get_company_info` cross-validation. Required to bypass upstream symbol-mapping bugs (Q-B).
+  - **Active House View**: When a house view is active, V2 patterns are MANDATORY to ensure tilt integrity.
+
+---
+
 ## 0.0 Pre-flight (before any data gathering)
 
 Run this once at the top of any should-i-buy / two-lens / house-view / portfolio workflow, **before the first data call** — not as a mid-run recovery:
@@ -13,17 +24,6 @@ Run this once at the top of any should-i-buy / two-lens / house-view / portfolio
 3. **Abort cleanly on a gap.** If a required convention/house-view file cannot be resolved, or the Parallax tools have still not registered after the §0.1 re-fire, **stop and tell the operator exactly what is missing.** Do not silently proceed on partial inputs or fall through to fabricated data.
 
 Most should-i-buy failures trace to one of two causes this pre-flight removes — missing convention/house-view files, and MCP calls racing schema registration. Converting those mid-run recoveries into one up-front check is what prevents sessions that burn the turn budget before producing output. This is the open-side complement to §0.3 (validation before reporting done).
-
----
-
-## 0. Feature Flags
-
-Gemini CLI uses feature flags to roll out architectural changes. These can be set via environment variables or documented at the session start.
-
-- **`PARALLAX_LOADER_V2=1`** (Phase 0 rewrite):
-  - **Universe Construction**: Replaces single-shot tilt-prepended `build_stock_universe` calls with N parallel per-tilt calls + client-side merge/dedupe. Required for multi-sector/multi-theme views to prevent universe collapse (Q-A).
-  - **Portfolio Scoring**: Replaces batch `quick_portfolio_scores` with per-holding `get_peer_snapshot` aggregation + `get_company_info` cross-validation. Required to bypass upstream symbol-mapping bugs (Q-B).
-  - **Active House View**: When a house view is active, V2 patterns are MANDATORY to ensure tilt integrity.
 
 ---
 
