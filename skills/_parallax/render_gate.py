@@ -106,7 +106,7 @@ SKILL_ANCHORS: dict[str, list[str]] = {
 # (C2): async-tool timeouts, pending/unavailable analyses, partial coverage. The gate
 # hoists these to a trailing status line rather than dropping them with the scaffold.
 _DEGRADED = re.compile(
-    r"(?i)\b(timed out|timeout|pending|unavailable|could not (?:be )?comput|"
+    r"(?i)\b(timed out|timeout|pending|unavailable|could not (?:be )?comput\w*|"
     r"partial(?:ly)?|degraded|not (?:yet )?available)\b"
 )
 # A stripped line that is just a markdown image/link is NOT a degraded-state note even
