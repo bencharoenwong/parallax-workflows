@@ -2,6 +2,7 @@
 
 Run: python3 -m pytest skills/_parallax/test_render_gate.py -q
 """
+
 from __future__ import annotations
 
 import sys
@@ -18,11 +19,11 @@ SCAFFOLD = "**Step A.5 → Batch C complete.** Verified-holdings aggregates...\n
 # confidence let the active/warning/critical banners be stripped. These are the
 # strings the gate must actually preserve.
 REAL_BANNERS = {
-    "active":            "Active house view: 'Q2 Defensive Tilt' — effective 2026-05-01 through 2026-08-01 (45 days remaining).",
-    "warning":           "Active view 'Q2 Defensive Tilt' expires in 12 days (2026-06-20); consider refreshing soon.",
-    "critical":          "⚠ Active view 'Q2 Defensive Tilt' expires in 5 day(s) (2026-06-13). Have you received an updated CIO view? Run /parallax-load-house-view to refresh.",
+    "active": "Active house view: 'Q2 Defensive Tilt' — effective 2026-05-01 through 2026-08-01 (45 days remaining).",
+    "warning": "Active view 'Q2 Defensive Tilt' expires in 12 days (2026-06-20); consider refreshing soon.",
+    "critical": "⚠ Active view 'Q2 Defensive Tilt' expires in 5 day(s) (2026-06-13). Have you received an updated CIO view? Run /parallax-load-house-view to refresh.",
     "not_yet_effective": "House view 'Q3 View' becomes effective on 2026-07-01. Running without view until then.",
-    "expired":           "! House view 'Q1 View' expired 3 day(s) ago (2026-06-01). Tilts NOT applied.",
+    "expired": "! House view 'Q1 View' expired 3 day(s) ago (2026-06-01). Tilts NOT applied.",
 }
 
 PC_HEADER = "## Portfolio Health Status: 🟢 **Healthy** — 0 of 5 flags raised"
@@ -30,6 +31,7 @@ PC_BODY = PC_HEADER + "\n\nbody line\n\n## Consider\n- a question?\n"
 
 
 # --- C1: every real house-view banner SURVIVES the strip ---------------------
+
 
 def test_all_real_banners_survive_strip():
     for state, banner in REAL_BANNERS.items():
@@ -49,9 +51,12 @@ def test_regression_active_banner_not_eaten():
 
 # --- C2: degraded-state note is HOISTED, not dropped -------------------------
 
+
 def test_async_timeout_note_hoisted_not_deleted():
-    draft = ("get_assessment timed out (~3 min) — AI assessment marked pending.\n\n"
-             + PC_BODY)
+    draft = (
+        "get_assessment timed out (~3 min) — AI assessment marked pending.\n\n"
+        + PC_BODY
+    )
     out = gate(draft, "portfolio-checkup")
     assert out.lstrip().startswith("## Portfolio Health Status"), out[:60]
     assert "timed out" in out, "degraded-state note was dropped (C2 violation)"
@@ -65,6 +70,7 @@ def test_pure_scaffold_not_hoisted():
 
 
 # --- C4: Branding Header (per-skill noun) + Ground-truth Integrity survive ----
+
 
 def test_branding_header_survives_per_skill_noun():
     cases = {
@@ -85,9 +91,12 @@ def test_branding_logo_image_survives_above_text_line():
     # integration-pattern.md §5: a URL logo renders as `![client](url)` on its own line
     # ABOVE the branding text line. Both must survive the strip (regression for the
     # gemini-gate finding `branding-logo-stripped`).
-    draft = (SCAFFOLD
-             + "![Acme Capital](https://cdn.example.com/acme/logo.png)\n"
-             + "**Acme Capital** portfolio review\n\n" + PC_BODY)
+    draft = (
+        SCAFFOLD
+        + "![Acme Capital](https://cdn.example.com/acme/logo.png)\n"
+        + "**Acme Capital** portfolio review\n\n"
+        + PC_BODY
+    )
     out = gate(draft, "client-review")
     first = out.lstrip().split("\n", 1)[0]
     assert first.startswith("![Acme Capital]"), f"logo image stripped -> {first!r}"
@@ -98,8 +107,11 @@ def test_logo_url_with_pending_not_hoisted_as_status():
     # A pure image/link line whose URL contains a degraded token ("logo-pending.png")
     # must not be hoisted as a status note (gemini finding `degraded-regex-too-broad`).
     # The logo anchor preserves it anyway; assert no spurious status note is appended.
-    draft = ("![Acme](https://cdn.example.com/acme/logo-pending.png)\n"
-             + "**Acme** portfolio review\n\n" + PC_BODY)
+    draft = (
+        "![Acme](https://cdn.example.com/acme/logo-pending.png)\n"
+        + "**Acme** portfolio review\n\n"
+        + PC_BODY
+    )
     out = gate(draft, "client-review")
     assert "Status note (preserved)" not in out
 
@@ -111,6 +123,7 @@ def test_ground_truth_integrity_survives():
 
 
 # --- C5: fail-open ----------------------------------------------------------
+
 
 def test_failopen_no_anchor_returns_input():
     junk = "no recognizable header here\nmore text\n"
@@ -132,7 +145,12 @@ FIRST_SECTION = {
 
 def test_each_skill_strips_scaffold_keeps_first_section():
     for skill, hdr in FIRST_SECTION.items():
-        draft = SCAFFOLD + "No active house view, white-label inactive.\n\n" + hdr + "\nbody\n"
+        draft = (
+            SCAFFOLD
+            + "No active house view, white-label inactive.\n\n"
+            + hdr
+            + "\nbody\n"
+        )
         out = gate(draft, skill)
         assert out.lstrip().startswith(hdr), (skill, out[:70])
 
@@ -158,7 +176,13 @@ def test_idempotent():
 
 
 def test_every_skill_has_anchors():
-    for skill in ["portfolio-checkup", "client-review", "morning-brief",
-                  "explain-portfolio", "rebalance", "watchlist-monitor",
-                  "portfolio-builder"]:
+    for skill in [
+        "portfolio-checkup",
+        "client-review",
+        "morning-brief",
+        "explain-portfolio",
+        "rebalance",
+        "watchlist-monitor",
+        "portfolio-builder",
+    ]:
         assert SKILL_ANCHORS.get(skill), f"no anchors for {skill}"

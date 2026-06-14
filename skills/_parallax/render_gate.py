@@ -27,6 +27,7 @@ Usage:
     python3 render_gate.py --skill client-review < draft.md     # clean report -> stdout
     echo "$DRAFT" | python3 render_gate.py --skill morning-brief
 """
+
 from __future__ import annotations
 
 import argparse
@@ -125,8 +126,11 @@ def gate(draft: str, skill: str) -> str:
     for i, line in enumerate(lines):
         if anchor_re.search(line):
             body = "\n".join(lines[i:]).strip()
-            notes = [ln.strip() for ln in lines[:i]
-                     if ln.strip() and _DEGRADED.search(ln) and not _IMAGE_OR_LINK.match(ln)]
+            notes = [
+                ln.strip()
+                for ln in lines[:i]
+                if ln.strip() and _DEGRADED.search(ln) and not _IMAGE_OR_LINK.match(ln)
+            ]
             if notes:
                 body += "\n\n> _Status note (preserved): " + " ".join(notes) + "_"
             return body + "\n"
