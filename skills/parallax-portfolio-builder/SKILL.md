@@ -93,13 +93,31 @@ Begin only after Phase A completes. Steps 3–6 have tight dependencies; execute
 - Call `analyze_portfolio` on the final allocation with `stream=true` to enable streaming JSON extraction. **Fallback for large responses:** use streaming; if streaming unavailable or times out, fall back to `check_portfolio_redundancy` + `quick_portfolio_scores` for light validation.
 - **Sanity-check `check_portfolio_redundancy` response in this fallback path** (mirrors Step 4): if the portfolio has >60% concentration in a single sector but `sector_concentration: {}` is empty and `"well-diversified"` is returned, the tool's concentration detection has silently failed — compute concentration client-side from per-holding sectors and flag the tool bug in output. The Step 4 sanity-check gate must fire on the fallback path as well, not only on the primary call.
 - **Scope of this fallback:** `check_portfolio_redundancy` + `quick_portfolio_scores` covers redundancy and basic factor coverage only. `analyze_portfolio` fields that are NOT recoverable from the fallback — rolling metrics, drawdown analysis, contribution attribution, performance time series — must be flagged as "unavailable in fallback path" in output. Do not silently omit them; the operator must know what wasn't validated.
-- **Symbol-mapping caveat (mirrors parallax-conventions.md §2):** `quick_portfolio_scores` on this fallback path is subject to the same symbol-mapping bug — non-US ticker scores may be mis-attributed. Cross-validate every `company_name` returned by quick_portfolio_scores against `get_company_info` before treating any score as authoritative. Mismatches flagged ⚠ MISMATCH and excluded from validation output per Step 2 / loader.md §5 rule 3. 
+- **Symbol-mapping caveat (mirrors parallax-conventions.md §2):** `quick_portfolio_scores` on this fallback path is subject to the same symbol-mapping bug — non-US ticker scores may be mis-attributed. Cross-validate every `company_name` returned by quick_portfolio_scores against `get_company_info` before treating any score as authoritative. Mismatches flagged ⚠ MISMATCH and excluded from validation output per Step 2 / loader.md §5 rule 3.
 - **When `--augment-silent` was applied:** the audit entry MUST carry `augmented_dimensions: [{path, source_tool, source_call_args, data_as_of}]` so the per-portfolio JIT augmentation provenance is on the audit chain and recoverable for compliance review. When `--augment-silent` was NOT applied but silent dimensions existed, log `silent_dimensions_skipped: [...]` so the auditor can see what wasn't filled.
 - Append audit log entry per loader.md §6.
 
 ### Pre-Render — Load white-label branding
 
 Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format. The loader returns exactly six keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+
+### Render — deterministic gate (LAST step, mandatory)
+
+Compose the complete report per **Output Format** below, then run it through the shared render gate in **one Bash step** before replying. Use a private `mktemp` file (never a fixed/predictable path — `/tmp` symlink hazard). The shared gate is `_parallax/render_gate.py`, a sibling of the directory you loaded this SKILL.md from; pass this skill's key (use the loaded directory's absolute path as `<skill-dir>`):
+
+```
+DRAFT="$(mktemp "${TMPDIR:-/tmp}/builder.XXXXXX")"
+cat > "$DRAFT" <<'REPORT'
+<your complete drafted report goes here>
+REPORT
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill portfolio-builder < "$DRAFT"; rm -f "$DRAFT"
+```
+
+**Your entire final message is exactly that command's stdout** — nothing before it (no step/batch-completion notes, no scratch computation, no "no active house view" / white-label config-probe narration), nothing after it.
+
+**Degraded-state rule:** if an async tool (e.g. `get_assessment`, `get_news_synthesis`) times out or returns no data, render the pending/unavailable note INSIDE the relevant section or the Provenance line — NOT as a preamble above the report — so it is part of the rendered body and survives the gate. (The gate also hoists a leaked degraded note as a backstop.)
+
+`_parallax/render_gate.py` is pure-stdlib and deterministically drops anything before the first rendered block (House View Preamble banner / Branding Header / Ground-truth Integrity / this skill's title or first rendered section), preserving the active-house-view banner in every `view_status` state. Same operator-agnostic-helper pattern as `view_status.py` / `loader.py` (a real Bash tool call, not prose).
 
 ## Output Format
 

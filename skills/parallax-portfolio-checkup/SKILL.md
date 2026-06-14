@@ -106,19 +106,19 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 
 ### Render — deterministic gate (LAST step, mandatory)
 
-Compose the complete report per **Output Format** below, then run it through the render gate in **one Bash step** before replying. Use a private `mktemp` file (never a fixed/predictable path like `/tmp/pcheckup_draft.md` — that is a world-writable-`/tmp` symlink hazard). `render_gate.py` lives in the **same directory you loaded this SKILL.md from** (the registered skill directory); use that directory's absolute path as `<skill-dir>`:
+Compose the complete report per **Output Format** below, then run it through the **shared** render gate in **one Bash step** before replying. Use a private `mktemp` file (never a fixed/predictable path like `/tmp/pcheckup_draft.md` — that is a world-writable-`/tmp` symlink hazard). The shared gate is `_parallax/render_gate.py`, a sibling of the directory you loaded this SKILL.md from; pass this skill's key with `--skill portfolio-checkup` (use the loaded directory's absolute path as `<skill-dir>`):
 
 ```
 DRAFT="$(mktemp "${TMPDIR:-/tmp}/pcheckup.XXXXXX")"
 cat > "$DRAFT" <<'REPORT'
 <your complete drafted report goes here>
 REPORT
-python3 "<skill-dir>/render_gate.py" < "$DRAFT"; rm -f "$DRAFT"
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill portfolio-checkup < "$DRAFT"; rm -f "$DRAFT"
 ```
 
 **Your entire final message is exactly that command's stdout** — nothing before it (no "composing", no step notes, no scratch computation), nothing after it.
 
-`render_gate.py` is pure-stdlib and deterministically drops anything before the first rendered header (House View Preamble / Branding Header / Portfolio Health Status / Portfolio Checkup title) — a safety net so a stray preamble can never reach the user. Same operator-agnostic-helper pattern as `view_status.py` / `loader.py` (a real Bash tool call, not prose).
+`_parallax/render_gate.py` is pure-stdlib and deterministically drops anything before the first rendered block (House View Preamble banner / Branding Header / Ground-truth Integrity / Portfolio Health Status / Portfolio Checkup title). It preserves the active-house-view banner in **every** `view_status` state (active / warning / critical / not-yet-effective / expired) and hoists any async-degraded note rather than dropping it. Same operator-agnostic-helper pattern as `view_status.py` / `loader.py` (a real Bash tool call, not prose).
 
 ## Output Format
 
