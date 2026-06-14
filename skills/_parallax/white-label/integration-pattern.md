@@ -83,7 +83,7 @@ Markdown skills (the 12 Tier 2 consumers) render in chat, not to .docx. "Brandin
    ```
    If `client_name == ""` (legacy config with no name field), **skip the header line entirely** — do not render `**** report` with empty bolding. The deliverable starts with the first analytical section in that case.
 
-   If `branding["logos"]["primary"]` is set AND is a URL (starts with `http://` or `https://`), embed: `![<client_name>](<url>)`. The loader resolves on-disk logos to absolute local filesystem paths (e.g., `/Users/<user>/.parallax/client-branding/primary-logo.png`), which are not embeddable in any markdown delivered over a network. **If `branding["logos"]["primary"]` starts with `/` or `~`, skip image embed entirely and add a second Provenance line: `Logo on file: <basename>`** (see §7).
+   If `branding["logos"]["primary"]` is set AND is a URL (starts with `http://` or `https://`), embed: `![<client_name>](<url>)`. **The logo MUST render on its OWN line immediately ABOVE the branding text line** to ensure the shared render gate preserves it (see `parallax-conventions.md` §10). The loader resolves on-disk logos to absolute local filesystem paths (e.g., `/Users/<user>/.parallax/client-branding/primary-logo.png`), which are not embeddable in any markdown delivered over a network. **If `branding["logos"]["primary"]` starts with `/` or `~`, skip image embed entirely and add a second Provenance line: `Logo on file: <basename>`** (see §7).
 
 2. **Provenance footer** (always present when this skill is wired, regardless of `white_label_active`): see §7.
 

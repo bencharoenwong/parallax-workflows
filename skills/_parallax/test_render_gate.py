@@ -63,6 +63,19 @@ def test_async_timeout_note_hoisted_not_deleted():
     assert "Status note (preserved)" in out
 
 
+def test_comput_variants_hoisted():
+    # Widened regex for 'comput\w*' (regression for 'could not be computed' finding)
+    draft = "Financials could not be computed for AAPL.O.\n\n" + PC_BODY
+    out = gate(draft, "portfolio-checkup")
+    assert "Status note (preserved)" in out
+    assert "could not be computed" in out
+
+    draft = "Could not compute risk metrics.\n\n" + PC_BODY
+    out = gate(draft, "portfolio-checkup")
+    assert "Status note (preserved)" in out
+    assert "Could not compute" in out
+
+
 def test_pure_scaffold_not_hoisted():
     # Non-degraded scaffold must NOT produce a spurious status note.
     out = gate(SCAFFOLD + PC_BODY, "portfolio-checkup")

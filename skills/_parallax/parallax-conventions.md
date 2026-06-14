@@ -339,7 +339,7 @@ The gate (`_parallax/render_gate.py`) is a pure-stdlib Python script. It determi
 - **Common anchors:** House View Preamble banner, Branding Header logo, and Ground-truth Integrity table.
 - **Skill anchors:** The specific skill's title, first rendered section, or Branding Header text.
 
-**Degraded-state notes** (e.g. `Analysis pending — service temporarily unavailable`) found in the stripped preamble are **hoisted** to a status line at the bottom of the report, ensuring no tool-failure visibility is lost.
+**Degraded-state notes** (e.g. `Analysis pending — service temporarily unavailable` or `Rolling metrics could not be computed`) found in the stripped preamble are **hoisted** to a status line at the bottom of the report, ensuring no tool-failure visibility is lost.
 
 ### 10.3 Usage in SKILL.md
 
