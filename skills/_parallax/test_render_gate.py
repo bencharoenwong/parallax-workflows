@@ -81,6 +81,29 @@ def test_branding_header_survives_per_skill_noun():
         assert "Acme Capital" in out.split("\n", 1)[0], (skill, out[:80])
 
 
+def test_branding_logo_image_survives_above_text_line():
+    # integration-pattern.md §5: a URL logo renders as `![client](url)` on its own line
+    # ABOVE the branding text line. Both must survive the strip (regression for the
+    # gemini-gate finding `branding-logo-stripped`).
+    draft = (SCAFFOLD
+             + "![Acme Capital](https://cdn.example.com/acme/logo.png)\n"
+             + "**Acme Capital** portfolio review\n\n" + PC_BODY)
+    out = gate(draft, "client-review")
+    first = out.lstrip().split("\n", 1)[0]
+    assert first.startswith("![Acme Capital]"), f"logo image stripped -> {first!r}"
+    assert "Acme Capital" in out
+
+
+def test_logo_url_with_pending_not_hoisted_as_status():
+    # A pure image/link line whose URL contains a degraded token ("logo-pending.png")
+    # must not be hoisted as a status note (gemini finding `degraded-regex-too-broad`).
+    # The logo anchor preserves it anyway; assert no spurious status note is appended.
+    draft = ("![Acme](https://cdn.example.com/acme/logo-pending.png)\n"
+             + "**Acme** portfolio review\n\n" + PC_BODY)
+    out = gate(draft, "client-review")
+    assert "Status note (preserved)" not in out
+
+
 def test_ground_truth_integrity_survives():
     draft = SCAFFOLD + "## Ground-truth Integrity\n| input | name |\n\n" + PC_BODY
     out = gate(draft, "client-review")

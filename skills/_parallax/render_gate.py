@@ -46,8 +46,13 @@ _HOUSE_VIEW = (
 )
 # Ground-truth Integrity table — renders first on a holding-name mismatch (C4).
 _GROUND_TRUTH = r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)ground-?truth\b"
+# Branding Header logo — per integration-pattern.md §5 a URL logo renders as
+# `![<client>](<url>)` on its OWN line ABOVE the branding text line. Anchor on a
+# leading image-only line so the logo survives the strip (C4). Scaffold never emits a
+# bare markdown image, so this does not false-anchor on internal narration.
+_BRANDING_LOGO = r"^\s{0,3}!\[[^\]]*\]\([^)]+\)\s*$"
 
-COMMON_ANCHORS = [_HOUSE_VIEW, _GROUND_TRUTH]
+COMMON_ANCHORS = [_HOUSE_VIEW, _BRANDING_LOGO, _GROUND_TRUTH]
 
 
 def _branding(noun: str) -> str:
@@ -103,6 +108,9 @@ _DEGRADED = re.compile(
     r"(?i)\b(timed out|timeout|pending|unavailable|could not (?:be )?comput|"
     r"partial(?:ly)?|degraded|not (?:yet )?available)\b"
 )
+# A stripped line that is just a markdown image/link is NOT a degraded-state note even
+# if its URL contains a token like "logo-pending.png" — don't hoist it.
+_IMAGE_OR_LINK = re.compile(r"^\s{0,3}!?\[[^\]]*\]\([^)]+\)\s*$")
 
 
 def gate(draft: str, skill: str) -> str:
@@ -117,7 +125,8 @@ def gate(draft: str, skill: str) -> str:
     for i, line in enumerate(lines):
         if anchor_re.search(line):
             body = "\n".join(lines[i:]).strip()
-            notes = [ln.strip() for ln in lines[:i] if ln.strip() and _DEGRADED.search(ln)]
+            notes = [ln.strip() for ln in lines[:i]
+                     if ln.strip() and _DEGRADED.search(ln) and not _IMAGE_OR_LINK.match(ln)]
             if notes:
                 body += "\n\n> _Status note (preserved): " + " ".join(notes) + "_"
             return body + "\n"
