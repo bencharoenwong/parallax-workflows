@@ -102,28 +102,12 @@ The directive must:
 
 ## Build-time check
 
-`build-skills.sh` should grow a check that:
+`build-skills.sh` runs two reference-integrity lints in its `RUN_LINT` block; both hard-fail the build:
 
-1. Greps every SKILL.md for `references/<name>.md` patterns
-2. Asserts each referenced file exists
-3. Fails the build if any directive points at a missing file
+1. **JIT-load directive lint** (`lint_jit_directives`, inline) — every `references/<name>.md` directive in a SKILL.md must resolve to a real file (local, `../sibling`, or bare cross-skill). Closes the silent-drift mode where a renamed reference file leaves the directive pointing nowhere and the model paraphrases from training instead of erroring.
+2. **Section-reference lint** (`_parallax/scripts/section-ref-lint.py`) — every `<file>.md §N[.M]` cross-reference must resolve to a heading in the named file. Closes the same drift class for section pointers (the kind of bug where a `§N.M` pointer outlives its heading). Scoped to cross-file refs — bare intra-file `§N.M` is too noisy (~870 in-repo) to disambiguate; recognizes indented headings, resolves bare `SKILL.md §N` to the sibling SKILL.md, and ignores refs inside HTML comments.
 
-This is the JIT-load directive drift mitigation flagged by Reviewer A in the council session. Until that check ships, JIT-directive drift is a silent-failure mode — a renamed file leaves the directive pointing nowhere, and the model proceeds without the reference (often paraphrasing from training rather than erroring).
-
-Implementation sketch (~20 lines of bash):
-
-```bash
-# inside build-skills.sh, after coverage-lint
-for skill_md in skills/*/SKILL.md; do
-  skill_dir=$(dirname "$skill_md")
-  while IFS= read -r ref; do
-    if [ ! -f "$skill_dir/$ref" ]; then
-      echo "FAIL: $skill_md references $ref but file does not exist"
-      exit 1
-    fi
-  done < <(grep -oE 'references/[a-zA-Z0-9_-]+\.md' "$skill_md" | sort -u)
-done
-```
+Both replaced earlier author-discipline-only enforcement (the JIT lint was originally specced here as a future "should grow" check; it and the section-ref lint now ship). Trigger-completeness (`--`-flag ↔ description-keyword) remains an unbuilt seam — see "Description / Trigger Completeness" below.
 
 ## Migration protocol (for splitting an existing SKILL.md)
 
