@@ -241,7 +241,8 @@ skills/
 ├── _parallax/                  # Shared conventions, token costs, AI profile framework
 │   ├── parallax-conventions.md # RIC resolution, parallel execution, fallbacks
 │   ├── token-costs.md          # Per-tool and per-workflow token estimates
-│   └── AI-profiles/            # Schema, output template, and profile specs for AI-* skills
+│   ├── AI-profiles/            # Schema, output template, and profile specs for AI-* skills
+│   └── scripts/                # Build/gate tooling: spec-validate, section-ref-lint, run-gate-tests
 ├── parallax-should-i-buy/               # Quick stock evaluation
 │   └── SKILL.md
 ├── parallax-deep-dive/                  # Full single-stock analysis
