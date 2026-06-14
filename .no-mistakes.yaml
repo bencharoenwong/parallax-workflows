@@ -2,11 +2,12 @@
 # Overrides ~/.no-mistakes/config.yaml for THIS repo only; other repos fall back
 # to the global agent (codex).
 
-# Gate agent for this repo: opencode (model pinned to opencode-go/glm-5.1 via the
-# global agent_args_override — that field is global-only). Chosen over the global
-# codex (rate-limited) and claude (OOM under session contention). glm-5.1 is
-# gate-compatible (forced-tool capable); kimi-k2.6 is NOT — see opencode.jsonc.
-agent: opencode
+# Gate agent for this repo: acp:gemini (Google Gemini via acpx). Switched from
+# opencode/glm-5.1 on 2026-06-14 — opencode-go hit recurring 429 quota hangs on the
+# review step. Matches the global default (acp:gemini). This repo is PUBLIC, so its
+# content reaching Google is already public; drive runs with an explicit --intent
+# string (no transcript inference) to keep unrelated session content out.
+agent: acp:gemini
 
 # Deterministic test command — replaces the LLM-agent test fallback that failed
 # under codex usage limits / claude OOM. Runs the FULL skill/eval suite via the
