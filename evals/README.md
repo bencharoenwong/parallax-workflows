@@ -107,6 +107,12 @@ evals/
 ├── skills/              # per-skill eval specs (one eval_config.py each)
 │   ├── should-i-buy/       # reference baseline spec
 │   ├── AI-buffett/         # different output family — its own checks
+│   ├── client-review/      # adviser-facing directive recommendations
+│   ├── explain-portfolio/  # reactive drawdown attribution
+│   ├── morning-brief/      # fund-manager daily regime/health brief
+│   ├── portfolio-builder/  # constructive thesis-to-allocation
+│   ├── rebalance/          # prioritized trades + quantified targets
+│   ├── watchlist-monitor/  # score-surveillance scan (no weights)
 │   └── portfolio-checkup/  # DRAFT — spec only, never run live
 ├── tasks/<skill>/core.jsonl  # eval task inputs per skill
 ├── fixtures/<skill>/       # golden + broken stream-json transcripts (offline tests)
@@ -119,6 +125,12 @@ evals/
 - `should-i-buy` — the reference baseline spec.
 - `AI-buffett` — a different output family (plain-line labels, citation/verdict
   contract); declares its own required sections and skill-specific checks.
+- `client-review` — adviser-facing directive recommendations; includes suitability assessment and actionable recommendation checks.
+- `explain-portfolio` — reactive drawdown attribution; includes return verification and divergence verdict (Transient/Fundamental) checks.
+- `morning-brief` — fund-manager daily regime/health brief; includes 800-word limit and macro-snapshot grounding checks.
+- `portfolio-builder` — constructive thesis-to-allocation; includes holdings-allocated check (weights + scores).
+- `rebalance` — prioritized trades + quantified targets; includes trade-recs-quantified check.
+- `watchlist-monitor` — score-surveillance scan (no weights); includes score-changes-quantified check.
 - `portfolio-checkup` — **DRAFT spec only, never run.** Same output family as
   should-i-buy.
 
