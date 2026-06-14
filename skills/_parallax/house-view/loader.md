@@ -195,6 +195,9 @@ When `PARALLAX_LOADER_V2=1`, portfolio consumer skills call `get_peer_snapshot` 
 When an active view is loaded and applied, every consumer skill MUST:
 
 1. **Load preamble** (top of output, above the main result):
+
+   ### §5.1 Load preamble — renders at the very top of output, above the main result
+
    > **House view active:** *[view_name]* — uploaded by [uploader_role] on [upload_date], effective [effective_date] through [valid_through or computed_expiry].
    >
    > [Any low-confidence warnings from §2.]
