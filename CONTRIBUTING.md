@@ -20,17 +20,17 @@ Thanks for the interest. A few notes on what fits and what doesn't.
 ## Before opening a PR
 
 1. **Check `DECISIONS.md`.** It's a long file, but a quick search for the area you're touching will surface prior reasoning. If your PR contradicts a `[DROP]` entry, explain why.
-2. **Run the tests.** Python modules have coverage in `skills/_parallax/house-view/tests/`. From the repo root:
+2. **Run the tests.** From the repo root, the full skill/eval suite — exactly what
+   the no-mistakes gate runs — is one command:
    ```bash
    python -m venv .venv && source .venv/bin/activate
    pip install -r skills/_parallax/house-view/requirements.txt pytest
-   pytest skills/_parallax/house-view/tests/
+   bash skills/_parallax/scripts/run-gate-tests.sh   # all roots, ~905 tests
    ```
-   If you touch anything under `evals/`, also run the eval grader suite — the
-   CI-safe pure-function tests, never a live rollout:
-   ```bash
-   cd evals && python3 -m pytest graders -q
-   ```
+   It runs one `pytest` process per top-level test root, because three skills ship
+   a `tests/conftest.py` that collide in a single invocation. While iterating you
+   can run just one area, e.g. `pytest skills/_parallax/house-view/tests/` or
+   `cd evals && python3 -m pytest graders -q`.
 3. **For SKILL.md changes**, verify the workflow runs end-to-end in a fresh Claude Code session. The runtime caches SKILL.md content at session start, so unit-style tests don't catch SKILL.md regressions.
 4. **Keep the diff focused.** One concern per PR. Refactors that bundle multiple unrelated changes get bounced.
 

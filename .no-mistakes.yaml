@@ -9,9 +9,11 @@
 agent: opencode
 
 # Deterministic test command — replaces the LLM-agent test fallback that failed
-# under codex usage limits / claude OOM. Runs the CONTRIBUTING-blessed CI-safe
-# suites in one shell-agnostic invocation. Verified green: 285 passed, 1 xfailed.
-# (The broader suite can't run in one invocation — white-label and judge-house-view
-# both ship tests/conftest.py, which collide via pytest ImportPathMismatchError.)
+# under codex usage limits / claude OOM. Runs the FULL skill/eval suite via the
+# per-root runner (one pytest process per top-level test root, so the three
+# tests/conftest.py files don't collide — a single invocation, even with
+# --import-mode=importlib, fails on the duplicate `tests.conftest` plugin name).
+# Roots are auto-discovered, so new skills with tests are covered with no edit.
+# Verified green: 7 suites / 905 tests. See the script header for the full why.
 commands:
-  test: python3 -m pytest skills/_parallax/house-view/tests evals/graders -q
+  test: bash skills/_parallax/scripts/run-gate-tests.sh
