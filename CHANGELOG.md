@@ -11,7 +11,8 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 - **`parallax-conventions.md` §0.3 Validation before reporting done** — confirm MCP-batch data integrity and that the `view_status` `banner` string actually rendered before claiming a workflow complete. Open/close complement to §0.0.
 - **`skill-structure-conventions.md` "Canonical source & path resolution"** — resolve `_parallax/...` to the canonical `parallax-workflows` copy; never edit a `~/.claude`-native fork; verify symlink-vs-native before grading a registered skill.
 - **`_parallax/scripts/section-ref-lint.py`** — build-time lint flagging dangling `<file>.md §N[.M]` cross-references. Wired into `build-skills.sh` as a hard gate beside the JIT-directive lint. Recognizes indented headings, resolves bare `SKILL.md §N` to the sibling SKILL.md, ignores refs inside HTML comments. On first run it caught a §5.1 pointer referenced by 14 skills with no anchor.
-- **`_parallax/scripts/run-gate-tests.sh`** — runs the FULL skill/eval test suite, one `pytest` process per top-level test root (the three `tests/conftest.py` files collide in a single invocation). Auto-discovers roots; asserts ≤1 conftest per root and fails loudly otherwise. The no-mistakes gate `commands.test` now points here — **905 tests across 7 suites**, up from ~285.
+- **`_parallax/scripts/run-gate-tests.sh`** — runs the FULL skill/eval suite, one `pytest` process per top-level test root (the three `tests/conftest.py` files collide in a single invocation). Auto-discovers roots; asserts ≤1 conftest per root and fails loudly otherwise. The no-mistakes gate `commands.test` now points here — **905 tests across 7 suites**, up from ~285.
+- **`skills/_parallax/render_gate.py`** — shared deterministic pre-render gate for portfolio-family skills; strips pre-report scaffold (step/batch notes, scratch computation, white-label probes) while preserving house-view banners and branding headers. Hoists async-timeout/pending notes out of the stripped preamble. Wired to 7 skills.
 
 ### Changed
 - **`loader.md` §5 gains a `### §5.1 Load preamble` heading** — the preamble was list rule 1 with an orphaned `### §5.1a`; 14 skills referenced the non-existent §5.1. The anchor resolves them all.
@@ -19,7 +20,8 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 - **`parallax-make-house-view/SKILL.md`** — the `(v2 plan §2.2)` parenthetical (a model-facing pointer to a non-loadable `notes/` doc) becomes an HTML-comment rationale.
 - **`build-skills.sh`** runs the new section-ref lint in its `RUN_LINT` block.
 - **`CONTRIBUTING.md`** test step points at the full-suite runner.
-- **`.no-mistakes.yaml`** (local gate config) — per-repo `agent: opencode` (model `opencode-go/glm-5.1`); `commands.test` → the full-suite runner.
+- **`.no-mistakes.yaml`** (local gate config) — gate agent switched to **`acp:gemini`** (Google Gemini) from `opencode/glm-5.1` to resolve recurring 429 quota hangs; `commands.test` → the full-suite runner.
+
 
 ## 2026-06-11
 

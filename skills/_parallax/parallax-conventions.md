@@ -319,3 +319,38 @@ Every workflow output that contains AI-generated narrative, synthesis, or recomm
 **Exemption:** Skills that produce configuration artifacts rather than direct client-facing analysis (currently `parallax-white-label-onboard` and `parallax-make-house-view`) are exempt from rendering §9.2. The rationale is narrow: such skills must (a) emit YAML/audit artifacts rather than a finished client deliverable, AND (b) gate any LLM-generated content behind an explicit operator confirmation step before that content can flow to downstream consumer skills. `parallax-white-label-onboard` qualifies because its Step 1.5 voice extraction is LLM-driven, but the resulting voice profile is reviewed and confirmed by the operator at Step 3 before being written to `~/.parallax/client-branding/` for downstream skills to consume — at which point the downstream skill renders §9.2 in its own output. `parallax-make-house-view` qualifies because it emits `view.yaml` + `prose.md` configuration artifacts whose LLM-synthesized content is gated by the shared Step 7 confirmation gate (`gate_present.py` — no save path bypasses it) before any downstream consumer can load the view — and every downstream consumer renders §9.2 in its own output per loader.md §5 rule 6. A future skill that emits LLM-generated content without an equivalent operator gate does NOT qualify for exemption, even if it produces "config" — the gate, not the artifact format, is the load-bearing condition. In particular, `parallax-judge-house-view` does NOT qualify: it emits an LLM-as-judge analysis report (not a config artifact) read directly by a natural person, so its report renders §9.2. Adding a skill to `_NINE_TWO_EXEMPT_SKILLS` in the test gate requires updating this exemption text in the same PR; entries are full skill directory names (`parallax-*`).
 
 **Consumer skill reference pattern:** Skills MUST render the §9.2 banner by reference, not by inlining the text. Example Output Format directive: `Render AI-interaction disclosure per parallax-conventions.md §9.2 immediately above the disclaimer.` Inlining the banner text creates drift risk — when counsel finalizes the wording (or when the attribution API lands), the canonical §9.2 entry is edited once and all consumer skills propagate automatically.
+
+---
+
+## 10. Render Gate
+
+Portfolio-family skills (`client-review`, `morning-brief`, `portfolio-builder`, `portfolio-checkup`, `rebalance`, `explain-portfolio`, `watchlist-monitor`) MUST pass their drafted report through the shared deterministic render gate as their **MANDATORY last step**.
+
+### 10.1 Why it exists
+
+Orchestrating models often emit "pre-report scaffold" — step-completion notes, scratch computation, cross-validation status, white-label config probes, or "no active house view" narration. This scaffold:
+1.  **Clutters the output** for the end-user.
+2.  **Weakens the white-label illusion** by surfacing the underlying model's "thinking."
+3.  **Causes drift** across skills when each tries to implement its own "strip to header" logic (some stripping too much, e.g. the house-view banner).
+
+### 10.2 Operation
+
+The gate (`_parallax/render_gate.py`) is a pure-stdlib Python script. It deterministically strips everything before the first recognized "anchor" block:
+- **Common anchors:** House View Preamble banner, Branding Header logo, and Ground-truth Integrity table.
+- **Skill anchors:** The specific skill's title, first rendered section, or Branding Header text.
+
+**Degraded-state notes** (e.g. `Analysis pending — service temporarily unavailable`) found in the stripped preamble are **hoisted** to a status line at the bottom of the report, ensuring no tool-failure visibility is lost.
+
+### 10.3 Usage in SKILL.md
+
+Every portfolio-family skill carries a `### Render — deterministic gate` heading before its **Output Format** section. The directive specifies the exact Bash one-liner to run:
+
+```bash
+DRAFT="$(mktemp "${TMPDIR:-/tmp}/skill.XXXXXX")"
+cat > "$DRAFT" <<'REPORT'
+<your complete drafted report goes here>
+REPORT
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill <skill-key> < "$DRAFT"; rm -f "$DRAFT"
+```
+
+The skill's **entire final message** is exactly that command's stdout. `render_gate.py` uses a fail-open design: if no anchor is found, the input is returned unchanged, ensuring the gate never destroys a report it cannot positively locate.
