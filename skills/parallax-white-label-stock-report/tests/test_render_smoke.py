@@ -166,6 +166,16 @@ def test_full_white_label_refuses_without_disclaimers():
     assert not os.path.exists(out)
 
 
+def test_full_white_label_with_credit_keeps_powered_by():
+    # client's own disclosures, but the client opts to keep the Chicago Global credit
+    branding = dict(FULL_WL_BRANDING)
+    branding["powered_by_optin"] = True
+    html = r.render_html(RESPONSE, branding)
+    assert "Powered by Chicago Global" in html             # credit kept by opt-in
+    assert "Example Securities Commission" in html          # client's own disclosures
+    assert "Monetary Authority of Singapore" not in html    # not the CGC/MAS boilerplate
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

@@ -15,7 +15,7 @@ gotchas:
   - Disclosures are NOT in the get_stock_report JSON. The skill renders its own bundled verbatim copy of the Chicago Global / MAS disclosure boilerplate. It is a pinned asset; if CGC updates its disclosure wording, re-sync the constant in render_stock_report.py from response.html_url. Never reword it.
   - Semantic colors (positive green, negative red, warning amber) are FIXED and never taken from the brand. They carry meaning, not identity. Only primary/secondary/accent/background/fonts/logo come from the client config.
   - No active brand config → the renderer falls back to the default Chicago Global palette and the output is NOT white-labeled. Run /parallax-white-label-onboard first to skin it for a client.
-  - Two compliance modes (see Compliance). Default is co-brand: visual skin only, with the Chicago Global / MAS disclosures kept verbatim. The gated --full-white-label mode strips CG/Parallax attribution and renders the client's OWN disclosures from the brand config (voice.disclaimers[]); it refuses to render if none are configured. Never hand-edit disclosures or improvise a private-label without the client's configured disclosure language.
+  - Output is two independent choices (see Compliance): whose disclosures (Chicago Global / MAS by default, or the client's OWN via --full-white-label, collected at run time into voice.disclaimers[] and refused if empty), and whether to keep the "Powered by Chicago Global" credit (shown by default; kept in full white-label only with --powered-by). Never hand-edit disclosures or improvise a private-label without the client's confirmed disclosure language.
   - During early rollout, do not send a generated report to an end client until Chicago Global has signed off on the compliance posture.
 ---
 
@@ -33,6 +33,7 @@ This is a presentation overlay. The onboarded client is the presentation brand; 
 /parallax-white-label-stock-report <path/to/report.json>  # use an already-downloaded report JSON (no fetch, no paid call)
 /parallax-white-label-stock-report <TICKER> --force    # ignore cache, re-fetch the paid report
 /parallax-white-label-stock-report <TICKER> --full-white-label  # private-label: client's own disclosures, no CG/Parallax attribution
+/parallax-white-label-stock-report <TICKER> --full-white-label --powered-by  # client's own disclosures, keep the Chicago Global credit
 ```
 
 The active brand config (written by `/parallax-white-label-onboard`) at `~/.parallax/client-branding/config.yaml` is used automatically. With no config, the report renders in the default Chicago Global palette (not white-labeled).
@@ -53,7 +54,7 @@ The active brand config (written by `/parallax-white-label-onboard`) at `~/.para
 - The per-page footer carries the client name and a confidentiality marker ("<Client> - Confidential" plus "Page X of N"); Chicago Global's MAS-regulated identity sits in the disclosures section, not the footer.
 
 **`--full-white-label` - private-label (gated).** The client presents the report as their own:
-- Removes the "Powered by Chicago Global" credit and every other CG / Parallax trace.
+- Removes every Chicago Global / Parallax trace by default. The client may opt to keep a "Powered by Chicago Global" credit (`--powered-by`); otherwise the document carries no Chicago Global mark.
 - Renders the client's OWN regulatory disclosures, taken verbatim from the brand config's `voice.disclaimers[]` ({jurisdiction, text, placement}) - the field the onboard skill already provides for jurisdiction-specific compliance footers.
 - Refuses to render if `voice.disclaimers[]` is empty, so it can never emit regulated research with no disclosures.
 - This requires the client to actually hold the appropriate authorization in their jurisdiction and to supply their own compliance-approved disclosure language. It goes a step beyond the shared white-label integration pattern (which keeps disclaimers fixed), so confirm with Chicago Global before using it for a live client.
@@ -95,11 +96,18 @@ mkdir -p ~/.parallax/stock-report-cache
 Confirm `~/.parallax/client-branding/config.yaml` exists and names the intended client (`metadata.client_name`). If it is absent or for the wrong client, collect the branding before rendering: ask the client for their brand guidelines, covering at least their logo and their colour palette (colorways); fonts are helpful but optional. Then run `/parallax-white-label-onboard` to capture them into the config. Without a config the render falls back to the default Chicago Global palette and is not white-labeled.
 
 ### 4. Confirm the output mode with the client
-Ask the client which output they need:
-- **Client branding plus "Powered by Chicago Global"** (co-brand, the default): keeps the Chicago Global / MAS disclosures verbatim.
-- **Full client branding** (full white-label): strips every Chicago Global / Parallax trace and renders the client's own disclosures instead. This needs the client's regulatory disclosures loaded in the config under `voice.disclaimers[]`; the renderer refuses to run without them. See Compliance.
+Two independent choices. Ask the client both:
 
-Map co-brand to the default render, and full client branding to the `--full-white-label` flag.
+**Whose disclosures?**
+- **Chicago Global / MAS** (default): the bundled regulatory disclosures, kept verbatim. Nothing more to collect.
+- **The client's own**: the client is the regulated face of the report. Collect their regulatory details at run time (see below) and render those instead. Uses `--full-white-label`.
+
+**Keep the "Powered by Chicago Global" credit?**
+- Shown by default. With the client's own disclosures it is hidden, unless the client opts to keep it, in which case add `--powered-by` (their own disclosures plus a Chicago Global credit).
+
+This yields three usable variants: co-brand (CG/MAS plus credit); client identity with credit (`--full-white-label --powered-by`); full private-label (`--full-white-label`, no credit).
+
+**Collecting the client's own regulatory details.** When the client wants their own disclosures, ask them for what their regulator requires, at minimum: the legal entity name, the registration or license number, the regulator's name, and the conflict-of-interest / disclaimer wording their compliance approves. Assemble these into the brand config under `voice.disclaimers[]` (each entry `{jurisdiction, text, placement}`). Do not invent or finalise regulatory wording: draft from what the client gives you, but the client confirms the final text, and the renderer reproduces it verbatim. The renderer refuses `--full-white-label` if `voice.disclaimers[]` is empty.
 
 ### 5. Render
 ```
