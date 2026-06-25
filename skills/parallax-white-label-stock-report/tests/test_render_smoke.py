@@ -163,6 +163,7 @@ def test_full_white_label_strips_cg_and_uses_client_disclosures():
     assert "Chicago Global" not in html
     assert "Monetary Authority of Singapore" not in html
     assert "Research and analysis by Chicago Global" not in html
+    assert "Powered by Parallax" not in html       # credit suppressed without powered_by_optin
     # client's own disclosures rendered instead
     assert "Example Securities Commission" in html
     assert 'id="sec-disclosures"' in html

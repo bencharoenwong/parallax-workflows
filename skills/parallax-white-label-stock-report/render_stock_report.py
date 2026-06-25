@@ -728,8 +728,10 @@ def render_disclosures(branding):
 def render_html(response, branding):
     # Note: in --full-white-label mode this renderer removes the static Parallax
     # attribution credit and replaces the Chicago Global / MAS disclosure blocks with
-    # the client's own. However, the AI-generated prose fields from get_stock_report
-    # (score_analysis, analyst_analysis, peers_analysis, financial_analysis) are
+    # the client's own. However, all AI-generated prose fields from get_stock_report
+    # (investment_thesis, score_analysis, analyst_analysis, peers_analysis,
+    # financial_analysis, company_profile, news_analysis, technical_analysis,
+    # financial_summary, and any field with a _prompt_version sibling) are
     # passed through verbatim. These fields are served brand-neutral by Parallax; if
     # your integration uses a non-standard response source, review the prose for
     # brand mentions before external distribution.

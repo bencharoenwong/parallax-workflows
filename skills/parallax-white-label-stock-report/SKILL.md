@@ -14,7 +14,7 @@ gotchas:
   - Single-letter US tickers fail as bare symbols ("Symbol too short"). Resolve to RIC first (Visa = V.N, not V). Use search_stocks to confirm the RIC.
   - Disclosures are NOT in the get_stock_report JSON. The skill renders its own bundled verbatim copy of the Chicago Global / MAS disclosure boilerplate. It is a pinned asset; if CGC updates its disclosure wording, re-sync the constant in render_stock_report.py from response.html_url. Never reword it.
   - Semantic colors (positive green, negative red, warning amber) are FIXED and never taken from the brand. They carry meaning, not identity. Only primary/secondary/accent/background/fonts/logo come from the client config.
-  - No active brand config → the renderer falls back to the default Chicago Global palette and the output is NOT white-labeled. Run /parallax-white-label-onboard first to skin it for a client.
+  - No active brand config → the renderer falls back to the default Parallax palette and the output is NOT white-labeled. Run /parallax-white-label-onboard first to skin it for a client.
   - Output is two independent choices (see Compliance): whose disclosures (Chicago Global / MAS by default, or the client's OWN via --full-white-label, collected at run time into voice.disclaimers[] and refused if empty), and whether to keep the "Powered by Parallax" credit (shown by default; kept in full white-label only with --powered-by). Never hand-edit disclosures or improvise a private-label without the client's confirmed disclosure language.
   - During early rollout, do not send a generated report to an end client until Chicago Global has signed off on the compliance posture.
 ---
@@ -36,7 +36,7 @@ This is a presentation overlay. The onboarded client is the presentation brand; 
 /parallax-white-label-stock-report <TICKER> --full-white-label --powered-by  # client's own disclosures, keep the Parallax credit
 ```
 
-The active brand config (written by `/parallax-white-label-onboard`) at `~/.parallax/client-branding/config.yaml` is used automatically. With no config, the report renders in the default Chicago Global palette (not white-labeled).
+The active brand config (written by `/parallax-white-label-onboard`) at `~/.parallax/client-branding/config.yaml` is used automatically. With no config, the report renders in the default Parallax palette (not white-labeled).
 
 ## Prerequisites
 
@@ -94,7 +94,7 @@ mkdir -p ~/.parallax/stock-report-cache
 ```
 
 ### 3. Confirm or collect the client's branding
-Confirm `~/.parallax/client-branding/config.yaml` exists and names the intended client (`metadata.client_name`). If it is absent or for the wrong client, collect the branding before rendering: ask the client for their brand guidelines, covering at least their logo and their colour palette (colorways); fonts are helpful but optional. Then run `/parallax-white-label-onboard` to capture them into the config. Without a config the render falls back to the default Chicago Global palette and is not white-labeled.
+Confirm `~/.parallax/client-branding/config.yaml` exists and names the intended client (`metadata.client_name`). If it is absent or for the wrong client, collect the branding before rendering: ask the client for their brand guidelines, covering at least their logo and their colour palette (colorways); fonts are helpful but optional. Then run `/parallax-white-label-onboard` to capture them into the config. Without a config the render falls back to the default Parallax palette and is not white-labeled.
 
 ### 4. Confirm the output mode with the client
 Two independent choices. Ask the client both:
