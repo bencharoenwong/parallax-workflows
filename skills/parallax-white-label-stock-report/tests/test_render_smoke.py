@@ -104,9 +104,9 @@ def test_disclosure_boilerplate_present():
 
 def test_provenance_line_present():
     html = _render()
-    # Co-brand: "Powered by Chicago Global" credit in the cover header. The verbose
+    # Co-brand: "Powered by Parallax" credit in the cover header. The verbose
     # research-author wording is intentionally NOT used.
-    assert "Powered by Chicago Global" in html
+    assert "Powered by Parallax" in html
     assert "Research and analysis by Chicago Global" not in html
 
 
@@ -119,8 +119,8 @@ def test_renders_with_no_branding_default():
     branding = r.load_branding("/nonexistent/path/config.yaml")
     assert branding["active"] is False
     html = r.render_html(RESPONSE, branding)
-    # No client config = default Chicago Global report; the credit still applies.
-    assert "Powered by Chicago Global" in html
+    # No client config = default Parallax report; the credit still applies.
+    assert "Powered by Parallax" in html
     # core content still renders
     assert 'id="sec-cover"' in html
 
@@ -167,13 +167,14 @@ def test_full_white_label_refuses_without_disclaimers():
 
 
 def test_full_white_label_with_credit_keeps_powered_by():
-    # client's own disclosures, but the client opts to keep the Chicago Global credit
+    # client's own disclosures, but the client opts to keep the Parallax credit
     branding = dict(FULL_WL_BRANDING)
     branding["powered_by_optin"] = True
     html = r.render_html(RESPONSE, branding)
-    assert "Powered by Chicago Global" in html             # credit kept by opt-in
+    assert "Powered by Parallax" in html                   # credit kept by opt-in
     assert "Example Securities Commission" in html          # client's own disclosures
     assert "Monetary Authority of Singapore" not in html    # not the CGC/MAS boilerplate
+    assert "Chicago Global" not in html                     # no CG entity trace anywhere
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 ---
 name: parallax-white-label-stock-report
-description: "Render a Parallax full stock research report (the get_stock_report output) under a client's brand as a white-labeled HTML and PDF. Takes a ticker (RIC), pulls the report, and re-renders all sections (cover, factor scores, thesis, company + peers, technical, financial analysis, statements, ratios, analyst ratings, disclosures) with the client's logo, colors, and fonts from the active white-label config. Visual skin only: keeps Chicago Global / MAS regulatory disclosures verbatim and a \"Powered by Chicago Global\" credit. Standalone, no shared-module dependency. NOT for configuring client branding (use /parallax-white-label-onboard first), not for monthly CIO LP letters (use /parallax-cio-letter-prep), not for ad-hoc single-stock analysis or research workflows (use /parallax-deep-dive or /parallax-due-diligence)."
+description: "Render a Parallax full stock research report (the get_stock_report output) under a client's brand as a white-labeled HTML and PDF. Takes a ticker (RIC), pulls the report, and re-renders all sections (cover, factor scores, thesis, company + peers, technical, financial analysis, statements, ratios, analyst ratings, disclosures) with the client's logo, colors, and fonts from the active white-label config. Visual skin only: keeps Chicago Global / MAS regulatory disclosures verbatim and a \"Powered by Parallax\" credit. Standalone, no shared-module dependency. NOT for configuring client branding (use /parallax-white-label-onboard first), not for monthly CIO LP letters (use /parallax-cio-letter-prep), not for ad-hoc single-stock analysis or research workflows (use /parallax-deep-dive or /parallax-due-diligence)."
 negative-triggers:
   - Setting up or editing the client brand config → use /parallax-white-label-onboard
   - Monthly fund-manager letter to LPs → use /parallax-cio-letter-prep
@@ -15,13 +15,13 @@ gotchas:
   - Disclosures are NOT in the get_stock_report JSON. The skill renders its own bundled verbatim copy of the Chicago Global / MAS disclosure boilerplate. It is a pinned asset; if CGC updates its disclosure wording, re-sync the constant in render_stock_report.py from response.html_url. Never reword it.
   - Semantic colors (positive green, negative red, warning amber) are FIXED and never taken from the brand. They carry meaning, not identity. Only primary/secondary/accent/background/fonts/logo come from the client config.
   - No active brand config → the renderer falls back to the default Chicago Global palette and the output is NOT white-labeled. Run /parallax-white-label-onboard first to skin it for a client.
-  - Output is two independent choices (see Compliance): whose disclosures (Chicago Global / MAS by default, or the client's OWN via --full-white-label, collected at run time into voice.disclaimers[] and refused if empty), and whether to keep the "Powered by Chicago Global" credit (shown by default; kept in full white-label only with --powered-by). Never hand-edit disclosures or improvise a private-label without the client's confirmed disclosure language.
+  - Output is two independent choices (see Compliance): whose disclosures (Chicago Global / MAS by default, or the client's OWN via --full-white-label, collected at run time into voice.disclaimers[] and refused if empty), and whether to keep the "Powered by Parallax" credit (shown by default; kept in full white-label only with --powered-by). Never hand-edit disclosures or improvise a private-label without the client's confirmed disclosure language.
   - During early rollout, do not send a generated report to an end client until Chicago Global has signed off on the compliance posture.
 ---
 
 # White-Label Stock Report
 
-Re-render the Parallax full stock research report (the `get_stock_report` output) under a client's brand, as a white-labeled HTML and PDF. The client's logo, colors, and fonts replace the Parallax visual identity; the underlying research, the Chicago Global / MAS regulatory disclosures, and a "Powered by Chicago Global" credit stay intact.
+Re-render the Parallax full stock research report (the `get_stock_report` output) under a client's brand, as a white-labeled HTML and PDF. The client's logo, colors, and fonts replace the Parallax visual identity; the underlying research, the Chicago Global / MAS regulatory disclosures, and a "Powered by Parallax" credit stay intact.
 
 This is a presentation overlay. The onboarded client is the presentation brand; in the default co-brand mode Chicago Global Capital remains the research author of record.
 
@@ -33,7 +33,7 @@ This is a presentation overlay. The onboarded client is the presentation brand; 
 /parallax-white-label-stock-report <path/to/report.json>  # use an already-downloaded report JSON (no fetch, no paid call)
 /parallax-white-label-stock-report <TICKER> --force    # ignore cache, re-fetch the paid report
 /parallax-white-label-stock-report <TICKER> --full-white-label  # private-label: client's own disclosures, no CG/Parallax attribution
-/parallax-white-label-stock-report <TICKER> --full-white-label --powered-by  # client's own disclosures, keep the Chicago Global credit
+/parallax-white-label-stock-report <TICKER> --full-white-label --powered-by  # client's own disclosures, keep the Parallax credit
 ```
 
 The active brand config (written by `/parallax-white-label-onboard`) at `~/.parallax/client-branding/config.yaml` is used automatically. With no config, the report renders in the default Chicago Global palette (not white-labeled).
@@ -50,14 +50,15 @@ The active brand config (written by `/parallax-white-label-onboard`) at `~/.para
 **Default - co-brand (recommended).** A presentation skin over Chicago Global research:
 - Swap the visual identity only: logo, primary/secondary/accent colors, heading/body fonts, and the client name in the header.
 - Keep the Chicago Global / MAS regulatory disclosures verbatim (the renderer bundles them; the JSON does not carry them).
-- Show a "Powered by Chicago Global" credit in the cover header.
+- Show a "Powered by Parallax" credit in the cover header.
 - The per-page footer carries the client name and a confidentiality marker ("<Client> - Confidential" plus "Page X of N"); Chicago Global's MAS-regulated identity sits in the disclosures section, not the footer.
 
 **`--full-white-label` - private-label (gated).** The client presents the report as their own:
-- Removes every Chicago Global / Parallax trace by default. The client may opt to keep a "Powered by Chicago Global" credit (`--powered-by`); otherwise the document carries no Chicago Global mark.
+- Removes the Parallax attribution credit and replaces the Chicago Global / MAS regulatory disclosures with the client's own. The client may opt to keep a "Powered by Parallax" credit (`--powered-by`); otherwise the document carries no Parallax mark.
 - Renders the client's OWN regulatory disclosures, taken verbatim from the brand config's `voice.disclaimers[]` ({jurisdiction, text, placement}) - the field the onboard skill already provides for jurisdiction-specific compliance footers.
 - Refuses to render if `voice.disclaimers[]` is empty, so it can never emit regulated research with no disclosures.
 - This requires the client to actually hold the appropriate authorization in their jurisdiction and to supply their own compliance-approved disclosure language. It goes a step beyond the shared white-label integration pattern (which keeps disclaimers fixed), so confirm with Chicago Global before using it for a live client.
+- Note: AI-generated prose fields from `get_stock_report` (score_analysis, analyst_analysis, peers_analysis, financial_analysis) are served brand-neutral by Parallax and pass through verbatim. If you are using a non-standard response source, review the prose for brand mentions before distribution.
 
 ## Choosing a mode (jurisdiction and audience)
 
@@ -69,7 +70,7 @@ Thailand, as a worked example, in brief - confirm with local counsel before any 
 - Producing or distributing research to clients in Thailand needs a firm securities-business license (investment advisory service) plus individual Investment Consultant (IC) approval; analysts typically hold the CISA credential.
 
 Decision:
-- Institutional / qualified-institutional audience only: co-brand is appropriate. The Chicago Global / MAS disclosures and the "Powered by Chicago Global" credit can stand; the client's brand is the visual skin.
+- Institutional / qualified-institutional audience only: co-brand is appropriate. The Chicago Global / MAS disclosures and the "Powered by Parallax" credit can stand; the client's brand is the visual skin.
 - Client is a licensed Thai securities company distributing to retail: the client is the regulated face of the report. Use --full-white-label, put the client's OWN firm identity and conflict disclosures on the document, and ensure qualified (IC / CISA) sign-off. Whether to keep any Chicago Global credit is then the client's call with their compliance.
 
 To run full private-label, collect from the client and load into the onboard config's voice.disclaimers[] ({jurisdiction, text, placement}): the client's legal entity name, regulatory/license status, the conflict-of-interest / disclaimer wording their compliance approves, and confirmation of qualified analyst sign-off. The renderer refuses --full-white-label if voice.disclaimers is empty.
@@ -102,8 +103,8 @@ Two independent choices. Ask the client both:
 - **Chicago Global / MAS** (default): the bundled regulatory disclosures, kept verbatim. Nothing more to collect.
 - **The client's own**: the client is the regulated face of the report. Collect their regulatory details at run time (see below) and render those instead. Uses `--full-white-label`.
 
-**Keep the "Powered by Chicago Global" credit?**
-- Shown by default. With the client's own disclosures it is hidden, unless the client opts to keep it, in which case add `--powered-by` (their own disclosures plus a Chicago Global credit).
+**Keep the "Powered by Parallax" credit?**
+- Shown by default. With the client's own disclosures it is hidden, unless the client opts to keep it, in which case add `--powered-by` (their own disclosures plus a Parallax attribution credit).
 
 This yields three usable variants: co-brand (CG/MAS plus credit); client identity with credit (`--full-white-label --powered-by`); full private-label (`--full-white-label`, no credit).
 
@@ -124,7 +125,7 @@ Open the PDF and confirm:
 - client logo on the cover and the brand palette applied to headings, rules, table headers, and score chips;
 - positive/negative/warning still in the fixed semantic colors (green/red/amber), NOT recolored to the brand;
 - the six factor scores, the peer table, all three financial statements, and the ratios table rendered;
-- the Chicago Global / MAS disclosures present verbatim and the "Powered by Chicago Global" credit in the cover header;
+- the Chicago Global / MAS disclosures present verbatim and the "Powered by Parallax" credit in the cover header;
 - no leakage of internal source paths or pre-signed URLs.
 
 Then deliver. During early rollout, do not send externally without Chicago Global sign-off on the compliance posture.

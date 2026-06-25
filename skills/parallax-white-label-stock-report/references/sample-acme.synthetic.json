@@ -5,7 +5,7 @@
   "html_url": "",
   "report": {
     "financial_analysis": {
-      "_prompt_version": "palepu-wahlen-mckinsey-fsa-page4-balanced-chicago-voice-v4-20260512",
+      "_prompt_version": "synthetic",
       "detailedanalysis": {
         "businessstrategy": {
           "industryposition": "Acme Robotics Inc designs and builds industrial automation systems. This is synthetic placeholder text for a fictional company used only as a rendering fixture; it is not investment analysis.",
@@ -87,7 +87,7 @@
         "volatility_level": "Acme Robotics Inc designs and builds industrial automation systems. This is synthetic placeholder text for a fictional company used only as a rendering fixture; it is not investment analysis.",
         "risk_factors": "Acme Robotics Inc designs and builds industrial automation systems. This is synthetic placeholder text for a fictional company used only as a rendering fixture; it is not investment analysis."
       },
-      "_prompt_version": "alpha-trader-tactical-chicago-voice-v2-20260512"
+      "_prompt_version": "synthetic"
     },
     "score_analysis": "Acme Robotics Inc designs and builds industrial automation systems. This is synthetic placeholder text for a fictional company used only as a rendering fixture; it is not investment analysis.",
     "company_profile": {

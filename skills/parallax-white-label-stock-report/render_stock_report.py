@@ -23,7 +23,7 @@ Compliance posture. Two independent choices:
 - Disclosures: co-brand keeps the CGC / MAS regulatory disclosures verbatim
   (default); full white-label (full_white_label) replaces them with the client's
   own jurisdiction disclosures (voice.disclaimers[]) and refuses if none are set.
-- Chicago Global credit: a "Powered by Chicago Global" line in the cover header.
+- Parallax attribution credit: a "Powered by Parallax" line in the cover header.
   Shown by default; hidden in full white-label unless the client opts to keep it
   (powered_by_optin), pairing their own disclosures with the credit.
 Brand identity (logo, palette, fonts, client name) is always the client's.
@@ -469,11 +469,11 @@ def render_cover(rep, branding):
     if not logo_html and branding.get("client_name"):
         logo_html = f'<div class="name">{esc(branding["client_name"])}</div>'
 
-    # Chicago Global credit in the cover header. Shown by default. In full
+    # Parallax attribution credit in the cover header. Shown by default. In full
     # white-label it is hidden, unless the client opts to keep it (powered_by_optin),
-    # which pairs their own disclosures with a "Powered by Chicago Global" credit.
+    # which pairs their own disclosures with a "Powered by Parallax" credit.
     show_credit = (not branding.get("full_white_label")) or branding.get("powered_by_optin")
-    powered = '<div class="powered">Powered by Chicago Global</div>' if show_credit else ""
+    powered = '<div class="powered">Powered by Parallax</div>' if show_credit else ""
 
     # factor score chips
     widths = rep.get("score_widths", {})
@@ -726,6 +726,13 @@ def render_disclosures(branding):
 # Assembly
 # --------------------------------------------------------------------------- #
 def render_html(response, branding):
+    # Note: in --full-white-label mode this renderer removes the static Parallax
+    # attribution credit and replaces the Chicago Global / MAS disclosure blocks with
+    # the client's own. However, the AI-generated prose fields from get_stock_report
+    # (score_analysis, analyst_analysis, peers_analysis, financial_analysis) are
+    # passed through verbatim. These fields are served brand-neutral by Parallax; if
+    # your integration uses a non-standard response source, review the prose for
+    # brand mentions before external distribution.
     rep = response.get("report", response) if isinstance(response, dict) else {}
     co = rep.get("company", {})
     title = f"{co.get('name') or rep.get('symbol', 'Stock')} - Equity Research"
@@ -834,8 +841,8 @@ def main(argv=None):
                          "client's own disclosures from the brand config (voice.disclaimers[]). "
                          "Refuses to render if no client disclosures are configured.")
     ap.add_argument("--powered-by", action="store_true",
-                    help="keep the 'Powered by Chicago Global' credit even with --full-white-label, "
-                         "so the client's own disclosures pair with the Chicago Global credit.")
+                    help="keep the 'Powered by Parallax' credit even with --full-white-label, "
+                         "so the client's own disclosures pair with the Parallax attribution credit.")
     args = ap.parse_args(argv)
 
     response = json.loads(Path(args.report_json).read_text())
