@@ -97,9 +97,22 @@ def test_semantic_colors_fixed_and_distinct_from_brand():
 
 
 def test_disclosure_boilerplate_present():
+    # Checks stable anchor phrases in the pinned CGC/MAS disclosure text.
+    # If these fail after a render_stock_report.py edit, re-sync DISCLOSURE_BLOCKS
+    # from the official report (response.html_url). Source: DISCLOSURE_BLOCKS constant.
     html = _render()
     assert "Monetary Authority of Singapore" in html
+    assert "Capital Markets Services Licensed" in html   # fund-management license sentence
+    assert "Accredited Investor" in html                 # investor-classification sentence
     assert "ANALYST" in html.upper()
+
+
+def test_bare_response_form_renders():
+    # render_html accepts a bare report dict (no 'success'/'symbol'/'report' wrapper).
+    # Protects the fallback in: rep = response.get("report", response) if isinstance(...
+    html = r.render_html(REPORT, CLIENT_BRANDING)
+    assert 'id="sec-cover"' in html
+    assert "Monetary Authority of Singapore" in html
 
 
 def test_provenance_line_present():
