@@ -189,10 +189,19 @@ def num(x):
         return None
 
 
+_HEX_CHARS = frozenset("0123456789abcdef")
+
+
 def _hex(c, fallback):
     if isinstance(c, str) and c.startswith("#") and len(c) in (4, 7):
-        return c.lower()
+        if all(ch in _HEX_CHARS for ch in c[1:].lower()):
+            return c.lower()
     return fallback
+
+
+def _safe_font(f):
+    # Strip chars that could break or escape out of a CSS property value.
+    return "".join(ch for ch in str(f) if ch not in ';}{}\'\"<>')
 
 
 def fmt(val, kind):
@@ -327,8 +336,8 @@ def build_css(branding):
   --brand-accent: {c['tertiary']};
   --brand-bg: {c['neutral']};
   --brand-text: {c['text']};
-  --brand-heading-font: {f['header']}, Arial, sans-serif;
-  --brand-body-font: {f['body']}, Helvetica, Arial, sans-serif;
+  --brand-heading-font: {_safe_font(f['header'])}, Arial, sans-serif;
+  --brand-body-font: {_safe_font(f['body'])}, Helvetica, Arial, sans-serif;
   --pos: {SEMANTIC['pos']};
   --neg: {SEMANTIC['neg']};
   --warn: {SEMANTIC['warn']};
@@ -725,7 +734,19 @@ def render_disclosures(branding):
 # --------------------------------------------------------------------------- #
 # Assembly
 # --------------------------------------------------------------------------- #
+_BRAND_TOKENS = ("Chicago Global", "Parallax", "CGC", "Monetary Authority of Singapore")
+
+
 def render_html(response, branding):
+    # Guard: full-white-label with no client disclosures would emit a regulated
+    # document with an empty disclosures section. Refuse early so library callers
+    # get the same protection as the CLI path.
+    if branding.get("full_white_label") and not branding.get("client_disclaimers"):
+        raise ValueError(
+            "full_white_label requires client_disclaimers in the brand config; "
+            "refusing to render regulated research with no disclosures."
+        )
+
     # Note: in --full-white-label mode this renderer removes the static Parallax
     # attribution credit and replaces the Chicago Global / MAS disclosure blocks with
     # the client's own. However, all AI-generated prose fields from get_stock_report
@@ -750,6 +771,23 @@ def render_html(response, branding):
         + render_analyst(rep)
         + render_disclosures(branding)
     )
+
+    if branding.get("full_white_label"):
+        # When powered_by_optin is set, "Powered by Parallax" is intentionally
+        # rendered in the cover; exclude "Parallax" from the scan to avoid a
+        # false positive on that credit div.
+        scan_tokens = [t for t in _BRAND_TOKENS
+                       if not (t == "Parallax" and branding.get("powered_by_optin"))]
+        hits = [t for t in scan_tokens if t in body]
+        if hits:
+            import warnings
+            warnings.warn(
+                f"full_white_label: brand token(s) found in AI prose fields: {hits}. "
+                "The Parallax server normally serves brand-neutral prose; this likely "
+                "means a non-standard response source was used. Review before distribution.",
+                stacklevel=2,
+            )
+
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <title>{esc(title)}</title>

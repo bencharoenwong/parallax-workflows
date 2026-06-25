@@ -170,7 +170,8 @@ def test_full_white_label_strips_cg_and_uses_client_disclosures():
 
 
 def test_full_white_label_refuses_without_disclaimers():
-    # main() must refuse to render regulated research with no client disclosures
+    # Both the CLI path (main) and the library path (render_html) must refuse to
+    # render regulated research with no client disclosures.
     import os
     import tempfile
     out = os.path.join(tempfile.mkdtemp(), "out.html")
@@ -178,6 +179,11 @@ def test_full_white_label_refuses_without_disclaimers():
                  "--full-white-label", "--out", out])
     assert rc == 2
     assert not os.path.exists(out)
+    # library path: render_html must raise, not silently emit an empty section
+    import pytest
+    branding_no_disclaimers = dict(CLIENT_BRANDING, full_white_label=True, client_disclaimers=[])
+    with pytest.raises(ValueError, match="client_disclaimers"):
+        r.render_html(RESPONSE, branding_no_disclaimers)
 
 
 def test_full_white_label_with_credit_keeps_powered_by():
