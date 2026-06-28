@@ -22,6 +22,7 @@ description: "Deep dive on a single position: company profile, peer comparison, 
 - When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
 - get_assessment is async and uses Perplexity — may take 30-90s
 - get_assessment prompt should incorporate macro context, score trends, and dividend profile alongside existing data
+- Technical Stance always renders. If `get_technical_analysis` is unavailable or times out, use the Momentum factor as a proxy and prefix the section with `Technical analysis unavailable — Momentum factor proxy:` instead of dropping the lens.
 - For non-US symbols, apply HK ambiguity cross-check from shared conventions
 - Pre-Render step loads white-label branding via `_parallax/white-label/loader.py` → `load_visual_branding()` (the 6-key visual subset wrapper). Voice/typography/etc. are structurally absent — `branding["voice"]` raises `KeyError`. Provenance state-to-text mapping and Branding Header semantics follow integration-pattern.md §5 + §7.
 

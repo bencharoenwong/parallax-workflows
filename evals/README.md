@@ -131,6 +131,7 @@ evals/
 - `portfolio-builder` — constructive thesis-to-allocation; includes holdings-allocated check (weights + scores).
 - `rebalance` — prioritized trades + quantified targets; includes trade-recs-quantified check.
 - `watchlist-monitor` — score-surveillance scan (no weights); includes score-changes-quantified check.
+- `deep-dive` — single-position research; includes technical-fallback structural check.
 - `portfolio-checkup` — **DRAFT spec only, never run.** Same output family as
   should-i-buy.
 
