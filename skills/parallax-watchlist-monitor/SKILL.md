@@ -48,13 +48,17 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
   - **Symbol** — score change, which factors moved, brief catalyst
 - **Stable Names** (one-liner each — "no material changes")
 - **Recommended Actions** (which names warrant a deeper look via /parallax-deep-dive)
+- **Provenance** (always present, even when branding is default):
+  - Use a real markdown heading: `## Provenance`
+  - First line inside the section: `Branding: default Parallax`
+  - If a logo was skipped under white-label, add `Logo on file: <basename>`
 
 Keep it scannable. Lead with what changed.
 
 ## Output additions
 
 - **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line at the very top: `**<client_name>** watchlist scan`. Logo handling per integration-pattern.md §5.
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7. If a logo was skipped, append `Logo on file: <basename>` as a second Provenance line.
+- **Provenance** (always present): render a `## Provenance` section with the branding-state line above. Place it before the AI disclosure/disclaimer footer. If a logo was skipped, include `Logo on file: <basename>` as a second line.
 
 ### Pre-Render — Load white-label branding
 

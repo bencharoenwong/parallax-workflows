@@ -16,6 +16,8 @@ ARGS="${1:?usage: $0 '<args>' [lang] [label] [model]}"
 LANG_ARG="${2:-en}"
 LABEL="${3:-$(git rev-parse --short HEAD 2>/dev/null || echo nogit)}"
 TARGET_MODEL="${4:-}"
+TIMEOUT_SECONDS="${ROLLOUT_TIMEOUT_SECONDS:-900}"
+export CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT="${CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT:-0}"
 
 command -v claude >/dev/null || { echo "claude CLI not on PATH" >&2; exit 1; }
 
@@ -29,7 +31,10 @@ mkdir -p "$RESULTS"
 CMD="${ROLLOUT_CMD:-/parallax-should-i-buy}"
 PREFIX="${ROLLOUT_PREFIX:-should-i-buy}"
 
-SAFE_ID=$(printf '%s_%s' "$ARGS" "$LANG_ARG" | tr -c 'A-Za-z0-9._-' '_')
+# SAFE_ID is cosmetic only; task identity is parsed from LABEL. Cap it so
+# array-valued args such as portfolio JSON do not exceed filesystem filename
+# limits.
+SAFE_ID=$(printf '%s_%s' "$ARGS" "$LANG_ARG" | tr -c 'A-Za-z0-9._-' '_' | cut -c1-48)
 TS=$(date -u +%Y%m%dT%H%M%SZ)
 OUT="$RESULTS/${PREFIX}_${LABEL}_${SAFE_ID}_${TS}.stream.json"
 
@@ -38,12 +43,29 @@ PROMPT="$CMD ${ARGS}"
 
 echo "[rollout] ~24 Parallax tokens — $PROMPT (label=$LABEL)" >&2
 
-MODEL_FLAG=()
-[ -n "$TARGET_MODEL" ] && MODEL_FLAG=(--model "$TARGET_MODEL")
+python3 - "$OUT" "$PROMPT" "$TARGET_MODEL" "$TIMEOUT_SECONDS" <<'PY'
+import subprocess
+import sys
 
-claude -p "$PROMPT" \
-  --output-format stream-json --verbose \
-  ${MODEL_FLAG[@]+"${MODEL_FLAG[@]}"} \
-  < /dev/null > "$OUT"
+out, prompt, model, timeout_s = sys.argv[1:5]
+cmd = ["claude", "-p", prompt, "--output-format", "stream-json", "--verbose"]
+if model:
+    cmd.extend(["--model", model])
+
+try:
+    with open(out, "w") as fh:
+        proc = subprocess.run(
+            cmd,
+            stdin=subprocess.DEVNULL,
+            stdout=fh,
+            text=True,
+            timeout=int(timeout_s),
+        )
+except subprocess.TimeoutExpired:
+    sys.stderr.write(f"rollout timeout after {timeout_s}s: {prompt}\n")
+    raise SystemExit(124)
+
+raise SystemExit(proc.returncode)
+PY
 
 echo "$OUT"
