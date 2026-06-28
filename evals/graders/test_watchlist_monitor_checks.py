@@ -40,7 +40,7 @@ GOLDEN = """# Watchlist Monitor
 - NVDA.O warrants a deeper look via /parallax-deep-dive.
 
 ## Provenance
-Default Parallax branding.
+Branding: default Parallax
 
 *AI-assisted output. Verify any specific statement before acting.*
 
@@ -115,7 +115,7 @@ def test_score_changes_red_when_summary_absent():
 
 
 def test_provenance_red_when_section_missing():
-    no_provenance = GOLDEN.replace("\n## Provenance\nDefault Parallax branding.\n", "\n")
+    no_provenance = GOLDEN.replace("\n## Provenance\nBranding: default Parallax\n", "\n")
     res = _results(no_provenance)
     assert res["provenance_present"] is False
     assert res["sections_present"] is False

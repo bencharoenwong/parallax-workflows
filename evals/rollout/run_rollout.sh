@@ -44,6 +44,7 @@ PROMPT="$CMD ${ARGS}"
 echo "[rollout] ~24 Parallax tokens — $PROMPT (label=$LABEL)" >&2
 
 python3 - "$OUT" "$PROMPT" "$TARGET_MODEL" "$TIMEOUT_SECONDS" <<'PY'
+import os
 import subprocess
 import sys
 
@@ -52,16 +53,23 @@ cmd = ["claude", "-p", prompt, "--output-format", "stream-json", "--verbose"]
 if model:
     cmd.extend(["--model", model])
 
+with open(out, "w") as fh:
+    proc = subprocess.Popen(
+        cmd,
+        stdin=subprocess.DEVNULL,
+        stdout=fh,
+        text=True,
+    )
+
 try:
-    with open(out, "w") as fh:
-        proc = subprocess.run(
-            cmd,
-            stdin=subprocess.DEVNULL,
-            stdout=fh,
-            text=True,
-            timeout=int(timeout_s),
-        )
+    proc.wait(timeout=int(timeout_s))
 except subprocess.TimeoutExpired:
+    proc.kill()
+    proc.wait()
+    try:
+        os.unlink(out)
+    except OSError:
+        pass
     sys.stderr.write(f"rollout timeout after {timeout_s}s: {prompt}\n")
     raise SystemExit(124)
 

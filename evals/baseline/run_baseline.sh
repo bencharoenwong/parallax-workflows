@@ -29,6 +29,8 @@ done
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$REPO_ROOT"
 
+[[ "$SKILL" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "invalid skill name: '$SKILL'" >&2; exit 1; }
+
 SPEC_JSON=$(python3 - "$SKILL" <<'PY'
 import json
 import sys
