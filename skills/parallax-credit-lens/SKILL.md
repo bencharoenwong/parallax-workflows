@@ -140,6 +140,9 @@ Overall traffic-light determined by: count of RED flags (→ Red), count of AMBE
 | Quality Trend | 🔴 RED  | –14 pts (52w) | —          | Deteriorating |
 ```
 
+### 2a. **Verdict sensitivity** (one line)
+State whether the Altman Z-score sits within 10% of a band boundary (2.99 Safe/Grey or 1.81 Grey/Distress) and the arithmetic flip condition, per `parallax-conventions.md` §11. Example: "Altman Z = 2.85 is within the Grey Zone, 0.14 below the 2.99 Safe threshold; a Z rise above 2.99 would move this leg to Safe." Applies only to the Altman Z band — the overall traffic-light header is a multi-metric majority vote, not a single published numeric cutoff, and is out of scope for this line.
+
 ### 3. **Solvency Assessment** (narrative)
 Output the Palepu solvency section from `get_financial_analysis`. If unavailable, note: `[Solvency assessment unavailable — tool error]`.
 

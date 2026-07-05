@@ -75,6 +75,7 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 - **Screening Criteria** (AAOIFI/DJIM thresholds as listed above)
 - **Compliance Results** (table: symbol, compliant Y/N, reason if non-compliant)
 - **Key Ratios** (debt/assets %, interest-bearing/assets %, non-permissible revenue %)
+- **Verdict sensitivity**: the ratio nearest its AAOIFI/DJIM cutoff (33% debt/assets, 33% interest-bearing/assets, or 5% non-permissible-revenue) and the arithmetic flip condition, per `parallax-conventions.md` §11. Applies only to the three quantitative ratios above — never to the qualitative business-activity screen.
 - **Purification Amount** (if applicable — percentage of dividends requiring purification)
 - **Alternatives** (for non-compliant holdings: scored compliant replacements in same sector)
 - **Compliant Portfolio** (if portfolio mode: restructured allocation with only halal holdings)
