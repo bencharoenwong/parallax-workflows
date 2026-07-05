@@ -146,6 +146,8 @@ Parallax Value sub-score (backup check): <score> / 10
 
 Profile fit: <match / partial_match / no_match> — <count> of 4 checks passed.
 
+Verdict sensitivity: the check nearest its cutoff is <check> (<actual> vs <target>); the verdict moves to the adjacent tier if that check crosses its threshold, or if the Parallax Value backup score crosses 4.
+
 [Optional: "No position warranted on this ticker per margin-of-safety principles. Cash is a valid stance."]
 
 Workflow derived from: Klarman, S. (1991). Margin of Safety.

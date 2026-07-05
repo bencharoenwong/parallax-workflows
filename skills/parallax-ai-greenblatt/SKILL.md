@@ -145,6 +145,8 @@ Universe size: <N>
 
 Profile fit: <match/partial_match/no_match> — <ticker> is in the [top 10% | top 25% | below top 25%] of the peer universe by Greenblatt combined rank.
 
+Verdict sensitivity: combined rank sits at the <percentile>th percentile, <D> positions from the [top-10% match | top-25% partial] cutoff; the verdict flips to the adjacent tier if the combined rank crosses that boundary.
+
 Workflow derived from: Greenblatt, J. (2006). The Little Book That Beats the Market; Gray & Carlisle (2012).
 Last anchor-tested: 2026-04-06 (CSCO.O, MSFT.O, NVDA.O) | Last legal review: pending
 Tool sequence: get_peer_snapshot, get_financials(ratios) × N

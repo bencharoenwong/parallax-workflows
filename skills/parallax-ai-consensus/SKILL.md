@@ -141,6 +141,7 @@ Full matches (M):        <count>
 Super-majority threshold: 75%
 Required matches:        ceil(0.75 × <A>) = <required>
 Consensus signal:        YES / NO / INSUFFICIENT_PROFILES
+Verdict sensitivity:     M is <M> vs required <required>; the signal flips if <|required − M|> more profile(s) reach (or drop below) full match.
 
 ## Shared factor signal (factors/criteria flagged across profiles)
 
