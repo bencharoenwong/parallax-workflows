@@ -123,6 +123,7 @@ Client-ready report:
 - **Ground-truth Integrity** (only render if any mismatch detected — table: `input_ticker`, `returned_name`, `expected_name`, status. Mismatched holdings had scores re-derived via `get_peer_snapshot` symbol-match — per loader.md §5 rule 3.)
 - **Portfolio Summary** (AUM breakdown, sector allocation, top 5 holdings; if view active, view-alignment score)
 - **Health Status** (Healthy/Monitor/Attention badge with flag summary)
+- **Verdict sensitivity** (render only when Health Status is Monitor or Attention): the 1-2 nearest-boundary flags and their arithmetic flip condition, per `parallax-portfolio-checkup/references/health-flags.md` "Verdict sensitivity" (renders `parallax-conventions.md` §11 by reference).
 - **Performance vs Benchmark** (key metrics)
 - **Factor Analysis** (scores with macro context interpretation for this client type; if view active, compare against view-target factor)
 - **Concentration & Redundancy** (flagged issues; coverage reliability note if applicable)

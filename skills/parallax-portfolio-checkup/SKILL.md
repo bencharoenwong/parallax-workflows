@@ -134,6 +134,7 @@ python3 "<skill-dir>/../_parallax/render_gate.py" --skill portfolio-checkup < "$
 - **Verification Note** *(only render if any cross-validation mismatches were detected)* — plain-language note: "Some holdings (X out of N) could not be matched to verified data and were excluded from aggregate factor analysis: [list of symbols]. The remaining N-X holdings drive the scores below."
 - **Your Portfolio Scorecard** (simple factor table with plain-language labels; flag indicators per holding. Mismatched holdings show "—" instead of scores.)
 - **Health Flags** (each triggered flag explained in plain language — what it means, why it matters)
+- **Verdict sensitivity** (render only when Health Status is Monitor or Attention — i.e. ≥ 1 flag triggered): the 1-2 nearest-boundary flags and their arithmetic flip condition, per `references/health-flags.md` "Verdict sensitivity" (renders `parallax-conventions.md` §11 by reference).
 - **Overlap Alert** (if redundancy found, explain why; include reliability note if coverage <60%)
 - **Macro Context** (2-3 sentences on relevant economic environment — skip if no covered markets)
 - **What This Means** (2-3 plain-language paragraphs)

@@ -127,6 +127,7 @@ python3 "<skill-dir>/../_parallax/render_gate.py" --skill rebalance < "$DRAFT"; 
 - **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** rebalance`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to Provenance.
 - **Current Portfolio Assessment** (factor scores, concentration issues, redundancy; if view active, current alignment vs view-tilted target)
 - **Health Status** (Healthy/Monitor/Attention badge with flag summary)
+- **Verdict sensitivity** (render only when Health Status is Monitor or Attention): the 1-2 nearest-boundary flags and their arithmetic flip condition, per `parallax-portfolio-checkup/references/health-flags.md` "Verdict sensitivity" (renders `parallax-conventions.md` §11 by reference).
 - **Health Flags** (table: each triggered flag per holding with priority level; View Misalignment / View Excluded shown as their own flag types)
 - **Macro Context** (relevant market outlook, sector tilt implications for rebalancing)
 - **Score Momentum** (table: each holding's score trend — improving/stable/declining)

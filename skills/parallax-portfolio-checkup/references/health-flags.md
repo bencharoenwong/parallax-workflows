@@ -20,6 +20,19 @@
 | **Monitor** | 1-2 flags | "A couple of items to keep an eye on." |
 | **Attention** | 3+ flags | "Some areas need a closer look." |
 
+## Verdict sensitivity
+
+Per `parallax-conventions.md` §11: report the 1-2 flags nearest their published cutoff and the arithmetic condition that would flip Health Status. All four numeric flags below qualify. **Macro Misalignment does not** — it is a qualitative sector / tactical-view match, not a numeric cutoff, so it is never a candidate for this line.
+
+| Flag | Cutoff | Distance computation |
+|---|---|---|
+| Low Score | Overall ≤ 5.0 | `5.0 − overall_score` (triggered) or `overall_score − 5.0` (not triggered) |
+| Value Trap | Portfolio value score ≤ 3.0 | `3.0 − value_score` or `value_score − 3.0` |
+| Concentration | Single > 15% OR top-3 > 45% | `15% − largest_single_weight` and `45% − top3_weight`; report whichever sub-condition is closer |
+| Redundancy | ≥ 2 redundant pairs | `2 − pair_count` (a portfolio at exactly 1 pair is 1 pair from triggering) |
+
+Rank all four (excluding Macro Misalignment) by absolute distance and surface the 1-2 closest. A flag already triggered and a flag not yet triggered are both eligible — closeness to the cutoff, not triggered-status, drives selection. A score sitting exactly on its cutoff (distance 0) is reported explicitly per §11.3, not rounded away.
+
 ## Mixed-Exchange Fallback
 
 This is **tier 3** of the fallback ladder defined in the SKILL.md Step A.5 — invoked only when V2 (`get_peer_snapshot` per-holding) AND V1 (`quick_portfolio_scores`) both return coverage <50% by weight.
