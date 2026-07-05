@@ -146,6 +146,8 @@ Profile fit: match — 4 of 4 factor criteria met.
 
 **Synthesis:** KO fits all four legs of the BKP-2018 profile — high-quality (Quality 8), reasonably priced (Value 4), low-momentum (4.83), and strongly low-beta (Defensive 10) — the cheap-safe-quality cluster the paper attributes Berkshire's alpha to. It sits at the quality-and-safety end of that style rather than deep value.
 
+Verdict sensitivity: Value 4 is at the ≥ 4 boundary; the verdict drops from match to partial (3 of 4) if Value falls below 4. The next-nearest input, Momentum 4.83 against the ≤ 6 ceiling, has 1.17 points of headroom.
+
 Workflow derived from: Frazzini, Kabiller, Pedersen (2018), "Buffett's Alpha", FAJ 74(4):35-55.
 Last anchor-tested: 2026-04-06 (KO.N, AXP.N) | Last legal review: pending
 Tool sequence: get_company_info, get_peer_snapshot, get_financials(summary), get_score_analysis(52w), explain_methodology

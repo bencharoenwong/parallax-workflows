@@ -48,6 +48,23 @@ Exactly one of:
 
 One to two sentences naming which legs of the profile the stock fits and which it misses, ending with a one-line takeaway. Required for every verdict — including `match`, which is not self-explanatory: state *why* the cluster fits (e.g., "cheap, high-quality, low-beta — the cluster the anchor attributes the investor's alpha to") rather than leaving a bare data table. This is the one interpretive sentence the dispatcher is permitted to write; it must restate the table and verdict, not introduce new claims, opinions, or recommendation language. Profiles whose `SKILL.md` does not call for a Synthesis section omit it.
 
+### 6.5. Verdict sensitivity (conditionally REQUIRED — gate below)
+
+Directly below the Synthesis section (or below the Verdict, for profiles that omit Synthesis), render one line labeled **"Verdict sensitivity"** stating, in third person and grounded purely in arithmetic, which 1-2 factor inputs sit nearest their published threshold and what would flip the verdict. The full principle, qualification gate, distance-0 rule, and forbidden-language list live in `parallax-conventions.md` §11 — render by reference; do not inline that prose here.
+
+**Gate — which profiles render this line:**
+
+| Profile | Renders? | Why |
+|---|---|---|
+| `parallax-ai-buffett` | YES | Four fixed numeric cutoffs (Quality ≥ 5, Value ≥ 4, Momentum ≤ 6, Defensive ≥ 7) — clean arithmetic distance per factor. |
+| `parallax-ai-greenblatt` | YES | Verdict is a percentile-rank cutoff (top 10% / top 25%) on the combined ROC + earnings-yield rank — a published numeric boundary. |
+| `parallax-ai-klarman` | YES | Verdict is a pass-count threshold (N ≥ 3 of 4 checks, Value ≥ 4 backup) over four numerically-defined checks — clean arithmetic distance. |
+| `parallax-ai-soros` | NO — omit | Dual-channel FLAGGED / NOT_FLAGGED / UNAVAILABLE (industry membership + telemetry basket). Neither channel has a numeric cutoff to measure distance from — forcing one would violate §11.2. If a sensitivity-style line is wanted, state the discrete criterion that would flip it (e.g., "Channel B would need to surface a basket match for `<ticker>`") — never a fabricated number. |
+| `parallax-ai-ptj` | NO — omit | Channel status (T/M/V) is a compound discrete evaluation (trend-direction category AND momentum-trend direction, or a risk-on/risk-off categorical macro read), even though individual sub-signals carry numeric cutoffs. Do not cherry-pick one sub-signal to represent the whole channel's status. |
+| `parallax-ai-consensus` | YES — meta-level only | The consensus signal itself is a clean numeric threshold: `required_matches = ceil(0.75 × A)` compared against `M`. Render Verdict sensitivity on the super-majority signal (e.g., "M is 3 vs required 4 for A = 5 — one more profile flipping to match would move the signal to YES"), never on the underlying Soros / PTJ rows inside the per-profile matrix — the omit rule above still applies to those two rows. |
+
+**Non-negotiable:** never fabricate a flip threshold for a profile or channel that has no published numeric cutoff. Omitting the line for Soros and PTJ is the compliant behavior, not a gap to fill.
+
 ### 7. Methodology footer
 
 ```
