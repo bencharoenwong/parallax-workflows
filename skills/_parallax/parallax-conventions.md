@@ -354,3 +354,38 @@ python3 "<skill-dir>/../_parallax/render_gate.py" --skill <skill-key> < "$DRAFT"
 ```
 
 The skill's **entire final message** is exactly that command's stdout. `render_gate.py` uses a fail-open design: if no anchor is found, the input is returned unchanged, ensuring the gate never destroys a report it cannot positively locate.
+
+---
+
+## 11. Verdict Sensitivity
+
+### §11.1 Principle
+
+Any skill that renders a threshold-driven verdict, screen, badge, or flag — a rendered output whose classification is determined by comparing a numeric input against a published numeric cutoff — MUST also state, in third person and grounded purely in arithmetic, which 1-2 inputs sit nearest their boundary and what would flip the verdict. This is a restatement of deterministic threshold logic already computed during the workflow: it introduces no new claim, no forecast, and no first-person voice. It is not advice — it never says whether an input *should* move, only what value *would* flip the classification if it did.
+
+**Surface label:** Skills with a categorical verdict (match / partial / no-match, PASS / FAIL, GREEN / AMBER / RED, Healthy / Monitor / Attention) render a line labeled **"Verdict sensitivity"**. `parallax-score-explainer`'s existing "What Would Change It" line is the grandfathered precedent for continuous-score skills that predate this section — it satisfies the same principle in different wording and MUST NOT be reworded to match.
+
+### §11.2 What qualifies as "purely arithmetic"
+
+A verdict is eligible for §11 rendering only if:
+
+1. Every input feeding the verdict has a **published, fixed numeric cutoff** stated in the skill's own spec (not inferred, not a model judgment call).
+2. The distance from an input's current value to its nearest cutoff can be computed with subtraction / comparison alone — no forecasting, no counterfactual data pull.
+3. The "what would flip it" statement names only inputs and cutoffs already surfaced in the rendered table / flags — it must not introduce a new metric.
+
+Discrete or qualitative verdicts (industry classification match, telemetry basket membership, technical trend direction, or any compound AND/OR-gated channel status) do NOT qualify. Forcing an arithmetic distance onto a qualitative or compound criterion is a grounding-failure risk — the very failure mode this section exists to prevent — and is FORBIDDEN.
+
+### §11.3 Selecting which input(s) to surface
+
+1. Compute `|current_value − nearest_cutoff|` for every qualifying input.
+2. Report the 1 input (or, if two are comparably close, 2) with the smallest distance.
+3. **Distance-0 case (the input sits exactly AT its cutoff):** state that fact explicitly — e.g., "Value 4 is at the ≥ 4 boundary" — and state the flip direction ("a Value read below 4 would move this leg from PASS to FAIL"). Distance 0 is the MOST sensitive case, not a degenerate one to round away.
+4. Never fabricate a flip number for an input with no published cutoff (the §11.2 gate). If none of the rendered inputs have a published cutoff, omit the Verdict Sensitivity line entirely rather than force one.
+
+### §11.4 Forbidden language
+
+Verdict Sensitivity is a restatement of arithmetic, not a recommendation. The forbidden-language list from `output-template.md` §5 applies without exception: no "buy", "sell", "would buy", "recommend", "should", or advice-framed "consider adding / trimming." Correct: *"Value 4 is at the ≥ 4 boundary; the verdict flips to partial match if Value falls below 4."* Incorrect: *"Value is right at the line — you may want to wait for a pullback before buying."*
+
+### §11.5 Consumer skill reference pattern
+
+Skills rendering Verdict Sensitivity MUST render it by reference, not by inlining this section's prose. Example Output Format directive: `Render Verdict Sensitivity per parallax-conventions.md §11 — the 1-2 nearest-boundary inputs and the arithmetic flip condition, third person, no verdict language.` Inlining creates drift risk — the qualification gate and forbidden-language list here are the single source of truth; a future tightening propagates to all consumers automatically.
