@@ -2,12 +2,16 @@
 # Overrides ~/.no-mistakes/config.yaml for THIS repo only; other repos fall back
 # to the global agent (codex).
 
-# Gate agent for this repo: acp:gemini (Google Gemini via acpx). Switched from
-# opencode/glm-5.1 on 2026-06-14 — opencode-go hit recurring 429 quota hangs on the
-# review step. Matches the global default (acp:gemini). This repo is PUBLIC, so its
-# content reaching Google is already public; drive runs with an explicit --intent
-# string (no transcript inference) to keep unrelated session content out.
-agent: acp:gemini
+# Gate agent for this repo: claude (local). Switched from acp:gemini on 2026-07-06 —
+# the Google account behind acpx was DISABLED for ToS violation (programmatic Gemini
+# access is banned; same bright line as the 2026-07-04 agy/CLI removal in ~/.claude).
+# Do NOT re-add any acp:gemini / acpx / agy route here — the ban is permanent policy,
+# not a quota blip. `claude` matches the current global default and ran the full
+# ~/.claude gate pipeline clean on 2026-07-05/06. If the global default later reverts
+# to codex and codex probes clean, deleting this pin to inherit global is fine.
+# PRIOR HISTORY: acp:gemini from 2026-06-14 (opencode/glm-5.1 before that — recurring
+# 429 quota hangs on the review step).
+agent: claude
 
 # Deterministic test command — replaces the LLM-agent test fallback that failed
 # under codex usage limits / claude OOM. Runs the FULL skill/eval suite via the
