@@ -8,7 +8,7 @@ description: "Pressure-tests a written investment thesis: decomposes it into fal
 ## When not to use
 
 - Reacting to a specific news event or market shock against a portfolio → use /parallax-scenario-analysis (that skill also answers to "stress test"/"stress book" vocabulary for event-driven exposure — this skill is for testing the *reasoning* behind a stated argument, not portfolio exposure to an event)
-- Portfolio health check with no accompanying investment argument → use /parallax-portfolio-checkup (this skill needs a stated thesis to decompose; a bare list of holdings with no reasoning is a checkup, not an argument)
+- Portfolio health check with no accompanying investment argument → use /parallax-portfolio-checkup (this skill's book mode aggregates *arguments*, and needs a stated thesis per position — a bare list of holdings with no reasoning is a checkup, not a thesis book)
 - Single-stock deep dive with no stated thesis → use /parallax-deep-dive or /parallax-should-i-buy
 - A formal suitability or compliance determination → not offered by this or any skill in this repo; Pass 2 here is heuristic risk observation, and a qualified professional must make the actual determination
 
@@ -25,6 +25,7 @@ description: "Pressure-tests a written investment thesis: decomposes it into fal
 - `get_news_synthesis` is symbol-only; theme/sector-level news goes through `macro_analyst(component: "news")`, not this tool.
 - `get_telemetry` is async (~15-30s); `get_assessment` is async (~3min) — fire early, don't block instant-response tool assembly on either.
 - **The core invariant: Pass 2 never rewrites a Pass-1 Supported/Contradicted/Unconfirmed status.** It evaluates the holder-dependent layer and re-weights severity only. See `references/client-conditioning.md` for the mechanical reason this holds.
+- **Book mode is opt-in by input shape** — when >1 thesis is supplied in one run, JIT-load `references/portfolio-aggregation.md` for Phase 6 (cross-thesis concentration). It is pure synthesis over the per-thesis records (no new tool calls, no writes) and **never rewrites a per-thesis status or issues a sizing/allocation call** — it surfaces where separate theses secretly share a load-bearing assumption or break on the same trigger. Single thesis → Phase 6 never runs. This is thesis-book aggregation, NOT portfolio health (`/parallax-portfolio-checkup`) or construction (`/parallax-portfolio-builder`).
 - No persisted state, no writes — `client_profile` lives in-session only; this skill writes nothing and reads no prior-run state.
 
 ## Usage
@@ -33,10 +34,16 @@ description: "Pressure-tests a written investment thesis: decomposes it into fal
 /parallax-stress-test-thesis "I like NVDA because AI capex keeps compounding and rate cuts extend the duration trade for growth names"
 /parallax-stress-test-thesis path/to/memo.pdf
 /parallax-stress-test-thesis "Rotate into crypto-adjacent equities now that the halving cycle plus ETF inflows are re-rating the space" client_profile={"age":27,"horizon":"20+ years","risk_capacity":"high","income_reliance":"accumulating","position_size_pct_networth":0.05,"risk_tolerance":"high"}
+/parallax-stress-test-thesis book.md        # a file (or several inline theses) → per-thesis reports + Phase 6 cross-thesis concentration roll-up
 ```
 
 The input is either an inline argument or a path/URL to a memo (extracted locally — the source never
 leaves the session). An optional `client_profile` (JSON object or key:value block) turns on Pass 2.
+
+**Multiple theses → book mode.** A file (or text) carrying several delimited theses — or multiple
+`<thesis_input>…</thesis_input>` tags — triggers **book mode**: each thesis gets its own full Pass
+1/2, then Phase 6 aggregates across them. A single supplied `client_profile` conditions the whole
+book (all theses share the one holder). Unknown tags are ignored, not errors; nothing is persisted.
 
 **Degenerate inputs** (handle before Phase 1 — see `references/assumption-decomposition.md` for detail): tickers with no argument → ask for the *why*; argument with no tickers → run Phases 2 and 4, skip Phase 3 and say so; no `client_profile` → run Pass 1 only, state Pass 2 was skipped for lack of a profile; `client_profile` missing `horizon` or `income_reliance` → ask for those before running Phase 5 **via a clickable `AskUserQuestion`** (horizon + income + risk-capacity in one call — see `references/client-conditioning.md` "Collecting the profile interactively"), never a free-text prompt.
 
@@ -120,6 +127,16 @@ Pass-1 break condition's severity (horizon vs. time-to-play-out, risk capacity v
 income reliance/sequence-of-returns, position size), re-rank Load-Bearing Vulnerabilities, and
 emit suitability-relevant flags. Never rewrites a Pass-1 status.
 
+### Phase 6 — Cross-thesis aggregation *(book mode only; runs only if >1 thesis was supplied)*
+
+→ Load `references/portfolio-aggregation.md`. After every thesis has finished its own Pass 1/2,
+synthesize a book-level concentration read over the per-thesis records: canonicalize assumptions that
+recur across theses, flag concentrated (breadth ≥ 2, high-criticality) Contradicted/Unconfirmed
+premises, group break conditions that fire on the same trigger into correlated single-points-of-
+failure, and give a book-level Assumption Strength that says whether the Weak theses share a root
+cause. **Pure synthesis — no new tool calls, no writes, no sizing/allocation call, and never rewrites
+a per-thesis status.** Single thesis → skip entirely.
+
 ## Output Format
 
 Depth (§Modes) sets which of these render in full vs. collapsed; the **bold-starred** items below
@@ -143,6 +160,8 @@ survive at every depth — they are never collapsed away. → `references/output
 - **What to Watch** (2–3 signals that would confirm or invalidate the thesis; if a profile was supplied, note any that are specifically holder-relevant)
 - **Confidence & Caveats** (extraction quality, Unconfirmed/out-of-scope assumptions, data staleness)
 - **Detail toggle** *(footer line)* — offer `expand` (full per-assumption reasoning at `deep` verbosity) / `collapse` (TL;DR + fragile points only). Re-renders from the same records — never re-runs tools or re-derives statuses. Collapsing never hides a Contradicted/Unconfirmed status or the disclaimer
+
+**Book mode (>1 thesis) — additional roll-up after the per-thesis reports** *(omit entirely for a single thesis)* — render each thesis's report first (collapsed to TL;DR + Load-Bearing Vulnerabilities at `quick`/`standard`, expandable), then: **Book Overview** (thesis count + per-thesis Assumption Strength roster); **Shared / Concentrated Assumptions** (table: `canonical_assumption`, `layer`, `# theses`, `max_criticality`, `status`, `member_ids` — concentrated Contradicted/Unconfirmed rows are the headline); **Correlated Break Conditions** (table: `trigger`, `theses_broken`, `common_horizon`, `simultaneous?` — the book's single points of failure); **Book-Level Verdict** (where the book concentrates argument risk, holder-independent, no sizing/recommendation); and **Client-Conditioned Book View** *(profile only)*. The disclaimer + AI-interaction disclosure render **once, at the end of the whole run**, not per thesis. → `references/portfolio-aggregation.md`
 
 **AI-interaction disclosure (always):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
