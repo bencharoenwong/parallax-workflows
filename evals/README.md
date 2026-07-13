@@ -113,7 +113,8 @@ evals/
 │   ├── portfolio-builder/  # constructive thesis-to-allocation
 │   ├── rebalance/          # prioritized trades + quantified targets
 │   ├── watchlist-monitor/  # score-surveillance scan (no weights)
-│   └── portfolio-checkup/  # DRAFT — spec only, never run live
+│   ├── portfolio-checkup/  # DRAFT — spec only, never run live
+│   └── stress-test-thesis/ # DRAFT — thesis decomposition; spec only, never run live
 ├── tasks/<skill>/core.jsonl  # eval task inputs per skill
 ├── fixtures/<skill>/       # golden + broken stream-json transcripts (offline tests)
 ├── rollout/run_rollout.sh  # one live stream-json rollout
@@ -133,6 +134,12 @@ evals/
 - `watchlist-monitor` — score-surveillance scan (no weights); includes score-changes-quantified check.
 - `portfolio-checkup` — **DRAFT spec only, never run.** Same output family as
   should-i-buy.
+- `stress-test-thesis` — **DRAFT spec only, never run.** Different output family
+  (Assumption Map + per-assumption status table + World Verdict; no per-stock
+  scorecard). Makes no buy/sell/hold call — `verdict_no_rec` is the analogue of
+  should-i-buy's `bottom_line_no_rec`. Core tasks are Pass-1-only; the §9.5
+  two-pass client-conditioning acceptance test needs paired-run support the
+  single-transcript engine doesn't have yet, so it stays a manual live test.
 
 ### Key scripts
 
