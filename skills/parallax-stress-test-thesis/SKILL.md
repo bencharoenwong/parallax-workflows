@@ -25,7 +25,8 @@ description: "Pressure-tests a written investment thesis: decomposes it into fal
 - `get_news_synthesis` is symbol-only; theme/sector-level news goes through `macro_analyst(component: "news")`, not this tool.
 - `get_telemetry` is async (~15-30s); `get_assessment` is async (~3min) — fire early, don't block instant-response tool assembly on either.
 - **The core invariant: Pass 2 never rewrites a Pass-1 Supported/Contradicted/Unconfirmed status.** It evaluates the holder-dependent layer and re-weights severity only. See `references/client-conditioning.md` for the mechanical reason this holds.
-- No persisted state, no writes — `client_profile` lives in-session only; this skill writes nothing and reads no prior-run state.
+- **House-view cross-check is optional, read-only, and flag-only** — JIT-load `references/house-view-check.md` only if an active view exists at `~/.parallax/active-house-view/`. It flags where the thesis's directional claims disagree with the firm's positioning; it **never** applies tilts, re-ranks, or rewrites a Pass-1 status (the view is opinion, the status is evidence). It deliberately does **not** write the `loader.md` §7 consume-audit entry by default — see the reference for that documented no-write variance and the opt-in `--house-view-audit` flag. No active view → render nothing. (Want the view *applied* — tilts, re-ranking — not just flagged? That is `/parallax-portfolio-builder`; this skill stays read-only by design.)
+- No persisted state, no writes — `client_profile` lives in-session only, and the house-view cross-check is read-only/unlogged, so this invariant still holds with or without a view.
 
 ## Usage
 
@@ -33,6 +34,7 @@ description: "Pressure-tests a written investment thesis: decomposes it into fal
 /parallax-stress-test-thesis "I like NVDA because AI capex keeps compounding and rate cuts extend the duration trade for growth names"
 /parallax-stress-test-thesis path/to/memo.pdf
 /parallax-stress-test-thesis "Rotate into crypto-adjacent equities now that the halving cycle plus ETF inflows are re-rating the space" client_profile={"age":27,"horizon":"20+ years","risk_capacity":"high","income_reliance":"accumulating","position_size_pct_networth":0.05,"risk_tolerance":"high"}
+/parallax-stress-test-thesis "…thesis…" --house-view-audit        # opt in to logging house-view consumption (off by default)
 ```
 
 The input is either an inline argument or a path/URL to a memo (extracted locally — the source never
@@ -109,6 +111,14 @@ horizon — holder-independent), and **never paste its output raw** — the word
 model ignores, so extract the three answers and compress them yourself. If it is skipped, errors, or
 times out, use the records-based synthesis rather than gating the report.
 
+#### Phase 4.5 — House-view cross-check *(optional; only if an active view exists)*
+
+→ Load `references/house-view-check.md` **only if** `~/.parallax/active-house-view/view.yaml` is
+present. Validate the view read-only (loader.md §2), surface the required active-view banner, and
+flag where the thesis's own directional claims (macro regime, sector/theme, factor lean) disagree
+with the firm's tilts — **flag only, never apply tilts, never rewrite a Pass-1 status.** This is
+client-invariant (it closes Pass 1). No active view → render nothing and add no caveat.
+
 ### PASS 2 — Client conditioning (what it means for this investor)
 
 Runs **only if a `client_profile` was supplied**.
@@ -136,6 +146,7 @@ survive at every depth — they are never collapsed away. → `references/output
 - **Position-Level Read** *(omit entirely if no tickers — say so under Thesis Restatement instead)* — direction alignment, peer-relative factor check, macro alignment, news + staleness caveat, per symbol
 - **World Verdict** (Phase 4 records synthesis; `get_assessment` optional cross-check — what has to be true, where it most likely fails). Lead it with an **Assumption Strength** label — `Weak` / `Mixed` / `Strong` — rating how well the load-bearing assumptions are supported by the current reads (Weak = a high-criticality assumption is Contradicted or Unconfirmed; Strong = the load-bearing set is Supported). **This rates the argument's evidential support, not the security — it is explicitly NOT a buy/sell/hold call, a PASS/FAIL grade, or a suitability verdict.** The TL;DR shows this label with a 🔴/🟡/🟢 traffic-light glyph (🔴 Weak / 🟡 Mixed / 🟢 Strong) — a visual severity cue for *argument strength*, **not** a buy/sell signal and **not** a control-flow gate: 🟢 never means "buy", 🔴 never means "sell", and every section still renders regardless of the light. Optionally annotate each Load-Bearing Vulnerability with the same Weak/Mixed/Strong tag for its own assumption.
 - **Bias & Conviction Check** *(the "hype meter"; client-invariant — a Pass-1 read, placed here directly under the World Verdict)* — a 🔴/🟡/🟢 read of how much the thesis leans on **conviction/hype language** (superlatives, certainty with no break condition, "world-class / guaranteed / obvious / no-brainer", narrative-or-authority-as-proof, no bear case) versus falsifiable, hedged, evidenced claims: 🟢 Low = evidence-led and hedged, 🟡 Elevated = some unhedged conviction, 🔴 High = heavy hype / few falsifiable conditions. It rates the argument's *language* and **names the specific behavioral bias most present** (confirmation, narrative fallacy, overconfidence, recency, herding/authority, anchoring, loss-aversion) with a one-clause why. **It is the *rhetoric* axis paired with the World Verdict's *evidence* axis** — the two use the same 🔴/🟡/🟢 glyphs but measure different things (how the case is argued vs. how well the reads back it), so they can diverge (a 🔴-hype thesis can still be 🟢 Strong, or vice-versa); label each explicitly and never conflate them. **Not** a trade signal, **not** a comment on whether the thesis is right. → `references/assumption-decomposition.md` "Bias & conviction (hype) scan"
+- **House-View Alignment** *(only if an active house view exists at `~/.parallax/active-house-view/`; omit entirely otherwise)* — the required active-view banner plus a single blanket note (via the shared `render_view_conflict` helper) flagging where the thesis's macro/sector/factor claims agree or disagree with the firm's positioning. **Flag only: the view never changes an assumption's Pass-1 status, criticality, or rank** — it is a positioning conflict to resolve at decision time, orthogonal to the evidential read. Client-invariant. → `references/house-view-check.md`
 - **Pass 2 — Holder-Dependent Assumptions** *(only if profile supplied)* — the layer-5 rows, Supported/Contradicted for this person
 - **Pass 2 — Client-Conditioned Vulnerabilities** *(only if profile supplied)* — re-ranked using `client_severity`; state what moved vs. the Pass-1 ranking and why
 - **Suitability-Relevant Flags** *(only if profile supplied)* — risk observations only, never a call; each closes with the qualified-professional reminder. **If none fired, render a one-line "No suitability flags fired" rather than omitting the section**, so the reader can see the check ran and nothing escalated (a legitimate, common outcome for a long-horizon/accumulating holder)
