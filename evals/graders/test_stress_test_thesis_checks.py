@@ -281,6 +281,48 @@ def test_stronger_disclaimer_variant_passes_shared_check():
     assert _results(prose)["disclaimer_present_correct"] is True
 
 
+# --- json_no_rec (structured payload carries no signal key) -----------------
+
+_VALID_JSON = """```json
+{
+  "schema": "stress-test-thesis/v1",
+  "thesis_fingerprint": "rate-cut duration long",
+  "assumptions": [{"id": "macro-1", "status": "Contradicted"}],
+  "world_verdict": {"assumption_strength": "Weak"},
+  "disclaimer_variant": "standard",
+  "not_a_recommendation": true
+}
+```"""
+
+
+def test_json_no_rec_green_on_valid_payload():
+    assert _results(GOLDEN + "\n" + _VALID_JSON)["json_no_rec"] is True
+
+
+def test_json_no_rec_vacuous_when_no_json():
+    # The common prose-only case must pass — the guard only bites on a payload.
+    assert _results(GOLDEN)["json_no_rec"] is True
+
+
+def test_json_no_rec_red_on_signal_key():
+    rec = _VALID_JSON.replace(
+        '"assumptions": [{"id": "macro-1", "status": "Contradicted"}],',
+        '"assumptions": [{"id": "macro-1", "status": "Contradicted", "action": "sell"}],',
+    )
+    assert _results(GOLDEN + "\n" + rec)["json_no_rec"] is False
+
+
+def test_json_no_rec_red_when_flag_missing():
+    rec = _VALID_JSON.replace('  "not_a_recommendation": true\n', "")
+    assert _results(GOLDEN + "\n" + rec)["json_no_rec"] is False
+
+
+def test_json_no_rec_ignores_foreign_json_block():
+    # A json block that is not this skill's payload must not trip the guard.
+    foreign = '```json\n{"action": "buy", "rating": "strong"}\n```'
+    assert _results(GOLDEN + "\n" + foreign)["json_no_rec"] is True
+
+
 # --- verdict_no_rec (hardened: casual imperatives, not just formal tokens) --
 
 

@@ -64,6 +64,7 @@ _SECTION_LABELS = [
     "Suitability-Relevant Flags",        # profile-only
     "Client-Conditioned Verdict",        # profile-only
     "What to Watch",
+    "What Changed",                      # decay-compare only (prior-run supplied)
     "Confidence & Caveats",
 ]
 
@@ -179,6 +180,64 @@ def _c_break_condition_fields(t, spec) -> Check:
     return Check("break_condition_fields", not bad, f"rows_missing_magnitude_or_time={bad}")
 
 
+# Structured (JSON) output mode carries the same no-recommendation invariant as
+# the prose verdict, but on a channel a downstream tool consumes directly — so a
+# signal-shaped key leaking in is worse here than in prose. This guards it: any
+# fenced json block that is this skill's payload must (a) contain none of the
+# signal keys anywhere in the tree, and (b) carry not_a_recommendation == true.
+# Vacuously passes when no such block is present (the common prose-only case).
+import json as _json  # noqa: E402
+
+_JSON_BLOCK_RE = re.compile(r"```json\s*(\{.*?\})\s*```", re.S | re.I)
+_FORBIDDEN_JSON_KEYS = {
+    "action", "rating", "recommendation", "buy_sell_hold", "target_price",
+    "price_target", "weight", "allocation", "position_size", "conviction_score",
+}
+
+
+_TRAILING_COMMA_RE = re.compile(r",(\s*[}\]])")
+
+
+def _walk_keys(obj):
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            yield k
+            yield from _walk_keys(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            yield from _walk_keys(v)
+
+
+def _loads_lenient(raw: str):
+    """Parse a JSON block, tolerating a trailing comma before a closing brace/bracket.
+    A payload that intends our schema but carries that common slop must still be graded,
+    not silently skipped as unparseable (which would let a missing flag pass vacuously)."""
+    try:
+        return _json.loads(raw)
+    except ValueError:
+        try:
+            return _json.loads(_TRAILING_COMMA_RE.sub(r"\1", raw))
+        except ValueError:
+            return None
+
+
+def _c_json_no_rec(t, spec) -> Check:
+    """If a structured stress-test-thesis JSON payload is emitted, it must carry no
+    signal-shaped key anywhere in the tree and must flag not_a_recommendation:true."""
+    for m in _JSON_BLOCK_RE.finditer(t.final_prose or ""):
+        obj = _loads_lenient(m.group(1))
+        if obj is None:
+            continue
+        if not (isinstance(obj, dict) and str(obj.get("schema", "")).startswith("stress-test-thesis")):
+            continue
+        bad = sorted({k for k in _walk_keys(obj) if k.lower() in _FORBIDDEN_JSON_KEYS})
+        if bad:
+            return Check("json_no_rec", False, f"forbidden_signal_keys={bad}")
+        if obj.get("not_a_recommendation") is not True:
+            return Check("json_no_rec", False, "not_a_recommendation flag missing/false")
+    return Check("json_no_rec", True, "no rec-shaped keys in structured payload")
+
+
 _READ_TIME_RE = re.compile(r"~\s*\d+\s*min\s+read", re.I)
 
 
@@ -258,6 +317,7 @@ SPEC = EvalSpec(
         "assumption_map_layered",      # NEW (five-layer decomposition ran)
         "break_condition_fields",      # NEW (magnitude + time_to_play_out mandatory)
         "read_time_marker",            # NEW (standard-render ~N min read marker)
+        "json_no_rec",                 # NEW (structured payload carries no signal key)
         "tldr_strength_light",         # NEW (TL;DR strength carries matching 🔴/🟡/🟢 glyph)
         "hype_meter_light",            # NEW (Bias & Conviction "hype meter" glyph consistency)
         "orchestrator_length",         # GENERIC
@@ -267,6 +327,7 @@ SPEC = EvalSpec(
         "assumption_map_layered": _c_assumption_map_layered,
         "break_condition_fields": _c_break_condition_fields,
         "read_time_marker": _c_read_time_marker,
+        "json_no_rec": _c_json_no_rec,
         "tldr_strength_light": _c_tldr_strength_light,
         "hype_meter_light": _c_hype_meter_light,
     },

@@ -77,3 +77,64 @@ do **not** re-run tools or re-derive statuses (that would risk drift against the
 shown). On `collapse`, render at `quick` verbosity. **Collapsing never hides a Contradicted or
 Unconfirmed status, the disclaimer, or the AI disclosure** — those survive at every verbosity; only
 narrative depth changes.
+
+## 7. Structured (JSON) output — for embedding
+
+For an engineering caller embedding this skill (internal research tools, B-CIO synthesis layers,
+white-label harnesses), a prose report is hard to consume. On `--json` (or an explicit "structured
+/ machine-readable output" request), emit a **fenced `json` block** that mirrors the same records the
+prose is built from — it is a *serialization of what was already derived*, not a second analysis.
+
+Shape (keys stable; omit sections that did not run rather than emitting nulls for them):
+
+```
+{
+  "schema": "stress-test-thesis/v1",
+  "thesis_fingerprint": "<short hash or first line>",
+  "assumption_map": [{"id","layer","claim","criticality","testability"}],
+  "assumptions": [{"id","status","break_condition","magnitude","time_to_play_out","base_severity",
+                   "client_severity"?}],
+  "load_bearing": ["<id>", ...],
+  "world_verdict": {"assumption_strength":"Weak|Mixed|Strong","most_likely_break","horizon"},
+  "house_view": {"present":bool,"view_id"?,"version_id"?,"conflicts":[...]}?,
+  "book": {"concentrated":[...],"correlated_breaks":[...],"book_strength":...}?,
+  "run_provenance": {"markets","components","report_dates","get_assessment_fired":bool},
+  "disclaimer_variant": "standard|client_profile",
+  "not_a_recommendation": true
+}
+```
+
+Hard rules — the JSON is bound by the same invariants as the prose:
+
+- **No recommendation field ever.** There is no `action`, `rating`, `target`, or `weight` key. The
+  constant `"not_a_recommendation": true` is emitted so a downstream consumer cannot mistake the
+  payload for a signal. Statuses are `Supported/Contradicted/Unconfirmed` — never buy/sell/hold.
+- **It carries the disclaimer, it does not replace it.** Emit `disclaimer_variant`, and when the
+  output is shown to a human still render the prose disclaimer + AI disclosure. The JSON is a
+  data-contract, not a compliance-exempt channel.
+- **No new derivation.** Every value is copied from a record the prose already reported; the JSON and
+  the prose can never disagree. If the prose said Unconfirmed, the JSON says Unconfirmed.
+- **Still read-only.** Emitting JSON writes nothing to disk — it is rendered in-chat like every other
+  output. (A caller that wants to persist it does so on their side, outside this skill.)
+- A caller can request **JSON only** (suppress prose) for pure programmatic use; the disclaimer +
+  `not_a_recommendation` flag still travel inside the payload.
+
+## 8. Decay-compare — re-running a thesis over time (no persistence)
+
+Addresses "is my thesis getting weaker week over week?" **without** giving the skill a write path or a
+watcher. The prior state is a **caller-supplied input**, not something the skill stored: the user
+pastes back a previous run's §7 JSON (or names the prior Assumption Strength + statuses), and the skill
+re-runs Pass 1 against *today's* reads and diffs.
+
+- Trigger: a prior-run JSON block in the input, or an explicit "compare to last time / what changed"
+  with the prior statuses supplied. No prior state supplied → run normally and note that this is the
+  baseline to feed back next time.
+- Output adds a **What Changed** section: per assumption, `prior_status → current_status`, whether its
+  break condition newly fired or cleared, and the net move in Assumption Strength (e.g. `Mixed → Weak`
+  because macro-1 flipped Supported → Contradicted). Everything else renders as normal.
+- Invariants hold: the skill **reads today's data live** (it never trusts the pasted prior reads as
+  current — they are only the comparison baseline), writes nothing, and issues no recommendation about
+  what to do about the change. It reports the drift; the reader decides.
+- Pairs with §7: the JSON a run emits today is exactly the artifact you feed back next week. That is
+  the intended, no-persistence "monitoring" loop — state lives with the caller, never in the skill.
+
