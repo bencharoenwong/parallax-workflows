@@ -49,6 +49,7 @@ type their own via the automatic "Other"):
 
 | Question | Header | Options |
 |---|---|---|
+| Your role | Role | Individual investor · Relationship manager · Fund manager · Research analyst *(Wealth advisor / Engineering via Other)* |
 | Time horizon | Horizon | `< 2 years` · `2–5 years` · `5–10 years` · `10+ years` |
 | Income from this capital | Income | Accumulating (no withdrawals) · Partially drawing income · Fully drawing income |
 | Capacity to absorb a loss | Risk capacity | Low · Medium · High |
@@ -56,7 +57,8 @@ type their own via the automatic "Other"):
 Fold the depth question (`output-modes.md` §3: Quick / Standard / Deep) into the same call when depth
 was not given, and — if you still need it — ask position size as a **band** (`< 2%` · `2–10%` ·
 `10–25%` · `> 25%` of net worth) rather than a raw float. `horizon` and `income_reliance` are the two
-required fields; if the user skips them, re-ask before running Phase 5.
+required fields; if the user skips them, re-ask before running Phase 5. `role` tailors presentation
+only (`output-modes.md` §9) — never the analysis — so a missing `role` never blocks the run.
 
 ## (a) Evaluate the holder-dependent layer
 

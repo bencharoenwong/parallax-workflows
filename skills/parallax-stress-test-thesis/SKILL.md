@@ -33,17 +33,19 @@ description: "Pressure-tests a written investment thesis: decomposes it into fal
 /parallax-stress-test-thesis "I like NVDA because AI capex keeps compounding and rate cuts extend the duration trade for growth names"
 /parallax-stress-test-thesis path/to/memo.pdf
 /parallax-stress-test-thesis "Rotate into crypto-adjacent equities now that the halving cycle plus ETF inflows are re-rating the space" client_profile={"age":27,"horizon":"20+ years","risk_capacity":"high","income_reliance":"accumulating","position_size_pct_networth":0.05,"risk_tolerance":"high"}
+/parallax-stress-test-thesis "…thesis…" role=rm client_profile={…}  # tailor which outputs lead to the operator's role (RM → client-facing plain-language)
 ```
 
 The input is either an inline argument or a path/URL to a memo (extracted locally — the source never
 leaves the session). An optional `client_profile` (JSON object or key:value block) turns on Pass 2.
 
-**Degenerate inputs** (handle before Phase 1 — see `references/assumption-decomposition.md` for detail): tickers with no argument → ask for the *why*; argument with no tickers → run Phases 2 and 4, skip Phase 3 and say so; no `client_profile` → run Pass 1 only, state Pass 2 was skipped for lack of a profile; `client_profile` missing `horizon` or `income_reliance` → ask for those before running Phase 5 **via a clickable `AskUserQuestion`** (horizon + income + risk-capacity in one call — see `references/client-conditioning.md` "Collecting the profile interactively"), never a free-text prompt.
+**Degenerate inputs** (handle before Phase 1 — see `references/assumption-decomposition.md` for detail): tickers with no argument → ask for the *why*; argument with no tickers → run Phases 2 and 4, skip Phase 3 and say so; no `client_profile` → run Pass 1 only, state Pass 2 was skipped for lack of a profile; `client_profile` missing `horizon` or `income_reliance` → ask for those before running Phase 5 **via a clickable `AskUserQuestion`** (role + horizon + income + risk-capacity in one call — see `references/client-conditioning.md` "Collecting the profile interactively"), never a free-text prompt.
 
-## Modes — depth & detail
+## Modes — depth, scope, export
 
-→ Load `references/output-modes.md` when these apply. **Both are presentation controls, never safety
-switches**: neither may skip Phase 0, report a status without a live read, or drop the disclaimer.
+→ Load `references/output-modes.md` when any of these apply. **All are presentation/selection
+controls, never safety switches**: none may skip Phase 0, report a status without a live read, or
+drop the disclaimer.
 
 - **Depth** — `quick` / `standard` (default) / `deep` sets verbosity and whether the optional
   `get_assessment` cross-check fires. `quick` still runs every mandatory live read — it shortens the
@@ -53,6 +55,20 @@ switches**: neither may skip Phase 0, report a status without a live read, or dr
 - **Detail toggle** — after the report, offer `expand` (full per-assumption reasoning) / `collapse`
   (TL;DR + fragile points). Re-renders from the same records; never re-runs tools or re-derives a
   status. Collapsing never hides a Contradicted/Unconfirmed status or the disclaimer.
+- **Role-tailored presentation** — an optional `role` (individual / rm / wealth_advisor /
+  fund_manager / research_analyst / engineering) makes the skill *default* to the outputs that role
+  most needs. It tailors which optional features lead **and the language register** — plain-English
+  for individuals/RMs, full factor/criticality detail for fund managers/analysts — **never** a
+  status, the disclaimer, or the analysis, and role ≠ `client_profile` (an RM's holder is their
+  client). Absent → standard defaults. → `references/output-modes.md` §9
+- **Single-layer scope** — if the user asks for one layer only ("just macro", "personal angle
+  only"), test only that layer but still render the full five-layer Assumption Map with the rest
+  marked *not tested*, scope the World Verdict/Assumption Strength to the tested layer, and warn that
+  fragility may live in an un-analyzed layer. → `references/output-modes.md` §5
+- **Copy-ready export** — a purpose-tailored fenced block (Email / Quick note / Talking points /
+  Doc / **Client-facing plain-language**), asked via `AskUserQuestion`. The disclaimer +
+  no-recommendation framing travel with every variant; purpose tailors format and length only. →
+  `references/output-modes.md` §6
 
 ## Where artifacts live
 
@@ -141,8 +157,11 @@ survive at every depth — they are never collapsed away. → `references/output
 - **Suitability-Relevant Flags** *(only if profile supplied)* — risk observations only, never a call; each closes with the qualified-professional reminder. **If none fired, render a one-line "No suitability flags fired" rather than omitting the section**, so the reader can see the check ran and nothing escalated (a legitimate, common outcome for a long-horizon/accumulating holder)
 - **Client-Conditioned Verdict** *(only if profile supplied)* — what this means for this investor specifically
 - **What to Watch** (2–3 signals that would confirm or invalidate the thesis; if a profile was supplied, note any that are specifically holder-relevant)
-- **Confidence & Caveats** (extraction quality, Unconfirmed/out-of-scope assumptions, data staleness)
+- **Confidence & Caveats** (extraction quality, Unconfirmed/out-of-scope assumptions, data staleness; in single-layer mode, the prominent "layers not tested" warning)
 - **Detail toggle** *(footer line)* — offer `expand` (full per-assumption reasoning at `deep` verbosity) / `collapse` (TL;DR + fragile points only). Re-renders from the same records — never re-runs tools or re-derives statuses. Collapsing never hides a Contradicted/Unconfirmed status or the disclaimer
+- **Follow-up Q&A** *(footer offer)* — invite the reader to ask follow-up questions on the conclusion in-chat ("why is that the load-bearing one?", "what would flip it to Strong?"). Answer from the **same session's records** — don't re-run tools or re-derive a status unless the question genuinely needs data this run didn't fetch (a new ticker/market), and say so when you do. Every invariant travels into the answer: a "so should I buy?" follow-up gets the same no-recommendation framing, and nothing persists between sessions. → `references/output-modes.md` §10
+- **Copy-ready export** *(offered after the report; on request)* — ask purpose via `AskUserQuestion` (Email / Quick note / Talking points / Doc), then render one fenced block tailored to it. **Every variant carries the disclaimer + no-recommendation framing and any material staleness/Unconfirmed caveat; purpose tailors format and length only, never substance.** Rendered as a copy-out-of-chat block — there is no OS-clipboard write. → `references/output-modes.md` §6
+- **Run Provenance** *(footer; render at `deep` depth or on request — omit at `quick`/`standard` to avoid bloat)* — a compact, machine-facing inventory that makes the run self-documenting: (a) thesis fingerprint; (b) markets queried and the `macro_analyst` components fired per market; (c) each read's `report_date` and its staleness vs. today; (d) whether the `get_assessment` cross-check fired or the records-based synthesis was used. It **echoes fixed inputs and reads only — it never re-derives a status** and adds no new finding; it is a provenance manifest, not analysis
 
 **AI-interaction disclosure (always):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
