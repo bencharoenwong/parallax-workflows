@@ -63,6 +63,9 @@ graphify-out/
 # Local-only benchmark results — server-load info, specific portfolio examples; harness is public
 evals/results/
 
+# Operator-supplied live-connector MCP config — carries endpoint/token; only the .template is tracked
+evals/rollout/*.mcp.json
+
 # Coverage artifacts
 .coverage
 *.coverage
