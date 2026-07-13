@@ -310,8 +310,58 @@ def test_lights_heuristic_disclosed_satisfied_by_profile_disclaimer():
     )
     assert _results(prose)["lights_heuristic_disclosed"] is True
 
+# --- json_no_rec (structured payload carries no signal key) -----------------
 
-# --- verdict_no_rec (hardened: casual imperatives, not just formal tokens) --
+_VALID_JSON = """```json
+{
+  "schema": "stress-test-thesis/v1",
+  "thesis_fingerprint": "rate-cut duration long",
+  "assumptions": [{"id": "macro-1", "status": "Contradicted"}],
+  "world_verdict": {"assumption_strength": "Weak"},
+  "disclaimer_variant": "standard",
+  "not_a_recommendation": true
+}
+```"""
+
+
+def test_json_no_rec_green_on_valid_payload():
+    assert _results(GOLDEN + "\n" + _VALID_JSON)["json_no_rec"] is True
+
+
+def test_json_no_rec_vacuous_when_no_json():
+    # The common prose-only case must pass — the guard only bites on a payload.
+    assert _results(GOLDEN)["json_no_rec"] is True
+
+
+def test_json_no_rec_red_on_signal_key():
+    rec = _VALID_JSON.replace(
+        '"assumptions": [{"id": "macro-1", "status": "Contradicted"}],',
+        '"assumptions": [{"id": "macro-1", "status": "Contradicted", "action": "sell"}],',
+    )
+    assert _results(GOLDEN + "\n" + rec)["json_no_rec"] is False
+
+
+def test_json_no_rec_red_when_flag_missing():
+    rec = _VALID_JSON.replace('  "not_a_recommendation": true\n', "")
+    assert _results(GOLDEN + "\n" + rec)["json_no_rec"] is False
+
+
+def test_json_no_rec_judges_every_fence_not_only_the_skill_payload():
+    """Was `ignores_foreign_json_block`, which asserted GREEN on a fence holding
+    {"action": "buy", "rating": "strong"} because it lacked the skill's schema key.
+    That exemption was a fail-open: a payload with a missing or misspelled schema
+    key went unjudged. This skill emits only its own payload, so every fence is
+    judged."""
+    foreign = '```json\n{"action": "buy", "rating": "strong"}\n```'
+    assert _results(GOLDEN + "\n" + foreign)["json_no_rec"] is False
+
+
+def test_json_no_rec_catches_sizing_keys_from_either_source_set():
+    """The merged key set is the union; neither original caught all of these."""
+    for key in ("weight", "allocation", "position_size", "conviction_score",
+                "buy_sell_hold", "advice", "signal", "target"):
+        blob = '```json\n{"schema": "stress-test-thesis/v1", "%s": 1, "not_a_recommendation": true}\n```' % key
+        assert _results(GOLDEN + "\n" + blob)["json_no_rec"] is False, key
 
 
 def test_verdict_no_rec_red_on_casual_imperative():
@@ -343,7 +393,7 @@ def test_verdict_no_rec_green_on_legit_market_vocab():
         assert _results(prose)["verdict_no_rec"] is True, phrase
 
 
-# --- json_no_rec (structured-output recommendation guard) -------------------
+# --- json_no_rec (merged: any fence, union key set, payload flag) -----------
 
 
 def test_json_no_rec_red_on_json_rating_key():
@@ -365,6 +415,17 @@ def test_json_no_rec_green_on_benign_structured_keys():
     assert _results(prose)["json_no_rec"] is True
 
 
-def test_json_no_rec_green_on_invalid_json_fence():
+def test_json_no_rec_a_trailing_comma_no_longer_buys_an_exemption():
+    """This asserted GREEN. A single trailing comma made the fence unparseable to
+    the strict parser, so a fence literally containing {"rating": "buy"} was skipped
+    and the check passed — a one-character typo defeated the guard. The lenient
+    parser repairs that slop and the key is judged."""
     prose = GOLDEN + '\n```json\n{"rating": "buy",}\n```\n'
+    assert _results(prose)["json_no_rec"] is False
+
+
+def test_json_no_rec_green_on_a_fence_that_is_not_json_at_all():
+    """Leniency repairs slop; it does not invent keys. A fence with no parseable
+    object carries nothing to judge and must not fail."""
+    prose = GOLDEN + '\n```json\nnot json, just prose about a rating\n```\n'
     assert _results(prose)["json_no_rec"] is True
