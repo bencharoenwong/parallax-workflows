@@ -107,7 +107,15 @@ Where a re-weighted assumption lands at `client_severity: high` specifically bec
 holder-dependent factor (not because the world-level read itself was severe), emit an explicit
 flag: this is a **risk observation**, phrased descriptively ("this position's break condition, if
 it fires, would coincide with this investor's stated income-reliance window") — **never** a
-buy/sell/hold call, and never phrased as a suitability determination. Close every flag block with
+buy/sell/hold call, and never phrased as a suitability determination.
+
+**Making a flag concrete — illustrative arithmetic (optional, guardrailed).** To help a
+non-specialist *feel* the severity, you may translate it into plain arithmetic off the supplied
+profile — e.g. "a 30% drawdown in a 35%-of-net-worth position is ~10% of net worth, taken while you
+are drawing income from it." This makes the mechanism tangible without a market view. **Mark it
+explicitly `illustrative, not a prediction`, use round arbitrary inputs (not a forecast), and never
+imply a probability or a specific magnitude will occur** — it demonstrates the *shape* of the risk
+(position size × income-reliance × horizon), nothing about whether it will happen. Close every flag block with
 a reminder that a formal suitability assessment must be made by a qualified professional against
 the individual's full circumstances — Pass 2 is heuristic reasoning over a partial profile, not a
 calibrated model (see `SKILL.md` "Failure modes the operator must know" — *Not a suitability

@@ -51,6 +51,13 @@ no equity expression — the reader must learn that at the top, not infer it fro
 rows at the end. This is honesty about resolution, not a refusal to run: a partial-coverage thesis is
 still analyzed as far as the country-macro read allows, with the boundary stated.
 
+**Make an out-of-scope leg a directed next step, not a dead end.** For each out-of-scope leg, name
+*where the reader can verify it themselves* — the spot instrument (e.g. spot BTC vs. a stated level),
+official ETF-/fund-flow data, the relevant economic print — and, where a covered equity gives an
+indirect read on the out-of-scope leg (a Bitcoin-treasury company's filings on its BTC book, a
+commodity producer's guidance), surface that triangulation. The reader should leave knowing what to
+check next, not just what could not be scored.
+
 *(Coverage last live-probed 2026-07-04 against the connected MCP; re-probe if Parallax announces new
 asset-class support.)*
 
