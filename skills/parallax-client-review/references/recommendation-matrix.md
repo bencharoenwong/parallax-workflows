@@ -22,15 +22,21 @@ Same taxonomy and threshold values as `parallax-portfolio-checkup/references/hea
 | Value Trap | Holding value score ≤ 3.0 |
 | Macro Misalignment | Holding's sector flagged unfavourable by `macro_analyst` tactical |
 
+## Threshold calibration scope
+
+The 15% single-holding / 45% top-3 concentration cutoffs (and the <7-holding structural caveat in `parallax-conventions.md`) are calibrated for concentrated advisor/retail-scale books; on institutional-scale books they rarely trigger. Scale-aware (percentile/HHI) thresholds and per-mandate overrides are a documented roadmap item — until then, state this calibration scope in output when the book exceeds ~30 holdings.
+
 ## Recommendation Types
+
+Action types are analytical classifications per `parallax-conventions.md` §12 — informational, not trade instructions; the §12.3 plain-label mode maps each type to a neutral status description for retail-suitable rendering.
 
 | Type | When to Use | Description |
 |---|---|---|
-| **Trim** | Concentration + other flags | Reduce weight to below threshold |
-| **Exit** | 3+ flags + deteriorating score trend | Full sell — multiple converging negatives |
-| **Hold** | Stable/improving scores, no flags | No action needed |
-| **Investigate** | 2 flags but ambiguous signal | Suggest `/parallax-deep-dive` for full analysis |
-| **Reweight** | Concentration without other flags | Adjust allocation to reduce concentration risk |
+| **Trim** | Concentration + other flags | Classification: flagged for partial-position review — weight above threshold |
+| **Exit** | 3+ flags + deteriorating score trend | Classification: flagged for full-position review — multiple converging negatives |
+| **Hold** | Stable/improving scores, no flags | Classification: no threshold breach |
+| **Investigate** | 2 flags but ambiguous signal | Classification: flagged for further review — ambiguous signal, see `/parallax-deep-dive` |
+| **Reweight** | Concentration without other flags | Classification: flagged for allocation review — concentration risk without other flags |
 
 Every recommendation must cite a **specific flag or data finding**. No generic advice like "consider diversifying."
 

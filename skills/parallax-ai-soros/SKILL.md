@@ -1,6 +1,6 @@
 ---
 name: parallax-ai-soros
-description: "Applies George Soros's top-down reflexivity framework (per 'The Alchemy of Finance', 1987) to current Parallax data. Triggers: 'trade ideas based on current macro regime', 'regime-driven stock picks', 'reflexivity-lens stock ideas'. Two modes: basket mode surfaces regime themes and ranked trade ideas; single-ticker mode runs the same macro workflow and checks ticker exposure via dual channels (industry exposure AND telemetry basket theme). Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized. Accepts plain tickers or RIC format. NOT for bottom-up factor analysis (use /parallax-deep-dive). For all five profiles simultaneously use /parallax-ai-consensus."
+description: "Applies George Soros's top-down reflexivity framework (per 'The Alchemy of Finance', 1987) to current Parallax data. Triggers: 'trade ideas based on current macro regime', 'regime-driven stock picks', 'reflexivity-lens stock ideas'. Two modes: basket mode surfaces regime themes and ranked exposure candidates (informational); single-ticker mode runs the same macro workflow and checks ticker exposure via dual channels (industry exposure AND telemetry basket theme). Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized. Accepts plain tickers or RIC format. NOT for bottom-up factor analysis (use /parallax-deep-dive). For all five profiles simultaneously use /parallax-ai-consensus."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -28,9 +28,9 @@ description: "Applies George Soros's top-down reflexivity framework (per 'The Al
 - Disclaimer verbatim per output-template.md, substituting "George Soros" for [Investor]
 - build_stock_universe is async (~15-40s) and may time out — fallback per conventions §4
 - Telemetry basket-membership resolution: ticker → basket assignment is currently best-effort via name-match against `divergences[*].basket_name`; per-ticker basket lookup is NOT a documented field in the get_telemetry schema. Treat Channel B (single-ticker mode) matches as best-effort pending a documented convention in parallax-conventions.md.
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
 
-Top-down reflexivity lens: regime identification → thematic exposure → ranked trade ideas OR single-ticker dual-channel check.
+Top-down reflexivity lens: regime identification → thematic exposure → ranked exposure candidates (informational) OR single-ticker dual-channel check.
 
 ## Usage
 
@@ -113,20 +113,20 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 **Basket mode output:**
 
 ```
-Soros-style regime themes and trade ideas
+Soros-style regime themes and exposure candidates (informational)
 
 Source: Soros, G. (1987). The Alchemy of Finance. | Drobny, S. (2006). Inside the House of Money.
 
-Reflexivity framework: identify regime break or narrative-fundamentals divergence → surface exposed industries → concentrate on high-conviction names.
+Reflexivity framework: identify regime break or narrative-fundamentals divergence → surface exposed industries → the names with strongest thematic exposure.
 
 Markets analyzed: <list>
 
 ## Theme 1: <name>
 Macro thesis: <one paragraph — regime break or tactical opportunity>
-Directional view: <long / short / rotation>
+Theme direction (analytical read): <positive / negative / rotation>
 Currency/rate context: <brief>
 
-Ranked trade ideas:
+Ranked exposure candidates (informational, per conventions §12 — not trade instructions):
 | Rank | Ticker | Industry | Momentum | Rationale |
 |------|--------|----------|----------|-----------|
 | 1    | XXX.N  | ...      | 7.2      | ...       |
@@ -136,7 +136,7 @@ Ranked trade ideas:
 [same structure]
 
 Workflow derived from: Soros (1987); Drobny (2006).
-Last anchor-tested: 2026-04-07 (NVDA.O, TSLA.O) | Last legal review: pending
+Last anchor-tested: 2026-04-07 (NVDA.O, TSLA.O)
 Tool sequence: list_macro_countries, macro_analyst × N, get_telemetry, build_stock_universe × N, get_peer_snapshot × M
 Token cost: ~25-40 tokens
 
@@ -173,7 +173,7 @@ Profile fit: <match / partial_match / no_match>
   - no_match: neither channel flagged (Soros-style lens has no current view)
 
 Workflow derived from: Soros (1987); Drobny (2006).
-Last anchor-tested: 2026-04-07 (NVDA.O, TSLA.O) | Last legal review: pending
+Last anchor-tested: 2026-04-07 (NVDA.O, TSLA.O)
 Tool sequence: list_macro_countries, macro_analyst × N, get_company_info, get_telemetry, get_peer_snapshot
 Token cost: ~25-30 tokens (single-ticker mode)
 
@@ -190,10 +190,10 @@ These additions apply to the rendered output ABOVE in addition to the persona-sp
 
 ### Pre-Render — Load white-label branding
 
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format.
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format.
 
 - **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line at the very top of the rendered output: `**<client_name>** Soros-style regime view`. Logo handling per integration-pattern.md §5.
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7. If a logo was skipped, append `Logo on file: <basename>` as a second Provenance line.
+- **About This Report** (always present): one line stating branding state per integration-pattern.md §7. If a logo was skipped, append `Logo on file: <basename>` as a second About This Report line.
 
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below. The persona-specific disclaimer in the output example characterizes the source of the framing; the §9.2 banner characterizes the LLM-generated synthesis itself.
 

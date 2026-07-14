@@ -28,7 +28,7 @@ description: "Applies Joel Greenblatt's Magic Formula (per 'The Little Book That
 - NEVER use first-person impersonation — always "Greenblatt-style" or "Magic Formula"
 - Disclaimer verbatim; substitute "Joel Greenblatt" for [Investor] in the disclaimer block
 - Profile is derived from public book + academic replication only — no get_assessment, no score_total
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
 
 Applies Joel Greenblatt's Magic Formula (ROC rank + earnings yield rank, combined, top decile) to Parallax data.
 
@@ -121,7 +121,7 @@ Top decile by combined ROC + earnings yield rank:
 | ...  | ...     | ...      | ...     | ...      | ...             |
 
 Workflow derived from: Greenblatt, J. (2006). The Little Book That Beats the Market; Gray & Carlisle (2012).
-Last anchor-tested: 2026-04-06 (CSCO.O, MSFT.O, NVDA.O) | Last legal review: pending
+Last anchor-tested: 2026-04-06 (CSCO.O, MSFT.O, NVDA.O)
 Tool sequence: build_stock_universe, get_peer_snapshot × N, get_financials(ratios) × N
 Token cost: ~10-30 tokens (universe mode) / ~10-15 tokens (ticker-check mode)
 
@@ -148,7 +148,7 @@ Profile fit: <match/partial_match/no_match> — <ticker> is in the [top 10% | to
 Verdict sensitivity: combined rank sits at the <percentile>th percentile, <D> positions from the [top-10% match | top-25% partial] cutoff; the verdict flips to the adjacent tier if the combined rank crosses that boundary.
 
 Workflow derived from: Greenblatt, J. (2006). The Little Book That Beats the Market; Gray & Carlisle (2012).
-Last anchor-tested: 2026-04-06 (CSCO.O, MSFT.O, NVDA.O) | Last legal review: pending
+Last anchor-tested: 2026-04-06 (CSCO.O, MSFT.O, NVDA.O)
 Tool sequence: get_peer_snapshot, get_financials(ratios) × N
 Token cost: ~10-15 tokens
 
@@ -165,10 +165,10 @@ These additions apply to the rendered output ABOVE in addition to the persona-sp
 
 ### Pre-Render — Load white-label branding
 
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format.
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format.
 
 - **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line at the very top of the rendered output: `**<client_name>** Greenblatt-style screen`. Logo handling per integration-pattern.md §5.
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7. If a logo was skipped, append `Logo on file: <basename>` as a second Provenance line.
+- **About This Report** (always present): one line stating branding state per integration-pattern.md §7. If a logo was skipped, append `Logo on file: <basename>` as a second About This Report line.
 
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below. The persona-specific disclaimer in the output example characterizes the source of the framing; the §9.2 banner characterizes the LLM-generated synthesis itself.
 

@@ -23,8 +23,9 @@ description: "RIA/wealth advisor client portfolio review: full analysis, redunda
 - Per-holding drill-down capped at 8 holdings to manage latency
 - Mixed-exchange portfolios may need split scoring (see shared conventions)
 - Output should be presentation-ready for client meetings
+- LANGUAGE HAND-OFF — if `lang=` is present and ≠ `en`, the terminal Translate step is mandatory. Route `zh-CN`/`zh-TW`/`zh-HK` → `/translate-chinese-finance`, `th` → `/translate-thai-finance`, using the delimited routing-directive block (never a prose sentence the translator could echo). Unsupported values → English output with the standard warning footer.
 - get_assessment prompt should incorporate all findings including macro, flags, and recommendations
-- Pre-Render step loads white-label branding via `_parallax/white-label/loader.py` → `load_visual_branding()` (the 6-key visual subset wrapper). Voice/typography/etc. are structurally absent from the returned dict — `branding["voice"]` raises `KeyError`. Provenance state-to-text mapping and Branding Header semantics follow `_parallax/white-label/integration-pattern.md` §5 + §7 — that doc is the canonical specification; client-review's Output Format bullets reference it rather than reproducing the table.
+- Pre-Render step loads white-label branding via `_parallax/white-label/loader.py` → `load_visual_branding()` (the 7-key visual subset wrapper). Voice/typography/etc. are structurally absent from the returned dict — `branding["voice"]` raises `KeyError`. About This Report state-to-text mapping and Branding Header semantics follow `_parallax/white-label/integration-pattern.md` §5 + §7 — that doc is the canonical specification; client-review's Output Format bullets reference it rather than reproducing the table.
 - Branding Header uses `**<client_name>** portfolio review` (skill-specific framing), not the generic `**<client_name>** report` template in integration-pattern.md §5. Intentional divergence — do not "fix" to match the generic template.
 
 Presentation-ready portfolio review with health flags and prioritized recommendations for wealth advisors.
@@ -33,7 +34,10 @@ Presentation-ready portfolio review with health flags and prioritized recommenda
 
 ```
 /parallax-client-review [{"symbol":"AAPL.O","weight":0.25},{"symbol":"BRK-B.N","weight":0.20}] client="conservative retiree, income focus, 10yr horizon"
+/parallax-client-review [{"symbol":"AAPL.O","weight":0.25},{"symbol":"BRK-B.N","weight":0.20}] client="conservative retiree, income focus, 10yr horizon" lang=zh-CN register=retail
 ```
+
+Optional: append `lang=<code>` (`en` default; `zh-CN`, `zh-TW`, `zh-HK`, `th`) and `register=retail` after the existing parameters. `register=retail` is passed only when translation is requested; absent means institutional register.
 
 **Note on `benchmark=` parameter.** The current workflow body does NOT consume a `benchmark=` parameter — the example above intentionally omits it. If a future revision adds benchmark-relative attribution: pass benchmarks as **plain ETF tickers** (e.g., `SPY`, `QQQ`, `EWJ`) and route through `etf_daily_price` — NOT `export_price_series`. The two endpoints are separate. Equity tickers (with RIC suffix like `.O` or `.N`) go through `export_price_series`; ETFs (plain ticker) go through `etf_daily_price`. Mixing them silently fails-empty.
 
@@ -93,7 +97,7 @@ News (selective, async): `get_news_synthesis` for holdings >10% weight AND flagg
 
 ### Pre-Render — Load white-label branding
 
-Before composing the Output Format, JIT-load `_parallax/white-label/integration-pattern.md` and call `load_visual_branding()` per §2. The loader returns exactly six keys: `client_name`, `colors`, `logos`, `fonts`, `source`, `error`. Set `white_label_active = is_white_label_active(branding)` and `client_name = branding.get("client_name", "")` for use in the Branding Header. See §4 (error states), §5 + §6 (substitution semantics), §7 (Provenance template). Any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`. Apply §5 + §7 when composing the Output Format below.
+Before composing the Output Format, JIT-load `_parallax/white-label/integration-pattern.md` and call `load_visual_branding()` per §2. The loader returns exactly seven keys: `client_name`, `colors`, `logos`, `fonts`, `source`, `error`, `render`. Set `white_label_active = is_white_label_active(branding)` and `client_name = branding.get("client_name", "")` for use in the Branding Header. See §4 (error states), §5 + §6 (substitution semantics), §7 (About This Report template). Any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`. Apply §5 + §7 when composing the Output Format below.
 
 `white_label_active` is the rendering flag. `client_name` may be `""` on legacy configs — tolerate without erroring (skip the Branding Header in that case per integration-pattern.md §5).
 
@@ -109,30 +113,56 @@ REPORT
 python3 "<skill-dir>/../_parallax/render_gate.py" --skill client-review < "$DRAFT"; rm -f "$DRAFT"
 ```
 
-**Your entire final message is exactly that command's stdout** — nothing before it (no step/batch-completion notes, no scratch computation, no "no active house view" / white-label config-probe narration), nothing after it.
+**Your entire final message is exactly that command's stdout** — unless `lang=` ≠ `en`, in which case the Translate step below consumes that stdout and the translated result is the entire final message. Never run the render gate on translated text; its anchors are English. Nothing before it (no step/batch-completion notes, no scratch computation, no "no active house view" / white-label config-probe narration), nothing after it.
 
-**Degraded-state rule:** if an async tool (e.g. `get_assessment`, `get_news_synthesis`) times out or returns no data, render the pending/unavailable note INSIDE the relevant section or the Provenance line — NOT as a preamble above the report — so it is part of the rendered body and survives the gate. (The gate also hoists a leaked degraded note as a backstop.)
+**Degraded-state rule:** if an async tool (e.g. `get_assessment`, `get_news_synthesis`) times out or returns no data, render the pending/unavailable note INSIDE the relevant section or the About This Report line — NOT as a preamble above the report — so it is part of the rendered body and survives the gate. (The gate also hoists a leaked degraded note as a backstop.)
 
 `_parallax/render_gate.py` is pure-stdlib and deterministically drops anything before the first rendered block (House View Preamble banner / Branding Header / Ground-truth Integrity / this skill's title or first rendered section), preserving the active-house-view banner in every `view_status` state. Same operator-agnostic-helper pattern as `view_status.py` / `loader.py` (a real Bash tool call, not prose).
+
+### Translate — conditional, after the render gate
+
+This step runs ONLY when `lang=` is present and not `en`. Capture the render gate's stdout as the full body, including all Output Format sections, About This Report, the §9.2 AI-interaction disclosure, and the disclaimer. Record which disclaimer variant rendered (view-aware per `loader.md §5` vs standard `parallax-conventions.md §9.1`) for the boundary check.
+
+Invoke the appropriate translator skill with the input shaped as follows:
+
+```
+ROUTING DIRECTIVE — DO NOT TRANSLATE OR ECHO THIS BLOCK:
+  target_variant: <variant>
+  register: retail
+  source_language: en
+  begin_content_below_separator: true
+---
+
+<render gate stdout>
+```
+
+Pass `register: retail` iff `register=retail` was supplied; otherwise omit the `register:` line so the translator defaults to institutional register. Route `zh-CN`, `zh-TW`, and `zh-HK` to `/translate-chinese-finance` with the matching `target_variant`. Route `th` to `/translate-thai-finance`; omit `target_variant` for Thai, but keep the routing block marker and `---` separator.
+
+Translator-failure handling:
+- If the translator fails or returns an empty/partial result, output the original English with a one-line warning footer: `> Translation to <lang> failed; output shown in English. Re-run if the issue is transient.`
+- If the language arg is unrecognized, output the original English with: `> Language '<arg>' not supported; output shown in English. Supported: en, zh-CN, zh-TW, zh-HK, th.`
+- Translator output replaces the English output in the chat; do not show both.
+
+**Disclaimer boundary check.** If the disclaimer is missing from the translated output, first attempt a single-section re-translation pass on just the original English disclaimer text using the same routing-directive shape. Append that result if non-empty. If the pass fails or returns empty, append the English disclaimer variant that was actually rendered. Record the event in the loader.md §6 audit entry's `notes` field (`disclaimer boundary check fired — re-translated` or `disclaimer boundary check fired — english fallback`). Do not add a user-visible footer.
 
 ## Output Format
 
 Client-ready report:
 - **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (preamble). Per loader.md §5.1, the load preamble goes "at the very top" — it precedes the Branding Header.
-- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view active): `**<client_name>** portfolio review`. For the logo: if `branding["logos"]["primary"]` is empty (`""`, e.g., on the `logo_missing` partial-success path), render the text line only — no image, no extra Provenance note. If it is a URL (starts with `http://` / `https://`), embed `![<client_name>](<url>)` above the text line. If it starts with `/` or `~` (absolute local path, not embeddable in chat-delivered markdown per integration-pattern.md §5), skip the image embed and append `Logo on file: <basename>` as a second Provenance line.
+- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view active): `**<client_name>** portfolio review`. For the logo: if `branding["logos"]["primary"]` is empty (`""`, e.g., on the `logo_missing` partial-success path), render the text line only — no image, no extra About This Report note. If it is a URL (starts with `http://` / `https://`), embed `![<client_name>](<url>)` above the text line. If it starts with `/` or `~` (absolute local path, not embeddable in chat-delivered markdown per integration-pattern.md §5), skip the image embed and append `Logo on file: <basename>` as a second About This Report line.
 - **Ground-truth Integrity** (only render if any mismatch detected — table: `input_ticker`, `returned_name`, `expected_name`, status. Mismatched holdings had scores re-derived via `get_peer_snapshot` symbol-match — per loader.md §5 rule 3.)
 - **Portfolio Summary** (AUM breakdown, sector allocation, top 5 holdings; if view active, view-alignment score)
 - **Health Status** (Healthy/Monitor/Attention badge with flag summary)
-- **Verdict sensitivity** (render only when Health Status is Monitor or Attention): the 1-2 nearest-boundary flags and their arithmetic flip condition, per `parallax-portfolio-checkup/references/health-flags.md` "Verdict sensitivity" (renders `parallax-conventions.md` §11 by reference).
+- **Verdict sensitivity**: the 1-2 nearest-boundary flags and their arithmetic flip condition for moving Health Status to the adjacent tier, per `parallax-portfolio-checkup/references/health-flags.md` "Verdict sensitivity" (renders `parallax-conventions.md` §11 by reference).
 - **Performance vs Benchmark** (key metrics)
 - **Factor Analysis** (scores with macro context interpretation for this client type; if view active, compare against view-target factor)
 - **Concentration & Redundancy** (flagged issues; coverage reliability note if applicable)
 - **House View Alignment** (only if view active) — table of view tilt direction vs current portfolio exposure per sector/region/factor; flagged misalignments
 - **Per-Holding Analysis** (for drill-down holdings: score trend, risk profile, flags, news highlights; view conflicts called out)
 - **Suitability Assessment** (alignment with client goals AND with active house view if present; cite basis_statement)
-- **Recommended Actions** (prioritized High/Medium/Low per recommendation-matrix.md, with specific action types; rationale cites view tilts where applicable)
+- **Recommended Actions** (prioritized High/Medium/Low per recommendation-matrix.md, with specific action types; rationale cites view tilts where applicable), framed per conventions §12 (informational preface required; `action_labels=plain` supported)
 - **Appendix: Methodology** (brief Parallax scoring note)
-- **Provenance** (always present): one line stating branding state. Format is the markdown column of integration-pattern.md §7 (render per table; do not collapse) so `schema_unavailable` correctly stays in the white-label branch rather than falling back to default Parallax. If a logo was skipped per the Branding Header rule above, append `Logo on file: <basename>` as a second Provenance line.
+- **About This Report** (always present): one line stating branding state. Format is the markdown column of integration-pattern.md §7 (render per table; do not collapse) so `schema_unavailable` correctly stays in the white-label branch rather than falling back to default Parallax. If a logo was skipped per the Branding Header rule above, append `Logo on file: <basename>` as a second About This Report line.
 
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 

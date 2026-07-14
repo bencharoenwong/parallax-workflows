@@ -12,6 +12,7 @@ description: "Full research analyst due diligence: all financial statements, Pal
 - Quick stock evaluation → use /parallax-should-i-buy
 - Position deep dive (no Palepu) → use /parallax-deep-dive
 - Peer comparison only → use /parallax-peer-comparison
+- Client-forwardable summary → use /parallax-client-review (portfolio) or the white-label stock-report skill (single name)
 
 ## Gotchas
 
@@ -22,7 +23,8 @@ description: "Full research analyst due diligence: all financial statements, Pal
 - This is the most thorough and expensive workflow — use for serious research only
 - JIT-load _parallax/house-view/loader.md and apply §7 (single-stock, read-only consumers) — due-diligence is a single-stock skill, so tilts are NOT applied to scores or to the assessment prompt. Workflow: §2 validation, §7.1 House View Note rendered AFTER the Factor Score Trajectory section (per render_helpers.md template via `render_view_conflict(kind="blanket", ...)`), §7.3 Score-vs-View Tension Banner inline at scores when primary stock total score ≥7 AND its sector tilt ≤-1, §6 audit log entry. §7.2 (peer-suggest token) is N/A here — due-diligence does not surface `get_peer_snapshot.suggestion`.
 - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
-- Pre-Render step loads white-label branding via `_parallax/white-label/loader.py` → `load_visual_branding()` (the 6-key visual subset wrapper). Voice/typography/etc. are structurally absent — `branding["voice"]` raises `KeyError`. Provenance state-to-text mapping and Branding Header semantics follow integration-pattern.md §5 + §7 — render per that table.
+- Pre-Render step loads white-label branding via `_parallax/white-label/loader.py` → `load_visual_branding()` (the 7-key visual subset wrapper). Voice/typography/etc. are structurally absent — `branding["voice"]` raises `KeyError`. About This Report state-to-text mapping and Branding Header semantics follow integration-pattern.md §5 + §7 — render per that table.
+- This skill does not support `audience=client_safe`. If invoked with it, render one line — "This skill produces an internal analyst working document and has no client-safe mode; for a client-facing deliverable use /parallax-client-review or the white-label stock report." — then proceed in internal_analyst mode.
 
 Comprehensive analyst-grade due diligence using all available Parallax tools.
 
@@ -81,14 +83,15 @@ If a view was loaded in Pre-Workflow:
 
 ### Pre-Render — Load white-label branding
 
-Before composing the Output Format, JIT-load `_parallax/white-label/integration-pattern.md` and call `load_visual_branding()` per §2. The loader returns exactly six keys: `client_name`, `colors`, `logos`, `fonts`, `source`, `error`. Set `white_label_active = is_white_label_active(branding)` and `client_name = branding.get("client_name", "")` for use in the Branding Header. See §4 (error states), §5 (substitution semantics), §7 (Provenance template). Any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+Before composing the Output Format, JIT-load `_parallax/white-label/integration-pattern.md` and call `load_visual_branding()` per §2. The loader returns exactly seven keys: `client_name`, `colors`, `logos`, `fonts`, `source`, `error`, `render`. Set `white_label_active = is_white_label_active(branding)` and `client_name = branding.get("client_name", "")` for use in the Branding Header. See §4 (error states), §5 (substitution semantics), §7 (About This Report template). Any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
 
 ## Output Format
 
 Analyst-grade research report. Precision over brevity. Include raw data tables.
 
+- **Scope note** — internal analyst working document; not designed for client forwarding.
 - **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (banner + low-confidence warnings if any).
-- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line at top of report: `**<client_name>** research report`. Logo: if `branding["logos"]["primary"]` is empty, render text line only; if URL, embed `![<client_name>](<url>)` above the line; if absolute local path (starts with `/` or `~`), skip embed and append `Logo on file: <basename>` to Provenance.
+- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line at top of report: `**<client_name>** research report`. Logo: if `branding["logos"]["primary"]` is empty, render text line only; if URL, embed `![<client_name>](<url>)` above the line; if absolute local path (starts with `/` or `~`), skip embed and append `Logo on file: <basename>` to About This Report.
 - **Company Overview** (business, sector, market cap, key thesis)
 - **Income Statement Analysis** (4-year trends: revenue, margins, EPS)
 - **Balance Sheet Analysis** (leverage, liquidity, asset quality)
@@ -102,7 +105,7 @@ Analyst-grade research report. Precision over brevity. Include raw data tables.
 - **House View Note** (only if view active) — placed AFTER Factor Score Trajectory per loader.md §7 rendering order, via `render_view_conflict(kind="blanket", ...)`.
 - **Parallax Research Report** (link to PDF/HTML from get_stock_report)
 - **Synthesis & Key Risks** (bull case, bear case, key uncertainties)
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+- **About This Report** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second About This Report line.
 
 Note: `get_financial_analysis` (~2-5 min) and `get_stock_report` (~1-2 min, paid) are async. Begin assembling output from instant tools while async calls resolve.
 

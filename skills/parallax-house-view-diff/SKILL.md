@@ -33,6 +33,8 @@ A consuming agent running a portfolio workflow with an active house view should 
 
 Full protocol: [`_parallax/house-view/tests/portfolio_diff_harness.md`](../_parallax/house-view/tests/portfolio_diff_harness.md).
 
+**Cost:** total cost is 2× the child skill's cost (Leg A + Leg B); see `_parallax/token-costs.md`.
+
 ## Exit semantics
 
 Consumer runners should surface at least three outcomes — PASS, WEAK, KILL — corresponding to the shift magnitude falling within the pass band, outside the warning band, or below the economic-viability threshold respectively. Specific band values are maintained internally by the reference-implementation provider.

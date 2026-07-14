@@ -24,7 +24,8 @@ description: "Individual investor portfolio checkup: health flags, factor scores
 - Plain language output — no finance jargon. Surface name mismatches in user-friendly terms ("Some holdings could not be verified") rather than technical jargon.
 - JIT-load `_parallax/house-view/loader.md` if an active CIO view is present; this is a portfolio-level skill, so apply §3 (multipliers) to factor scoring of verified holdings, §4 (conflict resolution if user-stated preferences contradict view), §5 (preamble + view-aware sections), §6 (audit log). The view biases the recommendations in **Consider** — view-aligned tilts get implicit support; view-misaligned holdings get a gentle question framing. Health flags themselves are unchanged by the view; the view adds context, not a sixth flag.
 - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
+- Integration note: the underlying figures come from the structured JSON of the MCP tools listed in the workflow — production integrations call those tools directly; this markdown report is the interactive/chat tier.
 
 Plain-language portfolio health check with health flags for individual investors.
 
@@ -32,7 +33,10 @@ Plain-language portfolio health check with health flags for individual investors
 
 ```
 /parallax-portfolio-checkup [{"symbol":"AAPL.O","weight":0.30},{"symbol":"MSFT.O","weight":0.25},{"symbol":"VZ.N","weight":0.20},{"symbol":"JNJ.N","weight":0.25}]
+/parallax-portfolio-checkup [{"symbol":"AAPL.O","weight":0.30},{"symbol":"MSFT.O","weight":0.25}] audience=client_safe
 ```
+
+Optional `audience=` argument: `client_safe | internal_analyst`; precedence follows `parallax-conventions.md` §13.1.
 
 ## Workflow
 
@@ -93,16 +97,13 @@ Assign health status: **Healthy** (0 flags) · **Monitor** (1-2) · **Attention*
 ### Step 4 — Interpret in plain language
 
 Explain scores and flags in plain terms:
-- High VALUE = tilts toward cheaper stocks
-- High QUALITY = strong balance sheets and profitability
-- High MOMENTUM = stocks with recent price strength
-- High DEFENSIVE = lower volatility, stable businesses
+Render the plain-language factor gloss per `parallax-conventions.md` §13.3 (single source — do not inline).
 
 If a view is active, after computing verified-holdings factor aggregates apply loader.md §3 multipliers (sector × factor) before mapping to plain-language interpretation. The plain-language descriptions of factor levels (high VALUE, etc.) describe the tilt-adjusted aggregate; the underlying raw factor scores per holding remain unchanged. Append the §6 audit log entry per loader.md §6.1.
 
 ### Pre-Render — Load white-label branding
 
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format. The loader returns exactly six keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
 
 ### Render — deterministic gate (LAST step, mandatory)
 
@@ -129,17 +130,17 @@ python3 "<skill-dir>/../_parallax/render_gate.py" --skill portfolio-checkup < "$
 (When a house view or white-label client is active, the House View Preamble / Branding Header precede this line per the rules below; the no-preamble rule still applies — those are rendered output, not internal scaffold.)
 
 - **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (banner from Pre-Workflow + low-confidence warnings). Per loader.md §5.1 the preamble goes at the very top — it precedes the Branding Header.
-- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** portfolio checkup`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to Provenance.
+- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** portfolio checkup`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to About This Report.
 - **Portfolio Health Status** (Healthy/Monitor/Attention badge with flag count)
 - **Verification Note** *(only render if any cross-validation mismatches were detected)* — plain-language note: "Some holdings (X out of N) could not be matched to verified data and were excluded from aggregate factor analysis: [list of symbols]. The remaining N-X holdings drive the scores below."
 - **Your Portfolio Scorecard** (simple factor table with plain-language labels; flag indicators per holding. Mismatched holdings show "—" instead of scores.)
 - **Health Flags** (each triggered flag explained in plain language — what it means, why it matters)
-- **Verdict sensitivity** (render only when Health Status is Monitor or Attention — i.e. ≥ 1 flag triggered): the 1-2 nearest-boundary flags and their arithmetic flip condition, per `references/health-flags.md` "Verdict sensitivity" (renders `parallax-conventions.md` §11 by reference).
+- **Verdict sensitivity**: the 1-2 nearest-boundary flags and their arithmetic flip condition for moving Health Status to the adjacent tier, per `references/health-flags.md` "Verdict sensitivity" (renders `parallax-conventions.md` §11 by reference; internal_analyst mode only — omitted under `audience=client_safe` per conventions §13.2; the Health Status verdict itself renders in both modes).
 - **Overlap Alert** (if redundancy found, explain why; include reliability note if coverage <60%)
 - **Macro Context** (2-3 sentences on relevant economic environment — skip if no covered markets)
 - **What This Means** (2-3 plain-language paragraphs)
 - **Consider** (suggestions prioritized by flag severity, framed as questions not directives; if view active, suggestions reflect view alignment — view-aligned tilts get implicit support, view-misaligned holdings get gentle question framing per loader.md §3-§4)
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+- **About This Report** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second About This Report line. Under `audience=client_safe`, append the §13.4 mode line.
 
 Keep tone friendly and educational.
 

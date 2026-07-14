@@ -1,6 +1,6 @@
 ---
 name: parallax-country-deep-dive
-description: "Country or region equity discovery: what to buy in a market — macro context, available equity coverage, top-scoring stocks, and investment opportunities via Parallax MCP tools. Anchored on the allocation question. NOT for macro regime reads ('what is the regime in [market]?' — use /parallax-macro-outlook), not for thematic screening (use /parallax-thematic-screen)."
+description: "Country or region equity discovery: which equities screen strongest in a market — macro context, available equity coverage, top-scoring stocks, and investment opportunities via Parallax MCP tools. Anchored on the allocation question. NOT for macro regime reads ('what is the regime in [market]?' — use /parallax-macro-outlook), not for thematic screening (use /parallax-thematic-screen)."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -23,7 +23,7 @@ description: "Country or region equity discovery: what to buy in a market — ma
 - JIT-load `_parallax/house-view/loader.md` UNCONDITIONALLY — §5 rule 3 (ground-truth check), rule 6 (AI disclosure), and §6 (audit log) apply whether or not a view is active. When a view IS present: this is a regional-screen skill, so additionally apply §3 (multipliers — region/sector tilts bias the top-opportunities ranking) and §5 (preamble + view-aware sections). The view does NOT override the country-specific macro narrative (the country's own data is sovereign for the macro sections); it biases the equity-selection ranking only.
 - Boundary with /parallax-macro-outlook: the view-tilted Top Opportunities ranking is THIS skill's design (discovery/allocation surface). macro-outlook's optional equity census is deliberately untilted (regime exhibit). Same tools, different question — do not "harmonize" the two house-view contracts.
 - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
 
 Macro + equity opportunity analysis for a specific country or region.
 
@@ -65,20 +65,20 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 
 ### Pre-Render — Load white-label branding
 
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format. The loader returns exactly six keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
 
 ## Output Format
 
 - **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (banner from Pre-Workflow + low-confidence warnings). Per loader.md §5.1 the preamble goes at the very top — it precedes the Branding Header.
-- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** country deep dive`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to Provenance.
+- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** country deep dive`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to About This Report.
 - **Country Overview** (macro summary, regime context)
 - **Economic Indicators** (macro_indicators, fixed_income, tactical highlights)
 - **Equity Coverage** (how many scored stocks, key sectors)
 - **Ground-truth Integrity** (only render if any mismatch detected — table: `input_ticker`, `returned_name`, `expected_name`, status, per loader.md §5 rule 3; mismatched rows show re-derived scores or "scores unavailable")
-- **Top Opportunities** (table: symbol, name, sector, total score, key factor strengths — names are the `get_company_info` names-of-record; ⚠ MISMATCH rows flagged inline)
+- **Top Opportunities** (one-line informational preface per conventions §12 — this is an analytical ranking, not a trade instruction — then a table: symbol, name, sector, total score, key factor strengths — names are the `get_company_info` names-of-record; ⚠ MISMATCH rows flagged inline). Universe caveat: rankings cover listed equities with Parallax factor coverage only — funds/OEICs are not screened.
 - **Score Trends** (which top picks are improving vs. declining)
 - **Investment Thesis** (synthesis: why this market, what factors favor it, key risks; if view active, frame in view-language — alignment vs misalignment with view tilts)
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+- **About This Report** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second About This Report line. Always append the §7 currency line: `Currency: figures as reported by source data; no base-currency conversion applied.`
 
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 

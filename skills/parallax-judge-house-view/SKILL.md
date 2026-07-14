@@ -51,6 +51,8 @@ This skill compares the active CIO house view against fresh Parallax macro signa
 
 The `--dry` flag skips the LLM Phase 5 recommendation step and returns deterministic drift severity from MCP signals alone. `--mock-mcp <path>` is independent — it replaces the live MCP fan-out with a canned JSON payload keyed by `tool:arg1:arg2:...` summary strings (for tests or CI). Either flag can be used alone or together.
 
+**Cost:** ~352 tokens at the default market set (~14 markets × 5 components; see `_parallax/token-costs.md`). `--dry` skips the Phase 5 LLM step but NOT the Phase 1 macro fan-out — the full ~352-token cost is still incurred.
+
 ## Workflow (Phases 0-8 per v2 plan §3.1)
 
 ### Phase 0 — Load active view

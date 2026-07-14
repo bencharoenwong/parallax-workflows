@@ -12,6 +12,10 @@
 | **Value Trap** | Portfolio-weighted value score is low | `get_peer_snapshot.value` aggregate (V2) / `quick_portfolio_scores` (V1) — verified-holdings weighted average | Portfolio value score ≤ 3.0 |
 | **Macro Misalignment** | Overweight in sectors with negative tactical outlook | `macro_analyst` (tactical), evaluated against verified-holdings sector weights | Holdings overweight in unfavourable sectors |
 
+## Threshold calibration scope
+
+The 15% single-holding / 45% top-3 concentration cutoffs (and the <7-holding structural caveat in `parallax-conventions.md`) are calibrated for concentrated advisor/retail-scale books; on institutional-scale books they rarely trigger. Scale-aware (percentile/HHI) thresholds and per-mandate overrides are a documented roadmap item — until then, state this calibration scope in output when the book exceeds ~30 holdings.
+
 ## Health Status Labels
 
 | Status | Flag Count | Plain-Language Frame |
@@ -22,7 +26,7 @@
 
 ## Verdict sensitivity
 
-Per `parallax-conventions.md` §11: report the 1-2 flags nearest their published cutoff and the arithmetic condition that would flip Health Status. All four numeric flags below qualify. **Macro Misalignment does not** — it is a qualitative sector / tactical-view match, not a numeric cutoff, so it is never a candidate for this line.
+Per `parallax-conventions.md` §11: report the 1-2 numeric flags nearest a Health Status boundary and the arithmetic condition that would move the portfolio toward the adjacent status tier. All four numeric flags below qualify. **Macro Misalignment does not** — it is a qualitative sector / tactical-view match, not a numeric cutoff, so it is never a candidate for this line.
 
 | Flag | Cutoff | Distance computation |
 |---|---|---|
@@ -31,7 +35,14 @@ Per `parallax-conventions.md` §11: report the 1-2 flags nearest their published
 | Concentration | Single > 15% OR top-3 > 45% | `15% − largest_single_weight` and `45% − top3_weight`; report whichever sub-condition is closer |
 | Redundancy | ≥ 2 redundant pairs | `2 − pair_count` (a portfolio at exactly 1 pair is 1 pair from triggering) |
 
-Rank all four (excluding Macro Misalignment) by absolute distance and surface the 1-2 closest. A flag already triggered and a flag not yet triggered are both eligible — closeness to the cutoff, not triggered-status, drives selection. A score sitting exactly on its cutoff (distance 0) is reported explicitly per §11.3, not rounded away.
+Rank all four (excluding Macro Misalignment) by absolute distance, then surface the 1-2 closest boundary-relevant candidates. A flag already triggered and a flag not yet triggered are both eligible, but the line must not imply a Health Status flip unless the flag-count boundary actually changes:
+
+- Healthy (0 flags): state the nearest untriggered numeric flag and the condition that would move Health Status to Monitor.
+- Monitor (1 flag): state the triggered numeric flag whose clearing would move Health Status to Healthy. If the only triggered flag is Macro Misalignment, state that no numeric flag can move the status to Healthy and optionally show the nearest untriggered numeric flag that would add a second Monitor flag.
+- Monitor (2 flags): state the nearest untriggered numeric flag whose triggering would move Health Status to Attention.
+- Attention (3+ flags): state the triggered numeric flag(s) nearest clearing and how many total flags must clear to return to Monitor. If more than two flags must clear, show the two closest numeric clearing candidates and explicitly state that both alone are insufficient.
+
+A score sitting exactly on its cutoff (distance 0) is reported explicitly per §11.3, not rounded away.
 
 ## Mixed-Exchange Fallback
 

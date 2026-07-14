@@ -23,7 +23,7 @@ description: "Research analyst peer comparison: peer snapshot, exported data, sc
 - JIT-load `_parallax/house-view/loader.md` if an active CIO view is present. Peer-comparison is single-stock per `loader.md` §7 (read-only consumers): tilts are NOT applied to factor scoring or peer ranking. Render the FULL §7 surface: (a) §7.3 Score-vs-View Tension Banner inline between the Factor Comparison Matrix and Score Trajectory when primary stock total ≥ 7 AND its sector tilt ≤ -1; (b) §7.2 Peer-suggest conflict token under the Factor Comparison Matrix for any peer in a view-UW sector (tilt ≤ -1) or on the excludes list — flag, do not filter; the peer stays in the matrix; (c) §7.1 House View Note after Score Trajectory via `render_view_conflict(kind="blanket", ...)`; (d) §6 audit log entry per loader.md §6.1.
 - When rendering §7.1/§7.2/§7.3 tokens, JIT-load `_parallax/house-view/render_helpers.md` and route every token through `render_view_conflict()`.
 - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
 
 Structured peer comparison analysis for research analysts.
 
@@ -87,12 +87,12 @@ If a view was loaded in Pre-Workflow:
 
 ### Pre-Render — Load white-label branding
 
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format. The loader returns exactly six keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
 
 ## Output Format
 
 - **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (banner from Pre-Workflow + low-confidence warnings). Per loader.md §5.1 the preamble goes at the very top — it precedes the Branding Header.
-- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** peer comparison`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to Provenance.
+- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** peer comparison`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to About This Report.
 - **Peer Group** (who the peers are and why they're comparable)
 - **Factor Comparison Matrix** (table: all peers x all factors)
   - *If view active*: render §7.2 Peer-suggest conflict tokens immediately under the matrix per Post-Workflow step 2. One token per conflicting peer; multiple stack vertically.
@@ -101,7 +101,7 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 - **House View Note** (only if view active) — render after Score Trajectory per loader.md §7.1 rendering order, via `render_view_conflict(kind="blanket", ...)`.
 - **Relative Price Performance** (comparative returns)
 - **Differentiation** (strengths and weaknesses vs peers)
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+- **About This Report** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second About This Report line.
 
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 

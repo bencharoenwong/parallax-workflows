@@ -37,7 +37,7 @@ description: "Monthly CIO letter prep pack for fund managers: period attribution
 - Duplicate symbol in input portfolio: reject at validation with "Duplicate symbol {sym}" — no auto-dedup.
 - Mid-period delisting (price series ends before period_end): treat as a coverage gap (drop from rankings + surface per the materiality tiers), not a hard ValueError.
 - This skill is private-beta gated; excluded from default `build-skills.sh` builds. Confirm enablement before running for new customers.
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step; that doc carries the loader call (`load_visual_branding`), error-state contract, docx substitution table (§6), and Provenance template (§7). The Pre-Render step in Workflow below points at it; the table at the end of Output Format previously inlined here has been moved to §6.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step; that doc carries the loader call (`load_visual_branding`), error-state contract, docx substitution table (§6), and About This Report template (§7). The Pre-Render step in Workflow below points at it; the table at the end of Output Format previously inlined here has been moved to §6.
 - Voice and auto-jurisdiction disclaimers remain explicitly out of scope (see "Not in scope"). This skill uses `load_visual_branding()` rather than `load_client_branding()` — the 6-key wrapper excludes `branding["voice"]` at code level, so accidental access raises `KeyError`. The CIO writes the prose; the standard wording in the **Disclaimer** section stays. Visual branding only.
 
 Generate a structured Word document that a fund-manager CIO can edit and send to LPs as the period letter. The pack covers the period dates, gross return / drawdown / vol, attribution snapshot, top 5 contributors and bottom 5 detractors with evidence-backed drivers, trade-log narrative, macro snapshot, news themes, a conditional forward-outlook (only if a house view is active), coverage gaps, and the standard disclaimer.
@@ -115,7 +115,7 @@ print(json.dumps(result))
 ```
 
 Compare local `result['portfolio_total_return']` against server-side `analyze_portfolio.portfolio_summary.total_return`:
-- `|local − server| ≤ 25 bps` → render server-side numbers in the pack; note "local audit passed (diff {N} bps)" in Provenance.
+- `|local − server| ≤ 25 bps` → render server-side numbers in the pack; note "local audit passed (diff {N} bps)" in About This Report.
 - `|local − server| > 25 bps` → halt rendering with "Reconciliation audit failed: local {X} bps vs server {Y} bps (diff {Z} bps exceeds 25-bp tolerance). Investigate before sending to LPs."
 
 The 25-bp tolerance accommodates known rebalance-date convention skew (Parallax server-side rebalances ON date D; `contribution.py` applies trades AFTER D's close). For monthly periods the typical divergence is ~10-25 bps; values outside this band signal a real bug in inputs, prices, or trade log.
@@ -145,13 +145,13 @@ Per conventions §5, the async tools should not block render assembly; if they h
 
 ### Pre-Render — Load white-label branding
 
-Load `_parallax/white-label/integration-pattern.md` and apply §2 (Loading the branding) verbatim. The loader call is `load_visual_branding()` (NOT `load_client_branding()`); the wrapper returns the 6-key visual subset and structurally excludes voice. Compute `white_label_active` per §2.
+Load `_parallax/white-label/integration-pattern.md` and apply §2 (Loading the branding) verbatim. The loader call is `load_visual_branding()` (NOT `load_client_branding()`); the wrapper returns the 7-key visual subset and structurally excludes voice. Compute `white_label_active` per §2.
 
 If `white_label_active` is True, the render in Batch C applies the docx substitution table at integration-pattern.md §6. Logo path (when present) is inserted at the cover-page header per §6 (left-aligned, ≤1.5 inch height). Semantic colors (`cg-green-700`, `cg-red-700`, `cg-amber-*`) are NEVER overridden per §1.
 
 If `white_label_active` is False, the **Default brand palette** table in Output Format below applies; no cover-page logo is inserted. On `logo_missing` (partial-success path per integration-pattern.md §4), palette and fonts still apply; only the cover-page logo is skipped.
 
-Provenance line wording follows integration-pattern.md §7 (docx column). For this skill specifically: on `logo_missing`, the qualifier is `(logo unavailable, omitted from cover)`.
+About This Report line wording follows integration-pattern.md §7 (docx column). For this skill specifically: on `logo_missing`, the qualifier is `(logo unavailable, omitted from cover)`.
 
 ### Batch C — Synthesis (sequential)
 
@@ -174,7 +174,7 @@ Compose the structured pack content with these sections in order. Hand the resul
 8. **News themes** — cluster news from `get_news_synthesis` calls by `sector × directional move` (positive vs negative). Max 5 buckets. Each bucket cites ≥ 1 ticker by name. Do NOT repeat the per-mover driver text verbatim; this section is sector-themed.
 9. **Forward-outlook** — render ONLY if `house_view` is active and validated. 1 bullet per top-5 holding by current weight, framed in view-language (regime call, tilt direction, conviction notes per loader.md §3-§5). If no active view, OMIT this section entirely.
 10. **Coverage gaps** — list any holdings excluded from contribution due to missing data with their weights. List any holdings excluded from per-position analysis due to the 40-holding soft cap. List any tools that returned "data unavailable" per conventions §4.
-11. **Provenance** — small footer block (smaller font, italic): generation date, tools used (with versions if available), reconciliation-audit result formatted as `Reconciliation audit: PASS — local total {X} bps vs server {Y} bps; diff {Z} bps; tolerance 25 bps` (or `FAIL` with halt-and-report wording). Skill version + private-beta tag. **Branding line** — per integration-pattern.md §7 docx column. Default-Parallax path: `Branding: default Parallax`. White-label clean load: `Branding: white-label (source: <branding["source"]["reference"]>)`. `logo_missing`: append `(logo unavailable, omitted from cover)`.
+11. **About This Report** — small footer block (smaller font, italic): generation date, tools used (with versions if available), reconciliation-audit result formatted as `Reconciliation audit: PASS — local total {X} bps vs server {Y} bps; diff {Z} bps; tolerance 25 bps` (or `FAIL` with halt-and-report wording). Skill version + private-beta tag. **Branding line** — per integration-pattern.md §7 docx column. Default-Parallax path: `Branding: default Parallax`. White-label clean load: `Branding: white-label (source: <branding["source"]["reference"]>)`. `logo_missing`: append `(logo unavailable, omitted from cover)`.
 12. **Disclaimer** — per conventions §9.1. If active view: use the view-aware disclaimer per loader.md §5 rule 5; otherwise the standard wording (see Disclaimer section below).
 
 ## Output Format
@@ -201,7 +201,7 @@ Word .docx ONLY via the `docx` skill chain. The deliverable is a .docx file the 
 | `cg-amber-700` | `#B45309` | Warning banner text |
 | `cg-amber-50` | `#F9F1EB` | Warning banner fill |
 
-The render synthesis applies these tokens to: title (navy-900), body (neutral-900), section headings (navy-900 H1/H2 → navy-700 H3/H4 → navy-400 H5/H6), table headers (navy-900 fill + white text), even rows (neutral-100 shading), contributor "+ bps" (green-700), detractor "− bps" (red-700), provenance/disclaimer (neutral-500 + italic + 8-9pt). Funds publishing under their own brand should swap the palette in their config; the default palette is a sensible institutional-finance baseline.
+The render synthesis applies these tokens to: title (navy-900), body (neutral-900), section headings (navy-900 H1/H2 → navy-700 H3/H4 → navy-400 H5/H6), table headers (navy-900 fill + white text), even rows (neutral-100 shading), contributor "+ bps" (green-700), detractor "− bps" (red-700), footer/disclaimer (neutral-500 + italic + 8-9pt). Funds publishing under their own brand should swap the palette in their config; the default palette is a sensible institutional-finance baseline.
 
 **White-label substitution.** When `white_label_active` (per Pre-Render), the renderer applies the docx substitution table at `_parallax/white-label/integration-pattern.md` §6. That table is the canonical mapping from `cg-*` tokens to `branding["colors"]` / `branding["fonts"]` / `branding["logos"]["primary"]`, and it specifies the never-overridden semantic tokens.
 

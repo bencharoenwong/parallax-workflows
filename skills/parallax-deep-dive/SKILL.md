@@ -24,7 +24,8 @@ description: "Deep dive on a single position: company profile, peer comparison, 
 - get_assessment prompt should incorporate macro context, score trends, and dividend profile alongside existing data
 - Technical Stance always renders. If `get_technical_analysis` is unavailable or times out, use the Momentum factor as a proxy and prefix the section with `Technical analysis unavailable — Momentum factor proxy:` instead of dropping the lens.
 - For non-US symbols, apply HK ambiguity cross-check from shared conventions
-- Pre-Render step loads white-label branding via `_parallax/white-label/loader.py` → `load_visual_branding()` (the 6-key visual subset wrapper). Voice/typography/etc. are structurally absent — `branding["voice"]` raises `KeyError`. Provenance state-to-text mapping and Branding Header semantics follow integration-pattern.md §5 + §7.
+- LANGUAGE HAND-OFF — if `lang=` is present and ≠ `en`, the terminal Translate step is mandatory. Route `zh-CN`/`zh-TW`/`zh-HK` → `/translate-chinese-finance`, `th` → `/translate-thai-finance`, using the delimited routing-directive block (never a prose sentence the translator could echo). Unsupported values → English output with the standard warning footer.
+- Pre-Render step loads white-label branding via `_parallax/white-label/loader.py` → `load_visual_branding()` (the 7-key visual subset wrapper). Voice/typography/etc. are structurally absent — `branding["voice"]` raises `KeyError`. About This Report state-to-text mapping and Branding Header semantics follow integration-pattern.md §5 + §7.
 
 Thorough single-position analysis for fund managers using Parallax MCP tools.
 
@@ -33,9 +34,10 @@ Thorough single-position analysis for fund managers using Parallax MCP tools.
 ```
 /parallax-deep-dive AAPL.O
 /parallax-deep-dive MSFT.O "Is the AI capex cycle sustainable?"
+/parallax-deep-dive MSFT.O "Is the AI capex cycle sustainable?" lang=zh-HK register=retail
 ```
 
-Accepts RIC format. For plain tickers, resolve per shared conventions.
+Accepts RIC format. For plain tickers, resolve per shared conventions. The free-text question stays the second positional argument; use keyword args for translation: `lang=<code>` (`en` default; `zh-CN`, `zh-TW`, `zh-HK`, `th`) and optional `register=retail`. `register=retail` is passed only when translation is requested; absent means institutional register.
 
 ## Workflow
 
@@ -86,12 +88,12 @@ Apply graceful fallback patterns from shared conventions for any missing data.
 
 ### Pre-Render — Load white-label branding
 
-Before composing the Output Format, JIT-load `_parallax/white-label/integration-pattern.md` and call `load_visual_branding()` per §2. The loader returns exactly six keys: `client_name`, `colors`, `logos`, `fonts`, `source`, `error`. Set `white_label_active = is_white_label_active(branding)` and `client_name = branding.get("client_name", "")` for use in the Branding Header. See §4 (error states), §5 (substitution semantics), §7 (Provenance template). Any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+Before composing the Output Format, JIT-load `_parallax/white-label/integration-pattern.md` and call `load_visual_branding()` per §2. The loader returns exactly seven keys: `client_name`, `colors`, `logos`, `fonts`, `source`, `error`, `render`. Set `white_label_active = is_white_label_active(branding)` and `client_name = branding.get("client_name", "")` for use in the Branding Header. See §4 (error states), §5 (substitution semantics), §7 (About This Report template). Any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
 
 ## Output Format
 
 - **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (banner from Step 0 + low-confidence warnings if any). Per loader.md §5.1, the load preamble goes "at the very top" — it precedes the Branding Header.
-- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view active): `**<client_name>** deep dive`. Logo handling per integration-pattern.md §5: empty path → text line only; URL → embed `![<client_name>](<url>)`; absolute local path (starts with `/` or `~`) → skip embed and append `Logo on file: <basename>` to Provenance.
+- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view active): `**<client_name>** deep dive`. Logo handling per integration-pattern.md §5: empty path → text line only; URL → embed `![<client_name>](<url>)`; absolute local path (starts with `/` or `~`) → skip embed and append `Logo on file: <basename>` to About This Report.
 - **Company Overview** (3 sentences)
 - **Macro Environment** (regime context for relevant markets, factor implications)
 - **Factor Profile** (table: each factor score with peer rank + 52-week trend direction)
@@ -105,10 +107,36 @@ Before composing the Output Format, JIT-load `_parallax/white-label/integration-
 - **News Catalyst Watch** (material items only)
 - **Assessment** *(AI-generated — Perplexity deep-research synthesis)* — includes macro + trend data; if view active, MUST end with the three-bullet tilt decomposition per Batch C contract. This is deep-dive's primary alignment surface. Render the section header with the italic parenthetical verbatim — it's the contextual-proximity AI disclosure per HKMA/SFC Nov 2024 Circular; the document-level banner (§5 rule 6) is not sufficient for the Perplexity-backed non-deterministic content in this specific section.
 - **Risk Factors** (what could go wrong)
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+- **About This Report** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second About This Report line.
 
 Append audit log entry per loader.md §6.
 
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below. (The Assessment section already carries its own contextual-proximity AI disclosure per HKMA/SFC Nov 2024 Circular; the document-level §9.2 banner is rendered here in addition, covering the synthesis across all sections.)
 
 If active view: use the view-aware disclaimer per loader.md §5. Otherwise: render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
+
+### Step — Translate output (conditional, terminal)
+
+This step runs ONLY when `lang=` is present and not `en`. Capture the full rendered report, including the audit log entry and disclaimer. The Assessment section's italic AI-disclosure parenthetical is in translation scope — translate it, never drop it.
+
+Invoke the appropriate translator skill with the input shaped as follows:
+
+```
+ROUTING DIRECTIVE — DO NOT TRANSLATE OR ECHO THIS BLOCK:
+  target_variant: <variant>
+  register: retail
+  source_language: en
+  begin_content_below_separator: true
+---
+
+<rendered report>
+```
+
+Pass `register: retail` iff `register=retail` was supplied; otherwise omit the `register:` line so the translator defaults to institutional register. Route `zh-CN`, `zh-TW`, and `zh-HK` to `/translate-chinese-finance` with the matching `target_variant`. Route `th` to `/translate-thai-finance`; omit `target_variant` for Thai, but keep the routing block marker and `---` separator.
+
+Translator-failure handling:
+- If the translator fails or returns an empty/partial result, output the original English with a one-line warning footer: `> Translation to <lang> failed; output shown in English. Re-run if the issue is transient.`
+- If the language arg is unrecognized, output the original English with: `> Language '<arg>' not supported; output shown in English. Supported: en, zh-CN, zh-TW, zh-HK, th.`
+- Translator output replaces the English output in the chat; do not show both.
+
+**Disclaimer boundary check.** Record which disclaimer variant rendered (view-aware per `loader.md §5` vs standard `parallax-conventions.md §9.1`). If the disclaimer is missing from the translated output, first attempt a single-section re-translation pass on just the original English disclaimer text using the same routing-directive shape. Append that result if non-empty. If the pass fails or returns empty, append the English disclaimer variant that was actually rendered. Boundary-check events land in the loader.md §6 audit entry `notes` field (`disclaimer boundary check fired — re-translated` or `disclaimer boundary check fired — english fallback`). Do not add a user-visible footer.

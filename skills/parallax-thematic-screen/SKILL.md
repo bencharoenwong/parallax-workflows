@@ -1,6 +1,6 @@
 ---
 name: parallax-thematic-screen
-description: "Thematic stock screen and trade-idea generation: build a stock universe from a theme, score top picks, layer optional macro context and regime signals, compare peers, and check financials via Parallax MCP tools. Triggers: 'screen for [theme]', 'trade ideas around X', 'thematic ideas for Y', 'stocks in Z theme', 'new ideas in [sector]'. NOT for single stock analysis (use /parallax-should-i-buy), not for portfolio review (use /parallax-client-review)."
+description: "Thematic stock screen and idea analysis: build a stock universe from a theme, score top picks, layer optional macro context and regime signals, compare peers, and check financials via Parallax MCP tools. Triggers: 'screen for [theme]', 'trade ideas around X', 'thematic ideas for Y', 'stocks in Z theme', 'new ideas in [sector]'. NOT for single stock analysis (use /parallax-should-i-buy), not for portfolio review (use /parallax-client-review)."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -28,7 +28,8 @@ description: "Thematic stock screen and trade-idea generation: build a stock uni
 - Macro context renders as SOFT annotation. When house view is active, view tilts remain sovereign per loader.md §4 — macro_analyst output supplements but never silently re-ranks. When no view is active, macro context may drive country/sector emphasis in the Output Format only; ranking is still composite-driven.
 - If the user-supplied theme is itself a macro-condition phrase, macro overlay may read as self-confirming. Render a banner suggesting /parallax-macro-outlook for macro-first analysis, then proceed. **Trigger criterion (deterministic, case-insensitive):** theme string contains any of `rates`, `inflation`, `recession`, `tariff`, `tariffs`, `yield curve`, `currency`, `USD`, `dollar`, `credit spread`, `GDP`, `monetary policy`, `fiscal`, `Fed`, `central bank`, `regime`, `cycle`, AND does not also contain a sector/industry word (`tech`, `energy`, `healthcare`, `financials`, `industrials`, `materials`, `utilities`, `staples`, `discretionary`, `REIT`, `biotech`, `software`, etc.). List is a starting heuristic; extend per deployment context.
 - Telemetry semantics: `get_telemetry` returns BASKET-LEVEL regime signals (`regime_tag`, `divergences[]` with basket-level z-scores, `commentary.headline`) — NOT per-ticker confidence. The schema does not expose per-name signal. Render only: (a) `regime_tag`, (b) top 1-3 divergence basket names with sign, (c) `commentary.headline` — in the Macro Context section. Do NOT tag individual Top Picks rows with a "Confidence" annotation derived from telemetry; any per-name tag would be hallucinated from basket-level data. Do NOT propagate raw proprietary framework-component names or factor-decomposition values from telemetry even if exposed.
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
+- Optional `audience=` argument: `client_safe | internal_analyst`; precedence follows `parallax-conventions.md` §13.1.
 
 Discover investment opportunities by theme using Parallax's semantic universe builder.
 
@@ -40,6 +41,7 @@ Discover investment opportunities by theme using Parallax's semantic universe bu
 /parallax-thematic-screen "thematic ideas for onshoring beneficiaries" top_n=10
 /parallax-thematic-screen "clean energy utilities" --no-macro
 /parallax-thematic-screen "gene therapy pure plays"
+/parallax-thematic-screen "AI infrastructure companies" audience=client_safe
 ```
 
 ## Workflow
@@ -55,7 +57,7 @@ proceeding to this skill's main workflow.
 Skip this pre-flight if invoked with `--skip-drift-check` or if no active
 house view exists.
 
-### Phase A — Setup (parallel, ~3–6 tokens)
+### Phase A — Setup (parallel, universe 5 + list 1 + telemetry 1 + macro 5×markets (0-3) tokens)
 
 Fire steps 1, 2, and 4 in parallel (independent). Step 3 is a dependent two-step sub-batch: step 3a (`list_macro_countries`) starts in parallel with steps 1/2/4, and step 3b (`macro_analyst` per market) fires only after step 3a returns.
 
@@ -76,7 +78,7 @@ Fire steps 1, 2, and 4 in parallel (independent). Step 3 is a dependent two-step
 
 **After Phase B:** Proceed to Phase C with validated universe.
 
-### Phase C — Scoring & Analytics (sequential coordination, ~3–4 tokens)
+### Phase C — Scoring & Analytics (sequential coordination, ~2×top_n + 4 tokens)
 
 **C1. Ground-truth check + Score Top Picks** (per loader.md §5 rule 3 — required universally) — For the top N results, call `get_peer_snapshot` AND `get_company_info` per candidate in parallel. Record `returned_name` (snapshot `target_company`) and `expected_name` (info `name`). Treat any row where `returned_name ≠ expected_name` as UNTRUSTED (do not rank, flag ⚠ MISMATCH). If view active, re-rank trusted rows by `composite × multiplier(holding's sector)` per loader.md §3.
 
@@ -98,20 +100,21 @@ Skill authors copying this pattern: do not introduce a sort or filter step drive
 
 ### Pre-Render — Load white-label branding
 
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format. The loader returns exactly six keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
 
 ## Output Format
 
 - **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (preamble). Per loader.md §5.1 the preamble goes at the very top — it precedes the Branding Header.
-- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** thematic screen`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to Provenance.
+- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** thematic screen`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to About This Report.
 - **Theme: [theme]** (brief investment thesis; note view conflict inline if applicable; if theme string is itself a macro-condition phrase, render the macro-self-confirming banner per gotchas and suggest `/parallax-macro-outlook`)
 - **Macro Context** (rendered if `macro_context` OR `telemetry` is present from Phase A) — one line per covered market (max 3) from macro_analyst: `<market>: <tactical takeaway from macro_analyst>`. State explicitly whether this is supplementary (house view active, view is sovereign) or primary (no view active). If `telemetry` is present, append a "Regime Signal" sub-line: `<regime_tag> | top divergence baskets: <basket names with sign, max 3> | <commentary.headline>`. Do NOT extend beyond what the tools returned — no LLM-confabulated narrative bridging the macro view to the theme.
+- **Plain-Language Summary** (under `audience=client_safe` only): 2-3 sentences describing the theme read and top-pick rationale for a non-specialist reader; factor names carry the §13.3 gloss, no cutoff arithmetic, framed per §12 as informational with no directives.
 - **Universe Built** (how many stocks found, key sectors; note any exclusions applied; surface divergence-assertion result per loader.md §5 rule 4)
-- **Top Picks** (table: `input_ticker`, `returned_name` (from scoring tool), `expected_name` (from get_company_info), sector, overall score, key factor strengths; if view active, add "Tilt Effect" column; if `macro_context` present, add "Macro Tag" column showing `with-regime / against-regime / orthogonal`. **Flag any row where `returned_name ≠ expected_name` with ⚠ MISMATCH and exclude its scores from ranking** — per loader.md §5 rule 3. **Rank is composite-driven regardless of Macro Tag** — that column annotates, not sorts. Do NOT add a per-name Confidence column — telemetry is basket-level only and any per-row confidence would be hallucinated.)
+- **Top Picks** (table: `input_ticker`, `returned_name` (from scoring tool), `expected_name` (from get_company_info), sector, overall score, key factor strengths; under `audience=client_safe`, factor-strength cells carry the §13.3 gloss; if view active, add "Tilt Effect" column; if `macro_context` present, add "Macro Tag" column showing `with-regime / against-regime / orthogonal`. **Flag any row where `returned_name ≠ expected_name` with ⚠ MISMATCH and exclude its scores from ranking** — per loader.md §5 rule 3. **Rank is composite-driven regardless of Macro Tag** — that column annotates, not sorts. Do NOT add a per-name Confidence column — telemetry is basket-level only and any per-row confidence would be hallucinated.)
 - **Comparison Matrix** (peer comparison for lead candidate)
 - **Financial Snapshot** (revenue, margins, growth for top 3 trusted picks)
-- **Implementation Notes** (liquidity considerations, position sizing guidance)
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+- **Implementation Notes** (liquidity considerations, concentration/threshold arithmetic per conventions §12 — no position-sizing instructions; concentration/threshold arithmetic renders in internal_analyst mode only per §13.2)
+- **About This Report** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second About This Report line.
 
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 

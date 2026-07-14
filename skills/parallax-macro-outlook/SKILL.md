@@ -26,7 +26,8 @@ description: "Full macro regime analysis with optional equity screening: country
 - JIT-load `_parallax/house-view/loader.md` UNCONDITIONALLY — §5 rule 3 (ground-truth check), rule 6 (AI disclosure), and §6 (audit log) apply whether or not a view is active. macro-outlook answers the regime question, so neither §3 multipliers nor §7 single-stock conflict-surfacing apply: the macro narrative reflects live data, and the optional Batch C equity census is **deliberately untilted** — it is an illustrative exhibit of which equities score well in this regime, not a discovery ranking. A user who wants the view-tilted "what should I buy in [country]" ranking belongs in /parallax-country-deep-dive (that skill applies §3 to its Top Opportunities by design). Apply a **macro-regime-alignment mode** (defined inline below — call it §7.4 by analogy) — render a divergence note when the view's stated macro regime contradicts live `get_telemetry.regime_tag`. No scoring math is altered. Standard surface: §2 (load + validate), §5 (preamble), §6 (audit log).
 - **§7.4 macro-regime-alignment mode (this skill's pattern, not in loader.md):** if the active view's basis_statement or stated macro regime (e.g., "recessionary", "expansion", "stagflation", from `view.macro_regime` if present) materially conflicts with the regime returned by `get_telemetry.regime_tag`, render a "View regime: <X> | Live regime: <Y>" line directly under the House View Preamble at the very top of Output Format. The user is informed of the disagreement; the analytical content still reflects live data (live wins for macro narrative). If no view, or view is silent on macro regime, omit the line.
 - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
+- Optional `audience=` argument: `client_safe | internal_analyst`; precedence follows `parallax-conventions.md` §13.1.
 
 Deep macro regime analysis with optional equity opportunity screening. Covers any of Parallax's 40+ global markets.
 
@@ -37,6 +38,7 @@ Deep macro regime analysis with optional equity opportunity screening. Covers an
 /parallax-macro-outlook "Japan" equities=true
 /parallax-macro-outlook "China" component=tactical
 /parallax-macro-outlook — compare US, Europe, Japan
+/parallax-macro-outlook "United States" audience=client_safe
 ```
 
 ## Workflow
@@ -81,21 +83,22 @@ If a view was loaded in Pre-Workflow:
 
 ### Pre-Render — Load white-label branding
 
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format. The loader returns exactly six keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
 
 ## Output Format
 
 - **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (banner from Pre-Workflow + low-confidence warnings). If §7.4 regime-alignment check produced a divergence note (Post-Workflow step 3), append it as a sub-line under the preamble. Per loader.md §5.1 the preamble goes at the very top — it precedes the Branding Header.
-- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** macro outlook`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to Provenance.
+- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** macro outlook`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to About This Report.
 - **Regime Status** (current regime tag, key signals, headline)
+- **Plain-Language Summary** (under `audience=client_safe` only): 2-3 sentences restating the regime read in plain language for a non-specialist reader; factor names carry the §13.3 gloss, no cutoff arithmetic, framed per §12 as informational with no directives.
 - **Macro Summary** (country-level economic overview)
 - **Deep Dive** (macro indicators, fixed income, tactical components as requested)
-- **Factor Regime Interaction** (which factors are favored/disfavored in this environment)
-- **Positioning Implications** (what this means for portfolio construction)
+- **Factor Regime Interaction** (which factors are favored/disfavored in this environment; under `audience=client_safe`, factor names carry the §13.3 gloss)
+- **Regime Implications** (which factors and sectors the regime read favors/disfavors — informational per conventions §12)
 - **Ground-truth Integrity** (only if equity screening included AND any mismatch detected — table: `input_ticker`, `returned_name`, `expected_name`, status, per loader.md §5 rule 3)
-- **Top Equity Opportunities** (if equity screening included: table with symbol, name, sector, score, trend — names are the `get_company_info` names-of-record; ⚠ MISMATCH rows flagged inline; untilted by design)
+- **Top Equity Opportunities** (if equity screening included: table with symbol, name, sector, score, trend — names are the `get_company_info` names-of-record; ⚠ MISMATCH rows flagged inline; untilted by design). Universe caveat: rankings cover listed equities with Parallax factor coverage only — funds/OEICs are not screened.
 - **Data Freshness** (when macro data was last updated)
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+- **About This Report** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second About This Report line. Always append the §7 currency line: `Currency: figures as reported by source data; no base-currency conversion applied.` Under `audience=client_safe`, append the §13.4 mode line.
 
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 

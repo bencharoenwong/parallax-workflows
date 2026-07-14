@@ -21,7 +21,7 @@ description: "Credit risk assessment for publicly traded companies: leverage, co
 - Quality factor is a credit health proxy — deteriorating Quality score is an early warning signal for credit stress.
 - Altman Z-score computed using market-cap-based formula for public companies (Z, not Z'). Thresholds: >2.99 Safe, 1.81–2.99 Grey, <1.81 Distress.
 - If Palepu solvency section is unavailable (tool error), degrade gracefully — output remaining metrics and flag Palepu as unavailable.
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
 
 Credit risk assessment for publicly traded companies using Parallax MCP tools.
 
@@ -126,7 +126,7 @@ Structure output in markdown with the following sections:
 ```
 ## Credit Risk Assessment: [Company] ([RIC]) | Traffic-Light: 🟢/🟡/🔴
 ```
-Overall traffic-light determined by: count of RED flags (→ Red), count of AMBER flags (→ Amber), count of GREEN (→ Green). Majority color wins.
+Overall traffic-light determined by: count of RED flags (→ Red), count of AMBER flags (→ Amber), count of GREEN (→ Green). Majority color wins. If two or more colors tie for the highest count, render the most conservative tied color (Red > Amber > Green) — e.g., a 2-2-2 split renders Red.
 
 ### 2. **Metrics Dashboard** (table)
 ```
@@ -141,7 +141,7 @@ Overall traffic-light determined by: count of RED flags (→ Red), count of AMBE
 ```
 
 ### 2a. **Verdict sensitivity** (one line)
-State whether the Altman Z-score sits within 10% of a band boundary (2.99 Safe/Grey or 1.81 Grey/Distress) and the arithmetic flip condition, per `parallax-conventions.md` §11. Example: "Altman Z = 2.85 is within the Grey Zone, 0.14 below the 2.99 Safe threshold; a Z rise above 2.99 would move this leg to Safe." Applies only to the Altman Z band — the overall traffic-light header is a multi-metric majority vote, not a single published numeric cutoff, and is out of scope for this line.
+State the Altman Z-score's nearest band boundary (2.99 Safe/Grey or 1.81 Grey/Distress) and the arithmetic flip condition, per `parallax-conventions.md` §11. Example: "Altman Z = 2.85 is within the Grey Zone, 0.14 below the 2.99 Safe threshold; a Z rise above 2.99 would move this leg to Safe." Applies only to the Altman Z band — the overall traffic-light header is a multi-metric majority vote, not a single published numeric cutoff, and is out of scope for this line.
 
 ### 3. **Solvency Assessment** (narrative)
 Output the Palepu solvency section from `get_financial_analysis`. If unavailable, note: `[Solvency assessment unavailable — tool error]`.
@@ -163,12 +163,12 @@ Example: "Current market regime is recessionary — a challenging environment fo
 ### 7. **Branding Header** (only if `white_label_active` AND `client_name != ""`)
 Single line at the very top of the rendered output: `**<client_name>** credit lens`. Logo handling per integration-pattern.md §5.
 
-### 8. **Provenance** (always present)
-One line stating branding state per integration-pattern.md §7. If a logo was skipped, append `Logo on file: <basename>` as a second Provenance line.
+### 8. **About This Report** (always present)
+One line stating branding state per integration-pattern.md §7, plus the unconditional §7 currency line: `Currency: figures as reported by source data; no base-currency conversion applied.` If a logo was skipped, append `Logo on file: <basename>` as a further About This Report line.
 
 ### Pre-Render — Load white-label branding
 
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format.
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format.
 
 ### 9. **Footer**
 

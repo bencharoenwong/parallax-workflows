@@ -1,6 +1,6 @@
 ---
 name: parallax-ai-consensus
-description: "Runs all installed Parallax AI Investor Profiles (Buffett, Greenblatt, Klarman, Soros, PTJ) against a single ticker or short basket (cap 5). Returns the per-profile verdict matrix, the super-majority consensus signal per consensus-config.md, and a factor-level agreement detail showing which factors/criteria were flagged by multiple profiles. Cross-profile agreement IS the high-conviction signal. Third-person framing throughout, AI-inferred from public information. NOT financial advice. NOT personalized. NOT for a single investor profile only (use /parallax-ai-buffett etc.). NOT for portfolio-level health check (use /parallax-portfolio-checkup)."
+description: "Runs all installed Parallax AI Investor Profiles (Buffett, Greenblatt, Klarman, Soros, PTJ) against a single ticker or short basket (cap 5). Returns the per-profile verdict matrix, the super-majority consensus signal per consensus-config.md, and a factor-level agreement detail showing which factors/criteria were flagged by multiple profiles. Cross-profile agreement is the strongest-agreement signal. Third-person framing throughout, AI-inferred from public information. NOT financial advice. NOT personalized. NOT for a single investor profile only (use /parallax-ai-buffett etc.). NOT for portfolio-level health check (use /parallax-portfolio-checkup)."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -27,7 +27,7 @@ description: "Runs all installed Parallax AI Investor Profiles (Buffett, Greenbl
 - Disclaimer verbatim; use umbrella phrasing "Parallax AI Investor Profiles framework" rather than any single investor name
 - If a profile fails (cross-validation, timeout, missing data) mark as `skipped` and continue with remaining profiles
 - INSUFFICIENT_PROFILES if applicable count < 3 (per consensus-config.md minimum_applicable_count)
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
 
 Runs all installed AI Investor Profiles in parallel against a ticker (or short basket), aggregates the verdicts, computes the super-majority consensus signal, and surfaces factor-level agreement detail.
 
@@ -141,9 +141,11 @@ Full matches (M):        <count>
 Super-majority threshold: 75%
 Required matches:        ceil(0.75 × <A>) = <required>
 Consensus signal:        YES / NO / INSUFFICIENT_PROFILES
-Verdict sensitivity:     M is <M> vs required <required>; the signal flips if <|required − M|> more profile(s) reach (or drop below) full match.
+Verdict sensitivity:     If signal is NO, M is <M> vs required <required>; <required − M> more applicable profile(s) reaching full match would move the signal to YES. If signal is YES, M is <M> vs required <required>; <M − required + 1> full match(es) falling away would move the signal to NO.
 
 ## Shared factor signal (factors/criteria flagged across profiles)
+
+Informational per conventions §12 — a ranked agreement count, not a ranked trade instruction.
 
 Factors flagged by ≥ 2 matching profiles:
   - <Factor>: flagged by <N> of <M> (<profile names>)
@@ -180,10 +182,10 @@ These additions apply to the rendered output ABOVE in addition to the persona-sp
 
 ### Pre-Render — Load white-label branding
 
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format.
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format.
 
 - **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line at the very top of the rendered output: `**<client_name>** AI investor consensus`. Logo handling per integration-pattern.md §5.
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7. If a logo was skipped, append `Logo on file: <basename>` as a second Provenance line.
+- **About This Report** (always present): one line stating branding state per integration-pattern.md §7. If a logo was skipped, append `Logo on file: <basename>` as a second About This Report line.
 
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below. The persona-specific disclaimer in the output example characterizes the source of the framing; the §9.2 banner characterizes the LLM-generated synthesis itself.
 
@@ -208,12 +210,14 @@ Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 
 For basket mode (5 tickers), Buffett/Klarman/Greenblatt run per-ticker; Soros and PTJ's macro workflows run once and only the per-ticker exposure check repeats. Approximate basket-of-5 cost: ~180-240 tokens.
 
+**Cheap subset — factor-profiles-only.** `--only buffett,klarman,greenblatt` runs the three factor/mechanical profiles for ~20-26 tokens (Buffett ~4 + Klarman ~5-7 + Greenblatt ~10-15), skipping Soros and PTJ's macro fan-out entirely. Arithmetic consequence: `A = 3` → `required_matches = ceil(0.75 × 3) = 3` — all three must match for a `YES` signal. Label this invocation's output as a reduced-ensemble read, not the full five-profile consensus.
+
 ## Why this meta-skill exists
 
 The consensus is the product's value proposition, not a convenience feature. Individual profiles are interesting but noisy — each reflects a single investor's framework and may flag for reasons unrelated to the investor's actual behavior today. Cross-profile consensus is informative precisely because the profiles are structurally different: Buffett is factor-tilted, Greenblatt is mechanical, Klarman is balance-sheet, Soros is top-down, PTJ is trend-and-regime. When four or five agree, the agreement is unlikely coincidental.
 
 The factor-level agreement section is pedagogically load-bearing. It tells users:
-- **Where the profiles converge** (the high-conviction shared signal)
+- **Where the profiles converge** (the strongest-agreement shared signal)
 - **Where they diverge** (informative tension)
 - **What dimensions are collectively absent** (the profiles' shared blind spots)
 
