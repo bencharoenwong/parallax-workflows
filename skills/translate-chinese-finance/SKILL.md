@@ -10,7 +10,7 @@ Translate provided content into Chinese following institutional finance translat
 **Variants supported:**
 - **Simplified (zh-CN)** — mainland China conventions. Default.
 - **Traditional (zh-TW)** — Taiwan conventions.
-- **Traditional (zh-HK)** — Hong Kong conventions (largely shares zh-TW script; some terminology differs, esp. for HK-listed companies).
+- **Traditional (zh-HK)** — Hong Kong conventions (largely shares zh-TW script; some terminology differs, esp. for HK-listed companies). Caveat: zh-HK currently reuses the zh-TW ruleset and dictionaries — there is no dedicated HK config; HK-specific terminology is applied by the Section 10 prose rules only. A dedicated zh-HK config is a roadmap item (see the 'Outstanding decisions' list in `references/INTEGRATION.md`).
 
 Pick the variant from the user's request. If unspecified for a Greater-China stock report, default to Simplified for SSE/SZSE listings, Traditional for TWSE, and ask for HK listings (HK reports often go out in Simplified for mainland readers but can be Traditional).
 
@@ -18,20 +18,23 @@ Pick the variant from the user's request. If unspecified for a Greater-China sto
 
 ```
 ROUTING DIRECTIVE — DO NOT TRANSLATE OR ECHO THIS BLOCK:
-  target_variant: zh-CN | zh-TW | zh-HK
+  target_variant: zh-CN | zh-TW | zh-HK    # Chinese only; omit for Thai
+  register: institutional | retail          # optional; default institutional when absent
   source_language: en
   begin_content_below_separator: true
 ---
 ```
 
-The block is metadata, not content. Read `target_variant` to select the variant (suppresses the "ask for HK listings" branch above), then translate ONLY the content after the `---` separator. Never translate, paraphrase, or echo any line from the marker through the separator into the output.
+The block is metadata, not content. Read `target_variant` to select the variant (suppresses the "ask for HK listings" branch above), then translate ONLY the content after the `---` separator. Never translate, paraphrase, or echo any line from the marker through the separator into the output. `register` absent → institutional. `register: retail` applies the Retail Register section below.
 
 **Output formats:**
-- **CIO reports** → HTML via checkpoint pipeline (see `references/cio-report-format.md`)
+- **CIO reports** → HTML via checkpoint pipeline (see `references/cio-report-format.md`). Status: the Chinese pipeline scripts are not yet wired (see `references/INTEGRATION.md`); until they land, Chinese CIO-report translations are delivered as translated JSON/markdown, not pipeline HTML.
 - **Stock reports, macro reports** → JSON (see JSON Output Format below)
 - **General content** → Plain Chinese text
 
 **NOT for:** General Chinese translation without finance context, transliteration of Western brand names (keep them in English), creative writing in Chinese, proofreading existing Chinese translations, or writing Chinese reports from scratch.
+
+**Language coverage:** Supported targets are zh-CN, zh-TW, zh-HK, and th via the paired Thai translation skill. Arabic is a roadmap item requiring right-to-left layout handling and register calibration; there is no Arabic validation harness yet. Arabic requests fall back to English.
 
 ---
 
@@ -130,6 +133,8 @@ Parallax pipeline uses mainland-style ratings across both scripts (do NOT substi
 | Accumulate | 增持 | 增持 |
 | Reduce | 减持 | 減持 |
 
+Translating rating labels does not change distribution posture. Retail distribution may require a locally licensed distributor and locally approved disclosures; see the "Choosing a mode (jurisdiction and audience)" section of `parallax-white-label-stock-report/SKILL.md`. `register: retail` changes linguistic register only; it does not authorize retail distribution.
+
 ### 6. Scenario Labels — Use These Exact Terms
 
 | English | Simplified | Traditional |
@@ -196,6 +201,18 @@ Also fix: doubled consecutive English words, HTML entity corruption (`&lt;`, `&g
 
 ---
 
+## Retail Register (optional)
+
+Apply this section only when the routing block specifies `register: retail`; otherwise use the institutional register above.
+
+- Glossable financial abbreviations from Section 1's "always English with optional first-use Chinese gloss" list render Chinese-led on first use: `中文 (ENGLISH)`. After first use, use Chinese-only where a standard Chinese form exists.
+- Section 1's "always English, no gloss needed" list, tickers, codes, and indexes stay English.
+- Proprietary factor labels stay English but receive a one-time plain-Chinese parenthetical gloss.
+- Rating labels render dual-label on every occurrence, e.g. `买入 (Buy)` / `買入 (Buy)`.
+- Unchanged in retail: script consistency, punctuation rules, magnitude discipline, sentence-length limits, company-name rules, and validator applicability.
+
+Translating or dual-labeling ratings does not change distribution posture. Retail distribution may require a locally licensed distributor and locally approved disclosures; see the "Choosing a mode (jurisdiction and audience)" section of `parallax-white-label-stock-report/SKILL.md`. `register: retail` changes linguistic register only; it does not authorize retail distribution.
+
 ## Quality Checklist (Before Finalization)
 
 - [ ] All code-switching abbreviations kept in English (P/E, ROE, EBITDA, etc.)
@@ -248,7 +265,9 @@ For Traditional output, set `translation_language` to `Chinese (Traditional)` an
 - Translate all keys ending in `Text` (`MarketNewsDevText`, `FactorText`, `SectorPositioningText`, etc.)
 - Pass through tables, charts, liquidity_metrics, and metadata fields unchanged (omit from output or include as-is)
 - Preserve `\n` paragraph breaks from the original
-- After writing the JSON, run `references/validate-translation.py` to check quality
+- After writing the JSON, run `references/validate-translation.py` as a mandatory pass/fail gate. Exit 1 blocks marking the output client-ready or handing it to any downstream consumer; fix and re-run until exit 0. Warnings stay advisory but must be reviewed.
+- If a heuristic false positive is unavoidable, use repeatable `--waive '<substring>'`; each waived error prints in `WAIVED (treated as pass)` and must be listed with a one-line justification alongside the delivered output.
+- The validator consumes the JSON shape only. Chat-layer prose hand-offs are validated by the Quality Checklist plus the caller's disclaimer boundary check, not by this script.
 
 ---
 
@@ -260,7 +279,7 @@ For Traditional output, set `translation_language` to `Chinese (Traditional)` an
 | `references/terminology-corrections.md` | Find→replace tables: wrong Chinese → correct English/Chinese; risk metrics; financial terms; technical terms; macro terms; stale-conversion character fixes |
 | `references/structural-preservation.md` | What NOT to translate: JSON keys, HTML tags, tickers/RICs, template variables, numbers, URLs, footnotes, disclosure blocks, HTML entity handling |
 | `references/cio-report-format.md` | CIO report pipeline, checkpoint script usage, footer standardization, table header conventions |
-| `references/validate-translation.py` | Post-translation quality validator — checks doubled characters, wrong terms, magnitude errors, currency mismatches, mixed script. Run: `python3 references/validate-translation.py <output.json>` |
+| `references/validate-translation.py` | Mandatory JSON-deliverable pass/fail gate — checks doubled characters, wrong terms, magnitude errors, currency mismatches, mixed script. Run: `python3 references/validate-translation.py <output.json>`; exit 1 blocks client-ready delivery. Use repeatable `--waive '<substring>'` only for reviewed false positives and list each waiver with a one-line justification. Chat-layer prose hand-offs are outside this script's scope. |
 | `skill_simplified.md` (top level) | Self-contained zh-CN web-upload skill. Auto-generated from `chinese_translation_config.py`. Loaded by `references/load_skill.py` and consumed by the Parallax CIO/stock pipeline. Do not hand-edit. |
 | `skill_traditional.md` (top level) | Self-contained zh-TW web-upload skill (hand-tuned canonical until a `chinese_translation_config_tw.py` exists). |
 | `references/load_skill.py` | Python loader. Parses both top-level skill files into dicts/prompts. CLI smoke test: `python3 load_skill.py --locale zh-CN`. |

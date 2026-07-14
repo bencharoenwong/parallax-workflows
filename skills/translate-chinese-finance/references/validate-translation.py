@@ -2,7 +2,7 @@
 """
 Post-translation quality validator for Chinese financial translations.
 Supports both Simplified (zh-CN) and Traditional (zh-TW) output.
-Usage: python3 validate-translation.py <translated_json_file>
+Usage: python3 validate-translation.py <translated_json_file> [--waive <error-substring> ...]
 """
 import json
 import re
@@ -191,19 +191,56 @@ def validate(filepath: str) -> tuple[list[str], list[str]]:
     return errors, warnings
 
 
+def parse_args(argv: list[str]) -> tuple[str | None, list[str]]:
+    filepath = None
+    waivers: list[str] = []
+    i = 1
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--waive":
+            if i + 1 >= len(argv):
+                print("Usage: python3 validate-translation.py <translated_json_file> [--waive <error-substring> ...]")
+                sys.exit(1)
+            waivers.append(argv[i + 1])
+            i += 2
+            continue
+        if filepath is None:
+            filepath = arg
+            i += 1
+            continue
+        print("Usage: python3 validate-translation.py <translated_json_file> [--waive <error-substring> ...]")
+        sys.exit(1)
+    return filepath, waivers
+
+
+def apply_waivers(errors: list[str], waivers: list[str]) -> tuple[list[str], list[str]]:
+    unwaived: list[str] = []
+    waived: list[str] = []
+    for error in errors:
+        if any(substring in error for substring in waivers):
+            waived.append(error)
+        else:
+            unwaived.append(error)
+    return unwaived, waived
+
+
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python3 validate-translation.py <translated_json_file>")
+    filepath, waivers = parse_args(sys.argv)
+    if filepath is None:
+        print("Usage: python3 validate-translation.py <translated_json_file> [--waive <error-substring> ...]")
         sys.exit(1)
 
-    filepath = sys.argv[1]
     errors, warnings = validate(filepath)
+    errors, waived = apply_waivers(errors, waivers)
 
     print("=" * 50)
     print(f"Validation: {filepath}")
     print("=" * 50)
     print(f"ERRORS: {len(errors)}")
     for e in errors:
+        print(f"  {e}")
+    print(f"\nWAIVED (treated as pass): {len(waived)}")
+    for e in waived:
         print(f"  {e}")
     print(f"\nWARNINGS: {len(warnings)}")
     for w in warnings:
