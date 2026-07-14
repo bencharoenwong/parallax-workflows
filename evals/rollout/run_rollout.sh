@@ -29,7 +29,12 @@ mkdir -p "$RESULTS"
 CMD="${ROLLOUT_CMD:-/parallax-should-i-buy}"
 PREFIX="${ROLLOUT_PREFIX:-should-i-buy}"
 
-SAFE_ID=$(printf '%s_%s' "$ARGS" "$LANG_ARG" | tr -c 'A-Za-z0-9._-' '_')
+# Bound the id: short-ticker skills (should-i-buy "AAPL") slug fine, but free-text
+# skills (a thesis paragraph) would overflow the 255-byte filename limit. Cap the
+# slug and append a stable hash of the full args so ids stay unique + readable.
+RAW_ID=$(printf '%s_%s' "$ARGS" "$LANG_ARG" | tr -c 'A-Za-z0-9._-' '_')
+ARGS_HASH=$(printf '%s_%s' "$ARGS" "$LANG_ARG" | cksum | cut -d' ' -f1)
+SAFE_ID="$(printf '%.60s' "$RAW_ID")_${ARGS_HASH}"
 TS=$(date -u +%Y%m%dT%H%M%SZ)
 OUT="$RESULTS/${PREFIX}_${LABEL}_${SAFE_ID}_${TS}.stream.json"
 
@@ -41,9 +46,21 @@ echo "[rollout] ~24 Parallax tokens — $PROMPT (label=$LABEL)" >&2
 MODEL_FLAG=()
 [ -n "$TARGET_MODEL" ] && MODEL_FLAG=(--model "$TARGET_MODEL")
 
+# Live-connector flags (CI / live-eval use). All optional — unset leaves behavior
+# unchanged, so existing should-i-buy callers are unaffected. See evals/rollout/README.md.
+#   MCP_CONFIG    — path(s) to a .mcp.json defining the Parallax server (--mcp-config)
+#   STRICT_MCP    — non-empty => --strict-mcp-config (ONLY the supplied servers load: reproducible)
+#   ALLOWED_TOOLS — tool allowlist so a non-interactive run never stalls on a permission
+#                   prompt (e.g. "mcp__claude_ai_Parallax__*")
+EXTRA_FLAGS=()
+[ -n "${MCP_CONFIG:-}" ]    && EXTRA_FLAGS+=(--mcp-config ${MCP_CONFIG})
+[ -n "${STRICT_MCP:-}" ]    && EXTRA_FLAGS+=(--strict-mcp-config)
+[ -n "${ALLOWED_TOOLS:-}" ] && EXTRA_FLAGS+=(--allowedTools ${ALLOWED_TOOLS})
+
 claude -p "$PROMPT" \
   --output-format stream-json --verbose \
   ${MODEL_FLAG[@]+"${MODEL_FLAG[@]}"} \
+  ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"} \
   < /dev/null > "$OUT"
 
 echo "$OUT"
