@@ -191,6 +191,14 @@ Contradicted, just in plainer words — same statuses, same caveats, same discla
 reader-facing roles rather than only in an export block. Absent role → `standard` register (neither
 stripped or maximally verbose).
 
+**The full-detail render keeps the layered analysis — never the plain-language strip.** For
+`fund_manager` / `research_analyst`, the render **retains and leads with the full Assumption Map and
+the Assumption-by-Assumption table**, and adds a **per-layer analytical walk-through** — the reasoning
+and the live reads behind each layer's classification (macro → sector/theme → position → structural →
+holder), not just the status cells. This audience is testing *your* reasoning, so the layer-by-layer
+mechanism is the point, not noise. The plain-language strip (dropping the map + taxonomy) is for the
+`individual` / `rm` / client audience **only** — never apply it to a fund-manager/analyst render.
+
 Hard rules (same spirit as every mode above):
 
 - **Role tailors which optional features surface by default and the language register — nothing
