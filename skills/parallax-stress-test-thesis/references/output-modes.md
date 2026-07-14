@@ -138,6 +138,30 @@ block tailored to that purpose:
 - **Nothing new appears in the export** that was not in the report it summarizes.
 - Purpose tailors **format and length only** — never the substance of a status or a flag.
 
+### The Client-facing plain-language variant — required shape
+
+When the purpose is **Client-facing plain-language**, render these elements in this order (all in
+plain sentences, the taxonomy stripped). Each is a translation of something already in the report —
+nothing new, and never a recommendation:
+
+1. **Bottom line for you** — 2–3 plain sentences leading with the single thing that matters. Name the
+   concrete anchor if there is one ("the one number to watch is X vs. $Y").
+2. **What we could and couldn't check** *(only when coverage is partial/out-of-scope)* — say plainly
+   which legs Parallax can't score and **where to verify them** (spot instrument, fund-flow data, an
+   official print), plus any covered-equity triangulation. Turns the coverage limit into a next step.
+3. **This works only if …** — the one-line validation condition (the falsification, put positively)
+   the reader can track.
+4. *(profile only)* **What it means for your situation** — the top client-conditioned risk in plain
+   terms, with the optional *illustrative, not-a-prediction* arithmetic (`client-conditioning.md` (d))
+   if it makes the risk tangible.
+5. **Questions to take to your advisor** — 2–3 questions the report raises. This is the natural
+   handoff: it makes the output actionable **while reinforcing the qualified-professional line**, not
+   substituting for it.
+6. The profile-appropriate **disclaimer**, verbatim in intent.
+
+This variant never issues a buy/sell/hold or suitability call; the advisor-questions block asks
+questions, it does not answer them.
+
 ## 9. Role-tailored presentation (`role`)
 
 An optional `role` input names *who is driving the run*, so the skill can **default** to the outputs
