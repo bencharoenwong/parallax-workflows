@@ -62,7 +62,7 @@ Assumption Strength: Weak. The chain fails at the entry premise.
 An easing pivot; curve re-steepening.
 
 ## Confidence & Caveats
-Macro read dated 2026-06-24; two weeks stale.
+Macro read dated 2026-06-24; two weeks stale. The 🔴/🟡/🟢 Assumption-Strength and Bias & Conviction lights are heuristic reads of argument quality, not outcome-calibrated scores.
 
 ---
 This analysis was AI-interaction assisted. It is informational analysis, not investment advice.
@@ -279,6 +279,36 @@ def test_stronger_disclaimer_variant_passes_shared_check():
         "This analysis was AI-interaction assisted.\n\n" + _STRONGER_VARIANT,
     )
     assert _results(prose)["disclaimer_present_correct"] is True
+
+
+# --- lights_heuristic_disclosed (mandatory heuristic caveat) ----------------
+
+
+def test_lights_heuristic_disclosed_on_golden():
+    assert _results(GOLDEN)["lights_heuristic_disclosed"] is True
+
+
+def test_lights_heuristic_disclosed_red_when_absent():
+    # Drop the heuristic caveat from Confidence & Caveats — the check must fail (mandatory).
+    no_caveat = GOLDEN.replace(
+        " The 🔴/🟡/🟢 Assumption-Strength and Bias & Conviction lights are heuristic reads of argument quality, not outcome-calibrated scores.",
+        "",
+    )
+    assert _results(no_caveat)["lights_heuristic_disclosed"] is False
+
+
+def test_lights_heuristic_disclosed_satisfied_by_profile_disclaimer():
+    # A profiled run carries "heuristic reasoning … not a calibrated suitability model" in its
+    # stronger disclaimer, which satisfies the disclosure even without the C&C line.
+    prose = GOLDEN.replace(
+        " The 🔴/🟡/🟢 Assumption-Strength and Bias & Conviction lights are heuristic reads of argument quality, not outcome-calibrated scores.",
+        "",
+    ).replace(
+        "This analysis was AI-interaction assisted. It is informational analysis, not investment advice.",
+        "This analysis was AI-interaction assisted. The client-conditioned pass is heuristic reasoning "
+        "over a partial profile, not a calibrated suitability model. It is not investment advice.",
+    )
+    assert _results(prose)["lights_heuristic_disclosed"] is True
 
 
 # --- verdict_no_rec (hardened: casual imperatives, not just formal tokens) --

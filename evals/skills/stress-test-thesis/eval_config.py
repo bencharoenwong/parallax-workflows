@@ -241,6 +241,22 @@ def _c_hype_meter_light(t, spec) -> Check:
     return _glyph_binding_ok("hype_meter_light", line, _HYPE_LIGHT)
 
 
+_HEURISTIC_RE = re.compile(r"heuristic", re.I)
+_UNCALIBRATED_RE = re.compile(r"not\s+(?:an?\s+)?(?:outcome[\s-]?)?calibrat", re.I)
+
+
+def _c_lights_heuristic_disclosed(t, spec) -> Check:
+    """The report MUST disclose that the 🔴/🟡/🟢 lights are heuristic and not outcome-calibrated — a
+    standing caveat so an uncalibrated argument-strength cue is never mistaken for a calibrated
+    signal. Mandatory (not vacuous): rendered in Confidence & Caveats on every run, and additionally
+    carried by the stronger client-profile disclaimer on profiled runs ('heuristic reasoning … not a
+    calibrated suitability model')."""
+    prose = t.final_prose or ""
+    heur = bool(_HEURISTIC_RE.search(prose))
+    uncal = bool(_UNCALIBRATED_RE.search(prose))
+    return Check("lights_heuristic_disclosed", heur and uncal, f"heuristic={heur} not_calibrated={uncal}")
+
+
 _NO_HALLUC = next(c for c in CRITERIA if c["id"] == "no_hallucinated_data")  # COPIED
 
 SPEC = EvalSpec(
@@ -260,6 +276,7 @@ SPEC = EvalSpec(
         "read_time_marker",            # NEW (standard-render ~N min read marker)
         "tldr_strength_light",         # NEW (TL;DR strength carries matching 🔴/🟡/🟢 glyph)
         "hype_meter_light",            # NEW (Bias & Conviction "hype meter" glyph consistency)
+        "lights_heuristic_disclosed",  # NEW (report discloses the lights are heuristic, not calibrated)
         "orchestrator_length",         # GENERIC
     ],
     extra_checks={
@@ -269,6 +286,7 @@ SPEC = EvalSpec(
         "read_time_marker": _c_read_time_marker,
         "tldr_strength_light": _c_tldr_strength_light,
         "hype_meter_light": _c_hype_meter_light,
+        "lights_heuristic_disclosed": _c_lights_heuristic_disclosed,
     },
     tier2_criteria=[
         _NO_HALLUC,  # COPIED

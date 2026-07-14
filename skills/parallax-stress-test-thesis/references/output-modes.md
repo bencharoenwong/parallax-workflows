@@ -35,7 +35,9 @@ below it.** Include, in order:
   assumptions are supported by the current reads**, and nothing else: 🔴 = a high-criticality
   assumption is Contradicted/Unconfirmed, 🟢 = the load-bearing set is Supported. It is **not a trade
   signal** — 🟢 means "the reasoning holds up", never "buy"; 🔴 means "the reasoning is fragile",
-  never "sell" — and it never gates or halts the report (every section still renders below it);
+  never "sell" — and it never gates or halts the report (every section still renders below it). It is
+  a **heuristic** read of argument support, **not an outcome-calibrated score**: a decision aid, not
+  a screen, and it is disclosed as such in Confidence & Caveats;
 - the single most load-bearing vulnerability, with its Pass-1 status;
 - where the thesis most likely breaks first, and over what horizon;
 - *(only if a `client_profile` was supplied)* the top client-conditioned flag, if any fired;
