@@ -125,6 +125,13 @@ emit suitability-relevant flags. Never rewrites a Pass-1 status.
 Depth (§Modes) sets which of these render in full vs. collapsed; the **bold-starred** items below
 survive at every depth — they are never collapsed away. → `references/output-modes.md`.
 
+**The default render is the full layered analysis.** The **Assumption Map** and the
+**Assumption-by-Assumption** table — the per-layer reasoning a sophisticated reader (fund manager /
+analyst) is here for — are **standard render: always shown, never reduced to a summary in a default
+run.** Condensing or plain-languaging them for a lay audience is an *opt-in* presentation mode
+(role/export), never the default — so the taxonomy-stripped view is only ever produced on explicit
+request, and the base skill always exposes the full layered view.
+
 - **`~N min read`** *(top marker)* — estimated read time of the rendered report (~200 wpm, rounded up); labeled as an estimate
 - **TL;DR** — 3–5 bullets compressing the body (Assumption Strength **with a 🔴/🟡/🟢 traffic-light indicator** — `🔴 Weak` / `🟡 Mixed` / `🟢 Strong`, a glyph for how well-supported the argument is and explicitly **not** a trade signal; top vulnerability + status; most-likely break + horizon; top client flag if any), closing with "rates the argument, not the security." Introduces nothing not in the body below. → `references/output-modes.md` §2
 - **Thesis Restatement** (1–2 sentences confirming what was understood, per the Phase 1 playback)
