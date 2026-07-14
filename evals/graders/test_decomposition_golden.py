@@ -9,6 +9,12 @@ everything after it.
 
 The golden maps encode analytical STRUCTURE (which layers, which keystone) — not any Parallax data —
 so they are safe as tracked fixtures and stable across live runs.
+
+This is a **contract test over synthetic transcripts**: it validates the checking logic (a flattened
+or mis-layered map fails), not that the live model actually produces a correct decomposition. Live
+conformance rests on the pending cold-session run — see
+`skills/parallax-stress-test-thesis/COMPLIANCE.md`. "golden decomposition test" here means "pins the
+grader contract", not "live-behaviour validation".
 """
 from __future__ import annotations
 

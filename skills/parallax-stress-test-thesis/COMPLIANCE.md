@@ -42,10 +42,17 @@ suitability determination, or a price target.** It is read-only and persists not
    qualified-professional reminder, and never as a determination. **Pass 2 is pending compliance /
    legal sign-off before production reliance.** If a faster path to publishing the core is wanted,
    ship **Pass-1-only** (no `client_profile`) first and gate Pass 2 behind that sign-off.
-3. **Live validation is limited.** Behavior has been validated live against current Parallax signals
-   on a small set of theses (inline, not yet in an isolated cold session). A cold-session CI run
-   needs Parallax connector credentials in CI (the runner + preflight gate are included). More live
-   coverage before a production claim is prudent.
+3. **Live validation is limited — and the automated tests are *contract* tests, not live-behaviour
+   tests.** The two acceptance tests (`test_two_pass_acceptance.py`, `test_decomposition_golden.py`)
+   grade **synthetic, hand-written transcripts**: they lock the grading logic and catch a regression
+   in the grader or a malformed map shape — real value — but by construction they cannot prove the
+   *live model* emits conforming output. That surface is covered by a cold-session run, which needs
+   Parallax connector credentials in CI (the runner + preflight gate are included). Behavior has so
+   far been validated live only *inline*, on a small set of theses. **Planned live-conformance step:**
+   once the cold-session run produces real transcripts, point the same layer-coverage and
+   Pass-1-stability assertions at those outputs as well as the fixtures — little new code, and it
+   turns the contract tests into a live check. Treat "golden decomposition test" as "pins the grader
+   contract," not "live-behaviour validation," until then.
 
 ## Fast reviewer checklist
 

@@ -8,6 +8,11 @@ situation never rewrites what is true about the world — is covered by CI, not 
 manual live run. It also confirms a profiled run carries the stronger disclaimer variant and a
 no-profile run carries the standard one.
 
+This is a **contract test over synthetic, hand-written transcripts**: it locks the grading logic and
+catches a Pass-2 regression (a status flip, a dropped disclaimer), but by construction it does NOT
+prove the live model produces conforming output. Live conformance rests on the pending cold-session
+run — see `skills/parallax-stress-test-thesis/COMPLIANCE.md`.
+
 Pure helpers (pass1_status_map / client_conditioned_text / uses_stronger_disclaimer) take prose only.
 """
 from __future__ import annotations
