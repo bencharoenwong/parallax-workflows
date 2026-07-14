@@ -37,7 +37,7 @@ _REQUIRED_SECTIONS = [
     "Top Detractors",
     "The Key Question",
     "What To Do",
-    "Provenance",
+    "About This Report",
 ]
 _SECTION_LABELS = [
     "House View Preamble",
@@ -49,7 +49,7 @@ _SECTION_LABELS = [
     "Top Detractors",
     "The Key Question: Noise or Signal?",
     "What To Do",
-    "Provenance",
+    "About This Report",
 ]
 
 _REGIME_TERMS = re.compile(

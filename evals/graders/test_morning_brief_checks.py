@@ -48,7 +48,7 @@ NVDA: in-line print, guidance steady.
 - NVDA 15% weight + concentration — review sizing.
 - Energy overweight into a negative tactical outlook.
 
-## Provenance
+## About This Report
 Default Parallax branding.
 
 *AI-assisted output. Verify any specific statement before acting.*

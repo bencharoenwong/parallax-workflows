@@ -34,7 +34,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _REQUIRED_SECTIONS = [
     "Alerts",
     "Recommended Actions",
-    "Provenance",
+    "About This Report",
 ]
 _SECTION_LABELS = [
     "Branding Header",
@@ -43,7 +43,7 @@ _SECTION_LABELS = [
     "Alerts",
     "Stable Names",
     "Recommended Actions",
-    "Provenance",
+    "About This Report",
 ]
 
 # A decimal score (7.2) or a signed change (+1.3 / -0.8) — a quantified summary/alert.

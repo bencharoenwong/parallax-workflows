@@ -119,8 +119,9 @@ def _c_dividends_explicit(t: Transcript, spec: EvalSpec) -> Check:
 
 
 def _c_provenance_present(t: Transcript, spec: EvalSpec) -> Check:
-    ok = _section_present(t.final_prose, "Provenance")
-    return Check("provenance_present", ok, "Provenance line present")
+    # Legacy label accepted so stored baseline transcripts stay re-gradable.
+    ok = _section_present(t.final_prose, "About This Report") or _section_present(t.final_prose, "Provenance")
+    return Check("provenance_present", ok, "About This Report line present")
 
 
 def _c_ai_disclosure_present(t: Transcript, spec: EvalSpec) -> Check:
