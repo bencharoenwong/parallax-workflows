@@ -10,7 +10,7 @@ This file is **specification**, not Python. The consumer SKILL.md is the operato
 
 ## §1 — Purpose & scope
 
-**In scope:** visual identity for rendered output — palette tokens, fonts, cover-page or header logo, client name in the deliverable header, and a one-line Branding row in the Provenance footer.
+**In scope:** visual identity for rendered output — palette tokens, fonts, cover-page or header logo, client name in the deliverable header, and a one-line Branding row in the About This Report footer.
 
 **Out of scope:**
 
@@ -18,7 +18,7 @@ This file is **specification**, not Python. The consumer SKILL.md is the operato
 - **Auto-jurisdiction disclaimers.** Disclaimers stay as the standard wording per each skill's own Disclaimer section. Voice config does not override the disclaimer block.
 - **Semantic color overrides.** Tokens `cg-green-700` (positive), `cg-red-700` (negative), `cg-amber-*` (warning) signal meaning, not brand identity. They are NEVER overridden by client branding.
 
-The structural guardrail enforcing this scope is `load_visual_branding()` in `loader.py` — it returns only the six visual keys; voice and v2 token-tree fields are absent from the dict, so accidental access raises `KeyError`.
+The structural guardrail enforcing this scope is `load_visual_branding()` in `loader.py` — it returns only the seven visual keys; voice and v2 token-tree fields are absent from the dict, so accidental access raises `KeyError`.
 
 ---
 
@@ -48,9 +48,9 @@ client_name = branding.get("client_name", "")
 
 ## §3 — Safe key access
 
-`load_visual_branding()` returns exactly six keys: `client_name`, `colors`, `logos`, `fonts`, `source`, `error`. Voice and v2-only token-tree fields (`typography`, `rounded`, `spacing`, `components`, `multi_source`, `confidence_scores`) are absent.
+`load_visual_branding()` returns exactly seven keys: `client_name`, `colors`, `logos`, `fonts`, `source`, `error`, `render`. `render` carries deployment render defaults; audience semantics live in `parallax-conventions.md` §13 and this doc only carries the key. Voice and v2-only token-tree fields (`typography`, `rounded`, `spacing`, `components`, `multi_source`, `confidence_scores`) are absent.
 
-This is enforced by the loader at code level (a dict-comprehension over the `_VISUAL_BRANDING_KEYS` constant in `loader.py`). Accidental `branding["voice"]` access raises `KeyError`. **The constant in `loader.py` is the machine-enforced source of truth; the six-key list above is its human-readable declaration. If the two ever diverge during a PR, the constant wins — and `tests/test_loader.py::test_visual_branding_keys_are_subset_of_load_client_branding` will fail.** Update both together (see §9).
+This is enforced by the loader at code level (a dict-comprehension over the `_VISUAL_BRANDING_KEYS` constant in `loader.py`). Accidental `branding["voice"]` access raises `KeyError`. **The constant in `loader.py` is the machine-enforced source of truth; the seven-key list above is its human-readable declaration. If the two ever diverge during a PR, the constant wins — and `tests/test_loader.py::test_visual_branding_keys_are_subset_of_load_client_branding` will fail.** Update both together (see §9).
 
 If a future visual key (e.g. `branding["icons"]`) is added, the allowlist must be updated deliberately — additive-safe by construction.
 
@@ -63,11 +63,11 @@ If a future visual key (e.g. `branding["icons"]`) is added, the allowlist must b
 | Value | Meaning | What the skill does |
 |---|---|---|
 | `None` | Clean load | Apply white-label substitution. |
-| `"config_not_found"` | No client onboarded | Silent default-Parallax path. No warning. Provenance reads `Branding: default Parallax`. |
-| `"logo_missing: <path>"` | Logo file referenced but absent on disk | Palette + fonts usable; cover-page / header logo skipped. Provenance reads `Branding: white-label (source: <ref>) (logo unavailable, omitted)`. |
-| `"schema_invalid: <details>"` | Schema validation failed | Fall back to defaults. Provenance reads `Branding: default Parallax (config invalid: <details>)`. |
-| `"yaml_parse_error: <details>"` | YAML corrupt | Fall back to defaults. Provenance reads `Branding: default Parallax (config unreadable)`. |
-| `"schema_unavailable"` | Loader's own schema file missing | Best-effort branding apply; Provenance reads `Branding: white-label (best-effort, schema unavailable)`. |
+| `"config_not_found"` | No client onboarded | Silent default-Parallax path. No warning. About This Report reads `Branding: default Parallax`. |
+| `"logo_missing: <path>"` | Logo file referenced but absent on disk | Palette + fonts usable; cover-page / header logo skipped. About This Report reads `Branding: white-label (source: <ref>) (logo unavailable, omitted)`. |
+| `"schema_invalid: <details>"` | Schema validation failed | Fall back to defaults. About This Report reads `Branding: default Parallax (config invalid: <details>)`. |
+| `"yaml_parse_error: <details>"` | YAML corrupt | Fall back to defaults. About This Report reads `Branding: default Parallax (config unreadable)`. |
+| `"schema_unavailable"` | Loader's own schema file missing | Best-effort branding apply; About This Report reads `Branding: white-label (best-effort, schema unavailable)`. |
 
 The `is_white_label_active()` helper in §2 collapses these to a binary: clean, `logo_missing`, or `schema_unavailable` → render the brand (palette/fonts usable, with best-effort caveat for `schema_unavailable`); anything else → default Parallax.
 
@@ -83,11 +83,11 @@ Markdown skills (the 12 Tier 2 consumers) render in chat, not to .docx. "Brandin
    ```
    If `client_name == ""` (legacy config with no name field), **skip the header line entirely** — do not render `**** report` with empty bolding. The deliverable starts with the first analytical section in that case.
 
-   If `branding["logos"]["primary"]` is set AND is a URL (starts with `http://` or `https://`), embed: `![<client_name>](<url>)`. **The logo MUST render on its OWN line immediately ABOVE the branding text line** to ensure the shared render gate preserves it (see `parallax-conventions.md` §10). The loader resolves on-disk logos to absolute local filesystem paths (e.g., `/Users/<user>/.parallax/client-branding/primary-logo.png`), which are not embeddable in any markdown delivered over a network. **If `branding["logos"]["primary"]` starts with `/` or `~`, skip image embed entirely and add a second Provenance line: `Logo on file: <basename>`** (see §7).
+   If `branding["logos"]["primary"]` is set AND is a URL (starts with `http://` or `https://`), embed: `![<client_name>](<url>)`. **The logo MUST render on its OWN line immediately ABOVE the branding text line** to ensure the shared render gate preserves it (see `parallax-conventions.md` §10). The loader resolves on-disk logos to absolute local filesystem paths (e.g., `/Users/<user>/.parallax/client-branding/primary-logo.png`), which are not embeddable in any markdown delivered over a network. **If `branding["logos"]["primary"]` starts with `/` or `~`, skip image embed entirely and add a second About This Report line: `Logo on file: <basename>`** (see §7).
 
-2. **Provenance footer** (always present when this skill is wired, regardless of `white_label_active`): see §7.
+2. **About This Report footer** (always present when this skill is wired, regardless of `white_label_active`): see §7.
 
-3. **No palette tokens.** Markdown rendered in chat has no color-token substrate, so palette swap is degenerate. The semantic-token rule (§1) still applies but is moot for markdown skills — they have no `cg-green-700` references to begin with. **Implication for `error == "logo_missing"`:** for markdown skills, `logo_missing` has no effect on rendering beyond the Provenance line — there is no palette or font substitution to apply or skip. The skill renders normally with the client_name header (if any) and the `logo_missing` Provenance line.
+3. **No palette tokens.** Markdown rendered in chat has no color-token substrate, so palette swap is degenerate. The semantic-token rule (§1) still applies but is moot for markdown skills — they have no `cg-green-700` references to begin with. **Implication for `error == "logo_missing"`:** for markdown skills, `logo_missing` has no effect on rendering beyond the About This Report line — there is no palette or font substitution to apply or skip. The skill renders normally with the client_name header (if any) and the `logo_missing` About This Report line.
 
 Markdown skills do NOT modify their analytical content based on `white_label_active`. Branding is a presentation overlay, not a synthesis flag.
 
@@ -119,9 +119,9 @@ Future writing-pipeline skills (newsletter, content) that DO want voice will cal
 
 ---
 
-## §7 — Provenance footer line template
+## §7 — About This Report footer line template
 
-Every wired skill renders a Branding line in its Provenance footer. The line is unconditional — it appears whether or not `white_label_active`. Format:
+Every wired skill renders a Branding line in its About This Report footer. The line is unconditional — it appears whether or not `white_label_active`. Format:
 
 In every row below, `<ref>` is `safe_source_reference(branding)` from `loader.py` — URLs collapse to `scheme://hostname`, filesystem paths to basename. Never embed `branding["source"]["reference"]` directly; pre-signed URLs and internal paths must not reach end-client output.
 
@@ -132,11 +132,20 @@ In every row below, `<ref>` is `safe_source_reference(branding)` from `loader.py
 | `config_not_found` | `Branding: default Parallax` | same |
 | `schema_invalid` / `yaml_parse_error` | `Branding: default Parallax (config error)` | same |
 | `schema_unavailable` | `Branding: white-label (best-effort, schema unavailable)` | same |
-| Markdown skill, abs-local logo skipped per §5 | Append `Logo on file: <basename>` as a second Provenance line | N/A (docx embeds the logo directly) |
+| Markdown skill, abs-local logo skipped per §5 | Append `Logo on file: <basename>` as a second About This Report line | N/A (docx embeds the logo directly) |
+| Resolved audience is `client_safe` | Append `Audience mode: client-safe` per `parallax-conventions.md` §13.4 | same |
 
 The docx `from cover` qualifier is more precise (the logo is specifically the cover-page header asset). Markdown skills have no cover; the unqualified `omitted` is correct for them.
 
-For markdown skills the Provenance footer is the last block of the deliverable. For docx (cio-letter-prep) the Provenance footer is rendered in the small-italic style per cio-letter-prep/SKILL.md Provenance section.
+For markdown skills the About This Report footer is the last block of the deliverable. For docx (cio-letter-prep) the About This Report footer is rendered in the small-italic style per cio-letter-prep/SKILL.md About This Report section.
+
+**Currency basis (unconditional second line).** Every wired skill also renders a second About This Report line, independent of `white_label_active` and independent of the Branding-line condition above:
+
+```
+Currency: figures as reported by source data; no base-currency conversion applied.
+```
+
+Use exactly this wording — it states the absence of conversion, not a currency guarantee. Rollout starts with the monitoring and ranking skills and completes library-wide in a later render-mode pass.
 
 ---
 
@@ -144,7 +153,7 @@ For markdown skills the Provenance footer is the last block of the deliverable. 
 
 1. **Do not re-parse the config file.** `loader.py` already does `yaml.safe_load` with proper error handling; a second `yaml.safe_load` in a consumer skill bypasses that.
 2. **Tolerate empty `client_name`.** Legacy configs predating the field return `""`. Header line in §5 simply omits the name in that case; do not error.
-3. **Markdown logo path is environment-dependent.** Loader returns absolute local paths. Per §5 resolution: skip image embed for any path starting with `/` or `~`; add the Provenance "Logo on file" line instead.
+3. **Markdown logo path is environment-dependent.** Loader returns absolute local paths. Per §5 resolution: skip image embed for any path starting with `/` or `~`; add the About This Report "Logo on file" line instead.
 4. **Voice is structurally inaccessible.** `branding["voice"]` raises `KeyError` (not `None`). Do not write defensive code like `branding.get("voice", {})` — that re-introduces the model-obedience-only guardrail this wrapper exists to remove. If a skill needs voice, it must explicitly call `load_client_branding()` (full loader) and document why.
 5. **Semantic tokens are never overridden.** `cg-green-700`, `cg-red-700`, `cg-amber-*` carry meaning, not brand identity. Even when `white_label_active`, these remain unchanged. (Markdown skills have no color tokens to override; this rule applies to docx skills.)
 6. **`white_label_active` is binary, not three-valued.** Three error classes resolve to active (clean, `logo_missing`, `schema_unavailable`); every other class is default Parallax. The predicate is `loader.is_white_label_active()` — call it, don't reproduce it.
@@ -153,6 +162,6 @@ For markdown skills the Provenance footer is the last block of the deliverable. 
 
 ## §9 — Versioning
 
-Loader return shape is the contract surface. If `load_visual_branding()` grows a new key (e.g., `icons`), update `_VISUAL_BRANDING_KEYS` in loader.py AND this doc's §3 in the same commit. If a new error class is added to the loader, update §4 in the same commit.
+Loader return shape is the contract surface. If `load_visual_branding()` grows a new key (e.g., `icons`), update `_VISUAL_BRANDING_KEYS` in loader.py AND this doc's §3 in the same commit. This version adds the `render` key alongside the `_VISUAL_BRANDING_KEYS` update so deployment render defaults can flow to `parallax-conventions.md` §13 consumers. If a new error class is added to the loader, update §4 in the same commit.
 
 The `tests/test_loader.py::test_visual_branding_keys_are_subset_of_load_client_branding` test is the structural drift gate for the constant.

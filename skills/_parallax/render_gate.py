@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Shared deterministic render gate for the Parallax portfolio-family skills.
+"""Shared deterministic render gate for gated skills (portfolio family + single-stock report skills).
 
 Strips any pre-report scaffold the orchestrating model may emit before the rendered
 output (step/batch-completion notes, scratch computation, cross-validation status,
@@ -99,6 +99,14 @@ SKILL_ANCHORS: dict[str, list[str]] = {
     "portfolio-builder": [
         r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:portfolio builder|portfolio construction|investment thesis)\b",
         _branding("portfolio construction"),
+    ],
+    "should-i-buy": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:the company|should i buy|stock (?:review|evaluation))\b",
+        _branding("stock review"),
+    ],
+    "score-explainer": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:the question|score explainer)\b",
+        _branding("score explainer"),
     ],
 }
 

@@ -157,6 +157,7 @@ _NINE_TWO_EXEMPT_SKILLS: frozenset[str] = frozenset(
     {
         "parallax-white-label-onboard",
         "parallax-make-house-view",
+        "parallax-load-house-view",
     }
 )
 
@@ -259,7 +260,7 @@ def test_no_skill_inlines_standard_disclaimer() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Provenance error-state count drift gate
+# About This Report error-state count drift gate
 # ---------------------------------------------------------------------------
 
 _HARDCODED_COUNT_RE = re.compile(

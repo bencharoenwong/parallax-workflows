@@ -8,15 +8,15 @@ Called on every skill invocation — optimised to be silent on success.
 Public interface
 ----------------
     load_client_branding() -> dict[str, Any]
-        Full 13-key shape (visual + voice + token tree). Voice consumers only.
+        Full 14-key shape (visual + voice + token tree + render defaults). Voice consumers only.
     load_visual_branding() -> dict[str, Any]
-        Visual-only 6-key subset (client_name, colors, logos, fonts, source,
-        error). Structurally excludes voice/typography/multi_source — accessing
+        Visual-only 7-key subset (client_name, colors, logos, fonts, source,
+        error, render). Structurally excludes voice/typography/multi_source — accessing
         e.g. result["voice"] raises KeyError. Use from any visual-rendering
         consumer skill.
     build_config_from_draft(draft, validation_summary=None) -> dict[str, Any]
 
-Return shape (always 13 top-level keys, identical on success and error paths)
+Return shape (always 14 top-level keys, identical on success and error paths)
 -----------------------------------------------------------------------------
     {
         "client_name":       str,              # "" when no config
@@ -27,6 +27,7 @@ Return shape (always 13 top-level keys, identical on success and error paths)
         "confidence_scores": dict | {},
         "voice":             dict | {},        # {"enabled": False} if not extracted
         "multi_source":      dict | {},        # populated only when 2+ sources used
+        "render":            dict | {},        # deployment render defaults per conventions §13
         "error":             str | None,       # None = clean load
         # v2-aware bonus keys — empty dicts on v1 configs and on every error
         # path, so consumers can read result["typography"] etc. unconditionally.
@@ -203,6 +204,15 @@ _JSONSCHEMA: dict[str, Any] = {
                 "agreements": {"type": "array"},
             },
         },
+        "render": {
+            "type": "object",
+            "properties": {
+                "audience_default": {
+                    "type": "string",
+                    "enum": ["client_safe", "internal_analyst"],
+                },
+            },
+        },
     },
 }
 
@@ -255,7 +265,7 @@ def _resolve_config_path() -> Path:
 
 
 def _empty_result(error: str) -> dict[str, Any]:
-    """Canonical 13-key empty result dict with a populated error field.
+    """Canonical 14-key empty result dict with a populated error field.
 
     Matches the success-path shape from _build_result so v2-aware consumers
     reading result["typography"] / ["rounded"] / ["spacing"] / ["components"]
@@ -270,6 +280,7 @@ def _empty_result(error: str) -> dict[str, Any]:
         "confidence_scores": {},
         "voice":             {"enabled": False},
         "multi_source":      {},
+        "render":            {},
         "error":             error,
         "typography":        {},
         "rounded":           {},
@@ -336,7 +347,7 @@ def _resolve_logo_paths(
     treated as "no logo supplied" and silently resolve to "" with no warning.
     Rejection messages name only the key and reason category — the raw path
     is intentionally omitted from both the error string and the WARNING log,
-    so operator paths do not leak into centralized logs or Provenance.
+    so operator paths do not leak into centralized logs or About This Report.
 
     Returns (resolved_logos_dict, list_of_warning_strings).
     """
@@ -553,7 +564,7 @@ def _build_result(
     logo_warnings: list[str],
 ) -> dict[str, Any]:
     """
-    Assemble the canonical 13-key result dict from validated, logo-resolved data.
+    Assemble the canonical 14-key result dict from validated, logo-resolved data.
 
     The four v2 token-tree keys (typography, rounded, spacing, components) are
     populated unconditionally — as empty dicts on v1 configs — so consumers
@@ -565,6 +576,7 @@ def _build_result(
     metadata = data.get("metadata", {})
     voice    = data.get("voice", {"enabled": False})
     multi    = data.get("multi_source", {})
+    render   = data.get("render", {})
 
     version = _detect_schema_version(data)
     if version >= 2:
@@ -601,6 +613,7 @@ def _build_result(
         "confidence_scores": data.get("confidence_scores", {}),
         "voice":             voice,
         "multi_source":      multi,
+        "render":            render,
         "error":             error,
         **extra
     }
@@ -759,6 +772,8 @@ def build_config_from_draft(
 
     if "multi_source" in draft:
         config["multi_source"] = draft["multi_source"]
+    if "render" in draft:
+        config["render"] = draft["render"]
 
     return config
 
@@ -772,10 +787,10 @@ def load_client_branding() -> dict[str, Any]:
     """
     Load and validate client branding configuration.
 
-    Returns a dict with a fixed 13-key shape on every path (success, error,
+    Returns a dict with a fixed 14-key shape on every path (success, error,
     schema-unavailable, v1, v2): client_name, colors, logos, fonts, source,
     confidence_scores, voice, multi_source, error, typography, rounded,
-    spacing, components. error is None on a fully clean load, a
+    spacing, components, render. error is None on a fully clean load, a
     human-readable string on any degradation.
 
     On v1 configs and on every error path, the four token-tree keys
@@ -870,6 +885,7 @@ _VISUAL_BRANDING_KEYS: tuple[str, ...] = (
     "fonts",
     "source",
     "error",
+    "render",
 )
 
 
@@ -877,8 +893,9 @@ def load_visual_branding() -> dict[str, Any]:
     """
     Visual-branding-only subset of :func:`load_client_branding`.
 
-    Returns the six keys a visual-rendering skill is permitted to read:
-    ``client_name``, ``colors``, ``logos``, ``fonts``, ``source``, ``error``.
+    Returns the seven keys a visual-rendering skill is permitted to read:
+    ``client_name``, ``colors``, ``logos``, ``fonts``, ``source``, ``error``,
+    ``render``. ``render`` carries deployment render defaults per conventions §13.
 
     Voice prose and v2-only token-tree keys (``typography``, ``rounded``,
     ``spacing``, ``components``, ``multi_source``, ``confidence_scores``) are
@@ -932,7 +949,7 @@ def safe_source_reference(branding: dict[str, Any]) -> str:
 
     URLs collapse to scheme+hostname; filesystem paths collapse to basename;
     other strings pass through. Prevents leaking pre-signed URLs, internal
-    paths, or full-source URLs into the Provenance footer.
+    paths, or full-source URLs into the About This Report footer.
     """
     ref = (branding.get("source") or {}).get("reference", "")
     if not isinstance(ref, str) or not ref:
