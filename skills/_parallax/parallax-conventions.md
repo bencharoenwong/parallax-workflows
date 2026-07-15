@@ -304,7 +304,7 @@ Every workflow output that contains AI-generated narrative, synthesis, or recomm
 
 > *AI-assisted output. Quantitative data — factor scores, financials, peer mappings, technicals, price series — is from Parallax's deterministic pipelines. Qualitative content — news synthesis, macro commentary, AI assessments, narrative framing, and recommendations — is LLM-generated, either by Parallax's MCP services (news, macro, assessment) or by the orchestrating model (narrative and recommendations). See the 'About This Report' footer for this output's branding and data-basis state. Verify any specific statement before acting.*
 
-<!-- COUNSEL-TBD — final wording subject to counsel sign-off. The current text is the working banner: it accurately distinguishes deterministic quantitative pipelines from LLM-generated qualitative content (covering both Parallax MCP services like news/macro/assessment and the orchestrating model), and avoids a methodology URL. Do not add a URL until counsel has signed off. Per-source attribution/version and trace-ID resolution are the documented upgrade path — neither is rendered today; re-expand the banner to reference a dedicated attribution section and a trace ID once the end-to-end attribution API lands, and the change propagates to all consumer skills via this single source of truth. -->
+<!-- Maintainer note: this is a working banner pending final review. It intentionally distinguishes deterministic quantitative pipelines from LLM-generated qualitative content and keeps the banner URL-free; do not add a methodology URL. -->
 
 **Why §9.2 is mandatory:**
 
