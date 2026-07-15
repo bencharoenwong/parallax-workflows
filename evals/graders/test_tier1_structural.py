@@ -65,6 +65,22 @@ def test_recommendation_inside_bottom_line_fails():
     assert _result_map(grade_tier1(t))["bottom_line_no_rec"] is False
 
 
+def test_legacy_provenance_footer_does_not_bleed_into_bottom_line():
+    # A stored legacy transcript whose final section is the pre-rename "## Provenance"
+    # must still terminate the preceding Bottom Line section (via _SECTION_ALIASES),
+    # so recommendation language in the footer does not fold into Bottom Line and
+    # trip a false bottom_line_no_rec failure.
+    from transcript import Transcript
+    t = Transcript(
+        final_prose=(
+            "## Bottom Line\nSolid quality but rich valuation.\n\n"
+            "## Provenance\nParallax MCP. Analysts we recommend buy this name.\n"
+        ),
+        tool_calls=[],
+    )
+    assert _result_map(grade_tier1(t))["bottom_line_no_rec"] is True
+
+
 def test_ai_disclosure_matches_canonical_92_banner():
     from transcript import Transcript
     t = Transcript(

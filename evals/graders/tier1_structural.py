@@ -75,7 +75,15 @@ def _section_text(prose: str, heading: str, labels: list[str]) -> str:
     target = _norm_tokens(heading)
     if not target:
         return ""
-    others = [_norm_tokens(s) for s in labels if _norm_tokens(s) != target]
+    # Boundary labels must include every accepted alias (e.g. the legacy
+    # "Provenance" for "About This Report"), so a legacy-labeled final section
+    # still terminates the preceding section instead of bleeding into it.
+    others = []
+    for s in labels:
+        for alias in _SECTION_ALIASES.get(s, (s,)):
+            n = _norm_tokens(alias)
+            if n != target:
+                others.append(n)
     lines = prose.splitlines()
     start = None
     for i, line in enumerate(lines):
