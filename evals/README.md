@@ -113,6 +113,7 @@ evals/
 │   ├── portfolio-builder/  # constructive thesis-to-allocation
 │   ├── rebalance/          # prioritized trades + quantified targets
 │   ├── watchlist-monitor/  # score-surveillance scan (no weights)
+│   ├── deep-dive/          # single-position research (structural-only)
 │   └── portfolio-checkup/  # DRAFT — spec only, never run live
 ├── tasks/<skill>/core.jsonl  # eval task inputs per skill
 ├── fixtures/<skill>/       # golden + broken stream-json transcripts (offline tests)

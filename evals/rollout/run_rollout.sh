@@ -26,8 +26,11 @@ RESULTS="$REPO_ROOT/evals/results"
 mkdir -p "$RESULTS"
 
 # Skill is parameterized via env so existing should-i-buy callers are unchanged.
-#   ROLLOUT_CMD    — slash command to invoke (default /parallax-should-i-buy)
-#   ROLLOUT_PREFIX — output filename prefix   (default should-i-buy)
+#   ROLLOUT_CMD              — slash command to invoke (default /parallax-should-i-buy)
+#   ROLLOUT_PREFIX           — output filename prefix   (default should-i-buy)
+#   ROLLOUT_TIMEOUT_SECONDS  — kill the rollout process group after N seconds
+#                              (default 900); on timeout the partial output is
+#                              removed and the script exits 124.
 CMD="${ROLLOUT_CMD:-/parallax-should-i-buy}"
 PREFIX="${ROLLOUT_PREFIX:-should-i-buy}"
 
