@@ -1,23 +1,6 @@
 ---
 name: parallax-white-label-stock-report
 description: "Render a Parallax full stock research report (the get_stock_report output) under a client's brand as a white-labeled HTML and PDF. Takes a ticker (RIC), pulls the report, and re-renders all sections (cover, factor scores, thesis, company + peers, technical, financial analysis, statements, ratios, analyst ratings, disclosures) with the client's logo, colors, and fonts from the active white-label config. Visual skin only: keeps Chicago Global / MAS regulatory disclosures verbatim and a \"Powered by Parallax\" credit. Standalone, no shared-module dependency. NOT for configuring client branding (use /parallax-white-label-onboard first), not for monthly CIO LP letters (use /parallax-cio-letter-prep), not for ad-hoc single-stock analysis or research workflows (use /parallax-deep-dive or /parallax-due-diligence)."
-negative-triggers:
-  - Setting up or editing the client brand config → use /parallax-white-label-onboard
-  - Monthly fund-manager letter to LPs → use /parallax-cio-letter-prep
-  - Interactive single-stock analysis / buy decision → use /parallax-should-i-buy or /parallax-deep-dive
-  - Full DIY research workflow (Palepu, financials) → use /parallax-due-diligence
-  - Portfolio-level review → use /parallax-client-review
-gotchas:
-  - Standalone by design. This skill imports NO sibling or shared module (no _parallax/white-label/ loader, no integration-pattern.md). render_stock_report.py inlines its own branding reader, token map, semantic-color rule, and the CGC disclosure boilerplate. The only files it reads at runtime are the report JSON and the brand config.
-  - The renderer is deterministic. The model's job is orchestration only (resolve ticker, call get_stock_report, run the script, review). NEVER hand-write or hand-edit the report HTML; that breaks Claude/Codex parity. Same script + same inputs = identical output.
-  - get_stock_report is PAID (about 1-2 min). Check the cache at ~/.parallax/stock-report-cache/<RIC>-<YYYY-MM-DD>.json first; pass --force only to refresh.
-  - Single-letter US tickers fail as bare symbols ("Symbol too short"). Resolve to RIC first (Visa = V.N, not V). Use search_stocks to confirm the RIC.
-  - Disclosures are NOT in the get_stock_report JSON. The skill renders its own bundled verbatim copy of the Chicago Global / MAS disclosure boilerplate. It is a pinned asset; if CGC updates its disclosure wording, re-sync the constant in render_stock_report.py from response.html_url. Never reword it.
-  - Semantic colors (positive green, negative red, warning amber) are FIXED and never taken from the brand. They carry meaning, not identity. Only primary/secondary/accent/background/fonts/logo come from the client config.
-  - Output language is English only. Translation hand-offs in the workflow skills operate on chat-layer prose; they do not localize this renderer's HTML/PDF (see `references/field-map.md`, 'Localization boundary').
-  - No active brand config → the renderer falls back to the default Parallax palette and the output is NOT white-labeled. Run /parallax-white-label-onboard first to skin it for a client.
-  - Output is two independent choices (see Compliance): whose disclosures (Chicago Global / MAS by default, or the client's OWN via --full-white-label, collected at run time into voice.disclaimers[] and refused if empty), and whether to keep the "Powered by Parallax" credit (shown by default; kept in full white-label only with --powered-by). Never hand-edit disclosures or improvise a private-label without the client's confirmed disclosure language.
-  - During early rollout, do not send a generated report to an end client until Chicago Global has signed off on the compliance posture.
 ---
 
 # White-Label Stock Report
@@ -156,3 +139,24 @@ The renderer is plain deterministic Python, so Claude and Codex produce identica
 - `references/sample-acme.synthetic.json` - a de-identified synthetic get_stock_report response (fictional company), used as the test fixture.
 - `references/field-map.md` - verbatim JSON field paths the renderer reads.
 - `tests/test_render_smoke.py` - smoke test (sections present, branding applied, semantic colors fixed, disclosures verbatim).
+
+## When not to use
+
+- Setting up or editing the client brand config → use /parallax-white-label-onboard
+- Monthly fund-manager letter to LPs → use /parallax-cio-letter-prep
+- Interactive single-stock analysis / buy decision → use /parallax-should-i-buy or /parallax-deep-dive
+- Full DIY research workflow (Palepu, financials) → use /parallax-due-diligence
+- Portfolio-level review → use /parallax-client-review
+
+## Gotchas
+
+- Standalone by design. This skill imports NO sibling or shared module (no _parallax/white-label/ loader, no integration-pattern.md). render_stock_report.py inlines its own branding reader, token map, semantic-color rule, and the CGC disclosure boilerplate. The only files it reads at runtime are the report JSON and the brand config.
+- The renderer is deterministic. The model's job is orchestration only (resolve ticker, call get_stock_report, run the script, review). NEVER hand-write or hand-edit the report HTML; that breaks Claude/Codex parity. Same script + same inputs = identical output.
+- get_stock_report is PAID (about 1-2 min). Check the cache at ~/.parallax/stock-report-cache/<RIC>-<YYYY-MM-DD>.json first; pass --force only to refresh.
+- Single-letter US tickers fail as bare symbols ("Symbol too short"). Resolve to RIC first (Visa = V.N, not V). Use search_stocks to confirm the RIC.
+- Disclosures are NOT in the get_stock_report JSON. The skill renders its own bundled verbatim copy of the Chicago Global / MAS disclosure boilerplate. It is a pinned asset; if CGC updates its disclosure wording, re-sync the constant in render_stock_report.py from response.html_url. Never reword it.
+- Semantic colors (positive green, negative red, warning amber) are FIXED and never taken from the brand. They carry meaning, not identity. Only primary/secondary/accent/background/fonts/logo come from the client config.
+- Output language is English only. Translation hand-offs in the workflow skills operate on chat-layer prose; they do not localize this renderer's HTML/PDF (see `references/field-map.md`, 'Localization boundary').
+- No active brand config → the renderer falls back to the default Parallax palette and the output is NOT white-labeled. Run /parallax-white-label-onboard first to skin it for a client.
+- Output is two independent choices (see Compliance): whose disclosures (Chicago Global / MAS by default, or the client's OWN via --full-white-label, collected at run time into voice.disclaimers[] and refused if empty), and whether to keep the "Powered by Parallax" credit (shown by default; kept in full white-label only with --powered-by). Never hand-edit disclosures or improvise a private-label without the client's confirmed disclosure language.
+- During early rollout, do not send a generated report to an end client until Chicago Global has signed off on the compliance posture.
