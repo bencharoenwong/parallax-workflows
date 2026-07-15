@@ -65,6 +65,22 @@ def test_recommendation_inside_bottom_line_fails():
     assert _result_map(grade_tier1(t))["bottom_line_no_rec"] is False
 
 
+def test_legacy_provenance_footer_does_not_bleed_into_bottom_line():
+    # A stored legacy transcript whose final section is the pre-rename "## Provenance"
+    # must still terminate the preceding Bottom Line section (via _SECTION_ALIASES),
+    # so recommendation language in the footer does not fold into Bottom Line and
+    # trip a false bottom_line_no_rec failure.
+    from transcript import Transcript
+    t = Transcript(
+        final_prose=(
+            "## Bottom Line\nSolid quality but rich valuation.\n\n"
+            "## Provenance\nParallax MCP. Analysts we recommend buy this name.\n"
+        ),
+        tool_calls=[],
+    )
+    assert _result_map(grade_tier1(t))["bottom_line_no_rec"] is True
+
+
 def test_ai_disclosure_matches_canonical_92_banner():
     from transcript import Transcript
     t = Transcript(
@@ -96,8 +112,14 @@ def test_scores_trend_accepts_arrow_notation():
 # --- real-output format calibration (locked against live should-i-buy, 2026-05-29) ---
 
 def test_section_present_matches_italic_provenance_label():
-    # Live skill renders Provenance as "*Provenance: ...*", not a "## Provenance" heading.
-    assert _section_present("*Provenance: Branding — default Parallax. Data from pipelines.*", "Provenance") is True
+    # Live skill renders About This Report as "*About This Report: ...*", not a "## About This Report" heading.
+    assert _section_present("*About This Report: Branding — default Parallax. Data from pipelines.*", "About This Report") is True
+
+
+def test_provenance_present_accepts_legacy_label():
+    from transcript import Transcript
+    t = Transcript(final_prose="## Provenance\nBranding: default Parallax\n", tool_calls=[])
+    assert _result_map(grade_tier1(t))["provenance_present"] is True
 
 
 def test_section_present_tolerates_vs_period_heading():
@@ -110,7 +132,7 @@ def test_section_present_matches_plain_heading():
 
 
 def test_section_present_absent_returns_false():
-    assert _section_present("## Recent News\nbody", "Provenance") is False
+    assert _section_present("## Recent News\nbody", "About This Report") is False
 
 
 # --- two-lens raised-bar gate (Stage 2; design-doc §4.4) ---

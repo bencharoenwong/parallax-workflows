@@ -65,7 +65,7 @@ Re-litigating any of the above requires a new public anchor that meets the inclu
 
 ## Legal posture
 
-Profiles are not gated on legal review before invocation. The disclaimer language in `output-template.md` does the legal work at runtime: "not financial advice," "AI-inferred from publicly available information," "consult a qualified financial advisor." Every profile output carries this disclaimer. Counsel review is a continuous quality process that may tighten wording but does not block the skills from running. See design spec §6.1 for rationale.
+Profiles are not gated on legal review before invocation. The disclaimer language in `output-template.md` does the legal work at runtime: "not financial advice," "AI-inferred from publicly available information," "consult a qualified financial advisor." Every profile output carries this disclaimer. Counsel review is a continuous quality process that may tighten wording but does not block the skills from running. See design spec §6.1 for rationale. For the compliance-facing rationale on the named-investor framing itself, see `methodology-faq.md`.
 
 ## Related files
 

@@ -59,7 +59,7 @@ Quality 6.2 → 7.0 after trims.
 ## Implementation Notes
 Execute the AAPL trim first for liquidity.
 
-## Provenance
+## About This Report
 Default Parallax branding.
 
 *AI-assisted output. Verify any specific statement before acting.*

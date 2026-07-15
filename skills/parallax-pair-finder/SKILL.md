@@ -26,7 +26,7 @@ description: "Long/short equity pair builder: given one leg, suggest top-3 count
 - Output gate (HARD HALT): refuse to render hedge ratios if benchmark price series is null or has < 60 observations. Do NOT substitute pair-relative regression beta and emit a caveat — that pattern is BANNED for primary deliverables. Halt with named failure reason and operator-action options.
 - JIT-load `_parallax/house-view/loader.md` if an active CIO view is present. Pair-finder is dual-single-stock per `loader.md` §7 (read-only consumers): tilts are NOT applied to candidate ranking or score subtraction. The view surfaces as: (a) §7.3 score-vs-view tension banner per leg (if leg's total ≥ 7 AND leg's sector tilt ≤ -1 in view), (b) §7.1 House View Note rendered once per pair after the per-pair detail, (c) §6 audit log per pair evaluated. §7.2 peer-suggest token N/A — pair-finder constructs its own candidate set from `export_peer_comparison`, not via `get_peer_snapshot.suggestion`.
 - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
 
 Long/short equity pair construction for fundamental PMs. Given one leg of a thesis, suggest the other leg from peers and report what residual exposure survives the hedge. Given both legs, report the residual.
 
@@ -233,13 +233,13 @@ If a view was loaded in Pre-Workflow, for each leg (primary + each candidate in 
 
 ### Pre-Render — Load white-label branding
 
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format. The loader returns exactly six keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
 
 ## Output Format
 
 **House View Preamble** (only if view active) — render per loader.md §5 rule 1 at the very top, before the mode-specific output. Per loader.md §5.1.
 
-**Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** pair finder`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to Provenance.
+**Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** pair finder`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to About This Report.
 
 ### Suggestion mode (Mode 1 / Mode 2)
 
@@ -297,9 +297,9 @@ Single-pair report — no comparison table:
 - **Score comparability flag** (always render — same_universe or cross_universe)
 - Liquidity disclaimer + standard disclaimer
 
-### Provenance (always present, bottom of output)
+### About This Report (always present, bottom of output)
 
-One line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+One line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second About This Report line.
 
 ## Disclaimer
 

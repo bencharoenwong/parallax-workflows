@@ -20,7 +20,9 @@ description: "Monitor a watchlist of tickers: flag score changes, news alerts, t
 - get_score_analysis with 4-8 weeks is sufficient for detecting recent changes — fire all in parallel. `weeks` is non-default here and must be passed as a typed integer at the call site (see conventions §0.2)
 - Only call get_news_synthesis for names with significant score changes (saves API calls)
 - Rank output by magnitude of change — most-changed at top
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
+- Cost: ~54 tokens at 10 symbols (see `_parallax/token-costs.md`): 1/symbol score scan + ~11 per flagged name (news 5 + technicals 5 + outlook 1)
+- Coverage: listed equities and ETFs only; fund/OEIC symbols surface the conventions §1 not-covered fallback, not a raw error
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
 
 Surveillance scan across a list of tickers — flag what's changed, what needs attention.
 
@@ -44,13 +46,15 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 ## Output Format
 
 - **Watchlist Summary** (table: all symbols, current total score, score change, alert flag)
+- **Verdict sensitivity** (one line, per `parallax-conventions.md` §11 by reference): the 1-2 symbols nearest the alert boundary (the >1-point total / >2-point single-factor cutoffs in Workflow step 2) and the arithmetic that would flip Alert ↔ Stable.
 - **Alerts** (ranked by magnitude of change):
   - **Symbol** — score change, which factors moved, brief catalyst
 - **Stable Names** (one-liner each — "no material changes")
 - **Recommended Actions** (which names warrant a deeper look via /parallax-deep-dive)
-- **Provenance** (always present, even when branding is default):
-  - Use a real markdown heading: `## Provenance`
+- **About This Report** (always present, even when branding is default):
+  - Use a real markdown heading: `## About This Report`
   - First line inside the section: `Branding: default Parallax`
+  - Unconditional second line, per integration-pattern.md §7: `Currency: figures as reported by source data; no base-currency conversion applied.`
   - If a logo was skipped under white-label, add `Logo on file: <basename>`
 
 Keep it scannable. Lead with what changed.
@@ -58,11 +62,11 @@ Keep it scannable. Lead with what changed.
 ## Output additions
 
 - **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line at the very top: `**<client_name>** watchlist scan`. Logo handling per integration-pattern.md §5.
-- **Provenance** (always present): render a `## Provenance` section with the branding-state line above. Place it before the AI disclosure/disclaimer footer. If a logo was skipped, include `Logo on file: <basename>` as a second line.
+- **About This Report** (always present): render a `## About This Report` section with the branding-state line above. Place it before the AI disclosure/disclaimer footer. If a logo was skipped, include `Logo on file: <basename>` as a second line.
 
 ### Pre-Render — Load white-label branding
 
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format.
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format.
 
 ### Render — deterministic gate (LAST step, mandatory)
 
@@ -78,7 +82,7 @@ python3 "<skill-dir>/../_parallax/render_gate.py" --skill watchlist-monitor < "$
 
 **Your entire final message is exactly that command's stdout** — nothing before it (no step/batch-completion notes, no scratch computation, no "no active house view" / white-label config-probe narration), nothing after it.
 
-**Degraded-state rule:** if an async tool (e.g. `get_assessment`, `get_news_synthesis`) times out or returns no data, render the pending/unavailable note INSIDE the relevant section or the Provenance line — NOT as a preamble above the report — so it is part of the rendered body and survives the gate. (The gate also hoists a leaked degraded note as a backstop.)
+**Degraded-state rule:** if an async tool (e.g. `get_assessment`, `get_news_synthesis`) times out or returns no data, render the pending/unavailable note INSIDE the relevant section or the About This Report line — NOT as a preamble above the report — so it is part of the rendered body and survives the gate. (The gate also hoists a leaked degraded note as a backstop.)
 
 `_parallax/render_gate.py` is pure-stdlib and deterministically drops anything before the first rendered block (House View Preamble banner / Branding Header / Ground-truth Integrity / this skill's title or first rendered section), preserving the active-house-view banner in every `view_status` state. Same operator-agnostic-helper pattern as `view_status.py` / `loader.py` (a real Bash tool call, not prose).
 

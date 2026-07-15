@@ -87,3 +87,40 @@ The MAS regulatory disclosure, AI analyst certification, conflict-management pol
 1. report.company.* numeric fields are strings; report.peers[].* and report.score_widths.* are numeric. Normalize on read.
 2. Two price targets (cover peer-P/E vs analyst consensus). Two current-price snapshots (use vital_stats). Two return sets (use period_returns for the strip, current_ratios for Key Statistics).
 3. Statement values are raw units (e.g. revenue 416161000000 with unitsconvtocode "M"); divide to millions for display to match the official report.
+
+## Localization boundary (translation contract)
+
+The branded stock-report renderer and its HTML/PDF output are English-only. Section chrome, table headers, and the pinned disclosure boilerplate are hardcoded in `render_stock_report.py`; disclosures may never be reworded, including by translation, without compliance sign-off.
+
+The library's translation skills consume composed chat-layer prose or the flat `*Text`-key macro/CIO JSON shape. The nested `get_stock_report` schema documented in this file is not a supported translator input.
+
+Field-path classification for a future localized-report project:
+
+**Prose (translatable in a future localized-report project):**
+- `report.investment_thesis.title`, `.hook`, `.para1`, `.para2`, `.para3`, `.para4`
+- `report.company_profile.para1`, `.para2`, `.para3`
+- `report.score_analysis`
+- `report.peers_analysis`
+- `report.analyst_analysis`
+- `report.financial_summary`
+- `report.news_analysis.title`, `.bullet1`, `.bullet2`, `.bullet3`
+- `report.technical_analysis.executive_summary`
+- `report.technical_analysis.technical_analysis.trend_analysis`, `.momentum_indicators`, `.volume_analysis`, `.price_action`, `.volatility_assessment`
+- `report.technical_analysis.risk_assessment.volatility_level`, `.risk_factors`
+- `report.financial_analysis.executivesummary.keyhighlights`
+- `report.financial_analysis.detailedanalysis.businessstrategy.industryposition`, `.competitiveadvantage`, `.businessmodel`, `.keyrisks`
+- `report.financial_analysis.detailedanalysis.accountingquality.earningsquality`, `.conservatismlevel`, `.keypolicies`, `.accountingredflags`
+- `report.financial_analysis.detailedanalysis.prospectiveanalysis.futureearnings`, `.growthprospects`, `.valuationassessment`, `.scenarioanalysis`
+
+**Data (pass-through always):**
+- Scores: `report.company.value`, `.quality`, `.momentum`, `.defensive`, `.tactical`, `.total`
+- Score widths: `report.score_widths.*`
+- Financial statements: `report.income_statement`, `report.balance_sheet`, `report.cash_flow`
+- Ratios and key statistics: `report.current_ratios.*`, `report.key_ratios`
+- Peer rows: `report.peers`
+- Price target fields: `report.dcf_valuation.target_value`, `report.price_target.*`
+- Return fields: `report.period_returns.*`
+- Dates: `report.generated_date`, statement period dates, `report.price_target.target_calc_date`
+- Currency fields: `report.company.currency`, `report.financial_statement_currency`
+
+A localized branded report additionally requires renderer i18n for headers, CJK/Thai font stacks, locale number/date handling, and translated compliance-approved disclosures. That work is out of scope until specified as its own project.

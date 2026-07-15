@@ -75,7 +75,15 @@ def _section_text(prose: str, heading: str, labels: list[str]) -> str:
     target = _norm_tokens(heading)
     if not target:
         return ""
-    others = [_norm_tokens(s) for s in labels if _norm_tokens(s) != target]
+    # Boundary labels must include every accepted alias (e.g. the legacy
+    # "Provenance" for "About This Report"), so a legacy-labeled final section
+    # still terminates the preceding section instead of bleeding into it.
+    others = []
+    for s in labels:
+        for alias in _SECTION_ALIASES.get(s, (s,)):
+            n = _norm_tokens(alias)
+            if n != target:
+                others.append(n)
     lines = prose.splitlines()
     start = None
     for i, line in enumerate(lines):
@@ -93,10 +101,20 @@ def _section_text(prose: str, heading: str, labels: list[str]) -> str:
     return "\n".join(lines[start:end])
 
 
+# Section labels renamed over time; a required section is satisfied by any of its
+# accepted aliases so stored baseline transcripts stay re-gradable.
+_SECTION_ALIASES = {
+    "About This Report": ("About This Report", "Provenance"),
+}
+
+
 # --- Checks: each takes (transcript, spec) ----------------------------------
 
 def _c_sections_present(t: Transcript, spec: EvalSpec) -> Check:
-    missing = [s for s in spec.required_sections if not _section_present(t.final_prose, s)]
+    missing = [
+        s for s in spec.required_sections
+        if not any(_section_present(t.final_prose, alias) for alias in _SECTION_ALIASES.get(s, (s,)))
+    ]
     return Check("sections_present", not missing, f"missing={missing}")
 
 
@@ -119,8 +137,9 @@ def _c_dividends_explicit(t: Transcript, spec: EvalSpec) -> Check:
 
 
 def _c_provenance_present(t: Transcript, spec: EvalSpec) -> Check:
-    ok = _section_present(t.final_prose, "Provenance")
-    return Check("provenance_present", ok, "Provenance line present")
+    # Legacy label accepted so stored baseline transcripts stay re-gradable.
+    ok = _section_present(t.final_prose, "About This Report") or _section_present(t.final_prose, "Provenance")
+    return Check("provenance_present", ok, "About This Report line present")
 
 
 def _c_ai_disclosure_present(t: Transcript, spec: EvalSpec) -> Check:

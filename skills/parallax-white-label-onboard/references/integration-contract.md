@@ -9,7 +9,7 @@ How visual and voice consumers load and apply white-label branding. SKILL.md kee
 - **Tier 1**: `/parallax-cio-letter-prep`, `/parallax-client-review`, `/parallax-due-diligence`, `/parallax-deep-dive`
 - **Tier 2**: `/parallax-should-i-buy`, `/parallax-thematic-screen`, `/parallax-portfolio-checkup`, `/parallax-portfolio-builder`, `/parallax-rebalance`, `/parallax-morning-brief`, `/parallax-explain-portfolio`, `/parallax-scenario-analysis`, `/parallax-country-deep-dive`, `/parallax-pair-finder`, `/parallax-peer-comparison`, `/parallax-macro-outlook`
 
-The canonical consumer-side contract — header rendering, provenance line, color substitution, logo placement, fallback behavior — lives in `_parallax/white-label/integration-pattern.md` (§1–§9). New visual consumers must JIT-load it via the `<!-- white-label: integration-pattern.md -->` sentinel; the drift gate at `tests/test_integration_pattern_referenced.py` enforces the sentinel ↔ load-directive pairing.
+The canonical consumer-side contract — header rendering, footer line, color substitution, logo placement, fallback behavior — lives in `_parallax/white-label/integration-pattern.md` (§1–§9). New visual consumers must JIT-load it via the `<!-- white-label: integration-pattern.md -->` sentinel; the drift gate at `tests/test_integration_pattern_referenced.py` enforces the sentinel ↔ load-directive pairing.
 
 **Voice consumers** — letter-writing, newsletter, meeting-prep, email-drafting, and any skill that produces written content under the client's name. They read `voice.*` and apply it as a style guide before generating prose. They optionally also read `branding.*` if the output is rendered (e.g., a branded PDF letter).
 
@@ -17,14 +17,14 @@ Both classes silently fall back to default Parallax styling/voice if the config 
 
 ## Visual consumer loading pattern
 
-Visual-rendering skills call `loader.load_visual_branding()` — it returns only the six keys a visual consumer is permitted to read (`client_name`, `colors`, `logos`, `fonts`, `source`, `error`) and structurally excludes `voice`/typography/`multi_source` so a misuse (`branding["voice"]`) raises `KeyError` instead of silently inheriting voice data. Pair it with `loader.is_white_label_active(branding)` (rendering predicate — do not re-implement inline; see `integration-pattern.md` §2/§4/§8) and `loader.safe_source_reference(branding)` (display-safe Provenance source ref — §7). The full 13-key shape from `load_client_branding()` is reserved for voice consumers (CIO letter, newsletter, future writing skills) that need both visual and voice. Both wrappers bridge v1↔v2 file shapes so downstream code keeps working through the schema migration:
+Visual-rendering skills call `loader.load_visual_branding()` — it returns only the seven keys a visual consumer is permitted to read (`client_name`, `colors`, `logos`, `fonts`, `source`, `error`, `render`) and structurally excludes `voice`/typography/`multi_source` so a misuse (`branding["voice"]`) raises `KeyError` instead of silently inheriting voice data. Pair it with `loader.is_white_label_active(branding)` (rendering predicate — do not re-implement inline; see `integration-pattern.md` §2/§4/§8) and `loader.safe_source_reference(branding)` (display-safe About This Report source ref — §7). The full 14-key shape from `load_client_branding()` is reserved for voice consumers (CIO letter, newsletter, future writing skills) that need both visual and voice. Both wrappers bridge v1↔v2 file shapes so downstream code keeps working through the schema migration:
 
 ```python
 from skills._parallax.white_label.loader import load_visual_branding
 
 result = load_visual_branding()
 if result.get("error") is None:
-    # 6-key visual subset — works against both v1 AND v2 config.yaml on disk
+    # 7-key visual subset — works against both v1 AND v2 config.yaml on disk
     primary_color = result["colors"]["primary"]
     accent_color  = result["colors"]["accent"]   # v2: derived from colors.tertiary
     bg_color      = result["colors"]["background"]  # v2: derived from colors.neutral

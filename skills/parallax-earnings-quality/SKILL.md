@@ -20,7 +20,7 @@ description: "Forensic earnings quality analysis: revenue recognition patterns, 
 - Quality score of 10 doesn't mean no risk — dig into sub-components
 - Cross-reference news for context on any red flags found
 - Focus output on actionable risk flags, not comprehensive financial review
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
 
 ## Usage
 
@@ -64,11 +64,11 @@ Call `get_assessment` with a prompt focused on: earnings quality concerns, reven
 - **AI Assessment** (synthesized risk opinion)
 - **Recommended Actions** (what to monitor, what warrants deeper investigation)
 - **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line at the very top: `**<client_name>** earnings quality review`. Logo handling per integration-pattern.md §5.
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7. If a logo was skipped, append `Logo on file: <basename>` as a second Provenance line.
+- **About This Report** (always present): one line stating branding state per integration-pattern.md §7. If a logo was skipped, append `Logo on file: <basename>` as a second About This Report line.
 
 ### Pre-Render — Load white-label branding
 
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format.
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format.
 
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 

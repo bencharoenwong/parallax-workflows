@@ -28,7 +28,7 @@ description: "Applies Seth Klarman's margin-of-safety framework (per 'Margin of 
 - NEVER use first-person impersonation; always "Klarman-style"
 - Disclaimer verbatim per output-template.md, substituting "Seth Klarman" for [Investor]
 - Value threshold is intentionally loose (≥ 4) per Lev-Srivastava 2022 intangibles caveat — do not tighten without re-anchoring
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
 
 Applies Seth Klarman's margin-of-safety framework to a single stock's current balance sheet, cash flow, and peer-relative valuation.
 
@@ -146,10 +146,12 @@ Parallax Value sub-score (backup check): <score> / 10
 
 Profile fit: <match / partial_match / no_match> — <count> of 4 checks passed.
 
+Verdict sensitivity: the verdict-relevant input nearest its cutoff is <check or Value backup> (<actual> vs <target>); state the arithmetic crossing that would change the pass count or Value backup status, and state the verdict change only when that crossing changes the overall match / partial / no-match tier.
+
 [Optional: "No position warranted on this ticker per margin-of-safety principles. Cash is a valid stance."]
 
 Workflow derived from: Klarman, S. (1991). Margin of Safety.
-Last anchor-tested: 2026-04-07 (BRKb.N, NVDA.O) | Last legal review: pending
+Last anchor-tested: 2026-04-07 (BRKb.N, NVDA.O)
 Tool sequence: get_company_info, get_peer_snapshot, get_financials(balance_sheet/cash_flow/ratios, 4 periods)
 Token cost: ~5 tokens
 
@@ -166,10 +168,10 @@ These additions apply to the rendered output ABOVE in addition to the persona-sp
 
 ### Pre-Render — Load white-label branding
 
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format.
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format.
 
 - **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line at the very top of the rendered output: `**<client_name>** Klarman-style profile`. Logo handling per integration-pattern.md §5.
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7. If a logo was skipped, append `Logo on file: <basename>` as a second Provenance line.
+- **About This Report** (always present): one line stating branding state per integration-pattern.md §7. If a logo was skipped, append `Logo on file: <basename>` as a second About This Report line.
 
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below. The persona-specific disclaimer in the output example characterizes the source of the framing; the §9.2 banner characterizes the LLM-generated synthesis itself.
 

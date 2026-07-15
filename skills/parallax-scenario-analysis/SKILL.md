@@ -1,6 +1,6 @@
 ---
 name: parallax-scenario-analysis
-description: "React to a news event or scenario: assess portfolio exposure, macro regime shift, sector impact, identify most-exposed holdings, find rotation candidates, and output a concrete action plan via Parallax MCP tools. Also surfaces under PM/RIA vocabulary: 'stress book', 'scenario suite', 'stress test' (e.g., rates +100bps, USD shock, 2008 / 2020 / 2022 replays). Requires a portfolio and a scenario description. NOT for routine morning briefs (use /parallax-morning-brief), not for macro outlook without a triggering event (use /parallax-macro-outlook)."
+description: "React to a news event or scenario: assess portfolio exposure, macro regime shift, sector impact, identify most-exposed holdings, find rotation candidates, and output an information-framed action analysis via Parallax MCP tools. Also surfaces under PM/RIA vocabulary: 'stress book', 'scenario suite', 'stress test' (e.g., rates +100bps, USD shock, 2008 / 2020 / 2022 replays). Requires a portfolio and a scenario description. NOT for routine morning briefs (use /parallax-morning-brief), not for macro outlook without a triggering event (use /parallax-macro-outlook)."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -22,9 +22,10 @@ description: "React to a news event or scenario: assess portfolio exposure, macr
 - Score changes haven't happened yet if the event is breaking — use get_assessment for forward-looking analysis
 - For historical events, get_score_analysis can show what actually moved
 - This skill produces FORWARD-LOOKING analysis — always caveat uncertainty
+- ~68 tokens at 10 holdings (see `_parallax/token-costs.md`); scales roughly linearly per holding — the >20-holding cap in Phase 2 bounds large books.
 - JIT-load `_parallax/house-view/loader.md` if an active CIO view is present; portfolio-level skill, so apply §3 (multipliers) to replacement-candidate scoring + §4 (the user-supplied scenario is sovereign per §4 — if scenario CONTRADICTS view tilts, surface "scenario contradicts house view" banner; the Action Plan acts on the scenario, not the view) + §5 (preamble + view-aware rendering) + §6 (audit). For an ALIGNED scenario, the Action Plan is more aggressive; for a CONTRADICTING scenario, the conflict is surfaced and the user's stated framing wins.
 - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
 
 Something happened (or might happen). What's exposed? What shifts? What do I do?
 
@@ -57,6 +58,8 @@ Fire all three simultaneously:
 ### Phase 2: Assess Portfolio Exposure
 
 Phase 2 is staged into two parallel turns: **2a classification + ground-truth** must complete before **2b per-equity scoring + sector** can fire, because the asset-class decision in 2a determines which holdings are eligible for 2b's `get_score_analysis` (factor scores are equity-only). Within each sub-phase every call is independent and parallel-safe per `_parallax/parallax-conventions.md` §3.
+
+**Fan-out cap for large portfolios**: for portfolios with >20 holdings, restrict 2b's `get_score_analysis` (and the 2a per-holding fan-outs where cost-bearing — `etf_profile` is free and unaffected) to the top 20 holdings by weight plus any holding already flagged (⚠ MISMATCH or otherwise). Render a degraded-coverage note in Output Format listing the symbols skipped by the cap.
 
 #### Phase 2a — Classification + ground-truth (parallel, single tool-call turn)
 
@@ -96,18 +99,18 @@ Then call `get_assessment` with a prompt that:
     - Macro regime and tactical outlook
     - Replacement candidates and their scores
     - Active house view if present (basis_statement + relevant tilts + alignment-vs-contradiction flag with the user-supplied scenario)
-    - Ask: "Given this scenario, what specific portfolio adjustments should be considered? Prioritize by urgency and magnitude of exposure."
+    - Ask: "Given this scenario, which holdings' exposure the scenario most affects and what adjustment candidates follow, framed as information. Prioritize by urgency and magnitude of exposure."
 
 11. **Audit log** — Append entry per loader.md §6.1 if a view was loaded.
 
 ### Pre-Render — Load white-label branding
 
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format. The loader returns exactly six keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
 
 ## Output Format
 
 - **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (banner from Pre-Workflow + low-confidence warnings). If user-supplied scenario CONTRADICTS view tilts, append a "Scenario contradicts house view" line stating which tilt(s) disagree — per loader.md §4, the user's scenario is sovereign. Per loader.md §5.1 the preamble goes at the very top — it precedes the Branding Header.
-- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** scenario analysis`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to Provenance.
+- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** scenario analysis`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to About This Report.
 - **Scenario Summary** (what happened, why it matters — 2-3 sentences)
 - **Ground-truth Integrity** *(only render if Phase 2a flagged any mismatches OR ETFs were excluded from per-position trajectory)* — table: `symbol`, `returned_name`, `expected_name`, status (⚠ MISMATCH / ETF — sector exposure only / TRUSTED). Mismatched holdings were fully excluded from the assessment prompt; ETF holdings are present in `analyze_portfolio` sector exposure but not in per-position factor trajectories.
 - **Macro Regime Impact** (how this shifts the current regime, which factors are affected)
@@ -116,10 +119,10 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 - **Least Affected** (safe positions — brief explanation why)
 - **Sector Rotation Thesis** (what benefits from this scenario)
 - **Replacement Candidates** (table: symbol, name, sector, total score, why it fits)
-- **Action Plan** (prioritized list: what to trim/sell, what to add, what to hold — with specific weight suggestions)
+- **Action Analysis** (prioritized, per conventions §12: exposure-reduction candidates, addition candidates, hold rationale — weight arithmetic framed as analysis, not instructions). Render the informational preface and action-label framing per `parallax-conventions.md` §12.
 - **What to Watch** (2-3 signals that would confirm or invalidate this thesis)
 - **Confidence & Caveats** (how certain is this analysis, what could go wrong with the rotation)
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+- **About This Report** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second About This Report line.
 
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 

@@ -55,7 +55,7 @@ SPEC = EvalSpec(
         "News Catalyst Watch",
         "Assessment",
         "Risk Factors",
-        "Provenance",
+        "About This Report",
     ],
     section_labels=[
         "Company Overview",
@@ -69,7 +69,7 @@ SPEC = EvalSpec(
         "News Catalyst Watch",
         "Assessment",
         "Risk Factors",
-        "Provenance",
+        "About This Report",
     ],
     check_ids=[
         "sections_present",

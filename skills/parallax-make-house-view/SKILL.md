@@ -40,6 +40,8 @@ The synthesized view lives in `~/.parallax/active-house-view/` and is consumed b
 /parallax-make-house-view --compare <path_a> <path_b>  # diff two saved view bundles; no MCP, no synthesis, no save
 ```
 
+**Cost:** ~352 tokens at the default market set (~14 markets × 5 components; see `_parallax/token-costs.md`); `--markets` scales cost proportionally.
+
 ## Workflow
 
 Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call. JIT-load `_parallax/house-view/MCP_FIELD_INVENTORY.md` (per-pillar input availability), `_parallax/house-view/schema.yaml` (view shape + `classification_taxonomy.generator_synthesis`), and `_parallax/house-view/loader.md` (esp. §6 audit format with the new `generate` action).

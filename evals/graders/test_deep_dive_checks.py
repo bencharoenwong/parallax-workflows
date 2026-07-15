@@ -49,7 +49,7 @@ def test_technical_fallback_passes_when_proxy_is_named():
 def test_view_aware_disclaimer_is_accepted():
     t = Transcript(
         final_prose=(
-            "## Provenance\nBranding: default Parallax\n"
+            "## About This Report\nBranding: default Parallax\n"
             "This analysis reflects active house view 'Q2 Defensive Tilt' uploaded by CIO on 2026-06-28, "
             "effective 2026-06-28 through 2026-09-01. Tilts and excludes per the loaded view; "
             "conflicts with explicit user scope are flagged inline. Outputs should be reviewed against "
@@ -73,7 +73,7 @@ def test_deep_dive_minimal_golden_shape_passes_structure_checks():
             "## News Catalyst Watch\nbody\n"
             "## Assessment\nbody\n"
             "## Risk Factors\nbody\n"
-            "## Provenance\nBranding: default Parallax\n"
+            "## About This Report\nBranding: default Parallax\n"
             "AI-assisted output. Quantitative data is deterministic; qualitative is LLM-generated.\n"
             "This is informational analysis based on Parallax factor scores, not investment advice. "
             "All outputs should be reviewed by qualified professionals before any investment decisions.\n"

@@ -332,7 +332,7 @@ validation_summary: <validation_results>
 confidence_scores: <draft.confidence_scores>
 ```
 
-`fonts.*` is **not** emitted in v2. The loader's `_normalize_branding_v2_to_return_shape` derives the legacy `fonts.{header,body,monospace}` keys from `typography.{h1,body-md,code}.fontFamily` at read time, so downstream consumers continue to see the legacy fonts keys regardless of on-disk schema version. The full `load_client_branding()` return shape is 13 keys on every path (the four v2 token-tree keys — `typography`, `rounded`, `spacing`, `components` — are populated as empty dicts on v1 and error paths so consumers can read them unconditionally).
+`fonts.*` is **not** emitted in v2. The loader's `_normalize_branding_v2_to_return_shape` derives the legacy `fonts.{header,body,monospace}` keys from `typography.{h1,body-md,code}.fontFamily` at read time, so downstream consumers continue to see the legacy fonts keys regardless of on-disk schema version. The full `load_client_branding()` return shape is 14 keys on every path (the four v2 token-tree keys — `typography`, `rounded`, `spacing`, `components` — plus the `render` defaults key are populated as empty dicts on v1 and error paths so consumers can read them unconditionally).
 
 Legacy v1 fallback (only when a downstream skill or migration explicitly passes `schema_version=1`):
 

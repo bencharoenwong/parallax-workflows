@@ -29,8 +29,13 @@ def _write_config(tmp_path: Path, data: dict[str, Any]) -> Path:
     return p
 
 
-def _valid_config(*, primary_logo: str = "", favicon: str = "") -> dict[str, Any]:
-    return {
+def _valid_config(
+    *,
+    primary_logo: str = "",
+    favicon: str = "",
+    render: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    cfg = {
         "metadata": {
             "schema_version": 1,
             "client_name": "Acme Capital",
@@ -65,6 +70,9 @@ def _valid_config(*, primary_logo: str = "", favicon: str = "") -> dict[str, Any
             "favicon":       0.85,
         },
     }
+    if render is not None:
+        cfg["render"] = render
+    return cfg
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +85,7 @@ def test_happy_path(
     monkeypatch: pytest.MonkeyPatch,
     loader_module: ModuleType,
 ) -> None:
-    """Valid config with real logo files -> all 13 keys present, error=None."""
+    """Valid config with real logo files -> all 14 keys present, error=None."""
     logo = tmp_path / "primary-logo.png"
     favicon = tmp_path / "favicon.ico"
     logo.write_bytes(b"\x89PNG")
@@ -98,7 +106,7 @@ def test_happy_path(
     # populated as empty dicts so `[]` access works without KeyError.
     assert set(result.keys()) == {
         "client_name", "colors", "logos", "fonts", "source", "confidence_scores",
-        "voice", "multi_source", "error",
+        "voice", "multi_source", "render", "error",
         "typography", "rounded", "spacing", "components",
     }
     assert result["error"] is None
@@ -106,6 +114,7 @@ def test_happy_path(
     # Voice + multi_source default to empty/disabled when not present in config
     assert result["voice"] == {"enabled": False}
     assert result["multi_source"] == {}
+    assert result["render"] == {}
     # client_name surfaced from metadata for downstream consumers
     assert isinstance(result["client_name"], str)
     assert result["logos"]["primary"] == str(logo)
@@ -136,6 +145,7 @@ def test_missing_config(
     assert result["fonts"] == {}
     assert result["source"] == {}
     assert result["confidence_scores"] == {}
+    assert result["render"] == {}
     # v2-aware bonus keys must be present (empty) on error paths too —
     # consumers reading result["typography"] should never KeyError.
     assert result["typography"] == {}
@@ -423,7 +433,7 @@ def test_visual_branding_excludes_voice_and_v2_keys(
     monkeypatch: pytest.MonkeyPatch,
     loader_module: ModuleType,
 ) -> None:
-    """Visual subset returns exactly 6 keys; voice/typography/etc. are absent.
+    """Visual subset returns exactly 7 keys; voice/typography/etc. are absent.
 
     This is the structural guardrail referenced in integration-pattern.md §3:
     voice-consuming skills call load_client_branding directly; visual skills
@@ -440,7 +450,7 @@ def test_visual_branding_excludes_voice_and_v2_keys(
     result = loader_module.load_visual_branding()
 
     assert set(result.keys()) == {
-        "client_name", "colors", "logos", "fonts", "source", "error",
+        "client_name", "colors", "logos", "fonts", "source", "error", "render",
     }
     assert result["error"] is None
     assert result["fonts"]["header"] == "Inter"
@@ -452,7 +462,7 @@ def test_visual_branding_missing_config_preserves_shape(
     monkeypatch: pytest.MonkeyPatch,
     loader_module: ModuleType,
 ) -> None:
-    """No client onboarded -> 6-key shape preserved, error='config_not_found'.
+    """No client onboarded -> 7-key shape preserved, error='config_not_found'.
 
     Mirrors the load_client_branding contract so consumers can branch on
     `result["error"] == "config_not_found"` without separate shape handling.
@@ -462,11 +472,63 @@ def test_visual_branding_missing_config_preserves_shape(
     result = loader_module.load_visual_branding()
 
     assert set(result.keys()) == {
-        "client_name", "colors", "logos", "fonts", "source", "error",
+        "client_name", "colors", "logos", "fonts", "source", "error", "render",
     }
     assert result["error"] == "config_not_found"
     assert result["colors"] == {}
     assert result["logos"] == {}
+    assert result["render"] == {}
+
+
+def test_render_block_exposed_by_full_and_visual_loaders(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    loader_module: ModuleType,
+) -> None:
+    """Valid render block -> both loaders expose deployment render defaults."""
+    cfg = _valid_config(render={"audience_default": "client_safe"})
+    config_path = _write_config(tmp_path, cfg)
+    monkeypatch.setattr(loader_module, "_CONFIG_PATH", config_path)
+    monkeypatch.setattr(loader_module, "_SCHEMA", loader_module._JSONSCHEMA)
+
+    full = loader_module.load_client_branding()
+    visual = loader_module.load_visual_branding()
+
+    assert full["error"] is None
+    assert full["render"] == {"audience_default": "client_safe"}
+    assert visual["render"] == {"audience_default": "client_safe"}
+
+
+def test_missing_render_block_defaults_to_empty_dict(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    loader_module: ModuleType,
+) -> None:
+    """Config without render block preserves the render key as an empty dict."""
+    config_path = _write_config(tmp_path, _valid_config())
+    monkeypatch.setattr(loader_module, "_CONFIG_PATH", config_path)
+    monkeypatch.setattr(loader_module, "_SCHEMA", loader_module._JSONSCHEMA)
+
+    assert loader_module.load_client_branding()["render"] == {}
+    assert loader_module.load_visual_branding()["render"] == {}
+
+
+def test_invalid_render_audience_default_fails_schema(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    loader_module: ModuleType,
+) -> None:
+    """Unknown audience defaults fail schema validation."""
+    config_path = _write_config(
+        tmp_path,
+        _valid_config(render={"audience_default": "everyone"}),
+    )
+    monkeypatch.setattr(loader_module, "_CONFIG_PATH", config_path)
+    monkeypatch.setattr(loader_module, "_SCHEMA", loader_module._JSONSCHEMA)
+
+    result = loader_module.load_client_branding()
+
+    assert result["error"].startswith("schema_invalid")
 
 
 def test_visual_branding_voice_in_source_config_is_filtered(

@@ -37,7 +37,7 @@ _REQUIRED_SECTIONS = [
     "Selected Holdings",
     "Portfolio Factor Profile",
     "Implementation Notes",
-    "Provenance",
+    "About This Report",
 ]
 _SECTION_LABELS = [
     "House View Preamble",
@@ -49,7 +49,7 @@ _SECTION_LABELS = [
     "Portfolio Factor Profile",
     "Redundancy Notes",
     "Implementation Notes",
-    "Provenance",
+    "About This Report",
 ]
 
 _PCT = re.compile(r"\d+(?:\.\d+)?\s*%")

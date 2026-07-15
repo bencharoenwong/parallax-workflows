@@ -1,6 +1,6 @@
 ---
 name: parallax-rebalance
-description: "Portfolio rebalancing with health flags and macro context: analyze current state, flag issues, generate prioritized trade instructions with score rationale via Parallax MCP tools. Holdings as [{symbol, weight}]. NOT for initial portfolio construction (use /parallax-portfolio-builder), not for diagnostic-only review (use /parallax-client-review)."
+description: "Portfolio rebalancing with health flags and macro context: analyze current state, flag issues, generate a prioritized, information-framed rebalancing analysis (candidate actions per conventions §12) with score rationale via Parallax MCP tools. Holdings as [{symbol, weight}]. NOT for initial portfolio construction (use /parallax-portfolio-builder), not for diagnostic-only review (use /parallax-client-review)."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -22,9 +22,9 @@ description: "Portfolio rebalancing with health flags and macro context: analyze
 - Health flags feed directly into trade action determination — High priority = strong trim/exit
 - analyze_portfolio is called twice with distinct field subsets (performance+risk, then concentration+attribution); see Batch A table for the required `portfolio=` + `fields=` shape. The parameters `holdings` and `lens` do not exist in the deployed schema. WARNING: responses often exceed 180K chars (daily time series). If output is truncated, too large, or MCP raises a schema validation error, fall back to `check_portfolio_redundancy` (concentration) + `quick_portfolio_scores` (factor tilt).
 - build_stock_universe can find replacement candidates for positions being trimmed
-- Output must include specific buy/sell/trim quantities, not just vague suggestions
+- Output must include specific candidate weight changes, framed per conventions §12 (analysis, not instructions), not just vague suggestions
 - For portfolios with 10+ holdings, prioritize score trend scans for top/bottom 5 by weight to manage latency
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
 
 Generate prioritized trade recommendations using health flags, macro context, and Parallax scores.
 
@@ -79,21 +79,26 @@ Per `loader.md` §1-§2: read view if present, validate hash and expiry. If view
 
 ### Batch C — Health flags + trade decisions
 
-1. Evaluate the 5 health flags **per holding** — binding flag conditions in `../parallax-client-review/references/recommendation-matrix.md` (same taxonomy and threshold values as `parallax-portfolio-checkup/references/health-flags.md`, whose canonical portfolio-level weighted-average definitions apply to portfolio-checkup, not here): Low Score (holding total score ≤5.0), Concentration (holding weight >15%, or holding among the top-3 when their combined weight >45%), Redundancy (holding is part of a redundant pair), Value Trap (holding value score ≤3.0), Macro Misalignment (holding's sector has a negative tactical outlook). Per-holding flag counts drive priority assignment.
-2. **House-view alignment check** (if view active): for each holding, compute view-tilted target weight using loader.md §3 multipliers; flag holdings >25% off target as "View Misalignment." For holdings on `tilts.excludes`, flag as "View Excluded — must trim."
-3. Assign priority per recommendation-matrix.md (count View Misalignment / View Excluded as flags):
+1. **Parse mandate parameters** (if `constraints=` and/or `target=` were passed):
+   - `constraints=`: split on commas; match each clause against two recognized patterns — "max N% per position" (a per-position weight cap, applied to Target Weight in step 5) and "no <sector>" (a sector/name exclusion, applied to Replacement Candidates in step 6 exactly like `tilts.excludes`).
+   - `target=`: match against recognized phrases — "reduce concentration" (prioritize Reweight/Trim of concentration-flagged holdings in step 5) and "improve quality score" (rank Replacement Candidates by quality sub-score in step 6). Any other phrase is unrecognized.
+   - **Fail-loud rule:** any `constraints=` clause that matches neither recognized pattern is never silently dropped — it renders "constraint not recognized — not applied" in the Mandate Constraints Applied output block. Any unrecognized `target=` phrase is echoed verbatim there with a statement of how the standard recommendations already address it.
+2. Evaluate the 5 health flags **per holding** — binding flag conditions in `../parallax-client-review/references/recommendation-matrix.md` (same taxonomy and threshold values as `parallax-portfolio-checkup/references/health-flags.md`, whose canonical portfolio-level weighted-average definitions apply to portfolio-checkup, not here): Low Score (holding total score ≤5.0), Concentration (holding weight >15%, or holding among the top-3 when their combined weight >45%), Redundancy (holding is part of a redundant pair), Value Trap (holding value score ≤3.0), Macro Misalignment (holding's sector has a negative tactical outlook). Per-holding flag counts drive priority assignment.
+3. **House-view alignment check** (if view active): for each holding, compute view-tilted target weight using loader.md §3 multipliers; flag holdings >25% off target as "View Misalignment." For holdings on `tilts.excludes`, flag as "View Excluded — must trim."
+4. Assign priority per recommendation-matrix.md (count View Misalignment / View Excluded as flags):
    - **High** (3+ flags or View Excluded): Strong trim/exit candidate
    - **Medium** (2 flags): Investigate + potential trim
    - **Low** (1 flag): Monitor, hold unless constraints violated
-4. Determine actions combining flags + score trends + macro + view tilts:
+5. Determine actions combining flags + score trends + macro + view tilts + parsed target bias:
    - **Trim/Exit:** High priority holdings, View Excluded, or declining scores + any flag
    - **Hold:** Stable/improving scores, no flags, view-aligned
-   - **Reweight:** Concentration flag only, OR view-tilted toward different weight than current
+   - **Reweight:** Concentration flag only, OR view-tilted toward different weight than current, OR prioritized by a parsed "reduce concentration" target bias
    - **Investigate:** Medium priority but ambiguous signal (suggest `/parallax-deep-dive`)
-5. For trim candidates: Resolve user thesis vs. view per loader.md §4. If `PARALLAX_LOADER_V2=1` and view active, follow `loader.md` §3 "Application (V2)": decompose replacement theme into parallel per-sector calls, merge, and dedupe. If V1, prepend tilt context and call `build_stock_universe` once.
+   - Apply any parsed per-position weight cap (from `constraints=`) to Target Weight for every recommended position.
+6. For trim candidates: Resolve user thesis vs. view per loader.md §4. If `PARALLAX_LOADER_V2=1` and view active, follow `loader.md` §3 "Application (V2)": decompose replacement theme into parallel per-sector calls, merge, and dedupe. If V1, prepend tilt context and call `build_stock_universe` once.
    - **Divergence assertion** (per loader.md §5 rule 4 — required universally): REQUIRED for V1 paths. If the query named N≥2 sectors/themes, compute `max_sector_share/total` in returned candidates. If > 0.6, emit fail-loud warning. If `PARALLAX_LOADER_V2=1`, use to verify merge quality.
    - **Ground-truth check per candidate** (per loader.md §5 rule 3): call `get_peer_snapshot` AND `get_company_info` in parallel. Drop any candidate where `returned_name ≠ expected_name` from the replacement pool (flag ⚠ MISMATCH, do not rank).
-   - Filter remaining trusted candidates against `tilts.excludes` and `tilts.excludes_freeform`.
+   - Filter remaining trusted candidates against `tilts.excludes`, `tilts.excludes_freeform`, and any sector/name exclusion parsed from `constraints=`. If an "improve quality score" target bias was parsed, rank remaining candidates by quality sub-score.
 
 ### Batch D — Validation
 
@@ -101,7 +106,7 @@ If `PARALLAX_LOADER_V2=1`, follow `loader.md` §3b: aggregate per-holding `get_p
 
 ### Pre-Render — Load white-label branding
 
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format. The loader returns exactly six keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
 
 ### Render — deterministic gate (LAST step, mandatory)
 
@@ -117,25 +122,27 @@ python3 "<skill-dir>/../_parallax/render_gate.py" --skill rebalance < "$DRAFT"; 
 
 **Your entire final message is exactly that command's stdout** — nothing before it (no step/batch-completion notes, no scratch computation, no "no active house view" / white-label config-probe narration), nothing after it.
 
-**Degraded-state rule:** if an async tool (e.g. `get_assessment`, `get_news_synthesis`) times out or returns no data, render the pending/unavailable note INSIDE the relevant section or the Provenance line — NOT as a preamble above the report — so it is part of the rendered body and survives the gate. (The gate also hoists a leaked degraded note as a backstop.)
+**Degraded-state rule:** if an async tool (e.g. `get_assessment`, `get_news_synthesis`) times out or returns no data, render the pending/unavailable note INSIDE the relevant section or the About This Report line — NOT as a preamble above the report — so it is part of the rendered body and survives the gate. (The gate also hoists a leaked degraded note as a backstop.)
 
 `_parallax/render_gate.py` is pure-stdlib and deterministically drops anything before the first rendered block (House View Preamble banner / Branding Header / Ground-truth Integrity / this skill's title or first rendered section), preserving the active-house-view banner in every `view_status` state. Same operator-agnostic-helper pattern as `view_status.py` / `loader.py` (a real Bash tool call, not prose).
 
 ## Output Format
 
 - **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (preamble). Per loader.md §5.1 the preamble goes at the very top — it precedes the Branding Header.
-- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** rebalance`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to Provenance.
+- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** rebalance`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to About This Report.
 - **Current Portfolio Assessment** (factor scores, concentration issues, redundancy; if view active, current alignment vs view-tilted target)
 - **Health Status** (Healthy/Monitor/Attention badge with flag summary)
+- **Verdict sensitivity**: the 1-2 nearest-boundary flags and their arithmetic flip condition for moving Health Status to the adjacent tier, per `parallax-portfolio-checkup/references/health-flags.md` "Verdict sensitivity" (renders `parallax-conventions.md` §11 by reference).
 - **Health Flags** (table: each triggered flag per holding with priority level; View Misalignment / View Excluded shown as their own flag types)
 - **Macro Context** (relevant market outlook, sector tilt implications for rebalancing)
 - **Score Momentum** (table: each holding's score trend — improving/stable/declining)
 - **Ground-truth Integrity** (only render if any mismatch detected — table: `input_ticker`, `returned_name`, `expected_name`, match status per holding. ⚠ MISMATCH rows are re-scored individually and flagged — scores not trusted from `quick_portfolio_scores` — per loader.md §5 rule 3.)
-- **Trade Recommendations** (table: Priority | Action | Symbol | Current Weight | Target Weight | Rationale — every recommendation cites a specific flag or finding; if view active, "Rationale" includes view-tilt direction; any recommendation on a ⚠ MISMATCH holding must note scores were re-derived via `get_peer_snapshot` directly)
+- **Mandate Constraints Applied** (only if `constraints=` or `target=` was provided) — echoes each parsed constraint/target and its effect (weight cap, exclusion, priority bias, quality-score ranking); any unparsed `constraints=` clause renders "constraint not recognized — not applied"; any unrecognized `target=` phrase is echoed with a statement of how the standard recommendations already address it.
+- **Trade Recommendations** (table: Priority | Action | Symbol | Current Weight | Target Weight | Rationale — every recommendation cites a specific flag or finding; if view active, "Rationale" includes view-tilt direction; any recommendation on a ⚠ MISMATCH holding must note scores were re-derived via `get_peer_snapshot` directly). Render a one-line informational preface above this table per conventions §12.2; framed per conventions §12 (candidate actions, not instructions) and supports `action_labels=plain` per §12.3 for retail-suitable rendering.
 - **Replacement Candidates** (if trimming, scored alternatives; filtered against tilts.excludes + tilts.excludes_freeform if view active; all candidates ground-truth-validated per loader.md §5 rule 3; divergence-assertion result for replacement universe per loader.md §5 rule 4)
 - **Before/After Comparison** (factor scores: current vs. proposed; if view active, alignment-to-view metric included)
 - **Implementation Notes** (suggested execution order, liquidity considerations)
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+- **About This Report** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second About This Report line.
 
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 

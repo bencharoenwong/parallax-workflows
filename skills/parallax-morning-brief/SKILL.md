@@ -23,7 +23,9 @@ description: "Fund manager morning brief: market regime, macro outlook, portfoli
 - macro_analyst parameter is `market` (not `country`); e.g., `macro_analyst(market="United States")`
 - The macro_analyst summary call returns all components inline including tactical — do not make separate per-component calls
 - Health flags (from parallax-portfolio-checkup/references/health-flags.md) apply here too — flag portfolios needing attention
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
+- Coverage: listed equities and ETFs only; fund/OEIC symbols surface the conventions §1 not-covered fallback, not a raw error
+- LANGUAGE HAND-OFF — if `lang=` is present and ≠ `en`, the terminal Translate step is mandatory. Route `zh-CN`/`zh-TW`/`zh-HK` → `/translate-chinese-finance`, `th` → `/translate-thai-finance`, using the delimited routing-directive block (never a prose sentence the translator could echo). Unsupported values → English output with the standard warning footer.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
 
 Generate a structured fund manager morning brief by orchestrating Parallax MCP tools.
 
@@ -31,9 +33,10 @@ Generate a structured fund manager morning brief by orchestrating Parallax MCP t
 
 ```
 /parallax-morning-brief [{"symbol":"AAPL.O","weight":0.25},{"symbol":"MSFT.O","weight":0.20},{"symbol":"JPM.N","weight":0.15},{"symbol":"JNJ.N","weight":0.15},{"symbol":"XOM.N","weight":0.25}]
+/parallax-morning-brief [{"symbol":"AAPL.O","weight":0.25},{"symbol":"MSFT.O","weight":0.20}] market=Japan top_n=5 lang=th register=retail
 ```
 
-Optional: append `market=Japan` or `top_n=5` after the portfolio JSON.
+Optional: append `market=Japan`, `top_n=5`, `lang=<code>` (`en` default; `zh-CN`, `zh-TW`, `zh-HK`, `th`), or `register=retail` after the portfolio JSON. `register=retail` is passed only when translation is requested; absent means institutional register.
 
 ## Workflow
 
@@ -80,7 +83,7 @@ would duplicate that work. The one-liner is a pointer, not an action.
 
 ### Pre-Render — Load white-label branding
 
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format. The loader returns exactly six keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
 
 ### Render — deterministic gate (LAST step, mandatory)
 
@@ -94,26 +97,53 @@ REPORT
 python3 "<skill-dir>/../_parallax/render_gate.py" --skill morning-brief < "$DRAFT"; rm -f "$DRAFT"
 ```
 
-**Your entire final message is exactly that command's stdout** — nothing before it (no step/batch-completion notes, no scratch computation, no "no active house view" / white-label config-probe narration), nothing after it.
+**Your entire final message is exactly that command's stdout** — unless `lang=` ≠ `en`, in which case the Translate step below consumes that stdout and the translated result is the entire final message. Never run the render gate on translated text; its anchors are English. Nothing before it (no step/batch-completion notes, no scratch computation, no "no active house view" / white-label config-probe narration), nothing after it.
 
-**Degraded-state rule:** if an async tool (e.g. `get_assessment`, `get_news_synthesis`) times out or returns no data, render the pending/unavailable note INSIDE the relevant section or the Provenance line — NOT as a preamble above the report — so it is part of the rendered body and survives the gate. (The gate also hoists a leaked degraded note as a backstop.)
+**Degraded-state rule:** if an async tool (e.g. `get_assessment`, `get_news_synthesis`) times out or returns no data, render the pending/unavailable note INSIDE the relevant section or the About This Report line — NOT as a preamble above the report — so it is part of the rendered body and survives the gate. (The gate also hoists a leaked degraded note as a backstop.)
 
 `_parallax/render_gate.py` is pure-stdlib and deterministically drops anything before the first rendered block (House View Preamble banner / Branding Header / Ground-truth Integrity / this skill's title or first rendered section), preserving the active-house-view banner in every `view_status` state. Same operator-agnostic-helper pattern as `view_status.py` / `loader.py` (a real Bash tool call, not prose).
+
+### Translate — conditional, after the render gate
+
+This step runs ONLY when `lang=` is present and not `en`. Capture the render gate's stdout as the full body, including all Output Format sections, About This Report, the §9.2 AI-interaction disclosure, and the disclaimer. Record which disclaimer variant rendered (view-aware per `loader.md §5` vs standard `parallax-conventions.md §9.1`) for the boundary check.
+
+Invoke the appropriate translator skill with the input shaped as follows:
+
+```
+ROUTING DIRECTIVE — DO NOT TRANSLATE OR ECHO THIS BLOCK:
+  target_variant: <variant>
+  register: retail
+  source_language: en
+  begin_content_below_separator: true
+---
+
+<render gate stdout>
+```
+
+Pass `register: retail` iff `register=retail` was supplied; otherwise omit the `register:` line so the translator defaults to institutional register. Route `zh-CN`, `zh-TW`, and `zh-HK` to `/translate-chinese-finance` with the matching `target_variant`. Route `th` to `/translate-thai-finance`; omit `target_variant` for Thai, but keep the routing block marker and `---` separator.
+
+Translator-failure handling:
+- If the translator fails or returns an empty/partial result, output the original English with a one-line warning footer: `> Translation to <lang> failed; output shown in English. Re-run if the issue is transient.`
+- If the language arg is unrecognized, output the original English with: `> Language '<arg>' not supported; output shown in English. Supported: en, zh-CN, zh-TW, zh-HK, th.`
+- Translator output replaces the English output in the chat; do not show both.
+
+**Disclaimer boundary check.** If the disclaimer is missing from the translated output, first attempt a single-section re-translation pass on just the original English disclaimer text using the same routing-directive shape. Append that result if non-empty. If the pass fails or returns empty, append the English disclaimer variant that was actually rendered. Record the event in the loader.md §6 audit entry's `notes` field (`disclaimer boundary check fired — re-translated` or `disclaimer boundary check fired — english fallback`). Do not add a user-visible footer.
 
 ## Output Format
 
 Present as a structured morning brief, under 800 words:
 
 - **House View Preamble** (only if view active) — 1-line summary per loader.md §5 rule 1 (preamble). Per loader.md §5.1 the preamble goes at the very top — it precedes the Branding Header.
-- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** morning brief`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to Provenance.
+- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** morning brief`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to About This Report.
 - **Market Regime & Signals** (2-3 sentences; if view active, note alignment/divergence with view's regime call)
 - **Macro Snapshot** (bullet points)
 - **Ground-truth Integrity** (only render if any mismatch detected — table: `input_ticker`, `returned_name`, `expected_name`, status. Mismatched holdings had scores re-derived via `get_peer_snapshot` — per loader.md §5 rule 3.)
 - **Portfolio Factor Tilt** (table: VALUE, QUALITY, MOMENTUM, DEFENSIVE scores aggregated over TRUSTED holdings only; mismatched holdings' re-derived scores included when available; if view active, add column showing view-target factor)
 - **Redundancy & Alignment Alerts** (only if flagged; include View Misalignment / View Excluded if view active)
+- **Verdict sensitivity** (render when any numeric health flag sits near its published cutoff): the 1-2 nearest-boundary flags and their trigger/clear arithmetic per `parallax-portfolio-checkup/references/health-flags.md` "Verdict sensitivity" (§11 by reference). Morning-brief renders no Health Status badge — state flag-level conditions only; do not use the tier-ladder language.
 - **Holding News** (one paragraph per holding)
 - **Action Items** (what deserves attention today; if view active, prioritize toward view rebalance direction)
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+- **About This Report** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse), plus the unconditional §7 currency line: `Currency: figures as reported by source data; no base-currency conversion applied.` If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a further About This Report line.
 
 Lead with what matters.
 

@@ -73,7 +73,7 @@ If you want the inline lint feedback, install Node 18+ (e.g., `brew install node
 
 Two consumer classes: **visual** (PDF/report skills, read colors/logos/fonts) and **voice** (letter/newsletter/writing skills, read `voice.*`). Both fall back silently to defaults if config is absent.
 
-Visual consumers call `loader.load_visual_branding()` (6-key visual subset). Voice consumers call `loader.load_client_branding()` (full 13-key shape including voice + v2 token tree).
+Visual consumers call `loader.load_visual_branding()` (7-key visual subset). Voice consumers call `loader.load_client_branding()` (full 14-key shape including voice + v2 token tree + render defaults).
 
 Currently integrated: **Tier 1** (`/parallax-cio-letter-prep`, `/parallax-client-review`, `/parallax-due-diligence`, `/parallax-deep-dive`) and **Tier 2** (`/parallax-should-i-buy`, `/parallax-thematic-screen`, `/parallax-portfolio-checkup`, `/parallax-portfolio-builder`, `/parallax-rebalance`, `/parallax-morning-brief`, `/parallax-explain-portfolio`, `/parallax-scenario-analysis`, `/parallax-country-deep-dive`, `/parallax-pair-finder`, `/parallax-peer-comparison`, `/parallax-macro-outlook`). New visual consumers must JIT-load `_parallax/white-label/integration-pattern.md` via the `<!-- white-label: integration-pattern.md -->` sentinel; the drift gate at `tests/test_integration_pattern_referenced.py` enforces sentinel ↔ load-directive pairing.
 

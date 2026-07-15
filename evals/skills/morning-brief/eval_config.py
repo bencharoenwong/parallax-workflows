@@ -34,7 +34,7 @@ _REQUIRED_SECTIONS = [
     "Macro Snapshot",
     "Portfolio Factor Tilt",
     "Action Items",
-    "Provenance",
+    "About This Report",
 ]
 _SECTION_LABELS = [
     "House View Preamble",
@@ -46,7 +46,7 @@ _SECTION_LABELS = [
     "Redundancy & Alignment Alerts",
     "Holding News",
     "Action Items",
-    "Provenance",
+    "About This Report",
 ]
 
 _MACRO_TERMS = re.compile(

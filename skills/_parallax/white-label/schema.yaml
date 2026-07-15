@@ -161,3 +161,8 @@ multi_source:
   agreements: []                             # fields that agreed (sanity-check signal)
     # - field: "fonts.header"
     #   value: "Calibri"
+
+# Optional render-mode defaults for this deployment. Consumed per
+# parallax-conventions.md §13. Absent block = internal_analyst default.
+render:
+  audience_default: "internal_analyst"        # enum: client_safe | internal_analyst

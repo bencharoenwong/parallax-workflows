@@ -493,7 +493,10 @@ def test_save_artifact(mock_view, temp_house_view_dir):
     assert str(report_path).startswith(
         str(temp_house_view_dir)
     ), f"artifact escaped tmp dir to {report_path}"
-    assert report_path.name.startswith(datetime.date.today().isoformat())
+    assert report_path.name.startswith(
+        # match save_artifact's clock source (UTC), not the local date — they differ 00:00–06:59 UTC+offset
+        datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+    )
     assert report_path.name.endswith(".md")
     assert (report_path.stat().st_mode & 0o777) == 0o600
     assert report_path.read_text() == report_content

@@ -14,16 +14,20 @@ Translate provided content into Thai following institutional finance translation
 
 **NOT for:** General Thai translation without finance context, transliteration of brand names, creative writing in Thai, proofreading existing Thai translations, or writing Thai reports from scratch.
 
+**Language coverage:** Supported targets are zh-CN, zh-TW, zh-HK, and th via the paired Chinese translation skill. Arabic is a roadmap item requiring right-to-left layout handling and register calibration; there is no Arabic validation harness yet. Arabic requests fall back to English.
+
 **Routing-directive blocks.** When invoked from another skill (e.g., `/parallax-should-i-buy`), the input may begin with a routing block of the form:
 
 ```
 ROUTING DIRECTIVE — DO NOT TRANSLATE OR ECHO THIS BLOCK:
+  target_variant: zh-CN | zh-TW | zh-HK    # Chinese only; omit for Thai
+  register: institutional | retail          # optional; default institutional when absent
   source_language: en
   begin_content_below_separator: true
 ---
 ```
 
-The block is metadata, not content. Translate ONLY the content after the `---` separator. Never translate, paraphrase, or echo any line from the marker through the separator into the output.
+The block is metadata, not content. For Thai, omit `target_variant`; `register` is optional and absent means institutional. Translate ONLY the content after the `---` separator. Never translate, paraphrase, or echo any line from the marker through the separator into the output. `register: retail` applies the Retail Register section below.
 
 ---
 
@@ -118,6 +122,8 @@ In CIO/portfolio reports, "Expected Shortfall" is a risk metric. Translating it 
 - SELL = ขาย
 - STRONG SELL = ขายออก (NOT ขายเชิงรุก)
 
+Translating rating labels does not change distribution posture. Retail distribution may require a locally licensed distributor and locally approved disclosures; see the "Choosing a mode (jurisdiction and audience)" section of `parallax-white-label-stock-report/SKILL.md`. `register: retail` changes linguistic register only; it does not authorize retail distribution.
+
 ### 9. Currency Format
 
 - Symbol always IN FRONT: HKD 41.22 (NOT 41.22 HKD)
@@ -143,6 +149,16 @@ In CIO/portfolio reports, "Expected Shortfall" is a risk metric. Translating it 
 Also fix: doubled consecutive words, HTML entity corruption (&lt; &gt; &amp; &quot;), extra spaces in mid-sentence.
 
 ---
+
+## Retail Register (optional)
+
+Apply this section only when the routing block specifies `register: retail`; otherwise use the institutional register above.
+
+- Factor labels and risk metrics stay English but receive a one-time plain-Thai descriptive gloss on first use. The gloss must be descriptive, never transliterated; if no natural gloss exists, keep English alone.
+- Rating labels render dual-label on every occurrence, e.g. `ซื้อ (Buy)`.
+- Unchanged in retail: the terminology-consistency table, the ECL/ES guard, spacing rules, sentence-length limits, currency rules, and validator applicability.
+
+Translating or dual-labeling ratings does not change distribution posture. Retail distribution may require a locally licensed distributor and locally approved disclosures; see the "Choosing a mode (jurisdiction and audience)" section of `parallax-white-label-stock-report/SKILL.md`. `register: retail` changes linguistic register only; it does not authorize retail distribution.
 
 ## Quality Checklist (Before Finalization)
 
@@ -192,7 +208,9 @@ Translate text sections only. Pass through data fields unchanged.
 - Translate all keys ending in `Text` (MarketNewsDevText, FactorText, SectorPositioningText, etc.)
 - Pass through tables, charts, liquidity_metrics, and metadata fields unchanged (omit from output or include as-is)
 - Preserve `\n` paragraph breaks from the original
-- After writing the JSON, run `references/validate-translation.py` to check quality
+- After writing the JSON, run `references/validate-translation.py` as a mandatory pass/fail gate. Exit 1 blocks marking the output client-ready or handing it to any downstream consumer; fix and re-run until exit 0. Warnings stay advisory but must be reviewed.
+- If a heuristic false positive is unavoidable, use repeatable `--waive '<substring>'`; each waived error prints in `WAIVED (treated as pass)` and must be listed with a one-line justification alongside the delivered output.
+- The validator consumes the JSON shape only. Chat-layer prose hand-offs are validated by the Quality Checklist plus the caller's disclaimer boundary check, not by this script.
 
 ---
 
@@ -204,7 +222,7 @@ Translate text sections only. Pass through data fields unchanged.
 | `references/dictionaries.md` | Country names, months, section header translations, strategy name translations |
 | `references/cio-report-format.md` | CIO report pipeline, checkpoint script usage, footer standardization, table header conventions |
 | `references/structural-preservation.md` | What NOT to translate: JSON escaping, HTML tags, tickers/RICs, template variables, numbers, URLs, footnotes, disclosure blocks, HTML entity handling |
-| `references/validate-translation.py` | Post-translation quality validator — checks doubled words, wrong terms, ECL/ES confusion, spacing, currency mismatches. Run: `python3 references/validate-translation.py <output.json>` |
+| `references/validate-translation.py` | Mandatory JSON-deliverable pass/fail gate — checks doubled words, wrong terms, ECL/ES confusion, spacing, currency mismatches. Run: `python3 references/validate-translation.py <output.json>`; exit 1 blocks client-ready delivery. Use repeatable `--waive '<substring>'` only for reviewed false positives and list each waiver with a one-line justification. Chat-layer prose hand-offs are outside this script's scope. |
 
 ---
 

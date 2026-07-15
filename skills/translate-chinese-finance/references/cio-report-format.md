@@ -2,6 +2,8 @@
 
 CIO report-specific pipeline, footer standards, and table conventions for Chinese (Simplified or Traditional) output.
 
+Status: the Chinese pipeline scripts are not yet wired (see `references/INTEGRATION.md`); until they land, Chinese CIO-report translations are delivered as translated JSON/markdown, not pipeline HTML.
+
 ---
 
 ## CIO Report Translation Pipeline

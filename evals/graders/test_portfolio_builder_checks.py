@@ -45,7 +45,7 @@ Mild software overlap MSFT/CRM; trimmed CRM.
 ## Implementation Notes
 Equal-ish weighting; rebalance quarterly; mind semis liquidity.
 
-## Provenance
+## About This Report
 Default Parallax branding.
 
 *AI-assisted output. Verify any specific statement before acting.*
