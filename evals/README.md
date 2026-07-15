@@ -113,6 +113,7 @@ evals/
 │   ├── portfolio-builder/  # constructive thesis-to-allocation
 │   ├── rebalance/          # prioritized trades + quantified targets
 │   ├── watchlist-monitor/  # score-surveillance scan (no weights)
+│   ├── deep-dive/          # single-position research (structural-only)
 │   └── portfolio-checkup/  # DRAFT — spec only, never run live
 ├── tasks/<skill>/core.jsonl  # eval task inputs per skill
 ├── fixtures/<skill>/       # golden + broken stream-json transcripts (offline tests)
@@ -131,6 +132,7 @@ evals/
 - `portfolio-builder` — constructive thesis-to-allocation; includes holdings-allocated check (weights + scores).
 - `rebalance` — prioritized trades + quantified targets; includes trade-recs-quantified check.
 - `watchlist-monitor` — score-surveillance scan (no weights); includes score-changes-quantified check.
+- `deep-dive` — single-position research; includes technical-fallback structural check.
 - `portfolio-checkup` — **DRAFT spec only, never run.** Same output family as
   should-i-buy.
 
@@ -140,8 +142,20 @@ evals/
 - `graders/tier1_structural.py` — deterministic structural checks (Tier-1, hard gate).
 - `graders/run_judge.py` + `judge_criteria.py` — pinned-Anthropic rubric judge (Tier-2).
   The judge model is allowlist-guarded — non-Anthropic models abort (perimeter).
-- `baseline/run_baseline.sh [--dry-run] [-n N]` — the headline deliverable: n>=3
-  rollouts/task -> pass-rate + variance noise-floor report in `results/`.
+- `baseline/run_baseline.sh [--skill NAME] [--dry-run] [-n N]` — the headline
+  deliverable: n>=3 rollouts/task -> pass-rate + variance noise-floor report in
+  `results/`. `--skill` loads `evals/skills/<name>/eval_config.py`, so the
+  runner uses the selected skill's slash command, task file, output prefix, and
+  Tier-2 criteria.
+- `baseline/score_existing.py --skill NAME evals/results/<prefix>_baseline_*.stream.json`
+  — offline Tier-1 scoring for already-captured rollouts; no live token spend.
+
+Example dry-runs before spending tokens:
+
+```bash
+./evals/baseline/run_baseline.sh --skill rebalance --dry-run -n 3
+./evals/baseline/run_baseline.sh --skill portfolio-builder --dry-run -n 3
+```
 
 **CI runs only the pure-function unit tests — never a live rollout:**
 `cd evals && python3 -m pytest graders -q`

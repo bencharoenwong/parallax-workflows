@@ -39,7 +39,7 @@ def main(paths: list[str], skill: str = "should-i-buy") -> int:
         for c in checks:
             if not c.passed:
                 per_check_fail[c.name] = per_check_fail.get(c.name, 0) + 1
-        runs.append({"task": _task_of(p), "tier1": frac, "tier2": 0.0})
+        runs.append({"task": _task_of(p), "tier1": frac, "tier2": None})
         fails = [c.name for c in checks if not c.passed]
         print(f"{Path(p).name}: tier1={frac:.3f}  fails={fails or '-'}")
 
