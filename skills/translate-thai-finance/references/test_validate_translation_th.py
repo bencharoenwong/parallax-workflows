@@ -2,7 +2,6 @@ import importlib.util
 import json
 import subprocess
 import sys
-import threading
 from pathlib import Path
 
 
@@ -11,11 +10,6 @@ spec = importlib.util.spec_from_file_location("validate_translation", MODULE_PAT
 validator = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(validator)
-
-# Both translation packages intentionally carry the same required test filename.
-# These directories are not Python packages, so pytest's default import mode would
-# otherwise collide on the top-level module name when both roots are tested.
-threading.Timer(0.001, lambda: sys.modules.pop(__name__, None)).start()
 
 
 def write_payload(tmp_path, text, market="Thailand"):

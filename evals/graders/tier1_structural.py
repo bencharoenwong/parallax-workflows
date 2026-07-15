@@ -93,10 +93,20 @@ def _section_text(prose: str, heading: str, labels: list[str]) -> str:
     return "\n".join(lines[start:end])
 
 
+# Section labels renamed over time; a required section is satisfied by any of its
+# accepted aliases so stored baseline transcripts stay re-gradable.
+_SECTION_ALIASES = {
+    "About This Report": ("About This Report", "Provenance"),
+}
+
+
 # --- Checks: each takes (transcript, spec) ----------------------------------
 
 def _c_sections_present(t: Transcript, spec: EvalSpec) -> Check:
-    missing = [s for s in spec.required_sections if not _section_present(t.final_prose, s)]
+    missing = [
+        s for s in spec.required_sections
+        if not any(_section_present(t.final_prose, alias) for alias in _SECTION_ALIASES.get(s, (s,)))
+    ]
     return Check("sections_present", not missing, f"missing={missing}")
 
 
