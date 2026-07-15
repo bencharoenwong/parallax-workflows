@@ -92,9 +92,9 @@ while IFS= read -r line; do
   [ -z "$line" ] && continue
   ARGS=$(printf '%s' "$line" | python3 -c "import sys,json; print(json.loads(sys.stdin.read())['args'])")
   ID=$(printf '%s' "$line" | python3 -c "import sys,json; print(json.loads(sys.stdin.read())['id'])")
-  LANG=$(printf '%s' "$line" | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('lang', 'en'))")
+  TASK_LANG=$(printf '%s' "$line" | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('lang', 'en'))")
   for i in $(seq 1 "$N"); do
-    STREAM=$(ROLLOUT_CMD="$CMD" ROLLOUT_PREFIX="$PREFIX" evals/rollout/run_rollout.sh "$ARGS" "$LANG" "baseline_${ID}_r${i}" "$MODEL")
+    STREAM=$(ROLLOUT_CMD="$CMD" ROLLOUT_PREFIX="$PREFIX" evals/rollout/run_rollout.sh "$ARGS" "$TASK_LANG" "baseline_${ID}_r${i}" "$MODEL")
     python3 - "$STREAM" "$ID" "$MODEL" "$RUNS_TMP" "$SKILL" <<'PY'
 import sys, json
 sys.path.insert(0, "evals/graders")
@@ -107,9 +107,12 @@ spec = load_spec(skill)
 t = load_transcript(stream)
 t1 = grade_tier1(t, spec)
 t1_frac = (sum(c.passed for c in t1) / len(t1)) if t1 else 0.0
-t2 = grade_tier2(t, model, spec.tier2_criteria)
-scored = [v for v in t2 if v["pass"] is not None]
-t2_frac = (sum(1 for v in scored if v["pass"]) / len(scored)) if scored else 0.0
+if spec.tier2_criteria:
+    t2 = grade_tier2(t, model, spec.tier2_criteria)
+    scored = [v for v in t2 if v["pass"] is not None]
+    t2_frac = (sum(1 for v in scored if v["pass"]) / len(scored)) if scored else 0.0
+else:
+    t2_frac = None  # structural-only spec: no judge configured
 runs = json.load(open(runs_path))
 runs.append({"task": task, "tier1": t1_frac, "tier2": t2_frac})
 json.dump(runs, open(runs_path, "w"))

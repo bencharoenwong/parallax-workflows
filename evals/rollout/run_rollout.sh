@@ -45,6 +45,7 @@ echo "[rollout] ~24 Parallax tokens — $PROMPT (label=$LABEL)" >&2
 
 python3 - "$OUT" "$PROMPT" "$TARGET_MODEL" "$TIMEOUT_SECONDS" <<'PY'
 import os
+import signal
 import subprocess
 import sys
 
@@ -59,12 +60,16 @@ with open(out, "w") as fh:
         stdin=subprocess.DEVNULL,
         stdout=fh,
         text=True,
+        start_new_session=True,
     )
 
 try:
     proc.wait(timeout=int(timeout_s))
 except subprocess.TimeoutExpired:
-    proc.kill()
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
     proc.wait()
     try:
         os.unlink(out)
