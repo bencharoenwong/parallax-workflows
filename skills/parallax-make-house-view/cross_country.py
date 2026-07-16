@@ -1,6 +1,6 @@
 """Cross-country aggregator.
 
-Folds per-market `macro_analyst` responses (5 components per market) +
+Folds per-market `macro_analyst` responses (4 components per market) +
 telemetry into a single `aggregated` dict consumed by `pillar_compose`
 and the prose synthesizer.
 
