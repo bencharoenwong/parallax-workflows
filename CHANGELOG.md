@@ -4,6 +4,18 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-07-16
+
+### Changed
+- **Latency reordering across 7 skills (batch 2)** — pure MCP-call reorderings that fire independent calls concurrently or non-blocking instead of in serial stages. Zero-token, output-neutral: same tool set, same rendered report; only the dispatch ordering changes. Following the batch-1 parallel-batching contract and the §3.1 Concurrent Annotation Pattern.
+  - **`parallax-client-review`** — Batch B (macro) now fires **concurrent with** Batch A rather than after it (home markets derive from input RIC suffixes, not Batch A output); Batch C still gates on both completing. `get_assessment` fires as soon as the deterministic recommendation matrix is assigned and non-assessment sections compose while it runs, inserting the assessment on resolve or the existing degraded-state note on timeout.
+  - **`parallax-morning-brief`** — `get_news_synthesis` for the top-N holdings joins the Batch A parallel fan-out (top-N derives from user-supplied weights, not Batch A output); step 3 inserts each result as it resolves instead of blocking.
+  - **`parallax-rebalance`** — `get_score_analysis` moves from Batch B into Batch A (no Batch A dependency, so it no longer waits behind the slower `analyze_portfolio` legs); Batch B is now macro-only.
+  - **`parallax-scenario-analysis`** — Phase 3 beneficiary discovery (`build_stock_universe`, step 7) is hoisted into the Phase 2a turn and beneficiary scoring (`get_peer_snapshot`, step 8) into the Phase 2b turn. Phase 1 is deliberately **not** merged into 2a (that would strip news from theme construction), `get_financials` (step 9) stays serial (depends on step-8 scores), and Phase 1 `get_news_synthesis` is explicitly non-gating on later phases.
+  - **`parallax-watchlist-monitor`** — the flagged-symbol drill-down (`get_news_synthesis`, `get_technical_analysis`, `get_stock_outlook`) collapses from three serial steps into one parallel batch, under the §4 no-retry degraded-state rule.
+  - **`parallax-explain-portfolio`** — `get_news_synthesis` is made non-blocking and overlapped with branding, macro reasoning, and price/score computation; the top-3 detractors' divergence classification (Step 5) and advice (Step 6) deliberately **remain gated** on news resolving, since the provisional-flag rule keys on whether a major event broke after the last score data point.
+  - **`parallax-judge-house-view`** — Phase 5 per-cell LLM dispatch is parallelized where the runtime supports concurrent dispatch (each prompt is built only from its own cell's snippet, so cells are mutually independent). The per-cell `validate_citation` ≥30-char verbatim-substring hallucination check is explicitly untouched and validates each response as it returns.
+
 ## 2026-07-15
 
 ### Added

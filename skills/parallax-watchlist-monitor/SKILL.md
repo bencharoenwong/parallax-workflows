@@ -39,9 +39,7 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 
 1. **Score Scan** — For each symbol, call `get_score_analysis` with `weeks` as int N, where N is the user-supplied value from the invocation (e.g., `weeks=8`) or 8 if none provided. This is non-default (server default is 52) — see conventions §0.2 for the serialization caveat. Compute change in total score over the period.
 2. **Flag Movers** — Identify symbols with significant score changes (>1 point total score change or any factor moving >2 points).
-3. **News Check** — For flagged symbols only, call `get_news_synthesis` to identify catalysts.
-4. **Technical Check** — For flagged symbols, call `get_technical_analysis` for trend changes.
-5. **Analyst Check** — For flagged symbols, call `get_stock_outlook` with `aspect="recommendations"` for consensus shifts.
+3. **Flagged Drill-Down (single parallel batch)** — For flagged symbols only, fire in ONE batch (conventions §3): `get_news_synthesis` (catalysts), `get_technical_analysis` (trend changes), and `get_stock_outlook` with `aspect="recommendations"` (consensus shifts). News and technicals are async (30-90s) — never phase them serially; if any call times out, apply the Degraded-state rule (§4 no-retry) rather than re-waiting.
 
 ## Output Format
 
