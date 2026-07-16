@@ -58,6 +58,7 @@ Per `loader.md` §1-§2. If view present, capture tilt vector, excludes, prose e
 | `macro_analyst` | market (default: US), no component | Macro summary (returns all components inline including tactical — do not make separate per-component calls) |
 | `get_peer_snapshot` | per holding — **all N calls fan out in parallel within Batch A** | **Primary scoring source** for `PARALLAX_LOADER_V2=1`. Aggregate scores client-side per `loader.md` §3b. |
 | `get_company_info` | per holding — **all N calls fan out in parallel within Batch A** | **Ground-truth check oracle** per loader.md §5 rule 3 (required universally, view or no view). Records `expected_name` to cross-check against `get_peer_snapshot.target_company`. |
+| `get_news_synthesis` | per top-N holding by input weight (default 3) — **all N calls fan out in parallel within Batch A** | Async, 30-90s each. Top-N derives from the user-supplied weights, not from any Batch A output — fire in the SAME turn as the other rows so the 30-90s wait overlaps everything else. Never loop these sequentially. |
 | `check_portfolio_redundancy` | `holdings` | Overlap detection |
 | `quick_portfolio_scores` | `holdings` | **Legacy/V1 path only**. Do NOT use if `PARALLAX_LOADER_V2=1` and view active. |
 
@@ -78,7 +79,7 @@ Do NOT auto-invoke the judge from morning-brief. Morning-brief already
 does its own live macro_analyst fan-out per Batch A — invoking the judge
 would duplicate that work. The one-liner is a pointer, not an action.
 
-3. For top N holdings by weight (default 3): call `get_news_synthesis` (async — don't block output).
+3. Holding news is already in flight from Batch A. Insert each result into the Holding News section as it resolves; if any call is still pending or timed out when the report is composed, render the pending note inside that holding's paragraph per conventions §5 and the Degraded-state rule — do not wait.
 4. Append audit log entry per loader.md §6.
 
 ### Pre-Render — Load white-label branding

@@ -65,9 +65,9 @@ Per `loader.md` §1-§2. If view present, capture tilt vector, excludes, basis_s
 
 **After Batch A**: cross-check returned names against `get_company_info` names per loader.md §5 rule 3. For `PARALLAX_LOADER_V2=1`, any mismatch in `get_peer_snapshot` is flagged ⚠ MISMATCH and excluded from aggregate calculations. For V1, any mismatch in `quick_portfolio_scores` is re-scored individually and flagged as UNTRUSTED for the batch factor profile.
 
-### Batch B — Macro context (after Batch A)
+### Batch B — Macro context (concurrent with Batch A)
 
-Derive home markets from RIC suffixes. Call `macro_analyst` with component="tactical" for each unique covered market (cap 3).
+Derive home markets from RIC suffixes (available from the input holdings before any call — no Batch A output is required). Fire `macro_analyst` with component="tactical" for each unique covered market (cap 3) in the SAME tool-call turn as the Batch A calls, rather than as a separate stage after them. Batch C still requires BOTH Batch A and these macro calls to have completed.
 
 ### Batch C — Health flags + drill-down (after A + B)
 
@@ -92,7 +92,7 @@ News (selective, async): `get_news_synthesis` for holdings >10% weight AND flagg
 ### Batch D — Recommendations + Assessment (after A + B + C)
 
 1. Per `references/recommendation-matrix.md`, assign each flagged holding a priority (High/Medium/Low) and action type (trim/exit/hold/investigate/reweight). Every recommendation must cite a specific finding. View Excluded → Exit (priority High). View Misalignment → Trim or Reweight (priority Medium unless paired with other flags).
-2. Call `get_assessment` with comprehensive prompt incorporating: portfolio composition, factor scores, health flags (including View flags), macro context, per-holding drill-down findings, recommendations, client context, AND active house view (basis_statement + tilt vector + excludes if present).
+2. Call `get_assessment` with comprehensive prompt incorporating: portfolio composition, factor scores, health flags (including View flags), macro context, per-holding drill-down findings, recommendations, client context, AND active house view (basis_statement + tilt vector + excludes if present). Fire this call as soon as recommendations are assigned (a deterministic matrix lookup — do not wait for pending `get_news_synthesis` calls; include news highlights only if already resolved). While `get_assessment` runs, proceed to compose all non-assessment sections; insert the assessment result into the Suitability Assessment section when it resolves, or render the degraded-state note per the existing rule on timeout.
 3. Append audit log entry per loader.md §6.
 
 ### Pre-Render — Load white-label branding

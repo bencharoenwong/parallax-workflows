@@ -63,6 +63,7 @@ Per `loader.md` §1-§2: read view if present, validate hash and expiry. If view
 | `analyze_portfolio` | `portfolio=[{date: <today ISO>, symbol: <ric>, weight: <w>}]`, `fields=["concentration_metrics","sector_allocation","company_contribution"]` | Concentration and attribution. Two separate field-subset calls to manage response size. **Timeout fallback:** skip if exceeds 30s. |
 | `get_peer_snapshot` | per holding | **Primary scoring source** for `PARALLAX_LOADER_V2=1`. **Timeout handling:** fire in parallel; if N≥2 calls timeout, mark those holdings as "scores unavailable" and continue with health-flags-only scoring. Collect successful scores only. Aggregate client-side per `loader.md` §3b. **For 10+ holdings:** prioritize top/bottom 5 by weight; timeout on remaining holdings is acceptable — fall back to health flags for those positions. |
 | `get_company_info` | per holding | **Ground-truth check oracle** per loader.md §5 rule 3 — records `expected_name` for mismatch check against `get_peer_snapshot.target_company`. **Timeout handling:** if timeout, mark holding as "name verification unavailable" and flag ⚠ UNVERIFIED. |
+| `get_score_analysis` | per holding | Score trend (improving/stable/declining) for the Score Momentum table and the Exit classification. Input is symbol + weeks only — no Batch A dependency, so it fires here in parallel. **For 10+ holdings:** prioritize top/bottom 5 by weight. **Timeout handling:** mark the holding's trend "unavailable" and continue. |
 | `check_portfolio_redundancy` | `holdings` | Overlap detection. **Timeout fallback:** if exceeds 20s, flag "redundancy check skipped" and continue. |
 | `list_macro_countries` | — | Check market coverage. **Timeout fallback:** skip if exceeds 5s. |
 | `quick_portfolio_scores`| `holdings` | **Legacy/V1 path only**. Do NOT use if `PARALLAX_LOADER_V2=1` and view active. **Timeout fallback:** if exceeds 10s, degrade to health-flags-only scoring. |
@@ -72,10 +73,9 @@ Per `loader.md` §1-§2: read view if present, validate hash and expiry. If view
 2. For holdings with no scores (timeouts), scoring is determined by health flags only — these holdings cannot be ranked by factor scores and must be evaluated by "High/Medium/Low priority" categories based on flags alone.
 3. Summary output: "Batch A completed: N/M holdings scored (M-N timeouts on peer snapshots). Rebalance will proceed with health-flag-driven recommendations for scoring-unavailable holdings."
 
-### Batch B — Macro + score trends (after Batch A)
+### Batch B — Macro (after Batch A)
 
-1. Call `macro_analyst` with component="tactical" for each unique covered market (cap 3).
-2. Call `get_score_analysis` for each holding (parallel within batch) to identify deteriorating vs. improving positions. For 10+ holdings, prioritize top/bottom 5 by weight.
+1. Call `macro_analyst` with component="tactical" for each unique covered market (cap 3) — fire all calls in one parallel batch. (Score trends moved into Batch A: `get_score_analysis` has no Batch A dependency, so it no longer waits behind the slow `analyze_portfolio` legs.)
 
 ### Batch C — Health flags + trade decisions
 

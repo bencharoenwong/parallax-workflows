@@ -47,7 +47,7 @@ Per `_parallax/house-view/loader.md` §1 and §2: load and validate any active h
 
 ### Phase 1: Understand the Event (parallel)
 
-Fire all three simultaneously:
+Fire all three simultaneously. `get_news_synthesis` is async (30-90s) and NEVER gates Phase 2, Phase 3, or the assessment: per conventions §5, insert its section when it resolves, or render a "news: pending" placeholder — do not wait on it.
 
 | Tool | Parameters | Notes |
 |---|---|---|
@@ -68,6 +68,7 @@ Phase 2 is staged into two parallel turns: **2a classification + ground-truth** 
 | `analyze_portfolio` | `portfolio=[{date: <today ISO>, symbol: <ric>, weight: <w>}]`, `fields=["concentration_metrics","sector_allocation","company_contribution","factor_exposures"]` | Sector/factor exposures. The parameters `holdings` and `lens` do not exist in the deployed schema. WARNING: may exceed 180K chars — fall back to `check_portfolio_redundancy` if truncated or on MCP schema validation error. Server-side ETF handling: ETFs included here without per-skill branching. |
 | `etf_profile` | per holding, plain ticker — **all N calls fan out in parallel within 2a** | **Asset-class oracle.** Non-error response → ETF; error response (`{"error": "No profile data found"}`) → equity. Free / instant per `_parallax/token-costs.md`. Mirrors `explain-portfolio` Step 1a. |
 | `get_company_info` | per holding — **all N calls fan out in parallel within 2a** | **Ground-truth name oracle** for cross-validation per conventions §2. Per-holding only — do NOT use comma-joined: comma-joined calls fail-empty on partial coverage, which is risky for arbitrary user-supplied portfolios where any single unresolved RIC silently zeroes the entire batch. |
+| `build_stock_universe` | theme describing what benefits from this scenario (e.g., "domestic US semiconductor manufacturers" if China tariffs hit imports) | **Beneficiary discovery (Phase 3 step 7), hoisted here** — the theme derives from the scenario text alone, needs no Phase 2 output, so it fires in the 2a turn to overlap the rest of Phase 2. If the theme is genuinely not derivable from the scenario, defer it to after Phase 2b instead. |
 
 **Gate between 2a and 2b** — perform the following checks on 2a results before firing 2b:
 
@@ -79,6 +80,7 @@ Phase 2 is staged into two parallel turns: **2a classification + ground-truth** 
 | Tool | Parameters | Notes |
 |---|---|---|
 | `get_score_analysis` | per **equity** holding (excluding ETFs from 2a and ⚠ MISMATCH holdings), 4-8 weeks — **all N calls fan out in parallel within 2b** | Current factor trajectories. Skipped holdings are surfaced explicitly in output (see Output Format). |
+| `get_peer_snapshot` | top 5 beneficiary candidates from the 2a `build_stock_universe` result — **fire in this 2b turn alongside `get_score_analysis`** | **Beneficiary scoring (Phase 3 step 8), hoisted here** — candidate symbols come from the universe build (different symbols than the score fan-out), so the two are independent and batch together. |
 
 Then call `get_assessment` with a prompt that:
    - Describes the scenario
@@ -87,9 +89,9 @@ Then call `get_assessment` with a prompt that:
    - Explicitly excludes ⚠ MISMATCH holdings from the prompt entirely
    - Asks: "Rank these holdings from most-exposed to least-exposed to this scenario. For each, explain the transmission mechanism (direct revenue impact, supply chain, regulatory, sentiment)."
 
-### Phase 3: Sector Rotation & Replacement Candidates
-7. **Identify Beneficiaries** — Call `build_stock_universe` with a theme describing what benefits from this scenario (e.g., "domestic US semiconductor manufacturers" if China tariffs hit imports).
-8. **Score Beneficiaries** — Call `get_peer_snapshot` for top 5 candidates from the universe build.
+### Phase 3: Sector Rotation & Replacement Candidates (steps 7-8 overlap Phase 2 — see above)
+7. **Identify Beneficiaries** — `build_stock_universe` is fired in the Phase 2a turn (theme is scenario-derived; see the 2a table).
+8. **Score Beneficiaries** — `get_peer_snapshot` for the top 5 universe candidates is fired in the Phase 2b turn (see the 2b table).
 9. **Compare Replacements** — For the top 2-3 replacement candidates, call `get_financials` with statement "summary" to verify they're fundamentally sound, not just thematically relevant.
 
 ### Phase 4: Action Plan

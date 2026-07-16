@@ -126,7 +126,7 @@ For the **top 3 detractors** by weighted contribution (parallel):
 
 **Note on `get_peer_snapshot`:** The tool may return a different company as the "target" (see Convention #2). Extract the queried stock's scores from wherever it appears in the peer list — do not trust the `target_company` field blindly. Cross-check against `get_company_info` if the name looks wrong.
 
-Determine for each: is this stock down because of (a) broad market, (b) sector/factor rotation, or (c) company-specific news?
+Fire `get_news_synthesis` non-blocking per conventions §5: overlap it with the branding load, macro reasoning, and the price/score computations that feed the divergence math, and begin assembling those sections immediately. The top-3 detractors' divergence classification (Step 5) and their advice (Step 6) MUST wait for their news to resolve (or its absence be confirmed) — Step 5's provisional-flag rule keys on whether a major event (earnings miss, indictment, regulatory action) broke after the last score data point, which only the news synthesis reveals; finalizing a "Transient — hold or add" verdict on a freshly-adverse detractor before its news lands is the exact failure that flag exists to prevent. If news is still pending when the rest of the report is drafted, render "Analysis pending — service temporarily unavailable" inside Top Detractors AND mark the affected detractors' divergence rows provisional-pending-news, per the Render step's degraded-state rule. Then determine for each: is this stock down because of (a) broad market, (b) sector/factor rotation, or (c) company-specific news?
 
 ### Step 5 — Score-vs-price divergence (the key insight)
 
