@@ -4,6 +4,28 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-07-16: Latency reordering batch 2 — 7 skills fire independent MCP calls concurrently/non-blocking, with deliberate gates preserved
+
+**Why.** Per-holding serial loops and stage barriers were the dominant latency leak across the analysis skills (continuing the batch-1 finding). Many MCP calls whose inputs are known before an earlier stage completes were nonetheless queued behind that stage, so wall-clock ran as the sum of stages rather than the slowest single chain. Each reorder here is a zero-token change: the same tool set is called and the rendered report is byte-identical — only dispatch ordering moves.
+
+**Impact.**
+- **`parallax-client-review`** — Batch B macro calls fire concurrent with Batch A (home markets derive from input RIC suffixes, needing no Batch A output); Batch C still gates on both. `get_assessment` fires as soon as the deterministic recommendation matrix is assigned; non-assessment sections compose while it runs, with the existing degraded-state note covering timeout.
+- **`parallax-morning-brief`** — top-N `get_news_synthesis` joins the Batch A fan-out (top-N is a function of user-supplied weights, not Batch A output); results insert as they resolve.
+- **`parallax-rebalance`** — `get_score_analysis` moves into Batch A (no Batch A dependency), off the critical path behind `analyze_portfolio`; Batch B becomes macro-only.
+- **`parallax-scenario-analysis`** — Phase 3 beneficiary discovery/scoring hoisted into the Phase 2a/2b turns.
+- **`parallax-watchlist-monitor`** — flagged drill-down collapses from three serial steps to one parallel batch.
+- **`parallax-explain-portfolio`** — news made non-blocking and overlapped with branding/macro/price-score work.
+- **`parallax-judge-house-view`** — Phase 5 per-cell LLM dispatch parallelized (cells are mutually independent).
+
+**Alternatives.**
+- `[DROP]` **Make explain-portfolio a full non-block** — rejected. The top-3 detractors' divergence classification (Step 5) and advice (Step 6) stay gated on news resolving: the provisional-flag rule keys on whether a major event (earnings miss, indictment, regulatory action) broke after the last score data point, which only the news synthesis reveals. Firing a "Transient — hold or add" verdict on a freshly-adverse detractor before its news lands is the exact failure that flag guards against.
+- `[DROP]` **Merge scenario-analysis Phase 1 into Phase 2a** — rejected; it would strip news from theme construction. `get_financials` (step 9) is also kept serial because it depends on the step-8 beneficiary scores.
+- `[DROP]` **Parallelize the judge Phase 5 citation check along with dispatch** — not done. Only the LLM dispatch is parallelized; the per-cell `validate_citation` ≥30-char verbatim-substring hallucination check is untouched and validates each response as it returns.
+
+**Flip conditions.** (a) Any reorder is ever observed changing rendered output or tool set → revert that reorder (the contract is output-neutrality). (b) A runtime without concurrent-dispatch support → the parallel guidance degrades to sequential with no correctness impact. (c) A future data dependency is introduced into a hoisted call (e.g. a beneficiary theme that needs Phase 2 output) → move that call back behind its dependency, as the scenario-analysis 2a note already provides for.
+
+**Verification.** Diff reviewed verbatim against the authored plan before commit; each reorder confirmed data-dependency-safe (hoisted calls take only inputs available before their new turn). Prose-only — no `.py`, validator, schema, or test file touched, so the gate suites are unaffected.
+
 ## 2026-07-15: Verdict-sensitivity + client-safe render batch — arithmetic flip lines, a presentation-only audience mode, the Provenance→About-This-Report footer rename, translation validators, and an audit-doc hygiene rule
 
 **Why.** Four related gaps surfaced together. (1) Threshold-driven outputs (screens, badges, health flags, AI-profile verdicts) told a reader *what* the classification was but never *how close* it was to flipping — information the workflow had already computed and then discarded. (2) The same outputs risked reading as trade instructions rather than analytical classifications, a standing compliance exposure for retail-suitable deployment. (3) A single deliverable had to serve both an internal analyst and an end client, but the internal-only apparatus (flip arithmetic, cutoff math, tool/token/source-tag lines) was not separable. (4) The report footer was labeled "Provenance," an engineering term that reads as internal jargon on a client-facing deliverable.
