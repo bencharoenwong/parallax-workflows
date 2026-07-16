@@ -143,6 +143,46 @@ def test_resolve_falls_back_to_hardcoded_on_list_failure():
 
 
 # ---------------------------------------------------------------------------
+# DEFAULT_COMPONENTS fan-out set (cost regression guard)
+# ---------------------------------------------------------------------------
+
+
+def test_default_components_excludes_fixed_income():
+    """Cost regression guard.
+
+    `fixed_income` was dropped from the default fan-out because no
+    downstream formula consumes it (macro_analyst was fanned out per
+    market for `fixed_income` — 14x/run — with the response never read by
+    cross_country, pillar_compose, or pillar_formulas). Re-add it ONLY in
+    the same change that lands a consuming formula (the deferred "rates
+    leg" of econometrics_phase) — a silent re-add here would reinflate the
+    make-house-view / judge-house-view MCP fan-out from 14x4 back to 14x5.
+    """
+    assert DEFAULT_COMPONENTS == ("macro_indicators", "tactical", "sectors", "news")
+    assert len(DEFAULT_COMPONENTS) == 4
+    assert "fixed_income" not in DEFAULT_COMPONENTS
+
+
+def test_fan_out_requests_no_fixed_income_component(tmp_view_dir: Path):
+    """Functional companion to the structural guard above.
+
+    Verifies the actual fan-out request set built from `DEFAULT_COMPONENTS`
+    (not just the constant in isolation) excludes `fixed_income` for every
+    covered market.
+    """
+    orc = MakerOrchestrator(
+        MakerOptions(view_dir=tmp_view_dir, market_filter=["us", "japan"])
+    )
+    runner = _FixtureRunner()
+    markets, _ = orc.resolve_covered_markets(runner)
+    per_market, _telemetry = orc.fan_out(runner, markets)
+    assert per_market, "fan_out should return per-market responses"
+    for m in per_market:
+        assert set(m.components.keys()) == set(DEFAULT_COMPONENTS)
+        assert "fixed_income" not in m.components
+
+
+# ---------------------------------------------------------------------------
 # End-to-end save: audit + provenance + chain
 # ---------------------------------------------------------------------------
 
