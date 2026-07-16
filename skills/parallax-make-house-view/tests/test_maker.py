@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
 
 import pytest
 import yaml
@@ -28,7 +27,6 @@ from maker import (
     SKILL_NAME,
     MakerOptions,
     MakerOrchestrator,
-    MakerResult,
     MCPResponses,
     MCPRunner,
 )
