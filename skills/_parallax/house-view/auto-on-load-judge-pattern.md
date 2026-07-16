@@ -17,7 +17,7 @@ Fire ONLY when ALL of:
    the same MCP fan-out shape but skips the LLM-as-judge recommendation
    step; the `--json` flag returns structured output).
    **Cost signal:** the `--dry` run still incurs the full macro fan-out
-   (~350 tokens, see `_parallax/token-costs.md`); the >30-day age gate
+   (~280 tokens, see `_parallax/token-costs.md`); the >30-day age gate
    bounds frequency — never lower that gate without revisiting cost.
 2. If the judge skill is NOT installed (ImportError or skill directory
    missing): surface a single-line preamble note: "/parallax-judge-house-view

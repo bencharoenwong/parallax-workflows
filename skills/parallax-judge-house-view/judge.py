@@ -322,7 +322,7 @@ def phase_1_fan_out(
         # empty dict and surface the gap in diagnostics — better than
         # crashing the whole pipeline.
         return {}
-    # The actual fan-out shape (14 markets × 5 components + telemetry)
+    # The actual fan-out shape (14 markets × 4 components + telemetry)
     # is implemented by the maker's orchestrator. The judge reuses
     # cross_country.aggregate + pillar_compose.compute_pillars on the
     # same payload shape — so live wiring goes through mcp_call_fn
