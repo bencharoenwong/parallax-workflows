@@ -51,7 +51,7 @@ This skill compares the active CIO house view against fresh Parallax macro signa
 
 The `--dry` flag skips the LLM Phase 5 recommendation step and returns deterministic drift severity from MCP signals alone. `--mock-mcp <path>` is independent — it replaces the live MCP fan-out with a canned JSON payload keyed by `tool:arg1:arg2:...` summary strings (for tests or CI). Either flag can be used alone or together.
 
-**Cost:** ~352 tokens at the default market set (~14 markets × 5 components; see `_parallax/token-costs.md`). `--dry` skips the Phase 5 LLM step but NOT the Phase 1 macro fan-out — the full ~352-token cost is still incurred.
+**Cost:** ~282 tokens at the default market set (~14 markets × 4 components; see `_parallax/token-costs.md`). `--dry` skips the Phase 5 LLM step but NOT the Phase 1 macro fan-out — the full ~282-token cost is still incurred.
 
 ## Workflow (Phases 0-8 per v2 plan §3.1)
 
@@ -67,7 +67,7 @@ Invoke `judge.phase_0_load_view()`, which wraps `stress.load_active_view()`. Thi
 
 ### Phase 1 — MCP fan-out
 
-Same recipe as the maker: 14 markets × 5 components (`macro_indicators`, `tactical`, `sectors`, `fixed_income`, `news`) + 1 `get_telemetry` call. Concurrency capped at 8.
+Same recipe as the maker: 14 markets × 4 components (`macro_indicators`, `tactical`, `sectors`, `news`) + 1 `get_telemetry` call. Concurrency capped at 8. (`fixed_income` is deferred — no v0 consumer; re-add in lockstep with the maker when a rates leg lands.)
 
 **Per-market timeout:** 45s. UNREACHABLE markets are classified via `stress.classify_mcp_meta_state` and weighted to 0 by the maker's aggregator. If unreachable_share > 30% across markets, the maker raises; the judge surfaces this in `diagnostics` and falls back to PARALLAX_SILENT.
 
