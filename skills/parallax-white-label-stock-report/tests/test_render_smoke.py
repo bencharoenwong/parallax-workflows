@@ -4,7 +4,6 @@ Run: python3 -m pytest tests/ -q   (from the skill dir)
 or:  python3 tests/test_render_smoke.py
 """
 import json
-import re
 import sys
 from pathlib import Path
 
