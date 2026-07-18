@@ -3,6 +3,7 @@
 Transforms run against the real source files (they are anchor-asserted, so a
 drifted source fails here before it fails a distribution build)."""
 import sys
+import unicodedata
 from pathlib import Path
 
 import pytest
@@ -105,6 +106,46 @@ def test_web_descriptions_cover_shortlist_within_limits():
         assert name in bb.WEB_DESCRIPTIONS
         assert len(name) <= 64
         assert len(bb.WEB_DESCRIPTIONS[name]) <= 200
+
+
+# The branding canaries are assembled from codepoints so this public repo never
+# carries them as literals (see build_bundle.py). These tests therefore assert
+# their SHAPE, never their value — a wrong hex digit would otherwise silently
+# drop a term from the leak gate while the scan kept passing. Nothing below may
+# spell a canary out, including in assertion messages.
+_EXPECTED_GLYPH_NAMES = [
+    "GREEK CAPITAL LETTER OMEGA",
+    "GREEK CAPITAL LETTER PHI",
+    "GREEK CAPITAL LETTER XI",
+    "GREEK CAPITAL LETTER PSI",
+]
+
+
+def test_branding_canaries_have_expected_shape():
+    canaries = bb._BRANDING_CANARIES
+    assert len(canaries) == len(_EXPECTED_GLYPH_NAMES) + 1
+    for i, expected in enumerate(_EXPECTED_GLYPH_NAMES):
+        glyph = canaries[i]
+        assert len(glyph) == 1, f"canary {i} is not a single character"
+        assert unicodedata.name(glyph) == expected, f"canary {i} name mismatch"
+    code_name = canaries[-1]
+    assert len(code_name) == 5, "code-name canary is not 5 characters"
+    assert code_name.isascii() and code_name.isalpha() and code_name.isupper(), (
+        "code-name canary is not ASCII uppercase letters")
+
+
+def test_branding_canaries_are_wired_into_the_scan(tmp_path):
+    for i, term in enumerate(bb._BRANDING_CANARIES):
+        planted = tmp_path / f"planted_{i}"
+        planted.mkdir()
+        (planted / "doc.md").write_text(f"prefix {term} suffix", encoding="utf-8")
+        with pytest.raises(bb.BuildError):
+            bb.canary_scan(planted)
+
+
+def test_canary_scan_passes_on_clean_tree(tmp_path):
+    (tmp_path / "doc.md").write_text("nothing to see here\n", encoding="utf-8")
+    bb.canary_scan(tmp_path)
 
 
 def test_plugin_skill_dirs_exist_and_have_skill_md():

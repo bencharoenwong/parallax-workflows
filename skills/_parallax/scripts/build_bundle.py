@@ -213,17 +213,18 @@ def _cut(text: str, start: str, end: str, label: str) -> str:
     return text[:i] + text[j:]
 
 
-def _drop_line(text: str, line: str, label: str) -> str:
-    needle = line + "\n"
-    if needle not in text:
-        raise BuildError(f"transform anchor not found ({label}): line")
-    return text.replace(needle, "", 1)
-
-
-def _swap(text: str, old: str, new: str, label: str) -> str:
-    if old not in text:
-        raise BuildError(f"transform anchor not found ({label}): old text")
+def _swap(text: str, old: str, new: str, label: str, what: str = "old text") -> str:
+    n = text.count(old)
+    if n == 0:
+        raise BuildError(f"transform anchor not found ({label}): {what}")
+    if n > 1:
+        raise BuildError(
+            f"transform anchor not unique ({label}): {what} matched {n} times")
     return text.replace(old, new, 1)
+
+
+def _drop_line(text: str, line: str, label: str) -> str:
+    return _swap(text, line + "\n", "", label, what="line")
 
 
 def transform_hv_loader(text: str) -> str:
@@ -263,6 +264,20 @@ def transform_portfolio_builder(text: str) -> str:
         "- **Operator verification:** see "
         "[examples/testing-posture.md](../../examples/testing-posture.md)",
         "portfolio-builder operator-verification link")
+
+
+def transform_white_label_stock_report(text: str) -> str:
+    """Drop the /parallax-cio-letter-prep route from the frontmatter
+    description. That skill is excluded from the plugin, and the description is
+    user-visible in the plugin's skill list, so naming it there advertises a
+    command the bundle does not provide. The routing intent (this skill is not
+    for monthly CIO LP letters) survives without the dangling slash command.
+    The source SKILL.md keeps the route for full-clone users who have it."""
+    return _swap(
+        text,
+        "not for monthly CIO LP letters (use /parallax-cio-letter-prep),",
+        "not for monthly CIO LP letters,",
+        "white-label-stock-report cio-letter-prep route")
 
 
 def transform_conventions(text: str) -> str:
@@ -351,6 +366,7 @@ TRANSFORMS = {
     "_parallax/AI-profiles/output-template.md": transform_output_template,
     "parallax-concierge/SKILL.md": transform_concierge,
     "parallax-portfolio-builder/SKILL.md": transform_portfolio_builder,
+    "parallax-white-label-stock-report/SKILL.md": transform_white_label_stock_report,
 }
 
 
@@ -451,25 +467,34 @@ def _resolve_parallax_ref(skills_root: Path, ref: str) -> bool:
     return any((skills_root / c).exists() for c in candidates)
 
 
+def bundled_skill_docs(skills_root: Path) -> list[Path]:
+    """Every markdown doc belonging to a bundled skill (SKILL.md plus its
+    references/ and other nested docs). The shared _parallax/ tree is excluded —
+    its refs are resolved by the collect_deps/allowlist path instead."""
+    return sorted(p for p in skills_root.rglob("*.md")
+                  if p.relative_to(skills_root).parts[0] != "_parallax")
+
+
 def resolution_check(skills_root: Path) -> None:
-    """Every shared-tree or references/ path named in a bundled SKILL.md must
-    resolve inside the bundle."""
+    """Every shared-tree, references/, or examples/ path named in a bundled
+    skill doc must resolve inside the artifact."""
     failures = []
-    for skill_md in sorted(skills_root.glob("*/SKILL.md")):
-        if skill_md.parent.name == "_parallax":
-            continue
-        text = skill_md.read_text(encoding="utf-8")
+    for doc in bundled_skill_docs(skills_root):
+        skill_dir = skills_root / doc.relative_to(skills_root).parts[0]
+        where = doc.relative_to(skills_root)
+        text = doc.read_text(encoding="utf-8")
         for ref in set(REF_PARALLAX.findall(text)):
             if not _resolve_parallax_ref(skills_root, ref):
-                failures.append(f"{skill_md.parent.name}: {ref}")
+                failures.append(f"{where}: {ref}")
         for m in {x.group(0) for x in REF_REFERENCES.finditer(text)}:
             if "<" in m:
                 continue
-            if not ((skill_md.parent / m).exists() or (skills_root / m).exists()):
-                failures.append(f"{skill_md.parent.name}: {m}")
+            if not ((skill_dir / m).exists() or (doc.parent / m).exists()
+                    or (skills_root / m).exists()):
+                failures.append(f"{where}: {m}")
         for m in set(REF_EXAMPLES.findall(text)):
             if not (skills_root.parent / m).exists():
-                failures.append(f"{skill_md.parent.name}: ../../{m}")
+                failures.append(f"{where}: ../../{m}")
     if failures:
         for f in failures:
             print(f"  UNRESOLVED: {f}", file=sys.stderr)
@@ -512,9 +537,9 @@ def build_plugin() -> None:
         # repo-root examples/ docs referenced from bundled skills ship at
         # <plugin>/examples/ so the ../../examples/ relative form resolves.
         example_refs = set()
-        for skill_md in sorted(skills_root.glob("*/SKILL.md")):
+        for doc in bundled_skill_docs(skills_root):
             example_refs |= set(REF_EXAMPLES.findall(
-                skill_md.read_text(encoding="utf-8")))
+                doc.read_text(encoding="utf-8")))
         for rel in sorted(example_refs):
             if not (REPO_ROOT / rel).is_file():
                 raise BuildError(f"referenced examples doc missing: {rel}")
@@ -652,6 +677,8 @@ def build_web(names: list[str]) -> None:
                 cross_deps |= c
                 example_refs |= set(REF_EXAMPLES.findall(body))
             for rel in sorted(example_refs):
+                if not (REPO_ROOT / rel).is_file():
+                    raise BuildError(f"referenced examples doc missing: {rel}")
                 dest = skill_root / "_vendored" / rel
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(REPO_ROOT / rel, dest)

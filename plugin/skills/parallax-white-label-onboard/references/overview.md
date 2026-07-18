@@ -177,7 +177,7 @@ v1 configs (`schema_version: 1`, `colors.{accent,background,text}` + `fonts.{hea
 - **Contrast**: WCAG AA compliance (≥4.5:1 for body text, ≥3:1 for large text)
 - **Calculation**: Gamma-corrected relative luminance with threshold 0.04045
 
-Reference: `skills/white-label-onboard/references/validation-rules.md`
+Reference: `skills/parallax-white-label-onboard/references/validation-rules.md`
 
 ### Logos
 
@@ -186,7 +186,7 @@ Reference: `skills/white-label-onboard/references/validation-rules.md`
 - **File size**: ≤5 MB
 - **Transparency**: Detected and preserved for PNG/SVG
 
-Reference: `skills/white-label-onboard/references/validation-rules.md`
+Reference: `skills/parallax-white-label-onboard/references/validation-rules.md`
 
 ### Fonts
 
@@ -194,7 +194,7 @@ Reference: `skills/white-label-onboard/references/validation-rules.md`
 - **Web-safe fallbacks**: Suggested if not installed
 - **Categories**: header (h1–h6), body (p, text), monospace (code, pre)
 
-Reference: `skills/white-label-onboard/references/supported-fonts.md`
+Reference: `skills/parallax-white-label-onboard/references/supported-fonts.md`
 
 ## Testing
 
