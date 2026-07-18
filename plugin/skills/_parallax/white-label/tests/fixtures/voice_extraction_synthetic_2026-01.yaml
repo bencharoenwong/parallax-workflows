@@ -1,0 +1,120 @@
+# Voice extraction test fixture — SYNTHETIC
+#
+# Purpose: validate that the Step 1.5 voice extraction prompt produces SPECIFIC,
+# quote-anchored output (vs generic asset-management boilerplate). The fields,
+# value-types, and confidence semantics mirror what a real corpus extraction
+# would produce.
+#
+# This is a SYNTHETIC fixture. Names, phrases, and holdings below are illustrative
+# placeholders for a fictional asset manager; no real portfolio composition,
+# real LP letter content, or real entity is referenced.
+
+enabled: true
+
+positioning: |
+  Example Asset Management is a fictional institutional long-only equity manager
+  used as a test fixture. Strategy: high-quality compounders with durable returns
+  on capital, held for multi-year periods. Portfolio is concentrated (~30 names)
+  across developed markets, with bias toward businesses whose competitive moats
+  are mispriced relative to consensus.
+
+tone:
+  register: institutional-analytical
+  # Two illustrative quoted phrases proving the register claim:
+  #   "Returns on incremental capital remain the load-bearing variable across this book."
+  #   "We continue to underwrite the franchise, not the quarter."
+  primary_attributes:
+    - thesis-led                # every section opens with the position's thesis
+    - evidence-anchored         # numeric or competitive-position evidence per claim
+    - long-horizon-framed       # references multi-year holding periods, not quarterly P&L
+    - specific-by-name          # names actual holdings rather than describing them generically
+    - probabilistic             # uses base-rate / range language rather than point forecasts
+    - candid-on-mistakes        # documents specific underwriting errors, not generalities
+  avoid_attributes:
+    - generic / abstract
+    - PR-speak / promotional
+    - consensus-deferential
+    - hedged / waffling
+    - hyperbolic
+
+core_rules:
+  - "Lead with thesis, not performance number. Performance is evidence OF the thesis."
+    # corpus: "The franchise we underwrote three years ago is finally showing through in the
+    # operating leverage; the year's return is the consequence, not the headline."
+  - "Pair every narrative claim with a concrete portfolio example. No abstract assertion without ledger."
+    # corpus: "Our two largest holdings — Acme Industries and Globex Holdings — together
+    # contributed 60% of relative outperformance, almost entirely through margin expansion."
+  - "Quantify confidence with ranges, not single numbers, when discussing forward returns."
+    # corpus: "We see a reasonable case for 12–15% IRR over five years; we do not see a case
+    # for 20%, and we are skeptical of presentations that do."
+  - "Document a specific underwriting error from the period; do not hide losses behind aggregates."
+  - "Use base-rate language ('historically, businesses with these characteristics ...') rather
+    than point predictions."
+  - "End sections with the position's next-quarter watch items, not a recap of the last quarter."
+
+anti_filler:
+  # Phrases conspicuously ABSENT from the synthetic corpus that would feel wrong if
+  # an AI draft introduced them.
+  - "leverage our expertise / our platform / our network"
+  - "best-in-class / world-class / industry-leading"
+  - "cutting-edge / state-of-the-art / revolutionary"
+  - "value proposition / value creation"
+  - "in today's volatile/uncertain/dynamic market"
+  - "synergies / synergistic"
+  - "robust / scalable / world-changing"
+  - "going forward"
+  - "alpha generation"
+
+audience_adaptation: []
+  # Single source — cannot derive variants from one document.
+  # Multi-letter sample needed to identify any audience-tier variations.
+
+channel_notes: []
+  # Single channel (synthetic LP letter). Cannot derive channel variants from one sample.
+
+drafted_vs_sent: []
+  # Cannot extract from a finished letter — requires AI draft + human-edited final pair.
+  # Populated incrementally via consumer-skill feedback loop.
+
+company_context: |
+  Example Asset Management (synthetic test fixture). Illustrative long-only equity
+  manager focused on quality compounders. Used to validate that voice extraction
+  produces specific, quote-anchored output rather than generic asset-management
+  boilerplate.
+
+disclaimers:
+  - jurisdiction: GENERIC
+    placement: report-end
+    text: |
+      This is a synthetic test-fixture disclaimer. It mirrors the placement and
+      structure a real fund's letter-end disclaimer would have (regulator,
+      methodology attribution, no-endorsement statement) without referencing
+      any real entity, regulator, or institution.
+
+source_corpus:
+  documents:
+    - "fixtures/synthetic-letter-2026-01.md (not committed; this fixture stands in for the extracted artifact)"
+  word_count: 2500
+  confidence: 0.7
+  notes: |
+    Synthetic fixture confidence pinned at 0.7 to mirror what a real single-letter
+    extraction would produce. Real extraction would back this with quote anchors;
+    here, the quoted phrases in comments above are illustrative.
+      - tone.register, tone.primary_attributes, core_rules, anti_filler,
+        positioning, company_context: high in a real extraction (~0.85).
+      - audience_adaptation, channel_notes: empty by design — single-letter
+        sample cannot reveal variation.
+      - drafted_vs_sent: empty — finished letters do not expose AI-draft pairs.
+
+# ---- VALIDATION CHECKLIST (Step 1.5 self-check) ----
+#
+# This fixture validates that the Step 1.5 prompt MECHANICS — field structure,
+# anchor-comment style, empty-by-design fields, confidence floor — produce a
+# parser-valid output. Real client-corpus extraction is required to validate
+# semantic quality (specificity, quote-anchoring) against actual prose.
+#
+# CONCLUSION: Step 1.5 prompt mechanics validated against a SYNTHETIC fixture.
+# Output is parser-valid and acknowledges single-source limitations. Prompt is
+# ready for use against real partner corpora when available, with the caveat
+# that single-newsletter input will leave audience_adaptation, channel_notes,
+# and drafted_vs_sent empty by design.

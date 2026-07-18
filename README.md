@@ -45,6 +45,17 @@ Add the Parallax MCP server to Claude Code. Connection details are provided duri
 
 ### 2. Install the workflows
 
+**Option A — plugin (recommended).** This repo hosts a Claude Code plugin marketplace with the general-release workflow set. Inside Claude Code:
+
+```
+/plugin marketplace add bencharoenwong/parallax-workflows
+/plugin install parallax@parallax-workflows
+```
+
+Plugin skills are namespaced — invoke them as `/parallax:parallax-should-i-buy`. Updates arrive with `/plugin marketplace update parallax-workflows`.
+
+**Option B — full clone (development, or if you want every workflow including the house-view operator tools):**
+
 ```bash
 git clone https://github.com/bencharoenwong/parallax-workflows.git
 cd parallax-workflows
@@ -67,7 +78,17 @@ The `_parallax` directory contains shared conventions, token-cost reference, and
 /parallax-should-i-buy AAPL
 ```
 
-If you see "tool not found" errors, the MCP server is not connected.
+(or `/parallax:parallax-should-i-buy AAPL` for the plugin install). If you see "tool not found" errors, the MCP server is not connected.
+
+### Claude web and mobile (claude.ai)
+
+The claude.ai apps don't load plugins; they take one uploaded skill at a time. Build self-contained `.skill` zips (shared files vendored inside each zip, descriptions trimmed to the claude.ai limit):
+
+```bash
+python3 skills/_parallax/scripts/build_bundle.py web
+```
+
+Then upload the zips from `~/Downloads/claude-web-skills/` in claude.ai → Settings → Capabilities → Skills. On Team/Enterprise plans an org admin can enable them workspace-wide instead of per-user. The Parallax MCP server must also be connected in claude.ai for the workflows to return data.
 
 ## Forking and Customizing
 
