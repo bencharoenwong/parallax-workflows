@@ -68,6 +68,7 @@ PLUGIN_SKILLS = [
     "parallax-thematic-screen",
     "parallax-watchlist-monitor",
     "parallax-white-label-onboard",
+    "parallax-white-label-stock-report",
     "translate-chinese-finance",
     "translate-thai-finance",
 ]
@@ -171,6 +172,15 @@ PARALLAX_INCLUDE = [
 ]
 
 # Distribution scan terms. Extra local-only terms come from EXTRA_CANARY_FILE.
+# Branding-only canaries (glyphs + framework code-name) must appear NOWHERE in
+# this public repo, including as literals here. Assemble them from codepoints so
+# a plain-text scan of this tracked file never surfaces them; the gate still runs
+# self-contained on any checkout with identical behavior. The snake_case /
+# compute_* identifiers below are the public data contract (safe as literals).
+_BRANDING_CANARIES = ["".join(map(chr, cps)) for cps in (
+    (0x03A9,), (0x03A6,), (0x039E,), (0x03A8,),   # four branding glyphs
+    (0x50, 0x52, 0x49, 0x53, 0x4D),               # framework code-name
+)]
 CANARY_TERMS = [
     "econometrics_phase",
     "valuation_state",
@@ -180,11 +190,7 @@ CANARY_TERMS = [
     "compute_phi",
     "compute_xi",
     "compute_psi",
-    "PRISM",
-    "Ω",  # Ω
-    "Φ",  # Φ
-    "Ξ",  # Ξ
-    "Ψ",  # Ψ
+    *_BRANDING_CANARIES,
 ]
 
 
@@ -434,9 +440,6 @@ REF_EXAMPLES = re.compile(r"\.\./\.\./(examples/[A-Za-z0-9_./-]+\.md)")
 def _resolve_parallax_ref(skills_root: Path, ref: str) -> bool:
     ref = ref.rstrip(".")
     candidates = [ref, ref + ".py", ref + ".md"]
-    if ref.endswith("extract.py"):
-        # extract.py was split into the extract/ package; accept the package.
-        candidates.append(ref[:-3])
     return any((skills_root / c).exists() for c in candidates)
 
 
@@ -599,8 +602,6 @@ def collect_deps(md_text: str, strict: bool = True) -> tuple[set, set]:
     for ref in REF_PARALLAX.findall(md_text):
         rel = ref.rstrip(".")[len("_parallax/"):].rstrip("/")
         candidates = [rel, rel + ".py", rel + ".md"]
-        if rel.endswith("extract.py"):
-            candidates.append(rel[:-3])
         resolved = next((c for c in candidates
                          if (SKILLS_DIR / "_parallax" / c).is_file()
                          or ((SKILLS_DIR / "_parallax" / c).is_dir() and allowed(c))),

@@ -22,7 +22,7 @@ The white-label onboarding skill is part of the `parallax-workflows` repository.
 ls -la skills/white-label-onboard/
 ls -la skills/_parallax/white-label/
 
-# Expected output: SKILL.md, schema.yaml, loader.py, validator.py, extract.py, tests/
+# Expected output: SKILL.md, schema.yaml, loader.py, validator.py, extract/, tests/
 ```
 
 ### First-Time Directory Setup

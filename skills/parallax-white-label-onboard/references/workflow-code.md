@@ -2,7 +2,7 @@
 
 Full Python code blocks for `/parallax-white-label-onboard`. SKILL.md keeps the runtime decision logic and breadcrumbs; this file holds the verbose code Claude JIT-loads when actually executing.
 
-JIT-load `_parallax/white-label/extract.py`, `_parallax/white-label/validator.py`, and `_parallax/white-label/loader.py` before using the patterns below.
+JIT-load `_parallax/white-label/extract/` (the extract package), `_parallax/white-label/validator.py`, and `_parallax/white-label/loader.py` before using the patterns below.
 
 ---
 

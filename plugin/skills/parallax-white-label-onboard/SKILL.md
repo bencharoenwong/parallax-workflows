@@ -15,13 +15,13 @@ description: "Configure white-label client branding for Parallax report output. 
 ## Gotchas
 
 - JIT-load _parallax/white-label/schema.yaml before extraction — it is the single source of truth for config.yaml shape
-- JIT-load _parallax/white-label/extract.py and _parallax/white-label/validator.py before running Steps 1 and 2
+- JIT-load _parallax/white-label/extract/ (the extract package) and _parallax/white-label/validator.py before running Steps 1 and 2
 - URL input — use defuddle (Bash: `defuddle parse <url> --md`) if available, else WebFetch; do NOT defuddle PDFs
 - PDF input — use the Read tool with `pages` parameter; read up to first 10 pages unless the brand guide is clearly deeper
 - PPTX input — extract.extract_from_pptx() reads OOXML theme XML directly (precise colors/fonts) and aggregates slide text for voice corpus. Requires python-pptx
 - DOCX input — extract.extract_from_docx() same pattern via word/theme/theme1.xml. Requires python-docx
 - Folder input — when given a directory, run all .pptx/.docx/.pdf files inside it through their respective extractors and merge_drafts() the result before validation
-- Voice extraction is LLM-driven (NOT regex) — extract.py only assembles the corpus. SKILL.md Step 1.5 prompts the model to fill the voice schema using the Lago 7-section template
+- Voice extraction is LLM-driven (NOT regex) — the extract package only assembles the corpus. SKILL.md Step 1.5 prompts the model to fill the voice schema using the Lago 7-section template
 - Voice corpus must be ≥500 words for credible extraction; ≥2000 words is recommended. VoiceValidator.validate_corpus_size enforces this with warn/fail. Below the floor, refuse to populate voice or surface a hard warning
 - Wizard mode is triggered by invoking with no argument — guide intake via AskUserQuestion, one prompt per group
 - Confirmation gate is REQUIRED — config must not be written until the user explicitly confirms
@@ -81,7 +81,7 @@ Currently integrated: **Tier 1** (`/parallax-cio-letter-prep`, `/parallax-client
 
 ## Workflow
 
-JIT-load `_parallax/white-label/schema.yaml`, `_parallax/white-label/extract.py`, and `_parallax/white-label/validator.py` before executing any step below.
+JIT-load `_parallax/white-label/schema.yaml`, `_parallax/white-label/extract/` (the extract package), and `_parallax/white-label/validator.py` before executing any step below.
 
 ```python
 from skills._parallax.white_label.extract import (
