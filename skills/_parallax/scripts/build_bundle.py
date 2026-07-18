@@ -164,7 +164,6 @@ PARALLAX_INCLUDE = [
     "house-view/schema.yaml",
     "house-view/render_helpers.md",
     "house-view/view_status.py",
-    "house-view/README.md",
     "house-view/gap_detect.py",
     "house-view/gap_suggest.py",
     "house-view/auto-on-load-judge-pattern.md",
@@ -252,9 +251,18 @@ def transform_hv_schema(text: str) -> str:
     return text
 
 
-def transform_hv_readme(text: str) -> str:
-    return _swap(text, "Mirrors the `AI-profiles/` pattern: a family", "A family",
-                 "house-view README pattern sentence")
+def transform_portfolio_builder(text: str) -> str:
+    """Drop the operator-verification link. It points at
+    examples/testing-posture.md, whose smoke tests exercise the house-view
+    operator layer (parallax-load-house-view etc.) that is excluded from the
+    plugin. Removing the reference also stops the doc from being bundled —
+    examples/ files ship only when a shipped skill still references them. The
+    source SKILL.md keeps the link for full-clone users who have that layer."""
+    return _drop_line(
+        text,
+        "- **Operator verification:** see "
+        "[examples/testing-posture.md](../../examples/testing-posture.md)",
+        "portfolio-builder operator-verification link")
 
 
 def transform_conventions(text: str) -> str:
@@ -339,10 +347,10 @@ def transform_output_template(text: str) -> str:
 TRANSFORMS = {
     "_parallax/house-view/loader.md": transform_hv_loader,
     "_parallax/house-view/schema.yaml": transform_hv_schema,
-    "_parallax/house-view/README.md": transform_hv_readme,
     "_parallax/parallax-conventions.md": transform_conventions,
     "_parallax/AI-profiles/output-template.md": transform_output_template,
     "parallax-concierge/SKILL.md": transform_concierge,
+    "parallax-portfolio-builder/SKILL.md": transform_portfolio_builder,
 }
 
 

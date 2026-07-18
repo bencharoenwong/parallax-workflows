@@ -27,7 +27,6 @@ description: "Build a portfolio from a natural language investment thesis. Const
 - The saved house view never carries Parallax-derived overlays. When the active view is silent on a dimension this portfolio decision needs, EITHER (a) treat as neutral [default — non-blocking, RM-fan-out-safe] OR (b) JIT-augment via --augment-silent flag with provenance tagged per holding [auditable]. Never fold augmentation back into the saved view.
 - **View-status banner is REQUIRED first thing in output when active view exists** — never bury after the holdings table. If execution gets compressed, this is the section that must NOT be dropped. RM uses the banner as the primary signal that the view is active and what's being applied.
 - **Phase A Parallelization:** View load and universe build run in parallel (view load is fast; universe build is the latency bottleneck). Both complete before Phase B begins.
-- **Operator verification:** see [examples/testing-posture.md](../../examples/testing-posture.md)
 - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
 - Optional `audience=` argument: `client_safe | internal_analyst`; precedence follows `parallax-conventions.md` §13.1.
 
