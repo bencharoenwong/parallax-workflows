@@ -86,15 +86,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 
 | Workflow | Tokens (typical) | Key cost drivers |
 |---|---|---|
-| `/parallax-load-house-view` | **0** | File I/O only — no chargeable MCP calls |
-| `/parallax-house-view-diff` | **2× child** | Runs the target skill twice (Leg A without view, Leg B with view) — no additional Parallax tokens beyond the child, but total cost doubles: e.g. 2 × 36 = **72 tokens** with `/parallax-portfolio-builder`. |
-| `/parallax-stress-house-view` | **~30** (scales with tilted markets) | `check_macro_health` (5) + `get_telemetry` (1) + `macro_analyst` × tilted markets (5 each); cap 12 markets |
-| `/parallax-judge-house-view` | **~282** | Same recipe as make: 14 markets × 4 components + telemetry |
-| `/parallax-make-house-view` | **~282** (scales with `--markets`) | `list_macro_countries` (0) + `get_telemetry` (1) + `macro_analyst` × 14 markets × 4 components (280); `--markets` flag reduces the market set and scales cost proportionally |
 
-> **Cost gotcha:** `/parallax-make-house-view` and `/parallax-judge-house-view` are the costliest workflows in the library at ~$56 each at Standard plan overage rates ($0.20/token). Run them intentionally — not as part of a routine check. For lightweight view assessment without full re-synthesis, prefer `/parallax-stress-house-view`.
-
-> **Auto-trigger surcharge:** the auto-on-load drift check (fired by `/parallax-portfolio-builder`, `/parallax-rebalance`, and `/parallax-thematic-screen` when the loaded view is older than 30 days) invokes `/parallax-judge-house-view --dry`. `--dry` skips the LLM synthesis step but still incurs the full macro fan-out (~280 tokens) — this surcharge lands on the consuming workflow's bill, not a separate line item. Run intentionally; the 30-day age gate is what bounds how often it fires.
 
 ### Cost Context
 

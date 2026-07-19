@@ -375,7 +375,10 @@ def test_canary_allowlist_masking_cannot_manufacture_a_hit(tmp_path, monkeypatch
     the sentinel becomes load-bearing the moment one is added."""
     monkeypatch.setattr(bb, "CANARY_ALLOWLIST", ["public_field"])
     monkeypatch.setattr(bb, "CANARY_TERMS", ["alpha -- beta"])
+    # Synthetic term list only — opt out of the real extra list, which
+    # load_canary_terms now hard-requires.
     monkeypatch.setattr(bb, "EXTRA_CANARY_FILE", tmp_path / "absent.txt")
+    monkeypatch.setenv(bb.PARTIAL_SCAN_ENV, "1")
 
     clean = tmp_path / "clean"
     clean.mkdir()
@@ -399,3 +402,28 @@ def test_authoring_guide_exemption_is_scoped_to_placeholder_refs(tmp_path):
         "see `_parallax/house-view/loader-RENAMED.md`\n", encoding="utf-8")
     with pytest.raises(bb.BuildError):
         bb.resolution_check(tmp_path)
+
+
+def test_load_canary_terms_fails_closed_without_extra_file(tmp_path, monkeypatch):
+    """The extra list carries most of the terms. A missing file silently halved
+    the scan and the build still reported success — on a public repo that means
+    publishing under a weakened gate from any machine lacking the file."""
+    monkeypatch.setattr(bb, "EXTRA_CANARY_FILE", tmp_path / "absent.txt")
+    monkeypatch.delenv(bb.PARTIAL_SCAN_ENV, raising=False)
+    with pytest.raises(bb.BuildError):
+        bb.load_canary_terms()
+
+
+def test_load_canary_terms_allows_explicit_partial_scan(tmp_path, monkeypatch):
+    """Degrading is allowed, but only as a deliberate act."""
+    monkeypatch.setattr(bb, "EXTRA_CANARY_FILE", tmp_path / "absent.txt")
+    monkeypatch.setenv(bb.PARTIAL_SCAN_ENV, "1")
+    assert bb.load_canary_terms() == list(bb.CANARY_TERMS)
+
+
+def test_load_canary_terms_includes_extra_file_when_present():
+    """Guards the real machine path: the local list must actually be picked up,
+    not just tolerated."""
+    if not bb.EXTRA_CANARY_FILE.exists():
+        pytest.skip("extra scan-term file not present on this machine")
+    assert len(bb.load_canary_terms()) > len(bb.CANARY_TERMS)

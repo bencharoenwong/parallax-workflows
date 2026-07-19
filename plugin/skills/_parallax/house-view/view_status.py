@@ -80,7 +80,7 @@ def compute_status(
             effective_date=None,
             valid_through=None,
             days_remaining=None,
-            banner="No active house view. Run `/parallax-load-house-view` to set one.",
+            banner="No active house view. Run the house-view operator tooling to set one.",
             suggestion=None,
             tilts_apply=False,
         )
@@ -97,7 +97,7 @@ def compute_status(
             days_remaining=None,
             banner=(
                 f"! House view at {view_path} is unreadable ({type(e).__name__}). "
-                "Run `/parallax-load-house-view --edit` to repair."
+                "Run the house-view operator tooling to repair."
             ),
             suggestion="Repair or re-load.",
             tilts_apply=False,
@@ -119,7 +119,7 @@ def compute_status(
             days_remaining=None,
             banner=(
                 f"! House view '{name_disp}' is missing both effective_date and valid_through. "
-                "Tilts NOT applied. Run `/parallax-load-house-view --edit`."
+                "Tilts NOT applied. Run the house-view operator tooling."
             ),
             suggestion="Repair window before tilts can apply.",
             tilts_apply=False,
@@ -138,7 +138,7 @@ def compute_status(
             days_remaining=None,
             banner=(
                 f"! House view '{name_disp}' lacks `valid_through` and a positive `auto_expire_days`. "
-                "Tilts NOT applied. Run `/parallax-load-house-view --edit`."
+                "Tilts NOT applied. Run the house-view operator tooling."
             ),
             suggestion="Set valid_through.",
             tilts_apply=False,
@@ -171,7 +171,7 @@ def compute_status(
             banner=(
                 f"! House view '{name_disp}' expired {-days_remaining} day(s) ago "
                 f"({expiry.isoformat()}). Tilts NOT applied. "
-                "Run `/parallax-load-house-view --extend` or load a fresh view."
+                "Run the house-view operator tooling or load a fresh view."
             ),
             suggestion="Refresh required.",
             tilts_apply=False,
@@ -188,7 +188,7 @@ def compute_status(
             banner=(
                 f"⚠ Active view '{name_disp}' expires in {days_remaining} day{plural} "
                 f"({expiry.isoformat()}). Have you received an updated CIO view? "
-                "Run `/parallax-load-house-view` to refresh."
+                "Run the house-view operator tooling to refresh."
             ),
             suggestion="Ask CIO/IC for an updated view.",
             tilts_apply=True,

@@ -143,7 +143,6 @@ The renderer is plain deterministic Python, so Claude and Codex produce identica
 ## When not to use
 
 - Setting up or editing the client brand config → use /parallax-white-label-onboard
-- Monthly fund-manager letter to LPs → use /parallax-cio-letter-prep
 - Interactive single-stock analysis / buy decision → use /parallax-should-i-buy or /parallax-deep-dive
 - Full DIY research workflow (Palepu, financials) → use /parallax-due-diligence
 - Portfolio-level review → use /parallax-client-review

@@ -12,7 +12,6 @@ description: "Thematic stock screen and idea analysis: build a stock universe fr
 - Single stock analysis → use /parallax-should-i-buy
 - Portfolio review → use /parallax-client-review
 - Peer comparison of known stock → use /parallax-peer-comparison
-- Regime-first or reflexivity-driven trade ideas (e.g., "trade ideas in current rates regime") → use /parallax-ai-soros
 
 ## Gotchas
 

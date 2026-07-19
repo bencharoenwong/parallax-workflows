@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -235,9 +236,92 @@ def _drop_line(text: str, line: str, label: str) -> str:
     return _swap(text, line + "\n", "", label, what="line")
 
 
+def _swap_every(text: str, old: str, new: str, label: str) -> str:
+    """Replace EVERY occurrence. For anchors that legitimately recur (a command
+    named in several error messages); still fails loudly when none match, so a
+    renamed source anchor cannot silently no-op."""
+    if old not in text:
+        raise BuildError(f"transform anchor not found ({label}): recurring text")
+    return text.replace(old, new)
+
+
+HV_OPERATOR_TOOLING = "the house-view operator tooling"
+
+
 def transform_hv_loader(text: str) -> str:
-    return _cut(text, "### Framework components", "### Factor aliases",
+    text = _cut(text, "### Framework components", "### Factor aliases",
                 "loader.md components")
+    # The house-view RUNTIME ships (this loader, the schema, the helper modules)
+    # but every operator command that produces or repairs a view is excluded from
+    # the bundle. Left as-is, the recovery paths in these error messages tell a
+    # plugin user to run commands they do not have. Longest form first so the
+    # flagged variants are rewritten before the bare command.
+    for variant in ("`/parallax-load-house-view --apply-judge <audit-hash>`",
+                    "`/parallax-load-house-view --apply-stress <audit-hash>`",
+                    "`/parallax-load-house-view --re-pair`",
+                    "`/parallax-load-house-view --extend`",
+                    "`/parallax-load-house-view --edit`",
+                    "`/parallax-load-house-view`"):
+        if variant in text:
+            text = _swap_every(text, variant, HV_OPERATOR_TOOLING,
+                               "loader.md operator command")
+    return text
+
+
+def transform_view_status(text: str) -> str:
+    """Same problem as loader.md, but in runtime banner strings a user actually
+    sees: every recovery path names an operator command the bundle excludes."""
+    for variant in ("`/parallax-load-house-view --extend`",
+                    "`/parallax-load-house-view --edit`",
+                    "`/parallax-load-house-view`"):
+        if variant in text:
+            text = _swap_every(text, variant, HV_OPERATOR_TOOLING,
+                               "view_status operator command")
+    return text
+
+
+def transform_token_costs(text: str) -> str:
+    """Drop the cost rows for house-view operator workflows. The bundle ships the
+    house-view runtime but none of those commands, so pricing them advertises
+    workflows a plugin user cannot run."""
+    out = []
+    dropped = 0
+    excluded = ("/parallax-load-house-view", "/parallax-make-house-view",
+                "/parallax-judge-house-view", "/parallax-stress-house-view",
+                "/parallax-house-view-diff")
+    for line in text.splitlines(keepends=True):
+        if line.startswith("|") and any(f"`{c}`" in line for c in excluded):
+            dropped += 1
+            continue
+        out.append(line)
+    if dropped != len(excluded):
+        raise BuildError(
+            f"transform anchor not found (token-costs house-view rows): "
+            f"dropped {dropped}, expected {len(excluded)}")
+    text = "".join(out)
+    # The two callouts below the table price and describe the same excluded
+    # workflows; the auto-trigger one documents a drift check that cannot fire
+    # in a bundle without the judge command.
+    text = _cut(text, "> **Cost gotcha:**", "\n#", "token-costs cost-gotcha callout")
+    return text
+
+
+def transform_macro_outlook(text: str) -> str:
+    """Drop the routing line to an investor-profile skill the bundle excludes."""
+    return _drop_line(
+        text,
+        "- Regime-driven directional trade ideas for a specific ticker → "
+        "use /parallax-ai-soros",
+        "macro-outlook ai-soros route")
+
+
+def transform_thematic_screen(text: str) -> str:
+    """Drop the routing line to an investor-profile skill the bundle excludes."""
+    return _drop_line(
+        text,
+        "- Regime-first or reflexivity-driven trade ideas "
+        '(e.g., "trade ideas in current rates regime") → use /parallax-ai-soros',
+        "thematic-screen ai-soros route")
 
 
 def transform_hv_schema(text: str) -> str:
@@ -281,11 +365,17 @@ def transform_white_label_stock_report(text: str) -> str:
     command the bundle does not provide. The routing intent (this skill is not
     for monthly CIO LP letters) survives without the dangling slash command.
     The source SKILL.md keeps the route for full-clone users who have it."""
-    return _swap(
+    text = _swap(
         text,
         "not for monthly CIO LP letters (use /parallax-cio-letter-prep),",
         "not for monthly CIO LP letters,",
         "white-label-stock-report cio-letter-prep route")
+    # Same command, same rationale, in the body routing list — scrubbing only the
+    # frontmatter left the route advertised two screens further down.
+    return _drop_line(
+        text,
+        "- Monthly fund-manager letter to LPs → use /parallax-cio-letter-prep",
+        "white-label-stock-report cio-letter-prep body route")
 
 
 def transform_conventions_web(text: str) -> str:
@@ -393,6 +483,10 @@ TRANSFORMS = {
     "_parallax/house-view/schema.yaml": transform_hv_schema,
     "_parallax/parallax-conventions.md": transform_conventions,
     "_parallax/AI-profiles/output-template.md": transform_output_template,
+    "_parallax/token-costs.md": transform_token_costs,
+    "_parallax/house-view/view_status.py": transform_view_status,
+    "parallax-macro-outlook/SKILL.md": transform_macro_outlook,
+    "parallax-thematic-screen/SKILL.md": transform_thematic_screen,
     "parallax-concierge/SKILL.md": transform_concierge,
     "parallax-portfolio-builder/SKILL.md": transform_portfolio_builder,
     "parallax-white-label-stock-report/SKILL.md": transform_white_label_stock_report,
@@ -456,16 +550,33 @@ def assemble_parallax_shared(dest_root: Path) -> None:
 # Gates: term scan + reference resolution
 # --------------------------------------------------------------------------
 
+PARTIAL_SCAN_ENV = "PARALLAX_ALLOW_PARTIAL_SCAN"
+
+
 def load_canary_terms() -> list[str]:
+    """Built-in terms plus the local-only extra list.
+
+    FAILS CLOSED when the extra list is absent. It carries most of the terms, so
+    a missing file silently halves the scan — and this repo is public, so a
+    machine without it (CI, a fresh clone, a second workstation) would otherwise
+    publish under a weakened gate while reporting success. Set
+    PARALLAX_ALLOW_PARTIAL_SCAN=1 to proceed deliberately with built-ins only."""
     terms = list(CANARY_TERMS)
     if EXTRA_CANARY_FILE.exists():
         for line in EXTRA_CANARY_FILE.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if line and not line.startswith("#"):
                 terms.append(line)
-    else:
+    elif os.environ.get(PARTIAL_SCAN_ENV) == "1":
         print(f"WARN: extra scan-term file not found ({EXTRA_CANARY_FILE}); "
-              "running with built-in terms only", file=sys.stderr)
+              f"running with {len(terms)} built-in terms only "
+              f"({PARTIAL_SCAN_ENV}=1)", file=sys.stderr)
+    else:
+        raise BuildError(
+            f"extra scan-term file not found ({EXTRA_CANARY_FILE}). The term "
+            f"scan would run with only {len(terms)} built-in terms, which is a "
+            f"materially weaker gate on a public repo. Restore the file, or set "
+            f"{PARTIAL_SCAN_ENV}=1 to proceed deliberately with a reduced scan.")
     return terms
 
 

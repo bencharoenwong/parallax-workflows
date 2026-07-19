@@ -14,7 +14,6 @@ description: "Full macro regime analysis with optional equity screening: country
 - Single stock analysis → use /parallax-deep-dive or /parallax-should-i-buy
 - Thematic screening across all markets → use /parallax-thematic-screen
 - Reacting to a specific news event → use /parallax-scenario-analysis
-- Regime-driven directional trade ideas for a specific ticker → use /parallax-ai-soros
 
 ## Gotchas
 

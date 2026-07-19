@@ -30,7 +30,7 @@ Run these checks in order. On any failure, behave per "Failure handling" below �
 3. **Verify** `prose.md` frontmatter `paired_yaml_hash == view_hash`. If mismatch → drift detected (YAML body changed without re-pairing).
 3a. **Verify prose body integrity** — recompute `prose_body_hash` per schema.yaml §"prose_body_hash computation" and compare to `prose.md` frontmatter `prose_body_hash`. If mismatch → drift detected (prose body changed without re-pairing). Two narrow backward-compat carve-outs apply when the frontmatter field is **missing**:
 
-    - If `metadata.upload_timestamp < 2026-04-24T00:00:00Z` → legacy view. Skip the check and surface a **visible warning in the load preamble** (not a silent one-time note): "Legacy view: prose body integrity not verified. Re-pair via `/parallax-load-house-view --re-pair` to enable." Do not allow downstream consumers to silently ignore — the warning MUST appear in rendered output alongside the view-active banner.
+    - If `metadata.upload_timestamp < 2026-04-24T00:00:00Z` → legacy view. Skip the check and surface a **visible warning in the load preamble** (not a silent one-time note): "Legacy view: prose body integrity not verified. Re-pair via the house-view operator tooling to enable." Do not allow downstream consumers to silently ignore — the warning MUST appear in rendered output alongside the view-active banner.
     - If `metadata.upload_timestamp >= 2026-04-24T00:00:00Z` → **hard drift failure**. The field was required at save time for every post-2026-04-24 view; its absence means the frontmatter was tampered with or the writer skipped the step. Emit the standard drift message and refuse to apply the view. This closes the "legacy-view downgrade attack" where an adversary removes `prose_body_hash` from frontmatter to degrade the gate to a soft warning.
 4. **Verify** `metadata.version_id == prose.md frontmatter version_id`.
 5. **Verify** `extraction.uploader_confirmed == true`.
@@ -51,9 +51,9 @@ Run these checks in order. On any failure, behave per "Failure handling" below �
 | Check failed | Behavior |
 |---|---|
 | `view.yaml` missing | No active view. Run skill normally with standard disclaimer. |
-| Hash mismatch (drift) | DO NOT apply tilts. Emit: "House view prose and structure are out of sync — re-confirm via `/parallax-load-house-view --re-pair`. Running without view." |
-| `uploader_confirmed = false` | DO NOT apply tilts. Emit: "House view extraction was never confirmed by uploader. Run `/parallax-load-house-view` to confirm." |
-| Expired | DO NOT apply tilts. Emit: "Active house view '[view_name]' expired [N] days ago. Falling back to neutral. Update via `/parallax-load-house-view --extend`." |
+| Hash mismatch (drift) | DO NOT apply tilts. Emit: "House view prose and structure are out of sync — re-confirm via the house-view operator tooling. Running without view." |
+| `uploader_confirmed = false` | DO NOT apply tilts. Emit: "House view extraction was never confirmed by uploader. Run the house-view operator tooling to confirm." |
+| Expired | DO NOT apply tilts. Emit: "Active house view '[view_name]' expired [N] days ago. Falling back to neutral. Update via the house-view operator tooling." |
 | Not yet effective | DO NOT apply tilts. Emit: "House view '[view_name]' becomes effective on [date]. Running without view until then." |
 | Malformed window (both `effective_date` and `valid_through` null) | DO NOT apply tilts. Emit per §2 step 6 guard. |
 | Low-confidence fields | Apply tilts, but include in load preamble: "House view loaded with low extraction confidence on: [field list]. Verify before acting." |
@@ -65,7 +65,7 @@ The `view_status` helper emits the banner directly; this table documents the tie
 | Condition (days_remaining = effective_expiry − today) | Helper state | Banner (gist) | tilts_apply |
 |---|---|---|---|
 | `< 0` | `expired` | "Expired N day(s) ago. Tilts NOT applied. `--extend` or reload." | false |
-| `0 ≤ N < 10` | `critical` | "Expires in N day(s). Have you received an updated CIO view? `/parallax-load-house-view` to refresh." | **true** |
+| `0 ≤ N < 10` | `critical` | "Expires in N day(s). Have you received an updated CIO view? the house-view operator tooling to refresh." | **true** |
 | `10 ≤ N < 14` | `warning` | "Expires in N days; consider refreshing soon." | true |
 | `N ≥ 14` | `active` | "Active house view: '...' — N days remaining." | true |
 | `tilt_variance < 0.5` across non-zero tilts | (orthogonal warning, emitted in addition to the helper banner) | "Minimal differentiation; tilts will have weak portfolio effect." | n/a |
@@ -168,7 +168,7 @@ When `PARALLAX_LOADER_V2=1`, portfolio consumer skills call `get_peer_snapshot` 
 ### Exception: hard excludes
 
 `tilts.excludes` list is honored even over explicit user requests. When user names something on the excludes list:
-- Surface a block message: "Cannot include [X]: blocked by house view ([exclude_reason]). Override requires editing the view via `/parallax-load-house-view --edit`."
+- Surface a block message: "Cannot include [X]: blocked by house view ([exclude_reason]). Override requires editing the view via the house-view operator tooling."
 - Continue building the rest of the request without [X].
 
 ### Resolution table
@@ -267,7 +267,7 @@ Every consume event appends one JSONL line to `~/.parallax/active-house-view/aud
 | `disposition` | `action == "stress_test"` | string (enum) | One of: `completed`, `halted_internal` (Phase 1 hard stop), `validation_failed` (Closure 3 gate rejected deltas), `schema_unreadable` (schema.yaml unreadable at validation time — install-time failure, distinct from data-level `validation_failed`). Distinct from extraction_attempt's `disposition` — values do not overlap. |
 | `validation_errors` | `action == "stress_test"` AND `disposition` ∈ {`validation_failed`, `schema_unreadable`} | list of `{index, field, reason}` objects | Each error: `index` (int delta position or null for schema-level errors), `field` (delta field name or null), `reason` (human-readable string). For `schema_unreadable`, a single error with `index=null, field=null, reason="schema_unreadable: <exc_class>: <message>"`. |
 | `stress_summary` | `action == "stress_test"` | object | Counts and aggregate metadata: `{internal_pass, internal_taste_count, cio_age_days, parallax_age_days, age_delta, external_markets_queried, tilted_markets, uncovered_markets_in_view, states, cio_challenges, taste_decisions, cross_dimension_themes}`. |
-| `recommended_deltas` | `action == "stress_test"` (optional) | list of objects | One entry per divergent-stale cell. Each: `{kind: "informational" \| "global", path, market (nullable), cio_value, parallax_signal, parallax_summary, stress_state, cio_age_days, parallax_age_days}`. `path` follows the `--why <tilt-path>` convention (`tilts.<category>.<dim>[.<sub>]`). v1 emits only `kind: "informational"`; v2's `/parallax-load-house-view --apply-stress <audit-hash>` will read this field to pre-populate a draft. |
+| `recommended_deltas` | `action == "stress_test"` (optional) | list of objects | One entry per divergent-stale cell. Each: `{kind: "informational" \| "global", path, market (nullable), cio_value, parallax_signal, parallax_summary, stress_state, cio_age_days, parallax_age_days}`. `path` follows the `--why <tilt-path>` convention (`tilts.<category>.<dim>[.<sub>]`). v1 emits only `kind: "informational"`; v2's the house-view operator tooling will read this field to pre-populate a draft. |
 | `view_hash` | `action == "generate"` | string (sha256 hex) | Canonical hash of the generated view body per schema.yaml §"view_hash computation". Matches `metadata.view_hash` written into the saved `view.yaml`, correlating the `generate` row to the saved bundle. |
 | `provenance_hash` | `action == "generate"` | string (sha256 hex) | Hash of the canonical `provenance.yaml` emitted alongside the generated view. Pairs the audit row with the per-leaf `generator_synthesis` entries without duplicating them onto the row (see the forbidden-keys rule below). |
 | `source_tools` | `action == "generate"` | list of string | `["tool:arg1:arg2", ...]` summary of MCP calls used in synthesis (e.g., `["macro_analyst:Japan:tactical", "get_telemetry:overview"]`). Identifies which Parallax surfaces fed this generation; pairs with the `generator_synthesis` provenance class in schema.yaml. |
@@ -278,7 +278,7 @@ Every consume event appends one JSONL line to `~/.parallax/active-house-view/aud
 | `view_age_days` | `action == "judge"` | int ≥ 0 | Staleness of the judged view at judgment time: `floor((judge_ts - view.metadata.upload_timestamp) / 86400s)`. |
 | `parallax_age_days` | `action == "judge"` | int ≥ 0 | Maximum staleness across all MCP responses queried during the judgment run. Mirrors `stress_summary.parallax_age_days` semantics. |
 | `drift_summary` | `action == "judge"` | object | Counts of judgment outcomes across all judged cells: `{aligned_count, drift_minor_count, drift_material_count, drift_breaking_count, parallax_silent_count, uncovered_count}`. All ints ≥ 0. |
-| `recommendations` | `action == "judge"` | list of objects | One entry per cell where the judge recommends an edit. Same shape as `stress_test.recommended_deltas`: `{kind, path, market (nullable), cio_value, parallax_signal, parallax_summary, stress_state, cio_age_days, parallax_age_days}`. v1 emits only `kind: "informational"`; future `/parallax-load-house-view --apply-judge <audit-hash>` will read this field to pre-populate a draft and write `judge_recommendation` provenance entries onto accepted cells. |
+| `recommendations` | `action == "judge"` | list of objects | One entry per cell where the judge recommends an edit. Same shape as `stress_test.recommended_deltas`: `{kind, path, market (nullable), cio_value, parallax_signal, parallax_summary, stress_state, cio_age_days, parallax_age_days}`. v1 emits only `kind: "informational"`; future the house-view operator tooling will read this field to pre-populate a draft and write `judge_recommendation` provenance entries onto accepted cells. |
 | `notes` | any | string | Optional free text for anything that doesn't fit a named field. Not relied upon by downstream queries. |
 
 ### 6.3 Forbidden
