@@ -47,6 +47,8 @@ skills/
 └── ... (16 more)
 ```
 
+`plugin/` and `.claude-plugin/marketplace.json` are the **generated** Claude Code plugin bundle — never hand-edit them. Edit the sources under `skills/` and rerun `python3 skills/_parallax/scripts/build_bundle.py plugin` (a gate test fails when the tracked bundle is stale). See the `build_bundle.py` docstring for the build gates.
+
 ## Prerequisites
 
 The Parallax MCP server must be connected as `claude_ai_Parallax`. If tools return "not found", the server is not configured.

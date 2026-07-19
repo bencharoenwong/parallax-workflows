@@ -12,8 +12,10 @@ Subcommands:
 
 Both paths copy git-TRACKED files only (via `git ls-files`), apply the
 distribution transforms below, and run a term-scan gate before emitting
-anything. Extra local-only scan terms can be supplied one-per-line in
-~/.claude/parallax-canary-extra.txt (never tracked in this repo).
+anything. The scan's local-only extra terms live one-per-line in
+~/.claude/parallax-canary-extra.txt (never tracked in this repo); the build
+FAILS CLOSED when that file is absent unless PARALLAX_ALLOW_PARTIAL_SCAN=1
+is set (see load_canary_terms).
 
 Stdlib-only; runs under python >= 3.9.
 """

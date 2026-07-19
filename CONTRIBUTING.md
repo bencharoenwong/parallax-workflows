@@ -25,14 +25,15 @@ Thanks for the interest. A few notes on what fits and what doesn't.
    ```bash
    python -m venv .venv && source .venv/bin/activate
    pip install -r skills/_parallax/house-view/requirements.txt pytest
-   bash skills/_parallax/scripts/run-gate-tests.sh   # all roots, ~905 tests
+   bash skills/_parallax/scripts/run-gate-tests.sh   # all roots, ~1,060 tests
    ```
    It runs one `pytest` process per top-level test root, because three skills ship
    a `tests/conftest.py` that collide in a single invocation. While iterating you
    can run just one area, e.g. `pytest skills/_parallax/house-view/tests/` or
    `cd evals && python3 -m pytest graders -q`.
 3. **For SKILL.md changes**, verify the workflow runs end-to-end in a fresh Claude Code session. The runtime caches SKILL.md content at session start, so unit-style tests don't catch SKILL.md regressions.
-4. **Keep the diff focused.** One concern per PR. Refactors that bundle multiple unrelated changes get bounced.
+4. **If your change touches a skill or shared file in the plugin's general-release set**, rebuild the bundle (`python3 skills/_parallax/scripts/build_bundle.py plugin`) and commit the regenerated `plugin/` alongside your source edit — a gate test fails when the tracked bundle drifts from the sources. Never edit `plugin/` by hand.
+5. **Keep the diff focused.** One concern per PR. Refactors that bundle multiple unrelated changes get bounced.
 
 ## Style
 
