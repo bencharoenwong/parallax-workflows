@@ -51,13 +51,7 @@ ARCHIVE_SUFFIXES = {".docx", ".xlsx", ".pptx", ".zip"}
 MAX_ARCHIVE_MEMBERS = 10_000
 MAX_ARCHIVE_UNCOMPRESSED_BYTES = 64 * 1024 * 1024
 APPROVED_UNSCANNED_FILES: frozenset[str] = frozenset()
-
-# build_bundle.py defines the term list, so it necessarily contains the terms.
-SELF_EXEMPT = {
-    "skills/_parallax/scripts/build_bundle.py",
-    "skills/_parallax/scripts/scan_tracked_terms.py",
-}
-
+OFFICE_THUMBNAIL_MEMBERS = {"docProps/thumbnail.jpeg"}
 
 def scoped_terms() -> list[str]:
     """Branding + local-only terms. Pillar vocabulary is excluded on purpose --
@@ -121,8 +115,6 @@ def scan() -> tuple[list[tuple[str, str]], list[str]]:
     unscanned: list[str] = []
 
     for rel in tracked_files():
-        if rel in SELF_EXEMPT:
-            continue
         path = REPO_ROOT / rel
         if not path.is_file():
             continue
@@ -137,13 +129,14 @@ def scan() -> tuple[list[tuple[str, str]], list[str]]:
                         _mark_unscanned(unscanned, rel)
                         continue
                     for member in members:
-                        if member.is_dir():
+                        if member.is_dir() or member.filename in OFFICE_THUMBNAIL_MEMBERS:
                             continue
                         try:
                             with zf.open(member) as part:
                                 label = _archive_hit_label(part, terms)
                         except UnicodeDecodeError:
-                            continue
+                            _mark_unscanned(unscanned, rel)
+                            break
                         if label:
                             hits.append((rel, label))
                             break
