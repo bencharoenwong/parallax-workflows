@@ -37,6 +37,13 @@ def _track_bytes(root: Path, rel: str, content: bytes) -> None:
     subprocess.run(["git", "add", rel], cwd=root, check=True)
 
 
+def _track_symlink(root: Path, rel: str, target: str) -> None:
+    p = root / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.symlink_to(target)
+    subprocess.run(["git", "add", rel], cwd=root, check=True)
+
+
 # --------------------------------------------------------------------------
 # Term scope: branding + local-only in, pillar vocabulary out
 # --------------------------------------------------------------------------
@@ -110,6 +117,28 @@ def test_pillar_vocabulary_does_not_trip_the_scanner(tmp_path, monkeypatch):
     monkeypatch.setattr(st, "REPO_ROOT", tmp_path)
     hits, _ = st.scan()
     assert hits == []
+
+
+def test_dangling_symlink_target_is_scanned(tmp_path, monkeypatch):
+    term = bb._BRANDING_CANARIES[0]
+    _git_repo(tmp_path)
+    _track_symlink(tmp_path, "link.md", f"missing-{term}.md")
+    monkeypatch.setattr(st, "REPO_ROOT", tmp_path)
+    hits, unscanned = st.scan()
+    assert ("link.md", "branding") in hits
+    assert unscanned == []
+
+
+def test_live_symlink_scans_target_not_destination(tmp_path, monkeypatch):
+    term = bb._BRANDING_CANARIES[0]
+    _git_repo(tmp_path)
+    _track(tmp_path, "target.md", term)
+    _track_symlink(tmp_path, "link.md", "target.md")
+    monkeypatch.setattr(st, "REPO_ROOT", tmp_path)
+    hits, unscanned = st.scan()
+    assert ("target.md", "branding") in hits
+    assert not [hit for hit in hits if hit[0] == "link.md"]
+    assert unscanned == []
 
 
 # --------------------------------------------------------------------------
@@ -239,6 +268,7 @@ def test_text_file_with_unfamiliar_suffix_is_scanned(tmp_path, monkeypatch):
 def test_this_repo_has_no_restricted_terms():
     """The point of the whole file: this public repo stays clean. Three
     exposures were found by hand before this ran automatically."""
+    assert (st.REPO_ROOT / "docs/security/audit-latest.md").is_symlink()
     hits, unscanned = st.scan()
     assert hits == [], f"{len(set(hits))} tracked file(s) carry restricted terms"
     assert unscanned == [], f"{len(unscanned)} tracked file(s) were not scanned"

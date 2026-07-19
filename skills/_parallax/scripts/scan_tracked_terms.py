@@ -154,6 +154,15 @@ def scan() -> tuple[list[tuple[str, str]], list[str]]:
 
     for rel in tracked_files():
         path = REPO_ROOT / rel
+        if path.is_symlink():
+            try:
+                label = _raw_hit_label(os.fsencode(os.readlink(path)), terms)
+            except OSError:
+                _mark_unscanned(unscanned, rel)
+                continue
+            if label:
+                hits.append((rel, label))
+            continue
         if not path.is_file():
             continue
         suffix = path.suffix.lower()
