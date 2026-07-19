@@ -28,7 +28,7 @@ Exit 0 clean, 1 on any hit. Run: python3 skills/_parallax/scripts/scan_tracked_t
 """
 from __future__ import annotations
 
-import io
+import codecs
 import os
 import re
 import subprocess
@@ -51,7 +51,6 @@ ARCHIVE_SUFFIXES = {".docx", ".xlsx", ".pptx", ".zip"}
 MAX_ARCHIVE_MEMBERS = 10_000
 MAX_ARCHIVE_UNCOMPRESSED_BYTES = 64 * 1024 * 1024
 APPROVED_UNSCANNED_FILES: frozenset[str] = frozenset()
-OFFICE_THUMBNAIL_MEMBERS = {"docProps/thumbnail.jpeg"}
 
 def scoped_terms() -> list[str]:
     """Branding + local-only terms. Pillar vocabulary is excluded on purpose --
@@ -85,22 +84,61 @@ def _hit_label(text: str, terms: list[str]) -> str | None:
     return None
 
 
+def _raw_hit_label(data: bytes, terms: list[str]) -> str | None:
+    for term in terms:
+        if term.isascii():
+            found = re.search(re.escape(term.encode("ascii")), data, re.IGNORECASE)
+        else:
+            found = any(form.encode("utf-8") in data
+                        for form in {term, term.lower(), term.upper()})
+        if found:
+            return "branding" if term in bb._BRANDING_CANARIES else "restricted"
+    return None
+
+
 def _archive_hit_label(member: zipfile.ZipExtFile, terms: list[str]) -> str | None:
     span = max([len(term) for term in terms] +
                [len(term) for term in bb.CANARY_ALLOWLIST] + [1])
-    retained = ""
-    with io.TextIOWrapper(member, encoding="utf-8", errors="strict") as text:
-        while chunk := text.read(64 * 1024):
-            body = retained + chunk
-            if len(body) <= 2 * span:
-                retained = body
-                continue
-            safe_end = len(body) - 2 * span
-            label = _hit_label(body[:safe_end + span], terms)
-            if label:
-                return label
-            retained = body[safe_end:]
-    return _hit_label(retained, terms)
+    byte_span = max(len(form.encode("utf-8"))
+                    for term in terms
+                    for form in {term, term.lower(), term.upper()})
+    decoder = codecs.getincrementaldecoder("utf-8")("strict")
+    text_retained = ""
+    byte_retained = b""
+    text_label: str | None = None
+    byte_label: str | None = None
+    binary = False
+
+    while chunk := member.read(64 * 1024):
+        byte_body = byte_retained + chunk
+        byte_label = byte_label or _raw_hit_label(byte_body, terms)
+        byte_retained = byte_body[-byte_span:]
+        if binary:
+            continue
+        try:
+            text_chunk = decoder.decode(chunk)
+        except UnicodeDecodeError:
+            binary = True
+            continue
+        if text_label:
+            continue
+        text_body = text_retained + text_chunk
+        if len(text_body) <= 2 * span:
+            text_retained = text_body
+            continue
+        safe_end = len(text_body) - 2 * span
+        text_label = _hit_label(text_body[:safe_end + span], terms)
+        text_retained = text_body[safe_end:]
+
+    if binary:
+        return byte_label
+    try:
+        text_chunk = decoder.decode(b"", final=True)
+    except UnicodeDecodeError:
+        return byte_label
+    if text_label:
+        return text_label
+    return _hit_label(text_retained + text_chunk, terms)
 
 
 def _mark_unscanned(unscanned: list[str], rel: str) -> None:
@@ -129,12 +167,10 @@ def scan() -> tuple[list[tuple[str, str]], list[str]]:
                         _mark_unscanned(unscanned, rel)
                         continue
                     for member in members:
-                        if member.is_dir() or member.filename in OFFICE_THUMBNAIL_MEMBERS:
-                            continue
                         try:
                             with zf.open(member) as part:
                                 label = _archive_hit_label(part, terms)
-                        except UnicodeDecodeError:
+                        except (zipfile.BadZipFile, OSError, RuntimeError, EOFError):
                             _mark_unscanned(unscanned, rel)
                             break
                         if label:

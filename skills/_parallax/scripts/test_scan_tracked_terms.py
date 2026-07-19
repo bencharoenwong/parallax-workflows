@@ -166,19 +166,18 @@ def test_oversized_archive_fails_closed(tmp_path, monkeypatch, capsys):
     assert "fixture.zip" in capsys.readouterr().err
 
 
-def test_archive_with_undecodable_member_fails_closed(tmp_path, monkeypatch, capsys):
+def test_archive_with_clean_binary_member_passes(tmp_path, monkeypatch):
     _git_repo(tmp_path)
     archive = tmp_path / "fixture.zip"
     with zipfile.ZipFile(archive, "w") as zf:
         zf.writestr("document.xml", "clean")
-        zf.writestr("binary.bin", bytes(range(256)))
+        zf.writestr("binary.bin", b"\xff\xfe\xfd" * 100)
     subprocess.run(["git", "add", "fixture.zip"], cwd=tmp_path, check=True)
     monkeypatch.setattr(st, "REPO_ROOT", tmp_path)
     hits, unscanned = st.scan()
     assert hits == []
-    assert unscanned == ["fixture.zip"]
-    assert st.main() == 1
-    assert "fixture.zip" in capsys.readouterr().err
+    assert unscanned == []
+    assert st.main() == 0
 
 
 def test_office_thumbnail_does_not_hide_document_term(tmp_path, monkeypatch):
@@ -186,12 +185,38 @@ def test_office_thumbnail_does_not_hide_document_term(tmp_path, monkeypatch):
     term = bb._BRANDING_CANARIES[0]
     document = tmp_path / "fixture.docx"
     with zipfile.ZipFile(document, "w") as zf:
-        zf.writestr("word/document.xml", term)
-        zf.writestr("docProps/thumbnail.jpeg", bytes(range(256)))
+        zf.writestr("word/document.xml", "clean")
+        zf.writestr("docProps/thumbnail.jpeg", term)
     subprocess.run(["git", "add", "fixture.docx"], cwd=tmp_path, check=True)
     monkeypatch.setattr(st, "REPO_ROOT", tmp_path)
     hits, unscanned = st.scan()
     assert ("fixture.docx", "branding") in hits
+    assert unscanned == []
+
+
+def test_nonempty_directory_entry_is_scanned(tmp_path, monkeypatch):
+    _git_repo(tmp_path)
+    term = bb._BRANDING_CANARIES[0]
+    archive = tmp_path / "fixture.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("directory/", term)
+    subprocess.run(["git", "add", "fixture.zip"], cwd=tmp_path, check=True)
+    monkeypatch.setattr(st, "REPO_ROOT", tmp_path)
+    hits, unscanned = st.scan()
+    assert ("fixture.zip", "branding") in hits
+    assert unscanned == []
+
+
+def test_undecodable_archive_member_is_scanned_as_bytes(tmp_path, monkeypatch):
+    _git_repo(tmp_path)
+    term = bb._BRANDING_CANARIES[0]
+    archive = tmp_path / "fixture.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("binary.bin", b"\xff" + term.encode("utf-8") + b"\xfe")
+    subprocess.run(["git", "add", "fixture.zip"], cwd=tmp_path, check=True)
+    monkeypatch.setattr(st, "REPO_ROOT", tmp_path)
+    hits, unscanned = st.scan()
+    assert ("fixture.zip", "branding") in hits
     assert unscanned == []
 
 
