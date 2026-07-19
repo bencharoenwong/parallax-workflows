@@ -30,6 +30,13 @@ def _track(root: Path, rel: str, content: str) -> None:
     subprocess.run(["git", "add", rel], cwd=root, check=True)
 
 
+def _track_bytes(root: Path, rel: str, content: bytes) -> None:
+    p = root / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(content)
+    subprocess.run(["git", "add", rel], cwd=root, check=True)
+
+
 # --------------------------------------------------------------------------
 # Term scope: branding + local-only in, pillar vocabulary out
 # --------------------------------------------------------------------------
@@ -85,6 +92,17 @@ def test_scanner_passes_on_clean_repo(tmp_path, monkeypatch):
     assert hits == []
 
 
+def test_scanner_catches_term_in_newline_filename(tmp_path, monkeypatch):
+    term = bb._BRANDING_CANARIES[0]
+    rel = "nested/name\ncontinued.md"
+    _git_repo(tmp_path)
+    _track(tmp_path, rel, f"{term}\n")
+    monkeypatch.setattr(st, "REPO_ROOT", tmp_path)
+    hits, unscanned = st.scan()
+    assert (rel, "branding") in hits
+    assert unscanned == []
+
+
 def test_pillar_vocabulary_does_not_trip_the_scanner(tmp_path, monkeypatch):
     pillar = sorted(set(bb.CANARY_TERMS) - set(bb._BRANDING_CANARIES))
     _git_repo(tmp_path)
@@ -118,13 +136,34 @@ def test_undecodable_binary_is_reported_not_guessed(tmp_path, monkeypatch):
     branding glyphs that were not in the document. Such files must land in
     `unscanned`, never in `hits`."""
     _git_repo(tmp_path)
-    blob = tmp_path / "asset.bin"
-    blob.write_bytes(bytes(range(256)) * 4)
-    subprocess.run(["git", "add", "asset.bin"], cwd=tmp_path, check=True)
+    _track_bytes(tmp_path, "asset.bin", bytes(range(256)) * 4)
     monkeypatch.setattr(st, "REPO_ROOT", tmp_path)
     hits, unscanned = st.scan()
     assert "asset.bin" in unscanned
     assert not [h for h in hits if h[0] == "asset.bin"]
+
+
+def test_main_fails_for_unscanned_file(tmp_path, monkeypatch, capsys):
+    _git_repo(tmp_path)
+    _track_bytes(tmp_path, "asset.bin", bytes(range(256)) * 4)
+    monkeypatch.setattr(st, "REPO_ROOT", tmp_path)
+    assert st.main() == 1
+    assert "asset.bin" in capsys.readouterr().err
+
+
+def test_oversized_archive_fails_closed(tmp_path, monkeypatch, capsys):
+    _git_repo(tmp_path)
+    archive = tmp_path / "fixture.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("document.xml", "ab")
+    subprocess.run(["git", "add", "fixture.zip"], cwd=tmp_path, check=True)
+    monkeypatch.setattr(st, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(st, "MAX_ARCHIVE_UNCOMPRESSED_BYTES", 1)
+    hits, unscanned = st.scan()
+    assert hits == []
+    assert unscanned == ["fixture.zip"]
+    assert st.main() == 1
+    assert "fixture.zip" in capsys.readouterr().err
 
 
 def test_text_file_with_unfamiliar_suffix_is_scanned(tmp_path, monkeypatch):
@@ -146,5 +185,6 @@ def test_text_file_with_unfamiliar_suffix_is_scanned(tmp_path, monkeypatch):
 def test_this_repo_has_no_restricted_terms():
     """The point of the whole file: this public repo stays clean. Three
     exposures were found by hand before this ran automatically."""
-    hits, _ = st.scan()
+    hits, unscanned = st.scan()
     assert hits == [], f"{len(set(hits))} tracked file(s) carry restricted terms"
+    assert unscanned == [], f"{len(unscanned)} tracked file(s) were not scanned"

@@ -28,6 +28,8 @@ Exit 0 clean, 1 on any hit. Run: python3 skills/_parallax/scripts/scan_tracked_t
 """
 from __future__ import annotations
 
+import io
+import os
 import re
 import subprocess
 import sys
@@ -46,6 +48,9 @@ TEXT_SUFFIXES = {
 }
 # Zip-container formats whose parts carry the real text.
 ARCHIVE_SUFFIXES = {".docx", ".xlsx", ".pptx", ".zip"}
+MAX_ARCHIVE_MEMBERS = 10_000
+MAX_ARCHIVE_UNCOMPRESSED_BYTES = 64 * 1024 * 1024
+APPROVED_UNSCANNED_FILES: frozenset[str] = frozenset()
 
 # build_bundle.py defines the term list, so it necessarily contains the terms.
 SELF_EXEMPT = {
@@ -70,9 +75,43 @@ def _mask_allowlisted(text: str) -> str:
 
 
 def tracked_files() -> list[str]:
-    out = subprocess.run(["git", "-C", str(REPO_ROOT), "ls-files"],
-                         capture_output=True, text=True, check=True).stdout
-    return sorted(p for p in out.splitlines() if p.strip())
+    out = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "ls-files", "-z"],
+        capture_output=True,
+        check=True,
+    ).stdout
+    return sorted(os.fsdecode(path) for path in out.split(b"\0") if path)
+
+
+def _hit_label(text: str, terms: list[str]) -> str | None:
+    hay = _mask_allowlisted(text)
+    for term in terms:
+        if term.lower() in hay:
+            return "branding" if term in bb._BRANDING_CANARIES else "restricted"
+    return None
+
+
+def _archive_hit_label(member: zipfile.ZipExtFile, terms: list[str]) -> str | None:
+    span = max([len(term) for term in terms] +
+               [len(term) for term in bb.CANARY_ALLOWLIST] + [1])
+    retained = ""
+    with io.TextIOWrapper(member, encoding="utf-8", errors="strict") as text:
+        while chunk := text.read(64 * 1024):
+            body = retained + chunk
+            if len(body) <= 2 * span:
+                retained = body
+                continue
+            safe_end = len(body) - 2 * span
+            label = _hit_label(body[:safe_end + span], terms)
+            if label:
+                return label
+            retained = body[safe_end:]
+    return _hit_label(retained, terms)
+
+
+def _mark_unscanned(unscanned: list[str], rel: str) -> None:
+    if rel not in APPROVED_UNSCANNED_FILES:
+        unscanned.append(rel)
 
 
 def scan() -> tuple[list[tuple[str, str]], list[str]]:
@@ -88,45 +127,52 @@ def scan() -> tuple[list[tuple[str, str]], list[str]]:
         if not path.is_file():
             continue
         suffix = path.suffix.lower()
-        bodies: list[str] = []
-
         if suffix in ARCHIVE_SUFFIXES:
             try:
-                zf = zipfile.ZipFile(path)
-                bodies = [zf.read(n).decode("utf-8", errors="replace")
-                          for n in zf.namelist()]
-            except (zipfile.BadZipFile, OSError):
-                unscanned.append(rel)
+                with zipfile.ZipFile(path) as zf:
+                    members = zf.infolist()
+                    total_size = sum(member.file_size for member in members)
+                    if (len(members) > MAX_ARCHIVE_MEMBERS or
+                            total_size > MAX_ARCHIVE_UNCOMPRESSED_BYTES):
+                        _mark_unscanned(unscanned, rel)
+                        continue
+                    for member in members:
+                        if member.is_dir():
+                            continue
+                        try:
+                            with zf.open(member) as part:
+                                label = _archive_hit_label(part, terms)
+                        except UnicodeDecodeError:
+                            continue
+                        if label:
+                            hits.append((rel, label))
+                            break
+            except (zipfile.BadZipFile, OSError, RuntimeError, EOFError):
+                _mark_unscanned(unscanned, rel)
                 continue
         elif suffix in TEXT_SUFFIXES or not suffix:
             try:
-                bodies = [path.read_bytes().decode("utf-8", errors="replace")]
-            except OSError:
-                unscanned.append(rel)
+                label = _hit_label(path.read_bytes().decode("utf-8"), terms)
+            except (OSError, UnicodeDecodeError):
+                _mark_unscanned(unscanned, rel)
                 continue
+            if label:
+                hits.append((rel, label))
         else:
             # Unfamiliar suffix is not the same as binary. Try a STRICT decode:
             # if it succeeds the file is genuinely text and is scanned normally
             # (a .priv fixture is plain ASCII). Only a file that will not decode
             # is left unscanned -- guessing at its bytes invents characters.
             try:
-                bodies = [path.read_bytes().decode("utf-8")]
+                label = _hit_label(path.read_bytes().decode("utf-8"), terms)
             except UnicodeDecodeError:
-                unscanned.append(rel)
+                _mark_unscanned(unscanned, rel)
                 continue
             except OSError:
-                unscanned.append(rel)
+                _mark_unscanned(unscanned, rel)
                 continue
-
-        for body in bodies:
-            hay = _mask_allowlisted(body)
-            for term in terms:
-                if term.lower() in hay:
-                    # Never print the term itself -- this output can land in logs.
-                    label = ("branding" if term in bb._BRANDING_CANARIES
-                             else "restricted")
-                    hits.append((rel, label))
-                    break
+            if label:
+                hits.append((rel, label))
 
     return hits, unscanned
 
@@ -139,13 +185,17 @@ def main() -> int:
         return 1
 
     if unscanned:
-        print(f"  note: {len(unscanned)} binary file(s) not scanned "
-              f"(no reliable text extraction)")
+        for rel in sorted(set(unscanned)):
+            print(f"  UNSCANNED FILE: {rel}", file=sys.stderr)
+        print(f"FAIL: {len(set(unscanned))} tracked file(s) could not be reliably "
+              "scanned; add only reviewed benign paths to "
+              "APPROVED_UNSCANNED_FILES", file=sys.stderr)
     if hits:
         for rel, label in sorted(set(hits)):
             print(f"  TERM HIT [{label}]: {rel}", file=sys.stderr)
         print(f"FAIL: {len(set(hits))} tracked file(s) contain restricted terms",
               file=sys.stderr)
+    if unscanned or hits:
         return 1
     print(f"  ✓ {len(tracked_files())} tracked files scanned — no restricted terms")
     return 0
