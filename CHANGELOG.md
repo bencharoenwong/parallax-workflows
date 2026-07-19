@@ -4,6 +4,13 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-07-18
+
+### Added
+- **Claude Code plugin distribution** — the repo now hosts a plugin marketplace (`.claude-plugin/marketplace.json`) serving a `parallax` plugin from the generated `plugin/` directory: the general-release workflow set (25 skills) plus the shared `_parallax` files they load, assembled by `skills/_parallax/scripts/build_bundle.py plugin`. `plugin/` is generated output — edit the sources under `skills/` and rebuild; never hand-edit it. Install with `/plugin marketplace add bencharoenwong/parallax-workflows` → `/plugin install parallax@parallax-workflows`.
+- **claude.ai skill packaging** — `build_bundle.py web` builds one self-contained `.skill` zip per workflow for upload to Claude web/mobile (which load skills individually and have no shared-folder mechanism): shared `_parallax` and cross-skill reference files are vendored under `_vendored/` inside each zip with references rewritten, and frontmatter descriptions are replaced with ≤200-char variants to fit the claude.ai limit. Default set: 12 workflows across advisor and fund-manager use cases.
+- **`build_bundle.py` gates** — both build paths copy git-tracked files only, apply content-anchored distribution transforms that fail the build if a source file drifts, verify every reference in a bundled `SKILL.md` resolves inside the artifact, and run a term-scan gate (built-in terms plus a local-only extra list; the build fails closed when the extra list is absent unless `PARALLAX_ALLOW_PARTIAL_SCAN=1` deliberately opts into the reduced scan) before emitting anything. Unit tests in `test_build_bundle.py` run the transforms against the live sources, and a gate test fails when the tracked `plugin/` bundle drifts from a rebuild.
+
 ## 2026-07-16
 
 ### Changed

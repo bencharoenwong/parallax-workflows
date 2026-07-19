@@ -2,23 +2,33 @@
 # Overrides ~/.no-mistakes/config.yaml for THIS repo only; other repos fall back
 # to the global agent (codex).
 
-# Gate agent for this repo: claude (local). Switched from acp:gemini on 2026-07-06 —
-# the Google account behind acpx was DISABLED for ToS violation (programmatic Gemini
-# access is banned; same bright line as the 2026-07-04 agy/CLI removal in ~/.claude).
-# Do NOT re-add any acp:gemini / acpx / agy route here — the ban is permanent policy,
-# not a quota blip. `claude` matches the current global default and ran the full
-# ~/.claude gate pipeline clean on 2026-07-05/06. If the global default later reverts
-# to codex and codex probes clean, deleting this pin to inherit global is fine.
-# PRIOR HISTORY: acp:gemini from 2026-06-14 (opencode/glm-5.1 before that — recurring
-# 429 quota hangs on the review step).
-agent: claude
+# Gate agent for this repo: codex (external, OpenAI). Set 2026-07-19, user-authorized.
+# This is the policy-sanctioned opt-in shape from ~/.no-mistakes/config.yaml
+# (2026-07-09): the global default stays `claude` (safe-by-default, zero external
+# egress) and external agents are opt-in PER-REPO via a committed .no-mistakes.yaml.
+# Safe for THIS repo specifically because it is PUBLIC — the diff codex receives is
+# already published, so external egress is not new disclosure. Do NOT copy this pin
+# to a private repo without a fresh perimeter review.
+# Probe before trusting this: `codex exec` verified clean 2026-07-19 (codex-cli
+# 0.144.4, returned OK, no usage-limit error). If the Plus cap returns, the review
+# step HANGS rather than failing fast — fall back to `agent: claude`.
+# Do NOT re-add any acp:gemini / acpx / agy route here — the Google account behind
+# acpx was DISABLED for ToS violation (programmatic Gemini access is banned; same
+# bright line as the 2026-07-04 agy/CLI removal in ~/.claude). The ban is permanent
+# policy, not a quota blip.
+# PRIOR HISTORY: claude from 2026-07-06; acp:gemini from 2026-06-14 (opencode/glm-5.1
+# before that — recurring 429 quota hangs on the review step).
+agent: codex
 
 # Deterministic test command — replaces the LLM-agent test fallback that failed
 # under codex usage limits / claude OOM. Runs the FULL skill/eval suite via the
 # per-root runner (one pytest process per top-level test root, so the three
 # tests/conftest.py files don't collide — a single invocation, even with
 # --import-mode=importlib, fails on the duplicate `tests.conftest` plugin name).
-# Roots are auto-discovered, so new skills with tests are covered with no edit.
-# Verified green: 7 suites / 905 tests. See the script header for the full why.
+# Roots are auto-discovered, so new skills with tests are covered with no edit;
+# the live count grows as skills add tests (9 roots / 1,062 tests collected as
+# of 2026-07-19). Last full green run verified 2026-06-14 at 7 suites / 905
+# tests; the gate's test step re-verifies on every push. See the script header
+# for the full why.
 commands:
   test: bash skills/_parallax/scripts/run-gate-tests.sh
