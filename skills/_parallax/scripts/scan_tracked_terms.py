@@ -4,8 +4,7 @@
 Complements the distribution gate in build_bundle.py, which only ever sees
 assembled bundle output. Anything tracked but not shipped -- repo-root docs, the
 scripts/ directory, test fixtures, operator-tier skills -- was invisible to that
-gate. Three separate exposures were found by hand before this existed: a test
-fixture that hardcoded terms, this scripts/ directory, and the decision log.
+gate.
 
 TERM SCOPE DIFFERS FROM THE BUNDLE GATE, deliberately:
 

@@ -266,8 +266,7 @@ def test_text_file_with_unfamiliar_suffix_is_scanned(tmp_path, monkeypatch):
 # --------------------------------------------------------------------------
 
 def test_this_repo_has_no_restricted_terms():
-    """The point of the whole file: this public repo stays clean. Three
-    exposures were found by hand before this ran automatically."""
+    """The point of the whole file: this public repo stays clean."""
     assert (st.REPO_ROOT / "docs/security/audit-latest.md").is_symlink()
     hits, unscanned = st.scan()
     assert hits == [], f"{len(set(hits))} tracked file(s) carry restricted terms"
