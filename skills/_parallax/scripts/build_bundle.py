@@ -180,6 +180,14 @@ _BRANDING_CANARIES = ["".join(map(chr, cps)) for cps in (
     (0x03A9,), (0x03A6,), (0x039E,), (0x03A8,),   # four branding glyphs
     (0x50, 0x52, 0x49, 0x53, 0x4D),               # framework code-name
 )]
+# Public MCP response fields that contain a scan term as a substring. These are
+# part of the published data contract (already documented publicly in
+# response-schemas.md), not internal identifiers — masked before scanning so
+# case-insensitive matching does not fail the build on the public contract.
+CANARY_ALLOWLIST = [
+    "pick_toscore",
+]
+
 CANARY_TERMS = [
     "econometrics_phase",
     "valuation_state",
@@ -280,6 +288,27 @@ def transform_white_label_stock_report(text: str) -> str:
         "white-label-stock-report cio-letter-prep route")
 
 
+def transform_conventions_web(text: str) -> str:
+    """Web-only. A .skill zip is self-contained: there is no parallax-workflows
+    checkout to resolve against, and skill-structure-conventions.md is an
+    authoring/meta doc excluded from web zips (WEB_VENDOR_EXCLUDE). Left as-is,
+    step 1 sends the agent to a path that does not exist inside the artifact.
+    Point it at the bundled _vendored/ copy instead. Plugin builds keep the
+    original wording — that bundle does ship the shared tree and the meta doc."""
+    return _swap(
+        text,
+        "Resolve every `_parallax/...` conventions and house-view path to the "
+        "canonical `parallax-workflows` copy (see "
+        "`_parallax/skill-structure-conventions.md` → "
+        '"Canonical source & path resolution"). '
+        "Do not assume the installed skill directory contains them.",
+        "Resolve every `_parallax/...` conventions and house-view path to the "
+        "`_vendored/_parallax/` copy bundled inside this skill. This artifact is "
+        "self-contained — there is no external `parallax-workflows` checkout to "
+        "resolve against.",
+        "conventions web path-resolution directive")
+
+
 def transform_conventions(text: str) -> str:
     text = _drop_line(
         text,
@@ -369,6 +398,11 @@ TRANSFORMS = {
     "parallax-white-label-stock-report/SKILL.md": transform_white_label_stock_report,
 }
 
+# Applied on top of TRANSFORMS, web build only (self-contained zips).
+WEB_TRANSFORMS = {
+    "_parallax/parallax-conventions.md": transform_conventions_web,
+}
+
 
 # --------------------------------------------------------------------------
 # Source enumeration and copying (tracked files only)
@@ -436,6 +470,17 @@ def load_canary_terms() -> list[str]:
 
 
 def canary_scan(root: Path) -> None:
+    """Case-INSENSITIVE substring scan. Warehouse/schema identifiers are written
+    upper-case in the term list but appear lower-case in real prose and SQL, so a
+    case-sensitive scan would wave through exactly the form a leak is most likely
+    to take. Known-benign collisions are masked out first via CANARY_ALLOWLIST.
+
+    The masking is TOKEN-BOUNDED and substitutes a sentinel rather than deleting.
+    Plain `str.replace` would be unsafe in both directions: an allowlist entry
+    that ends with a scan term (as the public field does) would strip that term
+    out of every sibling identifier sharing the prefix, shipping a real leak
+    (`<field>_raw`, `<field>_internal`) clean; and splicing the neighbours
+    together can manufacture a term the file never contained."""
     terms = load_canary_terms()
     hits = []
     for path in sorted(root.rglob("*")):
@@ -445,13 +490,41 @@ def canary_scan(root: Path) -> None:
             text = path.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue
+        haystack = text.lower()
+        for allowed in CANARY_ALLOWLIST:
+            haystack = re.sub(
+                r"(?<![a-z0-9_])" + re.escape(allowed.lower()) + r"(?![a-z0-9_])",
+                "\x00", haystack)
         for term in terms:
-            if term in text:
+            if term.lower() in haystack:
                 hits.append((path.relative_to(root), term))
     if hits:
         for rel, term in hits:
             print(f"  SCAN HIT: {rel}: {term}", file=sys.stderr)
         raise BuildError(f"term scan failed with {len(hits)} hit(s)")
+
+
+REF_VENDORED = re.compile(r"_vendored/[A-Za-z0-9_./-]+\.(?:md|py|yaml|json)")
+
+
+def web_resolution_check(skill_root: Path) -> None:
+    """Every `_vendored/...` path named in a finished web skill must resolve
+    inside that skill. Runs after rewrite_refs, so it sees exactly the paths the
+    consuming agent will follow — the only point where a doc that survived
+    vendoring exclusion (WEB_VENDOR_EXCLUDE) but is still referenced in prose
+    shows up as a dangling directive."""
+    failures = []
+    for doc in sorted(skill_root.rglob("*.md")):
+        text = doc.read_text(encoding="utf-8")
+        for ref in sorted({m.group(0) for m in REF_VENDORED.finditer(text)}):
+            if not (skill_root / ref).exists():
+                failures.append(f"{doc.relative_to(skill_root)}: {ref}")
+    if failures:
+        for f in failures:
+            print(f"  UNRESOLVED: {f}", file=sys.stderr)
+        raise BuildError(
+            f"{len(failures)} unresolved vendored reference(s) in "
+            f"{skill_root.name}")
 
 
 REF_PARALLAX = re.compile(r"_parallax/[A-Za-z0-9_./-]+")
@@ -467,12 +540,25 @@ def _resolve_parallax_ref(skills_root: Path, ref: str) -> bool:
     return any((skills_root / c).exists() for c in candidates)
 
 
+# Authoring guides addressed to skill developers, not runtime material. Their
+# prose is full of illustrative placeholder paths (`references/X.md`,
+# `references/step-3.md`) that are examples of how to structure a skill, not
+# refs to real files — so they are exempt from resolution_check.
+RESOLUTION_EXEMPT_DOCS = {
+    "_parallax/skill-structure-conventions.md",
+    "_parallax/jit-load-compliance-audit.md",
+}
+
+
 def bundled_skill_docs(skills_root: Path) -> list[Path]:
-    """Every markdown doc belonging to a bundled skill (SKILL.md plus its
-    references/ and other nested docs). The shared _parallax/ tree is excluded —
-    its refs are resolved by the collect_deps/allowlist path instead."""
-    return sorted(p for p in skills_root.rglob("*.md")
-                  if p.relative_to(skills_root).parts[0] != "_parallax")
+    """Every markdown doc in the bundle — each skill's SKILL.md plus its
+    references/ and nested docs, AND the shared _parallax/ tree. The shared tree
+    is included deliberately: it carries cross-skill references of its own
+    (loader.md → portfolio-checkup's health-flags.md, etc.) that nothing else
+    validates, so excluding it wholesale left the plugin free to ship a broken
+    reference undetected. Authoring guides stay in the list — their exemption is
+    scoped to the one ref class it applies to, inside resolution_check."""
+    return sorted(skills_root.rglob("*.md"))
 
 
 def resolution_check(skills_root: Path) -> None:
@@ -484,10 +570,20 @@ def resolution_check(skills_root: Path) -> None:
         where = doc.relative_to(skills_root)
         text = doc.read_text(encoding="utf-8")
         for ref in set(REF_PARALLAX.findall(text)):
+            # _parallax/scripts/ is author-time repo tooling (lints, the bundler
+            # itself) — never bundled by design, so a ref to it is not a break.
+            if ref.startswith("_parallax/scripts/"):
+                continue
             if not _resolve_parallax_ref(skills_root, ref):
                 failures.append(f"{where}: {ref}")
+        # Only the references/ class is exempted for authoring guides — their
+        # placeholder paths (references/X.md) are illustrative. Their _parallax/
+        # and examples/ refs are real and stay checked; both docs ship in the
+        # plugin, so a whole-file exemption would let a renamed shared doc ship
+        # broken.
+        exempt_refs = where.as_posix() in RESOLUTION_EXEMPT_DOCS
         for m in {x.group(0) for x in REF_REFERENCES.finditer(text)}:
-            if "<" in m:
+            if "<" in m or exempt_refs:
                 continue
             if not ((skill_dir / m).exists() or (doc.parent / m).exists()
                     or (skills_root / m).exists()):
@@ -699,11 +795,14 @@ def build_web(names: list[str]) -> None:
                     dest = skill_root / "_vendored" / "_parallax" / t
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     key = f"_parallax/{t}"
-                    if key in TRANSFORMS:
-                        dest.write_text(
-                            TRANSFORMS[key]((SKILLS_DIR / "_parallax" / t)
-                                            .read_text(encoding="utf-8")),
+                    if key in TRANSFORMS or key in WEB_TRANSFORMS:
+                        body = (SKILLS_DIR / "_parallax" / t).read_text(
                             encoding="utf-8")
+                        if key in TRANSFORMS:
+                            body = TRANSFORMS[key](body)
+                        if key in WEB_TRANSFORMS:
+                            body = WEB_TRANSFORMS[key](body)
+                        dest.write_text(body, encoding="utf-8")
                     else:
                         shutil.copy2(SKILLS_DIR / "_parallax" / t, dest)
                     if t.endswith(".md"):
@@ -736,6 +835,7 @@ def build_web(names: list[str]) -> None:
                               encoding="utf-8")
             replace_description(skill_root / "SKILL.md", desc)
 
+            web_resolution_check(skill_root)
             canary_scan(staging)
 
             out = WEB_OUT_DIR / f"{name}.skill"

@@ -156,3 +156,199 @@ def test_plugin_skill_dirs_exist_and_have_skill_md():
 def test_parallax_allowlist_paths_exist():
     for entry in bb.PARALLAX_INCLUDE:
         assert (SKILLS / "_parallax" / entry).exists(), entry
+
+
+# --------------------------------------------------------------------------
+# Web-only transforms
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("rel", sorted(bb.WEB_TRANSFORMS))
+def test_web_transform_applies_to_current_source(rel):
+    """Anchor-asserted like the shared transforms: a drifted source file fails
+    here before it fails a distribution build."""
+    src = (SKILLS / rel).read_text(encoding="utf-8")
+    assert bb.WEB_TRANSFORMS[rel](src) != src
+
+
+def test_web_conventions_transform_removes_unvendored_doc_ref():
+    """The web build excludes skill-structure-conventions.md, so the shared
+    conventions doc must not send a web agent to it (all 12 zips shipped that
+    dangling directive before this transform existed)."""
+    out = bb.transform_conventions_web(
+        (SKILLS / "_parallax/parallax-conventions.md").read_text(encoding="utf-8"))
+    assert "skill-structure-conventions.md" not in out
+    assert "self-contained" in out
+
+
+# --------------------------------------------------------------------------
+# Resolution gates
+# --------------------------------------------------------------------------
+
+def test_web_resolution_check_flags_dangling_vendored_ref(tmp_path):
+    skill = tmp_path / "parallax-demo"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "see `_vendored/_parallax/missing-doc.md` for details\n", encoding="utf-8")
+    with pytest.raises(bb.BuildError):
+        bb.web_resolution_check(skill)
+
+
+def test_web_resolution_check_passes_when_vendored_ref_resolves(tmp_path):
+    skill = tmp_path / "parallax-demo"
+    (skill / "_vendored" / "_parallax").mkdir(parents=True)
+    (skill / "_vendored" / "_parallax" / "present.md").write_text("x", encoding="utf-8")
+    (skill / "SKILL.md").write_text(
+        "see `_vendored/_parallax/present.md`\n", encoding="utf-8")
+    bb.web_resolution_check(skill)
+
+
+def test_bundled_skill_docs_covers_shared_parallax_tree(tmp_path):
+    """The shared tree carries cross-skill refs nothing else validates; it must
+    not be skipped wholesale (it was, so the plugin could ship a broken ref)."""
+    (tmp_path / "_parallax" / "house-view").mkdir(parents=True)
+    shared = tmp_path / "_parallax" / "house-view" / "loader.md"
+    shared.write_text("x", encoding="utf-8")
+    assert shared in bb.bundled_skill_docs(tmp_path)
+
+
+def test_authoring_guide_placeholder_refs_are_exempt(tmp_path):
+    """Authoring guides use illustrative placeholder paths (references/X.md)
+    that are examples, not real refs — exempt, but only that ref class (the
+    guides themselves stay under resolution_check; see the scoping test below)."""
+    (tmp_path / "_parallax").mkdir(parents=True)
+    for rel in bb.RESOLUTION_EXEMPT_DOCS:
+        p = tmp_path / rel
+        p.write_text("load references/X.md before Step 3\n", encoding="utf-8")
+        assert p in bb.bundled_skill_docs(tmp_path)
+    bb.resolution_check(tmp_path)
+
+
+def test_resolution_check_flags_broken_shared_tree_ref(tmp_path):
+    (tmp_path / "_parallax" / "house-view").mkdir(parents=True)
+    (tmp_path / "_parallax" / "house-view" / "loader.md").write_text(
+        "cross-ref: parallax-portfolio-checkup/references/gone.md\n", encoding="utf-8")
+    with pytest.raises(bb.BuildError):
+        bb.resolution_check(tmp_path)
+
+
+def test_resolution_check_ignores_author_only_script_refs(tmp_path):
+    """_parallax/scripts/ is repo tooling, never bundled by design."""
+    (tmp_path / "_parallax").mkdir(parents=True)
+    (tmp_path / "_parallax" / "coverage-matrix.md").write_text(
+        "run `_parallax/scripts/coverage-lint.sh` before committing\n",
+        encoding="utf-8")
+    bb.resolution_check(tmp_path)
+
+
+# --------------------------------------------------------------------------
+# Canary scan: case-insensitivity
+# --------------------------------------------------------------------------
+
+def test_canary_scan_catches_case_variant_leaks(tmp_path):
+    """Warehouse/schema identifiers are listed upper-case but leak lower-case
+    (SQL, prose); a case-sensitive scan waved those through.
+
+    Terms are read from the loaded scan list at RUNTIME and never written as
+    literals. This file is tracked in a public repo, so a hand-written "realistic
+    leak" fixture would itself be the leak it tests for — the same reason the
+    branding-canary tests above assert shape rather than value."""
+    terms = [t for t in bb.load_canary_terms() if t.isascii() and len(t) > 3]
+    assert terms, "no scan terms loaded"
+    for i, term in enumerate(terms):
+        for j, variant in enumerate({term.lower(), term.upper(), term.swapcase()}
+                                    - {term}):
+            planted = tmp_path / f"planted_{i}_{j}"
+            planted.mkdir()
+            (planted / "doc.md").write_text(
+                f"prefix {variant} suffix", encoding="utf-8")
+            with pytest.raises(bb.BuildError):
+                bb.canary_scan(planted)
+
+
+def test_canary_scan_allows_public_contract_fields(tmp_path):
+    """Allowlist entries are published MCP response fields, not the internal
+    identifiers whose terms they happen to contain as a substring."""
+    for i, allowed in enumerate(bb.CANARY_ALLOWLIST):
+        planted = tmp_path / f"allowed_{i}"
+        planted.mkdir()
+        (planted / "doc.md").write_text(
+            f"| `{allowed}` | bool | documented public response field |\n",
+            encoding="utf-8")
+        bb.canary_scan(planted)
+
+
+# --------------------------------------------------------------------------
+# Bundle freshness
+# --------------------------------------------------------------------------
+
+def test_tracked_plugin_bundle_matches_source(tmp_path, monkeypatch):
+    """plugin/ is a tracked build artifact, so a source edit that is not
+    followed by a rebuild silently ships a stale bundle (commit 2e344f8 dropped
+    an unused import from a source test and left the bundle copy behind). Build
+    into a temp dir and diff against the tracked tree."""
+    built = tmp_path / "plugin"
+    built_marketplace = tmp_path / "marketplace.json"
+    monkeypatch.setattr(bb, "PLUGIN_DIR", built)
+    monkeypatch.setattr(bb, "MARKETPLACE_FILE", built_marketplace)
+    bb.build_plugin()
+
+    # marketplace.json is a tracked build output too — and it is the file the
+    # marketplace installer reads. Its name/owner/source/description exist
+    # nowhere else, so plugin.json does not cover a stale copy.
+    tracked_marketplace = bb.REPO_ROOT / ".claude-plugin" / "marketplace.json"
+    assert built_marketplace.read_bytes() == tracked_marketplace.read_bytes(), (
+        ".claude-plugin/marketplace.json is stale — run: "
+        "python3 skills/_parallax/scripts/build_bundle.py plugin")
+
+    tracked = bb.REPO_ROOT / "plugin"
+    built_files = {p.relative_to(built) for p in built.rglob("*") if p.is_file()}
+    tracked_files_ = {p.relative_to(tracked) for p in tracked.rglob("*")
+                      if p.is_file() and "__pycache__" not in p.parts}
+
+    assert built_files == tracked_files_, (
+        "plugin/ file list is stale — run: "
+        "python3 skills/_parallax/scripts/build_bundle.py plugin")
+    stale = [str(rel) for rel in sorted(built_files)
+             if (built / rel).read_bytes() != (tracked / rel).read_bytes()]
+    assert stale == [], (
+        f"plugin/ content is stale in {len(stale)} file(s) — run: "
+        f"python3 skills/_parallax/scripts/build_bundle.py plugin\n" +
+        "\n".join(stale[:10]))
+
+
+def test_canary_allowlist_does_not_mask_sibling_identifiers(tmp_path):
+    """An allowlist entry can END with a scan term (the published field does).
+    Unbounded `str.replace` masking then stripped that term out of every sibling
+    identifier sharing the prefix — `<field>_raw`, `<field>_internal` — and
+    shipped a real leak clean. Masking must be token-bounded.
+
+    Siblings are constructed from the allowlist at runtime; nothing is spelled
+    out, so this stays safe to track in a public repo."""
+    terms = [t.lower() for t in bb.load_canary_terms()]
+    checked = 0
+    for i, allowed in enumerate(bb.CANARY_ALLOWLIST):
+        # Only entries that actually contain a scan term can exhibit the bug.
+        if not any(t in allowed.lower() for t in terms):
+            continue
+        for j, sibling in enumerate((f"{allowed}_raw", f"{allowed}_internal",
+                                     f"{allowed}Override")):
+            planted = tmp_path / f"sibling_{i}_{j}"
+            planted.mkdir()
+            (planted / "doc.md").write_text(
+                f"value = {sibling}\n", encoding="utf-8")
+            with pytest.raises(bb.BuildError):
+                bb.canary_scan(planted)
+            checked += 1
+    assert checked, "no allowlist entry overlaps a scan term — test is vacuous"
+
+
+def test_authoring_guide_exemption_is_scoped_to_placeholder_refs(tmp_path):
+    """Both authoring guides ship in the plugin. Their references/ placeholders
+    are exempt, but a broken _parallax/ ref in them is a real break."""
+    (tmp_path / "_parallax").mkdir(parents=True)
+    guide = tmp_path / sorted(bb.RESOLUTION_EXEMPT_DOCS)[0]
+    guide.write_text(
+        "load references/X.md before Step 3\n"
+        "see `_parallax/house-view/loader-RENAMED.md`\n", encoding="utf-8")
+    with pytest.raises(bb.BuildError):
+        bb.resolution_check(tmp_path)
