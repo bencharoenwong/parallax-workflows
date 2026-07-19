@@ -10,6 +10,13 @@ Subcommands:
                 Shared-file dependencies are vendored under <skill>/_vendored/
                 and references rewritten, so each zip is standalone.
 
+Relation to skills/build-skills.sh: the two claude.ai packagers cover disjoint
+tiers. `web` here owns the general-release Parallax workflow set (WEB_SKILLS,
+vendored + description-capped). build-skills.sh remains the per-skill packager
+for the translate-* skills and the private-beta tier (output
+~/Downloads/<name>.skill, with its own reference-integrity lints). Add a skill
+to exactly one of the two sets, never both.
+
 Both paths copy git-TRACKED files only (via `git ls-files`), apply the
 distribution transforms below, and run a term-scan gate before emitting
 anything. The scan's local-only extra terms live one-per-line in

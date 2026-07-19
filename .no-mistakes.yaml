@@ -25,7 +25,10 @@ agent: codex
 # per-root runner (one pytest process per top-level test root, so the three
 # tests/conftest.py files don't collide — a single invocation, even with
 # --import-mode=importlib, fails on the duplicate `tests.conftest` plugin name).
-# Roots are auto-discovered, so new skills with tests are covered with no edit.
-# Verified green: 7 suites / 905 tests. See the script header for the full why.
+# Roots are auto-discovered, so new skills with tests are covered with no edit;
+# the live count grows as skills add tests (9 roots / 1,062 tests collected as
+# of 2026-07-19). Last full green run verified 2026-06-14 at 7 suites / 905
+# tests; the gate's test step re-verifies on every push. See the script header
+# for the full why.
 commands:
   test: bash skills/_parallax/scripts/run-gate-tests.sh
