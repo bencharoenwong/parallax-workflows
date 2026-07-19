@@ -492,8 +492,11 @@ def canary_scan(root: Path) -> None:
             continue
         haystack = text.lower()
         for allowed in CANARY_ALLOWLIST:
+            # \w (Unicode-aware) rather than [a-z0-9_]: an ASCII-only boundary
+            # still masks an entry followed directly by a non-ASCII letter, so a
+            # homoglyph glued onto the field name would suppress the term.
             haystack = re.sub(
-                r"(?<![a-z0-9_])" + re.escape(allowed.lower()) + r"(?![a-z0-9_])",
+                r"(?<!\w)" + re.escape(allowed.lower()) + r"(?!\w)",
                 "\x00", haystack)
         for term in terms:
             if term.lower() in haystack:

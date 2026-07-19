@@ -254,10 +254,32 @@ def test_canary_scan_catches_case_variant_leaks(tmp_path):
     branding-canary tests above assert shape rather than value."""
     terms = [t for t in bb.load_canary_terms() if t.isascii() and len(t) > 3]
     assert terms, "no scan terms loaded"
+    checked = 0
     for i, term in enumerate(terms):
         for j, variant in enumerate({term.lower(), term.upper(), term.swapcase()}
                                     - {term}):
             planted = tmp_path / f"planted_{i}_{j}"
+            planted.mkdir()
+            (planted / "doc.md").write_text(
+                f"prefix {variant} suffix", encoding="utf-8")
+            with pytest.raises(bb.BuildError):
+                bb.canary_scan(planted)
+            checked += 1
+    # A term with no cased letters yields an empty variant set and contributes
+    # nothing; without this the test can go green while asserting nothing.
+    assert checked, "no case variants exercised — test is vacuous"
+
+
+def test_canary_scan_catches_glyph_case_variants(tmp_path):
+    """Case-insensitive matching is new behavior, and the single-character
+    branding terms are excluded from the ASCII case-variant test above — so
+    without this they have zero coverage for it. Selected by shape, never
+    spelled out."""
+    glyphs = [t for t in bb.CANARY_TERMS if len(t) == 1]
+    assert glyphs, "no single-character terms found"
+    for i, term in enumerate(glyphs):
+        for j, variant in enumerate({term.lower(), term.upper()}):
+            planted = tmp_path / f"glyph_{i}_{j}"
             planted.mkdir()
             (planted / "doc.md").write_text(
                 f"prefix {variant} suffix", encoding="utf-8")
@@ -340,6 +362,31 @@ def test_canary_allowlist_does_not_mask_sibling_identifiers(tmp_path):
                 bb.canary_scan(planted)
             checked += 1
     assert checked, "no allowlist entry overlaps a scan term — test is vacuous"
+
+
+def test_canary_allowlist_masking_cannot_manufacture_a_hit(tmp_path, monkeypatch):
+    """Masking substitutes a sentinel instead of deleting. Deleting would splice
+    the neighbours together and can synthesize a term the file never contained.
+
+    Uses SYNTHETIC allowlist/term values so no real term enters this tracked
+    file. The splice needs a term containing two consecutive non-word characters;
+    no current real term has that shape, but the term list is externally
+    extensible (a partner name with a ' & ' or ' - ' separator supplies it), so
+    the sentinel becomes load-bearing the moment one is added."""
+    monkeypatch.setattr(bb, "CANARY_ALLOWLIST", ["public_field"])
+    monkeypatch.setattr(bb, "CANARY_TERMS", ["alpha -- beta"])
+    monkeypatch.setattr(bb, "EXTRA_CANARY_FILE", tmp_path / "absent.txt")
+
+    clean = tmp_path / "clean"
+    clean.mkdir()
+    (clean / "doc.md").write_text("alpha -public_field- beta", encoding="utf-8")
+    bb.canary_scan(clean)   # sentinel keeps the neighbours apart
+
+    planted = tmp_path / "planted"
+    planted.mkdir()
+    (planted / "doc.md").write_text("alpha -- beta", encoding="utf-8")
+    with pytest.raises(bb.BuildError):   # control: really present, still caught
+        bb.canary_scan(planted)
 
 
 def test_authoring_guide_exemption_is_scoped_to_placeholder_refs(tmp_path):
