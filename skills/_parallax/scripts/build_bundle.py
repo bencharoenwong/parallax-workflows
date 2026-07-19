@@ -246,6 +246,22 @@ def _swap_every(text: str, old: str, new: str, label: str) -> str:
 
 
 HV_OPERATOR_TOOLING = "the house-view operator tooling"
+HV_OPERATOR_COMMAND = "`/parallax-load-house-view"
+
+
+def _swap_operator_commands(text: str, variants: tuple, label: str) -> str:
+    """Each variant is optional (a source edit may legitimately drop one), but
+    no backticked command form may survive the loop: a renamed flag matches no
+    variant, and without a post-condition the renamed command would ship in the
+    bundle untransformed with no build error."""
+    for variant in variants:
+        if variant in text:
+            text = _swap_every(text, variant, HV_OPERATOR_TOOLING, label)
+    if HV_OPERATOR_COMMAND in text:
+        raise BuildError(
+            f"transform anchor not found ({label}): a command form outside the "
+            f"variant list survived the transform")
+    return text
 
 
 def transform_hv_loader(text: str) -> str:
@@ -256,28 +272,26 @@ def transform_hv_loader(text: str) -> str:
     # the bundle. Left as-is, the recovery paths in these error messages tell a
     # plugin user to run commands they do not have. Longest form first so the
     # flagged variants are rewritten before the bare command.
-    for variant in ("`/parallax-load-house-view --apply-judge <audit-hash>`",
-                    "`/parallax-load-house-view --apply-stress <audit-hash>`",
-                    "`/parallax-load-house-view --re-pair`",
-                    "`/parallax-load-house-view --extend`",
-                    "`/parallax-load-house-view --edit`",
-                    "`/parallax-load-house-view`"):
-        if variant in text:
-            text = _swap_every(text, variant, HV_OPERATOR_TOOLING,
-                               "loader.md operator command")
-    return text
+    return _swap_operator_commands(
+        text,
+        ("`/parallax-load-house-view --apply-judge <audit-hash>`",
+         "`/parallax-load-house-view --apply-stress <audit-hash>`",
+         "`/parallax-load-house-view --re-pair`",
+         "`/parallax-load-house-view --extend`",
+         "`/parallax-load-house-view --edit`",
+         "`/parallax-load-house-view`"),
+        "loader.md operator command")
 
 
 def transform_view_status(text: str) -> str:
     """Same problem as loader.md, but in runtime banner strings a user actually
     sees: every recovery path names an operator command the bundle excludes."""
-    for variant in ("`/parallax-load-house-view --extend`",
-                    "`/parallax-load-house-view --edit`",
-                    "`/parallax-load-house-view`"):
-        if variant in text:
-            text = _swap_every(text, variant, HV_OPERATOR_TOOLING,
-                               "view_status operator command")
-    return text
+    return _swap_operator_commands(
+        text,
+        ("`/parallax-load-house-view --extend`",
+         "`/parallax-load-house-view --edit`",
+         "`/parallax-load-house-view`"),
+        "view_status operator command")
 
 
 def transform_token_costs(text: str) -> str:
@@ -591,16 +605,18 @@ def canary_scan(root: Path) -> None:
     that ends with a scan term (as the public field does) would strip that term
     out of every sibling identifier sharing the prefix, shipping a real leak
     (`<field>_raw`, `<field>_internal`) clean; and splicing the neighbours
-    together can manufacture a term the file never contained."""
+    together can manufacture a term the file never contained.
+
+    Decoding uses errors='replace' so a stray non-UTF-8 byte cannot exempt a
+    file from the scan — the replacement char can never mask a term, and a
+    binary that happens to trip a term fails the build loudly (the safe
+    direction) instead of shipping unscanned."""
     terms = load_canary_terms()
     hits = []
     for path in sorted(root.rglob("*")):
         if not path.is_file():
             continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
-            continue
+        text = path.read_bytes().decode("utf-8", errors="replace")
         haystack = text.lower()
         for allowed in CANARY_ALLOWLIST:
             # \w (Unicode-aware) rather than [a-z0-9_]: an ASCII-only boundary
@@ -714,10 +730,6 @@ def resolution_check(skills_root: Path) -> None:
 # --------------------------------------------------------------------------
 # Frontmatter (web build)
 # --------------------------------------------------------------------------
-
-FRONTMATTER_DESC = re.compile(r'(^description:\s*)("?)(.*?)(\2)\s*$',
-                              re.M | re.S)
-
 
 def replace_description(skill_md: Path, new_desc: str) -> None:
     text = skill_md.read_text(encoding="utf-8")
@@ -851,7 +863,7 @@ def collect_deps(md_text: str, strict: bool = True) -> tuple[set, set]:
                         None)
         if resolved is not None and allowed(resolved):
             shared.add(resolved)
-        elif strict and not (SKILLS_DIR / "_parallax" / rel).is_dir():
+        elif strict:
             raise BuildError(f"shared ref outside distribution set: _parallax/{rel}")
     cross = set()
     for m in CROSS_SKILL_REF.finditer(md_text):

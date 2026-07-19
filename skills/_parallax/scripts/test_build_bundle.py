@@ -139,7 +139,7 @@ def test_branding_canaries_are_wired_into_the_scan(tmp_path):
         planted = tmp_path / f"planted_{i}"
         planted.mkdir()
         (planted / "doc.md").write_text(f"prefix {term} suffix", encoding="utf-8")
-        with pytest.raises(bb.BuildError):
+        with pytest.raises(bb.BuildError, match="term scan failed"):
             bb.canary_scan(planted)
 
 
@@ -262,7 +262,7 @@ def test_canary_scan_catches_case_variant_leaks(tmp_path):
             planted.mkdir()
             (planted / "doc.md").write_text(
                 f"prefix {variant} suffix", encoding="utf-8")
-            with pytest.raises(bb.BuildError):
+            with pytest.raises(bb.BuildError, match="term scan failed"):
                 bb.canary_scan(planted)
             checked += 1
     # A term with no cased letters yields an empty variant set and contributes
@@ -283,7 +283,7 @@ def test_canary_scan_catches_glyph_case_variants(tmp_path):
             planted.mkdir()
             (planted / "doc.md").write_text(
                 f"prefix {variant} suffix", encoding="utf-8")
-            with pytest.raises(bb.BuildError):
+            with pytest.raises(bb.BuildError, match="term scan failed"):
                 bb.canary_scan(planted)
 
 
@@ -358,7 +358,7 @@ def test_canary_allowlist_does_not_mask_sibling_identifiers(tmp_path):
             planted.mkdir()
             (planted / "doc.md").write_text(
                 f"value = {sibling}\n", encoding="utf-8")
-            with pytest.raises(bb.BuildError):
+            with pytest.raises(bb.BuildError, match="term scan failed"):
                 bb.canary_scan(planted)
             checked += 1
     assert checked, "no allowlist entry overlaps a scan term — test is vacuous"
@@ -388,8 +388,8 @@ def test_canary_allowlist_masking_cannot_manufacture_a_hit(tmp_path, monkeypatch
     planted = tmp_path / "planted"
     planted.mkdir()
     (planted / "doc.md").write_text("alpha -- beta", encoding="utf-8")
-    with pytest.raises(bb.BuildError):   # control: really present, still caught
-        bb.canary_scan(planted)
+    with pytest.raises(bb.BuildError, match="term scan failed"):
+        bb.canary_scan(planted)   # control: really present, still caught
 
 
 def test_authoring_guide_exemption_is_scoped_to_placeholder_refs(tmp_path):
