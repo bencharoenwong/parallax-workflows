@@ -266,7 +266,7 @@ skills/
 │   ├── token-costs.md          # Per-tool and per-workflow token estimates
 │   ├── render_gate.py          # Shared deterministic pre-render gate (+ test_render_gate.py)
 │   ├── AI-profiles/            # Schema, output template, and profile specs for AI-* skills
-│   └── scripts/                # Build/gate tooling: spec-validate, section-ref-lint, run-gate-tests
+│   └── scripts/                # Build/gate tooling: spec-validate, section-ref-lint, tracked-file scan, run-gate-tests
 ├── parallax-should-i-buy/               # Quick stock evaluation
 │   └── SKILL.md
 ├── parallax-deep-dive/                  # Full single-stock analysis
