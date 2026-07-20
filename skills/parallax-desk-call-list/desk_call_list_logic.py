@@ -43,6 +43,7 @@ class DeskBook:
     clients: tuple[ClientBook, ...]
     source: str = "saved"
     unmatched_subset: tuple[str, ...] = ()
+    validation_warnings: tuple[BookWarning, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -166,6 +167,7 @@ def validate_book(raw: dict[str, Any]) -> tuple[DeskBook, list[BookWarning]]:
                 warnings,
             ),
             clients=tuple(clients),
+            validation_warnings=tuple(warnings),
         ),
         warnings,
     )
@@ -198,8 +200,12 @@ def staleness_tier(age: int | None) -> str:
 def resolve_input(inline: list[dict[str, Any]] | None, book: DeskBook, subset: Iterable[str] | None = None) -> DeskBook:
     if inline is not None:
         inline_raw = {"schema_version": 1, "clients": [_inline_client(c) for c in inline]}
-        resolved, _warnings = validate_book(inline_raw)
-        return replace(resolved, source="inline")
+        resolved, warnings = validate_book(inline_raw)
+        return replace(
+            resolved,
+            source="inline",
+            validation_warnings=tuple(warnings),
+        )
 
     if not subset:
         return book
@@ -212,6 +218,8 @@ def resolve_input(inline: list[dict[str, Any]] | None, book: DeskBook, subset: I
     )
     matched = {c.client_name.casefold() for c in clients} | {(c.client_ref or "").casefold() for c in clients}
     unmatched = tuple(s for s in wanted if s.casefold() not in matched)
+    if wanted and not clients:
+        raise ValueError(f"subset matched no clients: {', '.join(unmatched)}")
     return replace(book, clients=clients, unmatched_subset=unmatched)
 
 
@@ -258,9 +266,13 @@ def scan_integrity(moves: dict[str, float | SymbolMove], union: Iterable[str]) -
     symbols = tuple(union)
     priced = tuple(s for s in symbols if _is_priced(moves.get(s)))
     unpriced = tuple(s for s in symbols if s not in priced)
-    coverage = len(priced) / len(symbols) if symbols else 1.0
+    coverage = len(priced) / len(symbols) if symbols else 0.0
     return {
-        "status": "ok" if coverage >= 0.80 else "SCAN DEGRADED",
+        "status": (
+            "REFUSE TO SCAN"
+            if not symbols
+            else "ok" if coverage >= 0.80 else "SCAN DEGRADED"
+        ),
         "coverage": coverage,
         "priced_count": len(priced),
         "total_count": len(symbols),
@@ -350,7 +362,8 @@ def verdict_sensitivity(
 def redact_names(book: DeskBook) -> tuple[DeskBook, dict[str, str]]:
     mapping = {client.client_name: f"Client {idx}" for idx, client in enumerate(book.clients, start=1)}
     clients = tuple(replace(c, client_name=mapping[c.client_name]) for c in book.clients)
-    return replace(book, clients=clients), mapping
+    warnings = tuple(_redact_warning(warning, mapping) for warning in book.validation_warnings)
+    return replace(book, clients=clients, validation_warnings=warnings), mapping
 
 
 def render_no_calls_or_degraded(
@@ -361,13 +374,19 @@ def render_no_calls_or_degraded(
 ) -> str:
     symbols = union_symbols(book)
     integrity = scan_integrity(moves, symbols)
+    warning_block = _validation_warning_block(book)
+    if integrity["status"] == "REFUSE TO SCAN":
+        return (
+            "**Scan refused — no clients or symbols selected.** "
+            f"A call list was not rendered.{warning_block}"
+        )
     if integrity["status"] == "SCAN DEGRADED":
         unpriced = ", ".join(integrity["unpriced_symbols"][:10])
         return (
             f"**Scan degraded — results not reliable.** Priced {integrity['priced_count']} "
             f"of {integrity['total_count']} unique symbols ({integrity['coverage']:.0%}). "
             f"Unpriced: {unpriced}. A call list is not rendered because absence of a trigger "
-            "cannot be distinguished from absence of data."
+            f"cannot be distinguished from absence of data.{warning_block}"
         )
     triggered = triggered_symbols(moves, threshold)
     impacts = [client_metrics(c, moves, triggered) for c in book.clients]
@@ -378,6 +397,7 @@ def render_no_calls_or_degraded(
             f"**No calls indicated.** {len(symbols)} unique symbols scanned across "
             f"{len(book.clients)} client books. Largest move: {largest_symbol} {largest_move:+.1f}% "
             f"(threshold {threshold:.1f}%). No book impact reached the {min_impact:.2f} pp floor."
+            f"{warning_block}"
         )
     return "CALL LIST"
 
@@ -387,6 +407,26 @@ def _normalise_symbol(value: Any) -> str:
     if not symbol:
         raise ValueError("holding requires symbol")
     return symbol
+
+
+def _validation_warning_block(book: DeskBook) -> str:
+    if not book.validation_warnings:
+        return ""
+    lines = "\n".join(f"- {warning.message}" for warning in book.validation_warnings)
+    return f"\n\n**Validation Warnings**\n{lines}"
+
+
+def _redact_warning(warning: BookWarning, mapping: dict[str, str]) -> BookWarning:
+    original = warning.client_name
+    if original is None or original not in mapping:
+        return warning
+    alias = mapping[original]
+    message = warning.message
+    if message.startswith(f"{original}:"):
+        message = f"{alias}{message[len(original):]}"
+    elif message.endswith(f" {original}"):
+        message = f"{message[:-len(original)]}{alias}"
+    return replace(warning, message=message, client_name=alias)
 
 
 def _numeric_weight(value: Any, client_name: str, symbol: str) -> float:

@@ -26,8 +26,8 @@ description: "Desk-level morning call list for relationship managers covering mu
 - JIT-load `references/talk-tracks.md` before drafting per-client talk tracks.
 - `desk_call_list_logic.py` is the pure arithmetic layer. Do not put MCP calls or local file writes in it.
 - Client names and weights never go to Parallax MCP tools; only the deduplicated symbol union leaves the machine.
-- `SCAN_CONCURRENCY = 24` applies only to the 1-token price scan. If the live probe shows rate limiting, use 8.
-- `etf_profile` cost is UNVERIFIED if the measurement cannot be completed; do not invent a number.
+- `SCAN_CONCURRENCY = 24` applies only to the wide price scan. If the live probe shows rate limiting, use 8.
+- `etf_profile` classification and `etf_daily_price` pricing costs are UNVERIFIED; do not invent numbers.
 - `client_safe` is supported, but this is primarily an internal RM artifact.
 
 Build one ranked, bounded morning call list for a relationship manager covering many client books.
@@ -54,8 +54,8 @@ Execute using Parallax MCP tools plus local Python helpers.
 
 1. Resolve canonical `_parallax/...` paths per `_parallax/parallax-conventions.md §0.0`.
 2. Call `ToolSearch` with query `"+Parallax"` to load deferred Parallax MCP schemas before the first data call.
-3. Load `references/desk-book-format.md`; read inline input or `$PARALLAX_DESK_BOOK_PATH`, else `~/.parallax/desk-book/book.yaml`. Validate via `desk_call_list_logic.py`. Inline input wholly replaces the saved book.
-4. Apply subset filtering only to the saved book and report unmatched names.
+3. Load `references/desk-book-format.md`; read inline input or `$PARALLAX_DESK_BOOK_PATH`, else `~/.parallax/desk-book/book.yaml`. Validate via `desk_call_list_logic.py`. Inline input wholly replaces the saved book. Preserve validation warnings for both input paths.
+4. Apply subset filtering only to the saved book and report unmatched names. If a non-empty subset matches no clients, refuse to scan and name every unmatched selector.
 5. Compute staleness tier and the sorted deduplicated symbol union `U`.
 6. Load active house view per `_parallax/house-view/loader.md` §1-§2. Shell out to `view_status`; do not recompute expiry date math. If absent or invalid, run without view.
 
@@ -131,20 +131,23 @@ The entire final message is exactly that command's stdout. Put degraded notes in
 2. Branding Header, only if white-label active and `client_name != ""`: optional URL logo line, then `**<client_name>** desk call list`.
 3. `# Desk Call List` title with as-of date, session dates, threshold, clients scanned, and clients triggered.
 4. Book Staleness Warning, only for warn/stale/unknown tiers.
-5. Ground-truth Integrity, only if any mismatch.
-6. Market Context: 2-3 sentences from telemetry.
-7. Priority Calls: render the informational preface per `_parallax/parallax-conventions.md §12`, then the full ranked table.
-8. Client Detail: top `detail_cap` clients. Load `references/talk-tracks.md`; include why-listed arithmetic, positions table, talk track, and likely questions.
-9. Also Affected (summary only): ranks after `detail_cap`; group by driving symbol when triggered clients exceed 25.
-10. Symbol Movers Reference: symbol, name, move %, four-week score change, news headline, number of clients holding, desk-wide weighted exposure, and house-view tag.
-11. Verdict Sensitivity per `_parallax/parallax-conventions.md §11`; omit under `client_safe`.
-12. Next steps: point to `/parallax-client-review`, `/parallax-should-i-buy`, or `/parallax-watchlist-monitor` as appropriate. Do not auto-invoke them.
-13. About This Report: branding line per `_parallax/white-label/integration-pattern.md §7`, currency line, desk-book provenance, redaction state, audience mode if client-safe, skipped local-logo basename if relevant, and cost note if `etf_profile` cost is UNVERIFIED.
-14. AI-interaction disclosure per `_parallax/parallax-conventions.md §9.2`.
-15. Disclaimer: view-aware per `_parallax/house-view/loader.md §5` if active; otherwise render the standard disclaimer from `_parallax/parallax-conventions.md §9.1`.
+5. Validation Warnings, whenever validation produced warnings, including renormalisation warnings for inline and saved books.
+6. Ground-truth Integrity, only if any mismatch.
+7. Market Context: 2-3 sentences from telemetry.
+8. Priority Calls: render the informational preface per `_parallax/parallax-conventions.md §12`, then the full ranked table.
+9. Client Detail: top `detail_cap` clients. Load `references/talk-tracks.md`; include why-listed arithmetic, positions table, talk track, and likely questions.
+10. Also Affected (summary only): ranks after `detail_cap`; group by driving symbol when triggered clients exceed 25.
+11. Symbol Movers Reference: symbol, name, move %, four-week score change, news headline, number of clients holding, desk-wide weighted exposure, and house-view tag.
+12. Verdict Sensitivity per `_parallax/parallax-conventions.md §11`; omit under `client_safe`.
+13. Next steps: point to `/parallax-client-review`, `/parallax-should-i-buy`, or `/parallax-watchlist-monitor` as appropriate. Do not auto-invoke them.
+14. About This Report: branding line per `_parallax/white-label/integration-pattern.md §7`, currency line, desk-book provenance, redaction state, audience mode if client-safe, skipped local-logo basename if relevant, and a cost note that both `etf_profile` classification and `etf_daily_price` pricing costs are UNVERIFIED.
+15. AI-interaction disclosure per `_parallax/parallax-conventions.md §9.2`.
+16. Disclaimer: view-aware per `_parallax/house-view/loader.md §5` if active; otherwise render the standard disclaimer from `_parallax/parallax-conventions.md §9.1`.
 
 ## No-Calls and Degraded Short Forms
 
 SCAN DEGRADED starts with `**Scan degraded - results not reliable.**` and names priced count, total symbols, coverage, and up to 10 unpriced symbols.
 
-Quiet mornings start with `**No calls indicated.**`, then unique symbols scanned, client books scanned, largest move, threshold, and the `min_impact` pp floor. Include House View Preamble, Branding Header, staleness warning, About This Report, AI disclosure, and disclaimer.
+An empty client or symbol selection starts with `**Scan refused — no clients or symbols selected.**` and never renders a call list or no-calls result.
+
+Quiet mornings start with `**No calls indicated.**`, then unique symbols scanned, client books scanned, largest move, threshold, and the `min_impact` pp floor. Include House View Preamble, Branding Header, staleness warning, validation warnings, About This Report, AI disclosure, and disclaimer.

@@ -181,6 +181,18 @@ def test_inline_input_fully_overrides_saved_book():
     assert "Northgate" not in [c.client_name for c in resolved.clients]
 
 
+def test_inline_warnings_are_surfaced():
+    saved, _ = validate_book(load_desk_book(FIXTURES / "book_single_client.yaml"))
+    resolved = resolve_input(
+        [{"client_name": "Inline", "portfolio": [{"symbol": "TSLA.O", "weight": 0.12}]}],
+        saved,
+    )
+    assert any(warning.code == "weights_off" for warning in resolved.validation_warnings)
+    out = render_no_calls_or_degraded(resolved, {"TSLA.O": 1.0}, 5.0, 0.5)
+    assert "Validation Warnings" in out
+    assert "renormalised" in out
+
+
 def test_subset_flag_filters_saved_book_without_merging():
     raw = {"schema_version": 1, "clients": [{"client_name": "A", "client_ref": "A1", "holdings": [{"symbol": "AAPL.O", "weight": 1}]}, {"client_name": "B", "client_ref": "B1", "holdings": [{"symbol": "MSFT.O", "weight": 1}]}]}
     book, _ = validate_book(raw)
@@ -190,8 +202,14 @@ def test_subset_flag_filters_saved_book_without_merging():
 
 def test_subset_unmatched_name_is_reported_not_silently_dropped():
     book, _ = validate_book(load_desk_book(FIXTURES / "book_single_client.yaml"))
-    resolved = resolve_input(None, book, ["Missing"])
+    resolved = resolve_input(None, book, ["Northgate", "Missing"])
     assert resolved.unmatched_subset == ("Missing",)
+
+
+def test_subset_all_unmatched_refuses_and_names_selectors():
+    book, _ = validate_book(load_desk_book(FIXTURES / "book_single_client.yaml"))
+    with pytest.raises(ValueError, match="subset matched no clients: Missing, Unknown"):
+        resolve_input(None, book, ["Missing", "Unknown"])
 
 
 def test_staleness_tiers_at_30_31_90_91_and_missing():
@@ -248,6 +266,23 @@ def test_redact_names_is_stable_across_runs():
     assert redacted1.clients[0].client_name == redacted2.clients[0].client_name == "Client 1"
 
 
+def test_redact_names_also_redacts_validation_warnings():
+    raw = {
+        "schema_version": 1,
+        "clients": [
+            {
+                "client_name": "Example Client",
+                "holdings": [{"symbol": "AAPL.O", "weight": 0.2}],
+            }
+        ],
+    }
+    book, _ = validate_book(raw)
+    redacted, _ = redact_names(book)
+    warning = redacted.validation_warnings[0]
+    assert warning.client_name == "Client 1"
+    assert "Example Client" not in warning.message
+
+
 def test_scan_integrity_below_threshold_blocks_no_calls_path():
     integrity = scan_integrity({"AAPL.O": 1.0, "MSFT.O": SymbolMove("MSFT.O", None, False)}, ["AAPL.O", "MSFT.O"])
     assert integrity["status"] == "SCAN DEGRADED"
@@ -264,6 +299,12 @@ def test_scan_integrity_at_threshold_allows_render():
     integrity = scan_integrity({"A": 1.0, "B": 1.0, "C": 1.0, "D": 1.0, "E": SymbolMove("E", None, False)}, ["A", "B", "C", "D", "E"])
     assert integrity["coverage"] == pytest.approx(0.80)
     assert integrity["status"] == "ok"
+
+
+def test_empty_union_is_not_no_calls():
+    out = render_no_calls_or_degraded(_book([]), {}, 5.0, 0.5)
+    assert "Scan refused" in out
+    assert "No calls indicated" not in out
 
 
 def test_scan_integrity_precedes_empty_mover_branch():
