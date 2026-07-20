@@ -161,6 +161,8 @@ When `PARALLAX_LOADER_V2=1`, portfolio consumer skills call `get_peer_snapshot` 
 
 **For 10+ holdings**: parallelise all fan-out calls (cap at 8 concurrent calls, matching the `PARALLAX_LOADER_V2` default used by parallax-make-house-view and parallax-judge-house-view); if N≥2 calls time out, mark those holdings as "scores unavailable" and fall back to health-flags-only scoring (per `parallax-portfolio-checkup/references/health-flags.md`) for the missing positions.
 
+The cap above applies to score fan-out. `/parallax-desk-call-list` uses a separately justified `SCAN_CONCURRENCY` ceiling for its 1-token price scan only.
+
 ---
 
 ## 4. Conflict resolution: user constraints vs. view tilts

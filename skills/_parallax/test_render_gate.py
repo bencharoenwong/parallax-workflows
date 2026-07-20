@@ -214,3 +214,29 @@ def test_should_i_buy_active_banner_survives_scaffold():
     out = gate(draft, "should-i-buy")
     assert out.lstrip().startswith("Active house view:"), out[:80]
     assert "## The Company" in out
+
+
+def test_desk_call_list_title_anchor():
+    draft = SCAFFOLD + "# Desk Call List\nbody\n"
+    out = gate(draft, "desk-call-list")
+    assert out.lstrip().startswith("# Desk Call List")
+
+
+def test_desk_call_list_branding_anchor():
+    draft = SCAFFOLD + "**Acme Capital** desk call list\n\nbody\n"
+    out = gate(draft, "desk-call-list")
+    assert out.lstrip().startswith("**Acme Capital** desk call list")
+
+
+def test_desk_call_list_no_calls_anchor():
+    draft = SCAFFOLD + "**No calls indicated.** 12 unique symbols scanned.\n"
+    out = gate(draft, "desk-call-list")
+    assert out.lstrip().startswith("**No calls indicated.")
+
+
+def test_desk_call_list_degraded_note_hoisted():
+    draft = "news synthesis timed out for AAPL.O\n\n# Desk Call List\nbody\n"
+    out = gate(draft, "desk-call-list")
+    assert out.lstrip().startswith("# Desk Call List")
+    assert "Status note (preserved)" in out
+    assert "news synthesis timed out" in out

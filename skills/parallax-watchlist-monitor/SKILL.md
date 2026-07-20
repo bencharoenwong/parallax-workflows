@@ -11,6 +11,7 @@ description: "Monitor a watchlist of tickers: flag score changes, news alerts, t
 
 - Single stock deep dive → use /parallax-deep-dive
 - Portfolio with weights → use /parallax-morning-brief or /parallax-client-review
+- Weighted client books ranked by who to call → use /parallax-desk-call-list
 - Building a portfolio → use /parallax-portfolio-builder
 
 ## Gotchas

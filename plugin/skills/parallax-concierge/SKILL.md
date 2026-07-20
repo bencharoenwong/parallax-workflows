@@ -88,6 +88,7 @@ User picks Portfolio → ask one question:
 | Why am I down / what's dragging | `/parallax-explain-portfolio` |
 | Client meeting / RM prep | `/parallax-client-review` |
 | Morning brief / daily | `/parallax-morning-brief` |
+| Desk / multiple clients / who do I call | `/parallax-desk-call-list` |
 | Rebalance / trades | `/parallax-rebalance` |
 | Stress test / what if | `/parallax-scenario-analysis` |
 
@@ -154,6 +155,8 @@ Always 2-3 options. Never 6.
   - Single ticker (e.g. "Hi Parallax, NVDA?") → `/parallax-should-i-buy <ticker>`,
     then nudges
   - Holdings JSON present → `/parallax-portfolio-checkup`, then nudges
+  - Desk / multi-client phrasing ("who do I call today", "my whole desk",
+    "which clients are affected") → `/parallax-desk-call-list`, then nudges
   - Country name present (e.g. "Hi Parallax, Japan") → `/parallax-macro-outlook`,
     then nudges
 - **If ambiguous**, name the likely skill and confirm while running:

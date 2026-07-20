@@ -10,6 +10,11 @@ Parallax uses token-based pricing. All tools consume the same number of tokens w
 | `explain_methodology` | Scoring methodology explanations |
 | `get_docs` / `list_docs` | Documentation access |
 
+### Unverified costs
+| Tool | Description |
+|---|---|
+| `etf_profile` | ETF profile/classification probe. Cost UNVERIFIED in this environment; measure before publishing numeric desk-call-list probe cost. |
+
 ### 1 token each
 | Tool | Description |
 |---|---|
@@ -81,6 +86,13 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 | `/parallax-scenario-analysis` | **68** | 2x assessment (20) + 10 score scans + universe |
 | `/parallax-rebalance` | **76** | 10 score trends + replacements + validation re-score |
 | `/parallax-client-review` | **105** | 8 drill-downs + 5 news + assessment + 2x analyze |
+| `/parallax-desk-call-list` | **~109 + UNVERIFIED classification probes** (20 clients / 60 unique symbols / 6 movers) | 1 telemetry + 1 price series per UNIQUE symbol + 3 per triggered symbol (company_info + peer_snapshot + score_analysis) + 5 per news call (cap 8). Formula excluding unverified `etf_profile`: `1 + |U| + 3|M| + 5*min(|M|,K)`. Cost scales with unique symbols and movers, not client count. |
+
+> **Broad-selloff guard:** on a market-wide morning the mover set `M` can approach
+> `U`, and news + enrichment dominate the bill. `/parallax-desk-call-list`
+> deterministically raises its move threshold to cap `|M|` at 40 and states the
+> auto-raise in the report. Design worst case is ~281 tokens at 120 unique symbols,
+> excluding UNVERIFIED `etf_profile` classification probes.
 
 ### House View Workflows
 
@@ -100,6 +112,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 
 With the **Standard plan** ($2,000/month, 2,000 included tokens, $0.20 overage):
 - A daily morning brief (~50 tokens) = ~1,100 tokens/month (22 trading days)
+- A daily desk call list (~109 tokens + UNVERIFIED classification probes) = ~2,400 tokens/month (22 trading days), before any classification-probe cost
 - 5 should-i-buy checks/week (~29 each) = ~580 tokens/month
 - 2 client reviews/week (~105 each) = ~840 tokens/month
 - **Typical active RM usage:** 2,000-3,000 tokens/month

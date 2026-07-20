@@ -12,6 +12,7 @@ description: "Fund manager morning brief: market regime, macro outlook, portfoli
 - Single stock analysis → use /parallax-should-i-buy or /parallax-deep-dive
 - Running backtests → use /backtest
 - Client portfolio review → use /parallax-client-review
+- Multiple client books / desk-wide morning call list → use /parallax-desk-call-list
 - Thematic screening → use /parallax-thematic-screen
 
 ## Gotchas
