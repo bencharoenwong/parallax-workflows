@@ -175,6 +175,8 @@ This output is an AI-inferred synthesis produced by the Parallax AI Investor Pro
 
 ### Step 7 — Emit
 
+**Steps 1–6 are silent.** Perform the profile runs, cross-validation, consensus computation, and factor-level agreement internally — none of that working appears in your reply. Your **entire visible response is the rendered template and nothing else**, beginning at the Header line `Parallax AI Investor Profiles — Consensus for <ticker>`. When `white_label_active`, the single Branding Header line from "Output additions" comes first and the rendered template starts immediately after it; otherwise the Header line is the absolute first output — the `P` of "Parallax AI Investor Profiles". In both modes, do NOT prepend `**Step N**` labels, "Cross-validation passed", "All data verified", a "Let me…" preamble, or any narration — if any such text would precede the Header, delete it. The Step 6 output template above shows the complete response, first character to last.
+
 
 ## Output additions (white-label branding + §9.2 disclosure)
 

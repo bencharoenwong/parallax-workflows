@@ -183,6 +183,8 @@ This output is an AI-inferred interpretation of George Soros's approach, derived
 
 ### Step 6 — Emit
 
+**Steps 1–5 are silent.** Perform the ticker resolution, cross-validation, regime analysis, and verdict computation internally — none of that working appears in your reply. Your **entire visible response is the rendered template and nothing else**, beginning at the Header line `Soros-style profile applied to <ticker>`. When `white_label_active`, the single Branding Header line from "Output additions" comes first and the rendered template starts immediately after it; otherwise the Header line is the absolute first output — the `S` of "Soros-style". In both modes, do NOT prepend `**Step N**` labels, "Cross-validation passed", "All data verified", a "Let me…" preamble, or any narration — if any such text would precede the Header, delete it. The Step 5 output template above shows the complete response, first character to last.
+
 
 ## Output additions (white-label branding + §9.2 disclosure)
 

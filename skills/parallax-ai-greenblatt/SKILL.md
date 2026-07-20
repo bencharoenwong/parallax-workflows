@@ -158,6 +158,8 @@ This output is an AI-inferred interpretation of Joel Greenblatt's approach, deri
 
 ### Step 7 — Emit
 
+**Steps 1–6 are silent.** Perform the ticker resolution, cross-validation, scoring, threshold logic, and verdict computation internally — none of that working appears in your reply. Your **entire visible response is the rendered template and nothing else**, beginning at the Header line `Greenblatt-style profile applied to <ticker>`. When `white_label_active`, the single Branding Header line from "Output additions" comes first and the rendered template starts immediately after it; otherwise the Header line is the absolute first output — the `G` of "Greenblatt-style". In both modes, do NOT prepend `**Step N**` labels, "Cross-validation passed", "All data verified", a "Let me…" preamble, or any narration — if any such text would precede the Header, delete it. The Step 6 output template above shows the complete response, first character to last.
+
 
 ## Output additions (white-label branding + §9.2 disclosure)
 
