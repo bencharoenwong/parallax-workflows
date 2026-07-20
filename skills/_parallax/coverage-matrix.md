@@ -10,9 +10,9 @@
 
 | Tool | Equity (e.g., AAPL.O, JPM.N) | ETF (e.g., SPY, EWJ, QQQ) | Notes |
 |---|---|---|---|
-| `export_price_series` | ✓ supported | ✗ returns `[]` | Equity-only. Pass RIC with exchange suffix. |
-| `etf_daily_price` | ✗ returns `[]` | ✓ supported | ETF-only. Pass plain ticker (no `.X` suffix). Token cost UNVERIFIED. |
-| `etf_profile` | ✗ returns `{"error":"No profile data found"}` | ✓ rich profile (name, exchange, scores, recommendation) | **Use as asset-class oracle.** Single-symbol probe; token cost UNVERIFIED per `token-costs.md`. |
+| `export_price_series` | ✓ supported | ✗ returns `{success:false, error}` (NOT `[]`; verified live 2026-07-20) | Equity-only, FREE. Pass RIC with exchange suffix. A `success:false` response is a usable equity/ETF discriminator. |
+| `etf_daily_price` | ✗ returns `[]` | ✓ supported | ETF-only. Pass plain ticker (no `.X` suffix). Returns per-row `date` + `changepercent` — move AND date in one call. Token cost UNVERIFIED. |
+| `etf_profile` | ✗ returns `{"error":"No profile data found"}` | ✓ rich profile (name, exchange, scores, recommendation, `change_percent`) | **Use as asset-class oracle.** Also returns `change_percent`, but with NO as-of/date field (verified live 2026-07-20) — use `etf_daily_price` when a dated ETF move is needed. Single-symbol probe; token cost UNVERIFIED per `token-costs.md`. |
 | `etf_search` | n/a | ✓ supported | Discovery by market/keyword/score. |
 | `etf_holdings` | n/a | ✓ supported | Underlying holdings of an ETF. |
 | `get_company_info` | ✓ supported | ✓ partial (returns equity-shaped record for some ETFs) | **Does NOT include an `asset_class` field**; cannot be used to distinguish equity from ETF. Use `etf_profile` for that. |
