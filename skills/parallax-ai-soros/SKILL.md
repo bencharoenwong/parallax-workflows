@@ -183,6 +183,8 @@ This output is an AI-inferred interpretation of George Soros's approach, derived
 
 ### Step 6 — Emit
 
+**Steps 1–5 are silent.** Perform the ticker resolution, cross-validation, regime analysis, and verdict computation internally — none of that working appears in your reply. Your **entire visible response consists only of the selected Step 5 rendered template plus every required Output addition below**. In basket mode, the analytical template begins at the Header line `Soros-style regime themes and exposure candidates (informational)`; in single-ticker mode, it begins at `Soros-style profile applied to <ticker>`. Before the analytical Header, render only the leading white-label elements required by `integration-pattern.md` §5, in its prescribed order, including a URL logo and the conditional Branding Header when applicable. If no leading white-label element applies, the mode-specific analytical Header is the absolute first output. The About This Report footer, AI-interaction disclosure, and standard disclaimer remain required parts of the visible response in the positions specified below. In both modes, do NOT add `**Step N**` labels, "Cross-validation passed", "All data verified", a "Let me…" preamble, or any other workflow narration.
+
 
 ## Output additions (white-label branding + §9.2 disclosure)
 

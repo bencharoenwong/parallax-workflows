@@ -175,6 +175,8 @@ This output is an AI-inferred synthesis produced by the Parallax AI Investor Pro
 
 ### Step 7 — Emit
 
+**Steps 1–6 are silent.** Perform the profile runs, cross-validation, consensus computation, and factor-level agreement internally — none of that working appears in your reply. Your **entire visible response consists only of the rendered Step 6 template plus every required Output addition below**. The analytical template begins at the Header line `Parallax AI Investor Profiles — Consensus for <ticker>`; in basket mode, that Header begins each ticker block. Before the first analytical Header, render only the leading white-label elements required by `integration-pattern.md` §5, in its prescribed order, including a URL logo and the conditional Branding Header when applicable. If no leading white-label element applies, the analytical Header is the absolute first output. The About This Report footer, AI-interaction disclosure, and standard disclaimer remain required parts of the visible response in the positions specified below. In both modes, do NOT add `**Step N**` labels, "Cross-validation passed", "All data verified", a "Let me…" preamble, or any other workflow narration.
+
 
 ## Output additions (white-label branding + §9.2 disclosure)
 
