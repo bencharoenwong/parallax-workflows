@@ -42,6 +42,15 @@ suitability determination, or a price target.** It is read-only and persists not
    qualified-professional reminder, and never as a determination. **Pass 2 is pending compliance /
    legal sign-off before production reliance.** If a faster path to publishing the core is wanted,
    ship **Pass-1-only** (no `client_profile`) first and gate Pass 2 behind that sign-off.
+   - **Named capability within this surface — illustrative arithmetic in suitability flags.** A
+     Pass-2 flag may add plain arithmetic off the supplied profile (e.g. "a 30% drawdown in a
+     35%-of-net-worth position is ~10% of net worth, taken while drawing income from it"). It is
+     guardrailed — marked `illustrative, not a prediction`, built on round inputs, never implying a
+     probability or a specific magnitude, and it still closes with the qualified-professional
+     reminder (`references/client-conditioning.md` (d)). It is listed here **by name** because it
+     places a personalised, quantified net-worth-impact figure inside a suitability flag — exactly
+     the kind of statement a regulator scrutinises even when labelled illustrative — so the Pass-2
+     sign-off should approve it as a deliberate capability, not discover it in a rendered flag.
 3. **Live validation is limited — and the automated tests are *contract* tests, not live-behaviour
    tests.** The two acceptance tests (`test_two_pass_acceptance.py`, `test_decomposition_golden.py`)
    grade **synthetic, hand-written transcripts**: they lock the grading logic and catch a regression
@@ -62,4 +71,4 @@ suitability determination, or a price target.** It is read-only and persists not
 - [ ] Decide whether the heuristic-lights disclosure is sufficient, or the lights should be softened
       to words-only for v1.
 - [ ] Route the Pass-2 client-conditioning surface to compliance/legal for sign-off (or ship
-      Pass-1-only first).
+      Pass-1-only first) — **including the named illustrative-arithmetic capability** (item 2).
