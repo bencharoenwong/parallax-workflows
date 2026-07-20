@@ -39,8 +39,8 @@ GOLDEN = """# Watchlist Monitor
 ## Recommended Actions
 - NVDA.O warrants a deeper look via /parallax-deep-dive.
 
-## Provenance
-Default Parallax branding.
+## About This Report
+Branding: default Parallax
 
 *AI-assisted output. Verify any specific statement before acting.*
 
@@ -112,3 +112,10 @@ def test_score_changes_red_when_summary_has_no_numbers():
 def test_score_changes_red_when_summary_absent():
     no_sec = GOLDEN.replace("## Watchlist Summary", "## Overview")
     assert _results(no_sec)["score_changes_quantified"] is False
+
+
+def test_provenance_red_when_section_missing():
+    no_provenance = GOLDEN.replace("\n## About This Report\nBranding: default Parallax\n", "\n")
+    res = _results(no_provenance)
+    assert res["provenance_present"] is False
+    assert res["sections_present"] is False

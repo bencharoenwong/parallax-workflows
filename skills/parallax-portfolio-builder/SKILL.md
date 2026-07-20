@@ -28,7 +28,8 @@ description: "Build a portfolio from a natural language investment thesis. Const
 - **View-status banner is REQUIRED first thing in output when active view exists** — never bury after the holdings table. If execution gets compressed, this is the section that must NOT be dropped. RM uses the banner as the primary signal that the view is active and what's being applied.
 - **Phase A Parallelization:** View load and universe build run in parallel (view load is fast; universe build is the latency bottleneck). Both complete before Phase B begins.
 - **Operator verification:** see [examples/testing-posture.md](../../examples/testing-posture.md)
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
+- Optional `audience=` argument: `client_safe | internal_analyst`; precedence follows `parallax-conventions.md` §13.1.
 
 Construct a portfolio from a plain-English investment thesis using Parallax MCP tools.
 
@@ -39,6 +40,7 @@ Construct a portfolio from a plain-English investment thesis using Parallax MCP 
 /parallax-portfolio-builder "US tech companies with strong quality and momentum scores" top_n=10
 /parallax-portfolio-builder "ESG leaders in European industrials"
 /parallax-portfolio-builder "EM-tilt balanced" --augment-silent   # JIT-augment dimensions the active view is silent on (default: off)
+/parallax-portfolio-builder "defensive dividend-focused Asian equities" audience=client_safe
 ```
 
 ## Workflow
@@ -99,7 +101,7 @@ Begin only after Phase A completes. Steps 3–6 have tight dependencies; execute
 
 ### Pre-Render — Load white-label branding
 
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format. The loader returns exactly six keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
 
 ### Render — deterministic gate (LAST step, mandatory)
 
@@ -115,22 +117,23 @@ python3 "<skill-dir>/../_parallax/render_gate.py" --skill portfolio-builder < "$
 
 **Your entire final message is exactly that command's stdout** — nothing before it (no step/batch-completion notes, no scratch computation, no "no active house view" / white-label config-probe narration), nothing after it.
 
-**Degraded-state rule:** if an async tool (e.g. `get_assessment`, `get_news_synthesis`) times out or returns no data, render the pending/unavailable note INSIDE the relevant section or the Provenance line — NOT as a preamble above the report — so it is part of the rendered body and survives the gate. (The gate also hoists a leaked degraded note as a backstop.)
+**Degraded-state rule:** if an async tool (e.g. `get_assessment`, `get_news_synthesis`) times out or returns no data, render the pending/unavailable note INSIDE the relevant section or the About This Report line — NOT as a preamble above the report — so it is part of the rendered body and survives the gate. (The gate also hoists a leaked degraded note as a backstop.)
 
 `_parallax/render_gate.py` is pure-stdlib and deterministically drops anything before the first rendered block (House View Preamble banner / Branding Header / Ground-truth Integrity / this skill's title or first rendered section), preserving the active-house-view banner in every `view_status` state. Same operator-agnostic-helper pattern as `view_status.py` / `loader.py` (a real Bash tool call, not prose).
 
 ## Output Format
 
 - **House View Preamble** (REQUIRED FIRST when view active — render BEFORE any other section, never bury after the holdings table) — Per loader.md §5. MUST include: short view_id (first 8 chars), view_name, `effective_date → valid_through`, and a one-line summary `Applying tilts: <comma list of non-zero tilt names with values>`. If `--augment-silent` was used, append `JIT-augmented: <list of dim paths>`. This preamble is the user's primary signal that the view is active and what it's doing. If execution gets token-compressed, KEEP this section — drop other sections first if needed.
-- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** portfolio construction`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to Provenance.
+- **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** portfolio construction`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to About This Report.
 - **Investment Thesis** (restate and refine the user's intent; note any view-vs-thesis conflicts inline per loader.md §4)
 - **Universe Built** (how many candidates, key sectors; note force-includes from +2 tilts and excludes applied; surface divergence-assertion result per loader.md §5 rule 4)
-- **Selected Holdings** (table: `input_ticker`, `returned_name` (from scoring-tool response), `expected_name` (from get_company_info), sector, total score, weight, key factor strengths; if view active, include a "Tilt Effect" column showing the multiplier applied to each holding AND a "Tilt Source" column tagging the dimension's source. **Tilt Source enforcement (compliance contract):** EVERY row × dimension cell MUST carry a non-empty tag in `{[house_view: <path>=<value>], [parallax_jit, <tool>[<args>]@<date>], [neutral, <reason>]}`. If any cell would be empty, that's a runtime bug — emit `⚠ Tilt Source missing for <row> × <dim>; verify before relying on this output` and refuse to claim the output is compliance-ready. **Flag any row where `returned_name ≠ expected_name` with ⚠ MISMATCH and do not treat that row's scores as authoritative** — per loader.md §5 rule 3.)
+- **Why These Holdings**: 2-3 plain-language sentences summarizing why the selected names fit the stated thesis; no factor jargon without the §13.3 gloss. Rendered in both audience modes.
+- **Selected Holdings** (table: `input_ticker`, `returned_name` (from scoring-tool response), `expected_name` (from get_company_info), sector, total score, weight, key factor strengths; if view active, include a "Tilt Effect" column showing the multiplier applied to each holding AND a "Tilt Source" column tagging the dimension's source. Under `audience=client_safe`, move the `Tilt Effect` / `Tilt Source` columns out of the primary table into a trailing **Methodology appendix (internal)** section that reproduces the full row × dimension tag map. **Tilt Source enforcement (compliance contract):** EVERY row × dimension cell MUST carry a non-empty tag in `{[house_view: <path>=<value>], [parallax_jit, <tool>[<args>]@<date>], [neutral, <reason>]}`. If any cell would be empty, that's a runtime bug — emit `⚠ Tilt Source missing for <row> × <dim>; verify before relying on this output` and refuse to claim the output is compliance-ready. This compliance contract applies to the appendix identically — relocation never deletes or weakens it. **Flag any row where `returned_name ≠ expected_name` with ⚠ MISMATCH and do not treat that row's scores as authoritative** — per loader.md §5 rule 3. `⚠ MISMATCH` flags stay in the primary table in both modes because data-integrity warnings are non-suppressible per §13.2.)
 - **View-Effect Summary** (only when view active AND ≥1 holding's ranking shifted vs raw-score order) — One paragraph: `Without the active view, the top-N ranking would have been [list]. With the view's tilts applied, ranking is [list]. The biggest change: <name> moved from #X to #Y because <view tilt that drove it: e.g., 'US +1 region multiplier + Defensive 10 × low_vol +2 factor re-weight'>.` This section is the auditability story made tangible per portfolio — it lets the RM defend "the view materially affected this allocation" rather than asserting it.
 - **Portfolio Factor Profile** (VALUE, QUALITY, MOMENTUM, DEFENSIVE scores — computed as weighted aggregate of per-holding `get_peer_snapshot` scores; note `quick_portfolio_scores` batch output only if all names cross-validated)
 - **Redundancy Notes** (any overlap flagged and how it was resolved; include client-computed sector concentration if `check_portfolio_redundancy` returned an empty concentration map on a clearly-concentrated portfolio)
 - **Implementation Notes** (liquidity, position sizing, suggested rebalance frequency)
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second Provenance line.
+- **About This Report** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second About This Report line. Under `audience=client_safe`, append the §13.4 mode line.
 
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 

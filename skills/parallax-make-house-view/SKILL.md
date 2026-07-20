@@ -18,14 +18,14 @@ description: "Synthesize a draft Parallax house view by orchestrating macro_anal
 - JIT-load `_parallax/house-view/MCP_FIELD_INVENTORY.md` BEFORE assuming any component input is available. `valuation_state` / `market_entropy` are prose-extracted; `psychological_wavelength` is LLM-judged. Confidence caps differ per component.
 - The shared gate (`_parallax/house-view/gate_present.py`) is REQUIRED — there is no save path that bypasses it. `--shadow-diff` skips the gate AND the save.
 - `--compare` is a pure structural file diff of two saved bundles: it skips MCP, synthesis, the gate, the save, the audit row, AND all output disclaimers. It never emits a pillar-confidence block (keep pillar internals out of any cross-firm output).
-- Fan-out budget is 14 markets × 5 components = 70 macro_analyst calls + 1 list_macro_countries + 1 get_telemetry. Concurrency cap 8. Per-market timeout 45s. Hard abort when unreachable_share > 30%.
+- Fan-out budget is 14 markets × 4 components = 56 macro_analyst calls + 1 list_macro_countries + 1 get_telemetry. Concurrency cap 8. Per-market timeout 45s. Hard abort when unreachable_share > 30%.
 - Reuse `audit_chain.append_entry`, `chain_emit.emit_phase_0_chain`, `provenance_classes.validate_provenance_entry`. NEVER reimplement.
 - The `generate` audit row carries ONLY: schema_version, ts, view_id, version_id, view_hash, skill, action, applied, parent_version_id, provenance_hash, source_tools, calibration_status. composition_formula / aggregator_weights_ref / source_snippets / pillar_missing_inputs MUST go in `provenance.yaml`, NOT on the audit row.
 - `psychological_wavelength` judgment is Claude-only (data perimeter — telemetry contains CG-proprietary signals, do NOT dispatch to external models).
 - Synthesized views carry `auto_expire_days: 30` (shorter than ingested views' 90) because the underlying macro fan-out is point-in-time.
 - §9.2 exemption: this skill does NOT render the AI-interaction disclosure banner. It emits configuration artifacts (`view.yaml` + `prose.md`) whose LLM-synthesized content is gated by the Step 7 operator confirmation gate before any downstream consumer can load the view — and every downstream consumer renders §9.2 in its own output per loader.md §5 rule 6. Rationale and conditions: `parallax-conventions.md` §9.2 "Exemption". Registered in `_NINE_TWO_EXEMPT_SKILLS` in the white-label test gate.
 
-Synthesize a draft Parallax house view by orchestrating Parallax MCP tools (`list_macro_countries` + `macro_analyst` × 14 markets × 5 components + `get_telemetry`), aggregate cross-country, compose the four framework components (macro backdrop, valuation, market state, sentiment), route through the shared confirmation gate, and save through the same path `/parallax-load-house-view` uses.
+Synthesize a draft Parallax house view by orchestrating Parallax MCP tools (`list_macro_countries` + `macro_analyst` × 14 markets × 4 components + `get_telemetry`), aggregate cross-country, compose the four framework components (macro backdrop, valuation, market state, sentiment), route through the shared confirmation gate, and save through the same path `/parallax-load-house-view` uses.
 
 The synthesized view lives in `~/.parallax/active-house-view/` and is consumed by every downstream skill (portfolio-builder, rebalance, thematic-screen, etc.) exactly like an ingested view — the only difference is the provenance class (`generator_synthesis` vs `prose_extraction`) and a shorter default `auto_expire_days`.
 
@@ -39,6 +39,8 @@ The synthesized view lives in `~/.parallax/active-house-view/` and is consumed b
 /parallax-make-house-view --status                     # show last-generated view metadata
 /parallax-make-house-view --compare <path_a> <path_b>  # diff two saved view bundles; no MCP, no synthesis, no save
 ```
+
+**Cost:** ~282 tokens at the default market set (~14 markets × 4 components; see `_parallax/token-costs.md`); `--markets` scales cost proportionally.
 
 ## Workflow
 
@@ -54,7 +56,7 @@ Fallback: if `list_macro_countries` fails, use the hardcoded `HARDCODED_COVERAGE
 
 Fire in parallel (concurrency cap 8, per-call timeout 45s):
 
-- **Step 2 (batch):** `macro_analyst(market=M, component=C)` for every (M, C) pair where M ∈ covered_markets and C ∈ {`macro_indicators`, `tactical`, `sectors`, `fixed_income`, `news`}. Budget: 14 × 5 = 70 calls.
+- **Step 2 (batch):** `macro_analyst(market=M, component=C)` for every (M, C) pair where M ∈ covered_markets and C ∈ {`macro_indicators`, `tactical`, `sectors`, `news`}. Budget: 14 × 4 = 56 calls. (`fixed_income` is deferred — no v0 formula consumes it; re-add it in the same change that lands a rates leg in `pillar_formulas.py`.)
 - **Step 3 (single call, parallel with Step 2):** `get_telemetry(fields=["regime_tag", "divergences", "factor_view.factors", "factor_view.commentary", "signals", "commentary"])`.
 
 Per-market timeout: 45s. A market that doesn't respond on ANY component within timeout is `UNREACHABLE` (use `stress.classify_mcp_meta_state` semantics). A market that returns a successful response with content like "Sector ranking data remains unavailable for this reporting period" is treated as **silent for that component**, not UNREACHABLE for the market (per MCP_FIELD_INVENTORY.md §5.4).

@@ -1,0 +1,16 @@
+{
+  "name": "parallax-workflows",
+  "description": "Claude Code workflows for Parallax equity research by Chicago Global.",
+  "owner": {
+    "name": "Chicago Global",
+    "url": "https://chicago.global"
+  },
+  "plugins": [
+    {
+      "name": "parallax",
+      "source": "./plugin",
+      "description": "Parallax equity-research workflows: stock evaluation, portfolio analysis, screening, translation, and client-review skills powered by the Parallax MCP server.",
+      "version": "0.1.0"
+    }
+  ]
+}

@@ -36,7 +36,7 @@ _REQUIRED_SECTIONS = [
     "Per-Holding Analysis",
     "Suitability Assessment",
     "Recommended Actions",
-    "Provenance",
+    "About This Report",
 ]
 _SECTION_LABELS = [
     "House View Preamble",
@@ -52,7 +52,7 @@ _SECTION_LABELS = [
     "Suitability Assessment",
     "Recommended Actions",
     "Appendix: Methodology",
-    "Provenance",
+    "About This Report",
 ]
 
 # Directive recommendation vocabulary (references/recommendation-matrix.md).

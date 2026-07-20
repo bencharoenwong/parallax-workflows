@@ -57,7 +57,7 @@ Portfolio-level read: Transient. Prices fell but factor scores held — quality 
 ## What To Do
 Fundamentals are intact — stay the course unless your risk tolerance changed.
 
-## Provenance
+## About This Report
 Default Parallax branding.
 
 *AI-assisted output. Verify any specific statement before acting.*

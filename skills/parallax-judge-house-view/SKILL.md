@@ -51,6 +51,8 @@ This skill compares the active CIO house view against fresh Parallax macro signa
 
 The `--dry` flag skips the LLM Phase 5 recommendation step and returns deterministic drift severity from MCP signals alone. `--mock-mcp <path>` is independent — it replaces the live MCP fan-out with a canned JSON payload keyed by `tool:arg1:arg2:...` summary strings (for tests or CI). Either flag can be used alone or together.
 
+**Cost:** ~282 tokens at the default market set (~14 markets × 4 components; see `_parallax/token-costs.md`). `--dry` skips the Phase 5 LLM step but NOT the Phase 1 macro fan-out — the full ~282-token cost is still incurred.
+
 ## Workflow (Phases 0-8 per v2 plan §3.1)
 
 ### Phase 0 — Load active view
@@ -65,7 +67,7 @@ Invoke `judge.phase_0_load_view()`, which wraps `stress.load_active_view()`. Thi
 
 ### Phase 1 — MCP fan-out
 
-Same recipe as the maker: 14 markets × 5 components (`macro_indicators`, `tactical`, `sectors`, `fixed_income`, `news`) + 1 `get_telemetry` call. Concurrency capped at 8.
+Same recipe as the maker: 14 markets × 4 components (`macro_indicators`, `tactical`, `sectors`, `news`) + 1 `get_telemetry` call. Concurrency capped at 8. (`fixed_income` is deferred — no v0 consumer; re-add in lockstep with the maker when a rates leg lands.)
 
 **Per-market timeout:** 45s. UNREACHABLE markets are classified via `stress.classify_mcp_meta_state` and weighted to 0 by the maker's aggregator. If unreachable_share > 30% across markets, the maker raises; the judge surfaces this in `diagnostics` and falls back to PARALLAX_SILENT.
 
@@ -106,10 +108,10 @@ Call `stress.build_recommended_deltas(resolutions, cio_age, parallax_age, includ
 
 ### Phase 5 — LLM-as-judge recommendations (material+ severity only)
 
-For each cell at `drift_material` (or stricter), the orchestrator:
+For the cells at `drift_material` (or stricter), the orchestrator:
 
-1. Calls `recommendation.build_recommendation_prompt(...)` to assemble the structured-output prompt.
-2. Dispatches to Claude via the runtime-injected `llm_call_fn`.
+1. Calls `recommendation.build_recommendation_prompt(...)` for EVERY material cell first — each prompt is built only from its own cell's snippet, so the cells are mutually independent.
+2. Dispatches those cells to Claude via the runtime-injected `llm_call_fn` in parallel where the runtime supports concurrent dispatch; ordering within the batch is immaterial because no cell reads another's output and Phase 6/7 consume the completed set. Each response is validated by `recommendation.validate_citation` (step 3 below) as it returns — parallelism does NOT touch or weaken the per-cell >=30-char verbatim-substring check.
 3. **Validates the citation via `recommendation.validate_citation`.** The LLM's `rationale` (or any `evidence_refs` entry) MUST contain a >=30-char verbatim substring of the source snippet. Honest declines (`recommended_value=null` + "insufficient evidence" rationale) bypass the substring check.
 4. On validation failure, the recommendation is dropped and replaced with `recommendation.make_decline_placeholder(...)`. The decline marker (`"judge declined to recommend (citation check failed)"`) is visible in both the report and the audit row.
 

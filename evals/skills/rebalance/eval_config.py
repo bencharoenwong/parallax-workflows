@@ -37,7 +37,7 @@ _REQUIRED_SECTIONS = [
     "Trade Recommendations",
     "Before/After",
     "Implementation Notes",
-    "Provenance",
+    "About This Report",
 ]
 _SECTION_LABELS = [
     "House View Preamble",
@@ -52,7 +52,7 @@ _SECTION_LABELS = [
     "Replacement Candidates",
     "Before/After",
     "Implementation Notes",
-    "Provenance",
+    "About This Report",
 ]
 
 _PRIORITY = re.compile(r"\b(high|medium|low)\b", re.I)

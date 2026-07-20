@@ -2,7 +2,7 @@
 
 Same output family as should-i-buy (structured English research output, MCP tools,
 shared conventions: §9.2 AI-disclosure, "not investment advice" disclaimer,
-Provenance line, conditional Macro Context). It uses the generic structured-English
+About This Report line, conditional Macro Context). It uses the generic structured-English
 checks (sections_present, macro_conditional, ai_disclosure_present,
 disclaimer_present_correct, provenance_present, orchestrator_length) and adds
 skill-specific ones: consider_no_directive (Tier-1) and health_status_consistent,
@@ -23,12 +23,12 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 _REQUIRED_SECTIONS = [
     "Portfolio Health Status", "Health Flags", "What This Means",
-    "Consider", "Provenance",
+    "Consider", "About This Report",
 ]
 _SECTION_LABELS = [
     "House View Preamble", "Portfolio Health Status", "Verification Note",
     "Your Portfolio Scorecard", "Health Flags", "Overlap Alert",
-    "Macro Context", "What This Means", "Consider", "Provenance",
+    "Macro Context", "What This Means", "Consider", "About This Report",
 ]
 
 

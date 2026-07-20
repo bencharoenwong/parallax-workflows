@@ -22,12 +22,12 @@ SPEC = EvalSpec(
     # identity into the title rather than a standalone section.
     required_sections=[
         "The Scores", "Financial Health", "Dividends", "Risk vs Peers",
-        "Recent News", "Analyst View", "Bottom Line", "Provenance",
+        "Recent News", "Analyst View", "Bottom Line", "About This Report",
     ],
     section_labels=[
         "The Company", "Fundamentals", "The Scores", "House View Note",
         "Financial Health", "Technicals", "Macro Context", "Dividends",
-        "Risk vs Peers", "Recent News", "Analyst View", "Bottom Line", "Provenance",
+        "Risk vs Peers", "Recent News", "Analyst View", "Bottom Line", "About This Report",
     ],
     check_ids=[
         "sections_present", "scores_trend_direction", "macro_conditional",

@@ -1,0 +1,41 @@
+{
+  "symbol": "AAPL.O",
+  "statement": "balance_sheet",
+  "currency": "USD",
+  "periods": [
+    {
+      "period": "FY2024",
+      "total_assets": 364980000000,
+      "total_liabilities": 308030000000,
+      "total_equity": 56950000000,
+      "current_assets": 152987000000,
+      "current_liabilities": 176392000000,
+      "working_capital": -23405000000,
+      "retained_earnings": -19154000000,
+      "cash_and_equivalents": 29965000000,
+      "short_term_investments": 35228000000,
+      "total_debt": 104590000000,
+      "short_term_debt": 10912000000,
+      "long_term_debt": 91667000000,
+      "inventories": 6232000000,
+      "accounts_receivable": 33410000000
+    },
+    {
+      "period": "FY2023",
+      "total_assets": 352583000000,
+      "total_liabilities": 290437000000,
+      "total_equity": 62146000000,
+      "current_assets": 143566000000,
+      "current_liabilities": 145308000000,
+      "working_capital": -1742000000,
+      "retained_earnings": -214000000,
+      "cash_and_equivalents": 29965000000,
+      "short_term_investments": 31590000000,
+      "total_debt": 111088000000,
+      "short_term_debt": 9822000000,
+      "long_term_debt": 95281000000,
+      "inventories": 6331000000,
+      "accounts_receivable": 29508000000
+    }
+  ]
+}

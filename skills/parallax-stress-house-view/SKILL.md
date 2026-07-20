@@ -103,3 +103,7 @@ The stress test runs in four phases, as defined in `skills/_parallax/house-view/
 ## Output Format
 
 The primary output is the interactive `AskUserQuestion` gate in Phase 4. If the process halts earlier (e.g., no active view, internal contradiction), a clear explanatory message is provided. A detailed markdown report is always saved to the `stress-tests` directory for later review.
+
+**AI-interaction disclosure:** the saved markdown report and the Phase 4 summary render AI-interaction disclosure per `parallax-conventions.md` §9.2 immediately above the standard disclaimer (§9.1, or the view-aware disclaimer per `house-view/loader.md` §5 rule 5/6 when an active view is loaded). The internal-consistency and drift classifications are LLM-interpreted and the report is read directly by the CIO/operator, so §9.2 applies — this skill does not qualify for the config-artifact exemption (see conventions §9.2 exemption rationale and judge-house-view's identical directive).
+
+**Calibration disclosure:** this skill operates against views in `calibration_status: heuristic_phase0`. Cell resolutions and recommended deltas are heuristic; intended for directional research only — do not use for regulatory capital, fiduciary-grade portfolio construction, or client-facing recommendations without further validation.

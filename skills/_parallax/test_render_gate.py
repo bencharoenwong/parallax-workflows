@@ -93,6 +93,8 @@ def test_branding_header_survives_per_skill_noun():
         "rebalance": "**Acme Capital** rebalance",
         "portfolio-builder": "**Acme Capital** portfolio construction",
         "explain-portfolio": "**Acme Capital** portfolio attribution",
+        "should-i-buy": "**Acme Capital** stock review",
+        "score-explainer": "**Acme Capital** score explainer",
     }
     for skill, hdr in cases.items():
         draft = SCAFFOLD + hdr + "\n\nbody\n"
@@ -153,6 +155,8 @@ FIRST_SECTION = {
     "rebalance": "## Current Portfolio Assessment",
     "watchlist-monitor": "## Watchlist Summary",
     "portfolio-builder": "## Investment Thesis",
+    "should-i-buy": "## The Company",
+    "score-explainer": "## The Question",
 }
 
 
@@ -176,6 +180,8 @@ def test_title_form_anchors_each_skill():
         "rebalance": "# Portfolio Rebalance",
         "watchlist-monitor": "# Watchlist Scan — 7 names",
         "portfolio-builder": "# Portfolio Builder — US Tech",
+        "should-i-buy": "# Should I Buy — AAPL.O",
+        "score-explainer": "# Score Explainer — why is the value score low",
     }
     for skill, title in titles.items():
         out = gate(SCAFFOLD + title + "\nbody\n", skill)
@@ -197,5 +203,14 @@ def test_every_skill_has_anchors():
         "rebalance",
         "watchlist-monitor",
         "portfolio-builder",
+        "should-i-buy",
+        "score-explainer",
     ]:
         assert SKILL_ANCHORS.get(skill), f"no anchors for {skill}"
+
+
+def test_should_i_buy_active_banner_survives_scaffold():
+    draft = SCAFFOLD + REAL_BANNERS["active"] + "\n\n## The Company\nApple Inc.\n"
+    out = gate(draft, "should-i-buy")
+    assert out.lstrip().startswith("Active house view:"), out[:80]
+    assert "## The Company" in out

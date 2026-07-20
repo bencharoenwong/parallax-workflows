@@ -65,7 +65,7 @@ markets** (see `valuation_state` / `market_entropy` rows below).
 |---|---|---|
 | `macro_indicators` | ✓ US, China | `econometrics_phase` (growth/inflation), `valuation_state` (when explicit), `market_entropy` (when explicit) |
 | `tactical` | ✓ Japan | `econometrics_phase` (regime framing), sector tilts, region tilts |
-| `fixed_income` | ⚪ untested | rates leg of `econometrics_phase` |
+| `fixed_income` | ⚪ deferred | rates leg of `econometrics_phase` — not in the default fan-out (no v0 consumer) |
 | `currency` | ⚪ untested | FX context for `econometrics_phase` |
 | `sectors` | ✓ US | sector tilts (BUT: may report "data unavailable" — handle gracefully) |
 | `sector_positioning` | ⚪ untested | sector tilts (overlapping with sectors) |
@@ -160,16 +160,18 @@ Brazil/Mexico/Hong Kong, add Malaysia, exclude Global from per-country fan-out).
 
 ### 5.3 Component fan-out scope
 
-The maker plan v2 §2.1 Step 2 specifies 5 components per market: {macro_indicators,
-tactical, sectors, fixed_income, news}. The MCP exposes 9 components. The plan's
-5 are correct for pillar/sector/region tilt extraction — `currency`, `liquidity`,
-`sector_positioning`, `factors` are either redundant or out of scope for v0 (the
-country-level `factors` component would compete with telemetry.factor_view; skip
-for v0 unless validation shows it adds signal).
+The maker fans out 4 components per market: {macro_indicators, tactical,
+sectors, news}. The MCP exposes 9 components. These 4 are the ones consumed by
+pillar/sector/region tilt extraction — `fixed_income` is deferred (no v0
+formula reads it; the rates leg of `econometrics_phase` is unbuilt), and
+`currency`, `liquidity`, `sector_positioning`, `factors` are either redundant
+or out of scope for v0 (the country-level `factors` component would compete
+with telemetry.factor_view; skip for v0 unless validation shows it adds signal).
+Re-add `fixed_income` in lockstep with a rates leg in `pillar_formulas.py`.
 
-**Fan-out budget:** 14 markets × 5 components = 70 macro_analyst calls per maker
+**Fan-out budget:** 14 markets × 4 components = 56 macro_analyst calls per maker
 invocation (NOT 150 as v2 plan and swarm prompt estimated — that was based on
-30 markets). Plus 1 telemetry. With 8-concurrent batching: ~9 batch rounds.
+30 markets). Plus 1 telemetry. With 8-concurrent batching: ~7 batch rounds.
 At ~3s per call (per tool description), latency budget is ~30s for fan-out
 plus ~15-30s for telemetry. Total interactive latency: ~45-60s. Acceptable
 for a synthesis skill that the user expects to wait for.

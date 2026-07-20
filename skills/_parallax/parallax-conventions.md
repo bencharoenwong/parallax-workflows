@@ -94,6 +94,8 @@ Only escalate to the user if resolution fails after 2 attempts with the most lik
 
 **Peer symbol RIC resolution:** Peer symbols from `get_peer_snapshot` may lack exchange suffixes (e.g., `GM` instead of `GM.N`). Resolve them using the exchange suffix table above before passing to downstream tools.
 
+**Fund/OEIC resolution fallback:** If resolution still fails after the standard 2 attempts above, and the identifier pattern suggests a fund, OEIC, or investment trust (an ISIN-style code, or a name containing a `Fund`/`OEIC`/`Trust`/`Acc`/`Inc` share-class marker), do not surface a raw resolution error. State plainly: "This looks like a fund/OEIC — coverage is listed equities and ETFs only; funds are not covered," and continue processing any remaining symbols. Skills that JIT-load this section inherit the fallback with no per-skill edit required.
+
 ---
 
 ## 2. Symbol Cross-Validation
@@ -300,13 +302,13 @@ Every workflow output must end with a disclaimer. Use the exact wording from the
 
 Every workflow output that contains AI-generated narrative, synthesis, or recommendations MUST render the following banner immediately above the §9.1 disclaimer (or immediately above the view-aware disclaimer when an active house view is loaded — see house-view/loader.md §5 rule 6). This applies whether or not a white-label client view is active, and whether or not a house view is loaded. The wording is a working banner pending counsel sign-off:
 
-> *AI-assisted output. Quantitative data — factor scores, financials, peer mappings, technicals, price series — is from Parallax's deterministic pipelines. Qualitative content — news synthesis, macro commentary, AI assessments, narrative framing, and recommendations — is LLM-generated, either by Parallax's MCP services (news, macro, assessment) or by the orchestrating model (narrative and recommendations). See the Provenance footer for per-source attribution and version, and the trace ID for end-to-end output attribution. Verify any specific statement before acting.*
+> *AI-assisted output. Quantitative data — factor scores, financials, peer mappings, technicals, price series — is from Parallax's deterministic pipelines. Qualitative content — news synthesis, macro commentary, AI assessments, narrative framing, and recommendations — is LLM-generated, either by Parallax's MCP services (news, macro, assessment) or by the orchestrating model (narrative and recommendations). See the 'About This Report' footer for this output's branding and data-basis state. Verify any specific statement before acting.*
 
-<!-- COUNSEL-TBD — final wording subject to counsel sign-off. The current text is the working banner: it accurately distinguishes deterministic quantitative pipelines from LLM-generated qualitative content (covering both Parallax MCP services like news/macro/assessment and the orchestrating model), references the Provenance footer and trace ID for attribution, and avoids a methodology URL. Do not add a URL until counsel has signed off. The trace ID surface exists today; an end-to-end attribution API endpoint is in progress — when it lands, append a one-line "Resolve a trace ID at <url>" pointer here and the change propagates to all consumer skills via this single source of truth. -->
+<!-- Maintainer note: this is a working banner pending final review. It intentionally distinguishes deterministic quantitative pipelines from LLM-generated qualitative content and keeps the banner URL-free; do not add a methodology URL. -->
 
 **Why §9.2 is mandatory:**
 
-- **EU AI Act Art 50(1)** (effective 2 August 2026) — providers of AI systems generating synthetic content must mark outputs as artificially generated; the trace ID + Provenance footer satisfy this marking obligation.
+- **EU AI Act Art 50(1)** (effective 2 August 2026) — providers of AI systems generating synthetic content must mark outputs as artificially generated; the "AI-assisted output" label at the head of the §9.2 banner satisfies this marking obligation.
 - **EU AI Act Art 50(2)** — deployers of AI systems intended to interact directly with natural persons must inform users they are interacting with an AI; the "AI-assisted output" label satisfies this.
 - **HKMA GenAI Circular (19 August 2024)** + **HKMA Consumer Protection circular on GenAI (7 November 2024)** — authorised institutions must disclose the purposes and limitations of GenAI in customer-facing applications, monitor outputs, and let customers opt out / request human intervention.
 - **SFC Circular on Use of Generative AI Language Models (12 November 2024)** — for high-risk use cases (investment recommendations, advice, or research), licensed corporations must provide PROMINENT and CONTINUOUS disclosure that users are interacting with AI and that output may not be accurate. Parallax consumer-skill outputs fall in this high-risk category.
@@ -316,7 +318,7 @@ Every workflow output that contains AI-generated narrative, synthesis, or recomm
 
 **§9.2 scope:** The §9.2 banner is **content-level** disclosure. **Firm-level UI obligations** — opt-out / human-intervention option (HKMA), prominent UI placement and continuous-disclosure cadence (SFC), accessibility considerations — remain the responsibility of the deploying institution and are NOT preempted by rendering §9.2 in skill output.
 
-**Exemption:** Skills that produce configuration artifacts rather than direct client-facing analysis (currently `parallax-white-label-onboard` and `parallax-make-house-view`) are exempt from rendering §9.2. The rationale is narrow: such skills must (a) emit YAML/audit artifacts rather than a finished client deliverable, AND (b) gate any LLM-generated content behind an explicit operator confirmation step before that content can flow to downstream consumer skills. `parallax-white-label-onboard` qualifies because its Step 1.5 voice extraction is LLM-driven, but the resulting voice profile is reviewed and confirmed by the operator at Step 3 before being written to `~/.parallax/client-branding/` for downstream skills to consume — at which point the downstream skill renders §9.2 in its own output. `parallax-make-house-view` qualifies because it emits `view.yaml` + `prose.md` configuration artifacts whose LLM-synthesized content is gated by the shared Step 7 confirmation gate (`gate_present.py` — no save path bypasses it) before any downstream consumer can load the view — and every downstream consumer renders §9.2 in its own output per loader.md §5 rule 6. A future skill that emits LLM-generated content without an equivalent operator gate does NOT qualify for exemption, even if it produces "config" — the gate, not the artifact format, is the load-bearing condition. In particular, `parallax-judge-house-view` does NOT qualify: it emits an LLM-as-judge analysis report (not a config artifact) read directly by a natural person, so its report renders §9.2. Adding a skill to `_NINE_TWO_EXEMPT_SKILLS` in the test gate requires updating this exemption text in the same PR; entries are full skill directory names (`parallax-*`).
+**Exemption:** Skills that produce configuration artifacts rather than direct client-facing analysis (currently `parallax-white-label-onboard` and `parallax-make-house-view`) are exempt from rendering §9.2. The rationale is narrow: such skills must (a) emit YAML/audit artifacts rather than a finished client deliverable, AND (b) gate any LLM-generated content behind an explicit operator confirmation step before that content can flow to downstream consumer skills. `parallax-white-label-onboard` qualifies because its Step 1.5 voice extraction is LLM-driven, but the resulting voice profile is reviewed and confirmed by the operator at Step 3 before being written to `~/.parallax/client-branding/` for downstream skills to consume — at which point the downstream skill renders §9.2 in its own output. `parallax-make-house-view` qualifies because it emits `view.yaml` + `prose.md` configuration artifacts whose LLM-synthesized content is gated by the shared Step 7 confirmation gate (`gate_present.py` — no save path bypasses it) before any downstream consumer can load the view — and every downstream consumer renders §9.2 in its own output per loader.md §5 rule 6. A future skill that emits LLM-generated content without an equivalent operator gate does NOT qualify for exemption, even if it produces "config" — the gate, not the artifact format, is the load-bearing condition. In particular, `parallax-judge-house-view` does NOT qualify: it emits an LLM-as-judge analysis report (not a config artifact) read directly by a natural person, so its report renders §9.2. `parallax-load-house-view` also qualifies: it emits `view.yaml` configuration artifacts, and any LLM-extracted content is gated by its own Step 3 operator confirmation step before that content flows to downstream consumers — each of which renders §9.2 in its own output. Adding a skill to `_NINE_TWO_EXEMPT_SKILLS` in the test gate requires updating this exemption text in the same PR; entries are full skill directory names (`parallax-*`).
 
 **Consumer skill reference pattern:** Skills MUST render the §9.2 banner by reference, not by inlining the text. Example Output Format directive: `Render AI-interaction disclosure per parallax-conventions.md §9.2 immediately above the disclaimer.` Inlining the banner text creates drift risk — when counsel finalizes the wording (or when the attribution API lands), the canonical §9.2 entry is edited once and all consumer skills propagate automatically.
 
@@ -324,7 +326,7 @@ Every workflow output that contains AI-generated narrative, synthesis, or recomm
 
 ## 10. Render Gate
 
-Portfolio-family skills (`client-review`, `morning-brief`, `portfolio-builder`, `portfolio-checkup`, `rebalance`, `explain-portfolio`, `watchlist-monitor`) MUST pass their drafted report through the shared deterministic render gate as their **MANDATORY last step**.
+Portfolio-family skills (`client-review`, `morning-brief`, `portfolio-builder`, `portfolio-checkup`, `rebalance`, `explain-portfolio`, `watchlist-monitor`) plus the single-stock report skills (`should-i-buy`, `score-explainer`) MUST pass their drafted report through the shared deterministic render gate as their **MANDATORY last step**.
 
 ### 10.1 Why it exists
 
@@ -343,7 +345,7 @@ The gate (`_parallax/render_gate.py`) is a pure-stdlib Python script. It determi
 
 ### 10.3 Usage in SKILL.md
 
-Every portfolio-family skill carries a `### Render — deterministic gate` heading before its **Output Format** section. The directive specifies the exact Bash one-liner to run:
+Every gated skill carries a `### Render — deterministic gate` heading before its **Output Format** section. The directive specifies the exact Bash one-liner to run:
 
 ```bash
 DRAFT="$(mktemp "${TMPDIR:-/tmp}/skill.XXXXXX")"
@@ -354,3 +356,121 @@ python3 "<skill-dir>/../_parallax/render_gate.py" --skill <skill-key> < "$DRAFT"
 ```
 
 The skill's **entire final message** is exactly that command's stdout. `render_gate.py` uses a fail-open design: if no anchor is found, the input is returned unchanged, ensuring the gate never destroys a report it cannot positively locate.
+
+---
+
+## 11. Verdict Sensitivity
+
+### §11.1 Principle
+
+Any skill that renders a threshold-driven verdict, screen, badge, or flag — a rendered output whose classification is determined by comparing a numeric input against a published numeric cutoff — MUST also state, in third person and grounded purely in arithmetic, which 1-2 inputs sit nearest their boundary and what would flip the verdict. This is a restatement of deterministic threshold logic already computed during the workflow: it introduces no new claim, no forecast, and no first-person voice. It is not advice — it never says whether an input *should* move, only what value *would* flip the classification if it did.
+
+**Surface label:** Skills with a categorical verdict (match / partial / no-match, PASS / FAIL, GREEN / AMBER / RED, Healthy / Monitor / Attention) render a line labeled **"Verdict sensitivity"**. `parallax-score-explainer`'s existing "What Would Change It" line is the grandfathered precedent for continuous-score skills that predate this section — it satisfies the same principle in different wording and MUST NOT be reworded to match.
+
+### §11.2 What qualifies as "purely arithmetic"
+
+A verdict is eligible for §11 rendering only if:
+
+1. Every input feeding the verdict has a **published, fixed numeric cutoff** stated in the skill's own spec (not inferred, not a model judgment call).
+2. The distance from an input's current value to its nearest cutoff can be computed with subtraction / comparison alone — no forecasting, no counterfactual data pull.
+3. The "what would flip it" statement names only inputs and cutoffs already surfaced in the rendered table / flags — it must not introduce a new metric.
+
+Discrete or qualitative verdicts (industry classification match, telemetry basket membership, technical trend direction, or any compound AND/OR-gated channel status) do NOT qualify. Forcing an arithmetic distance onto a qualitative or compound criterion is a grounding-failure risk — the very failure mode this section exists to prevent — and is FORBIDDEN.
+
+### §11.3 Selecting which input(s) to surface
+
+1. Compute `|current_value − nearest_cutoff|` for every qualifying input.
+2. Report the 1 input (or, if two are comparably close, 2) with the smallest distance.
+3. **Distance-0 case (the input sits exactly AT its cutoff):** state that fact explicitly — e.g., "Value 4 is at the ≥ 4 boundary" — and state the flip direction ("a Value read below 4 would move this leg from PASS to FAIL"). Distance 0 is the MOST sensitive case, not a degenerate one to round away.
+4. Never fabricate a flip number for an input with no published cutoff (the §11.2 gate). If none of the rendered inputs have a published cutoff, omit the Verdict Sensitivity line entirely rather than force one.
+
+### §11.4 Forbidden language
+
+Verdict Sensitivity is a restatement of arithmetic, not a recommendation. The forbidden-language list from `_parallax/AI-profiles/output-template.md` §5 applies without exception: no "buy", "sell", "would buy", "recommend", "should", or advice-framed "consider adding / trimming." Correct: *"Value 4 is at the ≥ 4 boundary; the verdict flips to partial match if Value falls below 4."* Incorrect: *"Value is right at the line — you may want to wait for a pullback before buying."*
+
+### §11.5 Consumer skill reference pattern
+
+Skills rendering Verdict Sensitivity MUST render it by reference, not by inlining this section's prose. Example Output Format directive: `Render Verdict Sensitivity per parallax-conventions.md §11 — the 1-2 nearest-boundary inputs and the arithmetic flip condition, third person, no advice language.` Inlining creates drift risk — the qualification gate and forbidden-language list here are the single source of truth; a future tightening propagates to all consumers automatically.
+
+---
+
+## 12. Information Framing (Advice Boundary)
+
+### §12.1 Principle
+
+Rendered classifications and candidate actions are observational statements about threshold logic — never execution instructions. A skill may report that a holding crossed a published cutoff and name the classification that cutoff maps to; it may never tell the reader what to do about it.
+
+**Forbidden:** reader-directed imperative trade verbs ("sell", "buy", "trim", "exit this position"), first-person advice framing ("we recommend", "you should"), or "should" applied to a trade action.
+
+**Permitted:** capitalized action-type labels (Exit, Trim, Reweight, Investigate, Hold) when the label is defined by a cited matrix or threshold table, and each instance cites the specific flag or finding that produced it — the label names a classification, not a directive.
+
+### §12.2 Required framing devices
+
+Any section that renders an action-type table or a candidate-action list MUST carry:
+
+1. **A one-line informational preface** immediately above the table, stating that the section is an analytical classification, not an instruction.
+2. **Conditional/descriptive rationale verbs** ("flags", "sits above", "diverges from") in place of imperative verbs in the rationale column or supporting prose.
+3. A pointer to an existing reference pattern rather than inventing new framing per skill — `parallax-portfolio-checkup`'s question-framed "Consider" section and `parallax-pair-finder`'s informational halt are the reference patterns (cited by skill name only).
+
+### §12.3 Suppressible action-label mode
+
+Skills that render action-type labels MUST support an `action_labels=plain` render directive that maps each label to a neutral status description instead of an action-type word (e.g., Exit → "flagged for full-position review", Trim → "flagged for partial-position review", Reweight → "flagged for allocation review", Investigate → "flagged for further review", Hold → "no threshold breach"), for retail-suitable deployments. Under `action_labels=plain`, any magnitude accompanying a label renders as distance-to-threshold arithmetic (current value vs. published cutoff), not a suggested trade size.
+
+### §12.4 Consumer reference pattern
+
+Skills MUST render this section by reference, not by inlining its prose, per the same pattern as §9 and §11. Example Output Format directive: `Render the informational preface and action-label framing per parallax-conventions.md §12.` Inlining creates drift risk — a future tightening of the forbidden-language list propagates to all consumers automatically only if they reference this section rather than copy it.
+
+---
+
+## 13. Audience Render Mode
+
+### §13.1 Modes & precedence
+
+Two audience modes are supported:
+
+- `internal_analyst` — default; today's rendering, unchanged.
+- `client_safe` — deliverable suitable for forwarding to an end client / retail reader.
+
+Resolve audience mode in this order:
+
+1. Per-invocation flag `audience=client_safe` or `audience=internal_analyst`.
+2. White-label config `render.audience_default`, read via the loader per `white-label/integration-pattern.md` §2/§3 — never by re-parsing the YAML.
+3. Absent both, use `internal_analyst`.
+
+Unrecognized values fall back to `internal_analyst` with a one-line notice in the About This Report footer.
+
+### §13.2 Client-safe transformation table
+
+| Surface | `internal_analyst` (default, unchanged) | `client_safe` |
+|---|---|---|
+| Factor names (VALUE/QUALITY/MOMENTUM/DEFENSIVE) | raw pillar names | each carries the plain-language gloss from the canonical table in §13.3 |
+| Verdict-sensitivity lines (§11) | rendered | **omitted** (the verdict itself is unchanged; the flip-arithmetic line is analyst apparatus) |
+| Action-type labels (§12.3) | as defined | `action_labels=plain` is **implied** — neutral status descriptions |
+| Published-cutoff arithmetic in body prose | rendered | state the classification and its plain-language meaning; omit the cutoff arithmetic |
+| Methodology/ops apparatus (tool sequences, token-cost lines, per-cell source-tag columns) | inline | **relocated** to a clearly-separable trailing "Methodology appendix (internal)" section, or omitted where nothing requires retention. Anything under a compliance contract (e.g. portfolio-builder Tilt Source tags) is relocated, **never deleted** |
+| Footer ("About This Report") | rendered | rendered, plus one extra line: `Audience mode: client-safe` (auditability of mode state) |
+
+Non-suppressible in ANY mode: the §9.2 AI-interaction disclosure banner; the §9.1/bespoke disclaimers; the AI-profile family's verbatim disclaimer (output-template.md §8); Ground-truth Integrity / ⚠ MISMATCH data-integrity warnings; the House View Preamble banner; the About This Report footer itself.
+
+The §9.2 AI-interaction disclosure banner is not suppressible, rewordable, or movable by audience mode; its wording and placement are fixed pending counsel sign-off.
+
+### §13.3 Canonical plain-language factor gloss
+
+This table is the single source for plain-language factor gloss. Consumers and `parallax-portfolio-checkup` Step 4 render it by reference.
+
+- High VALUE = tilts toward cheaper stocks
+- High QUALITY = strong balance sheets and profitability
+- High MOMENTUM = stocks with recent price strength
+- High DEFENSIVE = lower volatility, stable businesses
+
+### §13.4 Footer mode line
+
+Under `client_safe`, the About This Report footer gains this line:
+
+`Audience mode: client-safe`
+
+### §13.5 Consumer reference pattern
+
+Skills MUST render this section by reference, not by inlining its prose, per the same pattern as §12. Example Output Format directive: `Apply audience render mode per parallax-conventions.md §13; default internal_analyst.` Inlining creates drift risk — a future tightening propagates to all consumers automatically only if they reference this section rather than copy it.
+
+Rollout: this batch wires the mode into the report-rendering consumers named in the batch plan; remaining consumers inherit the definition when wired.

@@ -26,7 +26,7 @@ description: "Applies Paul Tudor Jones's trend-following + macro-overlay framewo
 - NEVER use first-person impersonation ("PTJ would buy"); always frame as "PTJ-style lens identifies" or "Profile flags"
 - Disclaimer verbatim per output-template.md, substituting "Paul Tudor Jones" for [Investor]
 - Cross-validation gate is NON-BYPASSABLE — symbol mismatch between get_company_info and get_peer_snapshot halts rendering
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
 
 Trend-following + macro-overlay framework: technical momentum validation → macro regime check → volatility-based risk/reward asymmetry assessment.
 
@@ -169,14 +169,14 @@ Ticker exposure check (tri-channel):
     Status: FLAGGED / PARTIAL / NOT_FLAGGED
 
 Profile fit: <match / partial_match / no_match>
-  - match: all three channels flagged (tri-channel alignment; high-conviction setup)
-  - partial_match: two channels flagged (two-signal alignment; tactical entry possible)
+  - match: all three channels flagged (tri-channel alignment)
+  - partial_match: two channels flagged (two-signal alignment)
   - no_match: zero or one channel flagged (insufficient confluence; capital preservation)
 
 Setup quality: <Grade A / B / C / D>
 
 Workflow derived from: Schwager (1989); Covel (2004).
-Last anchor-tested: 2026-04-07 (NVDA.O, JPM.N) | Last legal review: pending
+Last anchor-tested: 2026-04-07 (NVDA.O, JPM.N)
 Tool sequence: list_macro_countries, get_company_info, get_technical_analysis, macro_analyst × N (N ≤ 3), get_score_analysis, get_stock_outlook, get_peer_snapshot
 Token cost: ~20-25 tokens (3 macro markets) / ~14-16 tokens (1 macro market)
 
@@ -193,10 +193,10 @@ These additions apply to the rendered output ABOVE in addition to the persona-sp
 
 ### Pre-Render — Load white-label branding
 
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format.
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format.
 
 - **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line at the very top of the rendered output: `**<client_name>** PTJ-style profile`. Logo handling per integration-pattern.md §5.
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7. If a logo was skipped, append `Logo on file: <basename>` as a second Provenance line.
+- **About This Report** (always present): one line stating branding state per integration-pattern.md §7. If a logo was skipped, append `Logo on file: <basename>` as a second About This Report line.
 
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below. The persona-specific disclaimer in the output example characterizes the source of the framing; the §9.2 banner characterizes the LLM-generated synthesis itself.
 

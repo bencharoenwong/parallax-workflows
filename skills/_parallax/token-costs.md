@@ -60,7 +60,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 |---|---|---|
 | `/parallax-score-explainer` | **0-2** | Free if methodology-only; 2 if score data needed |
 | `/parallax-peer-comparison` | **8** | 3 score histories + 3 price series |
-| `/parallax-halal-screen` | **8** | 2 financials + Palepu |
+| `/parallax-halal-screen` | **4** single stock (~4-5/holding portfolio) | company_info + balance_sheet (merged debt + interest-bearing check) + ratios + score_analysis = 4; +5 optional Palepu; portfolio mode adds redundancy fan-out + alternatives |
 | `/parallax-should-i-buy` | **29** | 4 outlook aspects + 2 macro markets + news + technicals (5) |
 | `/parallax-earnings-quality` | **24** | Palepu (5) + assessment (10) + news (5) |
 | `/parallax-due-diligence` | **31** | 4 financials + Palepu + stock report (10) |
@@ -89,10 +89,12 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 | `/parallax-load-house-view` | **0** | File I/O only — no chargeable MCP calls |
 | `/parallax-house-view-diff` | **2× child** | Runs the target skill twice (Leg A without view, Leg B with view) — no additional Parallax tokens beyond the child, but total cost doubles: e.g. 2 × 36 = **72 tokens** with `/parallax-portfolio-builder`. |
 | `/parallax-stress-house-view` | **~30** (scales with tilted markets) | `check_macro_health` (5) + `get_telemetry` (1) + `macro_analyst` × tilted markets (5 each); cap 12 markets |
-| `/parallax-judge-house-view` | **~352** | Same recipe as make: 14 markets × 5 components + telemetry |
-| `/parallax-make-house-view` | **~352** (scales with `--markets`) | `list_macro_countries` (0) + `get_telemetry` (1) + `macro_analyst` × 14 markets × 5 components (350); `--markets` flag reduces the market set and scales cost proportionally |
+| `/parallax-judge-house-view` | **~282** | Same recipe as make: 14 markets × 4 components + telemetry |
+| `/parallax-make-house-view` | **~282** (scales with `--markets`) | `list_macro_countries` (0) + `get_telemetry` (1) + `macro_analyst` × 14 markets × 4 components (280); `--markets` flag reduces the market set and scales cost proportionally |
 
-> **Cost gotcha:** `/parallax-make-house-view` and `/parallax-judge-house-view` are the costliest workflows in the library at ~$70 each at Standard plan overage rates ($0.20/token). Run them intentionally — not as part of a routine check. For lightweight view assessment without full re-synthesis, prefer `/parallax-stress-house-view`.
+> **Cost gotcha:** `/parallax-make-house-view` and `/parallax-judge-house-view` are the costliest workflows in the library at ~$56 each at Standard plan overage rates ($0.20/token). Run them intentionally — not as part of a routine check. For lightweight view assessment without full re-synthesis, prefer `/parallax-stress-house-view`.
+
+> **Auto-trigger surcharge:** the auto-on-load drift check (fired by `/parallax-portfolio-builder`, `/parallax-rebalance`, and `/parallax-thematic-screen` when the loaded view is older than 30 days) invokes `/parallax-judge-house-view --dry`. `--dry` skips the LLM synthesis step but still incurs the full macro fan-out (~280 tokens) — this surcharge lands on the consuming workflow's bill, not a separate line item. Run intentionally; the 30-day age gate is what bounds how often it fires.
 
 ### Cost Context
 

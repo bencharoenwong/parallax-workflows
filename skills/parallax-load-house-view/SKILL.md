@@ -308,4 +308,6 @@ The leading `<view_status.banner>` line covers all non-active states (expired, c
 
 See Step 5 for the post-save summary. See §"Status block" above for `--status`. For other operational modes, output the requested success/failure message.
 
+**§9.2 exemption:** This skill is listed in `_NINE_TWO_EXEMPT_SKILLS` (`_parallax/white-label/tests/test_integration_pattern_referenced.py`) and does not render the §9.2 banner itself — it emits a `view.yaml` configuration artifact, and any LLM-extracted content is gated by Step 3's operator confirmation before it can flow downstream. Each downstream consumer skill renders §9.2 in its own output when it loads the saved view (see `parallax-conventions.md` §9.2 exemption rationale).
+
 > *Local-filesystem implementation. A managed, org-keyed version (`set_house_view`, `get_active_house_view`, etc., backed by Supabase) is on the roadmap; schema and loader semantics carry forward unchanged.*

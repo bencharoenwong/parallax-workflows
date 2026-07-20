@@ -55,7 +55,7 @@ For a conservative income-focused retiree, this aggressive tech book is misalign
 ## Appendix: Methodology
 Parallax factor scores.
 
-## Provenance
+## About This Report
 Default Parallax branding.
 
 *AI-assisted output. Verify any specific statement before acting.*

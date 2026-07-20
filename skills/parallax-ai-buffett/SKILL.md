@@ -28,7 +28,7 @@ description: "Applies the Buffett-style factor profile (per Frazzini-Kabiller-Pe
 - NEVER use first-person impersonation of Buffett — always frame as "Buffett-style" or "the BKP 2018 factor profile"
 - Profile is derived from public academic sources only (BKP 2018 + Lev-Srivastava 2022) — no private data, no get_assessment
 - Thresholds are calibrated for 21st-century intangibles-heavy valuations — KO/AXP return match, BRK parent and AAPL return partial (documented)
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (6-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (Provenance) in Output Format.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
 
 Applies the Buffett-style factor profile documented in Frazzini, Kabiller, and Pedersen's 2018 *Financial Analysts Journal* paper "Buffett's Alpha" to a single stock's current Parallax factor scores.
 
@@ -118,7 +118,7 @@ Format the output per `_parallax/AI-profiles/output-template.md`. The template r
 4. Data table: Factor | Target | Score | 52-wk trend | Match
 5. Verdict: "Profile fit: <match/partial/no> — N of 4 factor criteria met"
 6. **Synthesis (REQUIRED for every verdict, including `match`)** — 1-2 sentences naming which legs of the BKP-2018 Buffett profile the stock fits and which it misses, with the one-line takeaway. A `match` is not self-explanatory: state *why* (e.g. "cheap, high-quality, low-beta — the cluster BKP attribute Berkshire's alpha to"). Do not leave a `match` as a bare table.
-7. Methodology footer (workflow derivation, anchor-test date, legal-review date, tool sequence, token cost)
+7. Methodology footer (workflow derivation, anchor-test date, legal-review date — renders only once completed, tool sequence, token cost)
 8. Standard disclaimer (VERBATIM — substitute `[Investor]` with `Warren Buffett` and nothing else)
 
 ### Step 7 — Emit
@@ -146,8 +146,10 @@ Profile fit: match — 4 of 4 factor criteria met.
 
 **Synthesis:** KO fits all four legs of the BKP-2018 profile — high-quality (Quality 8), reasonably priced (Value 4), low-momentum (4.83), and strongly low-beta (Defensive 10) — the cheap-safe-quality cluster the paper attributes Berkshire's alpha to. It sits at the quality-and-safety end of that style rather than deep value.
 
+Verdict sensitivity: Value 4 is at the ≥ 4 boundary; the verdict drops from match to partial (3 of 4) if Value falls below 4. The next-nearest input, Momentum 4.83 against the ≤ 6 ceiling, has 1.17 points of headroom.
+
 Workflow derived from: Frazzini, Kabiller, Pedersen (2018), "Buffett's Alpha", FAJ 74(4):35-55.
-Last anchor-tested: 2026-04-06 (KO.N, AXP.N) | Last legal review: pending
+Last anchor-tested: 2026-04-06 (KO.N, AXP.N)
 Tool sequence: get_company_info, get_peer_snapshot, get_financials(summary), get_score_analysis(52w), explain_methodology
 Token cost: 4 tokens
 
@@ -164,10 +166,10 @@ These additions apply to the rendered output ABOVE in addition to the persona-sp
 
 ### Pre-Render — Load white-label branding
 
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (Provenance) when composing the Output Format.
+Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format.
 
 - **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line at the very top of the rendered output: `**<client_name>** Buffett-style profile`. Logo handling per integration-pattern.md §5.
-- **Provenance** (always present): one line stating branding state per integration-pattern.md §7. If a logo was skipped, append `Logo on file: <basename>` as a second Provenance line.
+- **About This Report** (always present): one line stating branding state per integration-pattern.md §7. If a logo was skipped, append `Logo on file: <basename>` as a second About This Report line.
 
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below. The persona-specific disclaimer in the output example characterizes the source of the framing; the §9.2 banner characterizes the LLM-generated synthesis itself.
 

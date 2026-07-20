@@ -9,6 +9,10 @@
 #
 # Output: ~/Downloads/<skill-name>.skill
 #
+# Scope: translate-* and private-beta tiers only. The general-release Parallax
+# workflow set ships to claude.ai via `_parallax/scripts/build_bundle.py web`
+# (see its docstring for how the two packagers split).
+#
 # Two skill tiers:
 #   KNOWN_SKILLS       — general-release skills, built by default (no-arg run).
 #   PRIVATE_BETA_SKILLS — limited-distribution skills. Build by name only;

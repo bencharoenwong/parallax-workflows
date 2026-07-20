@@ -46,6 +46,17 @@ Add the Parallax MCP server to Claude Code. Connection details are provided duri
 
 ### 2. Install the workflows
 
+**Option A — plugin (recommended).** This repo hosts a Claude Code plugin marketplace with the general-release workflow set. Inside Claude Code:
+
+```
+/plugin marketplace add bencharoenwong/parallax-workflows
+/plugin install parallax@parallax-workflows
+```
+
+Plugin skills are namespaced — invoke them as `/parallax:parallax-should-i-buy`. Updates arrive with `/plugin marketplace update parallax-workflows`.
+
+**Option B — full clone (development, or if you want every workflow including the house-view operator tools):**
+
 ```bash
 git clone https://github.com/bencharoenwong/parallax-workflows.git
 cd parallax-workflows
@@ -68,7 +79,19 @@ The `_parallax` directory contains shared conventions, token-cost reference, and
 /parallax-should-i-buy AAPL
 ```
 
-If you see "tool not found" errors, the MCP server is not connected.
+(or `/parallax:parallax-should-i-buy AAPL` for the plugin install). If you see "tool not found" errors, the MCP server is not connected.
+
+### Claude web and mobile (claude.ai)
+
+The claude.ai apps don't load plugins; they take one uploaded skill at a time. Build self-contained `.skill` zips (shared files vendored inside each zip, descriptions trimmed to the claude.ai limit):
+
+```bash
+python3 skills/_parallax/scripts/build_bundle.py web
+```
+
+The build ends with a leak-scan gate that expects a maintainer-local extra term list and fails closed without it; on a fresh clone, set `PARALLAX_ALLOW_PARTIAL_SCAN=1` to build with the built-in scan terms only.
+
+Then upload the zips from `~/Downloads/claude-web-skills/` in claude.ai → Settings → Capabilities → Skills. On Team/Enterprise plans an org admin can enable them workspace-wide instead of per-user. The Parallax MCP server must also be connected in claude.ai for the workflows to return data.
 
 ## Forking and Customizing
 
@@ -255,7 +278,7 @@ skills/
 │   ├── token-costs.md          # Per-tool and per-workflow token estimates
 │   ├── render_gate.py          # Shared deterministic pre-render gate (+ test_render_gate.py)
 │   ├── AI-profiles/            # Schema, output template, and profile specs for AI-* skills
-│   └── scripts/                # Build/gate tooling: spec-validate, section-ref-lint, run-gate-tests
+│   └── scripts/                # Build/gate tooling: spec-validate, section-ref-lint, tracked-file scan, run-gate-tests
 ├── parallax-should-i-buy/               # Quick stock evaluation
 │   └── SKILL.md
 ├── parallax-deep-dive/                  # Full single-stock analysis
@@ -291,9 +314,10 @@ Each `SKILL.md` is a self-contained instruction set. Claude reads it when you in
 
 **Where things live:**
 - `skills/<workflow>/SKILL.md` — the user-invocable workflows
+- `plugin/` and `.claude-plugin/marketplace.json` — the generated Claude Code plugin bundle (general-release set). Never hand-edit: edit the sources under `skills/` and rerun `python3 skills/_parallax/scripts/build_bundle.py plugin`; a gate test fails when the tracked bundle drifts from the sources.
 - `skills/_parallax/parallax-conventions.md`, `token-costs.md`, `AI-profiles/` — genuinely shared across many skills (RIC resolution, parallel-call patterns, AI profile framework)
 - `skills/_parallax/house-view/` — house-view subsystem. Three skills participate: `/parallax-load-house-view` (writer, bank CIO ingestion — schema, audit chain, signed reasoning chains, calibration manifest verifier), `/parallax-make-house-view` (writer, MCP-driven synthesis — routes through the same gate, persists with `generator_synthesis` provenance), and `/parallax-judge-house-view` (read-only consumer, drift monitor — emits `judge` audit rows and a per-cell recommendation bundle). Also consumed by the portfolio and single-stock skills that surface view conflicts (`parallax-portfolio-builder`, `parallax-rebalance`, `parallax-client-review`, `parallax-morning-brief`, `parallax-explain-portfolio`, `parallax-thematic-screen`, `parallax-country-deep-dive`, `parallax-macro-outlook`, `parallax-deep-dive`, `parallax-should-i-buy`). `loader.md`, `render_helpers.md`, `gate_present.py` (shared Step 3 confirmation gate), `provenance_classes.py` (canonical 6-class registry), `aggregator_weights.yaml` (cross-country weighting for the maker), `MCP_FIELD_INVENTORY.md` (Phase A0 capability map), and `auto-on-load-judge-pattern.md` (consumer drift-gate protocol — auto-fires `/parallax-judge-house-view --dry --json` for `parallax-portfolio-builder` / `parallax-rebalance` / `parallax-thematic-screen` when the active view is older than 30 days) are the shared interface; `gap_detect` / `gap_suggest` are loaded by `portfolio-builder --augment-silent` only.
-- `skills/_parallax/white-label/` — white-label branding subsystem. Authored by `/parallax-white-label-onboard`; consumed by 16 visual-rendering skills (Tier 1 + Tier 2). `integration-pattern.md` (§1–§9) is the shared consumer-side contract — header rendering, provenance line, color substitution, logo placement, fallback behavior — JIT-loaded by every consumer via the `<!-- white-label: integration-pattern.md -->` sentinel. `loader.load_visual_branding()` is the visual-consumer entry point (6-key subset; voice-exclusion guardrail), paired with `loader.is_white_label_active(branding)` (single source of truth for the rendering flag, per `integration-pattern.md` §2/§4/§8) and `loader.safe_source_reference(branding)` (display-safe Provenance source ref, per §7). The drift gate at `tests/test_integration_pattern_referenced.py` enforces sentinel ↔ load-directive pairing.
+- `skills/_parallax/white-label/` — white-label branding subsystem. Authored by `/parallax-white-label-onboard`; consumed by 16 visual-rendering skills (Tier 1 + Tier 2). `integration-pattern.md` (§1–§9) is the shared consumer-side contract — header rendering, About This Report line, color substitution, logo placement, fallback behavior — JIT-loaded by every consumer via the `<!-- white-label: integration-pattern.md -->` sentinel. `loader.load_visual_branding()` is the visual-consumer entry point (7-key subset; voice-exclusion guardrail), paired with `loader.is_white_label_active(branding)` (single source of truth for the rendering flag, per `integration-pattern.md` §2/§4/§8) and `loader.safe_source_reference(branding)` (display-safe About This Report source ref, per §7). The drift gate at `tests/test_integration_pattern_referenced.py` enforces sentinel ↔ load-directive pairing.
 
 **Reference templates.** The newer skills (`parallax-credit-lens`, `parallax-load-house-view`, `parallax-white-label-onboard`) carry typed dataclasses, comprehensive test suites, and explicit reference modules. If you're authoring or upgrading a skill, model on those.
 

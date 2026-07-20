@@ -3,7 +3,7 @@
 Implements the 8-step orchestration from v2 plan §2.1:
 
   1. list_macro_countries()                     [Batch 0; 1 call]
-  2. Fan-out macro_analyst(market, component)   [Batch 1; ≤14×5=70 calls]
+  2. Fan-out macro_analyst(market, component)   [Batch 1; ≤14×4=56 calls]
   3. get_telemetry(fields=[...])                [Batch 2; parallel with Batch 1]
   4. cross_country.aggregate(...)               [pure compute]
   5. pillar_compose.compute_pillars(...)        [pure compute]
@@ -70,11 +70,13 @@ SKILL_NAME = "parallax-make-house-view"
 DEFAULT_VIEW_DIR = Path("~/.parallax/active-house-view").expanduser()
 
 # Default components fanned out per market (MCP_FIELD_INVENTORY.md §5.3).
+# `fixed_income` is deferred: no v0 formula consumes it (the rates leg of
+# `econometrics_phase` is unbuilt). Re-add it in the same change that lands a
+# rates leg in pillar_formulas.py.
 DEFAULT_COMPONENTS = (
     "macro_indicators",
     "tactical",
     "sectors",
-    "fixed_income",
     "news",
 )
 
