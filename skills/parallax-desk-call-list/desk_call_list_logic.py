@@ -15,6 +15,8 @@ from typing import Any, Iterable
 import yaml
 
 SCAN_CONCURRENCY = 24
+DEFAULT_THRESHOLD_PCT = 5.0
+DEFAULT_MIN_IMPACT_PP = 0.5
 
 
 @dataclass(frozen=True)
@@ -151,8 +153,18 @@ def validate_book(raw: dict[str, Any]) -> tuple[DeskBook, list[BookWarning]]:
         DeskBook(
             desk_name=_optional_str(raw.get("desk_name")),
             updated_at=_optional_str(raw.get("updated_at")),
-            default_threshold_pct=_optional_float(raw.get("default_threshold_pct")),
-            default_min_impact_pp=_optional_float(raw.get("default_min_impact_pp")),
+            default_threshold_pct=_validated_default(
+                raw.get("default_threshold_pct"),
+                "default_threshold_pct",
+                DEFAULT_THRESHOLD_PCT,
+                warnings,
+            ),
+            default_min_impact_pp=_validated_default(
+                raw.get("default_min_impact_pp"),
+                "default_min_impact_pp",
+                DEFAULT_MIN_IMPACT_PP,
+                warnings,
+            ),
             clients=tuple(clients),
         ),
         warnings,
@@ -211,6 +223,8 @@ def overnight_move(closes: list[float] | tuple[float, ...]) -> float:
     if len(closes) < 2:
         raise ValueError("at least two closes are required")
     previous, latest = float(closes[-2]), float(closes[-1])
+    if not math.isfinite(previous) or not math.isfinite(latest):
+        raise ValueError("closes must be finite")
     if previous == 0:
         raise ValueError("previous close must be non-zero")
     return (latest / previous - 1.0) * 100.0
@@ -385,10 +399,27 @@ def _numeric_weight(value: Any, client_name: str, symbol: str) -> float:
     return weight
 
 
-def _optional_float(value: Any) -> float | None:
+def _validated_default(
+    value: Any,
+    field_name: str,
+    fallback: float,
+    warnings: list[BookWarning],
+) -> float | None:
     if value is None:
         return None
-    return float(value)
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        parsed = math.nan
+    if math.isfinite(parsed) and parsed >= 0:
+        return parsed
+    warnings.append(
+        BookWarning(
+            f"invalid_{field_name}",
+            f"{field_name} must be finite and non-negative; using {fallback}",
+        )
+    )
+    return fallback
 
 
 def _optional_str(value: Any) -> str | None:
@@ -410,8 +441,12 @@ def _move_value(move: float | SymbolMove | None) -> float | None:
     if move is None:
         return None
     if isinstance(move, SymbolMove):
-        return move.move_pct if move.priced else None
-    return float(move)
+        if not move.priced or move.move_pct is None:
+            return None
+        value = float(move.move_pct)
+    else:
+        value = float(move)
+    return value if math.isfinite(value) else None
 
 
 def _is_priced(move: float | SymbolMove | None) -> bool:

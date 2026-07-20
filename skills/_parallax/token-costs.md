@@ -87,7 +87,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 | `/parallax-scenario-analysis` | **68** | 2x assessment (20) + 10 score scans + universe |
 | `/parallax-rebalance` | **76** | 10 score trends + replacements + validation re-score |
 | `/parallax-client-review` | **105** | 8 drill-downs + 5 news + assessment + 2x analyze |
-| `/parallax-desk-call-list` | **Measured subtotal + UNVERIFIED ETF prices and classification probes** | 1 telemetry + 1 measured `export_price_series` per unique equity + 3 per triggered symbol (company_info + peer_snapshot + score_analysis) + 5 per news call (cap 8). Measured-cost formula: `1 + |U_equity| + 3|M| + 5*min(|M|,K)`; add UNVERIFIED `etf_daily_price` and `etf_profile` calls. Cost scales with unique symbols and movers, not client count. |
+| `/parallax-desk-call-list` | **Measured subtotal + UNVERIFIED ETF prices and classification probes** | 1 telemetry + 1 measured `export_price_series` per unique equity; company info and peer snapshot per mover; score analysis and news only for equity movers. Measured-cost formula: `1 + |U_equity| + 3|M_equity| + 2|M_etf| + 5*min(|M_equity|,K)`; add UNVERIFIED `etf_daily_price` and `etf_profile` calls. Cost scales with unique symbols and movers, not client count. |
 
 > **Broad-selloff guard:** on a market-wide morning the mover set `M` can approach
 > `U`, and news + enrichment dominate the bill. `/parallax-desk-call-list`

@@ -37,6 +37,7 @@ Run validation before any Parallax tool call:
 - Per-client weights in `[0.95, 1.05]` are renormalised silently; outside that band, renormalise and flag the client.
 - Duplicate client names are suffixed `#2`, `#3`, and flagged.
 - Duplicate symbols within a client are summed and flagged.
+- `default_threshold_pct` and `default_min_impact_pp` must be finite and non-negative; invalid values are flagged and replaced with the built-in defaults.
 - Symbols are trimmed and upper-cased. Bare ticker resolution follows `_parallax/parallax-conventions.md §1`; fund/OEIC-shaped identifiers use that not-covered fallback.
 
 ## §4 Staleness

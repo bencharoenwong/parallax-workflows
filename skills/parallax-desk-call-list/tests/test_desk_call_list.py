@@ -54,6 +54,12 @@ def test_overnight_move_insufficient_data_raises():
         overnight_move([100.0])
 
 
+@pytest.mark.parametrize("closes", [[float("nan"), 100.0], [100.0, float("inf")]])
+def test_overnight_move_rejects_nonfinite_closes(closes):
+    with pytest.raises(ValueError, match="finite"):
+        overnight_move(closes)
+
+
 def test_threshold_boundary_is_strictly_greater():
     assert triggered_symbols({"AAPL.O": 5.00, "MSFT.O": 5.01}, 5.0) == ("MSFT.O",)
 
@@ -147,6 +153,27 @@ def test_cross_client_asset_class_conflict_is_rejected():
         validate_book(raw)
 
 
+def test_invalid_book_thresholds_warn_and_use_built_in_defaults():
+    raw = {
+        "schema_version": 1,
+        "default_threshold_pct": float("nan"),
+        "default_min_impact_pp": -0.1,
+        "clients": [
+            {
+                "client_name": "A",
+                "holdings": [{"symbol": "AAPL.O", "weight": 1}],
+            }
+        ],
+    }
+    book, warnings = validate_book(raw)
+    assert book.default_threshold_pct == 5.0
+    assert book.default_min_impact_pp == 0.5
+    assert {warning.code for warning in warnings} == {
+        "invalid_default_threshold_pct",
+        "invalid_default_min_impact_pp",
+    }
+
+
 def test_inline_input_fully_overrides_saved_book():
     saved, _ = validate_book(load_desk_book(FIXTURES / "book_single_client.yaml"))
     resolved = resolve_input([{"client_name": "Inline", "portfolio": [{"symbol": "TSLA.O", "weight": 1.0}]}], saved)
@@ -224,6 +251,13 @@ def test_redact_names_is_stable_across_runs():
 def test_scan_integrity_below_threshold_blocks_no_calls_path():
     integrity = scan_integrity({"AAPL.O": 1.0, "MSFT.O": SymbolMove("MSFT.O", None, False)}, ["AAPL.O", "MSFT.O"])
     assert integrity["status"] == "SCAN DEGRADED"
+
+
+def test_all_nan_scan_is_degraded_not_ok():
+    for move in [float("nan"), SymbolMove("AAPL.O", float("nan"))]:
+        integrity = scan_integrity({"AAPL.O": move}, ["AAPL.O"])
+        assert integrity["status"] == "SCAN DEGRADED"
+        assert integrity["coverage"] == 0.0
 
 
 def test_scan_integrity_at_threshold_allows_render():

@@ -77,7 +77,7 @@ Then fan out the price scan at `SCAN_CONCURRENCY` waves, plus one telemetry call
 | `export_price_series` per equity branch | `symbol=<ric>`, `days=10` as typed integer | Equity-only; single-symbol calls |
 | `etf_daily_price` per ETF branch | `symbol=<plain ticker>`, `start_date=<today-7d>`, `end_date=<today>` | ETF-only; single-symbol calls |
 
-Derive `move_pct = (close[-1] / close[-2] - 1) * 100` from the last two closes. Record both dates. If fewer than two closes return, mark the symbol unpriced, name it in coverage, and do not treat it as a trigger.
+Derive `move_pct = (close[-1] / close[-2] - 1) * 100` from the last two closes, which must both be finite. Record both dates. If fewer than two closes return or either close/move is non-finite, mark the symbol unpriced, name it in coverage, and do not treat it as a trigger.
 
 ### Batch B - Threshold and Scan Integrity
 
@@ -90,16 +90,18 @@ Load `references/ranking-and-bounding.md`.
 
 ### Batch C - Mover Enrichment
 
-For symbols in the mover set only, fan out one parallel turn. Keep enrichment fan-out at the shared cap of 8:
+For symbols in the mover set only, schedule enrichment in waves of at most 8 concurrent calls across symbols and tools:
 
 | Tool | Parameters | Purpose |
 |---|---|---|
-| `get_company_info` | `symbol` | Display name and expected-name oracle |
-| `get_peer_snapshot` | `symbol` | Current factor scores and `target_company` |
-| `get_score_analysis` | `symbol`, `weeks=4` as typed integer | Four-week score trajectory |
-| `get_news_synthesis` | `symbol` for top `news_cap` movers by desk-wide weighted exposure | One news synthesis per symbol, not per client |
+| `get_company_info` | `symbol` for every mover | Display name and expected-name oracle |
+| `get_peer_snapshot` | `symbol` for every mover | Current factor scores and `target_company` |
+| `get_score_analysis` | `symbol`, `weeks=4` as typed integer for equity movers only | Four-week score trajectory |
+| `get_news_synthesis` | `symbol` for top `news_cap` equity movers by desk-wide weighted exposure | One news synthesis per symbol, not per client |
 
 Cross-check `get_peer_snapshot.target_company` against `get_company_info.name`. On mismatch, render Ground-truth Integrity, exclude that symbol's scores, but keep the price move in client ranking.
+
+For ETF movers, skip `get_score_analysis` and `get_news_synthesis` because ETF coverage is unverified. Render those fields as `not available for ETFs`; never present their absence as an equity-grade enrichment failure. ETF price moves still drive client ranking.
 
 ### Batch D - Client Ranking
 
