@@ -20,6 +20,15 @@
 # before that — recurring 429 quota hangs on the review step).
 agent: codex
 
+# Perimeter-gate public-repo exception (2026-07-20, user-authorized): this repo is
+# PUBLIC, so the diff an external gate agent receives is already published — egress
+# is not new disclosure. The ~/.claude pre-push-perimeter hook honors this exact
+# literal ONLY from the COMMITTED .no-mistakes.yaml at HEAD (working-tree-only pins
+# do not activate it) and logs a loud NOTICE on every use. Without this pin, every
+# push blocks: the repo's own filenames match the Parallax fingerprint marker.
+# Do NOT copy this pin to a private repo — it disables the fingerprint scan.
+perimeter: public-authorized
+
 # Deterministic test command — replaces the LLM-agent test fallback that failed
 # under codex usage limits / claude OOM. Runs the FULL skill/eval suite via the
 # per-root runner (one pytest process per top-level test root, so the three
