@@ -22,7 +22,7 @@ description: "React to a news event or scenario: assess portfolio exposure, macr
 - Score changes haven't happened yet if the event is breaking — use get_assessment for forward-looking analysis
 - For historical events, get_score_analysis can show what actually moved
 - This skill produces FORWARD-LOOKING analysis — always caveat uncertainty
-- ~68 tokens at 10 holdings (see `_parallax/token-costs.md`); scales roughly linearly per holding — the >20-holding cap in Phase 2 bounds large books.
+- 68 known billable tokens at 10 equity holdings, plus UNVERIFIED classification costs (see `_parallax/token-costs.md`); scales roughly linearly per holding — the >20-holding cap in Phase 2 bounds large books.
 - JIT-load `_parallax/house-view/loader.md` if an active CIO view is present; portfolio-level skill, so apply §3 (multipliers) to replacement-candidate scoring + §4 (the user-supplied scenario is sovereign per §4 — if scenario CONTRADICTS view tilts, surface "scenario contradicts house view" banner; the Action Plan acts on the scenario, not the view) + §5 (preamble + view-aware rendering) + §6 (audit). For an ALIGNED scenario, the Action Plan is more aggressive; for a CONTRADICTING scenario, the conflict is surfaced and the user's stated framing wins.
 - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
 - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
@@ -59,14 +59,14 @@ Fire all three simultaneously. `get_news_synthesis` is async (30-90s) and NEVER 
 
 Phase 2 is staged into two parallel turns: **2a classification + ground-truth** must complete before **2b per-equity scoring + sector** can fire, because the asset-class decision in 2a determines which holdings are eligible for 2b's `get_score_analysis` (factor scores are equity-only). Within each sub-phase every call is independent and parallel-safe per `_parallax/parallax-conventions.md` §3.
 
-**Fan-out cap for large portfolios**: for portfolios with >20 holdings, restrict 2b's `get_score_analysis` (and the 2a per-holding fan-outs where cost-bearing — `etf_profile` is free and unaffected) to the top 20 holdings by weight plus any holding already flagged (⚠ MISMATCH or otherwise). Render a degraded-coverage note in Output Format listing the symbols skipped by the cap.
+**Fan-out cap for large portfolios**: for portfolios with >20 holdings, restrict 2b's `get_score_analysis` and the cost-bearing 2a per-holding fan-outs to the top 20 holdings by weight plus any holding already flagged (⚠ MISMATCH or otherwise). The classification fan-out remains uncapped. Render a degraded-coverage note in Output Format listing the symbols skipped by the cap.
 
 #### Phase 2a — Classification + ground-truth (parallel, single tool-call turn)
 
 | Tool | Parameters | Notes |
 |---|---|---|
 | `analyze_portfolio` | `portfolio=[{date: <today ISO>, symbol: <ric>, weight: <w>}]`, `fields=["concentration_metrics","sector_allocation","company_contribution","factor_exposures"]` | Sector/factor exposures. The parameters `holdings` and `lens` do not exist in the deployed schema. WARNING: may exceed 180K chars — fall back to `check_portfolio_redundancy` if truncated or on MCP schema validation error. Server-side ETF handling: ETFs included here without per-skill branching. |
-| `etf_profile` | per holding, plain ticker — **all N calls fan out in parallel within 2a** | **Asset-class oracle.** Non-error response → ETF; error response (`{"error": "No profile data found"}`) → equity. Free / instant per `_parallax/token-costs.md`. Mirrors `explain-portfolio` Step 1a. |
+| `etf_profile` | per holding, plain ticker — **all N calls fan out in parallel within 2a** | **Asset-class oracle.** Non-error response → ETF; error response (`{"error": "No profile data found"}`) → equity. Token cost UNVERIFIED per `_parallax/token-costs.md`. Mirrors `explain-portfolio` Step 1a. |
 | `get_company_info` | per holding — **all N calls fan out in parallel within 2a** | **Ground-truth name oracle** for cross-validation per conventions §2. Per-holding only — do NOT use comma-joined: comma-joined calls fail-empty on partial coverage, which is risky for arbitrary user-supplied portfolios where any single unresolved RIC silently zeroes the entire batch. |
 | `build_stock_universe` | theme describing what benefits from this scenario (e.g., "domestic US semiconductor manufacturers" if China tariffs hit imports) | **Beneficiary discovery (Phase 3 step 7), hoisted here** — the theme derives from the scenario text alone, needs no Phase 2 output, so it fires in the 2a turn to overlap the rest of Phase 2. If the theme is genuinely not derivable from the scenario, defer it to after Phase 2b instead. |
 

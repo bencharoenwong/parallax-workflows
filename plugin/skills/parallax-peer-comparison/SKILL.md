@@ -65,7 +65,7 @@ Peer symbols from `get_peer_snapshot` may lack exchange suffixes (e.g., `GM` ins
 - `{"error": "No profile data found", ...}` → equity, route through `export_price_series`.
 - Non-error response → ETF, route through `etf_daily_price`.
 
-This adds 3 FREE/instant calls (per `_parallax/coverage-matrix.md`).
+This adds 3 calls whose token cost is UNVERIFIED (per `_parallax/token-costs.md`).
 
 #### B.1 — Trends + price series (parallel)
 
