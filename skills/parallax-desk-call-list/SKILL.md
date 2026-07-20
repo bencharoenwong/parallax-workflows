@@ -18,7 +18,7 @@ description: "Desk-level morning call list for relationship managers covering mu
 ## Gotchas
 
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.1 tool loading, §0.2 typed integer params, §3 parallel execution, §3.1 annotation/rank separation, §9.1/§9.2 disclosures, §10 render gate, §11 verdict sensitivity, §12 information framing, and §13 audience mode.
-- JIT-load `_parallax/coverage-matrix.md` before Batch A. `export_price_series` is equity-only; ETFs use `etf_daily_price`.
+- JIT-load `_parallax/coverage-matrix.md` before Batch A. `export_price_series` is equity-only and FREE, and its `success:false` response classifies ETFs; ETFs then price via `etf_daily_price`. This skill does not call `etf_profile`.
 - JIT-load `_parallax/house-view/loader.md` §1-§2, §5, and §6. The house view annotates movers but never changes rank order or membership.
 - JIT-load `_parallax/white-label/integration-pattern.md` before Pre-Render. Loader call is `load_visual_branding()`; do not access `branding["voice"]`.
 - JIT-load `references/desk-book-format.md` before loading/validating any desk book.
@@ -27,7 +27,7 @@ description: "Desk-level morning call list for relationship managers covering mu
 - `desk_call_list_logic.py` is the pure arithmetic layer. Do not put MCP calls or local file writes in it.
 - Client names and weights never go to Parallax MCP tools; only the deduplicated symbol union leaves the machine.
 - `SCAN_CONCURRENCY = 24` applies only to the wide price scan. If the live probe shows rate limiting, use 8.
-- `etf_profile` classification and `etf_daily_price` pricing costs are UNVERIFIED; do not invent numbers.
+- `export_price_series` is FREE; `etf_daily_price` pricing cost is UNVERIFIED. This skill no longer calls `etf_profile`. Do not invent numbers.
 - `client_safe` is supported, but this is primarily an internal RM artifact.
 
 Build one ranked, bounded morning call list for a relationship manager covering many client books.
@@ -63,21 +63,24 @@ If the first Parallax batch after tool loading is empty or cancelled, re-fire th
 
 ### Batch A - Asset-Class Classification and Wide Price Scan
 
-Load `_parallax/coverage-matrix.md`. Asset-class pre-classification is mandatory before any price call:
+Load `_parallax/coverage-matrix.md`. Classification is fused with the price scan — the FREE `export_price_series` doubles as the equity classifier, so no separate classification probe is needed:
 
-1. Use holding `asset_class` when present.
-2. Otherwise fan out `etf_profile(symbol)` probes. Error shape means equity; non-error profile means ETF.
-3. If probes are unavailable, first resolve bare tickers to RICs per `_parallax/parallax-conventions.md` §1. Only then apply the static fallback to the resolved symbol: a symbol that remains suffix-less or ends in `.P` implies ETF; otherwise equity.
+1. Cached `asset_class` → route directly: `equity` → `export_price_series`; `etf` → `etf_daily_price`. No probe.
+2. Uncached → call `export_price_series(<ric>)` (FREE, equity-only) as both classifier and equity price source:
+   - `{"success": true, ...}` with a non-empty `prices` list → **equity**; take the move and both close dates from the returned series. Cost 0.
+   - `{"success": false, ...}` / no `prices` → **ETF**; call `etf_daily_price(<plain ticker>)` for the move + per-row date.
+   Keyed on `success == false` (NOT an empty list — the tool returns a `{success:false, error}` object for ETFs). This is a deliberate, documented classifier, not the silent substitution `coverage-lint` guards against: a `success:false` that is actually a dead equity gets one `etf_daily_price` probe that also fails and lands in the unpriced/coverage handling, named in the coverage line.
+3. Only if `export_price_series` is entirely unavailable (outage): resolve bare tickers to RICs per `_parallax/parallax-conventions.md` §1, then the static fallback (suffix-less or `.P` ⇒ ETF; otherwise equity).
 
 Then fan out the price scan at `SCAN_CONCURRENCY` waves, plus one telemetry call:
 
 | Tool | Parameters | Notes |
 |---|---|---|
 | `get_telemetry` | `fields: regime_tag, signals, commentary.headline, divergences` | Desk-wide market context |
-| `export_price_series` per equity branch | `symbol=<ric>`, `days=10` as typed integer | Equity-only; single-symbol calls |
-| `etf_daily_price` per ETF branch | `symbol=<plain ticker>`, `start_date=<today-7d>`, `end_date=<today>` | ETF-only; single-symbol calls |
+| `export_price_series` equity branch + classifier | `symbol=<ric>`, `days=10` as typed integer | **FREE.** Equity-only; single-symbol calls; the `success:false` response also classifies ETFs |
+| `etf_daily_price` per ETF branch | `symbol=<plain ticker>`, `start_date=<today-7d>`, `end_date=<today>` | ETF-only; single-symbol calls; per-row `date` carries the move's session |
 
-Derive `move_pct = (close[-1] / close[-2] - 1) * 100` from the last two closes, which must both be finite. Record both dates. If fewer than two closes return or either close/move is non-finite, mark the symbol unpriced, name it in coverage, and do not treat it as a trigger.
+Derive `move_pct = (close[-1] / close[-2] - 1) * 100` from the last two closes, which must both be finite. Record both dates — for the ETF branch these come from `etf_daily_price` rows (which carry the session date, unlike a dateless profile probe). If fewer than two closes return or either close/move is non-finite, mark the symbol unpriced, name it in coverage, and do not treat it as a trigger.
 
 ### Batch B - Threshold and Scan Integrity
 
@@ -140,7 +143,7 @@ The entire final message is exactly that command's stdout. Put degraded notes in
 11. Symbol Movers Reference: symbol, name, move %, four-week score change, news headline, number of clients holding, desk-wide weighted exposure, and house-view tag.
 12. Verdict Sensitivity per `_parallax/parallax-conventions.md §11`; omit under `client_safe`.
 13. Next steps: point to `/parallax-client-review`, `/parallax-should-i-buy`, or `/parallax-watchlist-monitor` as appropriate. Do not auto-invoke them.
-14. About This Report: branding line per `_parallax/white-label/integration-pattern.md §7`, currency line, desk-book provenance, redaction state, audience mode if client-safe, skipped local-logo basename if relevant, and a cost note that both `etf_profile` classification and `etf_daily_price` pricing costs are UNVERIFIED.
+14. About This Report: branding line per `_parallax/white-label/integration-pattern.md §7`, currency line, desk-book provenance, redaction state, audience mode if client-safe, skipped local-logo basename if relevant, and a cost note that the equity price scan is FREE (`export_price_series`) while `etf_daily_price` pricing cost is UNVERIFIED.
 15. AI-interaction disclosure per `_parallax/parallax-conventions.md §9.2`.
 16. Disclaimer: view-aware per `_parallax/house-view/loader.md §5` if active; otherwise render the standard disclaimer from `_parallax/parallax-conventions.md §9.1`.
 
