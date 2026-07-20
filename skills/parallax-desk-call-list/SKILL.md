@@ -67,7 +67,7 @@ Load `_parallax/coverage-matrix.md`. Asset-class pre-classification is mandatory
 
 1. Use holding `asset_class` when present.
 2. Otherwise fan out `etf_profile(symbol)` probes. Error shape means equity; non-error profile means ETF.
-3. If probes are unavailable, use the static fallback: no suffix or `.P` implies ETF; otherwise equity.
+3. If probes are unavailable, first resolve bare tickers to RICs per `_parallax/parallax-conventions.md` §1. Only then apply the static fallback to the resolved symbol: a symbol that remains suffix-less or ends in `.P` implies ETF; otherwise equity.
 
 Then fan out the price scan at `SCAN_CONCURRENCY` waves, plus one telemetry call:
 

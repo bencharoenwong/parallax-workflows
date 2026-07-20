@@ -135,6 +135,18 @@ def test_duplicate_client_name_suffixed_and_flagged():
     assert any(w.code == "duplicate_client_name" for w in warnings)
 
 
+def test_invalid_asset_class_is_rejected():
+    raw = {"schema_version": 1, "clients": [{"client_name": "A", "holdings": [{"symbol": "AAPL.O", "weight": 1, "asset_class": "stock"}]}]}
+    with pytest.raises(ValueError, match="asset_class must be exactly"):
+        validate_book(raw)
+
+
+def test_cross_client_asset_class_conflict_is_rejected():
+    raw = {"schema_version": 1, "clients": [{"client_name": "A", "holdings": [{"symbol": "SPY", "weight": 1, "asset_class": "etf"}]}, {"client_name": "B", "holdings": [{"symbol": "SPY", "weight": 1, "asset_class": "equity"}]}]}
+    with pytest.raises(ValueError, match="conflicting asset_class values"):
+        validate_book(raw)
+
+
 def test_inline_input_fully_overrides_saved_book():
     saved, _ = validate_book(load_desk_book(FIXTURES / "book_single_client.yaml"))
     resolved = resolve_input([{"client_name": "Inline", "portfolio": [{"symbol": "TSLA.O", "weight": 1.0}]}], saved)
@@ -171,9 +183,15 @@ def test_union_symbols_deduped_across_overlapping_books():
 
 def test_auto_raise_threshold_caps_movers_at_forty():
     moves = {f"S{i:03d}.O": 100.0 - i for i in range(60)}
-    threshold = auto_raise_threshold(moves, cap=40)
+    threshold = auto_raise_threshold(moves, threshold=5.0, cap=40)
     assert threshold == 61.0
     assert len(triggered_symbols(moves, threshold)) <= 40
+
+
+def test_auto_raise_does_not_fire_on_quiet_scan():
+    moves = {f"S{i:03d}.O": 1.0 for i in range(60)}
+    moves.update({"S000.O": 6.0, "S001.O": -7.0})
+    assert auto_raise_threshold(moves, threshold=5.0, cap=40) is None
 
 
 def test_missing_price_reduces_coverage_and_flags_but_does_not_drop_client():

@@ -26,7 +26,7 @@ clients:
         asset_class: etf
 ```
 
-`schema_version`, `clients[].client_name`, and non-empty holdings are required. `client_ref`, `default_threshold_pct`, `default_min_impact_pp`, and `asset_class` are optional.
+`schema_version`, `clients[].client_name`, and non-empty holdings are required. `client_ref`, `default_threshold_pct`, `default_min_impact_pp`, and `asset_class` are optional. When present, `asset_class` must be exactly `equity` or `etf`, and a symbol must have the same classification in every client book.
 
 ## §3 Validation
 

@@ -89,6 +89,7 @@ def validate_book(raw: dict[str, Any]) -> tuple[DeskBook, list[BookWarning]]:
 
     warnings: list[BookWarning] = []
     seen_names: dict[str, int] = {}
+    asset_classes_by_symbol: dict[str, str] = {}
     clients: list[ClientBook] = []
     for row in clients_raw:
         if not isinstance(row, dict):
@@ -112,11 +113,25 @@ def validate_book(raw: dict[str, Any]) -> tuple[DeskBook, list[BookWarning]]:
             symbol = _normalise_symbol(holding.get("symbol"))
             weight = _numeric_weight(holding.get("weight"), name, symbol)
             asset_class = holding.get("asset_class")
+            if asset_class is not None and asset_class not in {"equity", "etf"}:
+                raise ValueError(
+                    f"{name} {symbol} asset_class must be exactly 'equity' or 'etf'"
+                )
+            known_asset_class = asset_classes_by_symbol.get(symbol)
             if asset_class is not None:
-                asset_class = str(asset_class).strip().lower()
+                if known_asset_class is not None and known_asset_class != asset_class:
+                    raise ValueError(
+                        f"{symbol} has conflicting asset_class values: "
+                        f"{known_asset_class} and {asset_class}"
+                    )
+                asset_classes_by_symbol[symbol] = asset_class
             if symbol in by_symbol:
                 prev = by_symbol[symbol]
-                by_symbol[symbol] = replace(prev, weight=prev.weight + weight)
+                by_symbol[symbol] = replace(
+                    prev,
+                    weight=prev.weight + weight,
+                    asset_class=prev.asset_class or asset_class,
+                )
                 warnings.append(BookWarning("duplicate_symbol", f"{name}: duplicate {symbol} summed", name, symbol))
             else:
                 by_symbol[symbol] = Holding(symbol, weight, asset_class)
@@ -208,8 +223,17 @@ def triggered_symbols(moves: dict[str, float | SymbolMove], threshold: float) ->
     ))
 
 
-def auto_raise_threshold(moves: dict[str, float | SymbolMove], cap: int = 40) -> float | None:
-    magnitudes = sorted((abs(v) for m in moves.values() if (v := _move_value(m)) is not None), reverse=True)
+def auto_raise_threshold(
+    moves: dict[str, float | SymbolMove], threshold: float, cap: int = 40
+) -> float | None:
+    magnitudes = sorted(
+        (
+            abs(value)
+            for move in moves.values()
+            if (value := _move_value(move)) is not None and abs(value) > threshold
+        ),
+        reverse=True,
+    )
     if len(magnitudes) <= cap:
         return None
     raw = magnitudes[cap - 1]

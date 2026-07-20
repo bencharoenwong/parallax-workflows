@@ -11,8 +11,8 @@
 | Tool | Equity (e.g., AAPL.O, JPM.N) | ETF (e.g., SPY, EWJ, QQQ) | Notes |
 |---|---|---|---|
 | `export_price_series` | ✓ supported | ✗ returns `[]` | Equity-only. Pass RIC with exchange suffix. |
-| `etf_daily_price` | ✗ returns `[]` | ✓ supported | ETF-only. Pass plain ticker (no `.X` suffix). |
-| `etf_profile` | ✗ returns `{"error":"No profile data found"}` | ✓ rich profile (name, exchange, scores, recommendation) | **Use as asset-class oracle.** Single-symbol probe; FREE/instant per `token-costs.md`. |
+| `etf_daily_price` | ✗ returns `[]` | ✓ supported | ETF-only. Pass plain ticker (no `.X` suffix). Token cost UNVERIFIED. |
+| `etf_profile` | ✗ returns `{"error":"No profile data found"}` | ✓ rich profile (name, exchange, scores, recommendation) | **Use as asset-class oracle.** Single-symbol probe; token cost UNVERIFIED per `token-costs.md`. |
 | `etf_search` | n/a | ✓ supported | Discovery by market/keyword/score. |
 | `etf_holdings` | n/a | ✓ supported | Underlying holdings of an ETF. |
 | `get_company_info` | ✓ supported | ✓ partial (returns equity-shaped record for some ETFs) | **Does NOT include an `asset_class` field**; cannot be used to distinguish equity from ETF. Use `etf_profile` for that. |
@@ -46,9 +46,9 @@ For unverified markets, call `etf_search(market="<market>")` to discover availab
 
 1. **Multi-symbol calls fail-empty on partial coverage.** `etf_daily_price("SPY,EWJ,EWG")` returns `[]` (empty array) instead of returning the two valid symbols + an error for the missing one. Same behavior on `get_company_info` (the missing symbol is silently dropped from the response). **Always use single-symbol calls when coverage might be partial.**
 
-2. **`etf_profile` returns explicit error on equities.** Useful as a clean asset-class oracle: response shape `{"error": "No profile data found", "ric": ...}` → equity; non-error response → ETF. Single FREE call per symbol.
+2. **`etf_profile` returns explicit error on equities.** Useful as a clean asset-class oracle: response shape `{"error": "No profile data found", "ric": ...}` → equity; non-error response → ETF. Its token cost is UNVERIFIED.
 
-3. **`.P` exchange suffix on RIC == NYSE Arca == ETF.** Static heuristic available without an API call: if a symbol has no exchange suffix or ends in `.P`, it is likely an ETF. Use this for first-pass classification when latency matters; confirm with `etf_profile` when the cost of being wrong is high.
+3. **`.P` exchange suffix on RIC == NYSE Arca == ETF.** When probes are unavailable, first resolve bare tickers to RICs per `parallax-conventions.md` §1. Then apply the static heuristic: a symbol that remains suffix-less or ends in `.P` is likely an ETF; otherwise treat it as equity.
 
 ## How to add a new entry
 
@@ -80,7 +80,7 @@ The lint enforces routing correctness (right tool for the asset class). It does 
 
 A request to add a `supported_asset_classes` field to each MCP tool's schema was considered and deferred 2026-05-03. Rationale:
 
-- `etf_profile` already serves as the asset-class oracle (see Known API quirks #2). One FREE call per symbol; classification is a solved problem client-side.
+- `etf_profile` already serves as the asset-class oracle (see Known API quirks #2). Its token cost is UNVERIFIED; classification behavior is solved client-side.
 - Coverage-lint enforces routing at build time, which is a stronger guarantee than runtime metadata (fails the merge, not the user).
 - An upstream metadata field would not address the deeper instruction-execution gap — a model can ignore schema metadata the same way it can ignore SKILL.md prose. The structural fix for that is a deterministic dispatch layer (client-side), not a server schema change.
 

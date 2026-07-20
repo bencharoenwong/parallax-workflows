@@ -234,6 +234,12 @@ def test_desk_call_list_no_calls_anchor():
     assert out.lstrip().startswith("**No calls indicated.")
 
 
+def test_desk_call_list_degraded_short_form_anchor():
+    draft = SCAFFOLD + "**Scan degraded — results not reliable.** Priced 3 of 5 symbols.\n"
+    out = gate(draft, "desk-call-list")
+    assert out.lstrip().startswith("**Scan degraded")
+
+
 def test_desk_call_list_degraded_note_hoisted():
     draft = "news synthesis timed out for AAPL.O\n\n# Desk Call List\nbody\n"
     out = gate(draft, "desk-call-list")
