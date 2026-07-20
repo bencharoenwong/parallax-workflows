@@ -163,6 +163,12 @@ All portfolio workflows take holdings as JSON: `[{"symbol":"AAPL.O","weight":0.2
 | `/parallax-rebalance [holdings]` | Prioritized trades with health flags and score rationale |
 | `/parallax-scenario-analysis "event" portfolio=[holdings]` | Exposure assessment and rotation candidates |
 
+### Desk
+
+| Command | What it does |
+|---|---|
+| `/parallax-desk-call-list` | Scan the deduplicated union of saved client books for overnight movers, rank affected clients by weighted book impact, and draft bounded RM talk tracks. Also accepts an inline client array; see `skills/parallax-desk-call-list/references/desk-book-format.md`. |
+
 ### House View — flagship complex workflow
 
 Bring your own house view. The CIO memo, IC strategy doc, or macro-desk PDF that anchors your book becomes a first-class object every portfolio workflow auto-loads.
@@ -279,6 +285,9 @@ skills/
 │   ├── SKILL.md
 │   └── references/
 │       └── health-flags.md
+├── parallax-desk-call-list/             # Desk-wide RM morning call list
+│   ├── SKILL.md, desk_call_list_logic.py
+│   └── references/
 ├── parallax-ai-buffett/                 # Buffett-style factor profile dispatcher
 │   └── SKILL.md
 ├── parallax-ai-consensus/               # Multi-profile super-majority meta-skill
@@ -298,7 +307,7 @@ skills/
 └── ... (20+ more workflows)
 ```
 
-Each `SKILL.md` is a self-contained instruction set. Claude reads it when you invoke the command, then orchestrates the Parallax MCP tools accordingly. No code execution — just structured API orchestration.
+Each `SKILL.md` is a self-contained instruction set. Claude reads it when you invoke the command, then orchestrates the Parallax MCP tools accordingly. Some workflows also invoke adjacent deterministic Python helpers for local validation, arithmetic, or rendering.
 
 **Where things live:**
 - `skills/<workflow>/SKILL.md` — the user-invocable workflows
@@ -311,7 +320,7 @@ Each `SKILL.md` is a self-contained instruction set. Claude reads it when you in
 
 ## Known Limitations
 
-- **Publicly traded equities only** — no mutual funds, ETFs, or private assets
+- **Publicly traded securities only** — most workflows are equity-only; `/parallax-desk-call-list` also prices ETFs, but ETF score and news enrichment is unavailable
 - **RIC format required** for most workflows (except `/parallax-should-i-buy`)
 - **`build_stock_universe` uses keyword matching** — use sector-level queries ("US large cap consumer staples"), not abstract concepts ("pricing power in stagflation")
 - **Peer groups are industry-based** — mega-caps may be compared to smaller industry peers

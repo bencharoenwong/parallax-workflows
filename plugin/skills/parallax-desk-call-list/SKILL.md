@@ -146,7 +146,7 @@ The entire final message is exactly that command's stdout. Put degraded notes in
 
 ## No-Calls and Degraded Short Forms
 
-SCAN DEGRADED starts with `**Scan degraded - results not reliable.**` and names priced count, total symbols, coverage, and up to 10 unpriced symbols.
+SCAN DEGRADED starts with `**Scan degraded — results not reliable.**` and names priced count, total symbols, coverage, and up to 10 unpriced symbols.
 
 An empty client or symbol selection starts with `**Scan refused — no clients or symbols selected.**` and never renders a call list or no-calls result. An all-unmatched subset starts with `**Scan refused — subset matched no clients: <names>.**`; under `redact_names=true`, replace the names with `<N> selector(s) matched no client`. Redacted refusal and partial-match output never contains raw selectors, and client refs are omitted everywhere.
 

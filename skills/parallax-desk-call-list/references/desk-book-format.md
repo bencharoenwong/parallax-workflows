@@ -58,6 +58,6 @@ The skill runs in every tier. Staleness changes trust in the weights, not whethe
 
 The book lives in plaintext under the operator's OS account. Recommend `chmod 600` and keeping it outside cloud-sync folders.
 
-Client names and weights stay local. Only the deduplicated symbol union is sent to Parallax MCP tools. `--redact-names` renders clients as `Client 1..N`, removes client refs, and replaces unmatched selector values with a count; the mapping is not rendered. The skill never writes the desk book.
+Client names and weights stay local. Only the deduplicated symbol union is sent to Parallax MCP tools. `redact_names=true` renders clients as `Client 1..N`, removes client refs, and replaces unmatched selector values with a count; the mapping is not rendered. The skill never writes the desk book.
 
 If `asset_class` is omitted, the skill may need `etf_profile` classification probes. Their cost is currently UNVERIFIED in `_parallax/token-costs.md`; populating `asset_class` avoids those probes. `etf_daily_price` pricing cost is also UNVERIFIED for ETF holdings.
