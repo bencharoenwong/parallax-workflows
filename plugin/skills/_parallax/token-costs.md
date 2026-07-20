@@ -9,6 +9,8 @@ Parallax uses token-based pricing. All tools consume the same number of tokens w
 |---|---|
 | `explain_methodology` | Scoring methodology explanations |
 | `get_docs` / `list_docs` | Documentation access |
+| `search_stocks` / `search_etfs` | Symbol search (fuzzy) |
+| `export_price_series` | Daily price data export. Its own MCP tool description states "FREE" (verified live 2026-07-20; the whole tool suite marks free tools "FREE" and omits the marker on billable ones). Was previously listed under "1 token each" — reclassified to match the vendor's stated contract. **Reversible:** if operator billing shows this is metered (e.g. free only within plan limits), move it back and revise dependent skill estimates. |
 
 ### Unverified costs
 | Tool | Description |
@@ -25,7 +27,6 @@ Parallax uses token-based pricing. All tools consume the same number of tokens w
 | `get_financials` | Financial statements (1 token per statement type: income, balance_sheet, cash_flow, ratios, summary) |
 | `get_stock_outlook` | Analyst data (1 token per aspect: analyst_targets, recommendations, risk_return, dividends) |
 | `get_score_analysis` | Historical factor score trajectory |
-| `export_price_series` | Daily price data export |
 | `list_macro_countries` | Available macro market coverage |
 | `get_telemetry` | Market regime signals and divergences |
 
@@ -87,7 +88,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 | `/parallax-scenario-analysis` | **68** | 2x assessment (20) + 10 score scans + universe |
 | `/parallax-rebalance` | **76** | 10 score trends + replacements + validation re-score |
 | `/parallax-client-review` | **105** | 8 drill-downs + 5 news + assessment + 2x analyze |
-| `/parallax-desk-call-list` | **Measured subtotal + UNVERIFIED ETF prices and classification probes** | 1 telemetry + 1 measured `export_price_series` per unique equity; company info and peer snapshot per mover; score analysis and news only for equity movers. Measured-cost formula: `1 + |U_equity| + 3|M_equity| + 2|M_etf| + 5*min(|M_equity|,K)`; add UNVERIFIED `etf_daily_price` and `etf_profile` calls. Cost scales with unique symbols and movers, not client count. |
+| `/parallax-desk-call-list` | **~1 + 3\|M\| + 5·min(\|M\|,K) for an equity desk; + UNVERIFIED ETF costs** | 1 telemetry. The wide equity price scan is `export_price_series`, now FREE (above), so it adds nothing — the earlier `1×\|U\|` term is gone and an equity desk is materially cheaper than the first estimate. Per equity mover: company_info + peer_snapshot + score_analysis (3) + news (5, cap K). Equity-desk formula: `1 + 3\|M_equity\| + 5·min(\|M_equity\|,K)` (e.g. 6 movers → ~49). ETF holdings add UNVERIFIED `etf_profile` / `etf_daily_price` calls (not published by the vendor; see Unverified costs). Cost scales with movers, not client count. |
 
 > **Broad-selloff guard:** on a market-wide morning the mover set `M` can approach
 > `U`, and news + enrichment dominate the bill. `/parallax-desk-call-list`
