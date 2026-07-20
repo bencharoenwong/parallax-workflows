@@ -66,7 +66,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 | Workflow | Tokens (typical) | Key cost drivers |
 |---|---|---|
 | `/parallax-score-explainer` | **0-2** | Free if methodology-only; 2 if score data needed |
-| `/parallax-peer-comparison` | **8** | 3 score histories + 3 price series |
+| `/parallax-peer-comparison` | **5** | 3 score histories + 3 price series (free) |
 | `/parallax-halal-screen` | **4** single stock (~4-5/holding portfolio) | company_info + balance_sheet (merged debt + interest-bearing check) + ratios + score_analysis = 4; +5 optional Palepu; portfolio mode adds redundancy fan-out + alternatives |
 | `/parallax-should-i-buy` | **29** | 4 outlook aspects + 2 macro markets + news + technicals (5) |
 | `/parallax-earnings-quality` | **24** | Palepu (5) + assessment (10) + news (5) |
@@ -84,7 +84,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 | `/parallax-portfolio-checkup` | **36** | 2x fan-out (20) + 3 macro markets (15) |
 | `/parallax-morning-brief` | **50** | Telemetry + macro + 2x fan-out + 3 news |
 | `/parallax-watchlist-monitor` | **54** | 10 score scans + news/tech/analyst for ~4 flagged |
-| `/parallax-explain-portfolio` | **60** | 10 price series + 10 score trends + telemetry + 2 macro + 3 news + 3 snapshots |
+| `/parallax-explain-portfolio` | **39** | 10 price series (free) + 10 score trends + telemetry + 2 macro + 3 news + 3 snapshots |
 | `/parallax-scenario-analysis` | **68** | 2x assessment (20) + 10 score scans + universe |
 | `/parallax-rebalance` | **76** | 10 score trends + replacements + validation re-score |
 | `/parallax-client-review` | **105** | 8 drill-downs + 5 news + assessment + 2x analyze |

@@ -237,7 +237,7 @@ External integrators and skill authors frequently ask for capabilities that alre
 | User-phrased need | Use this | Notes |
 |---|---|---|
 | Stress book / scenario analysis | `/parallax-scenario-analysis` skill | Forward-looking event analysis (rate shock, USD shock, oil shock, regime replays). Skill orchestrates `get_assessment` + macro + news. NOT a REST primitive — talk track lives in skill layer. |
-| Drawdown attribution ("why am I down X%?") | `/parallax-explain-portfolio` skill | Decomposes drawdown into market-regime / factor / stock-specific components via score-vs-price divergence. ~60 tokens. |
+| Drawdown attribution ("why am I down X%?") | `/parallax-explain-portfolio` skill | Decomposes drawdown into market-regime / factor / stock-specific components via score-vs-price divergence. ~39 tokens. |
 | Per-holding return contribution | `analyze_portfolio` → `company_contribution` field | Returns `total_pl`, `contribution_pct`, `return_pct`, `avg_weight` per holding. **NOTE:** This is RETURN contribution, NOT risk contribution (no marginal vol / component VaR). For risk decomposition, no current capability — flag as gap. |
 | Portfolio drawdown statistics | `analyze_portfolio` → `drawdown_analysis` field | Includes `current_drawdown`, `max_drawdown`, underwater periods, durations, recovery days, and a per-day timeseries. See `response-schemas.md` for nested structure. |
 | Rolling metrics (Sharpe, vol, beta, correlation) | `analyze_portfolio` → `rolling_metrics` field | Three windows: `window_30d` / `window_60d` / `window_90d`, each with daily timeseries. See `response-schemas.md`. |
