@@ -66,7 +66,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 | Workflow | Tokens (typical) | Key cost drivers |
 |---|---|---|
 | `/parallax-score-explainer` | **0-2** | Free if methodology-only; 2 if score data needed |
-| `/parallax-peer-comparison` | **5** | 3 score histories + 3 price series (free) |
+| `/parallax-peer-comparison` | **5 known billable + UNVERIFIED classification/ETF-price costs** | Peer snapshot + peer comparison export + 3 score histories = 5. Equity price series are free; 3 mandatory `etf_profile` probes and any `etf_daily_price` branches have UNVERIFIED costs. |
 | `/parallax-halal-screen` | **4** single stock (~4-5/holding portfolio) | company_info + balance_sheet (merged debt + interest-bearing check) + ratios + score_analysis = 4; +5 optional Palepu; portfolio mode adds redundancy fan-out + alternatives |
 | `/parallax-should-i-buy` | **29** | 4 outlook aspects + 2 macro markets + news + technicals (5) |
 | `/parallax-earnings-quality` | **24** | Palepu (5) + assessment (10) + news (5) |
@@ -84,8 +84,8 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 | `/parallax-portfolio-checkup` | **36** | 2x fan-out (20) + 3 macro markets (15) |
 | `/parallax-morning-brief` | **50** | Telemetry + macro + 2x fan-out + 3 news |
 | `/parallax-watchlist-monitor` | **54** | 10 score scans + news/tech/analyst for ~4 flagged |
-| `/parallax-explain-portfolio` | **39** | 10 price series (free) + 10 score trends + telemetry + 2 macro + 3 news + 3 snapshots |
-| `/parallax-scenario-analysis` | **68** | 2x assessment (20) + 10 score scans + universe |
+| `/parallax-explain-portfolio` | **60 known billable + UNVERIFIED classification/ETF-price costs** | 10 company-info checks + 10 primary scoring calls + 10 score trends + telemetry + country listing + 2 macro + 3 news + 3 detractor snapshots = 60. Equity price series are free; 10 mandatory `etf_profile` probes and any `etf_daily_price` branches have UNVERIFIED costs. |
+| `/parallax-scenario-analysis` | **68 known billable + UNVERIFIED classification costs** | The 10-holding equity subtotal includes 10 company-info checks, 10 score scans, portfolio analysis, universe/beneficiary scoring, macro/news, financial checks, and 2 assessments. The 10 mandatory `etf_profile` probes have UNVERIFIED costs; ETFs reduce the billable equity score fan-out. |
 | `/parallax-rebalance` | **76** | 10 score trends + replacements + validation re-score |
 | `/parallax-client-review` | **105** | 8 drill-downs + 5 news + assessment + 2x analyze |
 | `/parallax-desk-call-list` | **~1 + 3\|M\| + 5·min(\|M\|,K) for an equity desk; + UNVERIFIED ETF costs** | 1 telemetry. The wide equity price scan is `export_price_series`, now FREE (above), so it adds nothing — the earlier `1×\|U\|` term is gone and an equity desk is materially cheaper than the first estimate. Per equity mover: company_info + peer_snapshot + score_analysis (3) + news (5, cap K). Equity-desk formula: `1 + 3\|M_equity\| + 5·min(\|M_equity\|,K)` (e.g. 6 movers → ~49). ETF holdings add UNVERIFIED `etf_profile` / `etf_daily_price` calls (not published by the vendor; see Unverified costs). Cost scales with movers, not client count. |
