@@ -10,6 +10,12 @@ Parallax uses token-based pricing. All tools consume the same number of tokens w
 | `explain_methodology` | Scoring methodology explanations |
 | `get_docs` / `list_docs` | Documentation access |
 
+### Unverified costs
+| Tool | Description |
+|---|---|
+| `etf_profile` | ETF profile/classification probe. Cost UNVERIFIED in this environment; measure before publishing numeric desk-call-list probe cost. |
+| `etf_daily_price` | ETF daily price series. Cost UNVERIFIED in this environment; measure before publishing numeric desk-call-list scan cost. |
+
 ### 1 token each
 | Tool | Description |
 |---|---|
@@ -81,6 +87,13 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 | `/parallax-scenario-analysis` | **68** | 2x assessment (20) + 10 score scans + universe |
 | `/parallax-rebalance` | **76** | 10 score trends + replacements + validation re-score |
 | `/parallax-client-review` | **105** | 8 drill-downs + 5 news + assessment + 2x analyze |
+| `/parallax-desk-call-list` | **Measured subtotal + UNVERIFIED ETF prices and classification probes** | 1 telemetry + 1 measured `export_price_series` per unique equity; company info and peer snapshot per mover; score analysis and news only for equity movers. Measured-cost formula: `1 + |U_equity| + 3|M_equity| + 2|M_etf| + 5*min(|M_equity|,K)`; add UNVERIFIED `etf_daily_price` and `etf_profile` calls. Cost scales with unique symbols and movers, not client count. |
+
+> **Broad-selloff guard:** on a market-wide morning the mover set `M` can approach
+> `U`, and news + enrichment dominate the bill. `/parallax-desk-call-list`
+> deterministically raises its move threshold to cap `|M|` at 40 and states the
+> auto-raise in the report. A numeric worst case cannot be published until
+> `etf_daily_price` and `etf_profile` costs are measured.
 
 ### House View Workflows
 
@@ -100,6 +113,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 
 With the **Standard plan** ($2,000/month, 2,000 included tokens, $0.20 overage):
 - A daily morning brief (~50 tokens) = ~1,100 tokens/month (22 trading days)
+- A daily desk call list has no publishable numeric estimate until `etf_daily_price` and `etf_profile` costs are measured
 - 5 should-i-buy checks/week (~29 each) = ~580 tokens/month
 - 2 client reviews/week (~105 each) = ~840 tokens/month
 - **Typical active RM usage:** 2,000-3,000 tokens/month

@@ -7,6 +7,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 ## 2026-07-19
 
 ### Added
+- **`parallax-desk-call-list`** — added a desk-level RM morning call list skill that scans the deduplicated union of client holdings, ranks affected clients by weighted book impact, renders bounded talk tracks, and ships with pure-logic tests plus render-gate anchors.
 - **Tracked-file term scan** — added `scan_tracked_terms.py` to complement the distribution artifact scan; its operational contract lives in the script docstring.
 
 ## 2026-07-18

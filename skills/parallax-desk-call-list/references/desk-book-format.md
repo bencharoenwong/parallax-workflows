@@ -1,0 +1,63 @@
+# Desk Book Format
+
+## §1 Location and Precedence
+
+Read `$PARALLAX_DESK_BOOK_PATH` when set, otherwise `~/.parallax/desk-book/book.yaml`.
+
+Inline input replaces the saved book completely. Never merge inline clients with saved-book clients, because merging silently changes who appears on the desk call list. For saved-book subsets, filter by `client_name` or `client_ref`; retain only global warnings and warnings owned by selected clients. Report unmatched subset names explicitly unless name redaction is active, in which case report only the unmatched count. If no selector matches, refuse to scan under the same disclosure rule.
+
+## §2 Schema
+
+```yaml
+schema_version: 1
+desk_name: "Equity Advisory"
+updated_at: "2026-07-18T17:40:00Z"
+default_threshold_pct: 5.0
+default_min_impact_pp: 0.5
+clients:
+  - client_name: "Example Family Office"
+    client_ref: "EX-001"
+    holdings:
+      - symbol: "AAPL.O"
+        weight: 0.12
+        asset_class: equity
+      - symbol: "SPY"
+        weight: 0.08
+        asset_class: etf
+```
+
+`schema_version`, `clients[].client_name`, and non-empty holdings are required. `client_ref`, `default_threshold_pct`, `default_min_impact_pp`, and `asset_class` are optional. When present, `asset_class` must be exactly `equity` or `etf`, and a symbol must have the same classification in every client book.
+
+## §3 Validation
+
+Run validation before any Parallax tool call:
+
+- `schema_version` must equal `1`; otherwise refuse to run and show the expected shape.
+- Weights must be numeric, `> 0`, and `<= 1`.
+- Per-client weights in `[0.95, 1.05]` are renormalised silently; outside that band, renormalise and flag the client.
+- Duplicate client names are suffixed `#2`, `#3`, and flagged.
+- Duplicate symbols within a client are summed and flagged.
+- `default_threshold_pct` and `default_min_impact_pp` must be finite and non-negative; invalid values are flagged and replaced with the built-in defaults.
+- Symbols are trimmed and upper-cased. Bare ticker resolution follows `_parallax/parallax-conventions.md §1`; fund/OEIC-shaped identifiers use that not-covered fallback.
+- Preserve and render every validation warning for both saved and inline books.
+
+## §4 Staleness
+
+Compute `age_days` from `updated_at`:
+
+| Age | Tier | Rendering |
+|---|---|---|
+| `<= 30` | fresh | provenance line only |
+| `31-90` | warn | visible warning near the top |
+| `> 90` | stale | stronger visible warning near the top |
+| missing/unparseable | unknown | treat as stale; say update date unknown |
+
+The skill runs in every tier. Staleness changes trust in the weights, not whether the RM receives a report.
+
+## §5 Privacy
+
+The book lives in plaintext under the operator's OS account. Recommend `chmod 600` and keeping it outside cloud-sync folders.
+
+Client names and weights stay local. Only the deduplicated symbol union is sent to Parallax MCP tools. `redact_names=true` renders clients as `Client 1..N`, removes client refs, and replaces unmatched selector values with a count; the mapping is not rendered. The skill never writes the desk book.
+
+If `asset_class` is omitted, the skill may need `etf_profile` classification probes. Their cost is currently UNVERIFIED in `_parallax/token-costs.md`; populating `asset_class` avoids those probes. `etf_daily_price` pricing cost is also UNVERIFIED for ETF holdings.

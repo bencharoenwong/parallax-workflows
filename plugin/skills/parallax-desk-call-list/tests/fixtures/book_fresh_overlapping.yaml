@@ -1,0 +1,75 @@
+schema_version: 1
+desk_name: Example Desk
+updated_at: "2026-07-18T17:40:00Z"
+default_threshold_pct: 5.0
+default_min_impact_pp: 0.5
+clients:
+  - client_name: Alpha
+    client_ref: A
+    holdings:
+      - {symbol: SHARED00.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED01.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED02.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED03.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED04.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED05.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED06.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED07.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED08.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED09.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED10.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED11.O, weight: 0.05, asset_class: equity}
+      - {symbol: A00.O, weight: 0.05, asset_class: equity}
+      - {symbol: A01.O, weight: 0.05, asset_class: equity}
+      - {symbol: A02.O, weight: 0.05, asset_class: equity}
+      - {symbol: A03.O, weight: 0.05, asset_class: equity}
+      - {symbol: A04.O, weight: 0.05, asset_class: equity}
+      - {symbol: A05.O, weight: 0.05, asset_class: equity}
+      - {symbol: A06.O, weight: 0.05, asset_class: equity}
+      - {symbol: A07.O, weight: 0.05, asset_class: equity}
+  - client_name: Beta
+    client_ref: B
+    holdings:
+      - {symbol: SHARED00.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED01.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED02.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED03.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED04.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED05.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED06.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED07.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED08.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED09.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED10.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED11.O, weight: 0.05, asset_class: equity}
+      - {symbol: B00.O, weight: 0.05, asset_class: equity}
+      - {symbol: B01.O, weight: 0.05, asset_class: equity}
+      - {symbol: B02.O, weight: 0.05, asset_class: equity}
+      - {symbol: B03.O, weight: 0.05, asset_class: equity}
+      - {symbol: B04.O, weight: 0.05, asset_class: equity}
+      - {symbol: B05.O, weight: 0.05, asset_class: equity}
+      - {symbol: B06.O, weight: 0.05, asset_class: equity}
+      - {symbol: B07.O, weight: 0.05, asset_class: equity}
+  - client_name: Gamma
+    client_ref: G
+    holdings:
+      - {symbol: SHARED00.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED01.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED02.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED03.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED04.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED05.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED06.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED07.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED08.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED09.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED10.O, weight: 0.05, asset_class: equity}
+      - {symbol: SHARED11.O, weight: 0.05, asset_class: equity}
+      - {symbol: C00.O, weight: 0.05, asset_class: equity}
+      - {symbol: C01.O, weight: 0.05, asset_class: equity}
+      - {symbol: C02.O, weight: 0.05, asset_class: equity}
+      - {symbol: C03.O, weight: 0.05, asset_class: equity}
+      - {symbol: C04.O, weight: 0.05, asset_class: equity}
+      - {symbol: C05.O, weight: 0.05, asset_class: equity}
+      - {symbol: C06.O, weight: 0.05, asset_class: equity}
+      - {symbol: C07.O, weight: 0.05, asset_class: equity}

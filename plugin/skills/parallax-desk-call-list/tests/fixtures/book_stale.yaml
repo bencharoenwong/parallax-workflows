@@ -1,0 +1,7 @@
+schema_version: 1
+desk_name: Stale Desk
+updated_at: "2026-01-01T00:00:00Z"
+clients:
+  - client_name: Stale Client
+    holdings:
+      - {symbol: AAPL.O, weight: 1.0, asset_class: equity}

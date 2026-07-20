@@ -60,6 +60,7 @@ PLUGIN_SKILLS = [
     "parallax-concierge",
     "parallax-country-deep-dive",
     "parallax-credit-lens",
+    "parallax-desk-call-list",
     "parallax-deep-dive",
     "parallax-due-diligence",
     "parallax-earnings-quality",

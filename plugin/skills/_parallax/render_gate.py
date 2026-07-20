@@ -96,6 +96,10 @@ SKILL_ANCHORS: dict[str, list[str]] = {
         r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)watchlist (?:monitor|summary|scan)\b",
         _branding("watchlist scan"),
     ],
+    "desk-call-list": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:desk call list|priority calls|no calls indicated|scan degraded|scan refused)\b",
+        _branding("desk call list"),
+    ],
     "portfolio-builder": [
         r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:portfolio builder|portfolio construction|investment thesis)\b",
         _branding("portfolio construction"),

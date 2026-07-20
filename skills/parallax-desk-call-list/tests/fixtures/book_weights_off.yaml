@@ -1,0 +1,8 @@
+schema_version: 1
+desk_name: Off Weights
+updated_at: "2026-07-19T00:00:00Z"
+clients:
+  - client_name: Off
+    holdings:
+      - {symbol: AAPL.O, weight: 0.20, asset_class: equity}
+      - {symbol: MSFT.O, weight: 0.20, asset_class: equity}
