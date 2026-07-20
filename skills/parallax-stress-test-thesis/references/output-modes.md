@@ -32,8 +32,11 @@ below it.** Include, in order:
 
 - the **Assumption Strength** label with a **traffic-light indicator** — `🔴 Weak` / `🟡 Mixed` /
   `🟢 Strong` — and one clause of why. The light rates **how well the argument's load-bearing
-  assumptions are supported by the current reads**, and nothing else: 🔴 = a high-criticality
-  assumption is Contradicted/Unconfirmed, 🟢 = the load-bearing set is Supported. It is **not a trade
+  assumptions are supported by the current reads**, and nothing else, as a precedence cascade:
+  🔴 = a high-criticality assumption is Contradicted/Unconfirmed (cracked at the foundation);
+  🟡 = every high-criticality assumption is Supported but a medium-criticality one is
+  Contradicted/Unconfirmed (foundation holds, cracks higher up); 🟢 = high-criticality set Supported
+  and no medium-criticality assumption Contradicted/Unconfirmed. It is **not a trade
   signal** — 🟢 means "the reasoning holds up", never "buy"; 🔴 means "the reasoning is fragile",
   never "sell" — and it never gates or halts the report (every section still renders below it). It is
   a **heuristic** read of argument support, **not an outcome-calibrated score**: a decision aid, not

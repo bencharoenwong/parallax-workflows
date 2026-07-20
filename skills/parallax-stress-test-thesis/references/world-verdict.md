@@ -53,10 +53,19 @@ keep it explicit and ordered.
 **Lead the verdict with an `Assumption Strength` label** — `Weak` / `Mixed` / `Strong` — rating how
 well the *load-bearing* assumptions are supported by the current Pass-1 reads:
 
-- **Weak** — at least one high-criticality assumption is `Contradicted` or `Unconfirmed`.
-- **Mixed** — the load-bearing set is partly Supported, partly Contradicted/Unconfirmed, with no
-  single high-criticality failure dominating.
-- **Strong** — the load-bearing set is `Supported`.
+- **Weak** — at least one **high-criticality** assumption is `Contradicted` or `Unconfirmed`. The
+  thesis is cracked at its foundation.
+- **Mixed** — **every high-criticality assumption is `Supported`**, but one or more
+  **medium-criticality** assumptions are `Contradicted` or `Unconfirmed`. The thesis holds at its
+  foundation but cracks higher up.
+- **Strong** — every high-criticality assumption is `Supported` **and** no medium-criticality
+  assumption is `Contradicted` or `Unconfirmed` — a clean read (low-criticality gaps aside).
+
+Evaluate in that order — the tiers form a **precedence cascade**, not an average: a broken
+high-criticality assumption forces **Weak** no matter how many other blocks hold; only once the
+high-criticality set is fully Supported does the medium-criticality set decide **Mixed** vs.
+**Strong**. Low-criticality assumptions never move the light (note them in Confidence & Caveats
+instead). If the medium tier is empty, Mixed cannot arise and the read is Weak or Strong only.
 
 This label rates the **argument's evidential support, not the security** — it is explicitly **not** a
 buy/sell/hold call, a PASS/FAIL grade, or a suitability verdict, and it never gates or short-circuits
