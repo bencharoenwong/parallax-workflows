@@ -55,7 +55,7 @@ Execute using Parallax MCP tools plus local Python helpers.
 1. Resolve canonical `_parallax/...` paths per `_parallax/parallax-conventions.md §0.0`.
 2. Call `ToolSearch` with query `"+Parallax"` to load deferred Parallax MCP schemas before the first data call.
 3. Load `references/desk-book-format.md`; read inline input or `$PARALLAX_DESK_BOOK_PATH`, else `~/.parallax/desk-book/book.yaml`. Validate via `desk_call_list_logic.py`. Inline input wholly replaces the saved book. Preserve validation warnings for both input paths.
-4. Apply subset filtering only to the saved book and report unmatched names. If a non-empty subset matches no clients, refuse to scan and name every unmatched selector.
+4. Apply subset filtering only to the saved book, passing the `redact_names` mode into resolution. Keep only global validation warnings and warnings owned by selected clients. Report unmatched names verbatim unless `redact_names=true`; in redacted mode retain and report only the unmatched count, then apply `redact_names()` so client refs and names are removed. If a non-empty subset matches no clients, refuse to scan under the same disclosure rule.
 5. Compute staleness tier and the sorted deduplicated symbol union `U`.
 6. Load active house view per `_parallax/house-view/loader.md` §1-§2. Shell out to `view_status`; do not recompute expiry date math. If absent or invalid, run without view.
 
@@ -148,6 +148,6 @@ The entire final message is exactly that command's stdout. Put degraded notes in
 
 SCAN DEGRADED starts with `**Scan degraded - results not reliable.**` and names priced count, total symbols, coverage, and up to 10 unpriced symbols.
 
-An empty client or symbol selection starts with `**Scan refused — no clients or symbols selected.**` and never renders a call list or no-calls result.
+An empty client or symbol selection starts with `**Scan refused — no clients or symbols selected.**` and never renders a call list or no-calls result. An all-unmatched subset starts with `**Scan refused — subset matched no clients: <names>.**`; under `redact_names=true`, replace the names with `<N> selector(s) matched no client`. Redacted refusal and partial-match output never contains raw selectors, and client refs are omitted everywhere.
 
 Quiet mornings start with `**No calls indicated.**`, then unique symbols scanned, client books scanned, largest move, threshold, and the `min_impact` pp floor. Include House View Preamble, Branding Header, staleness warning, validation warnings, About This Report, AI disclosure, and disclaimer.

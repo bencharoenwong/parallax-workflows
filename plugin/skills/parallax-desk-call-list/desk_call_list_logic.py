@@ -43,6 +43,7 @@ class DeskBook:
     clients: tuple[ClientBook, ...]
     source: str = "saved"
     unmatched_subset: tuple[str, ...] = ()
+    unmatched_subset_count: int = 0
     validation_warnings: tuple[BookWarning, ...] = ()
 
 
@@ -197,7 +198,12 @@ def staleness_tier(age: int | None) -> str:
     return "stale"
 
 
-def resolve_input(inline: list[dict[str, Any]] | None, book: DeskBook, subset: Iterable[str] | None = None) -> DeskBook:
+def resolve_input(
+    inline: list[dict[str, Any]] | None,
+    book: DeskBook,
+    subset: Iterable[str] | None = None,
+    redact_names: bool = False,
+) -> DeskBook:
     if inline is not None:
         inline_raw = {"schema_version": 1, "clients": [_inline_client(c) for c in inline]}
         resolved, warnings = validate_book(inline_raw)
@@ -219,8 +225,20 @@ def resolve_input(inline: list[dict[str, Any]] | None, book: DeskBook, subset: I
     matched = {c.client_name.casefold() for c in clients} | {(c.client_ref or "").casefold() for c in clients}
     unmatched = tuple(s for s in wanted if s.casefold() not in matched)
     if wanted and not clients:
-        raise ValueError(f"subset matched no clients: {', '.join(unmatched)}")
-    return replace(book, clients=clients, unmatched_subset=unmatched)
+        raise ValueError(_subset_refusal_message(unmatched, redact_names))
+    selected_names = {client.client_name for client in clients}
+    warnings = tuple(
+        warning
+        for warning in book.validation_warnings
+        if warning.client_name is None or warning.client_name in selected_names
+    )
+    return replace(
+        book,
+        clients=clients,
+        unmatched_subset=() if redact_names else unmatched,
+        unmatched_subset_count=len(unmatched),
+        validation_warnings=warnings,
+    )
 
 
 def union_symbols(book: DeskBook) -> tuple[str, ...]:
@@ -361,9 +379,24 @@ def verdict_sensitivity(
 
 def redact_names(book: DeskBook) -> tuple[DeskBook, dict[str, str]]:
     mapping = {client.client_name: f"Client {idx}" for idx, client in enumerate(book.clients, start=1)}
-    clients = tuple(replace(c, client_name=mapping[c.client_name]) for c in book.clients)
+    clients = tuple(
+        replace(c, client_name=mapping[c.client_name], client_ref=None)
+        for c in book.clients
+    )
     warnings = tuple(_redact_warning(warning, mapping) for warning in book.validation_warnings)
-    return replace(book, clients=clients, validation_warnings=warnings), mapping
+    return (
+        replace(
+            book,
+            clients=clients,
+            unmatched_subset=(),
+            unmatched_subset_count=max(
+                book.unmatched_subset_count,
+                len(book.unmatched_subset),
+            ),
+            validation_warnings=warnings,
+        ),
+        mapping,
+    )
 
 
 def render_no_calls_or_degraded(
@@ -414,6 +447,14 @@ def _validation_warning_block(book: DeskBook) -> str:
         return ""
     lines = "\n".join(f"- {warning.message}" for warning in book.validation_warnings)
     return f"\n\n**Validation Warnings**\n{lines}"
+
+
+def _subset_refusal_message(unmatched: tuple[str, ...], redacted: bool) -> str:
+    if redacted:
+        detail = f"{len(unmatched)} selector(s) matched no client"
+    else:
+        detail = f"subset matched no clients: {', '.join(unmatched)}"
+    return f"**Scan refused — {detail}.**"
 
 
 def _redact_warning(warning: BookWarning, mapping: dict[str, str]) -> BookWarning:

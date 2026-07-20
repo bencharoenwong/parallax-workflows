@@ -212,6 +212,47 @@ def test_subset_all_unmatched_refuses_and_names_selectors():
         resolve_input(None, book, ["Missing", "Unknown"])
 
 
+def test_subset_drops_excluded_client_warnings():
+    raw = {
+        "schema_version": 1,
+        "default_threshold_pct": -1,
+        "clients": [
+            {
+                "client_name": "Client A",
+                "client_ref": "A1",
+                "holdings": [{"symbol": "AAPL.O", "weight": 0.5}],
+            },
+            {
+                "client_name": "Client B",
+                "client_ref": "B1",
+                "holdings": [{"symbol": "MSFT.O", "weight": 0.5}],
+            },
+        ],
+    }
+    book, _ = validate_book(raw)
+    resolved = resolve_input(None, book, ["A1"])
+    assert any(warning.client_name is None for warning in resolved.validation_warnings)
+    assert any(
+        warning.client_name == "Client A"
+        for warning in resolved.validation_warnings
+    )
+    assert all(
+        warning.client_name in {None, "Client A"}
+        for warning in resolved.validation_warnings
+    )
+    assert all("Client B" not in warning.message for warning in resolved.validation_warnings)
+
+
+def test_redacted_refusal_emits_no_selector_names():
+    book, _ = validate_book(load_desk_book(FIXTURES / "book_single_client.yaml"))
+    selectors = ["Private Client", "PRIVATE-REF"]
+    with pytest.raises(ValueError) as exc_info:
+        resolve_input(None, book, selectors, redact_names=True)
+    output = str(exc_info.value)
+    assert output == "**Scan refused — 2 selector(s) matched no client.**"
+    assert all(selector not in output for selector in selectors)
+
+
 def test_staleness_tiers_at_30_31_90_91_and_missing():
     now = datetime(2026, 7, 20, tzinfo=timezone.utc)
     assert staleness_tier(book_age_days("2026-06-20T00:00:00Z", now)) == "fresh"
@@ -264,6 +305,22 @@ def test_redact_names_is_stable_across_runs():
     redacted2, mapping2 = redact_names(book)
     assert mapping1 == mapping2
     assert redacted1.clients[0].client_name == redacted2.clients[0].client_name == "Client 1"
+
+
+def test_redact_names_removes_client_refs_and_unmatched_selectors():
+    book, _ = validate_book(load_desk_book(FIXTURES / "book_single_client.yaml"))
+    resolved = resolve_input(
+        None,
+        book,
+        ["Northgate", "Private Selector"],
+        redact_names=True,
+    )
+    assert resolved.unmatched_subset == ()
+    assert resolved.unmatched_subset_count == 1
+    redacted, _ = redact_names(resolved)
+    assert redacted.clients[0].client_ref is None
+    assert redacted.unmatched_subset == ()
+    assert redacted.unmatched_subset_count == 1
 
 
 def test_redact_names_also_redacts_validation_warnings():

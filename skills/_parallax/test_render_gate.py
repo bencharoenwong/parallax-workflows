@@ -240,6 +240,12 @@ def test_desk_call_list_degraded_short_form_anchor():
     assert out.lstrip().startswith("**Scan degraded")
 
 
+def test_desk_call_list_refused_short_form_anchor():
+    draft = SCAFFOLD + "**Scan refused — 2 selector(s) matched no client.**\n"
+    out = gate(draft, "desk-call-list")
+    assert out.lstrip().startswith("**Scan refused")
+
+
 def test_desk_call_list_degraded_note_hoisted():
     draft = "news synthesis timed out for AAPL.O\n\n# Desk Call List\nbody\n"
     out = gate(draft, "desk-call-list")
