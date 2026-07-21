@@ -15,7 +15,7 @@ description: "Pressure-tests a written investment thesis: decomposes it into fal
 ## Gotchas
 
 - JIT-load `_parallax/parallax-conventions.md` for RIC resolution (§1), symbol cross-validation (§2), parallel execution (§3), fallback patterns (§4), macro market selection (§6), and disclaimers (§9.1/§9.2).
-- **Phase 0 hard-stop is two distinct failure modes** — don't conflate them in the message to the operator: not-connected (no tools loaded) vs. connected-but-unauthenticated/unentitled (tools loaded, health calls error). A slow/timed-out health call alone is not a hard stop.
+- **Phase 0 hard-stop is two distinct failure modes** — don't conflate them in the message to the operator: not-connected (no tools loaded) vs. connected-but-unauthenticated/unentitled (tools loaded, the `check_macro_health` probe errors). A slow/timed-out probe alone is not a hard stop.
 - JIT-load `references/assumption-decomposition.md` for the Phase 1 five-layer taxonomy and per-assumption record fields.
 - JIT-load `references/market-stress-test.md` for Phase 2 (layers 1–4: market selection, batch calls, Supported/Contradicted/Unconfirmed classification, and the stress step — magnitude + time-to-play-out, both mandatory for Phase 5).
 - JIT-load `references/position-evaluation.md` for Phase 3 (layer 3 position read, including the peer-relative factor check).
@@ -62,11 +62,12 @@ None. This skill is read-only and persists nothing — no files, no cache. `clie
 
 ### Phase 0 — Preflight
 
-Before any data call: call `ToolSearch` with query `"+Parallax"`.
+Before any data call: call `ToolSearch` with query `"+Parallax"`. If Parallax tools load,
+call `check_macro_health` once as the liveness/auth probe before proceeding.
 
 - **No `mcp__*Parallax*` tools load** → the connector isn't installed/enabled. Hard-stop: tell the operator they need a Parallax account (Chicago Global Capital) and must add the connector. Do not proceed to Phase 1.
-- **Tools load, but `check_api_health` and/or `check_macro_health` return an auth/entitlement error** (not merely slow) → the account isn't signed in or lacks access. Hard-stop with that specific explanation. Do not proceed to Phase 1.
-- A slow response or timeout on the health call alone is not a hard stop — proceed per the standard fallback patterns in `_parallax/parallax-conventions.md` §4.
+- **Tools load, but the Phase-0 `check_macro_health` probe (or the first Parallax data call) returns an auth/entitlement error** (not merely slow) → the account isn't signed in or lacks access. Hard-stop with that specific explanation. Do not proceed to Phase 1.
+- A slow response or timeout on the probe alone is not a hard stop — proceed per the standard fallback patterns in `_parallax/parallax-conventions.md` §4.
 
 ### Phase 1 — Decompose into assumptions
 

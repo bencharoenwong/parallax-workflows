@@ -1,5 +1,5 @@
 """Unit tests for the stress-test-thesis eval spec's skill-specific checks
-(verdict_no_rec, assumption_map_layered, break_condition_fields, read_time_marker).
+(verdict_no_rec, json_no_rec, assumption_map_layered, break_condition_fields, read_time_marker).
 Red/green before any live spend. Mirrors the other per-skill test files.
 """
 
@@ -341,3 +341,30 @@ def test_verdict_no_rec_green_on_legit_market_vocab():
     ]:
         prose = GOLDEN.replace("The chain fails at the entry premise.", phrase)
         assert _results(prose)["verdict_no_rec"] is True, phrase
+
+
+# --- json_no_rec (structured-output recommendation guard) -------------------
+
+
+def test_json_no_rec_red_on_json_rating_key():
+    prose = GOLDEN + '\n```json\n{"rating": "buy"}\n```\n'
+    assert _results(prose)["json_no_rec"] is False
+
+
+def test_json_no_rec_red_on_nested_action_key():
+    prose = GOLDEN + '\n```json\n{"positions": [{"action": "sell"}]}\n```\n'
+    assert _results(prose)["json_no_rec"] is False
+
+
+def test_json_no_rec_green_when_no_json():
+    assert _results(GOLDEN)["json_no_rec"] is True
+
+
+def test_json_no_rec_green_on_benign_structured_keys():
+    prose = GOLDEN + '\n```\n{"assumptions": ["rate cuts"], "layer": "macro"}\n```\n'
+    assert _results(prose)["json_no_rec"] is True
+
+
+def test_json_no_rec_green_on_invalid_json_fence():
+    prose = GOLDEN + '\n```json\n{"rating": "buy",}\n```\n'
+    assert _results(prose)["json_no_rec"] is True

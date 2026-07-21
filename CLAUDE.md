@@ -61,7 +61,7 @@ This repo is initialized with the `no-mistakes` gate. Push branches via:
 git push no-mistakes <branch> -o no-mistakes.skip=ci
 ```
 
-The `-o no-mistakes.skip=ci` flag is required for this repo — there is no `.github/workflows/`, so the `ci` step would otherwise idle for 4h waiting for checks that never register.
+The `-o no-mistakes.skip=ci` flag is required for this repo — the only workflow (`.github/workflows/evals.yml`) runs on `pull_request` and pushes to `main`, so a feature-branch push registers no checks and the `ci` step would otherwise idle for 4h waiting for checks that never register.
 
 The gate runs review / test / document / lint in an isolated worktree, forwards to `origin`, and opens a PR. The `document` step has auto-fix enabled and may add a commit; everything else reports findings only.
 

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import re
 import sys
+import json
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "graders"))
@@ -99,6 +100,53 @@ def _c_verdict_no_rec(t, spec) -> Check:
     )
     hit = next((p for p in _VERDICT_REC_PATTERNS if re.search(p, text, re.I)), None)
     return Check("verdict_no_rec", hit is None, f"rec_token_in_verdict={hit}")
+
+
+_JSON_FENCE_RE = re.compile(r"```(?:\s*json)?\s*(.*?)```", re.I | re.S)
+_JSON_REC_KEYS = {
+    "buy",
+    "sell",
+    "hold",
+    "rating",
+    "recommendation",
+    "recommendations",
+    "action",
+    "signal",
+    "advice",
+    "target",
+    "price_target",
+    "target_price",
+}
+
+
+def _json_keys(obj) -> set[str]:
+    if isinstance(obj, dict):
+        keys = {str(k).lower() for k in obj}
+        for v in obj.values():
+            keys.update(_json_keys(v))
+        return keys
+    if isinstance(obj, list):
+        keys = set()
+        for item in obj:
+            keys.update(_json_keys(item))
+        return keys
+    return set()
+
+
+def _c_json_no_rec(t, spec) -> Check:
+    """No recommendation-shaped keys in fenced JSON blocks. Prose recommendations
+    remain verdict_no_rec's job; invalid JSON fences are skipped."""
+    bad = set()
+    for m in _JSON_FENCE_RE.finditer(t.final_prose or ""):
+        block = m.group(1).strip()
+        if not block.startswith(("{", "[")):
+            continue
+        try:
+            parsed = json.loads(block)
+        except json.JSONDecodeError:
+            continue
+        bad.update(_json_keys(parsed) & _JSON_REC_KEYS)
+    return Check("json_no_rec", not bad, f"rec_keys_in_json={sorted(bad)}")
 
 
 def _c_assumption_map_layered(t, spec) -> Check:
@@ -271,6 +319,7 @@ SPEC = EvalSpec(
         "ai_disclosure_present",       # GENERIC (§9.2 banner, always)
         "disclaimer_present_correct",  # GENERIC ("not investment advice" — both the no-profile §9.1 render and the stronger profile variant carry the literal token)
         "verdict_no_rec",              # NEW (analogue of bottom_line_no_rec)
+        "json_no_rec",                 # NEW (structured JSON must not carry recommendation-shaped keys)
         "assumption_map_layered",      # NEW (five-layer decomposition ran)
         "break_condition_fields",      # NEW (magnitude + time_to_play_out mandatory)
         "read_time_marker",            # NEW (standard-render ~N min read marker)
@@ -281,6 +330,7 @@ SPEC = EvalSpec(
     ],
     extra_checks={
         "verdict_no_rec": _c_verdict_no_rec,
+        "json_no_rec": _c_json_no_rec,
         "assumption_map_layered": _c_assumption_map_layered,
         "break_condition_fields": _c_break_condition_fields,
         "read_time_marker": _c_read_time_marker,

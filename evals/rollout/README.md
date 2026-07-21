@@ -53,18 +53,18 @@ not literals, so the file itself carries nothing sensitive.
 
 ## Preflight — the gate that stops silent spends
 
-`preflight_connector.sh` runs one trivial `check_api_health` call in a fresh session and exits:
+`preflight_connector.sh` runs one trivial `check_macro_health` call in a fresh session and exits:
 
 | exit | meaning |
 |---|---|
-| 0 | connector loaded, authenticated, health tool responded — safe to run the batch |
+| 0 | connector loaded, authenticated, `check_macro_health` probe responded — safe to run the batch |
 | 1 | auth error (401) — no valid credentials |
 | 2 | no Parallax MCP server loaded — set `MCP_CONFIG` |
 | 3 | `claude` CLI not on PATH |
 | 4 | connector declared but the tool never executed — widen `ALLOWED_TOOLS` |
 
 `run_corpus.sh` calls it first and **aborts the whole batch if it fails** — so a dead
-connector costs one health probe, not a full corpus of empty, mis-graded 401 stubs. (That
+connector costs one `check_macro_health` probe, not a full corpus of empty, mis-graded 401 stubs. (That
 exact failure — an empty transcript scored as a *skill* failure — is what this gate prevents.)
 
 ## Running a batch + variance pass
@@ -88,8 +88,13 @@ infra problem (inconclusive — fix the harness and re-run).
 
 ## Calling it from CI
 
-This repo intentionally ships **no** `.github/workflows/` (the `no-mistakes` push gate skips
-`ci` for that reason — see the root `CLAUDE.md`). To wire live evals into CI, have the job
-export the contract env (API key + `MCP_CONFIG` + `ALLOWED_TOOLS` from CI secrets), then call
-`run_corpus.sh` followed by `grade_corpus.py` and fail the job on a non-zero grade. The scripts
-are self-contained and secret-free; the secrets live only in the CI environment.
+Structural CI already runs via `.github/workflows/evals.yml`: the offline grader suite plus
+doc-lint scripts run on pull requests and pushes to `main`, with no secrets and no live
+Parallax / MCP calls. It does **not** run on feature-branch pushes, so the `no-mistakes`
+push guidance in the root `CLAUDE.md` still uses `-o no-mistakes.skip=ci`; otherwise the
+gate waits for checks that never register on that push.
+
+Live evals remain deliberately out of CI. To wire them in, add a job that exports the
+contract env (API key + `MCP_CONFIG` + `ALLOWED_TOOLS` from CI secrets), then calls
+`run_corpus.sh` followed by `grade_corpus.py` and fails the job on a non-zero grade. The
+scripts are self-contained and secret-free; the secrets live only in the CI environment.
