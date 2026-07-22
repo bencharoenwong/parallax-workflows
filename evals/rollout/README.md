@@ -53,18 +53,18 @@ not literals, so the file itself carries nothing sensitive.
 
 ## Preflight — the gate that stops silent spends
 
-`preflight_connector.sh` runs one trivial `check_macro_health` call in a fresh session and exits:
+`preflight_connector.sh` runs one trivial `check_api_health` call in a fresh session and exits:
 
 | exit | meaning |
 |---|---|
-| 0 | connector loaded, authenticated, `check_macro_health` probe responded — safe to run the batch |
+| 0 | connector loaded, authenticated, `check_api_health` probe responded — safe to run the batch |
 | 1 | auth error (401) — no valid credentials |
 | 2 | no Parallax MCP server loaded — set `MCP_CONFIG` |
 | 3 | `claude` CLI not on PATH |
 | 4 | connector declared but the tool never executed — widen `ALLOWED_TOOLS` |
 
 `run_corpus.sh` calls it first and **aborts the whole batch if it fails** — so a dead
-connector costs one `check_macro_health` probe, not a full corpus of empty, mis-graded 401 stubs. (That
+connector costs one `check_api_health` probe, not a full corpus of empty, mis-graded 401 stubs. (That
 exact failure — an empty transcript scored as a *skill* failure — is what this gate prevents.)
 
 ## Running a batch + variance pass

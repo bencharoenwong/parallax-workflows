@@ -2,7 +2,7 @@
 # evals/rollout/preflight_connector.sh — HARD GATE before any live batch spends tokens.
 #
 # Verifies that a fresh `claude -p` session (1) authenticates and (2) actually loads the
-# Parallax connector, by asking it to run one trivial check_macro_health probe. Exits 0 only when both
+# Parallax connector, by asking it to run one trivial check_api_health probe. Exits 0 only when both
 # hold; non-zero with a precise reason otherwise.
 #
 # Why this exists: a spawned `claude -p` that lacks credentials returns HTTP 401 with an
@@ -26,7 +26,7 @@ XFLAG=()
 
 TMP="$(mktemp)"; trap 'rm -f "$TMP"' EXIT
 
-claude -p "Call the Parallax check_macro_health tool exactly once and report only whether it succeeded. Do nothing else." \
+claude -p "Call the Parallax check_api_health tool exactly once and report only whether it succeeded. Do nothing else." \
   --output-format stream-json --verbose \
   ${MFLAG[@]+"${MFLAG[@]}"} ${XFLAG[@]+"${XFLAG[@]}"} \
   < /dev/null > "$TMP" 2>&1 || true
@@ -44,11 +44,11 @@ if ! grep -oE '"mcp_servers":\[[^]]*\]' "$TMP" | grep -qi 'parallax'; then
   exit 2
 fi
 # 3) The probe tool actually ran (connector reachable, not just declared)
-if ! grep -qE '"name"[[:space:]]*:[[:space:]]*"mcp__[^"]*check_macro_health"' "$TMP"; then
-  echo "PREFLIGHT FAIL: Parallax connector declared but the check_macro_health probe never executed (tool blocked or unreachable)." >&2
+if ! grep -qE '"name"[[:space:]]*:[[:space:]]*"mcp__[^"]*check_api_health"' "$TMP"; then
+  echo "PREFLIGHT FAIL: Parallax connector declared but the check_api_health probe never executed (tool blocked or unreachable)." >&2
   echo "  fix: ensure ALLOWED_TOOLS permits the Parallax tools so a non-interactive run can call them." >&2
   exit 4
 fi
 
-echo "PREFLIGHT OK: Parallax connector loaded and authenticated; check_macro_health probe responded." >&2
+echo "PREFLIGHT OK: Parallax connector loaded and authenticated; check_api_health probe responded." >&2
 exit 0
