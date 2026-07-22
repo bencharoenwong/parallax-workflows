@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "claude_ai_Parallax": {
+      "type": "http",
+      "url": "https://REPLACE-WITH-YOUR-PARALLAX-MCP-ENDPOINT",
+      "headers": {
+        "Authorization": "Bearer ${PARALLAX_MCP_TOKEN}"
+      }
+    }
+  }
+}

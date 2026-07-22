@@ -21,6 +21,7 @@ If you have Parallax connected and want to try it now, three commands cover 80% 
 | Be guided to the right workflow | `Hi Parallax` (or `/parallax-concierge`) |
 | Evaluate a single stock | `/parallax-should-i-buy AAPL` |
 | Run a portfolio health check | `/parallax-portfolio-checkup [{"symbol":"AAPL.O","weight":0.4},{"symbol":"MSFT.O","weight":0.6}]` |
+| Pressure-test an investment thesis | `/parallax-stress-test-thesis "I like NVDA because AI capex keeps compounding and rate cuts extend the duration trade"` |
 
 Everything below is the full catalog. The concierge is the recommended entry point for first-time users — it asks one clarifying question and routes you.
 
@@ -215,6 +216,17 @@ Active view is consumed by: `parallax-portfolio-builder`, `parallax-rebalance`, 
 | `/parallax-portfolio-builder "defensive dividend Asian equities"` | Build allocation from thesis |
 | `/parallax-watchlist-monitor AAPL.O MSFT.O NVDA.O` | Flag score changes across a list |
 | `/parallax-halal-screen AAPL.O` | Shariah compliance check |
+
+### Thesis & Argument
+
+Pressure-test the *reasoning* behind a stated view — not a stock, not a portfolio. Decomposes an argument into falsifiable assumptions across five layers (macro, sector/theme, position, implicit market preconditions, holder preconditions), tests the market ones against current Parallax signals, and surfaces which assumptions the case depends on and where it breaks first. **Maps argument risk; it never issues a buy/sell/hold or suitability call**, never persists anything, and never lets a client's situation rewrite what is true about the world.
+
+| Command | What it does |
+|---|---|
+| `/parallax-stress-test-thesis "…your argument…"` | Decompose into assumptions, stress-test against live signals, rate Assumption Strength (🔴/🟡/🟢) alongside a Bias & Conviction "hype meter", and surface the load-bearing vulnerabilities and where the thesis breaks first |
+| `/parallax-stress-test-thesis "…" client_profile={…}` | Adds a client-conditioning pass — re-weights each break condition's severity for a specific holder (horizon, income reliance, risk capacity): same thesis, different verdict by investor. Pass-1 statuses stay fixed |
+
+Read-only, not advice; the client-conditioned pass is a heuristic risk observation, not a suitability determination. See `skills/parallax-stress-test-thesis/samples/` for the test-thesis corpus.
 
 ### Parallax AI Investor Profiles
 

@@ -34,10 +34,14 @@ mkdir -p "$RESULTS"
 CMD="${ROLLOUT_CMD:-/parallax-should-i-buy}"
 PREFIX="${ROLLOUT_PREFIX:-should-i-buy}"
 
-# SAFE_ID is cosmetic only; task identity is parsed from LABEL. Cap it so
-# array-valued args such as portfolio JSON do not exceed filesystem filename
-# limits.
-SAFE_ID=$(printf '%s_%s' "$ARGS" "$LANG_ARG" | tr -c 'A-Za-z0-9._-' '_' | cut -c1-48)
+# Bound the id: short-ticker skills (should-i-buy "AAPL") slug fine, but free-text
+# skills (a thesis paragraph) would overflow the 255-byte filename limit. SAFE_ID is
+# cosmetic (task identity is parsed from LABEL), but cap the slug and append a stable
+# hash of the full args so ids stay unique + readable even when two long theses share
+# a prefix.
+RAW_ID=$(printf '%s_%s' "$ARGS" "$LANG_ARG" | tr -c 'A-Za-z0-9._-' '_')
+ARGS_HASH=$(printf '%s_%s' "$ARGS" "$LANG_ARG" | cksum | cut -d' ' -f1)
+SAFE_ID="$(printf '%.60s' "$RAW_ID")_${ARGS_HASH}"
 TS=$(date -u +%Y%m%dT%H%M%SZ)
 OUT="$RESULTS/${PREFIX}_${LABEL}_${SAFE_ID}_${TS}.stream.json"
 
@@ -56,6 +60,19 @@ out, prompt, model, timeout_s = sys.argv[1:5]
 cmd = ["claude", "-p", prompt, "--output-format", "stream-json", "--verbose"]
 if model:
     cmd.extend(["--model", model])
+
+# Live-connector flags (CI / live-eval use). All optional — unset leaves behavior
+# unchanged, so existing should-i-buy callers are unaffected. See evals/rollout/README.md.
+#   MCP_CONFIG    — path(s) to a .mcp.json defining the Parallax server (--mcp-config)
+#   STRICT_MCP    — non-empty => --strict-mcp-config (ONLY the supplied servers load: reproducible)
+#   ALLOWED_TOOLS — tool allowlist so a non-interactive run never stalls on a permission
+#                   prompt (e.g. "mcp__claude_ai_Parallax__*")
+if os.environ.get("MCP_CONFIG"):
+    cmd.extend(["--mcp-config", *os.environ["MCP_CONFIG"].split()])
+if os.environ.get("STRICT_MCP"):
+    cmd.append("--strict-mcp-config")
+if os.environ.get("ALLOWED_TOOLS"):
+    cmd.extend(["--allowedTools", *os.environ["ALLOWED_TOOLS"].split()])
 
 with open(out, "w") as fh:
     proc = subprocess.Popen(
