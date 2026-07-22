@@ -60,6 +60,7 @@ _SECTION_LABELS = [
     "Position-Level Read",               # ticker-only
     "World Verdict",
     "Bias & Conviction Check",           # the "hype meter" — client-invariant Pass-1 read, under World Verdict
+    "House-View Alignment",              # active-view-only (read-only conflict flag)
     "Pass 2 — Holder-Dependent Assumptions",         # profile-only
     "Pass 2 — Client-Conditioned Vulnerabilities",   # profile-only
     "Suitability-Relevant Flags",        # profile-only
