@@ -66,6 +66,11 @@ _SECTION_LABELS = [
     "Client-Conditioned Verdict",        # profile-only
     "What to Watch",
     "Confidence & Caveats",
+    "Book Overview",                     # book-mode only (>1 thesis)
+    "Shared / Concentrated Assumptions", # book-mode only
+    "Correlated Break Conditions",       # book-mode only
+    "Book-Level Verdict",                # book-mode only
+    "Client-Conditioned Book View",      # book-mode + profile only
 ]
 
 # Evidence the five-layer decomposition actually ran: the Assumption Map's `layer`
