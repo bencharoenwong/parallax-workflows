@@ -1,8 +1,7 @@
 """URL and PDF extraction.
 
-URL path: defuddle for clean text (voice corpus + logo URLs in markdown) +
-scrapling/urllib for raw HTML (CSS color/font extraction). Both passes are
-best-effort; merged corpus drives the regex extractors.
+URL path: a destination-validated, size-capped urllib fetch for raw HTML and
+page text. The merged corpus drives the regex extractors.
 
 PDF path: pypdf or pdfplumber for text extraction; regex extractors run
 against the resulting text. Confidence is reduced to reflect the fragility
@@ -10,9 +9,12 @@ of PDF text extraction vs canonical OOXML theme XML.
 """
 
 import re
+import ipaddress
+import socket
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
+from urllib.parse import urlsplit, urlunsplit
 
 from .colors import ColorExtractor, _assign_color_roles_by_frequency
 from .voice import _voice_corpus_from_text
@@ -26,6 +28,160 @@ _EMPTY_VOICE_CORPUS = {"text": "", "word_count": 0, "truncated": False}
 _MAX_STYLESHEET_LINKS = 5
 _STYLESHEET_READ_CAP = 1 * 1024 * 1024  # 1 MB per stylesheet
 _STYLESHEET_TOTAL_TIMEOUT_SECONDS = 8
+
+
+def _sanitized_url(url: str) -> str:
+    """Return a log-safe URL without credentials, query parameters, or fragment."""
+    try:
+        parsed = urlsplit(url)
+        host = parsed.hostname or ""
+        if ":" in host:
+            host = f"[{host}]"
+        if parsed.port is not None:
+            host = f"{host}:{parsed.port}"
+        return urlunsplit((parsed.scheme, host, parsed.path, "", ""))
+    except (TypeError, ValueError):
+        return "(invalid URL)"
+
+
+def _public_ip(address: str) -> bool:
+    try:
+        return ipaddress.ip_address(address).is_global
+    except ValueError:
+        return False
+
+
+def _resolve_public_url(url: str) -> tuple[str, int, str]:
+    """Reject URL destinations that do not resolve exclusively to public IPs.
+
+    This intentionally rejects mixed public/private DNS answers: allowing the
+    public member would leave a DNS-rebinding window between validation and
+    connection. Legacy IPv4 integer/hex/octal forms are normalized with
+    ``inet_aton`` before DNS lookup.
+    """
+    try:
+        parsed = urlsplit(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise ValueError
+        if parsed.username is not None or parsed.password is not None:
+            raise ValueError
+        if "%" in parsed.hostname:  # IPv6 zone identifiers are local-scope syntax.
+            raise ValueError
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    except (TypeError, ValueError):
+        raise ValueError("URL destination is not public") from None
+
+    host = parsed.hostname
+    addresses: list[str] = []
+    try:
+        addresses.append(str(ipaddress.ip_address(host)))
+    except ValueError:
+        # inet_aton recognizes historical forms such as 2130706433 and
+        # 0x7f000001 that URL parsers otherwise treat as DNS names.
+        try:
+            packed = socket.inet_aton(host)
+            addresses.append(str(ipaddress.ip_address(packed)))
+        except OSError:
+            try:
+                answers = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+            except (OSError, UnicodeError):
+                raise ValueError("URL destination is not public") from None
+            for answer in answers:
+                address = answer[4][0].split("%", 1)[0]
+                if address not in addresses:
+                    addresses.append(address)
+
+    if not addresses or any(not _public_ip(address) for address in addresses):
+        raise ValueError("URL destination is not public")
+    return host, port, addresses[0]
+
+
+def _validate_public_url(url: str) -> None:
+    _resolve_public_url(url)
+
+
+def _make_pinned_connection(connection_class, host: str, pinned_ip: str, **kwargs):
+    """Build an HTTP(S) connection whose TCP dial uses an already-checked IP.
+
+    The connection's ``host`` remains the URL hostname, so HTTP Host headers
+    and HTTPS certificate/SNI verification retain their normal semantics. Only
+    the address passed to the socket connector is replaced.
+    """
+    connection = connection_class(host, **kwargs)
+    create_connection = connection._create_connection
+
+    def create_pinned(address, *args, **connect_kwargs):
+        return create_connection((pinned_ip, address[1]), *args, **connect_kwargs)
+
+    connection._create_connection = create_pinned
+    return connection
+
+
+def _network_open(request, *, timeout: int):
+    """Open with redirect validation performed before following Location."""
+    from http.client import HTTPConnection, HTTPSConnection
+    from urllib.request import (
+        HTTPHandler,
+        HTTPSHandler,
+        HTTPRedirectHandler,
+        ProxyHandler,
+        build_opener,
+    )
+
+    def pin_request(req, url):
+        _host, _port, pinned_ip = _resolve_public_url(url)
+        req._parallax_pinned_ip = pinned_ip
+        return req
+
+    class PublicRedirectHandler(HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+            return pin_request(redirected, newurl)
+
+    class PinnedHTTPHandler(HTTPHandler):
+        def http_open(self, req):
+            pinned_ip = req._parallax_pinned_ip
+            return self.do_open(
+                lambda host, **kwargs: _make_pinned_connection(
+                    HTTPConnection, host, pinned_ip, **kwargs
+                ),
+                req,
+            )
+
+    class PinnedHTTPSHandler(HTTPSHandler):
+        def https_open(self, req):
+            pinned_ip = req._parallax_pinned_ip
+            return self.do_open(
+                lambda host, **kwargs: _make_pinned_connection(
+                    HTTPSConnection, host, pinned_ip, **kwargs
+                ),
+                req,
+            )
+
+    if not hasattr(request, "_parallax_pinned_ip"):
+        pin_request(request, request.full_url)
+    # Disable environment proxies: otherwise the validated destination and the
+    # socket endpoint intentionally differ, defeating destination pinning.
+    return build_opener(
+        ProxyHandler({}), PublicRedirectHandler(), PinnedHTTPHandler(), PinnedHTTPSHandler()
+    ).open(request, timeout=timeout)
+
+
+def _open_public_url(request, *, timeout: int):
+    """Open a validated URL and validate its final redirect before body read."""
+    requested_url = request.full_url if hasattr(request, "full_url") else str(request)
+    _host, _port, pinned_ip = _resolve_public_url(requested_url)
+    request._parallax_pinned_ip = pinned_ip
+    response = _network_open(request, timeout=timeout)
+    final_url = response.geturl() if hasattr(response, "geturl") else requested_url
+    try:
+        _validate_public_url(final_url)
+    except Exception:
+        try:
+            response.close()
+        finally:
+            raise
+    return response
 
 
 def _fetch_external_stylesheets(raw_html: str, base_url: str) -> str:
@@ -49,14 +205,9 @@ def _fetch_external_stylesheets(raw_html: str, base_url: str) -> str:
     correctness path. Returns the concatenated CSS-equivalent text.
 
     Security note (SSRF surface):
-        This function fetches arbitrary URLs harvested from `<link rel=stylesheet>`
-        elements in the supplied HTML. Run against a hostile or compromised brand
-        page, the href could point at internal endpoints (e.g.
-        `http://169.254.169.254/...` cloud metadata, or intranet probes). The
-        documented use case is operator-supplied URLs run from a personal laptop,
-        which is acceptable. If this helper is ever wrapped in a server endpoint
-        or shared-session context, the caller MUST restrict outbound hosts to a
-        public allowlist before invoking it.
+        Stylesheet URLs are untrusted page content. Each non-Google fetch goes
+        through `_open_public_url`, which rejects non-public answers and pins the
+        TCP connection to the validated numeric address across redirects.
     """
     import re
     import time
@@ -106,10 +257,10 @@ def _fetch_external_stylesheets(raw_html: str, base_url: str) -> str:
 
         # Non-Google CSS: fetch the file directly and append
         try:
-            from urllib.request import Request, urlopen
+            from urllib.request import Request
             req = Request(absolute, headers={"User-Agent": "Mozilla/5.0"})
             remaining = max(1, int(deadline - time.monotonic()))
-            with urlopen(req, timeout=remaining) as resp:
+            with _open_public_url(req, timeout=remaining) as resp:
                 ctype = resp.headers.get_content_type() if hasattr(resp.headers, "get_content_type") else (resp.headers.get("Content-Type") or "")
                 # Only treat text/css as readable; HTML / images / binary blobs are noise
                 if ctype and "css" not in ctype.lower() and "text" not in ctype.lower():
@@ -463,20 +614,30 @@ class TypographyExtractor:
             ls_m = re.search(r'letter-spacing\s*:\s*([^;]+)', block, re.IGNORECASE)
             ff_m = re.search(r'font-family\s*:\s*([^;]+)', block, re.IGNORECASE)
 
-            if not any([fs_m, fw_m, lh_m, ls_m, ff_m]): continue
+            if not any([fs_m, fw_m, lh_m, ls_m, ff_m]):
+                continue
 
-            if fs_m: style["fontSize"] = _normalize_css_dimension(fs_m.group(1).strip())
+            if fs_m:
+                style["fontSize"] = _normalize_css_dimension(fs_m.group(1).strip())
             if fw_m:
                 val = fw_m.group(1).strip()
-                if val.isdigit(): style["fontWeight"] = int(val)
-                elif val.lower() == "bold": style["fontWeight"] = 700
+                if val.isdigit():
+                    style["fontWeight"] = int(val)
+                elif val.lower() == "bold":
+                    style["fontWeight"] = 700
             if lh_m:
                 # line-height accepts a unitless multiplier or a dimension.
                 # Pass unitless through; normalize pt for dimension form.
                 lh_val = lh_m.group(1).strip()
                 style["lineHeight"] = _normalize_css_dimension(lh_val) if any(u in lh_val.lower() for u in ("pt", "px", "rem", "em")) else lh_val
-            if ls_m: style["letterSpacing"] = _normalize_css_dimension(ls_m.group(1).strip())
-            if ff_m: style["fontFamily"] = ff_m.group(1).strip().split(',')[0].strip(' "\'')
+            if ls_m:
+                style["letterSpacing"] = _normalize_css_dimension(
+                    ls_m.group(1).strip()
+                )
+            if ff_m:
+                style["fontFamily"] = (
+                    ff_m.group(1).strip().split(',')[0].strip(' "\'')
+                )
             
             scale[level] = style
             
@@ -550,9 +711,11 @@ class SpacingExtractor:
                 m = re.match(r'^([\d.]+)(px|rem)$', p, re.IGNORECASE)
                 if m:
                     num = float(m.group(1))
-                    if num == 0: continue
+                    if num == 0:
+                        continue
                     unit = m.group(2).lower()
-                    if unit == "rem": num *= 16
+                    if unit == "rem":
+                        num *= 16
                     vals.append((num, p))
         unique = {}
         for num, text in vals:
@@ -636,23 +799,16 @@ def _extract_brand_guide_prose(pdf_text: str, *, filename: str) -> Dict[str, str
 def extract_from_url(url: str) -> Dict[str, Any]:
     """Extract branding from a website.
 
-    Two passes: defuddle for clean markdown (voice corpus + emitted text),
-    scrapling/urllib for raw HTML (CSS color/font extraction). Both are
-    best-effort; merged text drives the regex extractors.
+    Fetches only validated public HTTP(S) destinations. Raw HTML supplies CSS
+    color/font extraction and a stripped text corpus for voice extraction.
     """
+    safe_reference = _sanitized_url(url)
     try:
+        # Validate before invoking any network-capable dependency. URL fetching
+        # is kept in one auditable urllib path so redirects receive the same
+        # destination policy before their body is consumed.
+        _validate_public_url(url)
         page_text = ""
-        try:
-            from subprocess import run
-            result = run(
-                ["defuddle", "parse", url, "--md"],
-                capture_output=True,
-                text=True,
-                timeout=15,
-            )
-            page_text = result.stdout if result.returncode == 0 else ""
-        except (FileNotFoundError, Exception):
-            pass
 
         raw_html = ""
         # Cap raw_html size to prevent regex-quadratic blowup on multi-MB pages.
@@ -663,28 +819,22 @@ def extract_from_url(url: str) -> Dict[str, Any]:
         # branch caps at 5MB of raw bytes BEFORE decode (different surface).
         MAX_RAW_HTML_CHARS = 5 * 1024 * 1024
         try:
-            from scrapling.fetchers import Fetcher
-            page = Fetcher.get(url, stealthy_headers=True, follow_redirects=True)
-            raw_html = getattr(page, "html_content", "") or str(page)
-            if isinstance(raw_html, str) and len(raw_html) > MAX_RAW_HTML_CHARS:
-                raw_html = raw_html[:MAX_RAW_HTML_CHARS]
-            if not page_text:
-                page_text = page.get_all_text(separator="\n", strip=True)
+            from urllib.request import Request
+            req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with _open_public_url(req, timeout=15) as resp:
+                # Cap the read at 5 MB. Brand-asset extraction works on the
+                # head of the page (style block, logo links, page text); a
+                # multi-megabyte response is almost certainly the wrong
+                # asset (large PDF, video) and would consume memory before
+                # the extractors run.
+                raw_bytes = resp.read(5 * 1024 * 1024)
+                encoding = resp.headers.get_content_charset() or "utf-8"
+                raw_html = raw_bytes.decode(encoding, errors="replace")
+                if len(raw_html) > MAX_RAW_HTML_CHARS:
+                    raw_html = raw_html[:MAX_RAW_HTML_CHARS]
+                page_text = re.sub(r"<[^>]+>", " ", raw_html)
         except Exception:
-            try:
-                from urllib.request import Request, urlopen
-                req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
-                with urlopen(req, timeout=15) as resp:
-                    # Cap the read at 5 MB. Brand-asset extraction works on the
-                    # head of the page (style block, logo links, page text); a
-                    # multi-megabyte response is almost certainly the wrong
-                    # asset (large PDF, video) and would consume memory before
-                    # the extractors run.
-                    raw_bytes = resp.read(5 * 1024 * 1024)
-                    encoding = resp.headers.get_content_charset() or "utf-8"
-                    raw_html = raw_bytes.decode(encoding, errors="replace")
-            except Exception:
-                pass
+            pass
 
         # Best-effort: follow up to N <link rel="stylesheet"> hrefs to recover
         # font declarations that live in external CSS (a common pattern that
@@ -749,15 +899,18 @@ def extract_from_url(url: str) -> Dict[str, Any]:
             "fonts": fonts,
             "source": {
                 "type": "url",
-                "reference": url,
+                "reference": safe_reference,
             },
             "extracted_at": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
             "confidence_scores": confidence_scores,
             "voice_corpus": voice_corpus,
         }
-        if typography: ret["typography"] = typography
-        if rounded: ret["rounded"] = rounded
-        if spacing: ret["spacing"] = spacing
+        if typography:
+            ret["typography"] = typography
+        if rounded:
+            ret["rounded"] = rounded
+        if spacing:
+            ret["spacing"] = spacing
         return ret
 
     except Exception as e:
@@ -767,12 +920,12 @@ def extract_from_url(url: str) -> Dict[str, Any]:
             "fonts": {},
             "source": {
                 "type": "url",
-                "reference": url,
+                "reference": safe_reference,
             },
             "extracted_at": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
             "confidence_scores": {},
             "voice_corpus": {"text": "", "word_count": 0, "truncated": False},
-            "error": str(e),
+            "error": "URL destination is not public" if isinstance(e, ValueError) else "URL extraction failed",
         }
 
 

@@ -16,7 +16,9 @@ description: "Configure white-label client branding for Parallax report output. 
 
 - JIT-load _parallax/white-label/schema.yaml before extraction — it is the single source of truth for config.yaml shape
 - JIT-load _parallax/white-label/extract/ (the extract package) and _parallax/white-label/validator.py before running Steps 1 and 2
-- URL input — use defuddle (Bash: `defuddle parse <url> --md`) if available, else WebFetch; do NOT defuddle PDFs
+- URL input — use `extract_from_url()` from `_parallax/white-label/extract/` so public-destination
+  validation, redirect checks, and bounded reads cannot be bypassed; do not fetch the URL with
+  defuddle, WebFetch, or another network path
 - PDF input — use the Read tool with `pages` parameter; read up to first 10 pages unless the brand guide is clearly deeper
 - PPTX input — extract.extract_from_pptx() reads OOXML theme XML directly (precise colors/fonts) and aggregates slide text for voice corpus. Requires python-pptx
 - DOCX input — extract.extract_from_docx() same pattern via word/theme/theme1.xml. Requires python-docx

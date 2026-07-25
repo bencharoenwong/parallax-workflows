@@ -21,6 +21,7 @@ from extract import (  # noqa: E402
     extract_from_pptx,
     extract_from_url,
 )
+import extract.web_pdf as web_pdf_module  # noqa: E402
 
 
 # Load loader.py via conftest's existing pattern
@@ -231,14 +232,17 @@ class _StubResponse:
     ctype` is True and the content-type guard silently skips the body. Use
     real lambdas via spec= so the guard exercises the path it claims to.
     """
-    def __init__(self, body: bytes, content_type: str = "text/html"):
+    def __init__(self, body: bytes, content_type: str = "text/html", final_url: str = "https://example.com/"):
         self._body = body
+        self._final_url = final_url
+        self.read_calls = 0
         self.headers = mock.MagicMock(spec=["get_content_charset", "get_content_type", "get"])
         self.headers.get_content_charset = lambda: "utf-8"
         self.headers.get_content_type = lambda: content_type
         self.headers.get = lambda key, default=None: content_type if key.lower() == "content-type" else default
 
     def read(self, amt=None):
+        self.read_calls += 1
         # Real urllib HTTPResponse.read accepts an optional size cap.
         if amt is None:
             return self._body
@@ -250,33 +254,29 @@ class _StubResponse:
     def __exit__(self, *args):
         return False
 
+    def geturl(self):
+        return self._final_url
+
+    def close(self):
+        pass
+
 
 class TestUrlFallbackRegression:
-    def test_urllib_fallback_extracts_brand_signature(self, monkeypatch):
-        """When defuddle and scrapling both fail, urllib pulls raw HTML and
-        the regex extractors find the brand signature."""
-        # Force defuddle to "fail" — replace subprocess.run with a stub that
-        # returns non-zero
-        from subprocess import CompletedProcess
+    @pytest.fixture(autouse=True)
+    def public_dns_only(self, monkeypatch):
+        """All URL tests are hermetic and resolve fixture hosts to a public IP."""
+        def fake_getaddrinfo(host, port, *args, **kwargs):
+            return [(2, 1, 6, "", ("93.184.216.34", port))]
 
-        def fake_run(*args, **kwargs):
-            return CompletedProcess(args, returncode=1, stdout="", stderr="not found")
+        monkeypatch.setattr("socket.getaddrinfo", fake_getaddrinfo)
 
-        # Force scrapling's Fetcher.get to raise so the production code falls
-        # through to the urllib branch. (scrapling is installed in this env;
-        # without this, Fetcher.get makes a real network call to example.com
-        # and the urllib mock never fires — the historical reason this test
-        # failed on bare example.com.)
-        def fake_fetcher_get(*args, **kwargs):
-            raise RuntimeError("scrapling disabled for urllib-fallback test")
-
+    def test_public_url_extracts_brand_signature(self, monkeypatch):
+        """The validated URL opener's HTML supplies the brand signature."""
         # Intercept urllib at the import site used by extract.web_pdf.
         def fake_urlopen(req, timeout=None):
             return _StubResponse(_BRAND_STUB_HTML)
 
-        with mock.patch("subprocess.run", fake_run), \
-             mock.patch("scrapling.fetchers.Fetcher.get", fake_fetcher_get), \
-             mock.patch("urllib.request.urlopen", fake_urlopen):
+        with mock.patch("extract.web_pdf._network_open", fake_urlopen):
             draft = extract_from_url("https://www.example.com/")
 
         # Logo extracted (the brand logo, not a strategy image)
@@ -307,11 +307,6 @@ class TestUrlFallbackRegression:
         passed only because Google Fonts URL parsing fired BEFORE urlopen
         and the external CSS body was silently rejected.
         """
-        from subprocess import CompletedProcess
-
-        def fake_run(*args, **kwargs):
-            return CompletedProcess(args, returncode=1, stdout="")
-
         page_html = b"""
 <!DOCTYPE html><html><head>
 <link rel="stylesheet" href="/assets/style.css">
@@ -331,16 +326,7 @@ h1 { font-family: 'Inter', sans-serif; color: #5A597A; }
                 return _StubResponse(external_css, content_type="text/css")
             return _StubResponse(page_html, content_type="text/html")
 
-        # scrapling.Fetcher.get is the first HTTP path tried in extract_from_url;
-        # if left unpatched it makes a real network call to example.com and the
-        # urllib fallback (where fake_urlopen lives) never fires. Patch it to
-        # raise so the urllib path runs deterministically.
-        def fake_scrapling_get(url, **kwargs):
-            raise RuntimeError("test: forcing urllib fallback")
-
-        with mock.patch("subprocess.run", fake_run), \
-             mock.patch("urllib.request.urlopen", fake_urlopen), \
-             mock.patch("scrapling.fetchers.Fetcher.get", fake_scrapling_get):
+        with mock.patch("extract.web_pdf._network_open", fake_urlopen):
             draft = extract_from_url("https://example.com/")
 
         # Fonts should be populated
@@ -402,10 +388,108 @@ h1 { font-family: 'Inter', sans-serif; color: #5A597A; }
             raise OSError("Network unreachable")
 
         with mock.patch("subprocess.run", fake_run), \
-             mock.patch("urllib.request.urlopen", fake_urlopen_fail):
+             mock.patch("extract.web_pdf._network_open", fake_urlopen_fail):
             draft = extract_from_url("https://0.0.0.0/")
 
         # Graceful degradation: empty colors/logos/fonts but valid structure
         assert "voice_corpus" in draft
         assert draft["voice_corpus"]["word_count"] == 0
         assert draft["source"]["type"] == "url"
+
+    @pytest.mark.parametrize("url", [
+        "http://127.0.0.1/private",
+        "http://10.20.30.40/private",
+        "http://169.254.169.254/latest/meta-data/",
+        "http://[::1]/private",
+        "http://[fe80::1]/private",
+        "http://2130706433/private",
+        "http://0x7f000001/private",
+        "http://017700000001/private",
+        "http://[::ffff:127.0.0.1]/private",
+        "http://user@127.0.0.1/private",
+        "http://example.com@127.0.0.1/private",
+    ])
+    def test_private_and_ambiguous_destinations_rejected_before_open(self, url):
+        secret_url = f"{url}?token=do-not-log"
+        with mock.patch("extract.web_pdf._network_open") as opener:
+            draft = extract_from_url(secret_url)
+
+        opener.assert_not_called()
+        assert draft["error"] == "URL destination is not public"
+        assert "do-not-log" not in str(draft)
+        assert "?" not in draft["source"]["reference"]
+
+    def test_hostname_with_any_private_dns_answer_is_rejected(self, monkeypatch):
+        def mixed_getaddrinfo(host, port, *args, **kwargs):
+            return [
+                (2, 1, 6, "", ("93.184.216.34", port)),
+                (2, 1, 6, "", ("10.0.0.8", port)),
+            ]
+
+        monkeypatch.setattr("socket.getaddrinfo", mixed_getaddrinfo)
+        with mock.patch("extract.web_pdf._network_open") as opener:
+            draft = extract_from_url("https://rebinding.example/brand")
+
+        opener.assert_not_called()
+        assert draft["error"] == "URL destination is not public"
+
+    def test_redirect_location_is_validated_before_follow(self):
+        from urllib.request import Request
+
+        request = Request("https://example.com/start")
+
+        def fake_build_opener(*handlers):
+            # A real opener calls this hook before creating the redirected
+            # request. The private Location must abort here, before open().
+            handler = next(h for h in handlers if hasattr(h, "redirect_request"))
+            handler.redirect_request(
+                request, None, 302, "Found", {}, "http://127.0.0.1/admin"
+            )
+            raise AssertionError("private redirect was followed")
+
+        with mock.patch("urllib.request.build_opener", fake_build_opener), \
+             pytest.raises(ValueError, match="not public"):
+            web_pdf_module._network_open(request, timeout=1)
+
+    def test_https_connection_dials_pinned_ip_but_verifies_url_hostname(self):
+        import http.client
+
+        context = mock.Mock()
+        raw_socket = mock.Mock()
+        context.wrap_socket.return_value = mock.Mock()
+        with mock.patch("socket.create_connection", return_value=raw_socket) as dial:
+            connection = web_pdf_module._make_pinned_connection(
+                http.client.HTTPSConnection,
+                "brand.example",
+                "93.184.216.34",
+                context=context,
+                timeout=3,
+            )
+            connection.connect()
+
+        dial.assert_called_once_with(("93.184.216.34", 443), 3, None)
+        context.wrap_socket.assert_called_once_with(
+            raw_socket, server_hostname="brand.example"
+        )
+
+    def test_redirect_to_private_destination_is_rejected_before_body_read(self):
+        response = _StubResponse(
+            b"private response must never be consumed",
+            final_url="http://127.0.0.1/admin?token=redirect-secret",
+        )
+        with mock.patch("extract.web_pdf._network_open", return_value=response):
+            draft = extract_from_url("https://example.com/start?api_key=request-secret")
+
+        assert response.read_calls == 0
+        assert not draft["colors"]
+        assert "request-secret" not in str(draft)
+        assert "redirect-secret" not in str(draft)
+
+    def test_public_mocked_destination_still_extracts_without_query_secret(self):
+        response = _StubResponse(_BRAND_STUB_HTML, final_url="https://example.com/final")
+        with mock.patch("extract.web_pdf._network_open", return_value=response):
+            draft = extract_from_url("https://example.com/brand?token=do-not-persist")
+
+        assert response.read_calls >= 1
+        assert draft["colors"]["primary"]["hex"] == "#5A597A"
+        assert "do-not-persist" not in str(draft)

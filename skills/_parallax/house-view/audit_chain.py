@@ -10,8 +10,9 @@ import hashlib
 import json
 import logging
 import os
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 import rfc8785
 
@@ -22,6 +23,7 @@ _AUDIT_FILE_MODE = 0o600
 _TAIL_READ_INITIAL_BYTES = 32 * 1024
 _TAIL_READ_MAX_BYTES = 4 * 1024 * 1024  # 4 MiB ceiling; raises beyond this
 _AUDIT_ENTRY_WARN_BYTES = 256 * 1024  # ~5x realistic max; warn before silent drift
+_VIEW_TRANSACTION_LOCK = ".house-view.lock"
 
 
 class AuditChainError(Exception):
@@ -38,6 +40,33 @@ class AuditFileMalformed(AuditChainError):
 
 class AuditTailReadFailed(AuditChainError):
     error_code = "audit_tail_read_failed"
+
+
+@contextmanager
+def view_transaction(view_dir: Path) -> Iterator[None]:
+    """Serialize a canonical house-view read/write transaction.
+
+    ``append_entry`` protects the audit file's byte-level hash chain, but a
+    maker save commits ``view.yaml`` plus companion artifacts before its audit
+    row.  A judge therefore needs the same, broader lock while loading the view
+    and appending the row that witnesses what it read.  The dedicated lock file
+    has a stable inode (unlike atomically replaced artifacts), so ``flock``
+    works for threads and independent processes without stale-lock cleanup.
+    """
+    directory = Path(view_dir)
+    directory.mkdir(parents=True, exist_ok=True)
+    lock_path = directory / _VIEW_TRANSACTION_LOCK
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, _AUDIT_FILE_MODE)
+    with os.fdopen(fd, "r+b") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            try:
+                lock_path.chmod(_AUDIT_FILE_MODE)
+            except OSError:
+                pass
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def compute_entry_hash(entry: dict[str, Any]) -> str:

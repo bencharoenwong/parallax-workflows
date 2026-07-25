@@ -11,30 +11,106 @@ import pytest
 
 REPO = Path(__file__).resolve().parent.parent.parent.parent.parent
 SKILLS_DIR = REPO / "skills"
-DISABLED_DIR = SKILLS_DIR / ".disabled"
 SHARED_DIR = REPO / "skills" / "_parallax" / "house-view"
 MAKER_DIR = REPO / "skills" / "parallax-make-house-view"
 JUDGE_DIR = REPO / "skills" / "parallax-judge-house-view"
+STRESS_DIR = REPO / "skills" / "parallax-stress-house-view"
 
-for _path in (SHARED_DIR, MAKER_DIR, JUDGE_DIR):
-    if str(_path) not in sys.path:
-        sys.path.insert(0, str(_path))
+RUNTIME_TREES = (
+    (SHARED_DIR, Path("_parallax/house-view")),
+    (MAKER_DIR, Path("parallax-make-house-view")),
+    (JUDGE_DIR, Path("parallax-judge-house-view")),
+    (STRESS_DIR, Path("parallax-stress-house-view")),
+)
+RUNTIME_MODULE_NAMES = {
+    path.stem
+    for source, _ in RUNTIME_TREES
+    for path in source.glob("*.py")
+}
+
+
+def _ignore_non_runtime_files(_directory: str, names: list[str]) -> set[str]:
+    """Keep the replica producer-realistic without copying tests or caches."""
+    return {
+        name
+        for name in names
+        if name == "tests" or name == "__pycache__" or name.endswith(".pyc")
+    }
+
+
+@pytest.fixture
+def isolated_skills(tmp_path: Path):
+    """Replicate installed runtime trees and isolate their bare imports.
+
+    House-view skills use sibling-directory discovery and bare module imports,
+    so the replica preserves the installed ``skills/`` layout.  Saving and
+    restoring same-named modules prevents this fixture from contaminating
+    other house-view tests when the whole root runs in one pytest process.
+    """
+    skills_dir = tmp_path / "replica" / "skills"
+    for source, relative_destination in RUNTIME_TREES:
+        shutil.copytree(
+            source,
+            skills_dir / relative_destination,
+            ignore=_ignore_non_runtime_files,
+        )
+
+    runtime_paths = (
+        skills_dir / "_parallax" / "house-view",
+        skills_dir / "parallax-make-house-view",
+        skills_dir / "parallax-judge-house-view",
+        skills_dir / "parallax-stress-house-view",
+    )
+    original_sys_path = sys.path[:]
+    previous_modules = {
+        name: sys.modules[name]
+        for name in RUNTIME_MODULE_NAMES
+        if name in sys.modules
+    }
+    for name in RUNTIME_MODULE_NAMES:
+        sys.modules.pop(name, None)
+    for path in reversed(runtime_paths):
+        sys.path.insert(0, str(path))
+
+    try:
+        yield skills_dir
+    finally:
+        sys.path[:] = original_sys_path
+        for name in RUNTIME_MODULE_NAMES:
+            sys.modules.pop(name, None)
+        sys.modules.update(previous_modules)
 
 @contextmanager
-def temporarily_disabled(skill_name: str):
-    """Move skills/<skill_name>/ to .disabled/ for the duration, restore on exit."""
-    src = SKILLS_DIR / skill_name
-    dst = DISABLED_DIR / skill_name
+def temporarily_disabled(skills_dir: Path, skill_name: str):
+    """Disable a skill inside an isolated installed-tree replica."""
+    src = skills_dir / skill_name
+    disabled_dir = skills_dir / ".disabled"
+    dst = disabled_dir / skill_name
     if not src.exists():
         raise RuntimeError(f"Skill not found: {src}")
-    DISABLED_DIR.mkdir(exist_ok=True)
+    disabled_dir.mkdir(exist_ok=True)
     shutil.move(str(src), str(dst))
     try:
         yield
     finally:
         shutil.move(str(dst), str(src))
-        if DISABLED_DIR.exists() and not any(DISABLED_DIR.iterdir()):
-            DISABLED_DIR.rmdir()
+        if not any(disabled_dir.iterdir()):
+            disabled_dir.rmdir()
+
+
+def checkout_metadata_snapshot() -> dict[str, tuple[int, int, int, int]]:
+    """Capture checkout inode/mtime metadata for uninstall-sensitive trees."""
+    snapshot = {}
+    for root in (MAKER_DIR, JUDGE_DIR):
+        for path in (root, *sorted(root.rglob("*"))):
+            stat = path.lstat()
+            snapshot[str(path.relative_to(SKILLS_DIR))] = (
+                stat.st_ino,
+                stat.st_mtime_ns,
+                stat.st_size,
+                stat.st_mode,
+            )
+    return snapshot
 
 def seed_active_view_from_golden(tmp_path: Path):
     golden_dir = REPO / "skills" / "_parallax" / "house-view" / "tests" / "golden" / "pre_v2_house_view"
@@ -142,7 +218,11 @@ def structural_diff(d1: Any, d2: Any, exclude_keys: set[str], path: str = "") ->
             diffs.append(f"{path}: {d1} != {d2}")
     return diffs
 
-def test_disable_maker_leaves_judge_functional(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_disable_maker_leaves_judge_functional(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_skills: Path,
+):
     """With make-house-view disabled, judge still runs (operates on
     whatever view is active; doesn't depend on maker for read-only
     judgment).
@@ -150,7 +230,7 @@ def test_disable_maker_leaves_judge_functional(tmp_path: Path, monkeypatch: pyte
     monkeypatch.setenv("PARALLAX_HOUSE_VIEW_DIR", str(tmp_path))
     seed_active_view_from_golden(tmp_path)
 
-    with temporarily_disabled("parallax-make-house-view"):
+    with temporarily_disabled(isolated_skills, "parallax-make-house-view"):
         import judge
         
         config = judge.JudgeConfig(
@@ -167,7 +247,11 @@ def test_disable_maker_leaves_judge_functional(tmp_path: Path, monkeypatch: pyte
         assert result.severity in ("drift_minor", "drift_moderate", "drift_material")
         assert any("maker modules unavailable" in d for d in result.diagnostics)
 
-def test_disable_judge_leaves_maker_functional_and_consumers_skip_gracefully(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_disable_judge_leaves_maker_functional_and_consumers_skip_gracefully(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_skills: Path,
+):
     """With judge-house-view disabled:
        (a) maker still works (synthesize + save) using mocked MCP.
        (b) Auto-on-load drift check in consumer skills (per Phase F)
@@ -175,7 +259,7 @@ def test_disable_judge_leaves_maker_functional_and_consumers_skip_gracefully(tmp
     """
     monkeypatch.setenv("PARALLAX_HOUSE_VIEW_DIR", str(tmp_path))
 
-    with temporarily_disabled("parallax-judge-house-view"):
+    with temporarily_disabled(isolated_skills, "parallax-judge-house-view"):
         import maker
         import gate_present
         
@@ -206,12 +290,19 @@ def test_disable_judge_leaves_maker_functional_and_consumers_skip_gracefully(tmp
         assert (tmp_path / "view.yaml").exists()
         assert result.view_id is not None
 
-        pattern_md = (SHARED_DIR / "auto-on-load-judge-pattern.md").read_text()
+        pattern_md = (
+            isolated_skills / "_parallax" / "house-view" / "auto-on-load-judge-pattern.md"
+        ).read_text()
         assert "not installed; drift check skipped" in pattern_md
         assert ("Do NOT fail" in pattern_md) or ("graceful" in pattern_md.lower())
-        assert not (SKILLS_DIR / "parallax-judge-house-view").exists()
+        assert not (isolated_skills / "parallax-judge-house-view").exists()
 
-def test_disable_both_yields_structural_audit_parity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+
+def test_disable_both_yields_structural_audit_parity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_skills: Path,
+):
     """With both make and judge disabled, load-house-view's ingest output
     must be structurally identical to the pre-v2 golden baseline.
 
@@ -231,7 +322,9 @@ def test_disable_both_yields_structural_audit_parity(tmp_path: Path, monkeypatch
     """
     monkeypatch.setenv("PARALLAX_HOUSE_VIEW_DIR", str(tmp_path))
 
-    with temporarily_disabled("parallax-make-house-view"), temporarily_disabled("parallax-judge-house-view"):
+    with temporarily_disabled(
+        isolated_skills, "parallax-make-house-view"
+    ), temporarily_disabled(isolated_skills, "parallax-judge-house-view"):
         run_load_house_view_against_fixture(
             fixture=None,
             view_dir=tmp_path,
@@ -266,3 +359,24 @@ def test_disable_both_yields_structural_audit_parity(tmp_path: Path, monkeypatch
             assert len(entries) > 0
         except Exception as e:
             pytest.fail(f"Audit chain broken: {e}")
+
+
+@pytest.mark.parametrize(
+    "skill_name",
+    ("parallax-make-house-view", "parallax-judge-house-view"),
+)
+def test_injected_failure_restores_replica_without_touching_checkout(
+    isolated_skills: Path,
+    skill_name: str,
+):
+    """An exception during disable cannot alter the tracked checkout."""
+    checkout_before = checkout_metadata_snapshot()
+
+    with pytest.raises(RuntimeError, match="injected uninstall failure"):
+        with temporarily_disabled(isolated_skills, skill_name):
+            assert not (isolated_skills / skill_name).exists()
+            raise RuntimeError("injected uninstall failure")
+
+    assert (isolated_skills / skill_name).is_dir()
+    assert not (isolated_skills / ".disabled").exists()
+    assert checkout_metadata_snapshot() == checkout_before

@@ -84,14 +84,13 @@ def test_full_integration_flow():
             methodology="Empirical calibration v1",
             backtest_ref="bt-789"
         )
-        cache = manifest_cache.ManifestCache(cache_dir, TRUSTED_KEYS_PATH)
+        cache = manifest_cache.ManifestCache(
+            cache_dir, TRUSTED_KEYS_PATH, allow_test_keys=True
+        )
         cache.put(manifest_data)
 
         # --- SIMULATE SKILL STEP 4 ---
         view_hash = "abc123canonical"
-        uploader_role = "CIO"
-        basis_statement = "IC Meeting 2026-04"
-        parent_version_id = None
 
         # Step 4.1a: Load manifest
         try:
@@ -133,7 +132,9 @@ def test_full_integration_flow():
         if status == "ACTIVE":
             # In actual skill, manifest_ref_hash and signing_payload_hash would come from verify_manifest result
             import manifest_verify
-            result = manifest_verify.verify_manifest(manifest, TRUSTED_KEYS_PATH)
+            result = manifest_verify.verify_manifest(
+                manifest, TRUSTED_KEYS_PATH, allow_test_keys=True
+            )
             
             chain_path = chain_emit.emit_chain(
                 view=view_hash, # Using view_hash as dummy for the view content here
@@ -180,12 +181,11 @@ def test_phase_0_fallback_flow():
 
         # --- SIMULATE SKILL STEP 4 ---
         view_hash = "abc123fallback"
-        uploader_role = "PM"
-        basis_statement = "Tactical adjustment"
-        parent_version_id = "parent-uuid"
 
         # Step 4.1a: Load manifest (will fail to find anything)
-        cache = manifest_cache.ManifestCache(cache_dir, TRUSTED_KEYS_PATH)
+        cache = manifest_cache.ManifestCache(
+            cache_dir, TRUSTED_KEYS_PATH, allow_test_keys=True
+        )
         try:
             manifest = manifest_cache.load_manifest(
                 fresh_manifest=None,
@@ -226,7 +226,9 @@ def test_phase_0_fallback_flow():
         if status == "ACTIVE":
             # In actual skill, manifest_ref_hash and signing_payload_hash would come from verify_manifest result
             import manifest_verify
-            result = manifest_verify.verify_manifest(manifest, TRUSTED_KEYS_PATH)
+            result = manifest_verify.verify_manifest(
+                manifest, TRUSTED_KEYS_PATH, allow_test_keys=True
+            )
             
             chain_path = chain_emit.emit_chain(
                 view=view_hash, # Using view_hash as dummy for the view content here
@@ -261,7 +263,6 @@ def test_phase_0_fallback_flow():
 
 if __name__ == "__main__":
     import yaml
-    from datetime import datetime
     try:
         test_full_integration_flow()
         test_phase_0_fallback_flow()

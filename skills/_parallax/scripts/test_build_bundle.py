@@ -16,6 +16,18 @@ import build_bundle as bb
 SKILLS = bb.SKILLS_DIR
 
 
+@pytest.fixture(autouse=True)
+def allow_builtin_only_scan_in_tests(tmp_path, monkeypatch):
+    """CI intentionally lacks the local private term list.
+
+    Production builds remain fail-closed; tests that exercise the public,
+    self-contained canaries explicitly opt into that reduced fixture.
+    """
+    monkeypatch.setattr(
+        bb, "EXTRA_CANARY_FILE", tmp_path / "absent-extra-terms.txt")
+    monkeypatch.setenv(bb.PARTIAL_SCAN_ENV, "1")
+
+
 @pytest.mark.parametrize("rel", sorted(bb.TRANSFORMS))
 def test_transform_applies_to_current_source(rel):
     src = (SKILLS / rel).read_text(encoding="utf-8")
@@ -149,7 +161,10 @@ def test_canary_scan_passes_on_clean_tree(tmp_path):
 
 
 def test_plugin_skill_dirs_exist_and_have_skill_md():
-    for name in bb.PLUGIN_SKILLS:
+    # effective_plugin_skills() filters to this repo's dirs (tap output excludes
+    # some skills); assert the filtered set is coherent and non-trivial.
+    assert len(bb.effective_plugin_skills()) >= 20
+    for name in bb.effective_plugin_skills():
         assert (SKILLS / name / "SKILL.md").is_file(), name
 
 
@@ -308,6 +323,11 @@ def test_tracked_plugin_bundle_matches_source(tmp_path, monkeypatch):
     followed by a rebuild silently ships a stale bundle (commit 2e344f8 dropped
     an unused import from a source test and left the bundle copy behind). Build
     into a temp dir and diff against the tracked tree."""
+    tracked = bb.REPO_ROOT / "plugin"
+    tracked_marketplace = bb.REPO_ROOT / ".claude-plugin" / "marketplace.json"
+    if not tracked.is_dir() or not tracked_marketplace.is_file():
+        pytest.skip("this checkout does not track plugin build artifacts")
+
     built = tmp_path / "plugin"
     built_marketplace = tmp_path / "marketplace.json"
     monkeypatch.setattr(bb, "PLUGIN_DIR", built)
@@ -317,12 +337,10 @@ def test_tracked_plugin_bundle_matches_source(tmp_path, monkeypatch):
     # marketplace.json is a tracked build output too — and it is the file the
     # marketplace installer reads. Its name/owner/source/description exist
     # nowhere else, so plugin.json does not cover a stale copy.
-    tracked_marketplace = bb.REPO_ROOT / ".claude-plugin" / "marketplace.json"
     assert built_marketplace.read_bytes() == tracked_marketplace.read_bytes(), (
         ".claude-plugin/marketplace.json is stale — run: "
         "python3 skills/_parallax/scripts/build_bundle.py plugin")
 
-    tracked = bb.REPO_ROOT / "plugin"
     built_files = {p.relative_to(built) for p in built.rglob("*") if p.is_file()}
     tracked_files_ = {p.relative_to(tracked) for p in tracked.rglob("*")
                       if p.is_file() and "__pycache__" not in p.parts}
@@ -338,7 +356,8 @@ def test_tracked_plugin_bundle_matches_source(tmp_path, monkeypatch):
         "\n".join(stale[:10]))
 
 
-def test_canary_allowlist_does_not_mask_sibling_identifiers(tmp_path):
+def test_canary_allowlist_does_not_mask_sibling_identifiers(
+        tmp_path, monkeypatch):
     """An allowlist entry can END with a scan term (the published field does).
     Unbounded `str.replace` masking then stripped that term out of every sibling
     identifier sharing the prefix — `<field>_raw`, `<field>_internal` — and
@@ -346,6 +365,8 @@ def test_canary_allowlist_does_not_mask_sibling_identifiers(tmp_path):
 
     Siblings are constructed from the allowlist at runtime; nothing is spelled
     out, so this stays safe to track in a public repo."""
+    overlap = bb.CANARY_ALLOWLIST[0].rsplit("_", 1)[-1]
+    monkeypatch.setattr(bb, "CANARY_TERMS", [overlap])
     terms = [t.lower() for t in bb.load_canary_terms()]
     checked = 0
     for i, allowed in enumerate(bb.CANARY_ALLOWLIST):
@@ -361,7 +382,7 @@ def test_canary_allowlist_does_not_mask_sibling_identifiers(tmp_path):
             with pytest.raises(bb.BuildError, match="term scan failed"):
                 bb.canary_scan(planted)
             checked += 1
-    assert checked, "no allowlist entry overlaps a scan term — test is vacuous"
+    assert checked, "synthetic allowlist overlap was not exercised"
 
 
 def test_canary_allowlist_masking_cannot_manufacture_a_hit(tmp_path, monkeypatch):
@@ -421,9 +442,9 @@ def test_load_canary_terms_allows_explicit_partial_scan(tmp_path, monkeypatch):
     assert bb.load_canary_terms() == list(bb.CANARY_TERMS)
 
 
-def test_load_canary_terms_includes_extra_file_when_present():
-    """Guards the real machine path: the local list must actually be picked up,
-    not just tolerated."""
-    if not bb.EXTRA_CANARY_FILE.exists():
-        pytest.skip("extra scan-term file not present on this machine")
+def test_load_canary_terms_includes_extra_file_when_present(tmp_path, monkeypatch):
+    """An available extra list is loaded in addition to built-in terms."""
+    extra_file = tmp_path / "extra-terms.txt"
+    extra_file.write_text("# comment\nprivate_marker\n", encoding="utf-8")
+    monkeypatch.setattr(bb, "EXTRA_CANARY_FILE", extra_file)
     assert len(bb.load_canary_terms()) > len(bb.CANARY_TERMS)

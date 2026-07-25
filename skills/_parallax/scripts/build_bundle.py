@@ -50,7 +50,7 @@ EXTRA_CANARY_FILE = Path.home() / ".claude" / "parallax-canary-extra.txt"
 PLUGIN_VERSION = "0.1.0"
 PLUGIN_DESCRIPTION = (
     "Parallax equity-research workflows: stock evaluation, portfolio analysis, "
-    "screening, translation, and client-review skills powered by the Parallax MCP server."
+    "screening, and client-review skills powered by the Parallax MCP server."
 )
 
 # General-release skill set (same tiering convention as build-skills.sh:
@@ -246,6 +246,20 @@ def _drop_line(text: str, line: str, label: str) -> str:
     return _swap(text, line + "\n", "", label, what="line")
 
 
+def _drop_line_prefix(text: str, prefix: str, label: str) -> str:
+    """Drop the single line starting with `prefix`. Tolerates suffix drift
+    (the tap sync flattens markdown links downstream, so the same source line
+    is bracketed in parallax-workflows and plain in parallax-agent). Still
+    fails loudly when the line is absent or ambiguous."""
+    matches = [ln for ln in text.splitlines() if ln.startswith(prefix)]
+    if not matches:
+        raise BuildError(f"transform anchor not found ({label}): line prefix")
+    if len(matches) > 1:
+        raise BuildError(
+            f"transform anchor not unique ({label}): prefix matched {len(matches)} lines")
+    return _swap(text, matches[0] + "\n", "", label, what="line")
+
+
 def _swap_every(text: str, old: str, new: str, label: str) -> str:
     """Replace EVERY occurrence. For anchors that legitimately recur (a command
     named in several error messages); still fails loudly when none match, so a
@@ -375,10 +389,9 @@ def transform_portfolio_builder(text: str) -> str:
     plugin. Removing the reference also stops the doc from being bundled —
     examples/ files ship only when a shipped skill still references them. The
     source SKILL.md keeps the link for full-clone users who have that layer."""
-    return _drop_line(
+    return _drop_line_prefix(
         text,
-        "- **Operator verification:** see "
-        "[examples/testing-posture.md](../../examples/testing-posture.md)",
+        "- **Operator verification:** see ",
         "portfolio-builder operator-verification link")
 
 
@@ -758,11 +771,26 @@ def replace_description(skill_md: Path, new_desc: str) -> None:
 # plugin subcommand
 # --------------------------------------------------------------------------
 
+def effective_plugin_skills() -> list[str]:
+    """PLUGIN_SKILLS filtered to dirs present in THIS repo. The list is shared
+    between parallax-workflows (full set) and the parallax-agent tap output
+    (which excludes some skills, e.g. translate-*). Missing entries are
+    reported loudly, never silently; an empty result is a hard error."""
+    present = [n for n in PLUGIN_SKILLS if (SKILLS_DIR / n / "SKILL.md").is_file()]
+    missing = [n for n in PLUGIN_SKILLS if n not in present]
+    if missing:
+        print(f"  ! plugin list: {len(missing)} skill(s) absent in this repo, "
+              f"excluded from bundle: {', '.join(missing)}", file=sys.stderr)
+    if not present:
+        raise BuildError("no PLUGIN_SKILLS present in this repo; nothing to bundle")
+    return present
+
+
 def build_plugin() -> None:
     staging = Path(tempfile.mkdtemp(prefix="parallax-plugin-"))
     try:
         skills_root = staging / "skills"
-        for name in PLUGIN_SKILLS:
+        for name in effective_plugin_skills():
             assemble_skill(name, skills_root)
         assemble_parallax_shared(skills_root)
 
@@ -813,7 +841,7 @@ def build_plugin() -> None:
         }],
     }, indent=2) + "\n", encoding="utf-8")
 
-    n_skills = len(PLUGIN_SKILLS)
+    n_skills = len(effective_plugin_skills())
     print(f"  ✓ plugin bundle → {PLUGIN_DIR} ({n_skills} skills)")
     print(f"  ✓ marketplace manifest → {MARKETPLACE_FILE}")
 

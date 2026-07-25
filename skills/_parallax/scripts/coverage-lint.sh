@@ -179,7 +179,8 @@ check_cio_letter_prep_structure() {
   # 6. Optionally run the actual test suite. Strongest check; gated on pytest.
   if command -v pytest >/dev/null 2>&1; then
     if [[ -d "$scripts_dir" ]]; then
-      if ! pytest "$scripts_dir" -q --no-header >/tmp/cio-letter-prep-pytest.log 2>&1; then
+      if ! PYTHONDONTWRITEBYTECODE=1 pytest "$scripts_dir" -q --no-header \
+          -p no:cacheprovider >/tmp/cio-letter-prep-pytest.log 2>&1; then
         violations=$((violations + 1))
         echo "FAIL  $scripts_dir: pytest suite failed (see /tmp/cio-letter-prep-pytest.log)"
         # Surface the tail so CI logs include the failure summary inline.

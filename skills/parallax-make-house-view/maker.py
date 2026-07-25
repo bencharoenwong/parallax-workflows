@@ -570,6 +570,20 @@ class MakerOrchestrator:
         mcp_responses: MCPResponses,
         covered_markets: list[str],
     ) -> tuple[dict[str, Path], str, str, dict[str, Any], Path | None]:
+        """Commit canonical artifacts and their audit row as one transaction."""
+        with audit_chain.view_transaction(Path(self.options.view_dir)):
+            return self._save_view_locked(
+                view, pillars, aggregated, mcp_responses, covered_markets
+            )
+
+    def _save_view_locked(
+        self,
+        view: dict[str, Any],
+        pillars: dict[str, PillarResult],
+        aggregated: dict[str, Any],
+        mcp_responses: MCPResponses,
+        covered_markets: list[str],
+    ) -> tuple[dict[str, Path], str, str, dict[str, Any], Path | None]:
         """Compute hashes, write files, append audit, emit chain.
 
         Returns (saved_paths, view_id, version_id, audit_entry, chain_path).

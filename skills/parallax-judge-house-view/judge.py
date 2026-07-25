@@ -870,6 +870,24 @@ def run_judge(
     llm_call_fn: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     covered_markets: set[str] | None = None,
 ) -> JudgeResult:
+    """Run against one committed view and audit that same snapshot."""
+    resolved_config = config or JudgeConfig()
+    with audit_chain.view_transaction(Path(resolved_config.view_dir)):
+        return _run_judge_locked(
+            config=resolved_config,
+            mcp_call_fn=mcp_call_fn,
+            llm_call_fn=llm_call_fn,
+            covered_markets=covered_markets,
+        )
+
+
+def _run_judge_locked(
+    *,
+    config: JudgeConfig | None = None,
+    mcp_call_fn: Callable[..., dict[str, Any]] | None = None,
+    llm_call_fn: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    covered_markets: set[str] | None = None,
+) -> JudgeResult:
     """Top-level orchestrator. Implements Phases 0-8 from v2 plan §3.1.
 
     Args:

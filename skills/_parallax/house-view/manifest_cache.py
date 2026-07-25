@@ -180,11 +180,17 @@ class ManifestCache:
         self,
         cache_dir: Path | str | None = None,
         trusted_keys_path: Path | str | None = None,
+        *,
+        allow_test_keys: bool = False,
     ):
         self.cache_dir = Path(cache_dir) if cache_dir is not None else DEFAULT_CACHE_DIR
         if trusted_keys_path is None:
             trusted_keys_path = _HERE / "signing" / "trusted_keys.json"
         self.trusted_keys_path = Path(trusted_keys_path)
+        # Accept `use: "test-only"` signing keys. Default False (production
+        # posture); test harnesses opt in. Threaded into every
+        # verify_manifest call this cache (and load_manifest) makes.
+        self.allow_test_keys = allow_test_keys
 
     # ----- Permission helpers -----
 
@@ -261,7 +267,8 @@ class ManifestCache:
         if verify:
             try:
                 manifest_verify.verify_manifest(
-                    manifest, self.trusted_keys_path, now=now
+                    manifest, self.trusted_keys_path, now=now,
+                    allow_test_keys=self.allow_test_keys,
                 )
             except manifest_verify.ManifestVerificationError as e:
                 raise CacheCorrupt(
@@ -397,7 +404,8 @@ def load_manifest(
     if fresh_manifest is not None:
         try:
             manifest_verify.verify_manifest(
-                fresh_manifest, cache.trusted_keys_path, now=effective_now
+                fresh_manifest, cache.trusted_keys_path, now=effective_now,
+                allow_test_keys=cache.allow_test_keys,
             )
         except manifest_verify.KeyIdUnknown:
             # Schema spec §6.2 step 2: do NOT discard the cached manifest

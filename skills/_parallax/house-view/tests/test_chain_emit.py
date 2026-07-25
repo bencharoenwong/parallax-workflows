@@ -29,8 +29,7 @@ import os
 import stat
 import sys
 import tempfile
-import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import rfc8785
@@ -91,7 +90,9 @@ def _build_signed_manifest(
 
 
 def _verify(manifest: dict) -> dict:
-    return manifest_verify.verify_manifest(manifest, TRUSTED_KEYS_PATH)
+    return manifest_verify.verify_manifest(
+        manifest, TRUSTED_KEYS_PATH, allow_test_keys=True
+    )
 
 
 def _minimal_emit_kwargs(tmpdir: Path) -> dict:
@@ -335,7 +336,8 @@ def main() -> int:
             failures += 1
         except Exception as e:
             print(f"ERROR {t.__name__}: {type(e).__name__}: {e}")
-            import traceback; traceback.print_exc()
+            import traceback
+            traceback.print_exc()
             failures += 1
     if failures:
         print(f"\n{failures} test(s) failed.")
