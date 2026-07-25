@@ -33,10 +33,10 @@ _STYLESHEET_TOTAL_TIMEOUT_SECONDS = 8
 # leaves their bodies behind, and on a modern page the head is dominated by
 # minified JS/CSS/JSON-LD — enough to fill the voice corpus's leading-token
 # window with script noise while word_count still looks healthy.
-_NON_PROSE_BLOCKS = re.compile(
-    r"<(script|style|template|noscript)\b[^>]*>.*?</\s*\1\s*>|<!--.*?-->",
-    re.IGNORECASE | re.DOTALL,
-)
+_NON_PROSE_TAGS = ("script", "style", "template", "noscript")
+_COMMENT_OPEN = "<!--"
+_COMMENT_CLOSE = "-->"
+_TAG_NAME_TERMINATORS = " \t\r\n\f/>"
 
 
 class UrlNotPublicError(ValueError):
@@ -48,9 +48,61 @@ class UrlNotPublicError(ValueError):
     """
 
 
+def _non_prose_opener_at(lowered: str, index: int) -> tuple[str, bool] | None:
+    """Classify the `<` at `index`. Returns (closing delimiter, is_comment)."""
+    if lowered.startswith(_COMMENT_OPEN, index):
+        return _COMMENT_CLOSE, True
+    for tag in _NON_PROSE_TAGS:
+        if not lowered.startswith(tag, index + 1):
+            continue
+        after = index + 1 + len(tag)
+        if after >= len(lowered) or lowered[after] in _TAG_NAME_TERMINATORS:
+            return "</" + tag, False
+    return None
+
+
+def _strip_non_prose_blocks(raw_html: str) -> str:
+    """Drop script/style/template/noscript bodies and HTML comments.
+
+    Single forward pass: every `<` is inspected once and both the opener and
+    closer searches advance monotonically, so cost is O(len). A lazy DOTALL
+    regex instead re-scans to end-of-document for each *unterminated* opener —
+    O(openers x length), which a hostile page hits deliberately and which the
+    5 MB fetch cap is far too generous to contain. An opener with no closer
+    consumes the rest of the document, since that content is markup either way.
+    """
+    lowered = raw_html.lower()
+    length = len(raw_html)
+    parts: list[str] = []
+    cursor = 0
+    search = 0
+    while True:
+        opener = lowered.find("<", search)
+        if opener == -1:
+            break
+        matched = _non_prose_opener_at(lowered, opener)
+        if matched is None:
+            search = opener + 1
+            continue
+        closer, is_comment = matched
+        parts.append(raw_html[cursor:opener])
+        end = lowered.find(closer, opener + 1)
+        if end == -1:
+            cursor = length
+            break
+        if is_comment:
+            cursor = end + len(_COMMENT_CLOSE)
+        else:
+            gt = lowered.find(">", end + len(closer))
+            cursor = length if gt == -1 else gt + 1
+        search = cursor
+    parts.append(raw_html[cursor:])
+    return " ".join(parts)
+
+
 def _html_to_page_text(raw_html: str) -> str:
     """Strip markup to a prose corpus, dropping non-prose block bodies first."""
-    return re.sub(r"<[^>]+>", " ", _NON_PROSE_BLOCKS.sub(" ", raw_html))
+    return re.sub(r"<[^>]+>", " ", _strip_non_prose_blocks(raw_html))
 
 
 def _sanitized_url(url: str) -> str:

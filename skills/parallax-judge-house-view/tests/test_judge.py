@@ -500,3 +500,39 @@ def test_view_replaced_mid_run_aborts_before_the_audit_append(
         ))
 
     assert (active_view_dir / "audit.jsonl").read_text() == audit_before
+
+
+@pytest.mark.parametrize("field", ["view_id", "version_id", "upload_timestamp"])
+def test_metadata_only_supersede_mid_run_aborts_the_audit_append(
+    active_view_dir: Path,
+    report_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+):
+    """compute_view_hash covers tilts + excludes only, so a save whose tilts
+    land on identical values still mints fresh metadata. The audit row cites
+    that metadata, so hash equality alone must not certify the append."""
+    monkeypatch.setattr("chain_emit.DEFAULT_CHAIN_DIR", tmp_path / "chains")
+    original_fan_out = judge.phase_1_fan_out
+
+    def supersede_then_fan_out(config, mcp_call_fn):
+        view_path = active_view_dir / "view.yaml"
+        data = yaml.safe_load(view_path.read_text())
+        data["metadata"][field] = f"superseded-{field}"
+        view_path.write_text(yaml.safe_dump(data, sort_keys=False))
+        return original_fan_out(config, mcp_call_fn)
+
+    monkeypatch.setattr(judge, "phase_1_fan_out", supersede_then_fan_out)
+    audit_before = (active_view_dir / "audit.jsonl").read_text()
+
+    with pytest.raises(judge.ViewChangedDuringJudge, match="superseded"):
+        judge.run_judge(config=judge.JudgeConfig(
+            dry=True,
+            mock_mcp_responses={},
+            explicit=True,
+            view_dir=active_view_dir,
+            report_dir=report_dir,
+        ))
+
+    assert (active_view_dir / "audit.jsonl").read_text() == audit_before

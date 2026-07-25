@@ -323,6 +323,33 @@ class TestUrlFallbackRegression:
             assert noise not in corpus, f"{noise} leaked into the voice corpus"
         assert "Disciplined capital allocation" in corpus
 
+    @pytest.mark.parametrize("tag", ["script", "style", "template", "noscript"])
+    def test_non_prose_stripping_is_linear_on_unterminated_openers(self, tag):
+        """A lazy DOTALL regex re-scans to end-of-document for every opener
+        that never closes, so a hostile page of bare openers hangs the
+        session. The scan must stay linear."""
+        import time
+
+        hostile = f"<{tag}>" * 40_000 + "x" * 400_000
+        start = time.monotonic()
+        out = web_pdf_module._strip_non_prose_blocks(hostile)
+        assert time.monotonic() - start < 2.0
+        assert out.strip() == ""
+
+    def test_non_prose_stripping_preserves_lookalike_tag_names(self):
+        """`<scripture>` shares a prefix with `<script>` but is not a
+        non-prose block; only a real tag-name boundary may trigger a strip."""
+        out = web_pdf_module._strip_non_prose_blocks(
+            "<scripture>keepme</scripture><script>dropme</script>")
+        assert "keepme" in out
+        assert "dropme" not in out
+
+    def test_unterminated_opener_consumes_the_remaining_document(self):
+        out = web_pdf_module._strip_non_prose_blocks(
+            "<p>keepme</p><script>var x = '</p>not prose'")
+        assert "keepme" in out
+        assert "not prose" not in out
+
     def test_non_ssrf_failure_is_not_labelled_a_destination_rejection(
             self, monkeypatch):
         """Only a public-address rejection may report 'not public'. A plain

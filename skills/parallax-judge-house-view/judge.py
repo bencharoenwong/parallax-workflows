@@ -864,7 +864,13 @@ def phase_8_emit_chain(
 
 
 class ViewChangedDuringJudge(RuntimeError):
-    """The active view was replaced between phase 0 and the audit append."""
+    """The active view was superseded between phase 0 and the audit append."""
+
+
+# The audit row cites metadata that compute_view_hash deliberately excludes
+# (it hashes tilts + excludes only), so hash equality alone does not certify
+# that the row's identity fields still describe the committed view.
+_AUDIT_CITED_METADATA = ("view_id", "version_id", "upload_timestamp")
 
 
 def _resolved_view_dir(config: JudgeConfig) -> Path:
@@ -874,21 +880,41 @@ def _resolved_view_dir(config: JudgeConfig) -> Path:
     return Path(config.view_dir) if config.view_dir else Path(stress.HOUSE_VIEW_DIR)
 
 
+def _audit_identity(view: stress.View) -> dict[str, str]:
+    """Every committed-view field the judge's audit row will cite."""
+    metadata = view.data.get("metadata", {}) or {}
+    identity = {"view_hash": view.view_hash}
+    for field in _AUDIT_CITED_METADATA:
+        identity[field] = str(metadata.get(field, "<unknown>"))
+    return identity
+
+
 def _assert_view_unchanged(view: stress.View, config: JudgeConfig) -> None:
     """Re-read the committed view under the lock before the audit append.
 
-    Mirrors ``stress.append_stress_audit``'s race guard: the judge's audit row
-    asserts it judged ``view.view_hash``, so a maker save landing during the
-    unlocked network phases must abort the append rather than emit a row that
-    witnesses a view nobody judged.
+    Mirrors ``stress.append_stress_audit``'s race guard, widened to the full
+    identity the row cites: a maker save landing during the unlocked network
+    phases mints a fresh ``version_id`` and ``upload_timestamp`` even when the
+    tilts are byte-identical, so a hash-only check would let the judge stamp a
+    superseded version into a 7-year-retention chain and derive
+    ``view_age_days`` from an upload timestamp that no longer applies.
     """
     current = phase_0_load_view(config.view_dir)
-    if current.view_hash != view.view_hash:
-        raise ViewChangedDuringJudge(
-            "Active house view changed while the judge was running "
-            f"(judged {view.view_hash[:12]}, now {current.view_hash[:12]}); "
-            "no audit row was appended. Re-run /parallax-judge-house-view."
-        )
+    judged = _audit_identity(view)
+    committed = _audit_identity(current)
+    if committed == judged:
+        return
+    changed = ", ".join(
+        f"{field}: {judged[field]!r} -> {committed[field]!r}"
+        for field in judged
+        if judged[field] != committed[field]
+    )
+    raise ViewChangedDuringJudge(
+        "Active house view was superseded while the judge was running "
+        f"({changed}); no audit row was appended and this report describes a "
+        "version that is no longer active. Re-run /parallax-judge-house-view "
+        "to judge the current view."
+    )
 
 
 def run_judge(
