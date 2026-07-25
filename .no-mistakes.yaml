@@ -18,7 +18,10 @@
 # policy, not a quota blip.
 # PRIOR HISTORY: claude from 2026-07-06; acp:gemini from 2026-06-14 (opencode/glm-5.1
 # before that — recurring 429 quota hangs on the review step).
-agent: codex
+# 2026-07-25: codex Plus cap hit mid-gate (locked until Jul 30 per its error);
+# falling back to claude per the documented contingency above. Restore codex
+# after the cap clears if desired (probe `codex exec` first).
+agent: claude
 
 # Perimeter-gate public-repo exception (2026-07-20, user-authorized): this repo is
 # PUBLIC, so the diff an external gate agent receives is already published — egress
