@@ -344,6 +344,36 @@ class TestUrlFallbackRegression:
         assert "keepme" in out
         assert "dropme" not in out
 
+    def test_non_prose_stripping_survives_unicode_case_expansion(self):
+        """U+0130 lowercases to TWO code points, so offsets taken on a
+        case-folded copy drift against the source and slice mid-character.
+        Turkish brand prose ('İstanbul', 'İş Bankası') hits this on every page.
+        """
+        out = web_pdf_module._strip_non_prose_blocks(
+            "İstanbul İş Bankası İzmir keep <script>DROPME</script> tail")
+        assert "DROPME" not in out
+        assert "<" not in out and ">" not in out
+        assert "İstanbul İş Bankası İzmir keep" in out
+        assert "tail" in out
+
+    def test_voice_corpus_strips_scripts_on_unicode_heavy_page(self):
+        page_html = (
+            "<html><body><p>"
+            + "İş " * 200
+            + "</p><script>var noisetokenJs=1;</script>"
+            "<p>İstanbul capital allocation.</p></body></html>"
+        ).encode("utf-8")
+
+        def fake_urlopen(req, timeout=None):
+            return _StubResponse(page_html, content_type="text/html")
+
+        with mock.patch("extract.web_pdf._network_open", fake_urlopen):
+            draft = extract_from_url("https://example.com/")
+
+        corpus = draft["voice_corpus"]["text"]
+        assert "noisetokenJs" not in corpus
+        assert "İstanbul capital allocation." in corpus
+
     def test_unterminated_opener_consumes_the_remaining_document(self):
         out = web_pdf_module._strip_non_prose_blocks(
             "<p>keepme</p><script>var x = '</p>not prose'")

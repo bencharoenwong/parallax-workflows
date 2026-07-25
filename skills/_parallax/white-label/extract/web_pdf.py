@@ -34,9 +34,11 @@ _STYLESHEET_TOTAL_TIMEOUT_SECONDS = 8
 # minified JS/CSS/JSON-LD — enough to fill the voice corpus's leading-token
 # window with script noise while word_count still looks healthy.
 _NON_PROSE_TAGS = ("script", "style", "template", "noscript")
-_COMMENT_OPEN = "<!--"
-_COMMENT_CLOSE = "-->"
-_TAG_NAME_TERMINATORS = " \t\r\n\f/>"
+_COMMENT_KEY = "<!--"
+_NON_PROSE_OPENER_RE = re.compile(
+    r"<(" + "|".join(_NON_PROSE_TAGS) + r")\b[^>]*>|<!--", re.IGNORECASE)
+_NON_PROSE_CLOSER_RE = re.compile(
+    r"</(" + "|".join(_NON_PROSE_TAGS) + r")\s*>|-->", re.IGNORECASE)
 
 
 class UrlNotPublicError(ValueError):
@@ -48,54 +50,54 @@ class UrlNotPublicError(ValueError):
     """
 
 
-def _non_prose_opener_at(lowered: str, index: int) -> tuple[str, bool] | None:
-    """Classify the `<` at `index`. Returns (closing delimiter, is_comment)."""
-    if lowered.startswith(_COMMENT_OPEN, index):
-        return _COMMENT_CLOSE, True
-    for tag in _NON_PROSE_TAGS:
-        if not lowered.startswith(tag, index + 1):
-            continue
-        after = index + 1 + len(tag)
-        if after >= len(lowered) or lowered[after] in _TAG_NAME_TERMINATORS:
-            return "</" + tag, False
-    return None
+def _match_key(match: "re.Match[str]") -> str:
+    return (match.group(1) or "").lower() or _COMMENT_KEY
 
 
 def _strip_non_prose_blocks(raw_html: str) -> str:
     """Drop script/style/template/noscript bodies and HTML comments.
 
-    Single forward pass: every `<` is inspected once and both the opener and
-    closer searches advance monotonically, so cost is O(len). A lazy DOTALL
-    regex instead re-scans to end-of-document for each *unterminated* opener —
-    O(openers x length), which a hostile page hits deliberately and which the
-    5 MB fetch cap is far too generous to contain. An opener with no closer
-    consumes the rest of the document, since that content is markup either way.
+    Positions come from ``re.finditer`` spans over the ORIGINAL string, never a
+    case-folded copy: ``str.lower()`` applies full Unicode case mapping and
+    U+0130 expands to two code points, so offsets taken on a lowered copy drift
+    against the source and slice mid-character.
+
+    One finditer pass per delimiter plus a forward merge keeps the scan O(len).
+    Both patterns are non-backtracking, unlike a lazy DOTALL body, which
+    re-scans to end-of-document for every *unterminated* opener — O(openers x
+    length), which a hostile page hits deliberately and which the 5 MB fetch cap
+    is far too generous to contain. An opener with no closer consumes the rest
+    of the document, since that content is markup either way.
     """
-    lowered = raw_html.lower()
-    length = len(raw_html)
+    openers = [
+        (m.start(), m.end(), _match_key(m))
+        for m in _NON_PROSE_OPENER_RE.finditer(raw_html)
+    ]
+    if not openers:
+        return raw_html
+
+    closers: dict[str, list[tuple[int, int]]] = {}
+    for match in _NON_PROSE_CLOSER_RE.finditer(raw_html):
+        closers.setdefault(_match_key(match), []).append(
+            (match.start(), match.end()))
+    next_closer = dict.fromkeys(closers, 0)
+
     parts: list[str] = []
     cursor = 0
-    search = 0
-    while True:
-        opener = lowered.find("<", search)
-        if opener == -1:
-            break
-        matched = _non_prose_opener_at(lowered, opener)
-        if matched is None:
-            search = opener + 1
+    for start, opener_end, key in openers:
+        if start < cursor:
             continue
-        closer, is_comment = matched
-        parts.append(raw_html[cursor:opener])
-        end = lowered.find(closer, opener + 1)
-        if end == -1:
-            cursor = length
+        parts.append(raw_html[cursor:start])
+        candidates = closers.get(key, ())
+        index = next_closer.get(key, 0)
+        while index < len(candidates) and candidates[index][0] < opener_end:
+            index += 1
+        if key in next_closer:
+            next_closer[key] = index
+        if index >= len(candidates):
+            cursor = len(raw_html)
             break
-        if is_comment:
-            cursor = end + len(_COMMENT_CLOSE)
-        else:
-            gt = lowered.find(">", end + len(closer))
-            cursor = length if gt == -1 else gt + 1
-        search = cursor
+        cursor = candidates[index][1]
     parts.append(raw_html[cursor:])
     return " ".join(parts)
 
