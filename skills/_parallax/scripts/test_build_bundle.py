@@ -183,11 +183,36 @@ def test_canary_scan_passes_on_clean_tree(tmp_path):
 
 
 def test_plugin_skill_dirs_exist_and_have_skill_md():
-    # effective_plugin_skills() filters to this repo's dirs (tap output excludes
-    # some skills); assert the filtered set is coherent and non-trivial.
-    assert len(bb.effective_plugin_skills()) >= 20
-    for name in bb.effective_plugin_skills():
-        assert (SKILLS / name / "SKILL.md").is_file(), name
+    # effective_plugin_skills() filters to this repo's dirs (the tap output
+    # excludes translate-*). Only KNOWN_OPTIONAL_SKILLS may be filtered out —
+    # anything else absent is a typo and must already have raised.
+    effective = bb.effective_plugin_skills()
+    assert effective == [
+        name for name in bb.PLUGIN_SKILLS
+        if (SKILLS / name / "SKILL.md").is_file()
+    ]
+    for name in bb.PLUGIN_SKILLS:
+        if name not in effective:
+            assert name in bb.KNOWN_OPTIONAL_SKILLS, name
+    assert len(effective) >= 20
+
+
+def test_plugin_skills_typo_fails_the_build(monkeypatch):
+    """A renamed/mistyped entry must abort the build, not silently drop the
+    skill from the bundle (both built and tracked trees would then agree on a
+    bundle that is missing a skill)."""
+    monkeypatch.setattr(
+        bb, "PLUGIN_SKILLS", bb.PLUGIN_SKILLS + ["parallax-typoed-skill"])
+    with pytest.raises(bb.BuildError, match="KNOWN_OPTIONAL_SKILLS"):
+        bb.effective_plugin_skills()
+
+
+def test_plugin_description_tracks_the_bundled_skill_set():
+    with_translate = bb.plugin_description(["parallax-deep-dive",
+                                            "translate-thai-finance"])
+    without_translate = bb.plugin_description(["parallax-deep-dive"])
+    assert "screening, translation, and client-review" in with_translate
+    assert "screening, and client-review" in without_translate
 
 
 def test_parallax_allowlist_paths_exist():

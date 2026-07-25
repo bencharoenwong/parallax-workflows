@@ -48,9 +48,13 @@ WEB_OUT_DIR = Path.home() / "Downloads" / "claude-web-skills"
 EXTRA_CANARY_FILE = Path.home() / ".claude" / "parallax-canary-extra.txt"
 
 PLUGIN_VERSION = "0.1.0"
-PLUGIN_DESCRIPTION = (
+# Derived per build from the skills actually bundled: the same source builds
+# parallax-workflows (translate-* present) and the parallax-agent tap output
+# (translate-* absent), and the marketplace listing must match what installs.
+PLUGIN_DESCRIPTION_TEMPLATE = (
     "Parallax equity-research workflows: stock evaluation, portfolio analysis, "
-    "screening, and client-review skills powered by the Parallax MCP server."
+    "screening,{translation} and client-review skills powered by the Parallax "
+    "MCP server."
 )
 
 # General-release skill set (same tiering convention as build-skills.sh:
@@ -83,6 +87,14 @@ PLUGIN_SKILLS = [
     "translate-chinese-finance",
     "translate-thai-finance",
 ]
+
+# PLUGIN_SKILLS entries that are legitimately absent from some checkouts (the
+# parallax-agent tap ships without them). Anything else missing is a typo or an
+# un-updated rename and must fail the build rather than silently shrink it.
+KNOWN_OPTIONAL_SKILLS = {
+    "translate-chinese-finance",
+    "translate-thai-finance",
+}
 
 # General-release web shortlist (claude.ai channel).
 WEB_SKILLS = [
@@ -774,23 +786,39 @@ def replace_description(skill_md: Path, new_desc: str) -> None:
 def effective_plugin_skills() -> list[str]:
     """PLUGIN_SKILLS filtered to dirs present in THIS repo. The list is shared
     between parallax-workflows (full set) and the parallax-agent tap output
-    (which excludes some skills, e.g. translate-*). Missing entries are
-    reported loudly, never silently; an empty result is a hard error."""
+    (which excludes some skills, e.g. translate-*). Only KNOWN_OPTIONAL_SKILLS
+    may be absent — any other missing entry is a typo/rename and raises, so a
+    bad list can never silently shrink the bundle. An empty result is a hard
+    error."""
     present = [n for n in PLUGIN_SKILLS if (SKILLS_DIR / n / "SKILL.md").is_file()]
     missing = [n for n in PLUGIN_SKILLS if n not in present]
+    unexpected = [n for n in missing if n not in KNOWN_OPTIONAL_SKILLS]
+    if unexpected:
+        raise BuildError(
+            f"{len(unexpected)} PLUGIN_SKILLS entry/entries have no SKILL.md and "
+            f"are not in KNOWN_OPTIONAL_SKILLS: {', '.join(unexpected)}")
     if missing:
-        print(f"  ! plugin list: {len(missing)} skill(s) absent in this repo, "
-              f"excluded from bundle: {', '.join(missing)}", file=sys.stderr)
+        print(f"  ! plugin list: {len(missing)} optional skill(s) absent in this "
+              f"repo, excluded from bundle: {', '.join(missing)}", file=sys.stderr)
     if not present:
         raise BuildError("no PLUGIN_SKILLS present in this repo; nothing to bundle")
     return present
 
 
+def plugin_description(skills: list[str]) -> str:
+    """Description matching what this build actually ships."""
+    translation = " translation," if any(
+        n.startswith("translate-") for n in skills) else ""
+    return PLUGIN_DESCRIPTION_TEMPLATE.format(translation=translation)
+
+
 def build_plugin() -> None:
+    skills = effective_plugin_skills()
+    description = plugin_description(skills)
     staging = Path(tempfile.mkdtemp(prefix="parallax-plugin-"))
     try:
         skills_root = staging / "skills"
-        for name in effective_plugin_skills():
+        for name in skills:
             assemble_skill(name, skills_root)
         assemble_parallax_shared(skills_root)
 
@@ -811,7 +839,7 @@ def build_plugin() -> None:
         manifest_dir.mkdir()
         (manifest_dir / "plugin.json").write_text(json.dumps({
             "name": "parallax",
-            "description": PLUGIN_DESCRIPTION,
+            "description": description,
             "version": PLUGIN_VERSION,
             "author": {"name": "Chicago Global", "url": "https://chicago.global"},
             "homepage": "https://chicago.global/parallax",
@@ -836,13 +864,12 @@ def build_plugin() -> None:
         "plugins": [{
             "name": "parallax",
             "source": "./plugin",
-            "description": PLUGIN_DESCRIPTION,
+            "description": description,
             "version": PLUGIN_VERSION,
         }],
     }, indent=2) + "\n", encoding="utf-8")
 
-    n_skills = len(effective_plugin_skills())
-    print(f"  ✓ plugin bundle → {PLUGIN_DIR} ({n_skills} skills)")
+    print(f"  ✓ plugin bundle → {PLUGIN_DIR} ({len(skills)} skills)")
     print(f"  ✓ marketplace manifest → {MARKETPLACE_FILE}")
 
 

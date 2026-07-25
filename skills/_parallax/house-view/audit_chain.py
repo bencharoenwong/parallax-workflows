@@ -24,6 +24,7 @@ _TAIL_READ_INITIAL_BYTES = 32 * 1024
 _TAIL_READ_MAX_BYTES = 4 * 1024 * 1024  # 4 MiB ceiling; raises beyond this
 _AUDIT_ENTRY_WARN_BYTES = 256 * 1024  # ~5x realistic max; warn before silent drift
 _VIEW_TRANSACTION_LOCK = ".house-view.lock"
+_VIEW_DIR_MODE = 0o700
 
 
 class AuditChainError(Exception):
@@ -55,6 +56,10 @@ def view_transaction(view_dir: Path) -> Iterator[None]:
     """
     directory = Path(view_dir)
     directory.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(directory, _VIEW_DIR_MODE)
+    except OSError:
+        pass
     lock_path = directory / _VIEW_TRANSACTION_LOCK
     fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, _AUDIT_FILE_MODE)
     with os.fdopen(fd, "r+b") as lock_file:

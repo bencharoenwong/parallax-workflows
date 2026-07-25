@@ -29,6 +29,29 @@ _MAX_STYLESHEET_LINKS = 5
 _STYLESHEET_READ_CAP = 1 * 1024 * 1024  # 1 MB per stylesheet
 _STYLESHEET_TOTAL_TIMEOUT_SECONDS = 8
 
+# Blocks whose CONTENT is markup machinery, not prose. Stripping tags alone
+# leaves their bodies behind, and on a modern page the head is dominated by
+# minified JS/CSS/JSON-LD — enough to fill the voice corpus's leading-token
+# window with script noise while word_count still looks healthy.
+_NON_PROSE_BLOCKS = re.compile(
+    r"<(script|style|template|noscript)\b[^>]*>.*?</\s*\1\s*>|<!--.*?-->",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+class UrlNotPublicError(ValueError):
+    """A URL destination failed the public-address policy.
+
+    Subclasses ``ValueError`` so existing ``except ValueError`` callers keep
+    working, while letting the extractor distinguish a real destination
+    rejection from an unrelated ValueError raised further down the pipeline.
+    """
+
+
+def _html_to_page_text(raw_html: str) -> str:
+    """Strip markup to a prose corpus, dropping non-prose block bodies first."""
+    return re.sub(r"<[^>]+>", " ", _NON_PROSE_BLOCKS.sub(" ", raw_html))
+
 
 def _sanitized_url(url: str) -> str:
     """Return a log-safe URL without credentials, query parameters, or fragment."""
@@ -69,7 +92,7 @@ def _resolve_public_url(url: str) -> tuple[str, int, str]:
             raise ValueError
         port = parsed.port or (443 if parsed.scheme == "https" else 80)
     except (TypeError, ValueError):
-        raise ValueError("URL destination is not public") from None
+        raise UrlNotPublicError("URL destination is not public") from None
 
     host = parsed.hostname
     addresses: list[str] = []
@@ -85,14 +108,14 @@ def _resolve_public_url(url: str) -> tuple[str, int, str]:
             try:
                 answers = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
             except (OSError, UnicodeError):
-                raise ValueError("URL destination is not public") from None
+                raise UrlNotPublicError("URL destination is not public") from None
             for answer in answers:
                 address = answer[4][0].split("%", 1)[0]
                 if address not in addresses:
                     addresses.append(address)
 
     if not addresses or any(not _public_ip(address) for address in addresses):
-        raise ValueError("URL destination is not public")
+        raise UrlNotPublicError("URL destination is not public")
     return host, port, addresses[0]
 
 
@@ -832,7 +855,7 @@ def extract_from_url(url: str) -> Dict[str, Any]:
                 raw_html = raw_bytes.decode(encoding, errors="replace")
                 if len(raw_html) > MAX_RAW_HTML_CHARS:
                     raw_html = raw_html[:MAX_RAW_HTML_CHARS]
-                page_text = re.sub(r"<[^>]+>", " ", raw_html)
+                page_text = _html_to_page_text(raw_html)
         except Exception:
             pass
 
@@ -925,7 +948,7 @@ def extract_from_url(url: str) -> Dict[str, Any]:
             "extracted_at": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
             "confidence_scores": {},
             "voice_corpus": {"text": "", "word_count": 0, "truncated": False},
-            "error": "URL destination is not public" if isinstance(e, ValueError) else "URL extraction failed",
+            "error": "URL destination is not public" if isinstance(e, UrlNotPublicError) else "URL extraction failed",
         }
 
 

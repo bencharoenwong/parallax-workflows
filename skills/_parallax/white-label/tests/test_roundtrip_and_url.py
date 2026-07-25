@@ -296,6 +296,51 @@ class TestUrlFallbackRegression:
         # No error
         assert draft.get("error") is None
 
+    def test_voice_corpus_excludes_script_and_style_bodies(self):
+        """Tag-stripping alone keeps <script>/<style>/JSON-LD *contents*, which
+        on a real page fill the corpus's leading-token window with minified JS
+        while word_count still looks healthy."""
+        page_html = b"""
+<!DOCTYPE html><html><head>
+<style>.brand{content:"noisetokenCss";font-family:Inter}</style>
+<script>var noisetokenJs=function(){return 1};</script>
+<script type="application/ld+json">{"@type":"Org","name":"noisetokenJsonLd"}</script>
+<template><span>noisetokenTemplate</span></template>
+<!-- noisetokenComment -->
+</head><body><p>Disciplined capital allocation for institutional investors.</p>
+</body></html>
+"""
+
+        def fake_urlopen(req, timeout=None):
+            return _StubResponse(page_html, content_type="text/html")
+
+        with mock.patch("extract.web_pdf._network_open", fake_urlopen):
+            draft = extract_from_url("https://example.com/")
+
+        corpus = draft["voice_corpus"]["text"]
+        for noise in ("noisetokenCss", "noisetokenJs", "noisetokenJsonLd",
+                      "noisetokenTemplate", "noisetokenComment"):
+            assert noise not in corpus, f"{noise} leaked into the voice corpus"
+        assert "Disciplined capital allocation" in corpus
+
+    def test_non_ssrf_failure_is_not_labelled_a_destination_rejection(
+            self, monkeypatch):
+        """Only a public-address rejection may report 'not public'. A plain
+        ValueError from any downstream extractor must not send the operator
+        debugging DNS."""
+        monkeypatch.setattr(
+            web_pdf_module, "_assign_color_roles_by_frequency",
+            mock.Mock(side_effect=ValueError("unrelated parse failure")))
+
+        def fake_urlopen(req, timeout=None):
+            return _StubResponse(b"<html><body>hi</body></html>",
+                                 content_type="text/html")
+
+        with mock.patch("extract.web_pdf._network_open", fake_urlopen):
+            draft = extract_from_url("https://example.com/")
+
+        assert draft["error"] == "URL extraction failed"
+
     def test_external_stylesheet_following_recovers_fonts(self):
         """When the page links to external CSS via <link rel='stylesheet'>,
         the fetcher follows it AND parses Google Fonts URLs separately. Both

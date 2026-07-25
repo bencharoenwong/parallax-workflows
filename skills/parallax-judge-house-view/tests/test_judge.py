@@ -409,3 +409,94 @@ def test_probe_maker_modules_returns_unavailable_when_b1_absent():
         assert maker.cross_country is None
         assert maker.pillar_compose is None
         assert maker.pillar_formulas is None
+
+
+# ---------------------------------------------------------------------------
+# View-transaction lock scope.
+# ---------------------------------------------------------------------------
+
+
+def _view_lock_state(view_dir: Path) -> str:
+    import fcntl
+    import os
+
+    fd = os.open(str(view_dir / ".house-view.lock"), os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return "free"
+    except OSError:
+        return "held"
+    finally:
+        os.close(fd)
+
+
+def test_lock_is_not_held_across_mcp_and_llm_phases(
+    active_view_dir: Path,
+    report_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """An exclusive flock spanning phase 1 (MCP) or phase 5 (LLM) lets one
+    stalled judge block every maker save indefinitely. Only the view read and
+    the audit append need the lock."""
+    monkeypatch.setattr("chain_emit.DEFAULT_CHAIN_DIR", tmp_path / "chains")
+    seen: dict[str, str] = {}
+
+    for phase in ("phase_1_fan_out", "phase_5_recommendations",
+                  "phase_6_render_and_phase_7_audit"):
+        original = getattr(judge, phase)
+
+        def probe(*args, __phase=phase, __original=original, **kwargs):
+            seen[__phase] = _view_lock_state(active_view_dir)
+            return __original(*args, **kwargs)
+
+        monkeypatch.setattr(judge, phase, probe)
+
+    judge.run_judge(config=judge.JudgeConfig(
+        dry=True,
+        mock_mcp_responses={},
+        explicit=True,
+        view_dir=active_view_dir,
+        report_dir=report_dir,
+    ))
+
+    assert seen == {
+        "phase_1_fan_out": "free",
+        "phase_5_recommendations": "free",
+        "phase_6_render_and_phase_7_audit": "held",
+    }
+
+
+def test_view_replaced_mid_run_aborts_before_the_audit_append(
+    active_view_dir: Path,
+    report_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Releasing the lock across the network phases opens a window for a maker
+    save. The judge must refuse to append a row witnessing a view it never
+    judged."""
+    monkeypatch.setattr("chain_emit.DEFAULT_CHAIN_DIR", tmp_path / "chains")
+    original_fan_out = judge.phase_1_fan_out
+
+    def mutate_then_fan_out(config, mcp_call_fn):
+        view_path = active_view_dir / "view.yaml"
+        data = yaml.safe_load(view_path.read_text())
+        data["excludes"] = list(data.get("excludes") or []) + ["MUTATED.MID.RUN"]
+        view_path.write_text(yaml.safe_dump(data, sort_keys=False))
+        return original_fan_out(config, mcp_call_fn)
+
+    monkeypatch.setattr(judge, "phase_1_fan_out", mutate_then_fan_out)
+    audit_before = (active_view_dir / "audit.jsonl").read_text()
+
+    with pytest.raises(judge.ViewChangedDuringJudge):
+        judge.run_judge(config=judge.JudgeConfig(
+            dry=True,
+            mock_mcp_responses={},
+            explicit=True,
+            view_dir=active_view_dir,
+            report_dir=report_dir,
+        ))
+
+    assert (active_view_dir / "audit.jsonl").read_text() == audit_before

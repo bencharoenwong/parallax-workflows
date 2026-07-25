@@ -863,25 +863,35 @@ def phase_8_emit_chain(
 # ---------------------------------------------------------------------------
 
 
-def run_judge(
-    *,
-    config: JudgeConfig | None = None,
-    mcp_call_fn: Callable[..., dict[str, Any]] | None = None,
-    llm_call_fn: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
-    covered_markets: set[str] | None = None,
-) -> JudgeResult:
-    """Run against one committed view and audit that same snapshot."""
-    resolved_config = config or JudgeConfig()
-    with audit_chain.view_transaction(Path(resolved_config.view_dir)):
-        return _run_judge_locked(
-            config=resolved_config,
-            mcp_call_fn=mcp_call_fn,
-            llm_call_fn=llm_call_fn,
-            covered_markets=covered_markets,
+class ViewChangedDuringJudge(RuntimeError):
+    """The active view was replaced between phase 0 and the audit append."""
+
+
+def _resolved_view_dir(config: JudgeConfig) -> Path:
+    """The directory the transaction lock guards. Mirrors phase_0_load_view's
+    ``view_dir or stress.HOUSE_VIEW_DIR`` default so the lock and the read
+    never land on different directories."""
+    return Path(config.view_dir) if config.view_dir else Path(stress.HOUSE_VIEW_DIR)
+
+
+def _assert_view_unchanged(view: stress.View, config: JudgeConfig) -> None:
+    """Re-read the committed view under the lock before the audit append.
+
+    Mirrors ``stress.append_stress_audit``'s race guard: the judge's audit row
+    asserts it judged ``view.view_hash``, so a maker save landing during the
+    unlocked network phases must abort the append rather than emit a row that
+    witnesses a view nobody judged.
+    """
+    current = phase_0_load_view(config.view_dir)
+    if current.view_hash != view.view_hash:
+        raise ViewChangedDuringJudge(
+            "Active house view changed while the judge was running "
+            f"(judged {view.view_hash[:12]}, now {current.view_hash[:12]}); "
+            "no audit row was appended. Re-run /parallax-judge-house-view."
         )
 
 
-def _run_judge_locked(
+def run_judge(
     *,
     config: JudgeConfig | None = None,
     mcp_call_fn: Callable[..., dict[str, Any]] | None = None,
@@ -902,13 +912,24 @@ def _run_judge_locked(
 
     Returns:
         Populated ``JudgeResult``.
+
+    Locking:
+        The view transaction lock is held ONLY while reading the committed
+        view (phase 0) and while appending the audit row that witnesses it
+        (phases 6-7). The MCP fan-out and the phase-5 LLM call run unlocked —
+        holding an exclusive flock across network I/O would let one stalled
+        judge block every maker save indefinitely. The witness invariant is
+        preserved by re-loading the view under the second lock and refusing to
+        append when its hash moved.
     """
     config = config or JudgeConfig()
+    view_dir = _resolved_view_dir(config)
     now = _utcnow()
     diagnostics: list[str] = []
 
     # Phase 0
-    view = phase_0_load_view(config.view_dir)
+    with audit_chain.view_transaction(view_dir):
+        view = phase_0_load_view(config.view_dir)
     view_age_days = _view_age_days(view.data, now)
 
     # Trigger resolution (informational — affects banner only).
@@ -998,21 +1019,23 @@ def _run_judge_locked(
     )
 
     # Phase 6 + 7
-    report_dir, audit_entry, json_payload = phase_6_render_and_phase_7_audit(
-        view=view,
-        config=config,
-        trigger=trigger,
-        severity=severity,
-        severity_details=severity_details,
-        drift_summary=drift_summary,
-        resolutions=resolutions,
-        recommendations=recommendations,
-        deltas=deltas,
-        view_age_days=view_age_days,
-        parallax_age_days=parallax_age_days,
-        mcp_responses=mcp_responses,
-        judged_at=now,
-    )
+    with audit_chain.view_transaction(view_dir):
+        _assert_view_unchanged(view, config)
+        report_dir, audit_entry, json_payload = phase_6_render_and_phase_7_audit(
+            view=view,
+            config=config,
+            trigger=trigger,
+            severity=severity,
+            severity_details=severity_details,
+            drift_summary=drift_summary,
+            resolutions=resolutions,
+            recommendations=recommendations,
+            deltas=deltas,
+            view_age_days=view_age_days,
+            parallax_age_days=parallax_age_days,
+            mcp_responses=mcp_responses,
+            judged_at=now,
+        )
 
     # Phase 8
     chain_emit_failed = False
