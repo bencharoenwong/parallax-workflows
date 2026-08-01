@@ -33,6 +33,8 @@ FLAT_COST: dict[str, int] = {
     "get_financials": 1,
     "get_stock_outlook": 1,
     "get_score_analysis": 1,
+    "etf_profile": 1,
+    "etf_daily_price": 1,
     # 5 tokens
     "build_stock_universe": 5,
     "get_news_synthesis": 5,
@@ -51,11 +53,6 @@ PER_HOLDING_COST: dict[str, int] = {
     "quick_portfolio_scores": 1,
     "check_portfolio_redundancy": 1,
 }
-
-# Published price list explicitly marks these UNVERIFIED. Counted separately so
-# any total can state how much of it rests on an unverified price.
-UNVERIFIED: set[str] = {"etf_profile", "etf_daily_price"}
-UNVERIFIED_ASSUMED_COST = 1
 
 # Harness-local tools. These consume Anthropic tokens but never Parallax ones,
 # so they must be skipped rather than reported as unpriced endpoints -- an
@@ -79,12 +76,11 @@ USD_PER_TOKEN = 0.20
 @dataclass(frozen=True)
 class TokenEstimate:
     tokens: int
-    tokens_unverified: int
     unknown_endpoints: tuple[str, ...]
 
     @property
     def total(self) -> int:
-        return self.tokens + self.tokens_unverified
+        return self.tokens
 
     def usd(self, rate: float = USD_PER_TOKEN) -> float:
         return self.total * rate
@@ -111,7 +107,6 @@ def estimate(tool_calls) -> TokenEstimate:
     hard failure, not as a free call.
     """
     tokens = 0
-    unverified = 0
     unknown: list[str] = []
 
     for call in tool_calls:
@@ -120,11 +115,9 @@ def estimate(tool_calls) -> TokenEstimate:
             tokens += FLAT_COST[name]
         elif name in PER_HOLDING_COST:
             tokens += PER_HOLDING_COST[name] * _holdings_in(call.input or {})
-        elif name in UNVERIFIED:
-            unverified += UNVERIFIED_ASSUMED_COST
         elif name in HARNESS_TOOLS or name.startswith(HARNESS_PREFIXES):
             continue  # harness-local tool, not a Parallax endpoint
         else:
             unknown.append(name)
 
-    return TokenEstimate(tokens, unverified, tuple(sorted(set(unknown))))
+    return TokenEstimate(tokens, tuple(sorted(set(unknown))))

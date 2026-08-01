@@ -60,7 +60,6 @@ class RunRecord:
 
     # --- meter 2: Parallax (the client's bill), DERIVED not metered ---
     parallax_tokens: int = 0
-    parallax_tokens_unverified: int = 0
     parallax_cost_usd: float = 0.0
     unknown_endpoints: list[str] = field(default_factory=list)
 
@@ -174,15 +173,13 @@ def from_stream_json(
     parallax_calls = []
     for call in calls:
         name = token_model.bare(call.name)
-        if name in token_model.FLAT_COST or name in token_model.PER_HOLDING_COST \
-                or name in token_model.UNVERIFIED:
+        if name in token_model.FLAT_COST or name in token_model.PER_HOLDING_COST:
             counts[name] = counts.get(name, 0) + 1
             parallax_calls.append(call)
     rec.tool_calls_parallax = dict(sorted(counts.items()))
 
     est = token_model.estimate(calls)
     rec.parallax_tokens = est.tokens
-    rec.parallax_tokens_unverified = est.tokens_unverified
     rec.parallax_cost_usd = round(est.usd(usd_per_token), 4)
     rec.unknown_endpoints = list(est.unknown_endpoints)
 

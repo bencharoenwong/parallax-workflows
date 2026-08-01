@@ -4,6 +4,12 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-08-02
+
+### Changed
+- **ETF endpoint costs resolved** — `etf_profile` and `etf_daily_price` are priced at 1 token each (measured 2026-07-28) and move out of the "Unverified costs" section of `_parallax/token-costs.md`, which no longer has one. Every dependent workflow estimate that was published as a partial subtotal is now a single number: `peer-comparison` 8, `explain-portfolio` 70, `scenario-analysis` 78, and `desk-call-list` gains a `+ 1·|M_etf|` term with a publishable broad-selloff worst case. Cost language in `coverage-matrix.md`, `parallax-conventions.md`, and the four dependent skills was reconciled to match.
+- **Derived Parallax token meter** — `evals/graders/token_model.py` drops the separate unverified-token accumulator and `RunRecord.parallax_tokens_unverified`, since no endpoint in the price table is unverified any more. A tool name absent from the table is still a hard failure, not a free call.
+
 ## 2026-07-19
 
 ### Added
