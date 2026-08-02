@@ -103,6 +103,8 @@ evals/
 │   ├── judge_criteria.py   # Tier-2 rubric criteria (should-i-buy baseline set)
 │   ├── run_judge.py        # pinned-Anthropic rubric judge (allowlist-guarded)
 │   ├── transcript.py       # stream-json → final-prose extraction
+│   ├── runrecord.py        # one measured run → RunRecord (timing + both cost meters)
+│   ├── token_model.py      # Parallax token price table (derived from skills/_parallax/token-costs.md)
 │   └── test_*.py           # pure-function unit tests (the only thing CI runs)
 ├── skills/              # per-skill eval specs (one eval_config.py each)
 │   ├── should-i-buy/       # reference baseline spec
