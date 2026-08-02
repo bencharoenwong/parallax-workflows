@@ -4,6 +4,25 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-08-02: Price the two ETF endpoints and collapse every partial workflow subtotal into a single publishable number
+
+**Why.** `etf_profile` and `etf_daily_price` were the only endpoints in the price table carrying no measured cost, and both are *mandatory* classification probes — `explain-portfolio` and `scenario-analysis` fire one per holding, `peer-comparison` three per run. So two unmeasured endpoints held four workflow estimates hostage, and the table published things like "60 known billable + UNVERIFIED classification/ETF-price costs". That phrasing is honest but operationally useless: an RM quoting a client cannot price a workflow whose tail is unbounded, and the desk-call-list broad-selloff guard could not state a worst case at all. Both endpoints were measured at 1 token per call on 2026-07-28, which removes the blocker.
+
+**Impact.**
+- **Price table** — both endpoints move into "1 token each" with a `measured 2026-07-28` provenance note (matching the `export_price_series` precedent of citing when and how a cost was established). The "Unverified costs" section is deleted; `token-costs.md` no longer has one.
+- **Resolved estimates** — `peer-comparison` 8, `explain-portfolio` 70, `scenario-analysis` 78. `desk-call-list` gains a `+ 1·|M_etf|` term and can finally publish its capped worst case (`1 + 3×40 + 5·K`). The monthly Standard-plan illustration gains a desk-call-list line that previously had to say "no publishable estimate".
+- **Consistency sweep** — nine sites across `coverage-matrix.md`, `parallax-conventions.md`, and the four dependent skills still described these costs as UNVERIFIED. All reconciled, so no SKILL.md contradicts the table.
+- **Grader** — `token_model.py` drops the parallel unverified-token accumulator and `RunRecord.parallax_tokens_unverified`. A separate drift was caught in review: `list_macro_countries` and `get_telemetry` sat at 0 in the grader while the published table lists both at 1. The grader now follows the table and a test pins them together.
+
+**Alternatives.**
+- `[DROP]` **Keep the UNVERIFIED marker and publish ranges.** Rejected once the measurement existed — the marker was a placeholder for missing data, and retaining it after the data arrived would be false humility that keeps four estimates unusable.
+- `[DROP]` **Assume 1 token by analogy to other single-symbol lookups.** This is what the estimate would have been, and it turned out correct, but assuming it would have made the published table indistinguishable from a measured one. The provenance note exists precisely so a future reader can tell which rows were measured.
+- `[DROP]` **Price the four remaining unpriced live endpoints** (`etf_search`, `etf_holdings`, `check_job_status`, `submit_feedback`) by the same analogy, to reach full MCP-surface coverage. Rejected: nobody has measured them, and this repo's standing rule is not to invent numbers. They stay absent, which correctly trips the `unknown_endpoints` stale-table signal rather than silently producing a confident wrong total.
+
+**Flip conditions.** (a) Operator billing shows either ETF endpoint metered at something other than 1 token → revise the row and every dependent estimate (the same reversibility clause `export_price_series` carries). (b) The vendor changes pricing or moves an endpoint between tiers → re-measure rather than interpolate. (c) The four unpriced endpoints get measured → add them and re-check which workflows stop degrading. (d) A future endpoint is added to the table without a provenance note → treat the note's absence as "unmeasured" and re-verify.
+
+**Verification.** 167 eval-grader tests, plus the skill suites (house-view 253, credit-lens 131, judge 51, scripts + render gate 115, desk-call-list 43, make-house-view 79, cio-letter-prep 34) — all green. `plugin/` rebuild byte-exact against the tracked bundle; tracked-term scan clean across 535 files. Security audit refreshed (`audit-2026-08-02.md`, CRITICAL_FAILS=0). Gate run `01KYZWBBYKGPA9NY2WKCJT2BAT` passed review, test, document, and lint, contributing three fix commits (SSRF rejection surfacing, audit commit-hash repoint, grader/table alignment).
+
 ## 2026-07-16: Latency reordering batch 2 — 7 skills fire independent MCP calls concurrently/non-blocking, with deliberate gates preserved
 
 **Why.** Per-holding serial loops and stage barriers were the dominant latency leak across the analysis skills (continuing the batch-1 finding). Many MCP calls whose inputs are known before an earlier stage completes were nonetheless queued behind that stage, so wall-clock ran as the sum of stages rather than the slowest single chain. Each reorder here is a zero-token change: the same tool set is called and the rendered report is byte-identical — only dispatch ordering moves.
