@@ -83,7 +83,7 @@ The stress test runs in four phases, as defined in `skills/_parallax/house-view/
     - On `ok=False` AND the single error has `index is None` (sentinel for schema-load failure): audit with `disposition="schema_unreadable"`, retain `recommended_deltas`, add the same `validation_errors: errors` field; render emits an install-issue callout naming the schema.yaml path.
 4.  **Append Audit Entry**:
     - Invoke `stress.append_stress_audit(view, summary, applied=False, disposition="completed", recommended_deltas=...)`. Capture the returned entry dict.
-    - Re-checks the `view_hash` to guard against race conditions.
+    - Re-checks the full view identity (`view_hash` plus `view_id`/`version_id`) under the view transaction lock to guard against race conditions — see the `stress.append_stress_audit` docstring.
     - Compute the audit hash short form for the Phase 4-B citation: `audit_hash_short = audit_chain.compute_entry_hash(returned_entry)[:12]`.
 5.  **Render Artifact**:
     - Invoke `render.render_artifact(view_meta, internal_results, external_results, themes, view_hash, recommended_deltas=..., audit_hash_short=...)` from `skills/stress-house-view/render.py`.
