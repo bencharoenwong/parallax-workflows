@@ -23,11 +23,11 @@ FLAT_COST: dict[str, int] = {
     "search_stocks": 0,
     "search_etfs": 0,
     "export_price_series": 0,
-    "list_macro_countries": 0,
-    "get_telemetry": 0,
     "check_api_health": 0,
     # 1 token
     "get_company_info": 1,
+    "list_macro_countries": 1,
+    "get_telemetry": 1,
     "get_peer_snapshot": 1,
     "export_peer_comparison": 1,
     "get_financials": 1,
