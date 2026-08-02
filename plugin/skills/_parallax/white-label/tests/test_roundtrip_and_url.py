@@ -584,6 +584,7 @@ h1 { font-family: 'Inter', sans-serif; color: #5A597A; }
 
         assert response.read_calls == 0
         assert not draft["colors"]
+        assert draft["error"] == "URL destination is not public"
         assert "request-secret" not in str(draft)
         assert "redirect-secret" not in str(draft)
 

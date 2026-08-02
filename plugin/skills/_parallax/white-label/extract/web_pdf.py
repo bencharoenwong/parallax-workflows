@@ -910,6 +910,8 @@ def extract_from_url(url: str) -> Dict[str, Any]:
                 if len(raw_html) > MAX_RAW_HTML_CHARS:
                     raw_html = raw_html[:MAX_RAW_HTML_CHARS]
                 page_text = _html_to_page_text(raw_html)
+        except UrlNotPublicError:
+            raise
         except Exception:
             pass
 
