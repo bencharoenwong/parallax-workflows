@@ -882,11 +882,7 @@ def _resolved_view_dir(config: JudgeConfig) -> Path:
 
 def _audit_identity(view: stress.View) -> dict[str, str]:
     """Every committed-view field the judge's audit row will cite."""
-    metadata = view.data.get("metadata", {}) or {}
-    identity = {"view_hash": view.view_hash}
-    for field in _AUDIT_CITED_METADATA:
-        identity[field] = str(metadata.get(field, "<unknown>"))
-    return identity
+    return stress.audit_identity(view.data, view.view_hash, _AUDIT_CITED_METADATA)
 
 
 def _assert_view_unchanged(view: stress.View, config: JudgeConfig) -> None:

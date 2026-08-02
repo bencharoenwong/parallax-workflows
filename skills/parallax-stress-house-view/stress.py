@@ -121,6 +121,30 @@ def _now_iso_z() -> str:
         .replace("+00:00", "Z")
     )
 
+
+# Metadata fields the stress audit row cites alongside the view hash.
+AUDIT_IDENTITY_FIELDS = ("view_id", "version_id")
+
+
+def audit_identity(
+    view_data: Dict[str, Any],
+    view_hash: str,
+    fields: Tuple[str, ...] = AUDIT_IDENTITY_FIELDS,
+) -> Dict[str, str]:
+    """Every committed-view field an audit row cites, keyed for comparison.
+
+    ``compute_view_hash`` covers only tilts + excludes, so hash equality alone
+    does not certify that the identity metadata a row cites (``view_id``,
+    ``version_id``, ...) still describes the committed view: a maker re-save of
+    byte-identical tilts mints a fresh ``version_id``. Consumers (stress and
+    judge) compare this full identity before appending an audit row.
+    """
+    metadata = (view_data or {}).get("metadata", {}) or {}
+    identity = {"view_hash": view_hash}
+    for field_name in fields:
+        identity[field_name] = str(metadata.get(field_name, "<unknown>"))
+    return identity
+
 # Helper functions for rule evaluation
 def _get_nested(data: dict, path: str):
     keys = path.split('.')
@@ -520,9 +544,12 @@ def append_stress_audit(
 ) -> Dict[str, Any]:
     """Appends a stress test entry to the audit log.
 
-    Race-condition guard re-reads view.yaml and recomputes the canonical hash
-    (covers tilts AND excludes, per schema.yaml). disposition is optional and
-    captures hard-stop / completed / etc. on the audit row when set.
+    Race-condition guard re-reads view.yaml under the view transaction lock
+    and compares the full identity the row cites (canonical hash covering
+    tilts AND excludes per schema.yaml, plus view_id / version_id — a maker
+    re-save of identical tilts mints a fresh version_id that a hash-only
+    check would miss). disposition is optional and captures hard-stop /
+    completed / etc. on the audit row when set.
 
     recommended_deltas (optional, structured): forward-compatible payload for
     Option B (`load-house-view --apply-stress <audit-hash>`). When present,
@@ -538,27 +565,35 @@ def append_stress_audit(
     return value to `audit_chain.compute_entry_hash()` to get the
     `audit_hash_short` for the Phase 4-B citation in render_artifact.
     """
-    with open(view.view_path, "r", encoding="utf-8") as f:
-        current_data = yaml.safe_load(f)
-    current_hash = compute_view_hash(current_data)
+    with audit_chain.view_transaction(view.view_path.parent):
+        with open(view.view_path, "r", encoding="utf-8") as f:
+            current_data = yaml.safe_load(f)
+        current_hash = compute_view_hash(current_data)
 
-    if view.view_hash != current_hash:
-        raise RuntimeError("View changed mid-run, please retry.")
+        loaded = audit_identity(view.data, view.view_hash)
+        committed = audit_identity(current_data, current_hash)
+        if loaded != committed:
+            changed = ", ".join(
+                f"{key}: {loaded[key]!r} -> {committed[key]!r}"
+                for key in loaded
+                if loaded[key] != committed[key]
+            )
+            raise RuntimeError(f"View changed mid-run ({changed}), please retry.")
 
-    entry_data = {
-        "ts": _now_iso_z(),
-        "view_id": view.data["metadata"]["view_id"],
-        "version_id": view.data["metadata"]["version_id"],
-        "view_hash": view.view_hash,
-        "skill": "parallax-stress-house-view",
-        "action": "stress_test",
-        "applied": applied,
-        "stress_summary": summary,
-    }
-    if disposition is not None:
-        entry_data["disposition"] = disposition
-    if recommended_deltas is not None:
-        entry_data["recommended_deltas"] = recommended_deltas
-    if validation_errors is not None:
-        entry_data["validation_errors"] = validation_errors
-    return audit_chain.append_entry(view.audit_path, entry_data)
+        entry_data = {
+            "ts": _now_iso_z(),
+            "view_id": view.data["metadata"]["view_id"],
+            "version_id": view.data["metadata"]["version_id"],
+            "view_hash": view.view_hash,
+            "skill": "parallax-stress-house-view",
+            "action": "stress_test",
+            "applied": applied,
+            "stress_summary": summary,
+        }
+        if disposition is not None:
+            entry_data["disposition"] = disposition
+        if recommended_deltas is not None:
+            entry_data["recommended_deltas"] = recommended_deltas
+        if validation_errors is not None:
+            entry_data["validation_errors"] = validation_errors
+        return audit_chain.append_entry(view.audit_path, entry_data)

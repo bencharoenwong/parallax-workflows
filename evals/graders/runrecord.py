@@ -172,6 +172,8 @@ def from_stream_json(
     counts: dict[str, int] = {}
     parallax_calls = []
     for call in calls:
+        if call.name.startswith("mcp__") and not token_model.is_parallax_mcp(call.name):
+            continue
         name = token_model.bare(call.name)
         if name in token_model.FLAT_COST or name in token_model.PER_HOLDING_COST:
             counts[name] = counts.get(name, 0) + 1

@@ -89,7 +89,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 > **Broad-selloff guard:** on a market-wide morning the mover set `M` can approach
 > `U`, and news + enrichment dominate the bill. `/parallax-desk-call-list`
 > deterministically raises its move threshold to cap `|M|` at 40 and states the
-> auto-raise in the report. With all endpoint costs now verified, the numeric worst case for a pure-equity desk at cap is `1 + 3×40 + 5×K` (e.g. K=10 → ~171 tokens).
+> auto-raise in the report. With every endpoint this workflow calls now priced, the numeric worst case for a pure-equity desk at cap is `1 + 3×40 + 5×K` (e.g. K=10 → ~171 tokens).
 
 ### House View Workflows
 

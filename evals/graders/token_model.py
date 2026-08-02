@@ -65,7 +65,7 @@ HARNESS_TOOLS: set[str] = {
 }
 HARNESS_PREFIXES = (
     "Read", "Write", "Edit", "Bash", "Glob", "Grep", "LS", "WebFetch",
-    "WebSearch", "Notebook", "mcp__ide__",
+    "WebSearch", "Notebook",
 )
 
 # Default overage rate. Override per plan; never hardcode into a client-facing
@@ -91,6 +91,18 @@ def bare(name: str) -> str:
     return name.rsplit("__", 1)[-1]
 
 
+def is_parallax_mcp(name: str) -> bool:
+    """True when an ``mcp__``-namespaced tool name targets the Parallax server.
+
+    Other MCP servers (IDE, GitHub, ...) bill nothing in Parallax tokens, and
+    their endpoint names must not be mistaken for stale-price-table signals.
+    """
+    if not name.startswith("mcp__"):
+        return False
+    namespace = name[len("mcp__"):].rsplit("__", 1)[0]
+    return "parallax" in namespace.lower()
+
+
 def _holdings_in(call_input: dict) -> int:
     for key in ("portfolio", "holdings", "symbols"):
         val = call_input.get(key)
@@ -110,6 +122,8 @@ def estimate(tool_calls) -> TokenEstimate:
     unknown: list[str] = []
 
     for call in tool_calls:
+        if call.name.startswith("mcp__") and not is_parallax_mcp(call.name):
+            continue  # another MCP server's tool, not a Parallax endpoint
         name = bare(call.name)
         if name in FLAT_COST:
             tokens += FLAT_COST[name]

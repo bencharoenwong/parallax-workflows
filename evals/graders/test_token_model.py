@@ -74,3 +74,17 @@ def test_unrecognised_endpoint_is_flagged_not_free():
     est = estimate([ToolCall("mcp__claude_ai_Parallax__brand_new_tool", {})])
     assert est.total == 0
     assert est.unknown_endpoints == ("brand_new_tool",)
+
+
+def test_foreign_mcp_servers_are_skipped_not_flagged():
+    # Non-Parallax MCP tools consume no Parallax tokens and must not be
+    # reported as unknown endpoints (which would degrade the run).
+    est = estimate(
+        [
+            ToolCall("mcp__ide__getDiagnostics", {}),
+            ToolCall("mcp__plugin_github_github__get_me", {}),
+            ToolCall("mcp__claude_ai_Parallax__get_company_info", {}),
+        ]
+    )
+    assert est.total == 1
+    assert est.unknown_endpoints == ()

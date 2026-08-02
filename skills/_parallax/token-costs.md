@@ -89,7 +89,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 > **Broad-selloff guard:** on a market-wide morning the mover set `M` can approach
 > `U`, and news + enrichment dominate the bill. `/parallax-desk-call-list`
 > deterministically raises its move threshold to cap `|M|` at 40 and states the
-> auto-raise in the report. With all endpoint costs now verified, the numeric worst case for a pure-equity desk at cap is `1 + 3×40 + 5×K` (e.g. K=10 → ~171 tokens).
+> auto-raise in the report. With every endpoint this workflow calls now priced, the numeric worst case for a pure-equity desk at cap is `1 + 3×40 + 5×K` (e.g. K=10 → ~171 tokens).
 
 ### House View Workflows
 
@@ -99,7 +99,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 | `/parallax-house-view-diff` | **2× child** | Runs the target skill twice (Leg A without view, Leg B with view) — no additional Parallax tokens beyond the child, but total cost doubles: e.g. 2 × 36 = **72 tokens** with `/parallax-portfolio-builder`. |
 | `/parallax-stress-house-view` | **~30** (scales with tilted markets) | `check_macro_health` (5) + `get_telemetry` (1) + `macro_analyst` × tilted markets (5 each); cap 12 markets |
 | `/parallax-judge-house-view` | **~282** | Same recipe as make: 14 markets × 4 components + telemetry |
-| `/parallax-make-house-view` | **~282** (scales with `--markets`) | `list_macro_countries` (0) + `get_telemetry` (1) + `macro_analyst` × 14 markets × 4 components (280); `--markets` flag reduces the market set and scales cost proportionally |
+| `/parallax-make-house-view` | **~282** (scales with `--markets`) | `list_macro_countries` (1) + `get_telemetry` (1) + `macro_analyst` × 14 markets × 4 components (280); `--markets` flag reduces the market set and scales cost proportionally |
 
 > **Cost gotcha:** `/parallax-make-house-view` and `/parallax-judge-house-view` are the costliest workflows in the library at ~$56 each at Standard plan overage rates ($0.20/token). Run them intentionally — not as part of a routine check. For lightweight view assessment without full re-synthesis, prefer `/parallax-stress-house-view`.
 
