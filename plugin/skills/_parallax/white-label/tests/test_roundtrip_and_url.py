@@ -323,6 +323,35 @@ class TestUrlFallbackRegression:
             assert noise not in corpus, f"{noise} leaked into the voice corpus"
         assert "Disciplined capital allocation" in corpus
 
+    def test_voice_corpus_unescapes_html_entities(self):
+        """Entities left escaped reach the corpus as literal tokens: they
+        inflate word_count, eat the leading-token window the SKILL feeds to
+        voice extraction, and show the extractor `Smith &amp; Co&#8217;s`."""
+        page_html = (
+            b"<html><body><p>Smith &amp; Co&#8217;s&nbsp;capital"
+            b"&mdash;disciplined.</p></body></html>"
+        )
+
+        def fake_urlopen(req, timeout=None):
+            return _StubResponse(page_html, content_type="text/html")
+
+        with mock.patch("extract.web_pdf._network_open", fake_urlopen):
+            draft = extract_from_url("https://example.com/")
+
+        corpus = draft["voice_corpus"]["text"]
+        assert "Smith & Co’s" in corpus
+        assert "capital—disciplined" in corpus
+        for entity in ("&amp;", "&#8217;", "&nbsp;", "&mdash;"):
+            assert entity not in corpus, f"{entity} survived into the voice corpus"
+
+    def test_entity_escaped_markup_is_not_revived_into_a_tag(self):
+        """Unescaping must run AFTER tag stripping, or escaped markup quoted in
+        page copy becomes a real tag for the stripper to act on."""
+        out = web_pdf_module._html_to_page_text(
+            "<p>Write &lt;script&gt;alert(1)&lt;/script&gt; to demo.</p>")
+        assert "<script>alert(1)</script>" in out
+        assert "to demo." in out
+
     @pytest.mark.parametrize("tag", ["script", "style", "template", "noscript"])
     def test_non_prose_stripping_is_linear_on_unterminated_openers(self, tag):
         """A lazy DOTALL regex re-scans to end-of-document for every opener

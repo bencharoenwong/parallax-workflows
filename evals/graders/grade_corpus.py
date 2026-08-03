@@ -31,31 +31,14 @@ sys.path.insert(0, str(_HERE.parent / "skills" / "stress-test-thesis"))
 from transcript import parse_stream_json  # noqa: E402
 from tier1_structural import grade_tier1  # noqa: E402
 from eval_spec import load_spec  # noqa: E402
+from infra_failure import detect_infra_failure  # noqa: E402,F401
 
 _RESULTS = _HERE.parent / "results"
 
 # --- pure helpers -----------------------------------------------------------
 
-_AUTH_RE = re.compile(r'"error_status":\s*401|authentication_failed|Invalid authentication', re.I)
-_RESULT_RE = re.compile(r'"type":\s*"result"')
-_EMPTY_MCP_RE = re.compile(r'"mcp_servers":\s*\[\s*\]')
-
-
-def detect_infra_failure(raw: str) -> str | None:
-    """Return an infrastructure-failure reason for a stream, or None if the run is gradeable.
-
-    Distinguishes 'the harness/connector broke' from 'the skill produced a bad report' — the
-    two must never be conflated (an auth 401 yields an empty report that would otherwise be
-    mis-scored as a skill failure)."""
-    if not raw.strip():
-        return "empty stream (no output captured)"
-    if _AUTH_RE.search(raw):
-        return "authentication error (401) — no valid credentials in the session"
-    if not _RESULT_RE.search(raw):
-        return "no result event — run interrupted/aborted"
-    if _EMPTY_MCP_RE.search(raw) and "parallax" not in raw.lower():
-        return "no Parallax MCP server loaded (connector missing)"
-    return None
+# `detect_infra_failure` is re-exported from infra_failure so this module and
+# runrecord cannot drift into disagreeing about which runs are gradeable.
 
 
 def _light(prose: str, section_kw: str, labels: tuple[str, ...]) -> str | None:

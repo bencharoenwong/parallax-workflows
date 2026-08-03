@@ -8,6 +8,7 @@ against the resulting text. Confidence is reduced to reflect the fragility
 of PDF text extraction vs canonical OOXML theme XML.
 """
 
+import html
 import re
 import ipaddress
 import socket
@@ -103,8 +104,17 @@ def _strip_non_prose_blocks(raw_html: str) -> str:
 
 
 def _html_to_page_text(raw_html: str) -> str:
-    """Strip markup to a prose corpus, dropping non-prose block bodies first."""
-    return re.sub(r"<[^>]+>", " ", _strip_non_prose_blocks(raw_html))
+    """Strip markup to a prose corpus, dropping non-prose block bodies first.
+
+    Entities are unescaped LAST, after tags are gone: unescaping first would
+    turn an escaped ``&lt;script&gt;`` in page copy into a real tag for the
+    stripper to act on. Left escaped, every ``&nbsp;``/``&amp;``/``&#8217;``
+    reaches the voice corpus as a literal token — inflating ``word_count``,
+    consuming the leading-token window, and showing the extractor
+    ``Smith &amp; Co&#8217;s`` instead of ``Smith & Co's``.
+    """
+    return html.unescape(
+        re.sub(r"<[^>]+>", " ", _strip_non_prose_blocks(raw_html)))
 
 
 def _sanitized_url(url: str) -> str:

@@ -21,6 +21,7 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
 from transcript import ToolCall, parse_stream_json
+from infra_failure import detect_infra_failure
 import token_model
 
 # Run outcome classes. Only `ok` is aggregatable; `degraded` is retained and
@@ -116,28 +117,6 @@ def _count_tool_errors(raw: str) -> int:
     return errors
 
 
-def _detect_infra_failure(raw: str, result: dict | None) -> str | None:
-    """Infrastructure failed, as distinct from the skill performing badly.
-
-    Mirrors ``grade_corpus.detect_infra_failure``; kept here so a RunRecord can
-    be built without importing the grading layer.
-    """
-    if not raw.strip():
-        return "empty stream"
-    if result is None:
-        return "no result event"
-    if result.get("api_error_status"):
-        return f"api error {result['api_error_status']}"
-    if result.get("subtype") not in (None, "success"):
-        return f"result subtype {result['subtype']}"
-    lowered = raw.lower()
-    if "no mcp servers configured" in lowered or "mcp server" in lowered and "failed to connect" in lowered:
-        return "mcp server unavailable"
-    if '"status":401' in raw or "401 unauthorized" in lowered:
-        return "auth failure (401)"
-    return None
-
-
 def from_stream_json(
     raw: str,
     run_id: str,
@@ -157,7 +136,7 @@ def from_stream_json(
         replicate=replicate,
     )
 
-    reason = _detect_infra_failure(raw, result)
+    reason = detect_infra_failure(raw, result)
     if reason:
         rec.status = STATUS_INFRA_FAILURE
         rec.infra_reason = reason
