@@ -538,6 +538,42 @@ def test_metadata_only_supersede_mid_run_aborts_the_audit_append(
     assert (active_view_dir / "audit.jsonl").read_text() == audit_before
 
 
+@pytest.mark.parametrize("wipe", ["view.yaml", "audit.jsonl"])
+def test_view_removed_mid_run_reports_the_documented_guard(
+    active_view_dir: Path,
+    report_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    wipe: str,
+):
+    """An operator clearing the view dir during the unlocked network phases is
+    the same 'the report describes a view that is no longer active' case. The
+    reload must not surface `FileNotFoundError` ("No active house view found")
+    or a broken-chain error: callers catch `ViewChangedMidRun`, and a
+    never-loaded message contradicts the report the judge just built."""
+    monkeypatch.setattr("chain_emit.DEFAULT_CHAIN_DIR", tmp_path / "chains")
+    original_fan_out = judge.phase_1_fan_out
+
+    def wipe_then_fan_out(config, mcp_call_fn):
+        target = active_view_dir / wipe
+        if wipe == "view.yaml":
+            target.unlink()
+        else:
+            target.write_text(target.read_text() + "not-json-at-all\n")
+        return original_fan_out(config, mcp_call_fn)
+
+    monkeypatch.setattr(judge, "phase_1_fan_out", wipe_then_fan_out)
+
+    with pytest.raises(judge.ViewChangedDuringJudge, match="superseded"):
+        judge.run_judge(config=judge.JudgeConfig(
+            dry=True,
+            mock_mcp_responses={},
+            explicit=True,
+            view_dir=active_view_dir,
+            report_dir=report_dir,
+        ))
+
+
 def test_judge_identity_fields_superset_of_stress():
     """The judge's audit row cites strictly more than the stress row.
 

@@ -69,6 +69,35 @@ def test_401_unauthorized_prose_fails_both():
     _agree(raw)
 
 
+def test_a_401_quoted_inside_a_tool_result_is_not_an_auth_failure():
+    """A Parallax response enumerating HTTP status codes (`get_docs`,
+    `explain_methodology`) must not read as a connector auth failure: the run
+    authenticated fine and would otherwise be silently dropped from the
+    aggregate. Auth rejection is reported by the harness, not by a payload a
+    tool handed back."""
+    raw = (
+        _INIT_OK + "\n"
+        '{"type":"user","message":{"role":"user","content":[{"type":"tool_result",'
+        '"content":"Errors: {\\"status\\": 401} means 401 Unauthorized; '
+        'authentication_failed is returned when the key is stale."}]}}\n'
+        + _RESULT
+    )
+    assert _both(raw) == (None, None)
+    _agree(raw)
+
+
+def test_a_401_beside_a_tool_result_in_the_same_event_still_fails_both():
+    """Dropping tool-result blocks must not blind the scan to the rest of the
+    event they were carried in."""
+    raw = (
+        _INIT_OK + "\n"
+        '{"type":"user","error_status":401,"message":{"role":"user","content":'
+        '[{"type":"tool_result","content":"fine"}]}}\n' + _RESULT
+    )
+    assert all(r is not None for r in _both(raw))
+    _agree(raw)
+
+
 def test_empty_stream_fails_both():
     _agree("   ")
     assert all(r is not None for r in _both("   "))

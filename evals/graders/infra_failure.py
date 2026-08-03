@@ -24,6 +24,13 @@ from typing import Any
 # Auth rejection. Whitespace-tolerant on purpose: the same stream is emitted
 # both compactly (`"error_status":401`) and pretty-printed (`"status": 401`),
 # and a literal-substring test silently passes on the spaced form.
+#
+# Matched per event with tool-result payloads excluded, never against the whole
+# stream: these alternatives are broad enough that a Parallax response quoting
+# an HTTP status table (`get_docs`, `explain_methodology`) would otherwise read
+# as a connector auth failure and silently shrink the aggregate. Auth rejection
+# is reported by the harness — in the result/system events and the assistant's
+# own text — not inside a payload a tool handed back.
 _AUTH_RE = re.compile(
     r'"(?:error_)?status":\s*401(?!\d)'
     r'|authentication_failed'
@@ -76,6 +83,49 @@ def _init_mcp_servers(raw: str) -> list | None:
     return None
 
 
+def _without_tool_results(event: dict) -> dict | None:
+    """``event`` with its tool-result blocks dropped, or None if it carries none."""
+    message = event.get("message")
+    if not isinstance(message, dict):
+        return None
+    content = message.get("content")
+    if not isinstance(content, list):
+        return None
+    kept = [
+        block
+        for block in content
+        if not (isinstance(block, dict) and block.get("type") == "tool_result")
+    ]
+    if len(kept) == len(content):
+        return None
+    return {**event, "message": {**message, "content": kept}}
+
+
+def _has_auth_failure(raw: str) -> bool:
+    """True when the harness itself reported a 401, ignoring tool payloads.
+
+    Scans line by line so a tool result quoting a status code cannot vouch for
+    the connector's state. Lines that do not parse as a JSON object (hand-written
+    fixtures, truncated captures) are scanned verbatim, and so is any event that
+    carries no tool result — preserving the raw spacing the regex tolerates.
+    """
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            event = json.loads(stripped)
+        except (json.JSONDecodeError, TypeError):
+            event = None
+        scrubbed = _without_tool_results(event) if isinstance(event, dict) else None
+        if scrubbed is None:
+            if _AUTH_RE.search(line):
+                return True
+        elif _AUTH_RE.search(json.dumps(scrubbed)):
+            return True
+    return False
+
+
 def _is_parallax(server: Any) -> bool:
     if isinstance(server, str):
         return bool(_PARALLAX_RE.search(server))
@@ -104,7 +154,7 @@ def detect_infra_failure(raw: str, result: Any = _UNPARSED) -> str | None:
     """
     if not raw.strip():
         return "empty stream (no output captured)"
-    if _AUTH_RE.search(raw):
+    if _has_auth_failure(raw):
         return "authentication error (401) — no valid credentials in the session"
 
     if result is _UNPARSED:

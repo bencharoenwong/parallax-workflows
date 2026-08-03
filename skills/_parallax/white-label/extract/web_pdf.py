@@ -320,8 +320,16 @@ def _network_open(request, *, timeout: int):
 
 
 def _open_public_url(request, *, timeout: int):
-    """Open a validated URL and validate its final redirect before body read."""
-    requested_url = request.full_url if hasattr(request, "full_url") else str(request)
+    """Open a validated URL and validate its final redirect before body read.
+
+    A bare URL string is accepted and wrapped: pinning stores the validated
+    addresses on the request object, which a ``str`` cannot carry.
+    """
+    if not hasattr(request, "full_url"):
+        from urllib.request import Request
+
+        request = Request(str(request), headers={"User-Agent": "Mozilla/5.0"})
+    requested_url = request.full_url
     _host, _port, pinned_ips = _resolve_public_url(requested_url)
     request._parallax_pinned_ips = pinned_ips
     response = _network_open(request, timeout=timeout)

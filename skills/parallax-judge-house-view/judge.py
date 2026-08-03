@@ -899,8 +899,24 @@ def _assert_view_unchanged(view: stress.View, config: JudgeConfig) -> None:
     tilts are byte-identical, so a hash-only check would let the judge stamp a
     superseded version into a 7-year-retention chain and derive
     ``view_age_days`` from an upload timestamp that no longer applies.
+
+    A committed view that has become unreadable — removed outright, or with a
+    chain that no longer verifies — is reported the same way. It is still the
+    "the view the report describes is no longer the active one" case, and the
+    documented contract is that callers catch ``ViewChangedMidRun``; surfacing
+    the raw ``FileNotFoundError`` ("No active house view found") would both
+    escape that contract and contradict the report the judge just built.
     """
-    current = phase_0_load_view(config.view_dir)
+    try:
+        current = phase_0_load_view(config.view_dir)
+    except Exception as exc:
+        raise ViewChangedDuringJudge(
+            "Active house view was superseded while the judge was running "
+            f"(re-reading the committed view failed: {exc}); no audit row was "
+            "appended and this report describes a version that is no longer "
+            "active. Re-run /parallax-judge-house-view to judge the current "
+            "view."
+        ) from exc
     judged = _audit_identity(view)
     committed = _audit_identity(current)
     changed = audit_chain.identity_diff(judged, committed)

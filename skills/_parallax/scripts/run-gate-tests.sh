@@ -37,9 +37,13 @@ esac
 if [ "$gate_mode" = "offline" ]; then
   # Defense in depth for any opt-in integration checks added later. Tests must
   # still use fakes, but inherited operator settings cannot activate live paths.
-  export PARALLAX_E2E_LIVE=0
-  export PARALLAX_E2E_SPEND=0
-  export PARALLAX_S1_INTEGRATION=0
+  # Empty rather than 0: the usual `if os.environ.get(FLAG):` idiom reads the
+  # string "0" as true, so `=0` would enable the very paths this suppresses.
+  # Empty also beats `unset`, which would expose an `os.environ.get(FLAG, "1")`
+  # default. Both the truthiness idiom and an explicit `== "1"` read false here.
+  export PARALLAX_E2E_LIVE=
+  export PARALLAX_E2E_SPEND=
+  export PARALLAX_S1_INTEGRATION=
 fi
 export PYTHONDONTWRITEBYTECODE=1
 

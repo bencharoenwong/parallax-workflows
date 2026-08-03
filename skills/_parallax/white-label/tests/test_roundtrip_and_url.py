@@ -714,6 +714,22 @@ class TestAssetDownloadDestinationPolicy:
         opener.assert_not_called()
         assert not dest.exists()
 
+    def test_plain_url_string_is_wrapped_before_pinning(self):
+        """``_open_public_url`` accepts a bare URL string. Pinning stores the
+        validated addresses on the request object, so a ``str`` must be wrapped
+        rather than assigned to — otherwise the accepted input raises
+        AttributeError on the very line that enforces the destination."""
+        response = _StubResponse(b"ok", final_url="https://cdn.example.com/logo.png")
+        with mock.patch("extract.web_pdf._network_open", return_value=response) as opener:
+            opened = web_pdf_module._open_public_url(
+                "https://cdn.example.com/logo.png", timeout=1
+            )
+
+        assert opened is response
+        request = opener.call_args[0][0]
+        assert request.full_url == "https://cdn.example.com/logo.png"
+        assert request._parallax_pinned_ips == ("93.184.216.34",)
+
     def test_public_asset_url_is_written_to_dest(self, tmp_path):
         response = _StubResponse(b"\x89PNG\r\n\x1a\nlogo-bytes",
                                  content_type="image/png",
