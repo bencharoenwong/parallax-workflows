@@ -130,6 +130,37 @@ def test_declared_alias_resolves_ambiguity_and_bills():
         importlib.reload(token_model)
 
 
+def test_declared_foreign_namespace_resolves_ambiguity_truthfully():
+    """Ambiguity must be resolvable in BOTH directions.
+
+    With only PARALLAX_MCP_ALIASES, the sole way to stop a genuine foreign
+    collision degrading every run was to declare that server Parallax -- which
+    would then bill its calls to the client. Offering one direction rebuilt the
+    permanent-unfixable-degrade trap KNOWN_UNPRICED exists to prevent.
+    """
+    import importlib  # noqa: PLC0415
+    import os  # noqa: PLC0415
+
+    import token_model  # noqa: PLC0415
+
+    prior = os.environ.get("PARALLAX_MCP_FOREIGN_NAMESPACES")
+    os.environ["PARALLAX_MCP_FOREIGN_NAMESPACES"] = "claude_ai_hubspot"
+    try:
+        reloaded = importlib.reload(token_model)
+        est = reloaded.estimate([
+            ToolCall(name="mcp__claude_ai_HubSpot__submit_feedback", input={})
+        ])
+        assert est.ambiguous_endpoints == (), "declared foreign must stop degrading"
+        assert est.tokens == 0, "and must still never be billed"
+        assert est.unpriced_endpoints == ()
+    finally:
+        if prior is None:
+            os.environ.pop("PARALLAX_MCP_FOREIGN_NAMESPACES", None)
+        else:
+            os.environ["PARALLAX_MCP_FOREIGN_NAMESPACES"] = prior
+        importlib.reload(token_model)
+
+
 def test_foreign_server_colliding_name_is_never_billed():
     """`submit_feedback` is exposed by both the Parallax and HubSpot connectors.
 

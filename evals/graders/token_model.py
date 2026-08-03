@@ -122,6 +122,18 @@ PARALLAX_ALIASES: frozenset[str] = frozenset(
     if part.strip()
 )
 
+# The mirror of the above: namespaces known NOT to be Parallax. Without this,
+# ambiguity has only one resolution, so a genuine foreign collision (HubSpot
+# also exposes ``submit_feedback``) could never be cleared -- declaring HubSpot
+# a Parallax alias to silence it would be a lie that starts billing its calls.
+# That would rebuild the permanent-unfixable-degrade trap ``KNOWN_UNPRICED``
+# exists to avoid. Both answers must be expressible.
+FOREIGN_NAMESPACES: frozenset[str] = frozenset(
+    part.strip().lower()
+    for part in os.environ.get("PARALLAX_MCP_FOREIGN_NAMESPACES", "").split(",")
+    if part.strip()
+)
+
 CALL_PARALLAX = "parallax"
 CALL_FOREIGN = "foreign"
 CALL_AMBIGUOUS = "ambiguous"
@@ -139,17 +151,24 @@ def classify_call(name: str) -> str:
     both the Parallax and HubSpot connectors.
 
     So this does not guess. A namespace containing ``parallax``, or listed in
-    ``PARALLAX_MCP_ALIASES``, is Parallax. A name with no MCP namespace is
+    ``PARALLAX_MCP_ALIASES``, is Parallax. One listed in
+    ``PARALLAX_MCP_FOREIGN_NAMESPACES`` is not. A name with no MCP namespace is
     harness-local. Anything else whose bare name this table happens to know is
     reported ``ambiguous`` and billed to nobody, because the honest answer is
-    that we cannot tell -- and an operator can settle it permanently by naming
-    the alias in ``PARALLAX_MCP_ALIASES``.
+    that we cannot tell.
+
+    Ambiguity is always resolvable, in whichever direction is true: declare the
+    namespace an alias if it is Parallax, or foreign if it is not. Offering only
+    the first would leave a real foreign collision degrading runs forever with
+    no honest remedy.
     """
     if not name.startswith("mcp__"):
         return CALL_FOREIGN  # harness-local; never MCP-namespaced
     namespace = name[len("mcp__"):].rsplit("__", 1)[0].lower()
     if "parallax" in namespace or namespace in PARALLAX_ALIASES:
         return CALL_PARALLAX
+    if namespace in FOREIGN_NAMESPACES:
+        return CALL_FOREIGN  # operator has stated this server is not Parallax
     if bare(name) in KNOWN_ENDPOINTS:
         return CALL_AMBIGUOUS
     return CALL_FOREIGN
