@@ -6,7 +6,7 @@ import hashlib
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import sys
 
@@ -273,7 +273,6 @@ def evaluate_internal_rules(view: View, rules_path: Path) -> List[RuleResult]:
 
     results = []
     for rule in rules:
-        triggered = False
         evidence = []
         
         when_clause = rule.pattern.get('when', {})
@@ -305,7 +304,6 @@ def evaluate_internal_rules(view: View, rules_path: Path) -> List[RuleResult]:
                 results.append(RuleResult(rule_id=rule.id, triggered=False))
                 continue
         
-        triggered = True
         downgraded = (datetime.date.today() - rule.last_reviewed).days > 180 and rule.class_ == 'hard_stop'
         # Effective class after stale-config downgrade.
         effective_class = "taste" if downgraded else rule.class_
