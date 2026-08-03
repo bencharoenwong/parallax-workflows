@@ -80,12 +80,77 @@ def test_missing_connector_fails_both():
 
 def test_empty_server_list_with_parallax_present_is_not_a_connector_failure():
     """Another server reporting an empty list must not be read as Parallax
-    being absent."""
+    being absent. Connector state comes from the init event's own entries."""
     raw = (
         '{"type":"system","subtype":"init","mcp_servers":[{"name":"claude_ai_Parallax"}],'
         '"other_servers":{"mcp_servers":[]}}\n' + _RESULT
     )
     _agree(raw)
+    assert _both(raw) == (None, None)
+
+
+def test_connector_missing_is_detected_when_the_prompt_names_parallax():
+    """The regression this pins: the rollout prompt IS the skill command
+    (`/parallax-should-i-buy AAPL`), echoed back as a user event, so the word
+    `parallax` is in every captured stream — including one where the connector
+    failed to load. Deciding connector presence by substring-scanning the
+    transcript therefore never fires when it matters, and the empty report gets
+    scored as a skill failure instead of an infra failure."""
+    raw = (
+        '{"type":"system","subtype":"init","mcp_servers":[]}\n'
+        '{"type":"user","message":{"role":"user","content":'
+        '"/parallax-should-i-buy AAPL"}}\n' + _RESULT
+    )
+    assert "parallax" in raw.lower()
+    corpus_reason, record_reason = _both(raw)
+    assert "connector" in (corpus_reason or "").lower()
+    assert "connector" in (record_reason or "").lower()
+
+
+def test_foreign_connectors_only_is_a_connector_failure():
+    """A session that loaded other servers but not Parallax cannot produce a
+    Parallax report; the tool names in the prose must not vouch for the
+    connector."""
+    raw = (
+        '{"type":"system","subtype":"init","mcp_servers":[{"name":"claude_ai_HubSpot"}]}\n'
+        '{"type":"assistant","message":{"content":[{"type":"text",'
+        '"text":"I could not reach mcp__claude_ai_Parallax__get_score_analysis."}]}}\n'
+        + _RESULT
+    )
+    corpus_reason, record_reason = _both(raw)
+    assert "connector" in (corpus_reason or "").lower()
+    assert "connector" in (record_reason or "").lower()
+
+
+def test_parallax_listed_but_not_connected_fails_both():
+    raw = (
+        '{"type":"system","subtype":"init","mcp_servers":'
+        '[{"name":"claude_ai_Parallax","status":"failed"}]}\n' + _RESULT
+    )
+    corpus_reason, record_reason = _both(raw)
+    assert "connector" in (corpus_reason or "").lower()
+    assert "connector" in (record_reason or "").lower()
+
+
+def test_parallax_listed_as_connected_is_gradeable():
+    raw = (
+        '{"type":"system","subtype":"init","mcp_servers":'
+        '[{"name":"claude_ai_Parallax","status":"connected"},'
+        '{"name":"claude_ai_HubSpot","status":"failed"}]}\n' + _RESULT
+    )
+    assert _both(raw) == (None, None)
+
+
+def test_tracked_fixtures_are_gradeable():
+    """Real captured streams carry no init event, so the connector check falls
+    back to the raw signals. Those must not fire on a healthy transcript."""
+    fixtures = sorted(
+        (Path(__file__).parent.parent / "fixtures" / "should-i-buy").glob("golden_*.stream.json")
+    )
+    assert fixtures, "expected at least one golden fixture"
+    for path in fixtures:
+        raw = path.read_text(encoding="utf-8", errors="replace")
+        assert _both(raw) == (None, None), f"{path.name} misread as an infra failure"
 
 
 def test_parsed_result_checks_only_fire_with_a_parsed_result():

@@ -17,6 +17,7 @@ to enable the extra checks. The stream-level rules are identical either way.
 """
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
@@ -32,10 +33,18 @@ _AUTH_RE = re.compile(
 )
 _RESULT_RE = re.compile(r'"type":\s*"result"')
 
-# Connector missing. The init event's empty server list is the machine-readable
-# form; the prose forms below are what a failed launch prints instead. Both are
-# proximity-bound so an unrelated "failed to connect" elsewhere in a long
-# transcript cannot pair with an unrelated "mcp server".
+# Connector state is read from the init event's `mcp_servers` entries, never by
+# scanning the transcript for the word "parallax": the rollout prompt is the
+# skill command itself (`/parallax-should-i-buy AAPL`, echoed back as a user
+# event) and every tool name is `mcp__claude_ai_Parallax__*`, so that word is
+# present in EVERY captured stream — including one where the connector failed to
+# load. A whole-stream substring test therefore never fires when it matters.
+_PARALLAX_RE = re.compile(r"parallax", re.I)
+_CONNECTED_STATES = frozenset({"", "connected", "ok", "ready", "running", "active"})
+
+# Fallback signals, used only when a stream carries no parseable init event
+# (hand-written fixtures, truncated captures). Proximity-bound so an unrelated
+# "failed to connect" cannot pair with an unrelated "mcp server" paragraphs away.
 _EMPTY_MCP_RE = re.compile(r'"mcp_servers":\s*\[\s*\]')
 _MCP_PROSE_RE = re.compile(
     r'no mcp servers configured'
@@ -45,6 +54,45 @@ _MCP_PROSE_RE = re.compile(
 )
 
 _UNPARSED = object()
+
+
+def _init_mcp_servers(raw: str) -> list | None:
+    """The `mcp_servers` list from the stream's system/init event, or None."""
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(event, dict):
+            continue
+        if event.get("type") != "system" or event.get("subtype") != "init":
+            continue
+        servers = event.get("mcp_servers")
+        if isinstance(servers, list):
+            return servers
+    return None
+
+
+def _is_parallax(server: Any) -> bool:
+    if isinstance(server, str):
+        return bool(_PARALLAX_RE.search(server))
+    if isinstance(server, dict):
+        return any(
+            _PARALLAX_RE.search(str(server.get(key, "")))
+            for key in ("name", "serverName", "server")
+        )
+    return False
+
+
+def _is_connected(server: Any) -> bool:
+    """A server entry with no status field is assumed up; only an explicit
+    non-connected state counts as a failure."""
+    if not isinstance(server, dict):
+        return True
+    return str(server.get("status", "")).strip().lower() in _CONNECTED_STATES
 
 
 def detect_infra_failure(raw: str, result: Any = _UNPARSED) -> str | None:
@@ -70,9 +118,13 @@ def detect_infra_failure(raw: str, result: Any = _UNPARSED) -> str | None:
         if result.get("subtype") not in (None, "success"):
             return f"result subtype {result['subtype']}"
 
-    # The `parallax` guard keeps a run that merely reports an empty list for
-    # some *other* server from being called a missing Parallax connector.
-    if (_EMPTY_MCP_RE.search(raw) or _MCP_PROSE_RE.search(raw)) \
-            and "parallax" not in raw.lower():
+    servers = _init_mcp_servers(raw)
+    if servers is not None:
+        parallax = [s for s in servers if _is_parallax(s)]
+        if not parallax:
+            return "no Parallax MCP server loaded (connector missing)"
+        if not any(_is_connected(s) for s in parallax):
+            return "Parallax MCP server did not connect (connector unavailable)"
+    elif _EMPTY_MCP_RE.search(raw) or _MCP_PROSE_RE.search(raw):
         return "no Parallax MCP server loaded (connector missing)"
     return None
