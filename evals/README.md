@@ -103,6 +103,7 @@ evals/
 │   ├── judge_criteria.py   # Tier-2 rubric criteria (should-i-buy baseline set)
 │   ├── run_judge.py        # pinned-Anthropic rubric judge (allowlist-guarded)
 │   ├── transcript.py       # stream-json → final-prose extraction
+│   ├── infra_failure.py    # shared "harness/connector broke" predicate (one owner)
 │   ├── runrecord.py        # one measured run → RunRecord (timing + both cost meters)
 │   ├── token_model.py      # Parallax token price table (derived from skills/_parallax/token-costs.md)
 │   └── test_*.py           # pure-function unit tests (the only thing CI runs)
@@ -171,6 +172,25 @@ Example dry-runs before spending tokens:
 
 Live rollouts (`run_rollout.sh`, `run_baseline.sh` without `--dry-run`) cost Parallax
 tokens and are run manually.
+
+### Derived Parallax cost meter
+
+`RunRecord` reports Parallax token cost as **derived** — counted tool calls ×
+published unit price from `skills/_parallax/token-costs.md` — never metered.
+Attribution is by MCP namespace, not by tool name, because a tool name cannot
+prove which server served it:
+
+- Namespace contains `parallax`, or is listed in `PARALLAX_MCP_ALIASES` → billed.
+- No MCP namespace at all → harness-local (Read, Bash, …) → ignored.
+- A known endpoint name under an unrecognised namespace → **ambiguous**: billed
+  to nobody, listed in `ambiguous_endpoints`, and the run is degraded so it
+  cannot pool into an aggregate that reads as a measured client bill.
+
+If a deployment mounts the connector under an alias with no "parallax" in it
+(white-label, in particular), set `PARALLAX_MCP_ALIASES` to the comma-separated
+namespace segments to resolve that permanently. An endpoint under a recognised
+Parallax namespace that the price table does not know still lands in
+`unknown_endpoints` and degrades the run — the stale-table signal.
 
 ## Adding a new skill eval
 
