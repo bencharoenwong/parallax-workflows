@@ -203,10 +203,9 @@ def classify_mcp_meta_state(
     # tool_not_found, internal_error, ...) — we cannot enumerate them.
     if err is not None:
         return "PARALLAX_SILENT", f"{err} on {market}"
-    if response.get("success") is True:
-        return "ok", f"healthy response for {market}"
-    # Defensive fallthrough — response shape we don't recognize.
-    return "UNREACHABLE", "unrecognized response shape"
+    # Every remaining shape is `success: True` — the shared rule above already
+    # sent absent/non-mapping/unrecognized responses to UNREACHABLE.
+    return "ok", f"healthy response for {market}"
 
 # Core Functions
 def load_active_view(view_dir: Path = HOUSE_VIEW_DIR) -> View:
