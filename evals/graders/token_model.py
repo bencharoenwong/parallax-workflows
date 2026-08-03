@@ -54,6 +54,20 @@ PER_HOLDING_COST: dict[str, int] = {
     "check_portfolio_redundancy": 1,
 }
 
+# Live Parallax endpoints deliberately left unpriced: nobody has measured them,
+# and this repo does not publish inferred numbers. They are NOT a stale-table
+# signal -- that signal is reserved for a name we do not recognise at all, which
+# clears once someone prices it. These four never clear, so folding them into
+# ``unknown_endpoints`` would permanently degrade any run that touches them
+# (``parallax-pair-finder`` calls etf_search/etf_holdings) for a reason no table
+# edit can fix. They are reported separately so a total can state what it omits.
+KNOWN_UNPRICED: frozenset[str] = frozenset({
+    "etf_search",
+    "etf_holdings",
+    "check_job_status",
+    "submit_feedback",
+})
+
 # Harness-local tools. These consume Anthropic tokens but never Parallax ones,
 # so they must be skipped rather than reported as unpriced endpoints -- an
 # unrecognised name is meant to signal a stale price table, and noise here would
@@ -77,6 +91,7 @@ USD_PER_TOKEN = 0.20
 class TokenEstimate:
     tokens: int
     unknown_endpoints: tuple[str, ...]
+    unpriced_endpoints: tuple[str, ...] = ()
 
     @property
     def total(self) -> int:
@@ -117,9 +132,13 @@ def estimate(tool_calls) -> TokenEstimate:
     An endpoint absent from every table is reported in ``unknown_endpoints``
     rather than silently costed at zero -- a new billable tool must surface as a
     hard failure, not as a free call.
+
+    A ``KNOWN_UNPRICED`` endpoint lands in ``unpriced_endpoints`` instead. Both
+    are excluded from ``tokens``, but only the former means the table is stale.
     """
     tokens = 0
     unknown: list[str] = []
+    unpriced: list[str] = []
 
     for call in tool_calls:
         if call.name.startswith("mcp__") and not is_parallax_mcp(call.name):
@@ -129,9 +148,15 @@ def estimate(tool_calls) -> TokenEstimate:
             tokens += FLAT_COST[name]
         elif name in PER_HOLDING_COST:
             tokens += PER_HOLDING_COST[name] * _holdings_in(call.input or {})
+        elif name in KNOWN_UNPRICED:
+            unpriced.append(name)
         elif name in HARNESS_TOOLS or name.startswith(HARNESS_PREFIXES):
             continue  # harness-local tool, not a Parallax endpoint
         else:
             unknown.append(name)
 
-    return TokenEstimate(tokens, tuple(sorted(set(unknown))))
+    return TokenEstimate(
+        tokens,
+        tuple(sorted(set(unknown))),
+        tuple(sorted(set(unpriced))),
+    )

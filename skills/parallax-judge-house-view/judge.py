@@ -863,8 +863,13 @@ def phase_8_emit_chain(
 # ---------------------------------------------------------------------------
 
 
-class ViewChangedDuringJudge(RuntimeError):
-    """The active view was superseded between phase 0 and the audit append."""
+class ViewChangedDuringJudge(audit_chain.ViewChangedMidRun):
+    """The active view was superseded between phase 0 and the audit append.
+
+    Specialises the shared ``ViewChangedMidRun`` so the two house-view guards
+    share a base an operator can catch generically, while keeping the
+    judge-specific message and type that callers and tests already rely on.
+    """
 
 
 # The audit row cites metadata that compute_view_hash deliberately excludes
@@ -898,13 +903,9 @@ def _assert_view_unchanged(view: stress.View, config: JudgeConfig) -> None:
     current = phase_0_load_view(config.view_dir)
     judged = _audit_identity(view)
     committed = _audit_identity(current)
-    if committed == judged:
+    changed = audit_chain.identity_diff(judged, committed)
+    if not changed:
         return
-    changed = ", ".join(
-        f"{field}: {judged[field]!r} -> {committed[field]!r}"
-        for field in judged
-        if judged[field] != committed[field]
-    )
     raise ViewChangedDuringJudge(
         "Active house view was superseded while the judge was running "
         f"({changed}); no audit row was appended and this report describes a "

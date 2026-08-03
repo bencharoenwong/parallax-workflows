@@ -536,3 +536,23 @@ def test_metadata_only_supersede_mid_run_aborts_the_audit_append(
         ))
 
     assert (active_view_dir / "audit.jsonl").read_text() == audit_before
+
+
+def test_judge_identity_fields_superset_of_stress():
+    """The judge's audit row cites strictly more than the stress row.
+
+    Both guards call the same ``stress.audit_identity`` with their own field
+    tuple, so the two sets can drift apart silently — nothing but inspection
+    connected them before. The judge derives ``view_age_days`` from
+    ``upload_timestamp``, so its set must stay a superset: a field the stress
+    guard checks but the judge does not would let a superseded view through
+    the stricter of the two paths.
+    """
+    assert set(stress.AUDIT_IDENTITY_FIELDS) <= set(judge._AUDIT_CITED_METADATA)
+
+
+def test_view_changed_guards_share_a_catchable_base():
+    """An operator catching the shared base must catch both skills' guards."""
+    assert issubclass(judge.ViewChangedDuringJudge, audit_chain.ViewChangedMidRun)
+    # Bare `except RuntimeError` predates the shared base; it must still work.
+    assert issubclass(audit_chain.ViewChangedMidRun, RuntimeError)

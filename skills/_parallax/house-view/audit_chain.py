@@ -43,6 +43,33 @@ class AuditTailReadFailed(AuditChainError):
     error_code = "audit_tail_read_failed"
 
 
+class ViewChangedMidRun(AuditChainError, RuntimeError):
+    """The committed view moved between the phase-0 read and the audit append.
+
+    Subclasses ``RuntimeError`` so the callers that raised a bare ``RuntimeError``
+    before this type existed keep their contract.
+    """
+
+    error_code = "view_changed_mid_run"
+
+
+def identity_diff(captured: dict[str, str], committed: dict[str, str]) -> str:
+    """Human-readable diff of the identity fields that moved; ``""`` if none.
+
+    Single-sources the compare-and-format half of the stress and judge race
+    guards. Those two guards legitimately differ in *which* fields they cite
+    (the judge's audit row derives ``view_age_days`` from ``upload_timestamp``,
+    the stress row does not) and in how they reload the committed view, so the
+    field set and the reload stay at the call site. What must not drift is the
+    comparison itself and the operator-facing diff it produces.
+    """
+    return ", ".join(
+        f"{key}: {captured[key]!r} -> {committed[key]!r}"
+        for key in captured
+        if captured.get(key) != committed.get(key)
+    )
+
+
 @contextmanager
 def view_transaction(view_dir: Path) -> Iterator[None]:
     """Serialize a canonical house-view read/write transaction.

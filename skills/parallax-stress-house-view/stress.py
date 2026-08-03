@@ -16,6 +16,7 @@ _HOUSE_VIEW_DIR = Path(__file__).resolve().parent.parent / "_parallax" / "house-
 if str(_HOUSE_VIEW_DIR) not in sys.path:
     sys.path.insert(0, str(_HOUSE_VIEW_DIR))
 import audit_chain  # noqa: E402
+import mcp_meta  # noqa: E402
 
 # Data Classes
 @dataclass
@@ -189,13 +190,11 @@ def classify_mcp_meta_state(
     """
     if market not in covered_markets:
         return "UNCOVERED", f"{market} not in Parallax macro coverage"
-    if response is None:
-        return "UNREACHABLE", "no response from MCP"
-    if not isinstance(response, dict):
-        return "UNREACHABLE", f"unexpected response type: {type(response).__name__}"
-    if "success" not in response and "error" not in response:
-        # Malformed shape: neither healthy nor error-flagged. Fail closed.
-        return "UNREACHABLE", "malformed response shape (no `success`/`error`)"
+    # Shape rules are shared with maker's reachability test so the two cannot
+    # drift; the meta-state vocabulary below stays local to this skill.
+    unusable = mcp_meta.shape_unreachable_reason(response)
+    if unusable is not None:
+        return "UNREACHABLE", unusable
     if response.get("success") is False:
         return "PARALLAX_SILENT", f"success=false: {response.get('error', 'unspecified')}"
     err = response.get("error")
@@ -572,13 +571,11 @@ def append_stress_audit(
 
         loaded = audit_identity(view.data, view.view_hash)
         committed = audit_identity(current_data, current_hash)
-        if loaded != committed:
-            changed = ", ".join(
-                f"{key}: {loaded[key]!r} -> {committed[key]!r}"
-                for key in loaded
-                if loaded[key] != committed[key]
+        changed = audit_chain.identity_diff(loaded, committed)
+        if changed:
+            raise audit_chain.ViewChangedMidRun(
+                f"View changed mid-run ({changed}), please retry."
             )
-            raise RuntimeError(f"View changed mid-run ({changed}), please retry.")
 
         entry_data = {
             "ts": _now_iso_z(),

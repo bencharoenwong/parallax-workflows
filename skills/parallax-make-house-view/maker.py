@@ -53,6 +53,7 @@ if str(_SHARED_DIR) not in sys.path:
 import audit_chain  # noqa: E402
 import chain_emit  # noqa: E402
 import gate_present  # noqa: E402
+import mcp_meta  # noqa: E402
 import provenance_classes  # noqa: E402
 import view_status  # noqa: E402
 
@@ -383,7 +384,14 @@ class MakerOrchestrator:
             for comp in self.options.components:
                 resp = results.get((market, comp))
                 comp_responses[comp] = resp
-                if resp is not None:
+                # Fail closed on a shape we cannot interpret. `resp is not None`
+                # counted a malformed or non-mapping response as successfully
+                # fetched data, so a market answering only with garbage read as
+                # reachable and escaped the unreachable_share abort. An explicit
+                # `success: false` still counts as reachable -- the server
+                # answered, and that is silent-for-this-component, not a dead
+                # market (SKILL.md Step 3).
+                if mcp_meta.carries_data(resp):
                     any_reachable = True
                     # PARTIAL detection done downstream by cross_country.
                 else:

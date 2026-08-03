@@ -127,9 +127,24 @@ def build_aligned_mcp() -> dict[str, Any]:
             "markets": ["United States", "Japan", "China"],
         },
         "telemetry": {"regime_tag": "test-regime", "signals": {}},
-        ("United States", "macro_indicators"): {"economic_growth": "steady", "inflation": "benign"},
-        ("Japan", "tactical"): {"equities": "overweight"},
-        ("China", "macro_indicators"): {"economic_growth": "slowing"},
+        # `success` is part of the real macro_analyst envelope (verified live
+        # 2026-08-03). A bare payload without it is a shape the API never
+        # returns, and the reachability check fails closed on it by design.
+        ("United States", "macro_indicators"): {
+            "success": True,
+            "component": "macro_indicators",
+            "content": "Growth steady; inflation benign.",
+        },
+        ("Japan", "tactical"): {
+            "success": True,
+            "component": "tactical",
+            "content": "Equities overweight.",
+        },
+        ("China", "macro_indicators"): {
+            "success": True,
+            "component": "macro_indicators",
+            "content": "Growth slowing.",
+        },
     }
 
 def run_load_house_view_against_fixture(fixture: Any, view_dir: Path, auto_confirm: bool = True):

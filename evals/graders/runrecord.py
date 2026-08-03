@@ -62,6 +62,7 @@ class RunRecord:
     parallax_tokens: int = 0
     parallax_cost_usd: float = 0.0
     unknown_endpoints: list[str] = field(default_factory=list)
+    unpriced_endpoints: list[str] = field(default_factory=list)
 
     # --- work performed ---
     tool_calls_total: int = 0
@@ -184,6 +185,7 @@ def from_stream_json(
     rec.parallax_tokens = est.tokens
     rec.parallax_cost_usd = round(est.usd(usd_per_token), 4)
     rec.unknown_endpoints = list(est.unknown_endpoints)
+    rec.unpriced_endpoints = list(est.unpriced_endpoints)
 
     rec.tool_errors = _count_tool_errors(raw)
 
@@ -207,6 +209,12 @@ def from_stream_json(
         rec.degraded_paths.append(
             "unknown_endpoint:" + ",".join(rec.unknown_endpoints)
         )
+
+    # A KNOWN_UNPRICED endpoint is deliberately absent from the table, not a
+    # sign the table is stale -- no table edit can clear it, so degrading here
+    # would permanently exclude every run of a workflow that calls one
+    # (pair-finder) from AGGREGATABLE. It stays STATUS_OK; ``unpriced_endpoints``
+    # on the record states what the derived total omits.
 
     return rec
 
