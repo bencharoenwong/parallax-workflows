@@ -2,6 +2,7 @@
 
 Transforms run against the real source files (they are anchor-asserted, so a
 drifted source fails here before it fails a distribution build)."""
+import subprocess
 import sys
 import unicodedata
 from pathlib import Path
@@ -389,8 +390,16 @@ def test_tracked_plugin_bundle_matches_source(tmp_path, monkeypatch):
         "python3 skills/_parallax/scripts/build_bundle.py plugin")
 
     built_files = {p.relative_to(built) for p in built.rglob("*") if p.is_file()}
-    tracked_files_ = {p.relative_to(tracked) for p in tracked.rglob("*")
-                      if p.is_file() and "__pycache__" not in p.parts}
+    # Ask git for the tracked set rather than walking the working tree: any
+    # local untracked artifact under plugin/ (a stray .pytest_cache, .DS_Store,
+    # an editor swap file) would otherwise be reported as bundle staleness.
+    listing = subprocess.run(
+        ["git", "-C", str(bb.REPO_ROOT), "ls-files", "-z", "--", "plugin"],
+        capture_output=True, text=True)
+    if listing.returncode != 0:
+        pytest.skip("git is unavailable; cannot enumerate tracked plugin files")
+    tracked_files_ = {Path(rel).relative_to("plugin")
+                      for rel in listing.stdout.split("\0") if rel}
 
     assert built_files == tracked_files_, (
         "plugin/ file list is stale — run: "
