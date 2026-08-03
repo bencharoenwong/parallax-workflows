@@ -563,7 +563,7 @@ h1 { font-family: 'Inter', sans-serif; color: #5A597A; }
             connection = web_pdf_module._make_pinned_connection(
                 http.client.HTTPSConnection,
                 "brand.example",
-                "93.184.216.34",
+                ("93.184.216.34",),
                 context=context,
                 timeout=3,
             )
@@ -573,6 +573,57 @@ h1 { font-family: 'Inter', sans-serif; color: #5A597A; }
         context.wrap_socket.assert_called_once_with(
             raw_socket, server_hostname="brand.example"
         )
+
+    def test_dial_falls_back_to_the_next_validated_address(self):
+        """A dual-stack host must not become unreachable under pinning.
+
+        ``socket.create_connection`` walks every ``getaddrinfo`` answer. Pinning
+        to the first one alone turns an AAAA-first host on an IPv4-only network
+        into an empty extraction with no error, so every validated address is
+        tried in resolver order.
+        """
+        import http.client
+
+        context = mock.Mock()
+        raw_socket = mock.Mock()
+        context.wrap_socket.return_value = mock.Mock()
+
+        def dial(address, *args, **kwargs):
+            if address[0] == "2606:2800:220:1:248:1893:25c8:1946":
+                raise OSError("Network is unreachable")
+            return raw_socket
+
+        with mock.patch("socket.create_connection", side_effect=dial) as dialer:
+            connection = web_pdf_module._make_pinned_connection(
+                http.client.HTTPSConnection,
+                "brand.example",
+                ("2606:2800:220:1:248:1893:25c8:1946", "93.184.216.34"),
+                context=context,
+                timeout=3,
+            )
+            connection.connect()
+
+        assert [call.args[0] for call in dialer.call_args_list] == [
+            ("2606:2800:220:1:248:1893:25c8:1946", 443),
+            ("93.184.216.34", 443),
+        ]
+        context.wrap_socket.assert_called_once_with(
+            raw_socket, server_hostname="brand.example"
+        )
+
+    def test_dial_reraises_when_every_validated_address_fails(self):
+        import http.client
+
+        with mock.patch(
+            "socket.create_connection", side_effect=OSError("Network is unreachable")
+        ), pytest.raises(OSError, match="Network is unreachable"):
+            connection = web_pdf_module._make_pinned_connection(
+                http.client.HTTPConnection,
+                "brand.example",
+                ("93.184.216.34", "93.184.216.35"),
+                timeout=3,
+            )
+            connection.connect()
 
     def test_redirect_to_private_destination_is_rejected_before_body_read(self):
         response = _StubResponse(

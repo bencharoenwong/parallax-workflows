@@ -68,6 +68,12 @@ KNOWN_UNPRICED: frozenset[str] = frozenset({
     "submit_feedback",
 })
 
+# Every endpoint name this module can say anything about, priced or explicitly
+# not. Used to recognise a Parallax call mounted under a non-standard MCP alias.
+KNOWN_ENDPOINTS: frozenset[str] = (
+    frozenset(FLAT_COST) | frozenset(PER_HOLDING_COST) | KNOWN_UNPRICED
+)
+
 # Harness-local tools (Read, Bash, ToolSearch, ...) used to be skipped by a
 # hand-maintained blocklist. That inverted the burden: every tool the harness
 # gained in future had to be remembered here, and a forgotten one would land in
@@ -75,7 +81,7 @@ KNOWN_UNPRICED: frozenset[str] = frozenset({
 # failure ``KNOWN_UNPRICED`` exists to prevent, relocated into blocklist drift.
 #
 # A Parallax endpoint always arrives MCP-namespaced (``mcp__<alias>__<tool>``),
-# so a name that is not Parallax-namespaced cannot be a Parallax endpoint by
+# so a name carrying no MCP namespace cannot be a Parallax endpoint by
 # construction. ``estimate`` therefore allowlists on ``is_parallax_mcp`` and
 # ignores everything else structurally -- no list to keep current.
 
@@ -108,11 +114,21 @@ def is_parallax_mcp(name: str) -> bool:
 
     Other MCP servers (IDE, GitHub, ...) bill nothing in Parallax tokens, and
     their endpoint names must not be mistaken for stale-price-table signals.
+
+    The namespace test recognises the standard alias, but an operator is free to
+    mount the server under a name with no ``parallax`` in it. Such a run would
+    otherwise bill zero with an empty ``unknown_endpoints`` -- a silent
+    undercount that reads as a healthy free run. An endpoint this table already
+    names is therefore counted whatever the alias; only a namespace-unrecognised
+    AND table-unrecognised name is ignored, which is the case where no billing
+    conclusion is available either way.
     """
     if not name.startswith("mcp__"):
         return False
     namespace = name[len("mcp__"):].rsplit("__", 1)[0]
-    return "parallax" in namespace.lower()
+    if "parallax" in namespace.lower():
+        return True
+    return bare(name) in KNOWN_ENDPOINTS
 
 
 def _holdings_in(call_input: dict) -> int:

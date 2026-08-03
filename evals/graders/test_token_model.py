@@ -85,6 +85,22 @@ def test_alternate_parallax_connector_alias_is_billed():
     assert est.unknown_endpoints == ()
 
 
+def test_non_standard_alias_with_known_endpoint_is_still_billed():
+    """The namespace test alone undercounts a server mounted off-brand.
+
+    An operator is free to name the connector anything; a namespace-only
+    allowlist would drop every call from such a run, reporting ``tokens=0`` with
+    an empty ``unknown_endpoints`` -- indistinguishable from a genuinely free
+    run. An endpoint the price table already names is billed whatever the alias.
+    """
+    est = estimate([
+        ToolCall(name="mcp__research_desk__get_company_info", input={}),
+        ToolCall(name="mcp__research_desk__get_stock_report", input={}),
+    ])
+    assert est.tokens == 11
+    assert est.unknown_endpoints == ()
+
+
 def test_known_unpriced_is_not_a_stale_table_signal():
     """A deliberately-unpriced endpoint must not read as an unknown one.
 

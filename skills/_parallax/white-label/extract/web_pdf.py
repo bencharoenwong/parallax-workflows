@@ -13,7 +13,7 @@ import ipaddress
 import socket
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Sequence
 from urllib.parse import urlsplit, urlunsplit
 
 from .colors import ColorExtractor, _assign_color_roles_by_frequency
@@ -128,13 +128,19 @@ def _public_ip(address: str) -> bool:
         return False
 
 
-def _resolve_public_url(url: str) -> tuple[str, int, str]:
+def _resolve_public_url(url: str) -> tuple[str, int, tuple[str, ...]]:
     """Reject URL destinations that do not resolve exclusively to public IPs.
 
     This intentionally rejects mixed public/private DNS answers: allowing the
     public member would leave a DNS-rebinding window between validation and
     connection. Legacy IPv4 integer/hex/octal forms are normalized with
     ``inet_aton`` before DNS lookup.
+
+    Every validated address is returned, in resolver order, so the dial can fall
+    back the way ``socket.create_connection`` would: a dual-stack host whose
+    first answer is AAAA is unreachable from an IPv4-only network, and pinning
+    to that single answer would turn a working fetch into a silent empty
+    extraction. All returned addresses passed the same public-address policy.
     """
     try:
         parsed = urlsplit(url)
@@ -170,25 +176,39 @@ def _resolve_public_url(url: str) -> tuple[str, int, str]:
 
     if not addresses or any(not _public_ip(address) for address in addresses):
         raise UrlNotPublicError("URL destination is not public")
-    return host, port, addresses[0]
+    return host, port, tuple(addresses)
 
 
 def _validate_public_url(url: str) -> None:
     _resolve_public_url(url)
 
 
-def _make_pinned_connection(connection_class, host: str, pinned_ip: str, **kwargs):
-    """Build an HTTP(S) connection whose TCP dial uses an already-checked IP.
+def _make_pinned_connection(
+    connection_class, host: str, pinned_ips: Sequence[str], **kwargs
+):
+    """Build an HTTP(S) connection whose TCP dial uses already-checked IPs.
 
     The connection's ``host`` remains the URL hostname, so HTTP Host headers
     and HTTPS certificate/SNI verification retain their normal semantics. Only
     the address passed to the socket connector is replaced.
+
+    Candidates are tried in resolver order, mirroring what
+    ``socket.create_connection`` does with a multi-answer hostname; the last
+    error is re-raised when every candidate fails.
     """
     connection = connection_class(host, **kwargs)
     create_connection = connection._create_connection
 
     def create_pinned(address, *args, **connect_kwargs):
-        return create_connection((pinned_ip, address[1]), *args, **connect_kwargs)
+        last_error: OSError | None = None
+        for pinned_ip in pinned_ips:
+            try:
+                return create_connection(
+                    (pinned_ip, address[1]), *args, **connect_kwargs
+                )
+            except OSError as error:
+                last_error = error
+        raise last_error or OSError("no validated address for destination")
 
     connection._create_connection = create_pinned
     return connection
@@ -206,8 +226,8 @@ def _network_open(request, *, timeout: int):
     )
 
     def pin_request(req, url):
-        _host, _port, pinned_ip = _resolve_public_url(url)
-        req._parallax_pinned_ip = pinned_ip
+        _host, _port, pinned_ips = _resolve_public_url(url)
+        req._parallax_pinned_ips = pinned_ips
         return req
 
     class PublicRedirectHandler(HTTPRedirectHandler):
@@ -217,25 +237,25 @@ def _network_open(request, *, timeout: int):
 
     class PinnedHTTPHandler(HTTPHandler):
         def http_open(self, req):
-            pinned_ip = req._parallax_pinned_ip
+            pinned_ips = req._parallax_pinned_ips
             return self.do_open(
                 lambda host, **kwargs: _make_pinned_connection(
-                    HTTPConnection, host, pinned_ip, **kwargs
+                    HTTPConnection, host, pinned_ips, **kwargs
                 ),
                 req,
             )
 
     class PinnedHTTPSHandler(HTTPSHandler):
         def https_open(self, req):
-            pinned_ip = req._parallax_pinned_ip
+            pinned_ips = req._parallax_pinned_ips
             return self.do_open(
                 lambda host, **kwargs: _make_pinned_connection(
-                    HTTPSConnection, host, pinned_ip, **kwargs
+                    HTTPSConnection, host, pinned_ips, **kwargs
                 ),
                 req,
             )
 
-    if not hasattr(request, "_parallax_pinned_ip"):
+    if not hasattr(request, "_parallax_pinned_ips"):
         pin_request(request, request.full_url)
     # Disable environment proxies: otherwise the validated destination and the
     # socket endpoint intentionally differ, defeating destination pinning.
@@ -247,8 +267,8 @@ def _network_open(request, *, timeout: int):
 def _open_public_url(request, *, timeout: int):
     """Open a validated URL and validate its final redirect before body read."""
     requested_url = request.full_url if hasattr(request, "full_url") else str(request)
-    _host, _port, pinned_ip = _resolve_public_url(requested_url)
-    request._parallax_pinned_ip = pinned_ip
+    _host, _port, pinned_ips = _resolve_public_url(requested_url)
+    request._parallax_pinned_ips = pinned_ips
     response = _network_open(request, timeout=timeout)
     final_url = response.geturl() if hasattr(response, "geturl") else requested_url
     try:
