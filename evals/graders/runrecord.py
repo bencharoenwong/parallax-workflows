@@ -23,8 +23,8 @@ from pathlib import Path
 from transcript import ToolCall, parse_stream_json
 import token_model
 
-# Run outcome classes. Only `ok` and `degraded` are aggregatable; `degraded`
-# is reported as its own category and never pooled with `ok`.
+# Run outcome classes. Only `ok` is aggregatable; `degraded` is retained and
+# reported as its own category, never pooled with `ok`.
 STATUS_OK = "ok"
 STATUS_DEGRADED = "degraded"
 STATUS_SKILL_ERROR = "skill_error"
@@ -171,14 +171,12 @@ def from_stream_json(
 
     rec.tool_calls_total = len(calls)
     counts: dict[str, int] = {}
-    parallax_calls = []
     for call in calls:
         if call.name.startswith("mcp__") and not token_model.is_parallax_mcp(call.name):
             continue
         name = token_model.bare(call.name)
         if name in token_model.FLAT_COST or name in token_model.PER_HOLDING_COST:
             counts[name] = counts.get(name, 0) + 1
-            parallax_calls.append(call)
     rec.tool_calls_parallax = dict(sorted(counts.items()))
 
     est = token_model.estimate(calls)
