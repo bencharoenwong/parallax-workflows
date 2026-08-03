@@ -550,7 +550,12 @@ h1 { font-family: 'Inter', sans-serif; color: #5A597A; }
         opener.assert_not_called()
         assert draft["error"] == "URL destination is not public"
         assert "do-not-log" not in str(draft)
-        assert "?" not in draft["source"]["reference"]
+        # Previously asserted no "?" at all, which dropped the whole query and
+        # cost the reference its page identity. The contract is that secret
+        # VALUES never persist -- the parameter name may, and must be redacted.
+        reference = draft["source"]["reference"]
+        assert "do-not-log" not in reference
+        assert "token=REDACTED" in reference
 
     def test_hostname_with_any_private_dns_answer_is_rejected(self, monkeypatch):
         def mixed_getaddrinfo(host, port, *args, **kwargs):
@@ -750,3 +755,35 @@ def test_workflow_doc_does_not_teach_an_unchecked_download_path():
            / "references" / "workflow-code.md").read_text(encoding="utf-8")
     assert "urlretrieve(" not in doc, "Step 4b must not call urlretrieve"
     assert "download_public_url(" in doc
+
+
+def test_sanitized_url_keeps_page_identity():
+    """Provenance must still identify the page on re-extraction.
+
+    Dropping the query wholesale recorded `?locale=en-GB&v=2024` as a bare
+    path, which resolves to a different or ambiguous page later.
+    """
+    assert web_pdf_module._sanitized_url(
+        "https://example.com/brand?locale=en-GB&v=2024"
+    ) == "https://example.com/brand?locale=en-GB&v=2024"
+
+
+def test_sanitized_url_redacts_secret_query_values_but_keeps_keys():
+    out = web_pdf_module._sanitized_url("https://example.com/b?api_key=SEKRET&locale=en")
+    assert "SEKRET" not in out
+    assert "api_key=REDACTED" in out
+    assert "locale=en" in out, "identifying params must survive redaction"
+    signed = web_pdf_module._sanitized_url("https://example.com/b?X-Amz-Signature=abc&x=1")
+    assert "abc" not in signed and "x=1" in signed
+
+
+def test_sanitized_url_still_drops_credentials_and_fragment():
+    assert web_pdf_module._sanitized_url("https://u:p@example.com/b") == "https://example.com/b"
+    assert web_pdf_module._sanitized_url("https://example.com/b#sec") == "https://example.com/b"
+
+
+def test_sanitized_url_rejects_non_string_input():
+    """urlsplit() tolerates bytes/None and urlunsplit then yields b'', which
+    would persist bytes into the draft instead of the marker."""
+    for bad in (None, b"https://example.com", 42):
+        assert web_pdf_module._sanitized_url(bad) == "(invalid URL)"

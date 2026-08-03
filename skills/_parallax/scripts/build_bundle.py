@@ -51,9 +51,13 @@ PLUGIN_VERSION = "0.1.0"
 # Derived per build from the skills actually bundled: the same source builds
 # parallax-workflows (translate-* present) and the parallax-agent tap output
 # (translate-* absent), and the marketplace listing must match what installs.
+# The comma before {translation} belongs to the substitution, not the template:
+# a build that excludes translate-* renders the clause empty, and a hardcoded
+# comma would leave "screening, and client-review" in the description the
+# marketplace installer shows.
 PLUGIN_DESCRIPTION_TEMPLATE = (
     "Parallax equity-research workflows: stock evaluation, portfolio analysis, "
-    "screening,{translation} and client-review skills powered by the Parallax "
+    "screening{translation} and client-review skills powered by the Parallax "
     "MCP server."
 )
 
@@ -807,7 +811,7 @@ def effective_plugin_skills() -> list[str]:
 
 def plugin_description(skills: list[str]) -> str:
     """Description matching what this build actually ships."""
-    translation = " translation," if any(
+    translation = ", translation," if any(
         n.startswith("translate-") for n in skills) else ""
     return PLUGIN_DESCRIPTION_TEMPLATE.format(translation=translation)
 

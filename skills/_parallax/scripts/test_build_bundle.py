@@ -213,7 +213,11 @@ def test_plugin_description_tracks_the_bundled_skill_set():
                                             "translate-thai-finance"])
     without_translate = bb.plugin_description(["parallax-deep-dive"])
     assert "screening, translation, and client-review" in with_translate
-    assert "screening, and client-review" in without_translate
+    # Was pinned as "screening, and client-review" -- the dangling comma a
+    # translate-less build actually emitted. The assertion encoded the defect
+    # instead of catching it, so the marketplace description shipped with it.
+    assert "screening and client-review" in without_translate
+    assert ", and client-review" not in without_translate
 
 
 def test_parallax_allowlist_paths_exist():

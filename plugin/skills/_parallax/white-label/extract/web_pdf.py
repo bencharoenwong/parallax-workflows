@@ -15,7 +15,7 @@ import socket
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Sequence
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from .colors import ColorExtractor, _assign_color_roles_by_frequency
 from .voice import _voice_corpus_from_text
@@ -122,8 +122,46 @@ def _html_to_page_text(raw_html: str) -> str:
         re.sub(r"<[^>]+>", " ", _strip_non_prose_blocks(raw_html)))
 
 
+# Query parameters whose VALUE must never be persisted. Matched as substrings
+# of the lowercased key, because the same secret travels under many names
+# (api_key, access_token, X-Amz-Signature, sessionid, ...).
+_SECRET_QUERY_MARKERS = (
+    "token", "key", "secret", "password", "passwd", "pwd", "auth",
+    "sig", "credential", "session",
+)
+
+
+def _scrub_query(query: str) -> str:
+    """Keep the query's shape, redact any value that looks like a secret.
+
+    Dropping the query wholesale loses page identity: a brand guide at
+    ``?locale=en-GB&v=2024`` records as a bare path that resolves to a
+    different or ambiguous page on re-extraction. Keeping it wholesale would
+    persist a signed or keyed URL into the draft. Keys are preserved either
+    way, so the reference still distinguishes pages.
+    """
+    try:
+        pairs = parse_qsl(query, keep_blank_values=True)
+    except (TypeError, ValueError):
+        return ""
+    return urlencode([
+        (k, "REDACTED" if any(m in k.lower() for m in _SECRET_QUERY_MARKERS) else v)
+        for k, v in pairs
+    ])
+
+
 def _sanitized_url(url: str) -> str:
-    """Return a log-safe URL without credentials, query parameters, or fragment."""
+    """A persistable URL: no credentials, no secret query values, identity kept.
+
+    Userinfo is dropped entirely (that is where credentials properly live), and
+    secret-looking query values are redacted while the parameters that identify
+    the page survive.
+    """
+    # urlsplit() accepts bytes and None without raising, and urlunsplit then
+    # yields b'' -- persisting bytes into the draft's provenance rather than
+    # the intended marker. Reject anything that is not a str up front.
+    if not isinstance(url, str):
+        return "(invalid URL)"
     try:
         parsed = urlsplit(url)
         host = parsed.hostname or ""
@@ -131,7 +169,9 @@ def _sanitized_url(url: str) -> str:
             host = f"[{host}]"
         if parsed.port is not None:
             host = f"{host}:{parsed.port}"
-        return urlunsplit((parsed.scheme, host, parsed.path, "", ""))
+        return urlunsplit(
+            (parsed.scheme, host, parsed.path, _scrub_query(parsed.query), "")
+        )
     except (TypeError, ValueError):
         return "(invalid URL)"
 
