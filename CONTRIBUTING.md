@@ -28,7 +28,10 @@ Thanks for the interest. A few notes on what fits and what doesn't.
    bash skills/_parallax/scripts/run-gate-tests.sh   # all roots, ~1,300 tests
    ```
    It runs one `pytest` process per top-level test root, because three skills ship
-   a `tests/conftest.py` that collide in a single invocation. While iterating you
+   a `tests/conftest.py` that collide in a single invocation. The run is offline by
+   default and deselects the `npx`-marked DESIGN.md linter smoke, which would
+   otherwise fetch and execute an npm package; `PARALLAX_GATE_MODE=network` opts
+   back in for an explicitly network-authorized run. While iterating you
    can run just one area, e.g. `pytest skills/_parallax/house-view/tests/` or
    `cd evals && python3 -m pytest graders -q`.
 3. **For SKILL.md changes**, verify the workflow runs end-to-end in a fresh Claude Code session. The runtime caches SKILL.md content at session start, so unit-style tests don't catch SKILL.md regressions.
