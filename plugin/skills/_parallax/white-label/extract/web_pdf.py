@@ -30,6 +30,11 @@ _MAX_STYLESHEET_LINKS = 5
 _STYLESHEET_READ_CAP = 1 * 1024 * 1024  # 1 MB per stylesheet
 _STYLESHEET_TOTAL_TIMEOUT_SECONDS = 8
 
+# Asset download cap, in lockstep with validator.LogoValidator.MAX_FILE_SIZE: a
+# response larger than the validator will accept can only fail validation, so
+# there is no reason to spill it to disk first.
+_MAX_ASSET_BYTES = 5 * 1024 * 1024
+
 # Blocks whose CONTENT is markup machinery, not prose. Stripping tags alone
 # leaves their bodies behind, and on a modern page the head is dominated by
 # minified JS/CSS/JSON-LD — enough to fill the voice corpus's leading-token
@@ -289,6 +294,40 @@ def _open_public_url(request, *, timeout: int):
         finally:
             raise
     return response
+
+
+def download_public_url(
+    url: str,
+    dest: "str | Path",
+    *,
+    timeout: int = 15,
+    max_bytes: int = _MAX_ASSET_BYTES,
+) -> Path:
+    """Download a validated public HTTP(S) URL to ``dest`` and return the path.
+
+    Logo and favicon URLs are harvested from untrusted page content, so the
+    download is the same SSRF surface as the page fetch and must not use a
+    second, unchecked path such as ``urllib.request.urlretrieve``: that helper
+    accepts ``file://`` and every private/loopback/link-local destination, and
+    follows redirects without re-checking them.
+
+    Routing through ``_open_public_url`` applies one policy to both: non-HTTP(S)
+    schemes and non-public answers are rejected, the TCP dial is pinned to the
+    validated address, redirects are re-validated before their body is read, and
+    the read is capped. The destination file is only created once the response
+    is fully in hand, so a rejected or oversized fetch leaves no partial asset.
+    """
+    from urllib.request import Request
+
+    destination = Path(dest)
+    request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with _open_public_url(request, timeout=timeout) as response:
+        payload = response.read(max_bytes + 1)
+    if len(payload) > max_bytes:
+        raise ValueError(f"response exceeds the {max_bytes}-byte asset cap")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(payload)
+    return destination
 
 
 def _fetch_external_stylesheets(raw_html: str, base_url: str) -> str:

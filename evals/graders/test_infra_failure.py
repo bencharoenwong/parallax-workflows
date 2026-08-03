@@ -56,6 +56,14 @@ def test_compact_401_fails_both():
     _agree(raw)
 
 
+def test_a_status_that_merely_starts_with_401_is_not_an_auth_failure():
+    """Unanchored, the widened `"status": 401` alternative also matches 4010 —
+    dropping a gradeable run from the aggregate as an authentication error."""
+    raw = _INIT_OK + '\n{"type":"system","status":4010}\n' + _RESULT
+    assert _both(raw) == (None, None)
+    _agree(raw)
+
+
 def test_401_unauthorized_prose_fails_both():
     raw = _INIT_OK + '\n{"type":"assistant","text":"401 Unauthorized"}\n' + _RESULT
     _agree(raw)

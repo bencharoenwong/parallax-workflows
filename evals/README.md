@@ -186,11 +186,23 @@ prove which server served it:
   to nobody, listed in `ambiguous_endpoints`, and the run is degraded so it
   cannot pool into an aggregate that reads as a measured client bill.
 
-If a deployment mounts the connector under an alias with no "parallax" in it
-(white-label, in particular), set `PARALLAX_MCP_ALIASES` to the comma-separated
-namespace segments to resolve that permanently. An endpoint under a recognised
-Parallax namespace that the price table does not know still lands in
-`unknown_endpoints` and degrades the run — the stale-table signal.
+An ambiguous namespace is resolvable in **both** directions, and picking the
+wrong one corrupts the meter:
+
+- The namespace *is* the connector, mounted under an alias with no "parallax" in
+  it (white-label, in particular) → add it to `PARALLAX_MCP_ALIASES`. Its calls
+  are billed from then on.
+- The namespace is a **different** MCP server whose tool name happens to collide
+  with a Parallax endpoint (`submit_feedback`, say) → add it to
+  `PARALLAX_MCP_FOREIGN_NAMESPACES`. Its calls are ignored, not billed.
+
+Both take comma-separated namespace segments. Declaring a foreign server a
+Parallax alias to silence the degrade would start billing the client for another
+server's calls, so use the variable that matches what the namespace actually is.
+
+An endpoint under a recognised Parallax namespace that the price table does not
+know still lands in `unknown_endpoints` and degrades the run — the stale-table
+signal.
 
 ## Adding a new skill eval
 

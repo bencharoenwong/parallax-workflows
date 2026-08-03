@@ -92,6 +92,8 @@ def _find_result_event(raw: str) -> dict | None:
             event = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if not isinstance(event, dict):
+            continue
         if event.get("type") == "result":
             found = event
     return found
@@ -107,7 +109,10 @@ def _count_tool_errors(raw: str) -> int:
             event = json.loads(line)
         except json.JSONDecodeError:
             continue
-        content = (event.get("message") or {}).get("content") or []
+        if not isinstance(event, dict):
+            continue
+        message = event.get("message")
+        content = (message if isinstance(message, dict) else {}).get("content") or []
         if not isinstance(content, list):
             continue
         for block in content:
@@ -150,12 +155,18 @@ def from_stream_json(
         calls = []
 
     rec.tool_calls_total = len(calls)
+    # Counted over KNOWN_ENDPOINTS, not just the priced tables: a KNOWN_UNPRICED
+    # call under a Parallax namespace is definitively Parallax work performed,
+    # and ``unpriced_endpoints`` records only its name. Filtering it out here
+    # would leave a pair-finder run -- five etf_holdings, three etf_search --
+    # reporting zero Parallax calls, with nothing in the record stating how much
+    # work it actually did. Cost stays derived from the priced tables alone.
     counts: dict[str, int] = {}
     for call in calls:
         if not token_model.is_parallax_mcp(call.name):
             continue
         name = token_model.bare(call.name)
-        if name in token_model.FLAT_COST or name in token_model.PER_HOLDING_COST:
+        if name in token_model.KNOWN_ENDPOINTS:
             counts[name] = counts.get(name, 0) + 1
     rec.tool_calls_parallax = dict(sorted(counts.items()))
 
@@ -173,7 +184,8 @@ def from_stream_json(
         rec.api_s = (result.get("duration_api_ms") or 0) / 1000.0
         rec.num_turns = result.get("num_turns") or 0
         rec.anthropic_cost_usd = float(result.get("total_cost_usd") or 0.0)
-        usage = result.get("usage") or {}
+        usage = result.get("usage")
+        usage = usage if isinstance(usage, dict) else {}
         rec.tokens_in = usage.get("input_tokens") or 0
         rec.tokens_out = usage.get("output_tokens") or 0
         rec.cache_read = usage.get("cache_read_input_tokens") or 0

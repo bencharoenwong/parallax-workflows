@@ -25,7 +25,7 @@ from typing import Any
 # both compactly (`"error_status":401`) and pretty-printed (`"status": 401`),
 # and a literal-substring test silently passes on the spaced form.
 _AUTH_RE = re.compile(
-    r'"(?:error_)?status":\s*401'
+    r'"(?:error_)?status":\s*401(?!\d)'
     r'|authentication_failed'
     r'|Invalid authentication'
     r'|401\s+Unauthorized',

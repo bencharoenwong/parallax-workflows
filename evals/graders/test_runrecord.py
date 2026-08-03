@@ -82,12 +82,26 @@ def test_the_two_meters_are_not_merged():
     assert rec.parallax_cost_usd == round(10 * 0.20, 4)
 
 
-def test_tool_calls_parallax_counts_only_priced_endpoints():
+def test_tool_calls_parallax_counts_parallax_work_not_harness_tools():
     rec = from_stream_json(
         _stream([_p("get_peer_snapshot"), _p("get_peer_snapshot"), "Read"]), "r3"
     )
     assert rec.tool_calls_parallax == {"get_peer_snapshot": 2}
     assert rec.tool_calls_total == 3
+
+
+def test_tool_calls_parallax_counts_unpriced_endpoints_too():
+    """Work performed is not the same question as work billed.
+
+    A pair-finder run is mostly KNOWN_UNPRICED calls. Counting only the priced
+    tables would report it as having made zero Parallax calls, leaving nothing
+    on the record that states how much Parallax work it actually did.
+    """
+    rec = from_stream_json(
+        _stream([_p("etf_holdings"), _p("etf_holdings"), _p("etf_search")]), "r3b"
+    )
+    assert rec.tool_calls_parallax == {"etf_holdings": 2, "etf_search": 1}
+    assert rec.parallax_tokens == 0
 
 
 # --- degrade rules: what must and must not leave AGGREGATABLE -------------
@@ -184,6 +198,21 @@ def test_infra_failure_outranks_a_degrade():
     raw = _stream([_p("brand_new_tool")], include_result=False)
     rec = from_stream_json(raw, "r12")
     assert rec.status == STATUS_INFRA_FAILURE
+
+
+def test_a_scalar_json_line_does_not_abort_classification():
+    """A stray scalar line parses fine as JSON, so the JSONDecodeError guard
+    never fires; without an isinstance check the record aborts on AttributeError
+    instead of classifying the run."""
+    raw = _stream([_p("get_company_info")])
+    lines = raw.splitlines()
+    lines.insert(1, "42")
+    lines.insert(2, json.dumps(["not", "an", "event"]))
+    lines.insert(3, json.dumps({"type": "assistant", "message": "unexpected string"}))
+    rec = from_stream_json("\n".join(lines), "r14")
+    assert rec.status == STATUS_OK
+    assert rec.tool_calls_total == 1
+    assert rec.tool_errors == 0
 
 
 def test_to_json_roundtrips_every_field():

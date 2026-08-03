@@ -18,6 +18,8 @@ import yaml
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from extract import (  # noqa: E402
+    UrlNotPublicError,
+    download_public_url,
     extract_from_pptx,
     extract_from_url,
 )
@@ -676,3 +678,75 @@ h1 { font-family: 'Inter', sans-serif; color: #5A597A; }
         assert response.read_calls >= 1
         assert draft["colors"]["primary"]["hex"] == "#5A597A"
         assert "do-not-persist" not in str(draft)
+
+
+class TestAssetDownloadDestinationPolicy:
+    """Logo/favicon URLs are harvested from untrusted page content, so the
+    download is the same SSRF surface as the page fetch. These pin that it goes
+    through one policy rather than a second, unchecked ``urlretrieve`` path."""
+
+    @pytest.fixture(autouse=True)
+    def public_dns_only(self, monkeypatch):
+        def fake_getaddrinfo(host, port, *args, **kwargs):
+            return [(2, 1, 6, "", ("93.184.216.34", port))]
+
+        monkeypatch.setattr("socket.getaddrinfo", fake_getaddrinfo)
+
+    @pytest.mark.parametrize("url", [
+        "http://169.254.169.254/latest/meta-data/iam/x.png",
+        "http://127.0.0.1/logo.png",
+        "http://10.20.30.40/logo.png",
+        "http://2130706433/logo.png",
+        "file:///etc/passwd",
+        "ftp://example.com/logo.png",
+    ])
+    def test_non_public_asset_url_is_rejected_and_writes_nothing(self, url, tmp_path):
+        dest = tmp_path / "logo-primary.png"
+        with mock.patch("extract.web_pdf._network_open") as opener:
+            with pytest.raises(UrlNotPublicError):
+                download_public_url(url, dest)
+
+        opener.assert_not_called()
+        assert not dest.exists()
+
+    def test_public_asset_url_is_written_to_dest(self, tmp_path):
+        response = _StubResponse(b"\x89PNG\r\n\x1a\nlogo-bytes",
+                                 content_type="image/png",
+                                 final_url="https://cdn.example.com/logo.png")
+        dest = tmp_path / "assets" / "logo-primary.png"
+        with mock.patch("extract.web_pdf._network_open", return_value=response):
+            written = download_public_url("https://cdn.example.com/logo.png", dest)
+
+        assert written == dest
+        assert dest.read_bytes() == b"\x89PNG\r\n\x1a\nlogo-bytes"
+
+    def test_redirect_to_private_destination_leaves_no_partial_asset(self, tmp_path):
+        response = _StubResponse(b"metadata-credentials",
+                                 final_url="http://169.254.169.254/latest/meta-data/")
+        dest = tmp_path / "logo-primary.png"
+        with mock.patch("extract.web_pdf._network_open", return_value=response):
+            with pytest.raises(UrlNotPublicError):
+                download_public_url("https://cdn.example.com/logo.png", dest)
+
+        assert response.read_calls == 0
+        assert not dest.exists()
+
+    def test_oversized_asset_is_rejected_before_it_reaches_disk(self, tmp_path):
+        response = _StubResponse(b"x" * 4096, final_url="https://cdn.example.com/logo.png")
+        dest = tmp_path / "logo-primary.png"
+        with mock.patch("extract.web_pdf._network_open", return_value=response):
+            with pytest.raises(ValueError, match="asset cap"):
+                download_public_url("https://cdn.example.com/logo.png", dest,
+                                    max_bytes=1024)
+
+        assert not dest.exists()
+
+
+def test_workflow_doc_does_not_teach_an_unchecked_download_path():
+    """The skill's Step 4b is executable instructions, not commentary: a bare
+    ``urlretrieve`` there is a live SSRF path regardless of what the module
+    exports."""
+    doc = (Path(__file__).parents[3] / "parallax-white-label-onboard"
+           / "references" / "workflow-code.md").read_text(encoding="utf-8")
+    assert "urlretrieve(" not in doc, "Step 4b must not call urlretrieve"
+    assert "download_public_url(" in doc

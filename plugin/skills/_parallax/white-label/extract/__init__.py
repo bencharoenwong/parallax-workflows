@@ -31,6 +31,8 @@ from .ooxml import (
 from .web_pdf import (
     LogoExtractor,
     FontExtractor,
+    UrlNotPublicError,
+    download_public_url,
     extract_from_url,
     extract_from_pdf,
 )
@@ -59,6 +61,8 @@ __all__ = [
     # web_pdf
     "LogoExtractor",
     "FontExtractor",
+    "UrlNotPublicError",
+    "download_public_url",
     "extract_from_url",
     "extract_from_pdf",
     # wizard

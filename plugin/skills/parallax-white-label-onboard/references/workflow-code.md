@@ -249,13 +249,17 @@ lowest_field = min(draft["confidence_scores"], key=draft["confidence_scores"].ge
 ## Step 4b — Download logos to local assets/
 
 ```python
-import os, urllib.request
+import os
 from pathlib import Path
 from urllib.parse import urlparse
+
+from skills._parallax.white_label.extract import download_public_url
 
 assets_dir = os.path.expanduser("~/.parallax/client-branding/assets")
 os.makedirs(assets_dir, mode=0o700, exist_ok=True)
 ```
+
+**Download only via `download_public_url`.** Logo and favicon URLs come from untrusted page content, so they carry the same SSRF exposure as the page fetch itself. `download_public_url` applies the destination policy that `extract_from_url` uses — public HTTP(S) only, redirects re-validated, connection pinned to the validated address, response size capped. Do NOT substitute `urllib.request.urlretrieve`, `requests`, or any other fetcher: those accept `file://` and private/loopback destinations and follow redirects unchecked.
 
 For each logo with a URL (not already a local path):
 
@@ -265,7 +269,7 @@ if "url" in draft["logos"].get("primary", {}):
     url = draft["logos"]["primary"]["url"]
     ext = Path(urlparse(url).path).suffix or ".png"
     dest = f"{assets_dir}/logo-primary{ext}"
-    urllib.request.urlretrieve(url, dest)
+    download_public_url(url, dest)
     draft["logos"]["primary"]["local_path"] = dest
 
 # Favicon
@@ -273,11 +277,11 @@ if "url" in draft["logos"].get("favicon", {}):
     url = draft["logos"]["favicon"]["url"]
     ext = Path(urlparse(url).path).suffix or ".ico"
     dest = f"{assets_dir}/favicon{ext}"
-    urllib.request.urlretrieve(url, dest)
+    download_public_url(url, dest)
     draft["logos"]["favicon"]["local_path"] = dest
 ```
 
-On download failure: warn (`"Logo download failed: <error>. URL preserved in config; local copy unavailable."`) and set `local_path` to `None`. Do not abort the save.
+On download failure: warn (`"Logo download failed: <error>. URL preserved in config; local copy unavailable."`) and set `local_path` to `None`. Do not abort the save. A `UrlNotPublicError` means the asset URL itself was rejected by the destination policy — report it as such and do not retry through another path.
 
 After download, re-run `LogoValidator.validate_logo(dest)` and append results to the validation summary.
 

@@ -11,7 +11,7 @@ Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[
 **Impact.**
 - **Allowlist, not blocklist.** A Parallax endpoint always arrives MCP-namespaced, so a name with no namespace cannot be one. `estimate()` allowlists on the namespace and ignores everything else structurally; the hand-maintained harness-tool blocklist is deleted, not extended. That list was the same unfixable-signal failure `KNOWN_UNPRICED` exists to prevent, relocated into blocklist drift — a harness tool nobody remembered to add would have landed in `unknown_endpoints` and degraded runs permanently.
 - **A third class.** A known endpoint name under an unrecognised namespace is `ambiguous`: billed to nobody, reported in `RunRecord.ambiguous_endpoints`, and the run degrades. Degrading is the point — the derived total is of unknown accuracy, so it must not pool into an aggregate presented as a measured client bill.
-- **An operator escape hatch.** Unlike `KNOWN_UNPRICED`, ambiguity is resolvable: naming the namespace in `PARALLAX_MCP_ALIASES` clears it permanently. This is what white-label deployments need and what neither heuristic could express. Documented in `evals/README.md`.
+- **An operator escape hatch, in both directions.** Unlike `KNOWN_UNPRICED`, ambiguity is resolvable — but only if the operator can say *which* of the two things the namespace is. `PARALLAX_MCP_ALIASES` declares it the connector under an off-brand mount, and its calls start billing; `PARALLAX_MCP_FOREIGN_NAMESPACES` declares it a different server whose tool name merely collides, and its calls are ignored. Only one variable would force a foreign server to be declared a Parallax alias to silence the degrade, which starts billing the client for another server's calls. Both documented in `evals/README.md`.
 - **Both live aliases bill.** The namespace check stays a substring match because transcripts carry more than one Parallax connector alias; an exact-match allowlist on one would silently drop the other's calls from the derived bill.
 
 **Alternatives.**
@@ -19,7 +19,7 @@ Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[
 - `[DROP]` **Bare-name fallback when the namespace is unrecognised.** Misattributes a foreign server's colliding tool onto the client's invoice. A wrong bill is worse than a withheld one.
 - `[DROP]` **Keep extending the harness-tool blocklist.** Correct only until the harness gains a tool, with no signal when it does.
 
-**Flip conditions.** (a) The connector ships a stable server identifier in the transcript that survives renaming → attribute on that and retire the substring match. (b) `ambiguous_endpoints` shows up routinely in a deployment's runs → that deployment's alias belongs in `PARALLAX_MCP_ALIASES`, not in a widened default heuristic.
+**Flip conditions.** (a) The connector ships a stable server identifier in the transcript that survives renaming → attribute on that and retire the substring match. (b) `ambiguous_endpoints` shows up routinely in a deployment's runs → that namespace belongs in `PARALLAX_MCP_ALIASES` or `PARALLAX_MCP_FOREIGN_NAMESPACES` depending on which server it actually is, not in a widened default heuristic.
 
 ## 2026-08-02: Price the two ETF endpoints and collapse every partial workflow subtotal into a single publishable number
 
