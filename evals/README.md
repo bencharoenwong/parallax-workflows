@@ -50,10 +50,11 @@ within normal variance for a single run. Median over 3+ runs filters most of it.
 
 ## Caveats
 
-- **Wall-clock only in v1.** Token usage, individual MCP call durations, and
-  parallelism observation are out of scope for now. If you want those,
-  `claude -p --output-format stream-json` exposes a verbose tool-use stream
-  that can be parsed.
+- **Wall-clock only in v1.** Individual MCP call durations and parallelism
+  observation are out of scope for now. Token usage is not: v2's
+  `graders/runrecord.py` parses the `claude -p --output-format stream-json`
+  stream this caveat pointed at and reports both meters — see "Derived Parallax
+  cost meter" below.
 - **Server load is the dominant noise term.** A 30s run today might be 10s
   tomorrow on the same code. Always measure pre/post under the same
   conditions, and treat single-run differences <5s as noise.
@@ -91,7 +92,8 @@ v1 (above) times latency. v2 adds a **two-tier quality signal** (deterministic
 structural checks + LLM-as-judge rubric) on top of a **spec-driven, skill-agnostic
 grading engine** (design: `notes/2026-05-29-skillopt-eval-substrate-design.md`,
 local-only). Latency timing is retained (it becomes the Stage-2 Tier-3
-non-regression check); v2 supersedes only the "no quality scoring" caveat.
+non-regression check); v2 supersedes the v1 "no quality scoring" and "no token
+usage" caveats.
 
 ### Layout (v2 additions)
 

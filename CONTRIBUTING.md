@@ -25,7 +25,7 @@ Thanks for the interest. A few notes on what fits and what doesn't.
    ```bash
    python -m venv .venv && source .venv/bin/activate
    pip install -r skills/_parallax/house-view/requirements.txt pytest
-   bash skills/_parallax/scripts/run-gate-tests.sh   # all roots, ~1,060 tests
+   bash skills/_parallax/scripts/run-gate-tests.sh   # all roots, ~1,300 tests
    ```
    It runs one `pytest` process per top-level test root, because three skills ship
    a `tests/conftest.py` that collide in a single invocation. While iterating you
