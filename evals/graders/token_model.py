@@ -68,19 +68,16 @@ KNOWN_UNPRICED: frozenset[str] = frozenset({
     "submit_feedback",
 })
 
-# Harness-local tools. These consume Anthropic tokens but never Parallax ones,
-# so they must be skipped rather than reported as unpriced endpoints -- an
-# unrecognised name is meant to signal a stale price table, and noise here would
-# mask that signal.
-HARNESS_TOOLS: set[str] = {
-    "ToolSearch", "TodoWrite", "SlashCommand", "Skill", "Task", "Agent",
-    "AskUserQuestion", "ExitPlanMode", "EnterPlanMode", "KillShell",
-    "BashOutput", "NotebookEdit", "ListMcpResourcesTool", "ReadMcpResourceTool",
-}
-HARNESS_PREFIXES = (
-    "Read", "Write", "Edit", "Bash", "Glob", "Grep", "LS", "WebFetch",
-    "WebSearch", "Notebook",
-)
+# Harness-local tools (Read, Bash, ToolSearch, ...) used to be skipped by a
+# hand-maintained blocklist. That inverted the burden: every tool the harness
+# gained in future had to be remembered here, and a forgotten one would land in
+# ``unknown_endpoints`` and permanently degrade runs -- the same unfixable-signal
+# failure ``KNOWN_UNPRICED`` exists to prevent, relocated into blocklist drift.
+#
+# A Parallax endpoint always arrives MCP-namespaced (``mcp__<alias>__<tool>``),
+# so a name that is not Parallax-namespaced cannot be a Parallax endpoint by
+# construction. ``estimate`` therefore allowlists on ``is_parallax_mcp`` and
+# ignores everything else structurally -- no list to keep current.
 
 # Default overage rate. Override per plan; never hardcode into a client-facing
 # figure without stating the plan it came from.
@@ -141,8 +138,10 @@ def estimate(tool_calls) -> TokenEstimate:
     unpriced: list[str] = []
 
     for call in tool_calls:
-        if call.name.startswith("mcp__") and not is_parallax_mcp(call.name):
-            continue  # another MCP server's tool, not a Parallax endpoint
+        if not is_parallax_mcp(call.name):
+            # Harness-local tool or another MCP server. Cannot be a Parallax
+            # endpoint, so it is not a stale-table signal either.
+            continue
         name = bare(call.name)
         if name in FLAT_COST:
             tokens += FLAT_COST[name]
@@ -150,8 +149,6 @@ def estimate(tool_calls) -> TokenEstimate:
             tokens += PER_HOLDING_COST[name] * _holdings_in(call.input or {})
         elif name in KNOWN_UNPRICED:
             unpriced.append(name)
-        elif name in HARNESS_TOOLS or name.startswith(HARNESS_PREFIXES):
-            continue  # harness-local tool, not a Parallax endpoint
         else:
             unknown.append(name)
 

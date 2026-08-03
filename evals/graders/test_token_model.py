@@ -53,6 +53,38 @@ def test_flat_cost_matches_published_table():
             )
 
 
+def test_unlisted_harness_tool_is_ignored_not_degraded():
+    """A harness tool nobody registered anywhere must not degrade a run.
+
+    Endpoint recognition allowlists on the Parallax MCP namespace rather than
+    blocklisting known harness tool names. Under the old blocklist this call
+    would have landed in ``unknown_endpoints`` and marked the run degraded
+    forever -- a tool the harness gained after the list was written.
+    """
+    est = estimate([
+        ToolCall(name="SomeToolInventedNextYear", input={}),
+        ToolCall(name="Read", input={}),
+        ToolCall(name="mcp__plugin_github_github__get_me", input={}),
+    ])
+    assert est.unknown_endpoints == ()
+    assert est.tokens == 0
+
+
+def test_alternate_parallax_connector_alias_is_billed():
+    """Both live connector aliases must count.
+
+    Real transcripts carry `mcp__claude_ai_Parallax__*` and
+    `mcp__claude_ai_Parallax_2__*`. An exact-match allowlist on one alias would
+    silently drop the other's calls from the client's derived bill.
+    """
+    est = estimate([
+        ToolCall(name="mcp__claude_ai_Parallax__get_company_info", input={}),
+        ToolCall(name="mcp__claude_ai_Parallax_2__get_company_info", input={}),
+    ])
+    assert est.tokens == 2, "an aliased connector's calls must still be billed"
+    assert est.unknown_endpoints == ()
+
+
 def test_known_unpriced_is_not_a_stale_table_signal():
     """A deliberately-unpriced endpoint must not read as an unknown one.
 
