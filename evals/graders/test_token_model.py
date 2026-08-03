@@ -85,20 +85,61 @@ def test_alternate_parallax_connector_alias_is_billed():
     assert est.unknown_endpoints == ()
 
 
-def test_non_standard_alias_with_known_endpoint_is_still_billed():
-    """The namespace test alone undercounts a server mounted off-brand.
+def test_non_standard_alias_is_surfaced_not_guessed():
+    """Neither silent undercount nor silent misattribution.
 
-    An operator is free to name the connector anything; a namespace-only
-    allowlist would drop every call from such a run, reporting ``tokens=0`` with
-    an empty ``unknown_endpoints`` -- indistinguishable from a genuinely free
-    run. An endpoint the price table already names is billed whatever the alias.
+    A known endpoint name under an unrecognised namespace is genuinely
+    undecidable: it may be a connector mounted off-brand, or another server's
+    colliding tool. Billing it risks charging a client for someone else's call;
+    dropping it reports ``tokens=0`` on a real run. It is reported instead.
     """
     est = estimate([
         ToolCall(name="mcp__research_desk__get_company_info", input={}),
         ToolCall(name="mcp__research_desk__get_stock_report", input={}),
     ])
-    assert est.tokens == 11
-    assert est.unknown_endpoints == ()
+    assert est.tokens == 0, "must not bill a call we cannot attribute"
+    assert est.ambiguous_endpoints == (
+        "mcp__research_desk__get_company_info",
+        "mcp__research_desk__get_stock_report",
+    )
+    assert est.unknown_endpoints == (), "not a stale table -- an unknown server"
+
+
+def test_declared_alias_resolves_ambiguity_and_bills():
+    """PARALLAX_MCP_ALIASES is the supported way to settle an off-brand mount."""
+    import importlib  # noqa: PLC0415
+    import os  # noqa: PLC0415
+
+    import token_model  # noqa: PLC0415
+
+    prior = os.environ.get("PARALLAX_MCP_ALIASES")
+    os.environ["PARALLAX_MCP_ALIASES"] = "research_desk"
+    try:
+        reloaded = importlib.reload(token_model)
+        est = reloaded.estimate([
+            ToolCall(name="mcp__research_desk__get_company_info", input={}),
+            ToolCall(name="mcp__research_desk__get_stock_report", input={}),
+        ])
+        assert est.tokens == 11
+        assert est.ambiguous_endpoints == ()
+    finally:
+        if prior is None:
+            os.environ.pop("PARALLAX_MCP_ALIASES", None)
+        else:
+            os.environ["PARALLAX_MCP_ALIASES"] = prior
+        importlib.reload(token_model)
+
+
+def test_foreign_server_colliding_name_is_never_billed():
+    """`submit_feedback` is exposed by both the Parallax and HubSpot connectors.
+
+    Attributing HubSpot's copy to the client's Parallax invoice is the concrete
+    failure that rules out recognising a call by its bare name alone.
+    """
+    est = estimate([ToolCall(name="mcp__claude_ai_HubSpot__submit_feedback", input={})])
+    assert est.tokens == 0
+    assert est.unpriced_endpoints == (), "not Parallax's endpoint to report"
+    assert est.ambiguous_endpoints == ("mcp__claude_ai_HubSpot__submit_feedback",)
 
 
 def test_known_unpriced_is_not_a_stale_table_signal():

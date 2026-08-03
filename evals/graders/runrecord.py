@@ -63,6 +63,7 @@ class RunRecord:
     parallax_cost_usd: float = 0.0
     unknown_endpoints: list[str] = field(default_factory=list)
     unpriced_endpoints: list[str] = field(default_factory=list)
+    ambiguous_endpoints: list[str] = field(default_factory=list)
 
     # --- work performed ---
     tool_calls_total: int = 0
@@ -184,6 +185,7 @@ def from_stream_json(
     rec.parallax_cost_usd = round(est.usd(usd_per_token), 4)
     rec.unknown_endpoints = list(est.unknown_endpoints)
     rec.unpriced_endpoints = list(est.unpriced_endpoints)
+    rec.ambiguous_endpoints = list(est.ambiguous_endpoints)
 
     rec.tool_errors = _count_tool_errors(raw)
 
@@ -206,6 +208,18 @@ def from_stream_json(
         rec.status = STATUS_DEGRADED
         rec.degraded_paths.append(
             "unknown_endpoint:" + ",".join(rec.unknown_endpoints)
+        )
+
+    # An ambiguous call is a known endpoint name under an unrecognised MCP
+    # namespace: it may be a Parallax connector mounted off-brand, or another
+    # server's colliding tool. Either way ``parallax_tokens`` is now of unknown
+    # accuracy, so the run must not be pooled into an aggregate that reads as a
+    # measured client bill. Unlike KNOWN_UNPRICED this IS resolvable -- naming
+    # the namespace in PARALLAX_MCP_ALIASES clears it permanently.
+    if rec.ambiguous_endpoints and rec.status == STATUS_OK:
+        rec.status = STATUS_DEGRADED
+        rec.degraded_paths.append(
+            "ambiguous_endpoint:" + ",".join(rec.ambiguous_endpoints)
         )
 
     # A KNOWN_UNPRICED endpoint is deliberately absent from the table, not a

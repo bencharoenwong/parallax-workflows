@@ -12,6 +12,7 @@ Source of truth: ``skills/_parallax/token-costs.md``.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 # Flat per-call cost, keyed on the bare endpoint name (namespace-stripped).
@@ -95,6 +96,7 @@ class TokenEstimate:
     tokens: int
     unknown_endpoints: tuple[str, ...]
     unpriced_endpoints: tuple[str, ...] = ()
+    ambiguous_endpoints: tuple[str, ...] = ()
 
     @property
     def total(self) -> int:
@@ -109,26 +111,57 @@ def bare(name: str) -> str:
     return name.rsplit("__", 1)[-1]
 
 
-def is_parallax_mcp(name: str) -> bool:
-    """True when an ``mcp__``-namespaced tool name targets the Parallax server.
+# Extra MCP namespaces that are known to be Parallax, for deployments that mount
+# the connector under a name with no "parallax" in it (white-label, in
+# particular). Comma-separated, matched case-insensitively against the full
+# namespace segment. This is the supported way to resolve an ambiguous alias --
+# see ``classify_call``.
+PARALLAX_ALIASES: frozenset[str] = frozenset(
+    part.strip().lower()
+    for part in os.environ.get("PARALLAX_MCP_ALIASES", "").split(",")
+    if part.strip()
+)
 
-    Other MCP servers (IDE, GitHub, ...) bill nothing in Parallax tokens, and
-    their endpoint names must not be mistaken for stale-price-table signals.
+CALL_PARALLAX = "parallax"
+CALL_FOREIGN = "foreign"
+CALL_AMBIGUOUS = "ambiguous"
 
-    The namespace test recognises the standard alias, but an operator is free to
-    mount the server under a name with no ``parallax`` in it. Such a run would
-    otherwise bill zero with an empty ``unknown_endpoints`` -- a silent
-    undercount that reads as a healthy free run. An endpoint this table already
-    names is therefore counted whatever the alias; only a namespace-unrecognised
-    AND table-unrecognised name is ignored, which is the case where no billing
-    conclusion is available either way.
+
+def classify_call(name: str) -> str:
+    """Whose endpoint is this: Parallax, another server's, or undecidable?
+
+    A tool name cannot prove which server served it, and both ways of guessing
+    fail silently in opposite directions. Guessing by namespace undercounts a
+    connector mounted off-brand: every call bills zero with an empty
+    ``unknown_endpoints``, indistinguishable from a genuinely free run. Guessing
+    by bare name misattributes a foreign server's colliding tool onto the
+    client's invoice -- not hypothetical, since ``submit_feedback`` is exposed by
+    both the Parallax and HubSpot connectors.
+
+    So this does not guess. A namespace containing ``parallax``, or listed in
+    ``PARALLAX_MCP_ALIASES``, is Parallax. A name with no MCP namespace is
+    harness-local. Anything else whose bare name this table happens to know is
+    reported ``ambiguous`` and billed to nobody, because the honest answer is
+    that we cannot tell -- and an operator can settle it permanently by naming
+    the alias in ``PARALLAX_MCP_ALIASES``.
     """
     if not name.startswith("mcp__"):
-        return False
-    namespace = name[len("mcp__"):].rsplit("__", 1)[0]
-    if "parallax" in namespace.lower():
-        return True
-    return bare(name) in KNOWN_ENDPOINTS
+        return CALL_FOREIGN  # harness-local; never MCP-namespaced
+    namespace = name[len("mcp__"):].rsplit("__", 1)[0].lower()
+    if "parallax" in namespace or namespace in PARALLAX_ALIASES:
+        return CALL_PARALLAX
+    if bare(name) in KNOWN_ENDPOINTS:
+        return CALL_AMBIGUOUS
+    return CALL_FOREIGN
+
+
+def is_parallax_mcp(name: str) -> bool:
+    """True only when the call is definitively Parallax's.
+
+    Ambiguous calls are excluded: this answers "may I bill this?", and the
+    answer under ambiguity is no.
+    """
+    return classify_call(name) == CALL_PARALLAX
 
 
 def _holdings_in(call_input: dict) -> int:
@@ -152,11 +185,20 @@ def estimate(tool_calls) -> TokenEstimate:
     tokens = 0
     unknown: list[str] = []
     unpriced: list[str] = []
+    ambiguous: list[str] = []
 
     for call in tool_calls:
-        if not is_parallax_mcp(call.name):
+        kind = classify_call(call.name)
+        if kind == CALL_FOREIGN:
             # Harness-local tool or another MCP server. Cannot be a Parallax
             # endpoint, so it is not a stale-table signal either.
+            continue
+        if kind == CALL_AMBIGUOUS:
+            # A known endpoint name under an unrecognised namespace. Billing it
+            # risks charging the client for another server's call; skipping it
+            # silently undercounts a legitimately off-brand connector. Neither
+            # is defensible in silence, so it is surfaced instead.
+            ambiguous.append(call.name)
             continue
         name = bare(call.name)
         if name in FLAT_COST:
@@ -172,4 +214,5 @@ def estimate(tool_calls) -> TokenEstimate:
         tokens,
         tuple(sorted(set(unknown))),
         tuple(sorted(set(unpriced))),
+        tuple(sorted(set(ambiguous))),
     )
