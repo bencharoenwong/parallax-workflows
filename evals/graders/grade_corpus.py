@@ -64,21 +64,21 @@ def extract_readings(prose: str) -> dict:
     hype = _light(prose, "bias & conviction", ("low", "elevated", "high"))
     cov = None
     lines = prose.splitlines()
-    for i, l in enumerate(lines):
-        if re.match(r"#*\s*coverage notice", l.strip(), re.I):
+    for i, line in enumerate(lines):
+        if re.match(r"#*\s*coverage notice", line.strip(), re.I):
             body = " ".join(lines[i + 1:i + 4]).lower()
             cov = next((k for k in ("out-of-scope", "out of scope", "partial", "full") if k in body), None)
             break
     lb: list[str] = []
     cap = False
-    for l in lines:
-        if re.match(r"#*.*load-bearing", l.strip(), re.I):
+    for line in lines:
+        if re.match(r"#*.*load-bearing", line.strip(), re.I):
             cap = True
             continue
-        if cap and re.match(r"#+\s", l.strip()):
+        if cap and re.match(r"#+\s", line.strip()):
             break
         if cap:
-            for m in re.findall(r"\b([a-z]+-\d+)\b", l):
+            for m in re.findall(r"\b([a-z]+-\d+)\b", line):
                 if m not in lb:
                     lb.append(m)
     return {"strength": strength, "hype": hype, "coverage": cov, "load_bearing": lb[:4]}
