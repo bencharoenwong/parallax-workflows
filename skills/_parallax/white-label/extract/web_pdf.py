@@ -122,40 +122,40 @@ def _html_to_page_text(raw_html: str) -> str:
         re.sub(r"<[^>]+>", " ", _strip_non_prose_blocks(raw_html)))
 
 
-# Query parameters whose VALUE must never be persisted. Matched as substrings
-# of the lowercased key, because the same secret travels under many names
-# (api_key, access_token, X-Amz-Signature, sessionid, ...).
-_SECRET_QUERY_MARKERS = (
-    "token", "key", "secret", "password", "passwd", "pwd", "auth",
-    "sig", "credential", "session",
-)
-
-
 def _scrub_query(query: str) -> str:
-    """Keep the query's shape, redact any value that looks like a secret.
+    """Keep the query's shape; never persist a value.
 
-    Dropping the query wholesale loses page identity: a brand guide at
-    ``?locale=en-GB&v=2024`` records as a bare path that resolves to a
-    different or ambiguous page on re-extraction. Keeping it wholesale would
-    persist a signed or keyed URL into the draft. Keys are preserved either
-    way, so the reference still distinguishes pages.
+    ``source.reference`` is written to ``~/.parallax/client-branding/``, so a
+    brand-guide URL copied from an authenticated session must not carry its
+    credential there. An earlier version of this redacted only values whose KEY
+    matched a list of secret-looking names, which leaked every name the list
+    missed -- ``code`` (OAuth), ``jwt``, ``nonce``, ``otp``, ``assertion``, and
+    unboundedly many more. A denylist fails silently, and here a silent failure
+    is a persisted credential, so there is no list: every value is redacted and
+    no value is ever inspected.
+
+    Pairs with a blank value are dropped rather than redacted. ``?flag`` and
+    ``?<opaque-secret>`` both parse to a single key with an empty value and are
+    indistinguishable, so preserving the key would persist the secret verbatim
+    in the one place a key-preserving scheme cannot protect.
+
+    Keys survive, so the reference still records which parameters identified
+    the page -- its shape, not its contents. Full re-fetchability is
+    deliberately not offered; the operator has the original URL.
     """
     try:
         pairs = parse_qsl(query, keep_blank_values=True)
     except (TypeError, ValueError):
         return ""
-    return urlencode([
-        (k, "REDACTED" if any(m in k.lower() for m in _SECRET_QUERY_MARKERS) else v)
-        for k, v in pairs
-    ])
+    return urlencode([(k, "REDACTED") for k, v in pairs if v])
 
 
 def _sanitized_url(url: str) -> str:
-    """A persistable URL: no credentials, no secret query values, identity kept.
+    """A persistable URL: no credentials and no query values, page shape kept.
 
-    Userinfo is dropped entirely (that is where credentials properly live), and
-    secret-looking query values are redacted while the parameters that identify
-    the page survive.
+    Userinfo is dropped entirely (that is where credentials properly live) and
+    every query value is redacted, leaving the parameter names that record how
+    the page was addressed.
     """
     # urlsplit() accepts bytes and None without raising, and urlunsplit then
     # yields b'' -- persisting bytes into the draft's provenance rather than

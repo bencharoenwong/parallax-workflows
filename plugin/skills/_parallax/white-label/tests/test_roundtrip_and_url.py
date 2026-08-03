@@ -757,24 +757,55 @@ def test_workflow_doc_does_not_teach_an_unchecked_download_path():
     assert "download_public_url(" in doc
 
 
-def test_sanitized_url_keeps_page_identity():
-    """Provenance must still identify the page on re-extraction.
+def test_sanitized_url_keeps_query_keys_but_never_values():
+    """Provenance records the page's shape, not its contents.
 
-    Dropping the query wholesale recorded `?locale=en-GB&v=2024` as a bare
-    path, which resolves to a different or ambiguous page later.
+    An earlier version asserted the full plaintext query survived, which was
+    the leak channel itself. Keys record how the page was addressed; no value
+    is persisted, so full re-fetchability is deliberately not offered.
     """
     assert web_pdf_module._sanitized_url(
         "https://example.com/brand?locale=en-GB&v=2024"
-    ) == "https://example.com/brand?locale=en-GB&v=2024"
+    ) == "https://example.com/brand?locale=REDACTED&v=REDACTED"
 
 
-def test_sanitized_url_redacts_secret_query_values_but_keeps_keys():
-    out = web_pdf_module._sanitized_url("https://example.com/b?api_key=SEKRET&locale=en")
-    assert "SEKRET" not in out
-    assert "api_key=REDACTED" in out
-    assert "locale=en" in out, "identifying params must survive redaction"
-    signed = web_pdf_module._sanitized_url("https://example.com/b?X-Amz-Signature=abc&x=1")
-    assert "abc" not in signed and "x=1" in signed
+@pytest.mark.parametrize("key", [
+    # Every one of these was missed by the secret-name denylist this replaced.
+    "code", "jwt", "nonce", "hash", "otp", "assertion", "id_token",
+    "SAMLResponse",
+    # ...and the ones the denylist did happen to cover, which must still hold.
+    "api_key", "access_token", "X-Amz-Signature", "sessionid", "password",
+])
+def test_sanitized_url_redacts_every_query_value(key):
+    """No denylist: the value is redacted whatever the parameter is called.
+
+    Enumerating secret-looking names fails silently on the first name nobody
+    thought of, and here that failure persists a live credential.
+    """
+    out = web_pdf_module._sanitized_url(f"https://example.com/b?{key}=SEKRETVALUE")
+    assert "SEKRETVALUE" not in out, f"{key} value leaked into provenance"
+    assert f"{key}=REDACTED" in out
+
+
+def test_sanitized_url_redacts_benign_values_too():
+    """Benign-looking params get no exemption -- that judgement is the bug."""
+    out = web_pdf_module._sanitized_url("https://example.com/b?api_key=S&locale=en")
+    assert "S" not in out.replace("REDACTED", "").replace("https", "")
+    assert "api_key=REDACTED" in out and "locale=REDACTED" in out
+
+
+def test_sanitized_url_drops_bare_query_segments():
+    """A key-preserving scheme cannot protect a secret that IS the key.
+
+    `?flag` and `?<opaque-secret>` both parse to one key with an empty value
+    and are indistinguishable, so blank-valued pairs are dropped entirely.
+    """
+    out = web_pdf_module._sanitized_url("https://example.com/p?opaquesecrettoken123")
+    assert "opaquesecrettoken123" not in out
+    assert out == "https://example.com/p"
+    assert web_pdf_module._sanitized_url(
+        "https://example.com/p?debug"
+    ) == "https://example.com/p"
 
 
 def test_sanitized_url_still_drops_credentials_and_fragment():
