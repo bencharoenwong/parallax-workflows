@@ -11,6 +11,7 @@ import json
 import logging
 import os
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -25,6 +26,22 @@ _TAIL_READ_MAX_BYTES = 4 * 1024 * 1024  # 4 MiB ceiling; raises beyond this
 _AUDIT_ENTRY_WARN_BYTES = 256 * 1024  # ~5x realistic max; warn before silent drift
 _VIEW_TRANSACTION_LOCK = ".house-view.lock"
 _VIEW_DIR_MODE = 0o700
+
+VIEW_TRANSACTION_LOCK_FILENAME = _VIEW_TRANSACTION_LOCK
+
+
+@dataclass(frozen=True)
+class TransactionToken:
+    """Proof that the holder is inside a ``view_transaction`` for ``view_dir``.
+
+    ``view_commit.commit_view_locked`` requires one. A non-blocking ``flock``
+    probe cannot substitute: ``flock`` fails with EWOULDBLOCK when ANY open
+    file description holds the lock, so a probe cannot distinguish "I hold it"
+    from "another process holds it and I do not" -- it passes in exactly the
+    contended case that matters.
+    """
+
+    view_dir: Path
 
 
 class AuditChainError(Exception):
@@ -71,7 +88,7 @@ def identity_diff(captured: dict[str, str], committed: dict[str, str]) -> str:
 
 
 @contextmanager
-def view_transaction(view_dir: Path) -> Iterator[None]:
+def view_transaction(view_dir: Path) -> Iterator[TransactionToken]:
     """Serialize a canonical house-view read/write transaction.
 
     ``append_entry`` protects the audit file's byte-level hash chain, but a
@@ -96,7 +113,7 @@ def view_transaction(view_dir: Path) -> Iterator[None]:
                 lock_path.chmod(_AUDIT_FILE_MODE)
             except OSError:
                 pass
-            yield
+            yield TransactionToken(view_dir=directory)
         finally:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 

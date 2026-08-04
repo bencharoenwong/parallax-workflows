@@ -201,6 +201,19 @@ def test_tail_read_ceiling_raises(tmp_path: Path, monkeypatch):
         assert False, "expected AuditTailReadFailed"
 
 
+def test_view_transaction_yields_token_for_its_dir(tmp_path):
+    with audit_chain.view_transaction(tmp_path) as token:
+        assert isinstance(token, audit_chain.TransactionToken)
+        assert token.view_dir == tmp_path
+
+
+def test_view_transaction_still_works_without_binding_the_token(tmp_path):
+    # Every existing caller uses `with view_transaction(d):` and binds nothing.
+    with audit_chain.view_transaction(tmp_path):
+        pass
+    assert (tmp_path / audit_chain.VIEW_TRANSACTION_LOCK_FILENAME).exists()
+
+
 if __name__ == "__main__":
     # Manual run support
     import pytest
