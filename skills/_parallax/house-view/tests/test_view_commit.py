@@ -1,4 +1,7 @@
+import json
+import subprocess
 import sys
+import sys as _sys
 import threading
 from pathlib import Path
 
@@ -304,3 +307,69 @@ def test_staged_files_are_created_0600_not_chmodded_after(tmp_path):
                             audit_entry=_row(view_hash=view_commit.compute_view_hash({})),
                             expected_identity={"parent_version_id": "v1"})
     assert (tmp_path / "view.yaml").stat().st_mode & 0o777 == 0o600
+
+
+SHARED = str(view_commit._HOUSE_VIEW_DIR)
+
+
+def _run(plan, mode, view_dir):
+    return subprocess.run(
+        [_sys.executable, "-m", "view_commit", "--mode", mode, "--dir", str(view_dir)],
+        cwd=SHARED, input=json.dumps(plan), text=True, capture_output=True,
+    )
+
+
+def test_mode_spec_uses_the_hyphenated_action():
+    """loader.md:250 pins `re-pair`; consumers MUST skip unrecognized actions,
+    so `re_pair` would write rows --version-history silently drops."""
+    assert view_commit.MODE_SPECS["re-pair"]["action"] == "re-pair"
+    assert view_commit.MODE_SPECS["re-pair"]["identity_keys"] == ("view_hash", "prose_body_hash")
+    assert view_commit.MODE_SPECS["clear"]["remove"] == tuple(sorted(view_commit.WRITABLE))
+
+
+def test_cli_happy_path(tmp_path):
+    _seed(tmp_path)
+    plan = {"write": {}, "audit_entry": {"action": "extend", "version_id": "v1"},
+            "expected_identity": {"version_id": "v1"}}
+    result = _run(plan, "extend", tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["action"] == "extend"
+
+
+def test_cli_rejected_key_exits_2_and_writes_nothing(tmp_path):
+    _seed(tmp_path)
+    before = (tmp_path / AUDIT).read_bytes()
+    # expected_identity must be VALID here, or build_commit_args rejects on the
+    # missing key first and we never reach the whitelist check under test.
+    plan = {"write": {"audit.jsonl": {"inline": "x"}},
+            "audit_entry": {"action": "save", "version_id": "v2"},
+            "expected_identity": {"parent_version_id": "v1"}}
+    result = _run(plan, "save", tmp_path)
+    assert result.returncode == 2
+    assert "append-only" in result.stderr
+    assert (tmp_path / AUDIT).read_bytes() == before
+
+
+def test_cli_reads_path_refs_from_outside_the_view_dir(tmp_path):
+    _seed(tmp_path)
+    staging = tmp_path.parent / "staging"
+    staging.mkdir(exist_ok=True)
+    src = staging / "view.yaml"
+    src.write_text("metadata:\n  version_id: v2\n", encoding="utf-8")
+    plan = {"write": {"view.yaml": {"path": str(src)}},
+            "audit_entry": {"action": "save", "version_id": "v2",
+                            "view_hash": view_commit.compute_view_hash({})},
+            "expected_identity": {"parent_version_id": "v1"}}
+    result = _run(plan, "save", tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert not list(tmp_path.glob("*.tmp.*"))
+
+
+def test_cli_refuses_a_path_ref_inside_the_view_dir(tmp_path):
+    _seed(tmp_path)
+    plan = {"write": {"view.yaml": {"path": str(tmp_path / "view.yaml")}},
+            "audit_entry": {"action": "save", "version_id": "v2"},
+            "expected_identity": {}}
+    result = _run(plan, "save", tmp_path)
+    assert result.returncode == 2
+    assert "inside the view directory" in result.stderr

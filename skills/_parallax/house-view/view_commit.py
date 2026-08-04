@@ -20,7 +20,9 @@ its failure neither blocks nor rolls back a commit.
 """
 from __future__ import annotations
 
+import argparse
 import hashlib
+import json
 import os
 import sys
 from contextlib import suppress
@@ -382,3 +384,70 @@ def commit_view(
             view_dir, token=token, write=write, remove=remove,
             audit_entry=audit_entry, expected_identity=expected_identity,
         )
+
+
+# The mode table lives in code, not in prose. Prose that has to remember the
+# hyphen in "re-pair" or which identity key a mode needs is exactly the class
+# of unenforceable instruction this module exists to replace.
+MODE_SPECS: dict[str, dict[str, Any]] = {
+    "save":    {"action": "save",    "remove": (),                      "identity_keys": ("parent_version_id",)},
+    "extend":  {"action": "extend",  "remove": (),                      "identity_keys": ("version_id",)},
+    "re-pair": {"action": "re-pair", "remove": (),                      "identity_keys": ("view_hash", "prose_body_hash")},
+    "clear":   {"action": "clear",   "remove": tuple(sorted(WRITABLE)), "identity_keys": ("version_id",)},
+}
+
+
+def _resolve_content(view_dir: Path, name: str, ref: Any) -> str:
+    if isinstance(ref, str):
+        return ref
+    if not isinstance(ref, dict) or len(ref) != 1:
+        raise CommitRejected(f"write[{name!r}] must be {{'inline': ...}} or {{'path': ...}}")
+    if "inline" in ref:
+        return ref["inline"]
+    source = Path(ref["path"]).expanduser().resolve()
+    if source.parent == Path(view_dir).resolve():
+        raise CommitRejected(
+            f"write[{name!r}] path is inside the view directory; stage drafts elsewhere "
+            "(reading the file being replaced silently no-ops the change)"
+        )
+    return source.read_text(encoding="utf-8")
+
+
+def build_commit_args(mode: str, plan: dict[str, Any], view_dir: Path) -> dict[str, Any]:
+    if mode not in MODE_SPECS:
+        raise CommitRejected(f"unknown mode {mode!r} (known: {sorted(MODE_SPECS)})")
+    spec = MODE_SPECS[mode]
+    write = {n: _resolve_content(view_dir, n, r) for n, r in (plan.get("write") or {}).items()}
+    audit_entry = dict(plan.get("audit_entry") or {})
+    audit_entry["action"] = spec["action"]
+    expected = plan.get("expected_identity") or {}
+    missing = set(spec["identity_keys"]) - set(expected)
+    if missing:
+        raise CommitRejected(f"mode {mode!r} requires identity keys {sorted(missing)}")
+    return {"write": write, "remove": frozenset(spec["remove"]),
+            "audit_entry": audit_entry, "expected_identity": expected}
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="view_commit", description=__doc__)
+    parser.add_argument("--mode", required=True, choices=sorted(MODE_SPECS))
+    parser.add_argument("--dir", default=os.environ.get(
+        "PARALLAX_HOUSE_VIEW_DIR", str(Path.home() / ".parallax" / "active-house-view")))
+    args = parser.parse_args(argv)
+    view_dir = Path(args.dir).expanduser()
+    try:
+        plan = json.loads(sys.stdin.read())
+        kwargs = build_commit_args(args.mode, plan, view_dir)
+        entry = commit_view(view_dir, **kwargs)
+    except (CommitRejected, audit_chain.ViewChangedMidRun) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    except Exception as exc:  # noqa: BLE001
+        print(f"commit failed: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps(entry))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
