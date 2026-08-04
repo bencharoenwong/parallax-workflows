@@ -273,7 +273,7 @@ def test_rename_failure_keeps_completed_renames_and_cleans_the_rest(tmp_path, mo
         return real_rename(src, dst)
 
     monkeypatch.setattr(view_commit.os, "rename", flaky_rename)
-    with pytest.raises(view_commit.CommitRejected):
+    with pytest.raises(view_commit.CommitPartiallyApplied):
         view_commit.commit_view(
             tmp_path,
             write={"view.yaml": "metadata:\n  version_id: v2\n",
@@ -373,3 +373,35 @@ def test_cli_refuses_a_path_ref_inside_the_view_dir(tmp_path):
     result = _run(plan, "save", tmp_path)
     assert result.returncode == 2
     assert "inside the view directory" in result.stderr
+
+
+def test_cli_partial_apply_does_not_exit_2(tmp_path, monkeypatch):
+    """Exit 2 is contracted to mean nothing was written, so a failure that
+    landed one rename must not use it."""
+    _seed(tmp_path)
+    (tmp_path / "provenance.yaml").write_text("old: 1\n", encoding="utf-8")
+    staging = tmp_path.parent / "staging_partial"
+    staging.mkdir(exist_ok=True)
+    (staging / "view.yaml").write_text("metadata:\n  version_id: v2\n", encoding="utf-8")
+    (staging / "provenance.yaml").write_text("a: 1\n", encoding="utf-8")
+    plan = {"write": {"view.yaml": {"path": str(staging / "view.yaml")},
+                      "provenance.yaml": {"path": str(staging / "provenance.yaml")}},
+            "audit_entry": {"action": "save", "version_id": "v2",
+                            "view_hash": view_commit.compute_view_hash({})},
+            "expected_identity": {"parent_version_id": "v1"}}
+    # Drive the in-process path; the subprocess cannot be monkeypatched.
+    calls = {"n": 0}
+    real_rename = view_commit.os.rename
+
+    def flaky_rename(src, dst):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise OSError("rename failed")
+        return real_rename(src, dst)
+
+    monkeypatch.setattr(view_commit.os, "rename", flaky_rename)
+    kwargs = view_commit.build_commit_args("save", plan, tmp_path)
+    with pytest.raises(view_commit.CommitPartiallyApplied):
+        view_commit.commit_view(tmp_path, **kwargs)
+    # And confirm main() would not map this to 2.
+    assert not issubclass(view_commit.CommitPartiallyApplied, view_commit.CommitRejected)

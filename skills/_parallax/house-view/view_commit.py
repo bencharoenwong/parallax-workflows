@@ -68,6 +68,19 @@ class CommitWitnessLost(audit_chain.AuditChainError):
     error_code = "commit_witness_lost"
 
 
+class CommitPartiallyApplied(audit_chain.AuditChainError):
+    """A rename completed and then a later step failed.
+
+    The filesystem was mutated and cannot be rolled back: a completed
+    ``os.rename`` has no inverse, and a compensating rename would race any
+    reader that already observed the new bytes. Distinct from
+    ``CommitRejected`` so the CLI contract "exit 2 means nothing was written"
+    stays true -- this lands on the generic failure code instead.
+    """
+
+    error_code = "commit_partially_applied"
+
+
 def _is_empty(v: Any) -> bool:
     """Per schema.yaml §view_hash Rule 2. The bool guard and the numeric-zero
     case are both load-bearing: tilts default to 0 across every pillar, sector
@@ -291,6 +304,7 @@ def _validate_row_matches_bytes(write: dict[str, str], audit_entry: dict[str, An
 
 def _stage_and_rename(view_dir: Path, write: dict[str, str], version_id: str) -> None:
     staged: list[tuple[Path, Path]] = []
+    renamed = 0
     try:
         for name in ("view.yaml", "prose.md", "provenance.yaml"):
             if name not in write:
@@ -311,11 +325,18 @@ def _stage_and_rename(view_dir: Path, write: dict[str, str], version_id: str) ->
                 os.fsync(handle.fileno())
         for tmp, final in staged:
             os.rename(tmp, final)
+            renamed += 1
             staged = staged[1:]
     except OSError as exc:
         for tmp, _ in staged:
             with suppress(OSError):
                 tmp.unlink()
+        if renamed:
+            raise CommitPartiallyApplied(
+                f"{renamed} artifact(s) were renamed into place before this failed "
+                f"({exc}). The completed rename(s) cannot be undone and no audit row "
+                "was appended. Inspect the view directory before retrying."
+            ) from exc
         raise CommitRejected(f"staging failed, nothing committed: {exc}") from exc
 
 
