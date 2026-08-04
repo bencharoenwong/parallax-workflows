@@ -21,7 +21,9 @@ its failure neither blocks nor rolls back a commit.
 from __future__ import annotations
 
 import hashlib
+import os
 import sys
+from contextlib import suppress
 from pathlib import Path
 from typing import Any, Callable
 
@@ -208,3 +210,137 @@ IDENTITY_RESOLVERS: dict[str, Callable[[Path], str | None]] = {
     "view_hash": lambda d: _metadata_field(d, "view_hash"),
     "prose_body_hash": _resolve_prose_body_hash,
 }
+
+
+def _check_identity(view_dir: Path, expected_identity: dict[str, Any]) -> None:
+    unknown = set(expected_identity) - set(IDENTITY_RESOLVERS)
+    if unknown:
+        raise CommitRejected(f"unknown identity keys: {sorted(unknown)}")
+    captured = {k: str(v) for k, v in expected_identity.items()}
+    committed = {k: str(IDENTITY_RESOLVERS[k](view_dir)) for k in expected_identity}
+    moved = audit_chain.identity_diff(captured, committed)
+    if moved:
+        raise audit_chain.ViewChangedMidRun(
+            f"Active house view changed since it was read ({moved}); nothing was written."
+        )
+
+
+def _validate_row_matches_bytes(write: dict[str, str], audit_entry: dict[str, Any]) -> None:
+    """Assert the row describes the bytes. Without this, a row can disagree
+    with the artifacts it witnesses and the chain still verifies green."""
+    if "view.yaml" in write:
+        parsed = yaml.safe_load(write["view.yaml"]) or {}
+        meta = parsed.get("metadata") or {}
+        if "view_hash" in audit_entry:
+            actual = compute_view_hash(parsed)
+            if audit_entry["view_hash"] != actual:
+                raise CommitRejected(
+                    f"row view_hash {audit_entry['view_hash']!r} != bytes {actual!r}"
+                )
+        if meta.get("version_id") != audit_entry.get("version_id"):
+            raise CommitRejected(
+                f"row version_id {audit_entry.get('version_id')!r} != "
+                f"view.yaml metadata {meta.get('version_id')!r}"
+            )
+    if "prose.md" in write:
+        text = write["prose.md"]
+        front = {}
+        if text.startswith("---\n"):
+            end = text.find("---\n", 4)
+            if end != -1:
+                front = yaml.safe_load(text[4:end]) or {}
+        if "view_hash" in audit_entry and front.get("paired_yaml_hash") != audit_entry["view_hash"]:
+            raise CommitRejected(
+                f"prose paired_yaml_hash {front.get('paired_yaml_hash')!r} != "
+                f"row view_hash {audit_entry['view_hash']!r}"
+            )
+        actual_body = compute_prose_body_hash(text)
+        if front.get("prose_body_hash") != actual_body:
+            raise CommitRejected(
+                f"prose frontmatter prose_body_hash {front.get('prose_body_hash')!r} != "
+                f"body {actual_body!r}"
+            )
+
+
+def _stage_and_rename(view_dir: Path, write: dict[str, str], version_id: str) -> None:
+    staged: list[tuple[Path, Path]] = []
+    try:
+        for name in ("view.yaml", "prose.md", "provenance.yaml"):
+            if name not in write:
+                continue
+            tmp = view_dir / f"{name}.tmp.{version_id}"
+            # O_EXCL: a leftover staging file is a loud error, never a silent
+            # overwrite. 0600 at creation, not chmod-after-rename, so the file
+            # is never briefly world-readable under a permissive umask.
+            fd = os.open(str(tmp), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(write[name].encode("utf-8"))
+                handle.flush()
+                os.fsync(handle.fileno())
+            staged.append((tmp, view_dir / name))
+        for tmp, final in staged:
+            os.rename(tmp, final)
+            staged = staged[1:]
+    except OSError as exc:
+        for tmp, _ in staged:
+            with suppress(OSError):
+                tmp.unlink()
+        raise CommitRejected(f"staging failed, nothing committed: {exc}") from exc
+
+
+def commit_view_locked(
+    view_dir: Path,
+    *,
+    token: audit_chain.TransactionToken,
+    write: dict[str, str],
+    remove: frozenset[str],
+    audit_entry: dict[str, Any],
+    expected_identity: dict[str, Any],
+) -> dict[str, Any]:
+    """Commit artifacts and their witnessing row. Assumes the lock is HELD.
+
+    The step order IS the contract: nothing touches the filesystem until every
+    validation has passed.
+    """
+    view_dir = Path(view_dir)
+    if not isinstance(token, audit_chain.TransactionToken) or token.view_dir != view_dir:
+        raise CommitRejected(
+            "commit_view_locked requires a TransactionToken for this view_dir; "
+            "use commit_view() if you do not already hold the transaction"
+        )
+    validate_write_remove_keys(write, remove)
+    validate_audit_entry(audit_entry, write)
+    _check_identity(view_dir, expected_identity)
+    _validate_row_matches_bytes(write, audit_entry)
+    if write:
+        _stage_and_rename(view_dir, write, str(audit_entry["version_id"]))
+    for name in remove:
+        with suppress(FileNotFoundError):
+            (view_dir / name).unlink()
+    try:
+        return audit_chain.append_entry(view_dir / _AUDIT_FILENAME, audit_entry)
+    except Exception as exc:  # noqa: BLE001
+        raise CommitWitnessLost(
+            f"artifacts for version_id={audit_entry.get('version_id')!r} were committed "
+            f"but the audit row could not be appended ({exc}). The renames cannot be "
+            f"undone. Recover by re-appending the row to {view_dir / _AUDIT_FILENAME} "
+            "before any further commit."
+        ) from exc
+
+
+def commit_view(
+    view_dir: Path,
+    *,
+    write: dict[str, str],
+    remove: frozenset[str],
+    audit_entry: dict[str, Any],
+    expected_identity: dict[str, Any],
+) -> dict[str, Any]:
+    """Acquire the view transaction, then commit. Never call from inside one --
+    ``view_transaction`` is not re-entrant and nesting blocks forever."""
+    view_dir = Path(view_dir)
+    with audit_chain.view_transaction(view_dir) as token:
+        return commit_view_locked(
+            view_dir, token=token, write=write, remove=remove,
+            audit_entry=audit_entry, expected_identity=expected_identity,
+        )
