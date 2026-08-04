@@ -65,14 +65,41 @@ class CommitWitnessLost(audit_chain.AuditChainError):
 
 
 def _is_empty(v: Any) -> bool:
-    return v is None or v == "" or v == [] or v == {}
+    """Per schema.yaml §view_hash Rule 2. The bool guard and the numeric-zero
+    case are both load-bearing: tilts default to 0 across every pillar, sector
+    and region, and `False == 0` in Python."""
+    if isinstance(v, bool):
+        return False
+    if v is None:
+        return True
+    if isinstance(v, (int, float)) and v == 0:
+        return True
+    return v == "" or v == [] or v == {}
 
 
 def _strip_empty(obj: Any) -> Any:
+    """Post-order: ALWAYS recurse first, THEN decide whether to drop.
+
+    A container that only becomes empty after its children are stripped must
+    still be dropped. Testing before recursing (pre-order) leaves residual
+    empty containers and yields a different digest.
+    """
     if isinstance(obj, dict):
-        return {k: _strip_empty(v) for k, v in obj.items() if not _is_empty(v)}
+        out: dict[str, Any] = {}
+        for k, v in obj.items():
+            v = _strip_empty(v)
+            if _is_empty(v):
+                continue
+            out[k] = v
+        return out
     if isinstance(obj, list):
-        return [_strip_empty(v) for v in obj if not _is_empty(v)]
+        result = []
+        for x in obj:
+            y = _strip_empty(x)
+            if _is_empty(y):
+                continue
+            result.append(y)
+        return result
     return obj
 
 

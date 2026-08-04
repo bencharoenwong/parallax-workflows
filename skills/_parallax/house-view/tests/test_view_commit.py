@@ -67,3 +67,21 @@ def test_resolvers_only_read_what_is_asked_for(tmp_path):
     (tmp_path / "view.yaml").write_text("metadata:\n  version_id: v2\n", encoding="utf-8")
     (tmp_path / "prose.md").write_bytes(b"\xff\xfe not utf-8")
     assert view_commit.IDENTITY_RESOLVERS["version_id"](tmp_path) == "v2"
+
+
+def test_view_hash_agrees_with_the_oracle_on_zero_valued_tilts():
+    """Zero-valued tilts are the schema's default state for every pillar,
+    sector and region, so a strip-rule divergence misfires on real views."""
+    import test_view_hash as oracle
+
+    samples = [
+        {},
+        {"tilts": {}, "excludes": []},
+        {"tilts": {"pillars": {"econometrics_phase": 0, "valuation_state": 1},
+                   "sectors": {"energy": 0, "financials": 2}}, "excludes": []},
+        {"tilts": {"sectors": {"a": 0}}, "excludes": []},
+        {"tilts": {"factors": {"momentum": -1}}, "excludes": ["XYZ"]},
+    ]
+    for sample in samples:
+        _canonical, expected = oracle.compute_view_hash(sample)
+        assert view_commit.compute_view_hash(sample) == expected, sample
