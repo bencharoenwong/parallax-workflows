@@ -53,6 +53,7 @@ if str(_SHARED_DIR) not in sys.path:
 import audit_chain  # noqa: E402
 import chain_emit  # noqa: E402
 import gate_present  # noqa: E402
+import mcp_meta  # noqa: E402
 import provenance_classes  # noqa: E402
 import view_status  # noqa: E402
 
@@ -383,7 +384,14 @@ class MakerOrchestrator:
             for comp in self.options.components:
                 resp = results.get((market, comp))
                 comp_responses[comp] = resp
-                if resp is not None:
+                # Fail closed on a shape we cannot interpret. `resp is not None`
+                # counted a malformed or non-mapping response as successfully
+                # fetched data, so a market answering only with garbage read as
+                # reachable and escaped the unreachable_share abort. An explicit
+                # `success: false` still counts as reachable -- the server
+                # answered, and that is silent-for-this-component, not a dead
+                # market (SKILL.md Step 3).
+                if mcp_meta.carries_data(resp):
                     any_reachable = True
                     # PARTIAL detection done downstream by cross_country.
                 else:
@@ -570,11 +578,53 @@ class MakerOrchestrator:
         mcp_responses: MCPResponses,
         covered_markets: list[str],
     ) -> tuple[dict[str, Path], str, str, dict[str, Any], Path | None]:
+        """Commit canonical artifacts and their audit row as one transaction."""
+        with audit_chain.view_transaction(Path(self.options.view_dir)):
+            return self._save_view_locked(
+                view, pillars, aggregated, mcp_responses, covered_markets
+            )
+
+    def _save_view_locked(
+        self,
+        view: dict[str, Any],
+        pillars: dict[str, PillarResult],
+        aggregated: dict[str, Any],
+        mcp_responses: MCPResponses,
+        covered_markets: list[str],
+    ) -> tuple[dict[str, Path], str, str, dict[str, Any], Path | None]:
         """Compute hashes, write files, append audit, emit chain.
 
         Returns (saved_paths, view_id, version_id, audit_entry, chain_path).
         """
         view_dir = Path(self.options.view_dir)
+
+        # The draft's parent_version_id was read back at synthesis time, before
+        # the interactive confirmation gate -- which can sit parked for hours.
+        # Any writer landing in that window (another maker, a load-house-view
+        # apply, a stress-delta apply) makes this draft's recorded parent a
+        # version that was never its parent: the audit row still chains and
+        # verifies, but its lineage is a lie, and lineage is what the chain
+        # exists to prove. The lock below serialises the writes; it cannot
+        # notice a read that happened before it was taken, so re-read here.
+        #
+        # parent_version_id alone is sufficient: every writer mints a fresh
+        # version_id on save, so any intervening commit moves it. Covers the
+        # view being created (None -> V1), superseded (V1 -> V2), and removed
+        # (V1 -> None) while the gate was open.
+        captured = {
+            "parent_version_id": str(
+                (view.get("metadata") or {}).get("parent_version_id")
+            )
+        }
+        committed = {"parent_version_id": str(_read_parent_version_id(view_dir))}
+        moved = audit_chain.identity_diff(captured, committed)
+        if moved:
+            raise audit_chain.ViewChangedMidRun(
+                f"Active house view changed between synthesis and save ({moved}); "
+                "nothing was written. Re-run /parallax-make-house-view to "
+                "synthesise against the current view."
+            )
+
         view_dir.mkdir(parents=True, exist_ok=True)
         try:
             os.chmod(view_dir, 0o700)

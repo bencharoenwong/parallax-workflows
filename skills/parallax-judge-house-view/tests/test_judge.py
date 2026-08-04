@@ -409,3 +409,186 @@ def test_probe_maker_modules_returns_unavailable_when_b1_absent():
         assert maker.cross_country is None
         assert maker.pillar_compose is None
         assert maker.pillar_formulas is None
+
+
+# ---------------------------------------------------------------------------
+# View-transaction lock scope.
+# ---------------------------------------------------------------------------
+
+
+def _view_lock_state(view_dir: Path) -> str:
+    import fcntl
+    import os
+
+    fd = os.open(str(view_dir / ".house-view.lock"), os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return "free"
+    except OSError:
+        return "held"
+    finally:
+        os.close(fd)
+
+
+def test_lock_is_not_held_across_mcp_and_llm_phases(
+    active_view_dir: Path,
+    report_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """An exclusive flock spanning phase 1 (MCP) or phase 5 (LLM) lets one
+    stalled judge block every maker save indefinitely. Only the view read and
+    the audit append need the lock."""
+    monkeypatch.setattr("chain_emit.DEFAULT_CHAIN_DIR", tmp_path / "chains")
+    seen: dict[str, str] = {}
+
+    for phase in ("phase_1_fan_out", "phase_5_recommendations",
+                  "phase_6_render_and_phase_7_audit"):
+        original = getattr(judge, phase)
+
+        def probe(*args, __phase=phase, __original=original, **kwargs):
+            seen[__phase] = _view_lock_state(active_view_dir)
+            return __original(*args, **kwargs)
+
+        monkeypatch.setattr(judge, phase, probe)
+
+    judge.run_judge(config=judge.JudgeConfig(
+        dry=True,
+        mock_mcp_responses={},
+        explicit=True,
+        view_dir=active_view_dir,
+        report_dir=report_dir,
+    ))
+
+    assert seen == {
+        "phase_1_fan_out": "free",
+        "phase_5_recommendations": "free",
+        "phase_6_render_and_phase_7_audit": "held",
+    }
+
+
+def test_view_replaced_mid_run_aborts_before_the_audit_append(
+    active_view_dir: Path,
+    report_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Releasing the lock across the network phases opens a window for a maker
+    save. The judge must refuse to append a row witnessing a view it never
+    judged."""
+    monkeypatch.setattr("chain_emit.DEFAULT_CHAIN_DIR", tmp_path / "chains")
+    original_fan_out = judge.phase_1_fan_out
+
+    def mutate_then_fan_out(config, mcp_call_fn):
+        view_path = active_view_dir / "view.yaml"
+        data = yaml.safe_load(view_path.read_text())
+        data["excludes"] = list(data.get("excludes") or []) + ["MUTATED.MID.RUN"]
+        view_path.write_text(yaml.safe_dump(data, sort_keys=False))
+        return original_fan_out(config, mcp_call_fn)
+
+    monkeypatch.setattr(judge, "phase_1_fan_out", mutate_then_fan_out)
+    audit_before = (active_view_dir / "audit.jsonl").read_text()
+
+    with pytest.raises(judge.ViewChangedDuringJudge):
+        judge.run_judge(config=judge.JudgeConfig(
+            dry=True,
+            mock_mcp_responses={},
+            explicit=True,
+            view_dir=active_view_dir,
+            report_dir=report_dir,
+        ))
+
+    assert (active_view_dir / "audit.jsonl").read_text() == audit_before
+
+
+@pytest.mark.parametrize("field", ["view_id", "version_id", "upload_timestamp"])
+def test_metadata_only_supersede_mid_run_aborts_the_audit_append(
+    active_view_dir: Path,
+    report_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+):
+    """compute_view_hash covers tilts + excludes only, so a save whose tilts
+    land on identical values still mints fresh metadata. The audit row cites
+    that metadata, so hash equality alone must not certify the append."""
+    monkeypatch.setattr("chain_emit.DEFAULT_CHAIN_DIR", tmp_path / "chains")
+    original_fan_out = judge.phase_1_fan_out
+
+    def supersede_then_fan_out(config, mcp_call_fn):
+        view_path = active_view_dir / "view.yaml"
+        data = yaml.safe_load(view_path.read_text())
+        data["metadata"][field] = f"superseded-{field}"
+        view_path.write_text(yaml.safe_dump(data, sort_keys=False))
+        return original_fan_out(config, mcp_call_fn)
+
+    monkeypatch.setattr(judge, "phase_1_fan_out", supersede_then_fan_out)
+    audit_before = (active_view_dir / "audit.jsonl").read_text()
+
+    with pytest.raises(judge.ViewChangedDuringJudge, match="superseded"):
+        judge.run_judge(config=judge.JudgeConfig(
+            dry=True,
+            mock_mcp_responses={},
+            explicit=True,
+            view_dir=active_view_dir,
+            report_dir=report_dir,
+        ))
+
+    assert (active_view_dir / "audit.jsonl").read_text() == audit_before
+
+
+@pytest.mark.parametrize("wipe", ["view.yaml", "audit.jsonl"])
+def test_view_removed_mid_run_reports_the_documented_guard(
+    active_view_dir: Path,
+    report_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    wipe: str,
+):
+    """An operator clearing the view dir during the unlocked network phases is
+    the same 'the report describes a view that is no longer active' case. The
+    reload must not surface `FileNotFoundError` ("No active house view found")
+    or a broken-chain error: callers catch `ViewChangedMidRun`, and a
+    never-loaded message contradicts the report the judge just built."""
+    monkeypatch.setattr("chain_emit.DEFAULT_CHAIN_DIR", tmp_path / "chains")
+    original_fan_out = judge.phase_1_fan_out
+
+    def wipe_then_fan_out(config, mcp_call_fn):
+        target = active_view_dir / wipe
+        if wipe == "view.yaml":
+            target.unlink()
+        else:
+            target.write_text(target.read_text() + "not-json-at-all\n")
+        return original_fan_out(config, mcp_call_fn)
+
+    monkeypatch.setattr(judge, "phase_1_fan_out", wipe_then_fan_out)
+
+    with pytest.raises(judge.ViewChangedDuringJudge, match="superseded"):
+        judge.run_judge(config=judge.JudgeConfig(
+            dry=True,
+            mock_mcp_responses={},
+            explicit=True,
+            view_dir=active_view_dir,
+            report_dir=report_dir,
+        ))
+
+
+def test_judge_identity_fields_superset_of_stress():
+    """The judge's audit row cites strictly more than the stress row.
+
+    Both guards call the same ``stress.audit_identity`` with their own field
+    tuple, so the two sets can drift apart silently — nothing but inspection
+    connected them before. The judge derives ``view_age_days`` from
+    ``upload_timestamp``, so its set must stay a superset: a field the stress
+    guard checks but the judge does not would let a superseded view through
+    the stricter of the two paths.
+    """
+    assert set(stress.AUDIT_IDENTITY_FIELDS) <= set(judge._AUDIT_CITED_METADATA)
+
+
+def test_view_changed_guards_share_a_catchable_base():
+    """An operator catching the shared base must catch both skills' guards."""
+    assert issubclass(judge.ViewChangedDuringJudge, audit_chain.ViewChangedMidRun)
+    # Bare `except RuntimeError` predates the shared base; it must still work.
+    assert issubclass(audit_chain.ViewChangedMidRun, RuntimeError)

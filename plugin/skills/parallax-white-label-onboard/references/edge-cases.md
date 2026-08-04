@@ -6,6 +6,8 @@
 
 **Logo download fails (network error, 404):** Warn and preserve the URL as `branding.logos.primary`. Downstream skills must handle missing local files gracefully by falling back to the URL or omitting the logo.
 
+**URL rejected as non-public (`extract_from_url` returns `error: "URL destination is not public"`):** The destination policy rejected the URL itself, not the network — an intranet host, a private/loopback/link-local address, a non-HTTP(S) scheme, or embedded credentials (`https://user:pass@host/...`), applied to redirects and linked stylesheets too. Retrying or checking reachability will not help. When the URL carried userinfo, the destination may well be public — ask for the same URL without the `user:pass@` prefix, and treat the pasted credentials as exposed. Otherwise, tell the user the source must be a publicly reachable HTTP(S) page, and offer PDF/PPTX/DOCX export of the brand guide or wizard mode instead. Do NOT fetch the URL through defuddle, WebFetch, or any other path to work around the rejection.
+
 **All color extraction returns empty:** In URL mode, this is common for heavily JS-rendered sites. Surface the gap clearly: "No colors extracted — the site may require JavaScript rendering. Try providing the hex colors manually via wizard mode."
 
 **Font not on system (FontValidator returns warn):** This is expected for web fonts (Google Fonts, Adobe Fonts, etc.). The warn is informational. Downstream skills should specify the fallback font from `FontValidator._suggest_fallback()` in their CSS/PDF output stack.

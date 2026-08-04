@@ -50,10 +50,11 @@ within normal variance for a single run. Median over 3+ runs filters most of it.
 
 ## Caveats
 
-- **Wall-clock only in v1.** Token usage, individual MCP call durations, and
-  parallelism observation are out of scope for now. If you want those,
-  `claude -p --output-format stream-json` exposes a verbose tool-use stream
-  that can be parsed.
+- **Wall-clock only in v1.** Individual MCP call durations and parallelism
+  observation are out of scope for now. Token usage is not: v2's
+  `graders/runrecord.py` parses the `claude -p --output-format stream-json`
+  stream this caveat pointed at and reports both meters — see "Derived Parallax
+  cost meter" below.
 - **Server load is the dominant noise term.** A 30s run today might be 10s
   tomorrow on the same code. Always measure pre/post under the same
   conditions, and treat single-run differences <5s as noise.
@@ -91,7 +92,8 @@ v1 (above) times latency. v2 adds a **two-tier quality signal** (deterministic
 structural checks + LLM-as-judge rubric) on top of a **spec-driven, skill-agnostic
 grading engine** (design: `notes/2026-05-29-skillopt-eval-substrate-design.md`,
 local-only). Latency timing is retained (it becomes the Stage-2 Tier-3
-non-regression check); v2 supersedes only the "no quality scoring" caveat.
+non-regression check); v2 supersedes the v1 "no quality scoring" and "no token
+usage" caveats.
 
 ### Layout (v2 additions)
 
@@ -103,6 +105,9 @@ evals/
 │   ├── judge_criteria.py   # Tier-2 rubric criteria (should-i-buy baseline set)
 │   ├── run_judge.py        # pinned-Anthropic rubric judge (allowlist-guarded)
 │   ├── transcript.py       # stream-json → final-prose extraction
+│   ├── infra_failure.py    # shared "harness/connector broke" predicate (one owner)
+│   ├── runrecord.py        # one measured run → RunRecord (timing + both cost meters)
+│   ├── token_model.py      # Parallax token price table (derived from skills/_parallax/token-costs.md)
 │   └── test_*.py           # pure-function unit tests (the only thing CI runs)
 ├── skills/              # per-skill eval specs (one eval_config.py each)
 │   ├── should-i-buy/       # reference baseline spec
@@ -169,6 +174,37 @@ Example dry-runs before spending tokens:
 
 Live rollouts (`run_rollout.sh`, `run_baseline.sh` without `--dry-run`) cost Parallax
 tokens and are run manually.
+
+### Derived Parallax cost meter
+
+`RunRecord` reports Parallax token cost as **derived** — counted tool calls ×
+published unit price from `skills/_parallax/token-costs.md` — never metered.
+Attribution is by MCP namespace, not by tool name, because a tool name cannot
+prove which server served it:
+
+- Namespace contains `parallax`, or is listed in `PARALLAX_MCP_ALIASES` → billed.
+- No MCP namespace at all → harness-local (Read, Bash, …) → ignored.
+- A known endpoint name under an unrecognised namespace → **ambiguous**: billed
+  to nobody, listed in `ambiguous_endpoints`, and the run is degraded so it
+  cannot pool into an aggregate that reads as a measured client bill.
+
+An ambiguous namespace is resolvable in **both** directions, and picking the
+wrong one corrupts the meter:
+
+- The namespace *is* the connector, mounted under an alias with no "parallax" in
+  it (white-label, in particular) → add it to `PARALLAX_MCP_ALIASES`. Its calls
+  are billed from then on.
+- The namespace is a **different** MCP server whose tool name happens to collide
+  with a Parallax endpoint (`submit_feedback`, say) → add it to
+  `PARALLAX_MCP_FOREIGN_NAMESPACES`. Its calls are ignored, not billed.
+
+Both take comma-separated namespace segments. Declaring a foreign server a
+Parallax alias to silence the degrade would start billing the client for another
+server's calls, so use the variable that matches what the namespace actually is.
+
+An endpoint under a recognised Parallax namespace that the price table does not
+know still lands in `unknown_endpoints` and degrades the run — the stale-table
+signal.
 
 ## Adding a new skill eval
 

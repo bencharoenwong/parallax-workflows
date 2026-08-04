@@ -42,7 +42,6 @@ HERE = Path(__file__).parent
 HOUSE_VIEW_DIR = HERE.parent
 sys.path.insert(0, str(HOUSE_VIEW_DIR))
 
-import manifest_verify  # noqa: E402
 import manifest_cache  # noqa: E402
 
 TRUSTED_KEYS_PATH = HOUSE_VIEW_DIR / "signing" / "trusted_keys.json"
@@ -93,7 +92,8 @@ def _build_signed_manifest(
 
 def _new_cache(tmpdir: Path) -> manifest_cache.ManifestCache:
     return manifest_cache.ManifestCache(
-        cache_dir=tmpdir, trusted_keys_path=TRUSTED_KEYS_PATH
+        cache_dir=tmpdir, trusted_keys_path=TRUSTED_KEYS_PATH,
+        allow_test_keys=True,
     )
 
 
@@ -362,7 +362,8 @@ def main() -> int:
             failures += 1
         except Exception as e:
             print(f"ERROR {t.__name__}: {type(e).__name__}: {e}")
-            import traceback; traceback.print_exc()
+            import traceback
+            traceback.print_exc()
             failures += 1
     if failures:
         print(f"\n{failures} test(s) failed.")

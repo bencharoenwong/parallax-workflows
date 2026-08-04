@@ -27,7 +27,7 @@ description: "Desk-level morning call list for relationship managers covering mu
 - `desk_call_list_logic.py` is the pure arithmetic layer. Do not put MCP calls or local file writes in it.
 - Client names and weights never go to Parallax MCP tools; only the deduplicated symbol union leaves the machine.
 - `SCAN_CONCURRENCY = 24` applies only to the wide price scan. If the live probe shows rate limiting, use 8.
-- `export_price_series` is FREE; `etf_daily_price` pricing cost is UNVERIFIED. This skill no longer calls `etf_profile`. Do not invent numbers.
+- `export_price_series` is FREE; `etf_daily_price` costs 1 token per ETF priced. This skill no longer calls `etf_profile`. Do not invent numbers.
 - `client_safe` is supported, but this is primarily an internal RM artifact.
 
 Build one ranked, bounded morning call list for a relationship manager covering many client books.
@@ -143,7 +143,7 @@ The entire final message is exactly that command's stdout. Put degraded notes in
 11. Symbol Movers Reference: symbol, name, move %, four-week score change, news headline, number of clients holding, desk-wide weighted exposure, and house-view tag.
 12. Verdict Sensitivity per `_parallax/parallax-conventions.md §11`; omit under `client_safe`.
 13. Next steps: point to `/parallax-client-review`, `/parallax-should-i-buy`, or `/parallax-watchlist-monitor` as appropriate. Do not auto-invoke them.
-14. About This Report: branding line per `_parallax/white-label/integration-pattern.md §7`, currency line, desk-book provenance, redaction state, audience mode if client-safe, skipped local-logo basename if relevant, and a cost note that the equity price scan is FREE (`export_price_series`) while `etf_daily_price` pricing cost is UNVERIFIED.
+14. About This Report: branding line per `_parallax/white-label/integration-pattern.md §7`, currency line, desk-book provenance, redaction state, audience mode if client-safe, skipped local-logo basename if relevant, and a cost note that the equity price scan is FREE (`export_price_series`) while `etf_daily_price` costs 1 token per ETF priced.
 15. AI-interaction disclosure per `_parallax/parallax-conventions.md §9.2`.
 16. Disclaimer: view-aware per `_parallax/house-view/loader.md §5` if active; otherwise render the standard disclaimer from `_parallax/parallax-conventions.md §9.1`.
 

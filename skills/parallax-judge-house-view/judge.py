@@ -863,6 +863,73 @@ def phase_8_emit_chain(
 # ---------------------------------------------------------------------------
 
 
+class ViewChangedDuringJudge(audit_chain.ViewChangedMidRun):
+    """The active view was superseded between phase 0 and the audit append.
+
+    Specialises the shared ``ViewChangedMidRun`` so the two house-view guards
+    share a base an operator can catch generically, while keeping the
+    judge-specific message and type that callers and tests already rely on.
+    """
+
+
+# The audit row cites metadata that compute_view_hash deliberately excludes
+# (it hashes tilts + excludes only), so hash equality alone does not certify
+# that the row's identity fields still describe the committed view.
+_AUDIT_CITED_METADATA = ("view_id", "version_id", "upload_timestamp")
+
+
+def _resolved_view_dir(config: JudgeConfig) -> Path:
+    """The directory the transaction lock guards. Mirrors phase_0_load_view's
+    ``view_dir or stress.HOUSE_VIEW_DIR`` default so the lock and the read
+    never land on different directories."""
+    return Path(config.view_dir) if config.view_dir else Path(stress.HOUSE_VIEW_DIR)
+
+
+def _audit_identity(view: stress.View) -> dict[str, str]:
+    """Every committed-view field the judge's audit row will cite."""
+    return stress.audit_identity(view.data, view.view_hash, _AUDIT_CITED_METADATA)
+
+
+def _assert_view_unchanged(view: stress.View, config: JudgeConfig) -> None:
+    """Re-read the committed view under the lock before the audit append.
+
+    Mirrors ``stress.append_stress_audit``'s race guard, widened to the full
+    identity the row cites: a maker save landing during the unlocked network
+    phases mints a fresh ``version_id`` and ``upload_timestamp`` even when the
+    tilts are byte-identical, so a hash-only check would let the judge stamp a
+    superseded version into a 7-year-retention chain and derive
+    ``view_age_days`` from an upload timestamp that no longer applies.
+
+    A committed view that has become unreadable — removed outright, or with a
+    chain that no longer verifies — is reported the same way. It is still the
+    "the view the report describes is no longer the active one" case, and the
+    documented contract is that callers catch ``ViewChangedMidRun``; surfacing
+    the raw ``FileNotFoundError`` ("No active house view found") would both
+    escape that contract and contradict the report the judge just built.
+    """
+    try:
+        current = phase_0_load_view(config.view_dir)
+    except Exception as exc:
+        raise ViewChangedDuringJudge(
+            "Active house view was superseded while the judge was running "
+            f"(re-reading the committed view failed: {exc}); no audit row was "
+            "appended and this report describes a version that is no longer "
+            "active. Re-run /parallax-judge-house-view to judge the current "
+            "view."
+        ) from exc
+    judged = _audit_identity(view)
+    committed = _audit_identity(current)
+    changed = audit_chain.identity_diff(judged, committed)
+    if not changed:
+        return
+    raise ViewChangedDuringJudge(
+        "Active house view was superseded while the judge was running "
+        f"({changed}); no audit row was appended and this report describes a "
+        "version that is no longer active. Re-run /parallax-judge-house-view "
+        "to judge the current view."
+    )
+
+
 def run_judge(
     *,
     config: JudgeConfig | None = None,
@@ -884,13 +951,24 @@ def run_judge(
 
     Returns:
         Populated ``JudgeResult``.
+
+    Locking:
+        The view transaction lock is held ONLY while reading the committed
+        view (phase 0) and while appending the audit row that witnesses it
+        (phases 6-7). The MCP fan-out and the phase-5 LLM call run unlocked —
+        holding an exclusive flock across network I/O would let one stalled
+        judge block every maker save indefinitely. The witness invariant is
+        preserved by re-loading the view under the second lock and refusing to
+        append when its hash moved.
     """
     config = config or JudgeConfig()
+    view_dir = _resolved_view_dir(config)
     now = _utcnow()
     diagnostics: list[str] = []
 
     # Phase 0
-    view = phase_0_load_view(config.view_dir)
+    with audit_chain.view_transaction(view_dir):
+        view = phase_0_load_view(config.view_dir)
     view_age_days = _view_age_days(view.data, now)
 
     # Trigger resolution (informational — affects banner only).
@@ -980,21 +1058,23 @@ def run_judge(
     )
 
     # Phase 6 + 7
-    report_dir, audit_entry, json_payload = phase_6_render_and_phase_7_audit(
-        view=view,
-        config=config,
-        trigger=trigger,
-        severity=severity,
-        severity_details=severity_details,
-        drift_summary=drift_summary,
-        resolutions=resolutions,
-        recommendations=recommendations,
-        deltas=deltas,
-        view_age_days=view_age_days,
-        parallax_age_days=parallax_age_days,
-        mcp_responses=mcp_responses,
-        judged_at=now,
-    )
+    with audit_chain.view_transaction(view_dir):
+        _assert_view_unchanged(view, config)
+        report_dir, audit_entry, json_payload = phase_6_render_and_phase_7_audit(
+            view=view,
+            config=config,
+            trigger=trigger,
+            severity=severity,
+            severity_details=severity_details,
+            drift_summary=drift_summary,
+            resolutions=resolutions,
+            recommendations=recommendations,
+            deltas=deltas,
+            view_age_days=view_age_days,
+            parallax_age_days=parallax_age_days,
+            mcp_responses=mcp_responses,
+            judged_at=now,
+        )
 
     # Phase 8
     chain_emit_failed = False

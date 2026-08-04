@@ -43,9 +43,17 @@ def parse_stream_json(raw: str) -> Transcript:
             event = json.loads(line)
         except json.JSONDecodeError:
             continue
+        # A scalar or array line is valid JSON, so the decode guard above never
+        # fires on it. Without this check the whole parse raises AttributeError
+        # and every tool call in the stream is lost.
+        if not isinstance(event, dict):
+            continue
         etype = event.get("type")
         if etype == "assistant":
-            content = (event.get("message") or {}).get("content") or []
+            message = event.get("message")
+            content = (message if isinstance(message, dict) else {}).get("content")
+            if not isinstance(content, list):
+                content = []
             for block in content:
                 if not isinstance(block, dict):
                     continue

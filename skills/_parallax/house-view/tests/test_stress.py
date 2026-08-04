@@ -487,15 +487,20 @@ def test_save_artifact(mock_view, temp_house_view_dir):
     """
     report_content = "This is a test report."
     output_dir = temp_house_view_dir / "stress-tests"
+    utc_date_before = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
     report_path = render.save_artifact(report_content, mock_view, output_dir=output_dir)
+    utc_date_after = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
 
     assert report_path.exists()
     assert str(report_path).startswith(
         str(temp_house_view_dir)
     ), f"artifact escaped tmp dir to {report_path}"
-    assert report_path.name.startswith(
-        # match save_artifact's clock source (UTC), not the local date — they differ 00:00–06:59 UTC+offset
-        datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+    # Artifact filenames use UTC, matching the UTC Run Date in the report.
+    # Accept both observations only for the instant the call crosses UTC midnight.
+    expected_utc_dates = {utc_date_before, utc_date_after}
+    assert any(report_path.name.startswith(f"{day}-") for day in expected_utc_dates), (
+        f"artifact filename must start with a UTC date in {expected_utc_dates}; "
+        f"got {report_path.name}"
     )
     assert report_path.name.endswith(".md")
     assert (report_path.stat().st_mode & 0o777) == 0o600

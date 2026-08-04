@@ -81,6 +81,19 @@ class KeyIdExpired(ManifestVerificationError):
     error_code = "key_id_expired"
 
 
+class KeyTestOnly(ManifestVerificationError):
+    """The signing key is marked `use: "test-only"` in trusted_keys.json.
+
+    Test keys (and their published private seeds — see
+    tests/_gen_test_fixture.py) ship in the repo so auditors can replay
+    round-trips on a fresh clone. That means ANYONE can produce a manifest
+    that validates against a test key, so trusting one outside a test
+    context is equivalent to no signature at all. Default-deny: callers
+    must pass `allow_test_keys=True` to accept them (test harnesses only).
+    """
+    error_code = "key_test_only"
+
+
 class SignatureInvalid(ManifestVerificationError):
     error_code = "signature_invalid"
 
@@ -159,6 +172,7 @@ def verify_manifest(
     trusted_keys_path: Path | str,
     *,
     now: datetime | None = None,
+    allow_test_keys: bool = False,
 ) -> dict[str, Any]:
     """Verify a calibration manifest dict.
 
@@ -167,6 +181,9 @@ def verify_manifest(
         trusted_keys_path: path to the skill's pinned trusted_keys.json.
         now: optional override for the current time (test injection).
             Defaults to UTC now.
+        allow_test_keys: accept keys marked `use: "test-only"` in
+            trusted_keys.json. Default False (production posture); test
+            harnesses opt in explicitly.
 
     Returns:
         {
@@ -186,6 +203,8 @@ def verify_manifest(
             window. Distinct codes so callers (e.g., auditor replay) can
             distinguish "we never trusted this key" from "we trust(ed) this
             key but the window has elapsed".
+        KeyTestOnly: kid found but marked `use: "test-only"` and
+            `allow_test_keys` is False.
         SignatureInvalid: cryptographic verification failed.
         ManifestSignatureMissing: anti-collision guard tripped — manifest
             has no usable signature so the chain hash would equal the
@@ -234,6 +253,13 @@ def verify_manifest(
         raise KeyIdUnknown(
             f"Manifest signed with key {kid!r} not in {trusted_keys_path}. "
             "Skill update required."
+        )
+    if entry.get("use") == "test-only" and not allow_test_keys:
+        raise KeyTestOnly(
+            f"Signing key {kid!r} is marked use='test-only' in "
+            f"{trusted_keys_path}; refusing outside test contexts. "
+            "Its private seed is published for round-trip tests, so a "
+            "manifest it signs carries no production trust."
         )
     if entry.get("alg") != "ed25519":
         raise ManifestMalformed(
@@ -296,6 +322,7 @@ def verify_manifest_path(
     trusted_keys_path: Path | str,
     *,
     now: datetime | None = None,
+    allow_test_keys: bool = False,
 ) -> dict[str, Any]:
     """Convenience wrapper for the file-on-disk case."""
     manifest_path = Path(manifest_path)
@@ -306,7 +333,9 @@ def verify_manifest_path(
         raise ManifestMalformed(
             f"{manifest_path} is not valid JSON: {e}"
         ) from e
-    return verify_manifest(manifest, trusted_keys_path, now=now)
+    return verify_manifest(
+        manifest, trusted_keys_path, now=now, allow_test_keys=allow_test_keys
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover
@@ -318,9 +347,19 @@ if __name__ == "__main__":  # pragma: no cover
         default=str(Path(__file__).parent / "signing" / "trusted_keys.json"),
         help="Path to trusted_keys.json (default: bundled).",
     )
+    parser.add_argument(
+        "--allow-test-keys",
+        action="store_true",
+        help="Accept keys marked use='test-only' (test/round-trip use only; "
+        "never in production).",
+    )
     args = parser.parse_args()
     try:
-        result = verify_manifest_path(args.manifest_path, args.trusted_keys)
+        result = verify_manifest_path(
+            args.manifest_path,
+            args.trusted_keys,
+            allow_test_keys=args.allow_test_keys,
+        )
     except ManifestVerificationError as e:
         print(f"FAIL [{e.error_code}]: {e}")
         raise SystemExit(1)

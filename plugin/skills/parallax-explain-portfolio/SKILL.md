@@ -63,7 +63,7 @@ Infer lookback period from the client's statement ("this month" → ~21 trading 
 - If response is `{"error": "No profile data found", ...}` → treat as **equity**, route through `export_price_series`.
 - If response returns an ETF profile (non-error) → treat as **ETF**, route through `etf_daily_price`.
 
-This adds N calls with UNVERIFIED token cost (one per holding) — see `_parallax/token-costs.md`.
+This adds N calls at 1 token each (one per holding) — see `_parallax/token-costs.md`.
 
 #### Step 1b — Pull price history (parallel, split by asset class)
 

@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import build_bundle as bb
 import scan_tracked_terms as st
+from canary_fixture import hermetic_extra_terms  # noqa: F401 -- autouse fixture
 
 
 def _git_repo(root: Path) -> None:
@@ -64,9 +65,10 @@ def test_scope_excludes_pillar_vocabulary():
     assert not (pillar & scoped)
 
 
-def test_scope_includes_local_only_terms():
-    if not bb.EXTRA_CANARY_FILE.exists():
-        pytest.skip("extra term file not present on this machine")
+def test_scope_includes_local_only_terms(tmp_path, monkeypatch):
+    extra_file = tmp_path / "extra-terms.txt"
+    extra_file.write_text("private_marker\n", encoding="utf-8")
+    monkeypatch.setattr(bb, "EXTRA_CANARY_FILE", extra_file)
     extra = set(bb.load_canary_terms()) - set(bb.CANARY_TERMS)
     assert extra & set(st.scoped_terms())
 
@@ -80,9 +82,10 @@ def test_scanner_catches_planted_term(tmp_path, monkeypatch, which):
     if which == "branding":
         term = bb._BRANDING_CANARIES[0]
     else:
+        extra_file = tmp_path / "extra-terms.txt"
+        extra_file.write_text("private_marker\n", encoding="utf-8")
+        monkeypatch.setattr(bb, "EXTRA_CANARY_FILE", extra_file)
         extra = sorted(set(bb.load_canary_terms()) - set(bb.CANARY_TERMS))
-        if not extra:
-            pytest.skip("no local-only terms on this machine")
         term = extra[0]
     _git_repo(tmp_path)
     _track(tmp_path, "doc.md", f"planted {term} here\n")

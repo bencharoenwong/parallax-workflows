@@ -12,6 +12,8 @@ Covers the minimal-vertical-slice scope:
      payload hash — synthesized by removing the `signature` field
      entirely AFTER signing (impossible in practice but proves the guard
      bites if a buggy emitter ever produces the collision).
+  6. A key marked `use: "test-only"` is rejected with KeyTestOnly unless
+     the caller opts in via allow_test_keys=True (production default-deny).
 
 Run from `skills/_parallax/house-view/`:
 
@@ -21,7 +23,6 @@ Exits non-zero on first failing assertion.
 """
 from __future__ import annotations
 
-import copy
 import json
 import sys
 from pathlib import Path
@@ -49,7 +50,9 @@ def _load_fixture() -> dict:
 
 def test_valid_round_trip() -> None:
     manifest = _load_fixture()
-    result = manifest_verify.verify_manifest(manifest, TRUSTED_KEYS_PATH)
+    result = manifest_verify.verify_manifest(
+        manifest, TRUSTED_KEYS_PATH, allow_test_keys=True
+    )
     assert result["kid"] == manifest["signing_key_id"], (
         f"verifier returned kid={result['kid']!r} but manifest has "
         f"signing_key_id={manifest['signing_key_id']!r}"
@@ -71,7 +74,9 @@ def test_tampered_values_block() -> None:
     # original bytes, so verification MUST fail.
     manifest["values"]["sec-sensitivity-bands"]["warn_multiplier"] = 99.0
     try:
-        manifest_verify.verify_manifest(manifest, TRUSTED_KEYS_PATH)
+        manifest_verify.verify_manifest(
+            manifest, TRUSTED_KEYS_PATH, allow_test_keys=True
+        )
     except manifest_verify.SignatureInvalid as e:
         assert e.error_code == "signature_invalid", (
             f"expected error_code='signature_invalid', got {e.error_code!r}"
@@ -131,7 +136,9 @@ def test_anti_collision_guard_synthetic() -> None:
     original_sha256_hex = manifest_verify._sha256_hex
     manifest_verify._sha256_hex = lambda data: "deadbeef" * 8  # 64 hex chars
     try:
-        manifest_verify.verify_manifest(manifest, TRUSTED_KEYS_PATH)
+        manifest_verify.verify_manifest(
+            manifest, TRUSTED_KEYS_PATH, allow_test_keys=True
+        )
     except manifest_verify.ManifestSignatureMissing as e:
         assert e.error_code == "manifest_signature_missing", (
             f"expected error_code='manifest_signature_missing', got {e.error_code!r}"
@@ -146,6 +153,28 @@ def test_anti_collision_guard_synthetic() -> None:
     )
 
 
+def test_test_only_key_rejected_by_default() -> None:
+    """Production posture: a validly-signed manifest whose key is marked
+    `use: "test-only"` in trusted_keys.json MUST be rejected unless the
+    caller passes allow_test_keys=True. The test key's private seed is
+    published (tests/_gen_test_fixture.py), so trusting it in production
+    would let anyone mint accepted manifests.
+    """
+    manifest = _load_fixture()
+    try:
+        manifest_verify.verify_manifest(manifest, TRUSTED_KEYS_PATH)
+    except manifest_verify.KeyTestOnly as e:
+        assert e.error_code == "key_test_only", (
+            f"expected error_code='key_test_only', got {e.error_code!r}"
+        )
+        print("PASS  test_test_only_key_rejected_by_default (raised KeyTestOnly as expected)")
+        return
+    raise AssertionError(
+        "test-only key verified without allow_test_keys=True — production "
+        "would trust a key whose private seed is public."
+    )
+
+
 def main() -> int:
     tests = [
         test_valid_round_trip,
@@ -153,6 +182,7 @@ def main() -> int:
         test_unknown_kid,
         test_empty_signature_value,
         test_anti_collision_guard_synthetic,
+        test_test_only_key_rejected_by_default,
     ]
     failures = 0
     for t in tests:

@@ -39,6 +39,7 @@ import copy
 import json
 import sys
 import threading
+from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -336,11 +337,9 @@ def test_e2e_concurrent_maker_save_and_judge_run_handled_safely(
     """Mixed race: while a judge is mid-run against the current view,
     a second maker save fires (e.g., operator re-runs the synthesis).
 
-    The chain MUST end up in a consistent state. Acceptable outcomes:
-      (a) Both complete; audit.jsonl has 3 rows (1st save + judge + 2nd save)
-          in SOME valid order; verify_chain succeeds.
-      (b) One operation raises with a clear error message; audit.jsonl
-          still verifies cleanly (the failing op may not have appended).
+    Both operations must complete.  The shared view transaction lock orders
+    the second save before the judge load, so audit.jsonl has three valid rows
+    and the judge hash is witnessed by an earlier save row.
 
     The failure mode this test exists to catch: SILENT CORRUPTION — chain
     verifies green but actually contains a row whose semantic content
@@ -366,40 +365,84 @@ def test_e2e_concurrent_maker_save_and_judge_run_handled_safely(
     # MCP responses as they were at this point. A second concurrent maker
     # save will mutate view.yaml underneath the judge.
     judge_input = copy.deepcopy(first_res)
+    second_mcp = copy.deepcopy(base_mcp)
+    second_mcp["telemetry"]["regime_tag"] = "CONCURRENT_SECOND_SAVE"
 
-    barrier = threading.Barrier(2)
+    maker_at_commit = threading.Event()
+    release_maker_commit = threading.Event()
+    judge_loaded_view = threading.Event()
+    judge_audit_committed = threading.Event()
+    judge_lock_attempted = threading.Event()
     results: dict[str, Any] = {}
+    roles = threading.local()
+
+    original_append = audit_chain.append_entry
+    original_load = judge.phase_0_load_view
+    original_transaction = audit_chain.view_transaction
+
+    @contextmanager
+    def _controlled_transaction(path):
+        if getattr(roles, "name", None) == "judge":
+            judge_lock_attempted.set()
+        with original_transaction(path):
+            yield
+
+    def _controlled_append(path, entry_data, ensure_chained=True):
+        action = entry_data.get("action")
+        if action == "generate":
+            maker_at_commit.set()
+            assert release_maker_commit.wait(timeout=10)
+        entry = original_append(path, entry_data, ensure_chained=ensure_chained)
+        if action == "judge":
+            judge_audit_committed.set()
+        return entry
+
+    def _controlled_load(path):
+        loaded = original_load(path)
+        judge_loaded_view.set()
+        return loaded
 
     def _judge_worker() -> None:
         try:
-            barrier.wait(timeout=10)
+            roles.name = "judge"
             results["judge"] = _judge_dry(judge_input, view_dir, report_dir)
         except Exception as exc:  # noqa: BLE001
             results["judge"] = exc
 
     def _maker_worker() -> None:
         try:
-            barrier.wait(timeout=10)
+            roles.name = "maker"
             # Use the same mcp inputs — produces a fresh synthesis with a
             # new view_id/version_id, which means the audit row's
             # view_hash will differ from the judge's snapshot.
-            results["maker"] = _run_maker(base_mcp, view_dir)
+            results["maker"] = _run_maker(second_mcp, view_dir)
         except Exception as exc:  # noqa: BLE001
             results["maker"] = exc
 
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        fut_j = pool.submit(_judge_worker)
+    with (
+        patch("audit_chain.append_entry", side_effect=_controlled_append),
+        patch("audit_chain.view_transaction", side_effect=_controlled_transaction),
+        patch("judge.phase_0_load_view", side_effect=_controlled_load),
+        ThreadPoolExecutor(max_workers=2) as pool,
+    ):
         fut_m = pool.submit(_maker_worker)
+        assert maker_at_commit.wait(timeout=10)
+        fut_j = pool.submit(_judge_worker)
+        assert judge_lock_attempted.wait(timeout=10)
+        assert not judge_loaded_view.is_set(), (
+            "judge loaded view.yaml while maker's transaction was uncommitted"
+        )
+        release_maker_commit.set()
         fut_j.result(timeout=60)
         fut_m.result(timeout=60)
+        assert judge_loaded_view.is_set()
+        assert judge_audit_committed.is_set()
 
-    # At least one operation should have completed without raising — if
-    # both raised, the system has a hard concurrency bug worth surfacing.
-    exc_count = sum(1 for r in results.values() if isinstance(r, Exception))
-    assert exc_count < 2, (
-        f"Both concurrent operations raised — judge:{results.get('judge')!r}, "
-        f"maker:{results.get('maker')!r}"
-    )
+    for name, result in results.items():
+        assert not isinstance(result, Exception), (
+            f"{name} raised under serialized maker/judge contention: "
+            f"{type(result).__name__}: {result}"
+        )
 
     # The load-bearing assertion: whatever state the system landed in,
     # the chain MUST either verify cleanly or raise AuditChainBroken /
@@ -407,22 +450,7 @@ def test_e2e_concurrent_maker_save_and_judge_run_handled_safely(
     # passes but contains a bad row) is what we're hunting.
     rows_after = audit_path.read_text().strip().split("\n")
     assert len(rows_after) >= 1
-    try:
-        verified = audit_chain.verify_chain(audit_path)
-    except audit_chain.AuditChainError as exc:
-        # Acceptable outcome (b): raised with a clear error message.
-        # The error type itself is the loud signal — re-raise as a
-        # diagnostic xfail so the maintainer sees it without the suite
-        # going red on something that is "consistent failure" rather
-        # than "silent corruption".
-        pytest.xfail(
-            f"Mixed race surfaced chain inconsistency (consistent, not "
-            f"silent): {type(exc).__name__}: {exc}. The system correctly "
-            f"refused to validate a corrupted chain — but the upstream "
-            f"orchestration allowed the corrupting append to land. Fix "
-            f"locus: serialize maker save vs judge append at a layer "
-            f"above audit_chain.append_entry."
-        )
+    verified = audit_chain.verify_chain(audit_path)
 
     # If we got here, verify_chain returned cleanly. The row count must
     # match the file's line count — anything else means verify_chain
@@ -436,21 +464,20 @@ def test_e2e_concurrent_maker_save_and_judge_run_handled_safely(
     # canonical save path (action in {save, generate, judge}) — catches
     # the silent-corruption case where the judge row's view_hash points
     # at a phantom state that no save ever produced.
-    save_hashes = {
-        json.loads(line).get("view_hash")
-        for line in rows_after
-        if json.loads(line).get("action") in ("save", "generate")
-    }
+    committed_save_hashes: set[str] = set()
     for line in rows_after:
         entry = json.loads(line)
+        if entry.get("action") in ("save", "generate"):
+            committed_save_hashes.add(entry.get("view_hash"))
+            continue
         if entry.get("action") != "judge":
             continue
         judge_view_hash = entry.get("view_hash")
-        # The judge MUST have read view.yaml at SOME consistent moment;
-        # that moment's view_hash should match SOME save's view_hash.
-        assert judge_view_hash in save_hashes, (
+        # The judge MUST reference a view committed by an earlier save row.
+        assert judge_view_hash in committed_save_hashes, (
             f"Judge row's view_hash {judge_view_hash!r} does not match "
-            f"any save row's view_hash (saves: {save_hashes}). This is "
+            f"a previously committed save row's view_hash "
+            f"(committed saves: {committed_save_hashes}). This is "
             f"the silent-corruption fingerprint — judge captured a view "
             f"state that no save row witnesses."
         )

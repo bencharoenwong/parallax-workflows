@@ -9,7 +9,7 @@
   - `jsonschema` — Schema validation
   - `pillow` (PIL) — Image dimension checking
   - `matplotlib` — Font detection via FontManager
-  - `requests` or `scrapling` — Web content fetching (for URL extraction)
+  - Python standard-library `urllib` — URL extraction requires no third-party fetcher
 
 ## Installation
 
@@ -49,17 +49,14 @@ The `chmod 700` restriction ensures only the current user can read/write brandin
 
 ### Python Packages
 
-Install all dependencies:
+Install the third-party dependencies:
 
 ```bash
-pip install pyyaml jsonschema pillow matplotlib requests
+pip install pyyaml jsonschema pillow matplotlib
 ```
 
-Or with `scrapling` (recommended for robust web scraping):
-
-```bash
-pip install pyyaml jsonschema pillow matplotlib scrapling
-```
+URL extraction accepts only public HTTP(S) destinations, applies the same check to redirects and
+linked stylesheets, and caps response reads. It does not use `requests`, `scrapling`, or `defuddle`.
 
 ### Optional: For PDF Extraction
 

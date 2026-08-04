@@ -52,7 +52,7 @@ implementation choices.
 | Phase 1 rule evaluation | Rule config is stale — e.g., empirical evidence post-2026 changes the rate-cutting + momentum pairing, but the rule still hard-stops | False hard-stop locks every CIO out of stress-testing until a rule update ships | Rules carry `last_reviewed: <date>` and `confidence` in config. Warn (not hard-stop) when `last_reviewed > 6mo`. Hard-stop downgrades to Taste in that case. |
 | Phase 2 per-market fan-out | One market's `macro_analyst` times out at 30s while others return | Naive `await all` blocks the whole run on the slowest market | Per-market degrade: a timed-out market resolves as `PARALLAX_SILENT`, not as a run failure. Captured in the artifact, not as an exception. |
 | Phase 2 fan-out under heavy tilt count | CIO has tilts on 20+ markets → 40-60 concurrent MCP calls | MCP rate-limit / cost spike; some calls 429 and degrade silently as `PARALLAX_SILENT` | Hard cap at 12 markets per run. If > 12 tilted markets, prompt user once: stress all (chunk into 2 batches), stress top-12 by `|tilt|`, or cancel. No silent truncation. |
-| Phase 3 audit append | `view_hash` re-read at Phase 3 differs from Phase 0 (concurrent save in another terminal) | Audit would attach to a view version that wasn't the one stress-tested | Already in M3/M7: abort with "view changed mid-run, retry." Phase 3 work discarded; no partial audit. |
+| Phase 3 audit append | View identity re-read at Phase 3 differs from Phase 0 (concurrent save in another terminal) | Audit would attach to a view version that wasn't the one stress-tested | Already in M3/M7: abort with "view changed mid-run, retry." Phase 3 work discarded; no partial audit. |
 | Phase 4 handoff to `load-house-view --edit` | User picks B (update view), `load-house-view` then rejects the draft at its own confirmation gate (uploader edits and cancels) | Stress-test audit shows `applied=false` but user thought they were saving | Surface this explicitly: stress-test audit entry stays `applied=false` regardless; `load-house-view` writes its own `save` (or absence-of-save). UX text on Phase 4 makes the two-gate sequence visible: "your stress test is logged; the view update is a separate confirmation." |
 | Phase 4 handoff produces a draft that fails schema validation | Proposed delta produces a YAML that `load-house-view` rejects as malformed | Stress-test "recommendation" can't actually be applied | Validate proposed delta against `_parallax/house-view/schema.yaml` *before* handoff. If invalid, downgrade Phase 4 to A-only and log the diagnostic. |
 
@@ -71,7 +71,7 @@ Read context (no MCP yet):
 - `~/.parallax/active-house-view/view.yaml` — required; abort with clear message if absent
 - `~/.parallax/active-house-view/audit.jsonl` — verify hash-chain integrity; refuse to run if broken
 - Compute `cio_age = today − metadata.effective_date`
-- Compute `view_hash` of the live view and pin it; re-check at the Final Gate (race-condition guard)
+- Compute `view_hash` of the live view and pin it; the audit append re-checks the full view identity (`view_hash` + `view_id`/`version_id`) under the view transaction lock (race-condition guard — see `stress.audit_identity`)
 - Enumerate dimensions to test:
   - All non-zero `tilts.macro_regime.*`
   - All non-zero `tilts.factors.*`
@@ -300,7 +300,7 @@ Options (mirrors autoplan, adapted to a view update):
 |---|---|---|
 | M1 | `check_macro_health` returns no `last_updated` | mark cell `UNVERIFIABLE_DATA` (separate from `UNCOVERED`); proceed |
 | M2 | Parallax MCP not connected | fail loud, no audit write, exit |
-| M3 | `view_hash` at Phase 3 ≠ `view_hash` captured at Phase 0 | abort with "view changed mid-run, retry"; partial work discarded |
+| M3 | View identity at Phase 3 ≠ identity captured at Phase 0 — `view_hash` covers only tilts + excludes, so `view_id`/`version_id` are compared too (a maker re-save of identical tilts mints a fresh `version_id`); checked under the view transaction lock (see `stress.audit_identity`) | abort with "view changed mid-run, retry"; partial work discarded |
 | M4 | Every tilted market is `UNCOVERED` | render full UNCOVERED report; audit entry with `applied=false`; suggest expanding region tilts to broader keys covered by Parallax |
 | M5 | Hash chain broken when reading `audit.jsonl` | refuse to run; user must restore from `.archive/` or `--re-pair` (existing flow) |
 | M6 | User picks B/C at gate but `load-house-view` confirmation fails | stress-test audit entry already written with `applied=false`; load-house-view writes its own `save` entry; no state corruption |

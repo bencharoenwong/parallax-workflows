@@ -424,3 +424,65 @@ def test_source_tools_list_includes_per_market_per_component(tmp_view_dir: Path)
     assert any(t.startswith("macro_analyst:Japan:") for t in tools)
     assert any(t.startswith("get_telemetry") for t in tools)
     assert any(t.startswith("list_macro_countries") for t in tools)
+
+
+# ---------------------------------------------------------------------------
+# Save races the interactive gate
+# ---------------------------------------------------------------------------
+
+
+def test_save_aborts_when_active_view_moved_since_synthesis(tmp_view_dir: Path):
+    """A stale parent_version_id must abort, not record false lineage.
+
+    parent_version_id is read at synthesis, before the confirmation gate. The
+    transaction lock serialises writes but cannot notice a read taken before
+    it existed, so a draft built against V1 could be saved after V2 landed --
+    producing an audit row that chains and verifies while naming a parent that
+    was never its parent.
+    """
+    orc = MakerOrchestrator(
+        MakerOptions(view_dir=tmp_view_dir, market_filter=["us", "japan"])
+    )
+    first = orc.execute_synthesis(_FixtureRunner(), dispose_fn=_confirm_dispose)
+    assert first.disposition == "confirm"
+
+    audit_before = (tmp_view_dir / "audit.jsonl").read_text(encoding="utf-8")
+    committed = yaml.safe_load((tmp_view_dir / "view.yaml").read_text(encoding="utf-8"))
+
+    # A draft carrying the pre-existing (now superseded) parent.
+    stale = yaml.safe_load(yaml.safe_dump(committed))
+    stale["metadata"]["parent_version_id"] = None
+
+    second = MakerOrchestrator(MakerOptions(view_dir=tmp_view_dir))
+    with pytest.raises(audit_chain.ViewChangedMidRun, match="between synthesis and save"):
+        second.save_view(stale, {}, {}, MCPResponses(), ["United States"])
+
+    assert (tmp_view_dir / "audit.jsonl").read_text(encoding="utf-8") == audit_before, \
+        "a rejected save must append nothing"
+    audit_chain.verify_chain(tmp_view_dir / "audit.jsonl")
+
+
+def test_second_save_landing_during_the_gate_aborts_the_outer_run(tmp_view_dir: Path):
+    """The realistic shape: another writer commits while the gate is parked."""
+    inner_done = {"ran": False}
+
+    def dispose_then_race(prompt: gate_present.GatePrompt) -> str:
+        if not inner_done["ran"]:
+            inner_done["ran"] = True
+            inner = MakerOrchestrator(
+                MakerOptions(view_dir=tmp_view_dir, market_filter=["us"])
+            )
+            inner.execute_synthesis(_FixtureRunner(), dispose_fn=_confirm_dispose)
+        return "confirm"
+
+    orc = MakerOrchestrator(
+        MakerOptions(view_dir=tmp_view_dir, market_filter=["us", "japan"])
+    )
+    with pytest.raises(audit_chain.ViewChangedMidRun):
+        orc.execute_synthesis(_FixtureRunner(), dispose_fn=dispose_then_race)
+
+    assert inner_done["ran"], "the racing writer must actually have committed"
+    # The inner run's view is the one that survives, intact.
+    surviving = yaml.safe_load((tmp_view_dir / "view.yaml").read_text(encoding="utf-8"))
+    assert surviving["metadata"]["version_id"]
+    audit_chain.verify_chain(tmp_view_dir / "audit.jsonl")

@@ -2,6 +2,7 @@
 
 Transforms run against the real source files (they are anchor-asserted, so a
 drifted source fails here before it fails a distribution build)."""
+import subprocess
 import sys
 import unicodedata
 from pathlib import Path
@@ -12,6 +13,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import build_bundle as bb
+from canary_fixture import hermetic_extra_terms  # noqa: F401 -- autouse fixture
 
 SKILLS = bb.SKILLS_DIR
 
@@ -149,8 +151,40 @@ def test_canary_scan_passes_on_clean_tree(tmp_path):
 
 
 def test_plugin_skill_dirs_exist_and_have_skill_md():
+    # effective_plugin_skills() filters to this repo's dirs (the tap output
+    # excludes translate-*). Only KNOWN_OPTIONAL_SKILLS may be filtered out —
+    # anything else absent is a typo and must already have raised.
+    effective = bb.effective_plugin_skills()
+    assert effective == [
+        name for name in bb.PLUGIN_SKILLS
+        if (SKILLS / name / "SKILL.md").is_file()
+    ]
     for name in bb.PLUGIN_SKILLS:
-        assert (SKILLS / name / "SKILL.md").is_file(), name
+        if name not in effective:
+            assert name in bb.KNOWN_OPTIONAL_SKILLS, name
+    assert len(effective) >= 20
+
+
+def test_plugin_skills_typo_fails_the_build(monkeypatch):
+    """A renamed/mistyped entry must abort the build, not silently drop the
+    skill from the bundle (both built and tracked trees would then agree on a
+    bundle that is missing a skill)."""
+    monkeypatch.setattr(
+        bb, "PLUGIN_SKILLS", bb.PLUGIN_SKILLS + ["parallax-typoed-skill"])
+    with pytest.raises(bb.BuildError, match="KNOWN_OPTIONAL_SKILLS"):
+        bb.effective_plugin_skills()
+
+
+def test_plugin_description_tracks_the_bundled_skill_set():
+    with_translate = bb.plugin_description(["parallax-deep-dive",
+                                            "translate-thai-finance"])
+    without_translate = bb.plugin_description(["parallax-deep-dive"])
+    assert "screening, translation, and client-review" in with_translate
+    # Was pinned as "screening, and client-review" -- the dangling comma a
+    # translate-less build actually emitted. The assertion encoded the defect
+    # instead of catching it, so the marketplace description shipped with it.
+    assert "screening and client-review" in without_translate
+    assert ", and client-review" not in without_translate
 
 
 def test_parallax_allowlist_paths_exist():
@@ -308,6 +342,11 @@ def test_tracked_plugin_bundle_matches_source(tmp_path, monkeypatch):
     followed by a rebuild silently ships a stale bundle (commit 2e344f8 dropped
     an unused import from a source test and left the bundle copy behind). Build
     into a temp dir and diff against the tracked tree."""
+    tracked = bb.REPO_ROOT / "plugin"
+    tracked_marketplace = bb.REPO_ROOT / ".claude-plugin" / "marketplace.json"
+    if not tracked.is_dir() or not tracked_marketplace.is_file():
+        pytest.skip("this checkout does not track plugin build artifacts")
+
     built = tmp_path / "plugin"
     built_marketplace = tmp_path / "marketplace.json"
     monkeypatch.setattr(bb, "PLUGIN_DIR", built)
@@ -317,15 +356,21 @@ def test_tracked_plugin_bundle_matches_source(tmp_path, monkeypatch):
     # marketplace.json is a tracked build output too — and it is the file the
     # marketplace installer reads. Its name/owner/source/description exist
     # nowhere else, so plugin.json does not cover a stale copy.
-    tracked_marketplace = bb.REPO_ROOT / ".claude-plugin" / "marketplace.json"
     assert built_marketplace.read_bytes() == tracked_marketplace.read_bytes(), (
         ".claude-plugin/marketplace.json is stale — run: "
         "python3 skills/_parallax/scripts/build_bundle.py plugin")
 
-    tracked = bb.REPO_ROOT / "plugin"
     built_files = {p.relative_to(built) for p in built.rglob("*") if p.is_file()}
-    tracked_files_ = {p.relative_to(tracked) for p in tracked.rglob("*")
-                      if p.is_file() and "__pycache__" not in p.parts}
+    # Ask git for the tracked set rather than walking the working tree: any
+    # local untracked artifact under plugin/ (a stray .pytest_cache, .DS_Store,
+    # an editor swap file) would otherwise be reported as bundle staleness.
+    listing = subprocess.run(
+        ["git", "-C", str(bb.REPO_ROOT), "ls-files", "-z", "--", "plugin"],
+        capture_output=True, text=True)
+    if listing.returncode != 0:
+        pytest.skip("git is unavailable; cannot enumerate tracked plugin files")
+    tracked_files_ = {Path(rel).relative_to("plugin")
+                      for rel in listing.stdout.split("\0") if rel}
 
     assert built_files == tracked_files_, (
         "plugin/ file list is stale — run: "
@@ -338,7 +383,8 @@ def test_tracked_plugin_bundle_matches_source(tmp_path, monkeypatch):
         "\n".join(stale[:10]))
 
 
-def test_canary_allowlist_does_not_mask_sibling_identifiers(tmp_path):
+def test_canary_allowlist_does_not_mask_sibling_identifiers(
+        tmp_path, monkeypatch):
     """An allowlist entry can END with a scan term (the published field does).
     Unbounded `str.replace` masking then stripped that term out of every sibling
     identifier sharing the prefix — `<field>_raw`, `<field>_internal` — and
@@ -346,6 +392,8 @@ def test_canary_allowlist_does_not_mask_sibling_identifiers(tmp_path):
 
     Siblings are constructed from the allowlist at runtime; nothing is spelled
     out, so this stays safe to track in a public repo."""
+    overlap = bb.CANARY_ALLOWLIST[0].rsplit("_", 1)[-1]
+    monkeypatch.setattr(bb, "CANARY_TERMS", [overlap])
     terms = [t.lower() for t in bb.load_canary_terms()]
     checked = 0
     for i, allowed in enumerate(bb.CANARY_ALLOWLIST):
@@ -361,7 +409,7 @@ def test_canary_allowlist_does_not_mask_sibling_identifiers(tmp_path):
             with pytest.raises(bb.BuildError, match="term scan failed"):
                 bb.canary_scan(planted)
             checked += 1
-    assert checked, "no allowlist entry overlaps a scan term — test is vacuous"
+    assert checked, "synthetic allowlist overlap was not exercised"
 
 
 def test_canary_allowlist_masking_cannot_manufacture_a_hit(tmp_path, monkeypatch):
@@ -421,9 +469,9 @@ def test_load_canary_terms_allows_explicit_partial_scan(tmp_path, monkeypatch):
     assert bb.load_canary_terms() == list(bb.CANARY_TERMS)
 
 
-def test_load_canary_terms_includes_extra_file_when_present():
-    """Guards the real machine path: the local list must actually be picked up,
-    not just tolerated."""
-    if not bb.EXTRA_CANARY_FILE.exists():
-        pytest.skip("extra scan-term file not present on this machine")
+def test_load_canary_terms_includes_extra_file_when_present(tmp_path, monkeypatch):
+    """An available extra list is loaded in addition to built-in terms."""
+    extra_file = tmp_path / "extra-terms.txt"
+    extra_file.write_text("# comment\nprivate_marker\n", encoding="utf-8")
+    monkeypatch.setattr(bb, "EXTRA_CANARY_FILE", extra_file)
     assert len(bb.load_canary_terms()) > len(bb.CANARY_TERMS)
