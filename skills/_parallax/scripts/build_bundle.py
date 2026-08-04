@@ -318,6 +318,7 @@ def transform_hv_loader(text: str) -> str:
          "`/parallax-load-house-view --apply-stress <audit-hash>`",
          "`/parallax-load-house-view --re-pair`",
          "`/parallax-load-house-view --extend`",
+         "`/parallax-load-house-view --clear`",
          "`/parallax-load-house-view --edit`",
          "`/parallax-load-house-view`"),
         "loader.md operator command")
