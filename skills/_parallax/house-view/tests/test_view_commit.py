@@ -1,4 +1,3 @@
-import json
 import sys
 import threading
 from pathlib import Path
@@ -191,13 +190,24 @@ def test_append_entry_is_reached_through_the_module_attribute(tmp_path, monkeypa
 def test_two_threads_both_commit_and_the_chain_stays_valid(tmp_path):
     _seed(tmp_path)
     errors = []
+    barrier = threading.Barrier(2)
 
     def worker(n):
         try:
-            view_commit.commit_view(tmp_path, write={}, remove=frozenset(),
-                                    audit_entry={"action": "extend", "version_id": "v1",
-                                                 "note": f"w{n}"},
-                                    expected_identity={"version_id": "v1"})
+            barrier.wait(timeout=5)
+            if n == 0:
+                view_commit.commit_view(
+                    tmp_path,
+                    write={"view.yaml": "metadata:\n  version_id: v1\n"},
+                    remove=frozenset(),
+                    audit_entry={"action": "extend", "version_id": "v1",
+                                 "view_hash": view_commit.compute_view_hash({})},
+                    expected_identity={"version_id": "v1"})
+            else:
+                view_commit.commit_view(
+                    tmp_path, write={}, remove=frozenset(),
+                    audit_entry={"action": "extend", "version_id": "v1", "note": "w1"},
+                    expected_identity={"version_id": "v1"})
         except Exception as exc:  # noqa: BLE001
             errors.append(exc)
 
@@ -209,27 +219,82 @@ def test_two_threads_both_commit_and_the_chain_stays_valid(tmp_path):
         assert not t.is_alive(), "commit_view deadlocked"
     assert not errors
     assert len(audit_chain.verify_chain(tmp_path / AUDIT)) == 3
+    # view.yaml is only ever written by worker 0; if the transaction lock
+    # failed to serialize the two commits, a torn/interleaved write here is
+    # the most likely symptom.
+    text = (tmp_path / "view.yaml").read_text(encoding="utf-8")
+    assert text == "metadata:\n  version_id: v1\n"
+    assert view_commit._load_view(tmp_path) == {"metadata": {"version_id": "v1"}}
 
 
-def test_staged_files_are_cleaned_up_when_a_later_write_fails(tmp_path, monkeypatch):
+def test_staging_failure_cleans_up_and_commits_nothing(tmp_path, monkeypatch):
+    """Failure mid-staging: no rename has happened, so every tmp is removed
+    and the previous artifacts are untouched."""
     _seed(tmp_path)
-    real_open = view_commit.os.open
+    (tmp_path / "provenance.yaml").write_text("old: 1\n", encoding="utf-8")
+    original = (tmp_path / "view.yaml").read_bytes()
     calls = {"n": 0}
+    real_fsync = view_commit.os.fsync
 
-    def flaky(path, *a, **k):
+    def flaky_fsync(fd):
         calls["n"] += 1
         if calls["n"] == 2:
             raise OSError("no space left on device")
-        return real_open(path, *a, **k)
+        return real_fsync(fd)
 
-    monkeypatch.setattr(view_commit.os, "open", flaky)
+    monkeypatch.setattr(view_commit.os, "fsync", flaky_fsync)
     with pytest.raises(view_commit.CommitRejected):
         view_commit.commit_view(
             tmp_path,
-            write={"view.yaml": "metadata:\n  version_id: v2\n", "provenance.yaml": "a: 1\n"},
-            remove=frozenset(), audit_entry=_row(view_hash=view_commit.compute_view_hash({})),
+            write={"view.yaml": "metadata:\n  version_id: v2\n",
+                   "provenance.yaml": "a: 1\n"},
+            remove=frozenset(),
+            audit_entry=_row(view_hash=view_commit.compute_view_hash({})),
+            expected_identity={"parent_version_id": "v1"})
+    assert not list(tmp_path.glob("*.tmp.*")), "staged files leaked"
+    assert (tmp_path / "view.yaml").read_bytes() == original, "committed despite failure"
+    assert (tmp_path / "provenance.yaml").read_text() == "old: 1\n"
+
+
+def test_rename_failure_keeps_completed_renames_and_cleans_the_rest(tmp_path, monkeypatch):
+    """A completed rename cannot be undone; the rest must still be cleaned."""
+    _seed(tmp_path)
+    (tmp_path / "provenance.yaml").write_text("old: 1\n", encoding="utf-8")
+    calls = {"n": 0}
+    real_rename = view_commit.os.rename
+
+    def flaky_rename(src, dst):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise OSError("rename failed")
+        return real_rename(src, dst)
+
+    monkeypatch.setattr(view_commit.os, "rename", flaky_rename)
+    with pytest.raises(view_commit.CommitRejected):
+        view_commit.commit_view(
+            tmp_path,
+            write={"view.yaml": "metadata:\n  version_id: v2\n",
+                   "provenance.yaml": "a: 1\n"},
+            remove=frozenset(),
+            audit_entry=_row(view_hash=view_commit.compute_view_hash({})),
+            expected_identity={"parent_version_id": "v1"})
+    # First rename completed and must have kept its NEW bytes.
+    assert "v2" in (tmp_path / "view.yaml").read_text()
+    # The unrenamed one was cleaned up and its target left alone.
+    assert not list(tmp_path.glob("*.tmp.*")), "unrenamed staging files leaked"
+    assert (tmp_path / "provenance.yaml").read_text() == "old: 1\n"
+
+
+def test_unsafe_version_id_is_rejected_and_writes_nothing(tmp_path):
+    _seed(tmp_path)
+    with pytest.raises(view_commit.CommitRejected):
+        view_commit.commit_view(
+            tmp_path, write={"view.yaml": "metadata:\n  version_id: v2\n"},
+            remove=frozenset(),
+            audit_entry=_row(version_id="../escape", view_hash=view_commit.compute_view_hash({})),
             expected_identity={"parent_version_id": "v1"})
     assert not list(tmp_path.glob("*.tmp.*"))
+    assert "metadata:\n  version_id: v1\n  view_id: vw\n" == (tmp_path / "view.yaml").read_text()
 
 
 def test_staged_files_are_created_0600_not_chmodded_after(tmp_path):

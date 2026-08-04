@@ -169,6 +169,10 @@ def validate_audit_entry(audit_entry: dict[str, Any], write: dict[str, Any]) -> 
             "audit_entry.version_id is required whenever artifacts are written "
             "(it names the .tmp.<version_id> staging files)"
         )
+    if write:
+        vid = str(audit_entry["version_id"])
+        if any(bad in vid for bad in ("/", "\\", "..")) or vid != vid.strip():
+            raise CommitRejected(f"unsafe version_id for a staging filename: {vid!r}")
     if audit_entry["action"] == "clear":
         for field in _CLEAR_REQUIRED_FIELDS:
             if not audit_entry.get(field):
@@ -225,11 +229,26 @@ def _check_identity(view_dir: Path, expected_identity: dict[str, Any]) -> None:
         )
 
 
+def _parse_mapping(text: str, label: str) -> dict[str, Any]:
+    """Parse YAML into a mapping, failing closed as ``CommitRejected`` --
+    never letting a ``yaml.YAMLError`` or a non-mapping document escape as an
+    unhandled type that bypasses ``except AuditChainError`` callers."""
+    try:
+        parsed = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        raise CommitRejected(f"{label} is not valid YAML: {exc}") from exc
+    if parsed is None:
+        return {}
+    if not isinstance(parsed, dict):
+        raise CommitRejected(f"{label} must be a mapping, got {type(parsed).__name__}")
+    return parsed
+
+
 def _validate_row_matches_bytes(write: dict[str, str], audit_entry: dict[str, Any]) -> None:
     """Assert the row describes the bytes. Without this, a row can disagree
     with the artifacts it witnesses and the chain still verifies green."""
     if "view.yaml" in write:
-        parsed = yaml.safe_load(write["view.yaml"]) or {}
+        parsed = _parse_mapping(write["view.yaml"], "view.yaml")
         meta = parsed.get("metadata") or {}
         if "view_hash" in audit_entry:
             actual = compute_view_hash(parsed)
@@ -244,11 +263,17 @@ def _validate_row_matches_bytes(write: dict[str, str], audit_entry: dict[str, An
             )
     if "prose.md" in write:
         text = write["prose.md"]
-        front = {}
-        if text.startswith("---\n"):
-            end = text.find("---\n", 4)
+        # Normalize CRLF the same way compute_prose_body_hash does before
+        # looking for the frontmatter marker -- otherwise a CRLF prose.md
+        # never matches "---\n", front stays {}, and the body hash below
+        # (computed against the normalized+stripped body) is guaranteed to
+        # disagree with an empty frontmatter dict: a spurious rejection.
+        normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+        front: dict[str, Any] = {}
+        if normalized.startswith("---\n"):
+            end = normalized.find("---\n", 4)
             if end != -1:
-                front = yaml.safe_load(text[4:end]) or {}
+                front = _parse_mapping(normalized[4:end], "prose.md frontmatter")
         if "view_hash" in audit_entry and front.get("paired_yaml_hash") != audit_entry["view_hash"]:
             raise CommitRejected(
                 f"prose paired_yaml_hash {front.get('paired_yaml_hash')!r} != "
@@ -273,11 +298,15 @@ def _stage_and_rename(view_dir: Path, write: dict[str, str], version_id: str) ->
             # overwrite. 0600 at creation, not chmod-after-rename, so the file
             # is never briefly world-readable under a permissive umask.
             fd = os.open(str(tmp), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            # Register BEFORE writing: if write/flush/fsync raises, the tmp
+            # file already exists on disk (O_CREAT already ran) and must
+            # still be in the cleanup list, or it leaks -- and O_EXCL then
+            # wedges every retry with this same version_id permanently.
+            staged.append((tmp, view_dir / name))
             with os.fdopen(fd, "wb") as handle:
                 handle.write(write[name].encode("utf-8"))
                 handle.flush()
                 os.fsync(handle.fileno())
-            staged.append((tmp, view_dir / name))
         for tmp, final in staged:
             os.rename(tmp, final)
             staged = staged[1:]
@@ -312,14 +341,23 @@ def commit_view_locked(
     validate_audit_entry(audit_entry, write)
     _check_identity(view_dir, expected_identity)
     _validate_row_matches_bytes(write, audit_entry)
+    mutated = False
     if write:
         _stage_and_rename(view_dir, write, str(audit_entry["version_id"]))
+        mutated = True
     for name in remove:
-        with suppress(FileNotFoundError):
+        try:
             (view_dir / name).unlink()
+            mutated = True
+        except FileNotFoundError:
+            pass
     try:
         return audit_chain.append_entry(view_dir / _AUDIT_FILENAME, audit_entry)
     except Exception as exc:  # noqa: BLE001
+        if not mutated:
+            # Nothing reached the filesystem, so the correct action is retry
+            # -- not a hand-edit of the chain. Do not claim a commit happened.
+            raise
         raise CommitWitnessLost(
             f"artifacts for version_id={audit_entry.get('version_id')!r} were committed "
             f"but the audit row could not be appended ({exc}). The renames cannot be "
