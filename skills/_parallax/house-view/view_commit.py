@@ -188,6 +188,12 @@ def validate_audit_entry(audit_entry: dict[str, Any], write: dict[str, Any]) -> 
         vid = str(audit_entry["version_id"])
         if any(bad in vid for bad in ("/", "\\", "..")) or vid != vid.strip():
             raise CommitRejected(f"unsafe version_id for a staging filename: {vid!r}")
+    if "view.yaml" in write and not audit_entry.get("view_hash"):
+        raise CommitRejected(
+            "audit_entry.view_hash is required when view.yaml is written — "
+            "a row that witnesses a view it cannot identify defeats the "
+            "row-vs-bytes check (loader.md §6.2)"
+        )
     if audit_entry["action"] == "clear":
         for field in _CLEAR_REQUIRED_FIELDS:
             if not audit_entry.get(field):

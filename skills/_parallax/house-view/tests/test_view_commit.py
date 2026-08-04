@@ -148,10 +148,25 @@ def test_moved_identity_writes_nothing(tmp_path):
     _seed(tmp_path, version_id="v9")
     before = (tmp_path / AUDIT).read_bytes()
     with pytest.raises(audit_chain.ViewChangedMidRun):
-        view_commit.commit_view(tmp_path, write={"view.yaml": "metadata:\n  version_id: v2\n"},
-                                remove=frozenset(), audit_entry=_row(),
-                                expected_identity={"parent_version_id": "v1"})
+        view_commit.commit_view(
+            tmp_path, write={"view.yaml": "metadata:\n  version_id: v2\n"},
+            remove=frozenset(),
+            audit_entry=_row(view_hash=view_commit.compute_view_hash({})),
+            expected_identity={"parent_version_id": "v1"})
     assert (tmp_path / AUDIT).read_bytes() == before
+
+
+def test_view_hash_is_required_when_view_yaml_is_written(tmp_path):
+    """A row witnessing a written view must identify it."""
+    _seed(tmp_path)
+    with pytest.raises(view_commit.CommitRejected, match="view_hash is required"):
+        view_commit.commit_view(
+            tmp_path,
+            write={"view.yaml": "metadata:\n  version_id: v2\n"},
+            remove=frozenset(),
+            audit_entry={"action": "save", "version_id": "v2"},   # no view_hash
+            expected_identity={"parent_version_id": "v1"})
+    assert not list(tmp_path.glob("*.tmp.*"))
 
 
 def test_row_that_disagrees_with_bytes_is_rejected(tmp_path):
