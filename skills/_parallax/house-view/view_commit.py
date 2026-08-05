@@ -8,8 +8,10 @@ flock, and the resulting truncated chain still verifies green because
 ``verify_chain`` raises only on MULTIPLE ``chain_root`` entries.
 
 Not repo-wide: ``parallax-make-house-view``'s ``maker.py`` still writes all
-three directly with ``write_text()``, outside this lock. Its migration is
-deferred, so the lock here excludes only other ``view_transaction`` holders.
+three directly with ``write_text()``. It holds this same lock -- what it lacks
+is staging, writing each artifact in place and ``chmod``ing afterwards, so a
+crash mid-write can leave a torn ``view.yaml`` that a staged rename would not,
+and a lock-free reader can observe it. Its migration is deferred.
 
 Known residue, deliberately not fixed here:
   * The grouped renames are per-file atomic, not atomic as a group. A crash

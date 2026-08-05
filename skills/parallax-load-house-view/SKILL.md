@@ -324,8 +324,8 @@ PLAN
 `--clear` — **archive first, then commit.** `view_commit --mode clear` deletes; it does not archive. The row's `destination` field asserts where the view was moved, so writing a row without having moved it puts a false statement into a 7-year compliance record and leaves the operator with nothing to recover.
 
 1. Read `metadata.view_id` and `metadata.version_id` from the current `view.yaml`.
-2. Copy `view.yaml`, `prose.md`, and `provenance.yaml` (each one that exists) into `~/.parallax/active-house-view/.archive/<view_id>-<version_id>/`, creating the directory `0700`. Use the Read + Write tools, or `cp`; this is a copy, not a move — `view_commit` does the removal.
-3. Verify all three copies landed. **If the archive fails, stop — do not run the clear.** Report the failure and leave the active view in place; an unrecoverable clear is worse than a clear that did not happen.
+2. Resolve the view directory exactly as the command below does — `$PARALLAX_HOUSE_VIEW_DIR` if set, else `~/.parallax/active-house-view/` — and copy `view.yaml`, `prose.md`, and `provenance.yaml` (each one that exists) into `<view_dir>/.archive/<view_id>-<version_id>/`, creating the directory `0700`. Do not hardcode the default path: the command omits `--dir` and clears whichever directory that variable resolves to, so archiving out of a different one would again make `destination` name a location that does not hold what was deleted. Use the Read + Write tools, or `cp`; this is a copy, not a move — `view_commit` does the removal.
+3. Verify that every artifact **that existed** in step 2 landed in the archive — a legacy view carrying no `provenance.yaml` archives two files, not three, and that is not a failure. **If any artifact that did exist failed to copy, stop — do not run the clear.** Report the failure and leave the active view in place; an unrecoverable clear is worse than a clear that did not happen.
 4. Only then run the command below, passing that same directory as `destination`.
 
 ```bash
