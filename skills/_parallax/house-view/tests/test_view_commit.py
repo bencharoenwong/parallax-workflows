@@ -1,3 +1,4 @@
+import collections
 import json
 import subprocess
 import sys
@@ -77,6 +78,26 @@ def test_prose_body_hash_is_recomputed_not_read_from_frontmatter(tmp_path):
     assert resolved == view_commit.compute_prose_body_hash("---\nx\n---\nreal body\n")
 
 
+def test_view_hash_is_recomputed_not_read_from_metadata(tmp_path):
+    """SECURITY: --re-pair blesses whatever is on disk and keys on view_hash.
+    Trusting metadata.view_hash lets an edit to the tilts pass the guard while
+    the stale stored field goes unchanged."""
+    (tmp_path / "view.yaml").write_text(
+        "metadata:\n  version_id: v1\n  view_hash: " + "0" * 64 + "\n"
+        "tilts:\n  sectors:\n    health_care: 2\n",
+        encoding="utf-8",
+    )
+    resolved = view_commit.IDENTITY_RESOLVERS["view_hash"](tmp_path)
+    assert resolved != "0" * 64
+    assert resolved == view_commit.compute_view_hash(
+        {"tilts": {"sectors": {"health_care": 2}}}
+    )
+
+
+def test_view_hash_resolver_returns_none_when_there_is_no_view(tmp_path):
+    assert view_commit.IDENTITY_RESOLVERS["view_hash"](tmp_path) is None
+
+
 def test_parent_version_id_resolves_against_on_disk_version_id(tmp_path):
     (tmp_path / "view.yaml").write_text("metadata:\n  version_id: v2\n", encoding="utf-8")
     assert view_commit.IDENTITY_RESOLVERS["parent_version_id"](tmp_path) == "v2"
@@ -123,6 +144,64 @@ def test_token_for_another_dir_is_rejected(tmp_path):
             view_commit.commit_view_locked(tmp_path, token=token, write={},
                                            remove=frozenset(), audit_entry=_row(),
                                            expected_identity={})
+
+
+def test_impostor_tokens_are_rejected(tmp_path):
+    """The token is proof the lock is held; a look-alike proves nothing.
+    A duck-typed stand-in carrying the right view_dir must not satisfy it."""
+    _seed(tmp_path)
+    lookalike = collections.namedtuple("TransactionToken", "view_dir")(tmp_path)
+    for impostor in (object(), lookalike):
+        with pytest.raises(view_commit.CommitRejected, match="TransactionToken"):
+            view_commit.commit_view_locked(
+                tmp_path, token=impostor, write={}, remove=frozenset(),
+                audit_entry=_row(), expected_identity={})
+
+
+def test_fresh_install_save_accepts_a_null_parent_version_id(tmp_path):
+    """Nothing on disk to read, so the plan passes JSON null."""
+    content = "metadata:\n  version_id: v1\n"
+    view_commit.commit_view(
+        tmp_path, write={"view.yaml": content}, remove=frozenset(),
+        audit_entry=_row(version_id="v1", view_hash=view_commit.compute_view_hash({})),
+        expected_identity={"parent_version_id": None})
+    assert (tmp_path / "view.yaml").read_text() == content
+
+
+def test_staging_order_covers_exactly_the_writable_set():
+    """Two sources of truth here would accept a name, never write it, and
+    still witness it with a successful row."""
+    assert frozenset(view_commit._STAGING_ORDER) == view_commit.WRITABLE
+
+
+def test_a_single_key_that_is_neither_inline_nor_path_is_rejected(tmp_path):
+    with pytest.raises(view_commit.CommitRejected, match="neither 'inline' nor 'path'"):
+        view_commit._resolve_content(tmp_path, "view.yaml", {"contents": "x"})
+
+
+def test_undeletable_artifact_reports_what_was_already_removed(tmp_path, monkeypatch):
+    """A PermissionError mid-remove must not escape raw: the removals that
+    already landed cannot be undone, so this is a partial apply."""
+    _seed(tmp_path)
+    (tmp_path / "prose.md").write_text("---\nx: 1\n---\nbody\n", encoding="utf-8")
+    (tmp_path / "provenance.yaml").write_text("a: 1\n", encoding="utf-8")
+    real_unlink = Path.unlink
+
+    def flaky_unlink(self, *a, **k):
+        if self.name == "view.yaml":
+            raise PermissionError("read-only file system")
+        return real_unlink(self, *a, **k)
+
+    monkeypatch.setattr(Path, "unlink", flaky_unlink)
+    with pytest.raises(view_commit.CommitPartiallyApplied) as excinfo:
+        view_commit.commit_view(
+            tmp_path, write={}, remove=frozenset(WRITABLE_ALL),
+            audit_entry={"action": "clear", "version_id": "v1",
+                         "destination": "/archive/x", "reason": "operator cleared"},
+            expected_identity={"version_id": "v1"})
+    # Sorted order: prose.md and provenance.yaml go before view.yaml.
+    assert "prose.md" in str(excinfo.value)
+    assert "provenance.yaml" in str(excinfo.value)
 
 
 def test_prior_audit_rows_survive_a_clear(tmp_path):

@@ -1,4 +1,4 @@
-"""The only sanctioned writer of canonical house-view artifacts.
+"""The sanctioned writer of canonical house-view artifacts for the loader.
 
 ``view.yaml`` / ``prose.md`` / ``provenance.yaml`` are written here, always by
 staging ``<name>.tmp.<version_id>`` and renaming. ``audit.jsonl`` is NEVER
@@ -6,6 +6,10 @@ staged or renamed -- it is append-only, and replacing it is what this module
 exists to prevent: a rename swaps the inode out from under ``append_entry``'s
 flock, and the resulting truncated chain still verifies green because
 ``verify_chain`` raises only on MULTIPLE ``chain_root`` entries.
+
+Not repo-wide: ``parallax-make-house-view``'s ``maker.py`` still writes all
+three directly with ``write_text()``, outside this lock. Its migration is
+deferred, so the lock here excludes only other ``view_transaction`` holders.
 
 Known residue, deliberately not fixed here:
   * The grouped renames are per-file atomic, not atomic as a group. A crash
@@ -221,6 +225,19 @@ def _resolve_prose_body_hash(view_dir: Path) -> str | None:
     return compute_prose_body_hash(path.read_text(encoding="utf-8"))
 
 
+def _resolve_view_hash(view_dir: Path) -> str | None:
+    path = view_dir / "view.yaml"
+    if not path.exists():
+        return None
+    # SECURITY: recompute, never read metadata.view_hash out of view.yaml.
+    # Same argument as _resolve_prose_body_hash, and it bites hardest on
+    # --re-pair, whose identity key this is: edit the tilts, leave the stale
+    # metadata.view_hash alone, and a guard that read the stored field would
+    # pass -- blessing the modified view with a row attesting a review that
+    # never covered it.
+    return compute_view_hash(_load_view(view_dir))
+
+
 # Resolvers are lazy and per-key: only the keys actually present in
 # `expected_identity` cause a read. --clear asks for version_id alone, so a
 # corrupt prose.md must not break the mode most likely to be run against a
@@ -232,7 +249,7 @@ IDENTITY_RESOLVERS: dict[str, Callable[[Path], str | None]] = {
     "parent_version_id": lambda d: _metadata_field(d, "version_id"),
     "version_id": lambda d: _metadata_field(d, "version_id"),
     "view_id": lambda d: _metadata_field(d, "view_id"),
-    "view_hash": lambda d: _metadata_field(d, "view_hash"),
+    "view_hash": _resolve_view_hash,
     "prose_body_hash": _resolve_prose_body_hash,
 }
 
@@ -241,6 +258,11 @@ def _check_identity(view_dir: Path, expected_identity: dict[str, Any]) -> None:
     unknown = set(expected_identity) - set(IDENTITY_RESOLVERS)
     if unknown:
         raise CommitRejected(f"unknown identity keys: {sorted(unknown)}")
+    # Both sides go through str() deliberately, which is also what makes the
+    # fresh-install save work: the caller passes `"parent_version_id": null`
+    # when no prior view was read, the resolver returns None for the absent
+    # view.yaml, and "None" == "None". Do not "fix" this into an identity
+    # comparison without giving the fresh-install path its own branch.
     captured = {k: str(v) for k, v in expected_identity.items()}
     committed = {k: str(IDENTITY_RESOLVERS[k](view_dir)) for k in expected_identity}
     moved = audit_chain.identity_diff(captured, committed)
@@ -308,11 +330,24 @@ def _validate_row_matches_bytes(write: dict[str, str], audit_entry: dict[str, An
             )
 
 
+# The staging order is explicit (deterministic across runs and platforms) but
+# is not a second source of truth: a name added to WRITABLE and forgotten here
+# would pass validation, never be written, and still be witnessed by a
+# successful audit row. Fail at import instead of shipping that.
+_STAGING_ORDER: tuple[str, ...] = ("view.yaml", "prose.md", "provenance.yaml")
+if frozenset(_STAGING_ORDER) != WRITABLE:
+    raise RuntimeError(
+        f"_STAGING_ORDER {sorted(_STAGING_ORDER)} must cover exactly WRITABLE "
+        f"{sorted(WRITABLE)}; an unstaged writable artifact would be accepted, "
+        "silently not written, and witnessed by a successful row."
+    )
+
+
 def _stage_and_rename(view_dir: Path, write: dict[str, str], version_id: str) -> None:
     staged: list[tuple[Path, Path]] = []
     renamed = 0
     try:
-        for name in ("view.yaml", "prose.md", "provenance.yaml"):
+        for name in _STAGING_ORDER:
             if name not in write:
                 continue
             tmp = view_dir / f"{name}.tmp.{version_id}"
@@ -374,12 +409,29 @@ def commit_view_locked(
     if write:
         _stage_and_rename(view_dir, write, str(audit_entry["version_id"]))
         mutated = True
-    for name in remove:
+    # `remove` is a frozenset, whose iteration order is unspecified; sort it so
+    # a mid-remove failure leaves a reproducible partial state rather than a
+    # different one per run.
+    removed: list[str] = []
+    for name in sorted(remove):
         try:
             (view_dir / name).unlink()
+            removed.append(name)
             mutated = True
         except FileNotFoundError:
             pass
+        except OSError as exc:
+            # Not FileNotFoundError: the artifact is there and could not be
+            # deleted (permissions, a busy handle). Anything already removed —
+            # and any rename above — is not recoverable, so this is a partial
+            # apply, not a clean rejection.
+            raise CommitPartiallyApplied(
+                f"removal of {name!r} failed ({exc}). Already removed: "
+                f"{removed or 'nothing'}"
+                + ("; the write set was already renamed into place" if write else "")
+                + ". No audit row was appended. Inspect the view directory "
+                "before retrying."
+            ) from exc
     try:
         return audit_chain.append_entry(view_dir / _AUDIT_FILENAME, audit_entry)
     except Exception as exc:  # noqa: BLE001
@@ -431,6 +483,13 @@ def _resolve_content(view_dir: Path, name: str, ref: Any) -> str:
         raise CommitRejected(f"write[{name!r}] must be {{'inline': ...}} or {{'path': ...}}")
     if "inline" in ref:
         return ref["inline"]
+    if "path" not in ref:
+        # A single-key dict with the wrong key is a plan typo, not a bug in the
+        # caller's Python: reject it as such rather than letting a bare KeyError
+        # escape past every `except AuditChainError` handler and land on exit 1.
+        raise CommitRejected(
+            f"write[{name!r}] key {next(iter(ref))!r} is neither 'inline' nor 'path'"
+        )
     source = Path(ref["path"]).expanduser().resolve()
     if source.parent == Path(view_dir).resolve():
         raise CommitRejected(
