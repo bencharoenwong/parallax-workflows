@@ -4,6 +4,14 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-08-05
+
+### Security
+- **The house-view loader can no longer truncate its own audit-chain hash by way of a normal save** — every prior write path staged `audit.jsonl` as a temp file and renamed it over the live log alongside `view.yaml`/`prose.md`/`provenance.yaml`. A rename swaps the file's inode out from under any concurrent reader holding the old one, and the append logic then minted a fresh `chain_root` on top of the truncated file rather than raising — `verify_chain` only raises on *multiple* `chain_root` entries, so the loss of prior history was invisible at both write and verify time. The new `skills/_parallax/house-view/view_commit.py` is now the only sanctioned writer of `view.yaml`/`prose.md`/`provenance.yaml`; `audit.jsonl` is excluded from every write/remove set it accepts and is touched only by the existing append-only path. `commit_view` acquires the `audit_chain.view_transaction` lock and commits under it; `commit_view_locked` accepts a `TransactionToken` (new in `audit_chain.py`, yielded by `view_transaction`) for a caller that already holds the lock — `view_transaction` is not re-entrant, so a second acquire would deadlock rather than error. A stdin-JSON CLI (`python3 -m view_commit --mode {save,extend,re-pair,clear}`) lets `parallax-load-house-view` invoke the whole commit in one process instead of open-coding staging itself.
+- **Every commit is guarded by an identity re-check and a row-vs-bytes assertion before anything reaches disk** — the caller's `expected_identity` (parent/version/view id, `view_hash`, `prose_body_hash`, resolved lazily per key so a corrupt `prose.md` cannot break a `--clear` that never needed it) is re-verified against the on-disk view under the lock, raising if it moved since the caller read it; separately, the audit row being appended is checked against the bytes it is about to witness (`view_hash` against the parsed `view.yaml`, `paired_yaml_hash`/`prose_body_hash` against the parsed `prose.md` frontmatter) so a row can never disagree with what it describes.
+- **`--clear` now removes `provenance.yaml` in addition to `view.yaml` and `prose.md`** — previously left behind, which `audit_export.py` hard-requires when present.
+- **`--extend` and `--re-pair` now write an audit row** — both modes previously committed their file changes with no corresponding chain entry; both now route through `view_commit` and land a row like every other write mode.
+
 ## 2026-08-03
 
 ### Security
