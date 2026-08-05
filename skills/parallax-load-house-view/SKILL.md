@@ -224,7 +224,7 @@ On `Confirm`:
      **`audit.jsonl` is append vs replace, not touch vs don't-touch.** Never stage, rename, copy over, or overwrite it, and never write it with the Write tool — every one of those replaces the file, which swaps the inode out from under the append path and truncates the chain into something that still verifies green. Appending through `audit_chain.append_entry` is the one sanctioned direct write (that is how Step 3b's `extraction_attempt` row lands, and `view_commit` itself appends through the same call). Every commit of the canonical artifacts — `view.yaml`, `prose.md`, `provenance.yaml` — goes through `view_commit`, which appends its own witnessing row. Then run exactly:
 
      ```bash
-     cd <repo>/skills/_parallax/house-view && python3 -m view_commit --mode save <<'PLAN'
+     cd <repo>/skills/_parallax/house-view && python3 -m view_commit --mode save --staging-dir <staging> <<'PLAN'
      {"write": {"view.yaml": {"path": "<staging>/view.yaml"},
                 "prose.md": {"path": "<staging>/prose.md"},
                 "provenance.yaml": {"path": "<staging>/provenance.yaml"}},
@@ -239,7 +239,7 @@ On `Confirm`:
 
      Do not pass `--dir`. `view_commit` resolves the view directory from `$PARALLAX_HOUSE_VIEW_DIR`, falling back to `~/.parallax/active-house-view/` — the same order `view_status.py` and loader.md use. Hardcoding `--dir` overrides a per-org directory the operator set deliberately.
 
-     A `path` value must resolve outside the view directory — `view_commit` rejects one that resolves inside it, since reading the file you are about to replace would silently no-op the change. `view_commit` sets `audit_entry.action` from `--mode` itself; do not set `action` in the plan. `audit_entry.view_hash` is required whenever `view.yaml` is in the write set — a row that can't identify the view it witnesses defeats the row-vs-bytes check.
+     `--staging-dir` is the same `<staging>` directory the three artifacts were just written into, and it is a containment boundary, not a convenience. A `{"path": ...}` value is read **only** when it resolves to a file sitting directly in that directory; a path elsewhere, a `..` that climbs out, and a symlink inside the directory whose target resolves outside it are each refused before the file is opened. Omit the flag and every `path` ref is refused — so pass it whenever the plan uses one, and give it one directory rather than a parent that happens to contain several. The boundary exists because the plan is assembled after reading an untrusted CIO document: without it, text in that document could name any local file and have its contents committed into the 7-year record. A `path` must also resolve outside the view directory — `view_commit` rejects one that resolves inside it, since reading the file you are about to replace would silently no-op the change — and the staging directory itself may not be, contain, or sit inside the view directory. `view_commit` sets `audit_entry.action` from `--mode` itself; do not set `action` in the plan. `audit_entry.view_hash` is required whenever `view.yaml` is in the write set — a row that can't identify the view it witnesses defeats the row-vs-bytes check.
 
      Exit 0 prints the committed audit row as JSON on stdout — that row already carries `prev_entry_hash` linking and is authoritative; nothing further needs to append it. Exit 2 means the commit was refused and **nothing was written**; surface the message verbatim and do not retry blindly — read why first (a moved `expected_identity` means the active view changed since Stage 1's read). Exit 1 means something else went wrong, including the rare case where the artifacts were renamed into place but the audit row could not be appended — that failure is loud and names its own recovery in the message; follow it rather than hand-editing the chain.
 10. (Moved to Step 9 Stage 1 to avoid async race conditions.)
@@ -295,12 +295,12 @@ To clear:  /parallax-load-house-view --clear
 
 #### Commit invocations for `--extend`, `--re-pair`, `--clear`
 
-Same contract as Step 4 Stage 2: stage any written file outside the view directory with the Write tool first, omit `--dir` so `$PARALLAX_HOUSE_VIEW_DIR` (default `~/.parallax/active-house-view/`) resolves the target, `view_commit` sets `audit_entry.action` from `--mode` itself, exit 0 prints the committed row, exit 2 means refused and nothing was written, exit 1 is anything else (including the rare artifacts-committed-row-not-appended case, which names its own recovery). `audit.jsonl` stays append-only throughout — see the Stage 2 rule above.
+Same contract as Step 4 Stage 2: stage any written file outside the view directory with the Write tool first and name that directory in `--staging-dir` (path refs are read only from there — see Stage 2), omit `--dir` so `$PARALLAX_HOUSE_VIEW_DIR` (default `~/.parallax/active-house-view/`) resolves the target, `view_commit` sets `audit_entry.action` from `--mode` itself, exit 0 prints the committed row, exit 2 means refused and nothing was written, exit 1 is anything else (including the rare artifacts-committed-row-not-appended case, which names its own recovery). `audit.jsonl` stays append-only throughout — see the Stage 2 rule above.
 
 `--extend` (writes `view.yaml` + `prose.md`; `view_hash` is required in `audit_entry` because `view.yaml` is in the write set):
 
 ```bash
-cd <repo>/skills/_parallax/house-view && python3 -m view_commit --mode extend <<'PLAN'
+cd <repo>/skills/_parallax/house-view && python3 -m view_commit --mode extend --staging-dir <staging> <<'PLAN'
 {"write": {"view.yaml": {"path": "<staging>/view.yaml"},
            "prose.md": {"path": "<staging>/prose.md"}},
  "audit_entry": {"schema_version": 1, "ts": "...", "view_id": "...", "version_id": "<new-version-id>",
@@ -312,7 +312,7 @@ PLAN
 `--re-pair` (writes `prose.md` only — `view.yaml` is untouched):
 
 ```bash
-cd <repo>/skills/_parallax/house-view && python3 -m view_commit --mode re-pair <<'PLAN'
+cd <repo>/skills/_parallax/house-view && python3 -m view_commit --mode re-pair --staging-dir <staging> <<'PLAN'
 {"write": {"prose.md": {"path": "<staging>/prose.md"}},
  "audit_entry": {"schema_version": 1, "ts": "...", "view_id": "...", "version_id": "...",
                  "view_hash": "...", "skill": "parallax-load-house-view", "applied": true},
@@ -326,7 +326,7 @@ PLAN
 1. Read `metadata.view_id` and `metadata.version_id` from the current `view.yaml`.
 2. Resolve the view directory exactly as the command below does — `$PARALLAX_HOUSE_VIEW_DIR` if set, else `~/.parallax/active-house-view/` — and copy `view.yaml`, `prose.md`, and `provenance.yaml` (each one that exists) into `<view_dir>/.archive/<view_id>-<version_id>/`, creating the directory `0700`. Do not hardcode the default path: the command omits `--dir` and clears whichever directory that variable resolves to, so archiving out of a different one would again make `destination` name a location that does not hold what was deleted. Use the Read + Write tools, or `cp`; this is a copy, not a move — `view_commit` does the removal.
 3. Verify that every artifact **that existed** in step 2 landed in the archive — a legacy view carrying no `provenance.yaml` archives two files, not three, and that is not a failure. **If any artifact that did exist failed to copy, stop — do not run the clear.** Report the failure and leave the active view in place; an unrecoverable clear is worse than a clear that did not happen.
-4. Only then run the command below, passing that same directory as `destination`.
+4. Only then run the command below, passing that same directory as `destination`. Its write set is empty, so it takes no `--staging-dir` — nothing is read from disk.
 
 ```bash
 cd <repo>/skills/_parallax/house-view && python3 -m view_commit --mode clear <<'PLAN'

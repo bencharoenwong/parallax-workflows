@@ -21,6 +21,16 @@ Known residue, deliberately not fixed here:
     ``audit.jsonl`` and the directory entry are not.
   * ``flock`` may silently no-op on some network filesystems.
 
+A plan may hand content over as ``{"inline": ...}`` or as ``{"path": ...}``.
+The path form exists so an operator LLM never has to escape multi-KB prose into
+JSON, and it is contained rather than removed: a path ref is read ONLY from the
+directory named by ``--staging-dir``, compared after ``resolve()`` so a ``..``
+traversal or a symlink pointing out of that directory is rejected instead of
+followed, and rejected before any read. With no staging directory declared,
+every path ref is refused. The plan is composed downstream of an untrusted CIO
+document, so an injected path is a realistic input, and whatever it named would
+land in a retained compliance record.
+
 Archiving is caller-side and best-effort; it happens before the commit call and
 its failure neither blocks nor rolls back a commit.
 """
@@ -478,12 +488,46 @@ MODE_SPECS: dict[str, dict[str, Any]] = {
 }
 
 
-def _resolve_content(view_dir: Path, name: str, ref: Any) -> str:
+def resolve_staging_dir(staging_dir: Any, view_dir: Path) -> Path | None:
+    """Resolve and bound the one directory ``{'path': ...}`` refs may name.
+
+    Returns None when no staging directory was supplied -- which makes every
+    path ref a rejection (see ``_resolve_content``), never a permitted read.
+
+    The plan is composed by an LLM that has just read an untrusted CIO
+    document, so ``ref['path']`` is attacker-influenced input, not operator
+    input. Bounding it to a single declared directory is what keeps an injected
+    path (a key, a credentials file) out of ``prose.md`` -- and therefore out of
+    the retained compliance record ``audit_export.py`` bundles.
+    """
+    if staging_dir is None:
+        return None
+    resolved = Path(staging_dir).expanduser().resolve()
+    view_resolved = Path(view_dir).expanduser().resolve()
+    # "is, contains, or is inside" in one pair of comparisons -- equality is
+    # covered by either direction. Generalizes the older "not inside view_dir"
+    # guard: a staging dir that CONTAINS the view directory would otherwise let
+    # a ref name the artifact it is about to replace.
+    if resolved == view_resolved or resolved.is_relative_to(view_resolved) \
+            or view_resolved.is_relative_to(resolved):
+        raise CommitRejected(
+            f"staging directory {resolved} is, contains, or is inside the view "
+            f"directory {view_resolved}; stage drafts in an unrelated directory"
+        )
+    if not resolved.is_dir():
+        raise CommitRejected(f"staging directory {resolved} is not a directory")
+    return resolved
+
+
+def _resolve_content(
+    view_dir: Path, name: str, ref: Any, staging_dir: Path | None = None
+) -> str:
     if isinstance(ref, str):
         return ref
     if not isinstance(ref, dict) or len(ref) != 1:
         raise CommitRejected(f"write[{name!r}] must be {{'inline': ...}} or {{'path': ...}}")
     if "inline" in ref:
+        # No filesystem access, so nothing to bound.
         return ref["inline"]
     if "path" not in ref:
         # A single-key dict with the wrong key is a plan typo, not a bug in the
@@ -492,20 +536,53 @@ def _resolve_content(view_dir: Path, name: str, ref: Any) -> str:
         raise CommitRejected(
             f"write[{name!r}] key {next(iter(ref))!r} is neither 'inline' nor 'path'"
         )
+    # Every branch below rejects BEFORE opening the file. Order is the contract:
+    # a plan that will be refused must not have caused a read on its way to the
+    # refusal, or the refusal came too late to matter.
+    if staging_dir is None:
+        raise CommitRejected(
+            f"write[{name!r}] is a path ref but no staging directory was declared; "
+            "pass --staging-dir (path refs are read ONLY from that directory) or "
+            "supply the content as {'inline': ...}"
+        )
+    # `.resolve()` FOLLOWS symlinks, and comparing the resolved parent is what
+    # makes that safe: a symlink sitting inside the staging directory whose
+    # target is elsewhere resolves to the target, whose parent is not the
+    # staging directory, so it is rejected rather than followed. `..` segments
+    # are normalized by the same call, so a traversal out of the staging
+    # directory fails the same comparison.
     source = Path(ref["path"]).expanduser().resolve()
-    if source.parent == Path(view_dir).resolve():
+    if source.parent == Path(view_dir).expanduser().resolve():
+        # Unreachable while staging_dir is disjoint from view_dir (enforced
+        # above), and kept anyway: it is the guard that still holds if a future
+        # caller passes a staging dir some other way, and its message names the
+        # specific mistake. Do not remove as "dead code".
         raise CommitRejected(
             f"write[{name!r}] path is inside the view directory; stage drafts elsewhere "
             "(reading the file being replaced silently no-ops the change)"
         )
+    if source.parent != staging_dir:
+        raise CommitRejected(
+            f"write[{name!r}] path resolves to {source}, whose parent is not the "
+            f"staging directory {staging_dir}; path refs are read only from there"
+        )
+    if not source.is_file():
+        raise CommitRejected(f"write[{name!r}] path {source} is not a regular file")
     return source.read_text(encoding="utf-8")
 
 
-def build_commit_args(mode: str, plan: dict[str, Any], view_dir: Path) -> dict[str, Any]:
+def build_commit_args(
+    mode: str, plan: dict[str, Any], view_dir: Path, *, staging_dir: Any = None
+) -> dict[str, Any]:
     if mode not in MODE_SPECS:
         raise CommitRejected(f"unknown mode {mode!r} (known: {sorted(MODE_SPECS)})")
     spec = MODE_SPECS[mode]
-    write = {n: _resolve_content(view_dir, n, r) for n, r in (plan.get("write") or {}).items()}
+    # Validated even when the plan turns out to hold no path refs: a staging
+    # directory the operator got wrong should be a loud rejection, not a value
+    # that silently never gets used.
+    staging = resolve_staging_dir(staging_dir, view_dir)
+    write = {n: _resolve_content(view_dir, n, r, staging)
+             for n, r in (plan.get("write") or {}).items()}
     audit_entry = dict(plan.get("audit_entry") or {})
     audit_entry["action"] = spec["action"]
     expected = plan.get("expected_identity") or {}
@@ -521,11 +598,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mode", required=True, choices=sorted(MODE_SPECS))
     parser.add_argument("--dir", default=os.environ.get(
         "PARALLAX_HOUSE_VIEW_DIR", str(Path.home() / ".parallax" / "active-house-view")))
+    parser.add_argument(
+        "--staging-dir",
+        help="the ONLY directory a {'path': ...} write ref may resolve into. "
+             "Required for any plan that uses a path ref; omitting it rejects "
+             "every path ref rather than reading from an unbounded location.",
+    )
     args = parser.parse_args(argv)
     view_dir = Path(args.dir).expanduser()
     try:
         plan = json.loads(sys.stdin.read())
-        kwargs = build_commit_args(args.mode, plan, view_dir)
+        kwargs = build_commit_args(args.mode, plan, view_dir, staging_dir=args.staging_dir)
         entry = commit_view(view_dir, **kwargs)
     except (CommitRejected, audit_chain.ViewChangedMidRun) as exc:
         print(str(exc), file=sys.stderr)

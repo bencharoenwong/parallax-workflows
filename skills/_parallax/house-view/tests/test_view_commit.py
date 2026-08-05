@@ -406,10 +406,12 @@ def test_staged_files_are_created_0600_not_chmodded_after(tmp_path):
 SHARED = str(view_commit._HOUSE_VIEW_DIR)
 
 
-def _run(plan, mode, view_dir):
+def _run(plan, mode, view_dir, staging_dir=None):
+    argv = [_sys.executable, "-m", "view_commit", "--mode", mode, "--dir", str(view_dir)]
+    if staging_dir is not None:
+        argv += ["--staging-dir", str(staging_dir)]
     return subprocess.run(
-        [_sys.executable, "-m", "view_commit", "--mode", mode, "--dir", str(view_dir)],
-        cwd=SHARED, input=json.dumps(plan), text=True, capture_output=True,
+        argv, cwd=SHARED, input=json.dumps(plan), text=True, capture_output=True,
     )
 
 
@@ -444,7 +446,7 @@ def test_cli_rejected_key_exits_2_and_writes_nothing(tmp_path):
     assert (tmp_path / AUDIT).read_bytes() == before
 
 
-def test_cli_reads_path_refs_from_outside_the_view_dir(tmp_path):
+def test_cli_reads_path_refs_from_the_staging_dir(tmp_path):
     _seed(tmp_path)
     staging = tmp_path.parent / "staging"
     staging.mkdir(exist_ok=True)
@@ -454,19 +456,163 @@ def test_cli_reads_path_refs_from_outside_the_view_dir(tmp_path):
             "audit_entry": {"action": "save", "version_id": "v2",
                             "view_hash": view_commit.compute_view_hash({})},
             "expected_identity": {"parent_version_id": "v1"}}
-    result = _run(plan, "save", tmp_path)
+    result = _run(plan, "save", tmp_path, staging_dir=staging)
     assert result.returncode == 0, result.stderr
     assert not list(tmp_path.glob("*.tmp.*"))
+    assert (tmp_path / "view.yaml").read_text() == "metadata:\n  version_id: v2\n"
 
 
 def test_cli_refuses_a_path_ref_inside_the_view_dir(tmp_path):
     _seed(tmp_path)
+    staging = tmp_path.parent / "staging_inside"
+    staging.mkdir(exist_ok=True)
     plan = {"write": {"view.yaml": {"path": str(tmp_path / "view.yaml")}},
             "audit_entry": {"action": "save", "version_id": "v2"},
             "expected_identity": {}}
-    result = _run(plan, "save", tmp_path)
+    result = _run(plan, "save", tmp_path, staging_dir=staging)
     assert result.returncode == 2
     assert "inside the view directory" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# Staging-directory containment. The plan is composed by an LLM that has just
+# ingested an untrusted CIO document, so `ref["path"]` is attacker-influenced:
+# an injected path would otherwise be read into prose.md / view.yaml and become
+# part of a retained compliance record. Every case below must reject BEFORE the
+# read, which is why each asserts the audit log is byte-identical and no
+# staging file was created.
+# ---------------------------------------------------------------------------
+
+
+def _unbounded_plan(src):
+    return {"write": {"view.yaml": {"path": str(src)}},
+            "audit_entry": {"action": "save", "version_id": "v2",
+                            "view_hash": view_commit.compute_view_hash({})},
+            "expected_identity": {"parent_version_id": "v1"}}
+
+
+def _assert_untouched(tmp_path, before):
+    assert not list(tmp_path.glob("*.tmp.*")), "staged files leaked"
+    assert (tmp_path / AUDIT).read_bytes() == before, "audit chain was appended to"
+    assert (tmp_path / "view.yaml").read_text() == (
+        "metadata:\n  version_id: v1\n  view_id: vw\n"
+    ), "artifacts were mutated"
+
+
+def test_path_ref_outside_the_staging_dir_is_rejected_unread(tmp_path):
+    _seed(tmp_path)
+    before = (tmp_path / AUDIT).read_bytes()
+    staging = tmp_path.parent / "staging_bounded"
+    staging.mkdir(exist_ok=True)
+    secret = tmp_path.parent / "elsewhere"
+    secret.mkdir(exist_ok=True)
+    src = secret / "id_rsa"
+    src.write_text("PRIVATE KEY MATERIAL\n", encoding="utf-8")
+    with pytest.raises(view_commit.CommitRejected, match="staging directory"):
+        view_commit.build_commit_args(
+            "save", _unbounded_plan(src), tmp_path, staging_dir=staging
+        )
+    _assert_untouched(tmp_path, before)
+
+
+def test_dot_dot_traversal_out_of_the_staging_dir_is_rejected(tmp_path):
+    _seed(tmp_path)
+    before = (tmp_path / AUDIT).read_bytes()
+    staging = tmp_path.parent / "staging_traversal"
+    staging.mkdir(exist_ok=True)
+    outside = tmp_path.parent / "outside.txt"
+    outside.write_text("PRIVATE KEY MATERIAL\n", encoding="utf-8")
+    escaped = staging / ".." / "outside.txt"
+    with pytest.raises(view_commit.CommitRejected, match="staging directory"):
+        view_commit.build_commit_args(
+            "save", _unbounded_plan(escaped), tmp_path, staging_dir=staging
+        )
+    _assert_untouched(tmp_path, before)
+
+
+def test_symlink_in_the_staging_dir_pointing_out_is_rejected_not_followed(tmp_path):
+    _seed(tmp_path)
+    before = (tmp_path / AUDIT).read_bytes()
+    staging = tmp_path.parent / "staging_symlink"
+    staging.mkdir(exist_ok=True)
+    target = tmp_path.parent / "id_rsa"
+    target.write_text("PRIVATE KEY MATERIAL\n", encoding="utf-8")
+    link = staging / "view.yaml"
+    link.symlink_to(target)
+    with pytest.raises(view_commit.CommitRejected, match="staging directory"):
+        view_commit.build_commit_args(
+            "save", _unbounded_plan(link), tmp_path, staging_dir=staging
+        )
+    _assert_untouched(tmp_path, before)
+
+
+@pytest.mark.parametrize("where", ["equal", "inside", "contains"])
+def test_a_staging_dir_entangled_with_the_view_dir_is_rejected(tmp_path, where):
+    view_dir = tmp_path / "view"
+    view_dir.mkdir()
+    _seed(view_dir)
+    before = (view_dir / AUDIT).read_bytes()
+    staging = {"equal": view_dir, "inside": view_dir / "drafts", "contains": tmp_path}[where]
+    if where == "inside":
+        staging.mkdir()
+    with pytest.raises(view_commit.CommitRejected, match="is, contains, or is inside"):
+        view_commit.build_commit_args(
+            "save", _unbounded_plan(staging / "view.yaml"), view_dir, staging_dir=staging
+        )
+    _assert_untouched(view_dir, before)
+
+
+def test_a_path_ref_with_no_staging_dir_is_rejected(tmp_path):
+    """Fail closed: an in-process caller that declares no staging directory
+    gets every path ref refused, never an unbounded read."""
+    _seed(tmp_path)
+    before = (tmp_path / AUDIT).read_bytes()
+    src = tmp_path.parent / "id_rsa"
+    src.write_text("PRIVATE KEY MATERIAL\n", encoding="utf-8")
+    with pytest.raises(view_commit.CommitRejected, match="no staging directory was declared"):
+        view_commit.build_commit_args("save", _unbounded_plan(src), tmp_path)
+    _assert_untouched(tmp_path, before)
+
+
+def test_inline_refs_need_no_staging_dir(tmp_path):
+    """The containment boundary is about filesystem reads; inline content does
+    none, so it must keep working with no staging directory declared."""
+    _seed(tmp_path)
+    content = "metadata:\n  version_id: v2\n"
+    kwargs = view_commit.build_commit_args(
+        "save",
+        {"write": {"view.yaml": {"inline": content}},
+         "audit_entry": {"action": "save", "version_id": "v2",
+                         "view_hash": view_commit.compute_view_hash({})},
+         "expected_identity": {"parent_version_id": "v1"}},
+        tmp_path,
+    )
+    view_commit.commit_view(tmp_path, **kwargs)
+    assert (tmp_path / "view.yaml").read_text() == content
+
+
+def test_a_real_file_directly_in_the_staging_dir_is_committed(tmp_path):
+    _seed(tmp_path)
+    staging = tmp_path.parent / "staging_happy"
+    staging.mkdir(exist_ok=True)
+    src = staging / "view.yaml"
+    content = "metadata:\n  version_id: v2\n"
+    src.write_text(content, encoding="utf-8")
+    kwargs = view_commit.build_commit_args(
+        "save", _unbounded_plan(src), tmp_path, staging_dir=staging
+    )
+    view_commit.commit_view(tmp_path, **kwargs)
+    assert (tmp_path / "view.yaml").read_text() == content
+    assert not list(tmp_path.glob("*.tmp.*"))
+
+
+def test_a_missing_staging_dir_is_rejected(tmp_path):
+    _seed(tmp_path)
+    with pytest.raises(view_commit.CommitRejected, match="not a directory"):
+        view_commit.build_commit_args(
+            "save", _unbounded_plan(tmp_path.parent / "nope" / "view.yaml"),
+            tmp_path, staging_dir=tmp_path.parent / "nope",
+        )
 
 
 def test_cli_partial_apply_does_not_exit_2(tmp_path, monkeypatch):
@@ -494,7 +640,7 @@ def test_cli_partial_apply_does_not_exit_2(tmp_path, monkeypatch):
         return real_rename(src, dst)
 
     monkeypatch.setattr(view_commit.os, "rename", flaky_rename)
-    kwargs = view_commit.build_commit_args("save", plan, tmp_path)
+    kwargs = view_commit.build_commit_args("save", plan, tmp_path, staging_dir=staging)
     with pytest.raises(view_commit.CommitPartiallyApplied):
         view_commit.commit_view(tmp_path, **kwargs)
     # And confirm main() would not map this to 2.
