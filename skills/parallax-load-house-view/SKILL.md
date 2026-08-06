@@ -22,7 +22,7 @@ description: "Ingest a CIO house view (PDF / text / URL / wizard) into the Paral
 - Ask uploader_role and basis_statement via AskUserQuestion — these are required-at-institutional fields and need explicit human input
 - Auto-applied macro_regime → factor tilts (loader.md §3) MUST be surfaced to the uploader at the gate, not silently applied
 - Confirmation gate persists a pre-edit snapshot (Step 3a) when uploader chooses 'Edit specific fields' — writes extractor's pristine draft to `.archive/<version>/pre_edit.yaml` alongside the superseded view. No-edit confirmations skip this.
-- Every extraction attempt (Step 3b) logs an `extraction_attempt` audit entry to `audit.jsonl` — whether or not it becomes a save. Capture disposition (confirmed/edited/re_extracted/rejected) + draft_yaml_hash per loader.md §6.2.
+- Every extraction attempt (Step 3b) logs an `extraction_attempt` audit entry to `audit.jsonl` — whether or not it becomes a save. Capture disposition (confirmed/edited/re_extracted/rejected) + draft_yaml_hash per loader.md §6.2. Append it with `audit_chain.append_entry`, never with the Write tool (Step 3b names the call).
 - Save (Step 4 step 10) computes a `version_diff` block vs `parent_version_id` and stashes it on the save audit entry. Only when this save supersedes a prior version.
 - Calibration manifest: Invoke `manifest_cache.load_manifest()` during Step 4 (Write Phase) to resolve active calibration. Handle `DeadStateNoFallback` or signature errors by logging a warning and falling back to the bundled-values default.
 - Reasoning Chains: Every save MUST invoke `chain_emit.emit_chain()` (or `emit_phase_0_chain()`) to produce a compliance artifact at `~/.parallax/reasoning-chains/`.
@@ -128,7 +128,7 @@ Components are usually coarse — a prose view rarely articulates sub-factor lev
 
 > **Architectural note:** the saved house view is PURE — it carries only what the source document said + what the uploader confirmed at this gate. Parallax-derived augmentation is deferred to **just-in-time** lookup at consumer-skill use (e.g., when `/parallax-portfolio-builder` detects the active view is silent on a dimension it needs for a specific portfolio decision). The augmentation provenance lives on the consuming portfolio/screen artifact, never on the saved house view. The `gap_detect` and `gap_suggest` modules in `_parallax/house-view/` remain — they get JIT-loaded by consumer skills.
 
-> **Shared module.** The gate display + disposition loop lives in `_parallax/house-view/gate_present.py` so the in-progress `/parallax-make-house-view` skill can reuse it. This Step describes how `parallax-load-house-view` *uses* the module; the module itself is the source of truth for display rendering and disposition vocabulary. Step 3a (pre-edit snapshot persistence) and Step 3b (extraction_attempt audit logging) remain caller-side responsibilities — the module returns the snapshot in `GateResult` but never writes audit rows or `.archive/<...>/pre_edit.yaml`.
+> **Shared module.** The gate display + disposition loop lives in `_parallax/house-view/gate_present.py` so the in-progress `/parallax-make-house-view` skill can reuse it. This Step describes how `parallax-load-house-view` *uses* the module; the module itself is the source of truth for display rendering and disposition vocabulary. Step 3a (pre-edit snapshot persistence) and Step 3b (extraction_attempt audit logging) remain caller-side responsibilities — the module returns the snapshot in `GateResult` but never writes audit rows or `.archive/<...>/pre_edit.yaml`. Step 3b's row is appended with `audit_chain.append_entry` (see §3b); it does not go through `view_commit`, which derives `action` from its `--mode` and has no extraction-attempt mode.
 
 JIT-load `_parallax/house-view/gate_present.py` and construct a `GateContext`:
 
@@ -162,7 +162,28 @@ If the uploader confirms the pristine draft (no edits), skip Step 3a entirely �
 
 #### Step 3b — Extraction attempt logging (Layer 5, folded into audit.jsonl)
 
-Every extraction attempt — including re-extracts and rejections that never become saves — appends one `action: "extraction_attempt"` entry to `audit.jsonl` per loader.md §6.1. Required fields: `schema_version`, `ts`, `skill`, `action`, `applied=false`. Conditional: `query_summary` (source file basename or URL), `disposition` (one of: `confirmed`, `edited`, `re_extracted`, `rejected`), `draft_yaml_hash` (sha256 of the draft the uploader saw; lets us correlate with a later save's `view_hash`), `extraction_duration_ms` (optional, wall-clock from extraction start to disposition), `hint` (when disposition=re_extracted, the hint text truncated to 200 chars).
+Every extraction attempt — including re-extracts and rejections that never become saves — appends one `action: "extraction_attempt"` entry to `audit.jsonl` per loader.md §6.1.
+
+**How to write it.** Append the row with `audit_chain.append_entry` — the append-only path that takes the view's `flock`, computes `prev_entry_hash`, and never replaces the file. It is the one sanctioned direct write to `audit.jsonl`; the Write tool is not (see Step 4 Stage 2). `view_commit` cannot produce this row: it derives `audit_entry["action"]` from `--mode`, and there is no `extraction_attempt` mode. Run exactly:
+
+```bash
+cd <repo>/skills/_parallax/house-view && python3 -c '
+import json, os, sys, audit_chain
+from pathlib import Path
+view_dir = Path(os.environ.get("PARALLAX_HOUSE_VIEW_DIR")
+                or Path.home() / ".parallax" / "active-house-view").expanduser()
+view_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+print(json.dumps(audit_chain.append_entry(view_dir / "audit.jsonl", json.load(sys.stdin))))
+' <<'ROW'
+{"schema_version": 1, "ts": "...", "skill": "parallax-load-house-view",
+ "action": "extraction_attempt", "applied": false, "query_summary": "...",
+ "disposition": "confirmed", "draft_yaml_hash": "..."}
+ROW
+```
+
+Note `import audit_chain` and `audit_chain.append_entry(...)` — module-attribute access, not a `from`-import. The view directory resolves the same way `view_commit` resolves it (`$PARALLAX_HOUSE_VIEW_DIR`, else `~/.parallax/active-house-view/`), which is why the snippet does not hardcode a path. On a fresh install the directory is created `0700`; `append_entry` writes the file `0600` and mints the `chain_root` on the empty chain.
+
+Required fields: `schema_version`, `ts`, `skill`, `action`, `applied=false`. Conditional: `query_summary` (source file basename or URL), `disposition` (one of: `confirmed`, `edited`, `re_extracted`, `rejected`), `draft_yaml_hash` (sha256 of the draft the uploader saw; lets us correlate with a later save's `view_hash`), `extraction_duration_ms` (optional, wall-clock from extraction start to disposition), `hint` (when disposition=re_extracted, the hint text truncated to 200 chars).
 
 A successful `save` after a confirmed draft still emits its own `action: "save"` entry per Step 4 — the two actions are independent. An `extraction_attempt` with `disposition=confirmed` tells you "the uploader confirmed this draft"; the subsequent `save` tells you "this draft was persisted." Rejected or re-extracted drafts have no matching save.
 
@@ -194,34 +215,44 @@ On `Confirm`:
      0. **Current-view guard.** If the current active `~/.parallax/active-house-view/view.yaml` does not exist (fresh install), set `version_diff_truncated: true` with `notes: "no_prior_version"` on the save audit entry. Do not emit a `version_diff` field. Continue to save.
      1. Read the current active `view.yaml` (the prior version being superseded).
      2. Compute a flat diff restricted to the `tilts` and `excludes` subtrees (same scope as `view_hash`) by comparing the prior `view.yaml` with the new draft. For each dotted path (`tilts.sectors.health_care`, `tilts.factors.momentum`, `excludes[0]`, etc.) that differs, record `{path: [old_value, new_value]}`. Use `null` for either side when the key is absent on that side. Cap output at 40 entries; if more, truncate and set `version_diff_truncated: true`.
-     3. Stash computed diff for use in Step 11.
+     3. Stash computed diff for use in the `audit_entry` passed to `view_commit` in Stage 2 below.
+
+     Stage 1's read happens outside the lock. The only thing that makes that safe is `expected_identity`, which `view_commit` re-checks under the lock and refuses to write past if it moved. Do not remove it as redundant.
    - **Stage 1b: Archive (non-blocking, best-effort):** After version-diff is computed, archive the current active `~/.parallax/active-house-view/view.yaml` and `prose.md` to `~/.parallax/active-house-view/.archive/<old_view_id>-<old_version_id>/` **asynchronously**. Archive failures are non-blocking — log a warning but do not abort the save. (The archive is a courtesy; it is not load-bearing for correctness.)
-   - **Stage 2: Write new files with per-file atomic renames (atomic operation):**
-     - **Write to temporary files in the active directory:** For each file to be written, write first to `~/.parallax/active-house-view/<filename>.tmp.<new_version_id>`:
-       - `view.yaml.tmp.<new_version_id>`
-       - `prose.md.tmp.<new_version_id>` (with frontmatter **four fields in this order**: `paired_yaml_hash`, `prose_body_hash`, `view_id`, `version_id`. Frontmatter is the only part of the file NOT covered by `prose_body_hash`.)
-       - `provenance.yaml.tmp.<new_version_id>`
-       - `audit.jsonl.tmp.<new_version_id>`
-     - **Write concurrently:** All temporary files write in parallel. If ANY write fails, immediately abort remaining writes and proceed to rollback (Step 9c).
-   - **Stage 2b: Atomic per-file rename** (only if all temporary writes succeeded):
-     - For each temporary file, use `os.rename(tmp_path, final_path)` (POSIX-atomic on same filesystem) to atomically replace the old file with the new one. Use this rename order to preserve atomicity:
-       1. `view.yaml.tmp.<new_version_id>` → `view.yaml`
-       2. `prose.md.tmp.<new_version_id>` → `prose.md`
-       3. `provenance.yaml.tmp.<new_version_id>` → `provenance.yaml`
-       4. `audit.jsonl.tmp.<new_version_id>` → `audit.jsonl` (rename last)
-     - **If any rename fails (should be rare):** Clean up all `*.tmp.<new_version_id>` files and fail loudly with **"Atomic rename failed on <filename> — view not activated. Manual recovery may be needed."** The active directory remains in a consistent state (no partial writes, no dangling temp files).
-   - **Stage 2c: Permission enforcement (post-rename):** After all atomic renames succeed, apply permissions concurrently:
-     - `chmod 0o600` on `provenance.yaml` (security audit Finding 6 — file carries source-extracted prose snippets; default umask perms would leave it world-readable on shared workstations).
-     - `chmod 0o600` on `audit.jsonl` (security audit Finding 5 — closes the window between empty-file creation and the first `audit_chain.append_entry`). The `audit_chain` module also re-enforces 0600 on every append as defense in depth.
-     - `chmod 0o700` the parent dir `~/.parallax/active-house-view/` if it was created in this run.
-   - **Stage 2c.1: Rollback (only if any write fails during Stage 2):** If any file write fails before all temporary files are created, clean up any partial temporary files and report the error: **"Save failed: <file> write error. No files written. Safe to retry."** Do not proceed to Step 11. The active view remains unchanged.
+   - **Stage 2 — Commit.** Use the staging directory `$HOME/.parallax/.staging` — create it with `mkdir -p "$staging" && chmod 700 "$staging"` (a bare `mkdir` inherits the shell's umask, typically `0755`; the `chmod 700` is what protects the source-extracted content in `provenance.yaml` while it sits outside the view directory, and a fixed path under `$HOME` avoids the world-writable-directory exposure `/tmp` carries). Write the three artifacts into `$staging` with the Write tool (`view.yaml` with frontmatter fields set per the earlier substeps, `prose.md` with frontmatter **four fields in this order** — `paired_yaml_hash`, `prose_body_hash`, `view_id`, `version_id` — frontmatter being the only part of the file NOT covered by `prose_body_hash`, and `provenance.yaml`), **and write the plan JSON itself into `$staging/plan.json` with the Write tool too** — never type the plan into a shell heredoc. The plan carries document-derived text (the `version_diff` values come from the CIO draft's `tilts`/`excludes`), and a heredoc would hand that text to the shell for command substitution; a file written by the Write tool never passes through a shell. Because the staging path is known, every `path` in the plan is a literal absolute path (no `~`, no variables — `view_commit` reads the file as-is). Never write into `~/.parallax/active-house-view/` yourself. Remove `$staging` unconditionally after the commit (shown in the block) — the contents are reconstructible, so leaving source-extracted output behind on a failed commit is the worse trade — and end the block with `exit "$status"` so the Bash tool reports `view_commit`'s own exit code rather than the cleanup's.
+
+     **`audit.jsonl` is append vs replace, not touch vs don't-touch.** Never stage, rename, copy over, or overwrite it, and never write it with the Write tool — every one of those replaces the file, which swaps the inode out from under the append path and truncates the chain into something that still verifies green. Appending through `audit_chain.append_entry` is the one sanctioned direct write (that is how Step 3b's `extraction_attempt` row lands, and `view_commit` itself appends through the same call). Every commit of the canonical artifacts — `view.yaml`, `prose.md`, `provenance.yaml` — goes through `view_commit`, which appends its own witnessing row. Then run exactly:
+
+     ```bash
+     staging="$HOME/.parallax/.staging"
+     mkdir -p "$staging" && chmod 700 "$staging"
+     # write view.yaml, prose.md, provenance.yaml, and plan.json into "$staging" via the Write tool, then:
+     cd <repo>/skills/_parallax/house-view && python3 -m view_commit --mode save --staging-dir "$staging" < "$staging/plan.json"
+     status=$?
+     rm -rf "$staging"
+     exit "$status"
+     ```
+
+     `plan.json` (written with the Write tool; `<home>` is the literal expansion of `$HOME`):
+
+     ```json
+     {"write": {"view.yaml": {"path": "<home>/.parallax/.staging/view.yaml"},
+                "prose.md": {"path": "<home>/.parallax/.staging/prose.md"},
+                "provenance.yaml": {"path": "<home>/.parallax/.staging/provenance.yaml"}},
+      "audit_entry": {"schema_version": 1, "ts": "...", "view_id": "...", "version_id": "...",
+                      "view_hash": "...", "skill": "parallax-load-house-view", "applied": true,
+                      "parent_version_id": "...", "provenance_hash": "...", "version_diff": {}},
+      "expected_identity": {"parent_version_id": "<the value read at Stage 1, or null on a fresh install>"}}
+     ```
+
+     On a fresh install with no prior view, pass `"parent_version_id": null` — JSON `null`, not `""` and not an omitted key. The key is required for `--mode save`; an empty string fails the identity check and omitting it fails the required-keys check.
+
+     Do not pass `--dir`. `view_commit` resolves the view directory from `$PARALLAX_HOUSE_VIEW_DIR`, falling back to `~/.parallax/active-house-view/` — the same order `view_status.py` and loader.md use. Hardcoding `--dir` overrides a per-org directory the operator set deliberately.
+
+     `--staging-dir` is the same `$staging` directory the artifacts and `plan.json` were just written into, and it is a containment boundary, not a convenience. A `{"path": ...}` value is read **only** when it resolves to a file sitting directly in that directory; a path elsewhere, a `..` that climbs out, and a symlink inside the directory whose target resolves outside it are each refused before the file is opened. Omit the flag and every `path` ref is refused — so pass it whenever the plan uses one, and give it one directory rather than a parent that happens to contain several. The boundary exists because the plan is assembled after reading an untrusted CIO document: without it, text in that document could name any local file and have its contents committed into the 7-year record. A `path` must also resolve outside the view directory — `view_commit` rejects one that resolves inside it, since reading the file you are about to replace would silently no-op the change — and the staging directory itself may not be, contain, or sit inside the view directory. `view_commit` sets `audit_entry.action` from `--mode` itself; do not set `action` in the plan. `audit_entry.view_hash` is required whenever `view.yaml` is in the write set — a row that can't identify the view it witnesses defeats the row-vs-bytes check.
+
+     Exit 0 prints the committed audit row as JSON on stdout — that row already carries `prev_entry_hash` linking and is authoritative; nothing further needs to append it. Exit 2 means the commit was refused and **nothing was written**; surface the message verbatim and do not retry blindly — read why first (a moved `expected_identity` means the active view changed since Stage 1's read). Exit 1 means something else went wrong, including the rare case where the artifacts were renamed into place but the audit row could not be appended — that failure is loud and names its own recovery in the message; follow it rather than hand-editing the chain.
 10. (Moved to Step 9 Stage 1 to avoid async race conditions.)
-11. **Append Hash-Chained Audit Entry:**
-    - Prepare entry payload:
-      ```json
-      {"schema_version":1,"ts":"...","view_id":"...","version_id":"...","view_hash":"...","skill":"parallax-load-house-view","action":"save","applied":true,"parent_version_id":"...","provenance_hash":"...","version_diff":{...}}
-      ```
-    - Invoke `audit_chain.append_entry(audit_path, entry_data)` to handle `prev_entry_hash` linking and RFC 8785 canonicalization.
 11a. **Emit Reasoning Chain (deferred, non-blocking):**
     - This step can be deferred to async completion AFTER the save confirmation is returned to the user. It does not block user confirmation in Step 5.
     - Call `chain_emit.emit_chain()` (or `emit_phase_0_chain()`) to produce the reasoning chain.
@@ -264,13 +295,79 @@ To clear:  /parallax-load-house-view --clear
 | Flag | Behavior |
 |---|---|
 | `--status` | Read `view.yaml`, validate per loader.md §2, then invoke `view_status.compute_status()` (or shell `python -m view_status`) to obtain the canonical status. Print the helper's `banner` field verbatim as the first line, then render the status block defined in §"Status block" below. The banner is the single source of truth for state wording across operator LLMs — do NOT paraphrase. If no view, the helper returns `state="none"` with the standard "No active house view" banner. |
-| `--clear` | Archive current view to `.archive/`, remove `view.yaml` and `prose.md`. Append audit entry `{"action":"clear"}`. |
-| `--extend <date>` | Update `metadata.valid_through` only. Bump `version_id`. Re-pair (recompute view_hash — should be unchanged since tilts/excludes unmodified — and re-write `prose.md` frontmatter). |
-| `--re-pair` | Recompute `view_hash` from current `view.yaml` and `prose_body_hash` from current `prose.md` body. Update `prose.md` frontmatter `paired_yaml_hash` AND `prose_body_hash` to match. Use this after a manual prose edit (body or YAML) when the edit was intentional; the command re-anchors both hashes in one step. Note that re-pair intentionally blesses whatever is currently on disk — run only after you have reviewed the edit. |
+| `--clear` | **Archives** the current view, then removes **all three** artifacts (`view.yaml`, `prose.md`, `provenance.yaml`) via `view_commit --mode clear`. `provenance.yaml` was previously left behind; a cleared view's provenance is stale, and `audit_export.py` raises when `provenance.yaml` is *missing*, so leaving it meant a later export could silently bundle a prior view's evidence rather than failing loudly. Writes an audit row (`destination` + `reason` required); `destination` is the archive directory, so the archive must happen first. See invocation below. |
+| `--extend <date>` | Update `metadata.valid_through` only. Bump `version_id`. Recompute `view_hash` (should be unchanged since tilts/excludes unmodified) and re-write `prose.md` frontmatter. Commits both files plus an audit row via `view_commit --mode extend` — previously wrote no audit row for this mode. See invocation below. |
+| `--re-pair` | Recompute `view_hash` from current `view.yaml` and `prose_body_hash` from current `prose.md` body. Commits the updated `prose.md` frontmatter (`paired_yaml_hash` AND `prose_body_hash`) plus an audit row via `view_commit --mode re-pair` — previously wrote no audit row for this mode. Use this after a manual prose edit (body or YAML) when the edit was intentional; the command re-anchors both hashes in one step. Note that re-pair intentionally blesses whatever is currently on disk — run only after you have reviewed the edit. See invocation below. |
 | `--edit` | Open `view.yaml` in `$EDITOR` (default: `vi`). On save, re-run Steps 3-4 (confirmation gate + write) using the edited content as the draft. |
 | `--export <view_id>` | Call `audit_export.create_bundle()` to package view + narrative + provenance + full hash-chained audit trail into a tarball. Fails if audit chain is broken. |
 | `--why <tilt-path>` | On-demand provenance query. Takes a dotted path (e.g., `tilts.factors.momentum`, `tilts.sectors.information_technology`, `tilts.macro_regime.growth`). JIT-load `references/why-provenance.md` for path parsing rules, derivation resolution order, and per-source output formats. |
 | `--version-history` | Read `audit.jsonl`, filter `action="save"` entries in the current view family, and render a compact chain: `version_id → version_id` with the `version_diff` payload rendered as a short bullet list. If any save has `version_diff_truncated: true`, note that. Use this to audit how the view evolved. |
+
+#### Commit invocations for `--extend`, `--re-pair`, `--clear`
+
+Same contract as Step 4 Stage 2: use the staging directory `$HOME/.parallax/.staging`, created with `mkdir -p "$staging" && chmod 700 "$staging"` (the `0700` mode is what protects source-extracted content outside the view directory, and a fixed path under `$HOME` avoids `/tmp`'s world-writable exposure), write every file to be committed **and the plan JSON itself** into it with the Write tool — never a shell heredoc — feed the plan via `< "$staging/plan.json"`, name that directory in `--staging-dir` (path refs are read only from there — see Stage 2), then remove it unconditionally and `exit "$status"` so the commit's exit code is what the block reports. Plan `path` values are literal absolute paths (no `~`, no variables). Omit `--dir` so `$PARALLAX_HOUSE_VIEW_DIR` (default `~/.parallax/active-house-view/`) resolves the target, `view_commit` sets `audit_entry.action` from `--mode` itself, exit 0 prints the committed row, exit 2 means refused and nothing was written, exit 1 is anything else (including the rare artifacts-committed-row-not-appended case, which names its own recovery). `audit.jsonl` stays append-only throughout — see the Stage 2 rule above.
+
+`--extend` (writes `view.yaml` + `prose.md`; `view_hash` is required in `audit_entry` because `view.yaml` is in the write set). Create the staging directory, write both files and `plan.json` into it with the Write tool, then commit:
+
+```bash
+staging="$HOME/.parallax/.staging"
+mkdir -p "$staging" && chmod 700 "$staging"
+# write view.yaml, prose.md, and plan.json into "$staging" via the Write tool, then:
+cd <repo>/skills/_parallax/house-view && python3 -m view_commit --mode extend --staging-dir "$staging" < "$staging/plan.json"
+status=$?
+rm -rf "$staging"
+exit "$status"
+```
+
+`plan.json` (`<home>` is the literal expansion of `$HOME`):
+
+```json
+{"write": {"view.yaml": {"path": "<home>/.parallax/.staging/view.yaml"},
+           "prose.md": {"path": "<home>/.parallax/.staging/prose.md"}},
+ "audit_entry": {"schema_version": 1, "ts": "...", "view_id": "...", "version_id": "<new-version-id>",
+                 "view_hash": "...", "skill": "parallax-load-house-view", "applied": true},
+ "expected_identity": {"version_id": "<the version_id read before this call>"}}
+```
+
+`--re-pair` (writes `prose.md` only — `view.yaml` is untouched). Create the staging directory, write the file and `plan.json` into it with the Write tool, then commit:
+
+```bash
+staging="$HOME/.parallax/.staging"
+mkdir -p "$staging" && chmod 700 "$staging"
+# write prose.md and plan.json into "$staging" via the Write tool, then:
+cd <repo>/skills/_parallax/house-view && python3 -m view_commit --mode re-pair --staging-dir "$staging" < "$staging/plan.json"
+status=$?
+rm -rf "$staging"
+exit "$status"
+```
+
+`plan.json` (`<home>` is the literal expansion of `$HOME`):
+
+```json
+{"write": {"prose.md": {"path": "<home>/.parallax/.staging/prose.md"}},
+ "audit_entry": {"schema_version": 1, "ts": "...", "view_id": "...", "version_id": "...",
+                 "view_hash": "...", "skill": "parallax-load-house-view", "applied": true},
+ "expected_identity": {"view_hash": "<the view_hash read before this call>",
+                       "prose_body_hash": "<the prose_body_hash read before this call>"}}
+```
+
+`--clear` — **archive first, then commit.** `view_commit --mode clear` deletes; it does not archive. The row's `destination` field asserts where the view was moved, so writing a row without having moved it puts a false statement into a 7-year compliance record and leaves the operator with nothing to recover.
+
+1. Read `metadata.view_id` and `metadata.version_id` from the current `view.yaml`.
+2. Resolve the view directory exactly as the command below does — `$PARALLAX_HOUSE_VIEW_DIR` if set, else `~/.parallax/active-house-view/` — and copy `view.yaml`, `prose.md`, and `provenance.yaml` (each one that exists) into `<view_dir>/.archive/<view_id>-<version_id>/`, creating the directory `0700`. Do not hardcode the default path: the command omits `--dir` and clears whichever directory that variable resolves to, so archiving out of a different one would again make `destination` name a location that does not hold what was deleted. Use the Read + Write tools, or `cp`; this is a copy, not a move — `view_commit` does the removal.
+3. Verify that every artifact **that existed** in step 2 landed in the archive — a legacy view carrying no `provenance.yaml` archives two files, not three, and that is not a failure. **If any artifact that did exist failed to copy, stop — do not run the clear.** Report the failure and leave the active view in place; an unrecoverable clear is worse than a clear that did not happen.
+4. Only then run the command below, passing that same directory as `destination`. Its write set is empty, so it takes no `--staging-dir` — nothing is read from disk.
+
+```bash
+cd <repo>/skills/_parallax/house-view && python3 -m view_commit --mode clear <<'PLAN'
+{"write": {},
+ "audit_entry": {"schema_version": 1, "ts": "...", "view_id": "...", "version_id": "<current version_id>",
+                 "skill": "parallax-load-house-view", "applied": true,
+                 "destination": "<the .archive/<view_id>-<version_id>/ path written in step 2>",
+                 "reason": "operator cleared"},
+ "expected_identity": {"version_id": "<the version_id read before this call>"}}
+PLAN
+```
 
 ### Status block (output of `--status`)
 

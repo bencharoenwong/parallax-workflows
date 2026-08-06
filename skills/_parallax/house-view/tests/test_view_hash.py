@@ -89,6 +89,25 @@ def compute_prose_body_hash(prose_text: str) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def test_view_commit_prose_hash_agrees_with_the_oracle():
+    """The oracle stays a separate implementation on purpose — importing
+    view_commit's function here instead would make this assert nothing.
+
+    view_hash agreement is covered from the other side, in
+    tests/test_view_commit.py::test_view_hash_agrees_with_the_oracle_on_zero_valued_tilts.
+    """
+    import view_commit
+
+    for text in [
+        "---\npaired_yaml_hash: a\n---\nbody\n",
+        "no frontmatter at all\n",
+        "---\r\na: 1\r\n---\r\nbody with crlf\r\n",
+        "---\na: 1\n---\n",
+        "",
+    ]:
+        assert view_commit.compute_prose_body_hash(text) == compute_prose_body_hash(text), repr(text)
+
+
 def _edge_cases() -> list[tuple[str, bool]]:
     """Return [(description, passed), ...] for strip + hash edge cases."""
     out = []
