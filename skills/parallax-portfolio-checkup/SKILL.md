@@ -67,7 +67,7 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 
 This step gates Batch B and Batch C; do not start them until A.5 is complete.
 
-1. **Cross-validation** (per conventions §2): for each holding, compare `get_peer_snapshot.target_company` (or its `name` field) against `get_company_info.name`. Mismatches are flagged ⚠ MISMATCH and **excluded from aggregate factor calculations**; their per-position scores are not displayed.
+1. **Cross-validation** (per conventions §2): for each holding, compare `get_peer_snapshot.target_company` (top level — never the `name` field on peer rows, which refers to each peer) against `get_company_info.name`. Mismatches are flagged ⚠ MISMATCH and **excluded from aggregate factor calculations**; their per-position scores are not displayed.
 2. **Compute V2 coverage**: weight share of holdings that returned non-empty `get_peer_snapshot` AND passed cross-validation.
 3. **Fallback ladder** — apply the first tier whose precondition holds:
    - **V2 (primary)** — V2 coverage ≥ 50% → use V2-aggregated scores; do NOT fire V1.

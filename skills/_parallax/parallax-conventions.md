@@ -104,9 +104,19 @@ Scoring tools (`get_peer_snapshot`, `get_score_analysis`, `quick_portfolio_score
 
 **After any scoring call:**
 
-1. Cross-check the `name` field returned by the scoring tool against the `get_company_info` result for the same symbol.
+1. Cross-check the company-identity field against the `get_company_info` result for the same symbol. **The field differs per tool** — there is no single `name` field shared across scoring tools, and reading the wrong one silently validates nothing:
+
+   | Tool | Identity field |
+   |---|---|
+   | `get_company_info` | `name` — the oracle the other checks compare against |
+   | `get_peer_snapshot` | `target_company`, **top level**. NOT `name`, which appears on each peer row and refers to that peer |
+   | `get_score_analysis` | no company name in the response — verify `data[0].symbol` matches the requested RIC instead |
+   | `quick_portfolio_scores` | `holdings_analyzed[].company_name`, per holding row |
+
 2. If names diverge, warn the user clearly and treat `get_company_info` as the source of truth.
 3. Do not present scores from a mismatched company as belonging to the intended security.
+
+Field names above were confirmed against live tool responses on 2026-08-11. Two are easy to get wrong from intuition: `get_peer_snapshot` does carry a `name` field, but it belongs to peer rows, so a check reading it compares a peer against the target and passes when it should fail; and `get_score_analysis` carries no company name at all, so a name-based check there has nothing to read.
 
 **For portfolio workflows (`PARALLAX_LOADER_V2=1`):** Use per-holding `get_peer_snapshot` aggregation in parallel with `get_company_info` cross-validation. This is the **primary robust path**. Do NOT rely on `quick_portfolio_scores` for portfolio factor profiling when a house view is active.
 

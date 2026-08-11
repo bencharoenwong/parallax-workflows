@@ -80,7 +80,7 @@ After any scoring tool call (`get_peer_snapshot`, `get_score_analysis`, `quick_p
 | `get_company_info` | `name` | The target symbol's company name |
 | `get_peer_snapshot` | `target_company` (top-level) | NOT the `name` field on individual peer rows — those refer to each peer |
 | `get_score_analysis` | Verify `data[0].symbol` matches the requested RIC; also cross-check company name via `get_company_info` |
-| `quick_portfolio_scores` | `name` per holding row | Cross-check each holding separately |
+| `quick_portfolio_scores` | `holdings_analyzed[].company_name` | Cross-check each holding separately. Confirmed against a live response 2026-08-11 |
 
 If names diverge, the dispatcher MUST refuse to render and emit exactly this error:
 
