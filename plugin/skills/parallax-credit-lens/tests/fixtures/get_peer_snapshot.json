@@ -5,11 +5,11 @@
   "industry": "Consumer Electronics",
   "peer_group": ["MSFT.O", "GOOGL.O", "META.O", "AMZN.O", "NVDA.O"],
   "factor_scores": {
-    "quality": 72,
-    "value": 38,
-    "momentum": 61,
-    "growth": 55,
-    "total": 67
+    "quality": 7.2,
+    "value": 3.8,
+    "momentum": 6.1,
+    "growth": 5.5,
+    "total": 6.7
   },
   "peer_rank": {
     "quality": 2,
