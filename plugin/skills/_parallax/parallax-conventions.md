@@ -50,7 +50,7 @@ Parameter names that commonly trip up skill authors (and LLMs guessing from pros
 | `get_score_analysis` | `weeks` | integer | Defaults to 52. Same serialization caveat as `periods`. |
 | `get_stock_outlook` | `limit` | integer | Defaults to 20 (applies to `dividends` aspect, range 1-100). Same serialization caveat as `periods`. |
 | `export_price_series` | `days` | integer | Defaults to 100 (range 1-365). Same serialization caveat as `periods`. |
-| `get_peer_snapshot` | N/A | — | Symbol only; company-identity field in response is `target_company` (top-level), NOT `name` (which refers to individual peer rows). |
+| `get_peer_snapshot` | N/A | — | Symbol only; company-identity field in response is `target_company` (top-level). The response has no `name` field — each peer's name is `comparison[].company`. |
 
 Any skill calling `macro_analyst` or `build_stock_universe` with `country=` or `description=` will fail with an MCP parameter validation error. Skills should always use the names in this table.
 
@@ -109,14 +109,14 @@ Scoring tools (`get_peer_snapshot`, `get_score_analysis`, `quick_portfolio_score
    | Tool | Identity field |
    |---|---|
    | `get_company_info` | `name` — the oracle the other checks compare against |
-   | `get_peer_snapshot` | `target_company`, **top level**. NOT `name`, which appears on each peer row and refers to that peer |
+   | `get_peer_snapshot` | `target_company`, **top level**. There is no `name` field anywhere in the response — each peer's name is `comparison[].company` |
    | `get_score_analysis` | no company name in the response — verify `data[0].symbol` matches the requested RIC instead |
    | `quick_portfolio_scores` | `holdings_analyzed[].company_name`, per holding row |
 
 2. If names diverge, warn the user clearly and treat `get_company_info` as the source of truth.
 3. Do not present scores from a mismatched company as belonging to the intended security.
 
-Field names above were confirmed against live tool responses on 2026-08-11. Two are easy to get wrong from intuition: `get_peer_snapshot` does carry a `name` field, but it belongs to peer rows, so a check reading it compares a peer against the target and passes when it should fail; and `get_score_analysis` carries no company name at all, so a name-based check there has nothing to read.
+Field names above were confirmed against live tool responses on 2026-08-11. Two are easy to get wrong from intuition: `get_peer_snapshot` exposes no `name` field at all — the target is `target_company` at top level and each peer's name is `comparison[].company`, so a name-based check there reads nothing; and `get_score_analysis` likewise carries no company name, so its check must compare `data[0].symbol` against the requested RIC.
 
 **For portfolio workflows (`PARALLAX_LOADER_V2=1`):** Use per-holding `get_peer_snapshot` aggregation in parallel with `get_company_info` cross-validation. This is the **primary robust path**. Do NOT rely on `quick_portfolio_scores` for portfolio factor profiling when a house view is active.
 
@@ -260,7 +260,7 @@ External integrators and skill authors frequently ask for capabilities that alre
 
 | User-phrased need | Use this | Notes |
 |---|---|---|
-| Peer comparison table | `get_peer_snapshot` | Symbol → `target_company` (top-level) + peer rows (`name` field). |
+| Peer comparison table | `get_peer_snapshot` | Symbol → `target_company` (top-level) + peer rows (`comparison[].company`). |
 
 ### Symbol resolution & search
 
