@@ -114,7 +114,7 @@ Also apply absolute credit thresholds (use the more conservative of peer-relativ
 | Interest Coverage | < 3.0x | < 1.5x |
 | Current Ratio | < 1.2x | < 1.0x |
 | Altman Z | Grey zone (1.81–2.99) | Distress zone (< 1.81) |
-| Quality Score Change (52w, 0-10 scale) | decline > 0.5 pts | decline > 1.5 pts |
+| Quality Score Change (52w, 0-10 scale) | change ≤ -0.5 pts | change ≤ -1.5 pts |
 
 Quality score deterioration is a primary credit health warning signal.
 
@@ -139,7 +139,7 @@ Overall traffic-light determined by: count of RED flags (→ Red), count of AMBE
 | Liquidity     | 🟡 AMBER| Curr Ratio 1.3x | Peer 1.8x | Below median |
 | Profitability | 🟢 GREEN| EBITDA Margin 28% | Peer 22% | Above peer |
 | Altman Z      | 🟡 AMBER| Z = 2.1      | —           | Grey Zone |
-| Quality Trend | 🔴 RED  | –1.4 pts (52w) | —         | Deteriorating |
+| Quality Trend | 🔴 RED  | –1.8 pts (52w) | —         | Deteriorating |
 ```
 
 ### 2a. **Verdict sensitivity** (one line)
@@ -151,12 +151,12 @@ Output the Palepu solvency section from `get_financial_analysis`. If unavailable
 ### 4. **Key Flags** (bulleted list)
 List every RED and AMBER flag with one-line explanation:
 - 🔴 RED: Debt/EBITDA 5.2x exceeds peer 75th percentile (3.8x) and absolute threshold (5.0x)
-- 🟡 AMBER: Quality score down 14 pts over 52 weeks — monitor for further deterioration
+- 🟡 AMBER: Quality score down 1.4 pts over 52 weeks — monitor for further deterioration
 - 🔴 RED: Interest Coverage 2.1x below absolute threshold (3.0x); limited debt service cushion
 
 ### 5. **Quality Trend** (one sentence)
 [Quality score 52-week trajectory + interpretation from `get_score_analysis`]
-Example: "Quality score deteriorated 14 points over the past 52 weeks, signaling a potential credit health decline."
+Example: "Quality score deteriorated 1.4 points over the past 52 weeks, signaling a potential credit health decline."
 
 ### 6. **Macro Context** (one sentence)
 [Market regime from `get_telemetry` + one sentence on credit implication]
@@ -187,7 +187,7 @@ Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 
 ## Gotchas & Callouts
 
-- **Quality score is a credit proxy**: A deteriorating Quality score (especially >10 pts decline) is an early warning of credit stress and should be flagged as RED even if other metrics are healthy.
+- **Quality score is a credit proxy**: A deteriorating Quality score (a 52-week change of -1.5 pts or worse on the 0-10 scale) is an early warning of credit stress and should be flagged as RED even if other metrics are healthy.
 - **Altman Z thresholds shift by industry**: Manufacturing thresholds may differ from retail/financial. The fixed thresholds are generic — note industry caveats in output if appropriate.
 - **Peer comparisons assume comparable size/structure**: A mega-cap's peer medians may not be relevant to an analyst evaluating a small-cap. Call this out if significant size mismatch is detected.
 - **Palepu solvency assessment includes accruals quality**: High accruals (earnings not backed by cash) is a red flag independent of traditional credit metrics.

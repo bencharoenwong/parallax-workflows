@@ -614,7 +614,7 @@ class TestReportBuilders:
     def test_key_flags_renders_all_entries(self) -> None:
         flags = [
             "\U0001f534 RED: Debt/EBITDA 5.2x exceeds threshold",
-            "\U0001f7e1 AMBER: Quality score down 14 pts",
+            "\U0001f7e1 AMBER: Quality score down 1.4 pts",
         ]
         section = build_key_flags_section(flags)
         assert "Debt/EBITDA" in section
@@ -974,12 +974,10 @@ class TestEdgeCases:
         assert flag_quality_change(0.0) == Flag.GREEN
 
     def test_quality_change_very_large_positive(self) -> None:
-        # Out of range for a 0-10 score; the guard must still not flag GREEN
-        # as anything else.
-        assert flag_quality_change(5.0) == Flag.GREEN
+        assert flag_quality_change(50.0) == Flag.GREEN
 
     def test_quality_change_very_large_negative(self) -> None:
-        assert flag_quality_change(-10.0) == Flag.RED
+        assert flag_quality_change(-100.0) == Flag.RED
 
     def test_build_metrics_table_with_unavailable_flag(self) -> None:
         """UNAVAILABLE flag renders without crashing."""
