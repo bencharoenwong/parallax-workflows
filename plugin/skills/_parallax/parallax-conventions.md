@@ -50,7 +50,7 @@ Parameter names that commonly trip up skill authors (and LLMs guessing from pros
 | `get_score_analysis` | `weeks` | integer | Defaults to 52. Same serialization caveat as `periods`. |
 | `get_stock_outlook` | `limit` | integer | Defaults to 20 (applies to `dividends` aspect, range 1-100). Same serialization caveat as `periods`. |
 | `export_price_series` | `days` | integer | Defaults to 100 (range 1-365). Same serialization caveat as `periods`. |
-| `get_peer_snapshot` | N/A | — | Symbol only; company-identity field in response is `target_company` (top-level). The response has no `name` field — each peer's name is `comparison[].company`. |
+| `get_peer_snapshot` | N/A | — | Symbol only; company-identity field in response is `target_company` (top-level). The response has no `name` field — each peer's name is `comparison[].company`. `comparison[]` carries the target's own row alongside its peers (`peer_count` counts peers only), so exclude the row whose `symbol` equals the queried symbol when iterating the peer set. |
 
 Any skill calling `macro_analyst` or `build_stock_universe` with `country=` or `description=` will fail with an MCP parameter validation error. Skills should always use the names in this table.
 

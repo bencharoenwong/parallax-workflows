@@ -4,6 +4,24 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-08-11: Name the cross-validation field per tool, because the shared-`name` assumption failed silently
+
+**Why.** A cross-validation instruction that reads a field which does not exist is worse than no instruction: it returns nothing, compares nothing, and reports a pass. `parallax-conventions.md` §2 scoped the check to three scoring tools and named one field for all of them. Only `get_company_info` (the oracle) actually has `name`. `get_peer_snapshot` has no `name` key at all, so the check read nothing and passed. `get_score_analysis` returns no company name, so there was nothing to compare. Separately, `loader.md` §5 rule 3's mismatch-recovery path read `get_peer_snapshot.peer_list[]`, which is not a key in the response — the recovery could never fire, and every detected mismatch degraded to "scores unavailable" instead. Both were diagnosed by probing live tool responses rather than by reading the prose, which is what surfaced them as absent keys rather than as wording drift.
+
+**Impact.**
+- **§2 carries a per-tool identity table**, and the two silent cases state their own substitute check: `get_peer_snapshot` → `target_company` at top level, `get_score_analysis` → `data[0].symbol` against the requested RIC. The consumer skills that restated the old wording were corrected to match.
+- **The table is inlined into §2, not referenced.** `AI-profiles/profile-schema.md` holds the same table and would be the natural owner, but it is excluded from the plugin bundle — a pointer would dangle in-bundle and fail the reference-resolution gate. Two copies with a stated reason beat one dangling link.
+- **`comparison[]` contains the target's own row** alongside its peers, while `peer_count` counts peers only. Recorded once, in the §0.2 `get_peer_snapshot` row, with the instruction to exclude the row whose `symbol` equals the queried symbol when iterating the peer set. Ranking logic that deliberately compares the target against its peers inside the same array is unaffected and was left alone.
+
+**Alternatives.**
+- `[DROP]` **Keep "the `name` field" and let each skill work it out.** That is the state that produced the bug. A check whose failure mode is a false pass has to name its field exactly.
+- `[DROP]` **Point §2 at `profile-schema.md` instead of duplicating the table.** Rejected for the bundle-exclusion reason above.
+- `[DROP]` **Fix the field names inferred from the prose.** Rejected — the prose is what was wrong. Every field name here was confirmed against a live response first.
+
+**Flip conditions.** (a) The Parallax MCP server adds a uniform company-name field across scoring tools → collapse the per-tool table back to one field and delete the substitute checks. (b) `profile-schema.md` enters the plugin bundle → replace the inlined §2 table with a pointer.
+
+**Verification.** Field names and the `comparison[]` shape confirmed against live `get_peer_snapshot`, `get_score_analysis`, `get_company_info`, and `quick_portfolio_scores` responses on 2026-08-11.
+
 ## 2026-08-05: A single locked commit path for the canonical house-view artifacts, with `audit.jsonl` carved out of every rename
 
 **Why.** `parallax-load-house-view`'s save/extend/re-pair/clear paths each staged all four on-disk files — `view.yaml`, `prose.md`, `provenance.yaml`, and `audit.jsonl` — as `.tmp` siblings and renamed them into place. That is correct for the first three, which are whole-document replacements, and wrong for `audit.jsonl`, which is append-only by design: a rename swaps the file's inode out from under any reader (or the process's own `append_entry`) holding the old one, and the append logic then computes a fresh `chain_root` over what is now a truncated file rather than detecting the loss — `verify_chain` raises only when it sees *multiple* `chain_root` entries, not when it sees a plausible-looking single one sitting on top of history that no longer exists on disk. The defect was invisible at both the write and the verify layer at once. Fixing it by deleting one line from a rename list would still leave every content-writing step free-floating outside any lock, so the actual fix is a single commit function that owns the whole write, with the audit log structurally excluded from its capabilities rather than merely absent from today's call sites.

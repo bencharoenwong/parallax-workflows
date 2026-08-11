@@ -85,7 +85,7 @@ For each drill-down holding (parallel):
 | `get_stock_outlook` | `symbol`, `aspect="risk_return"` |
 | `get_peer_snapshot` | `symbol` |
 
-**Ground-truth re-verification per drill-down holding** (per loader.md §5 rule 3): cross-check `get_peer_snapshot.target_company` against the `get_company_info.name` already captured in Batch A. If mismatch at drill-down time (can occur when the Batch A and Batch C queries bind differently), flag ⚠ MISMATCH and extract the queried stock's scores from `get_peer_snapshot.peer_list[]` by symbol match, not from the target_company field.
+**Ground-truth re-verification per drill-down holding** (per loader.md §5 rule 3): cross-check `get_peer_snapshot.target_company` against the `get_company_info.name` already captured in Batch A. If mismatch at drill-down time (can occur when the Batch A and Batch C queries bind differently), flag ⚠ MISMATCH and extract the queried stock's scores from the `get_peer_snapshot.comparison[]` row whose `symbol` matches the queried symbol, not from the target_company field.
 
 News (selective, async): `get_news_synthesis` for holdings >10% weight AND flagged, or in sectors with active macro developments. Cap at 5.
 

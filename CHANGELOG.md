@@ -4,6 +4,12 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-08-11
+
+### Fixed
+- **Symbol cross-validation names the identity field per tool instead of assuming a shared `name`** — `parallax-conventions.md` §2 told callers to compare "the `name` field returned by the scoring tool" against `get_company_info`, but no such shared field exists across the three tools §2 scopes, and two of the three failed silently. `get_peer_snapshot` has no `name` field anywhere in its response (the target is `target_company` at top level; each peer's name is `comparison[].company`), so a name-based check there read nothing and passed; `get_score_analysis` carries no company name at all, so its check must compare `data[0].symbol` against the requested RIC. §2 now carries a per-tool identity table, inlined rather than referenced because `AI-profiles/profile-schema.md` is outside the plugin bundle. The same probe corrected `profile-schema.md`'s `quick_portfolio_scores` row to `holdings_analyzed[].company_name`. All field names confirmed against live tool responses.
+- **The mismatch-recovery path in `loader.md` §5 rule 3 reads an array that exists** — it re-derived a mismatched holding's scores from `get_peer_snapshot.peer_list[]`, which is not a key in the response, so the recovery silently did nothing and every mismatch fell through to "scores unavailable". It now matches on the `comparison[]` row whose `symbol` equals the input ticker. `parallax-country-deep-dive` and `parallax-client-review`, which restated the field name, are corrected the same way. `comparison[]` carries the target's own row alongside its peers (`peer_count` counts peers only) — recorded in the §0.2 `get_peer_snapshot` row with the instruction to exclude the target's row when iterating the peer set.
+
 ## 2026-08-05
 
 ### Security
