@@ -114,9 +114,11 @@ Also apply absolute credit thresholds (use the more conservative of peer-relativ
 | Interest Coverage | < 3.0x | < 1.5x |
 | Current Ratio | < 1.2x | < 1.0x |
 | Altman Z | Grey zone (1.81–2.99) | Distress zone (< 1.81) |
-| Quality Score Change | > –5 pts | > –15 pts (52w) |
+| Quality Score Change (52w, 0-10 scale) | decline > 0.5 pts | decline > 1.5 pts |
 
 Quality score deterioration is a primary credit health warning signal.
+
+Bands sit on the 0-10 per-security scale that `get_score_analysis` returns. Do not restate them on a 0-100 basis.
 
 ## Output Format
 
@@ -137,7 +139,7 @@ Overall traffic-light determined by: count of RED flags (→ Red), count of AMBE
 | Liquidity     | 🟡 AMBER| Curr Ratio 1.3x | Peer 1.8x | Below median |
 | Profitability | 🟢 GREEN| EBITDA Margin 28% | Peer 22% | Above peer |
 | Altman Z      | 🟡 AMBER| Z = 2.1      | —           | Grey Zone |
-| Quality Trend | 🔴 RED  | –14 pts (52w) | —          | Deteriorating |
+| Quality Trend | 🔴 RED  | –1.4 pts (52w) | —         | Deteriorating |
 ```
 
 ### 2a. **Verdict sensitivity** (one line)

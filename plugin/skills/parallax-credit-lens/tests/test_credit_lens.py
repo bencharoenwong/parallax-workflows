@@ -383,28 +383,34 @@ class TestQualityChangeFlagging:
         assert flag_quality_change(0) == Flag.GREEN
 
     def test_slight_improvement_is_green(self) -> None:
-        assert flag_quality_change(+3) == Flag.GREEN
+        assert flag_quality_change(+0.3) == Flag.GREEN
 
     def test_minor_decline_below_amber_is_green(self) -> None:
-        # -4 pts → still GREEN (threshold is > -5)
-        assert flag_quality_change(-4) == Flag.GREEN
+        # -0.4 pts → still GREEN (threshold is > -0.5)
+        assert flag_quality_change(-0.4) == Flag.GREEN
 
-    def test_exactly_minus_5_is_amber(self) -> None:
-        # -5 pts exactly → AMBER (change <= -5)
-        assert flag_quality_change(-5) == Flag.AMBER
+    def test_exactly_minus_0_5_is_amber(self) -> None:
+        # -0.5 pts exactly → AMBER (change <= -0.5)
+        assert flag_quality_change(-0.5) == Flag.AMBER
 
     def test_moderate_decline_is_amber(self) -> None:
-        assert flag_quality_change(-10) == Flag.AMBER
+        assert flag_quality_change(-1.0) == Flag.AMBER
 
-    def test_exactly_minus_15_is_red(self) -> None:
-        # -15 pts exactly → RED (change <= -15)
-        assert flag_quality_change(-15) == Flag.RED
+    def test_exactly_minus_1_5_is_red(self) -> None:
+        # -1.5 pts exactly → RED (change <= -1.5)
+        assert flag_quality_change(-1.5) == Flag.RED
 
     def test_severe_decline_is_red(self) -> None:
-        assert flag_quality_change(-25) == Flag.RED
+        assert flag_quality_change(-2.5) == Flag.RED
 
     def test_large_improvement_is_green(self) -> None:
-        assert flag_quality_change(+20) == Flag.GREEN
+        assert flag_quality_change(+2.0) == Flag.GREEN
+
+    def test_full_scale_decline_cannot_be_missed(self) -> None:
+        # Regression guard for the 0-100 bands: the largest possible 52-week
+        # move on a 0-10 score is -10, which the old RED band (-15) could
+        # never reach. It must be RED now.
+        assert flag_quality_change(-10.0) == Flag.RED
 
 
 # ---------------------------------------------------------------------------
@@ -749,11 +755,11 @@ class TestIntegrationFixtures:
         assert result == Flag.RED
 
     def test_aapl_quality_change_flag_from_fixture(self) -> None:
-        """AAPL quality change -6 pts → AMBER (between -5 and -15)."""
+        """AAPL quality change -0.6 pts → AMBER (between -0.5 and -1.5)."""
         score = _load_fixture("get_score_analysis.json")
         change = score["factor_trajectory"]["quality"]["change_pts"]
         result = flag_quality_change(change)
-        assert result == Flag.AMBER  # -6 is in AMBER zone
+        assert result == Flag.AMBER  # -0.6 is in AMBER zone
 
     def test_distressed_company_debt_ebitda_is_red(self) -> None:
         """Distressed fixture: D/EBITDA=6.2x → RED."""
@@ -968,10 +974,12 @@ class TestEdgeCases:
         assert flag_quality_change(0.0) == Flag.GREEN
 
     def test_quality_change_very_large_positive(self) -> None:
-        assert flag_quality_change(50.0) == Flag.GREEN
+        # Out of range for a 0-10 score; the guard must still not flag GREEN
+        # as anything else.
+        assert flag_quality_change(5.0) == Flag.GREEN
 
     def test_quality_change_very_large_negative(self) -> None:
-        assert flag_quality_change(-100.0) == Flag.RED
+        assert flag_quality_change(-10.0) == Flag.RED
 
     def test_build_metrics_table_with_unavailable_flag(self) -> None:
         """UNAVAILABLE flag renders without crashing."""
