@@ -100,7 +100,7 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
    - If `get_telemetry` fails (e.g., "Admin org not configured"), Channel B is `UNAVAILABLE` (not `NOT_FLAGGED`). This distinction matters for verdict computation.
    - Output: `FLAGGED`, `NOT_FLAGGED`, or `UNAVAILABLE` for channel B.
 
-4. Cross-validation gate: after `get_peer_snapshot` (if called during universe resolution), cross-check `target_company` (the top-level field — NOT `name` on individual peer rows) against `get_company_info`'s `name` per conventions.
+4. Cross-validation gate: after `get_peer_snapshot` (if called during universe resolution), cross-check `target_company` (the top-level field — the response has no `name` field; each peer's name is `comparison[].company`) against `get_company_info`'s `name` per conventions.
 
 5. Combine verdicts:
    - Both channels `FLAGGED` → verdict `match`

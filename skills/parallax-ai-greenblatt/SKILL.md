@@ -90,7 +90,7 @@ Do NOT pass broad queries like "US large-cap and mid-cap equities excluding fina
 
 ### Step 4 — Cross-validation gate
 
-For ticker-check mode, after `get_peer_snapshot` on the target ticker, cross-check `target_company` (the top-level field — NOT `name` on individual peer rows) against `get_company_info`'s `name`. Refuse to render on mismatch per `profile-schema.md §2 Step 2`.
+For ticker-check mode, after `get_peer_snapshot` on the target ticker, cross-check `target_company` (the top-level field — the response has no `name` field; each peer's name is `comparison[].company`) against `get_company_info`'s `name`. Refuse to render on mismatch per `profile-schema.md §2 Step 2`.
 
 For universe mode, cross-validation is per-name on the top-3 basket members that get `get_peer_snapshot` calls.
 

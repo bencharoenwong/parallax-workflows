@@ -73,7 +73,7 @@ Per shared conventions (RIC suffix table in `parallax-conventions.md §1`).
 
 ### Step 3 — Pre-render cross-validation gate (MANDATORY per spec §6.4)
 
-After `get_peer_snapshot` returns, cross-check its `target_company` field (NOT `name` — that field on individual peer rows refers to each peer, not the target) against `get_company_info`'s `name`. On mismatch, refuse to render and emit:
+After `get_peer_snapshot` returns, cross-check its `target_company` field (the response carries no `name` field — each peer's name is `comparison[].company`) against `get_company_info`'s `name`. On mismatch, refuse to render and emit:
 
 ```
 Error: Symbol cross-validation failed for <ticker>.

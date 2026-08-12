@@ -28,7 +28,7 @@ When a user invokes `/parallax-<workflow>`, read the corresponding `skills/paral
 
 - Symbols use RIC format (AAPL.O, JPM.N). `/parallax-should-i-buy` auto-resolves plain tickers.
 - Independent MCP tool calls should fire in parallel (batch pattern in conventions).
-- Cross-validate company names after `get_score_analysis` — the scoring tool may map to the wrong company.
+- Cross-validate company identity after any scoring call — the field differs per tool (conventions §2 is canonical; `get_score_analysis` has none, so check `data[0].symbol` matches the requested RIC).
 - Handle tool failures gracefully — mark sections as "unavailable" rather than erroring out.
 
 ## Structure

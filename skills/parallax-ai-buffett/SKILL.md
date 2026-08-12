@@ -75,7 +75,7 @@ Once the RIC is confirmed, call all of the following simultaneously (per convent
 
 ### Step 3 — Pre-render cross-validation gate (MANDATORY per spec §6.4)
 
-After `get_peer_snapshot` returns, cross-check the `target_company` field returned by `get_peer_snapshot` against the `name` field returned by `get_company_info` for the same symbol. (Note: the peer snapshot tool uses `target_company`, not `name`, for the queried stock; the `name` field on individual peer entries refers to each peer.)
+After `get_peer_snapshot` returns, cross-check the `target_company` field returned by `get_peer_snapshot` against the `name` field returned by `get_company_info` for the same symbol. (Note: the peer snapshot response has no `name` field at all — the queried stock is `target_company` at top level, and each peer's name is `comparison[].company`. Per-tool identity fields: `profile-schema.md §2 Step 2`.)
 
 **If names diverge:** refuse to render and emit exactly:
 
