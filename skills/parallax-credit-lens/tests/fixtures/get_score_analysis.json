@@ -4,33 +4,33 @@
   "analysis_date": "2024-09-30",
   "factor_trajectory": {
     "quality": {
-      "current": 72,
-      "52w_ago": 78,
-      "change_pts": -6,
+      "current": 7.2,
+      "52w_ago": 7.8,
+      "change_pts": -0.6,
       "trend": "deteriorating"
     },
     "value": {
-      "current": 38,
-      "52w_ago": 41,
-      "change_pts": -3,
+      "current": 3.8,
+      "52w_ago": 4.1,
+      "change_pts": -0.3,
       "trend": "stable"
     },
     "momentum": {
-      "current": 61,
-      "52w_ago": 55,
-      "change_pts": 6,
+      "current": 6.1,
+      "52w_ago": 5.5,
+      "change_pts": 0.6,
       "trend": "improving"
     },
     "growth": {
-      "current": 55,
-      "52w_ago": 58,
-      "change_pts": -3,
+      "current": 5.5,
+      "52w_ago": 5.8,
+      "change_pts": -0.3,
       "trend": "stable"
     },
     "total": {
-      "current": 67,
-      "52w_ago": 71,
-      "change_pts": -4,
+      "current": 6.7,
+      "52w_ago": 7.1,
+      "change_pts": -0.4,
       "trend": "stable"
     }
   },

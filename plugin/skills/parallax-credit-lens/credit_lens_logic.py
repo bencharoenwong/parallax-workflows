@@ -194,10 +194,16 @@ def _worse_flag(a: Flag, b: Flag) -> Flag:
 
 
 def flag_quality_change(change_pts: float) -> Flag:
-    """AMBER: change ≤ -5 pts, RED: change ≤ -15 pts (52w deterioration)."""
-    if change_pts <= -15:
+    """AMBER: change ≤ -0.5 pts, RED: change ≤ -1.5 pts (52w deterioration).
+
+    Bands are on the 0-10 per-security scale that `get_score_analysis` returns.
+    The previous -5 / -15 bands were on a 0-100 basis. The largest possible
+    decline on a 0-10 score is -10, so the RED band could never fire and the
+    AMBER band fired only on a catastrophic decline of 5 points or more.
+    """
+    if change_pts <= -1.5:
         return Flag.RED
-    if change_pts <= -5:
+    if change_pts <= -0.5:
         return Flag.AMBER
     return Flag.GREEN
 
