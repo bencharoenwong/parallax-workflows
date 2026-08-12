@@ -25,7 +25,11 @@ JIT-load when you need to know what's inside an `analyze_portfolio` response fie
 
 (Plus more if requested via `fields=`: `portfolio_input`, `portfolio_summary`, `turnover_analysis`, `performance_metrics`, `transactions`, `market_allocation`, `sector_allocation`, `currency_allocation`, `sector_contribution`, `market_contribution`, `time_period_returns`, `monthly_returns`, `annual_returns`, `benchmark_prices`, `daily_summary`.)
 
-> **`fields=` is a direct passthrough, not a validated enum.** The array is handed to the API as-is. An unknown field name is therefore silently ignored rather than rejected: the block is simply absent from the response and the call still reports success. Take field names from the valid list above — never infer one from a section heading, or from what you want the block to be called.
+> **`fields=` is a direct passthrough, not a validated enum.** The array is handed to the API as-is. An unknown field name is not rejected: the block is simply absent and the call still reports `success: true`. Take field names from the valid list above — never infer one from a section heading, or from what you want the block to be called.
+>
+> **The response tells you which names were wrong — read it.** Every `analyze_portfolio` response carries `result._meta` with three keys: `fields_requested`, `fields_returned`, and `invalid_fields`. A bad name appears in `invalid_fields`, so the failure is only silent if you ignore `_meta`. Verified live 2026-08-11: requesting `["portfolio_summary","factor_exposures","performance","risk","concentration"]` returned `success: true`, `fields_returned: ["portfolio_summary"]`, and `invalid_fields: ["factor_exposures","performance","risk","concentration"]`.
+>
+> **Runtime rule:** after any `analyze_portfolio` call, check `result._meta.invalid_fields`. If it is non-empty, treat the missing blocks as a caller error and say so — do not render the affected section as though the data were merely unavailable.
 
 ---
 
