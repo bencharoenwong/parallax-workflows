@@ -61,7 +61,8 @@ Any skill calling `macro_analyst` or `build_stock_universe` with `country=` or `
 Before reporting any Parallax workflow complete:
 
 1. **Data integrity** — confirm the MCP batch returned real data, not an init race (per §0.1: an empty or interrupted first batch is re-fired in full before "no data" is concluded). Empty ≠ done.
-2. **House-view integrity** — when a house view is active, confirm the `view_status` `banner` string actually appears in the rendered output (verify its presence — don't assume it rendered). Per loader.md §2 "Load-time validation" item 6, the **hard-block** states `malformed` / `expired` (tilts do NOT apply) and the **soft** state `critical` (tilts apply; expiry imminent) all surface their banner verbatim — never swallow one to make a workflow look clean.
+2. **Field-request integrity** — after any `analyze_portfolio` call, read `result._meta.invalid_fields`. `fields=` is a passthrough, so a bad name returns `success: true` with the block simply absent. A non-empty `invalid_fields` is a **caller error**, not unavailable data: fix the field name, and never render the affected section as "data unavailable." See `_parallax/response-schemas.md` for the requestable-name list and the live-probe evidence.
+3. **House-view integrity** — when a house view is active, confirm the `view_status` `banner` string actually appears in the rendered output (verify its presence — don't assume it rendered). Per loader.md §2 "Load-time validation" item 6, the **hard-block** states `malformed` / `expired` (tilts do NOT apply) and the **soft** state `critical` (tilts apply; expiry imminent) all surface their banner verbatim — never swallow one to make a workflow look clean.
 
 Integrity failures are flagged explicitly in the output, not omitted. This is the Parallax-domain instance of the completion-claim discipline in `CLAUDE.verification.md` ("a passing metric is necessary, not sufficient"; verify, don't eyeball).
 

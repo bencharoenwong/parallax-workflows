@@ -25,6 +25,16 @@ JIT-load when you need to know what's inside an `analyze_portfolio` response fie
 
 (Plus more if requested via `fields=`: `portfolio_input`, `portfolio_summary`, `turnover_analysis`, `performance_metrics`, `transactions`, `market_allocation`, `sector_allocation`, `currency_allocation`, `sector_contribution`, `market_contribution`, `time_period_returns`, `monthly_returns`, `annual_returns`, `benchmark_prices`, `daily_summary`.)
 
+> **`fields=` is a direct passthrough, not a validated enum.** The array is handed to the API as-is. An unknown field name is not rejected: the block is simply absent and the call still reports `success: true`.
+>
+> **What you may actually pass in `fields=`:** the extras enumerated on the line above, plus the analytics blocks in the top-level key list (`company_contribution`, `concentration_metrics`, `drawdown_analysis`, `latest_holdings`, `portfolio_scores`, `rolling_metrics`). The remaining top-level keys — `_meta`, `company_info`, `data_quality`, `portfolio_parameters` — are returned automatically with every response; they are response keys, not requestable names, so do not put them in `fields=`. Never infer a name from a section heading, or from what you want the block to be called. Ground truth for any single call is its own `_meta.fields_requested` / `fields_returned` pair.
+>
+> **The response tells you which names were wrong — read it.** Every `analyze_portfolio` response carries `result._meta` with three keys: `fields_requested`, `fields_returned`, and `invalid_fields`. A bad name appears in `invalid_fields`, so the failure is only silent if you ignore `_meta`. Verified live 2026-08-11: requesting `["portfolio_summary","factor_exposures","performance","risk","concentration"]` returned `success: true`, `fields_returned: ["portfolio_summary"]`, and `invalid_fields: ["factor_exposures","performance","risk","concentration"]`.
+>
+> **Known discrepancy:** the repo's own `analyze_portfolio` mock fixture and contract schema still describe a shape that the live response does not return; they are being corrected separately, so treat this file — not the mock — as the current record of the live contract.
+>
+> **Runtime rule:** after any `analyze_portfolio` call, check `result._meta.invalid_fields`. If it is non-empty, treat the missing blocks as a caller error and say so — do not render the affected section as though the data were merely unavailable.
+
 ---
 
 ## `rolling_metrics`
