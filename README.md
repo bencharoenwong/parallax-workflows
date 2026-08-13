@@ -344,4 +344,4 @@ MIT — see [LICENSE](LICENSE).
 
 ## Disclaimer
 
-These workflows are analytical tools that automate data retrieval and presentation from the Parallax platform. They do not constitute financial advice, investment recommendations, or solicitations to buy or sell securities. All outputs are informational only and should be independently verified and reviewed by qualified professionals before any investment decisions. Example Capital Ltd. assumes no liability for decisions made based on these outputs.
+These workflows are analytical tools that automate data retrieval and presentation from the Parallax platform. They do not constitute financial advice, investment recommendations, or solicitations to buy or sell securities. All outputs are informational only and should be independently verified and reviewed by qualified professionals before any investment decisions. Chicago Global Capital Pte Ltd assumes no liability for decisions made based on these outputs.
