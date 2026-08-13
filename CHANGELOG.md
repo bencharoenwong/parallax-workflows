@@ -4,6 +4,11 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-08-13
+
+### Fixed
+- **`LICENSE` and the README disclaimer name the real entity** — both carried the placeholder "Example Capital Ltd." in a public repo. A liability disclaimer naming a non-existent company disclaims nothing, and an MIT grant needs an identifiable grantor for downstream licence scanners to resolve. Both now read Chicago Global Capital Pte Ltd, the sole operating entity; the copyright line adds "and contributors" to reflect that `CONTRIBUTING.md` takes an inbound MIT licence rather than a copyright assignment. The four "Example Capital Ltd" strings in the `translate-*/references/structural-preservation.md` files are generic teaching examples and are unchanged.
+
 ## 2026-08-11
 
 ### Fixed

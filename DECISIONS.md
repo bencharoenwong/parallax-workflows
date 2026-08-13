@@ -4,6 +4,17 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-08-13: Name the real copyright holder and disclaimer entity
+
+**Why.** `LICENSE` and the README disclaimer both carried the placeholder "Example Capital Ltd." in a public repository. A liability disclaimer attributed to a company that does not exist disclaims nothing, and an MIT grant needs an identifiable grantor before a downstream licence scanner can resolve it. Neither problem is visible from inside the repo — both files read as complete.
+
+**Impact.**
+- **Both files name Chicago Global Capital Pte Ltd**, the sole operating entity (UEN 201734851Z). `LICENSE` owns the copyright line; the README owns the disclaimer; the README's License section stays a pointer to `LICENSE` rather than a second copy of the holder.
+- **The copyright line reads "and contributors."** `CONTRIBUTING.md` takes an inbound MIT licence, not a copyright assignment, so contributors retain their copyright and the notice has to say so.
+
+**Alternatives.**
+- `[DROP]` **Also rewrite the four "Example Capital Ltd" strings under `translate-chinese-finance/` and `translate-thai-finance/` `references/structural-preservation.md`.** Rejected — those are deliberate generic teaching examples of a legal entity name inside a disclaimer, not claims about this repository's owner. Substituting a real firm name there would make the example read as a live attribution.
+
 ## 2026-08-11: Name the cross-validation field per tool, because the shared-`name` assumption failed silently
 
 **Why.** A cross-validation instruction that reads a field which does not exist is worse than no instruction: it returns nothing, compares nothing, and reports a pass. `parallax-conventions.md` §2 scoped the check to three scoring tools and named one field for all of them. Only `get_company_info` (the oracle) actually has `name`. `get_peer_snapshot` has no `name` key at all, so the check read nothing and passed. `get_score_analysis` returns no company name, so there was nothing to compare. Separately, `loader.md` §5 rule 3's mismatch-recovery path read `get_peer_snapshot.peer_list[]`, which is not a key in the response — the recovery could never fire, and every detected mismatch degraded to "scores unavailable" instead. Both were diagnosed by probing live tool responses rather than by reading the prose, which is what surfaced them as absent keys rather than as wording drift.
