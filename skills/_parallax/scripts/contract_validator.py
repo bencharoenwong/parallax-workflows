@@ -19,10 +19,12 @@ Schema DSL (Python-dict)
     <type spec> ::= type                       # required, single type
                   | (type, ...)                # required, any of these types
                   | (type, "optional")         # optional, single type
+                  | (type, "nullable")         # required, but may be null
                   | dict (nested schema)       # required nested object
                   | (dict, "optional")         # optional nested object
                   | [<type spec>]              # required list; element schema
                   | ([<type spec>], "optional") # optional list
+                  | ([<type spec>], "nullable") # required list, may be null
 
 For list elements that are dicts, use ``[nested_schema]`` (a one-element list
 whose only element is a dict).
@@ -35,8 +37,8 @@ list passes the validator unconditionally — element-shape validation only
 fires per-element. If empty lists are not legitimate output for an endpoint,
 add a ``len(data[field]) > 0`` guard in that endpoint's realistic-values test.
 
-OPTIONAL semantics — absent vs null
------------------------------------
+OPTIONAL vs NULLABLE — absent vs null
+-------------------------------------
 
 ``OPTIONAL`` means **the field may be absent** from the response dict. It does
 NOT cover JSON null: if an endpoint returns ``{"currency": null}`` (field
@@ -45,9 +47,17 @@ the inner type spec (e.g., ``str``). This is a deliberate semantic — null and
 absent are distinct in JSON, and silently accepting both would mask real
 contract drift.
 
-If a future endpoint legitimately uses null for a field, introduce a
-``NULLABLE`` sentinel (alongside ``OPTIONAL``) rather than loosening
-``OPTIONAL`` itself. Don't add this until a real schema needs it.
+``NULLABLE`` is the complement: the field **must be present**, and its value is
+either JSON null or a match for the inner type spec. Use it for a field that is
+always present in the responses a schema models but is left empty as a
+sentinel — the canonical case is ``analyze_portfolio._meta.invalid_fields``,
+which every ``fields=``-supplied response carries, null when every requested
+field name was valid and a list of the rejected names otherwise. Marking such a
+field ``OPTIONAL`` would let it disappear entirely without failing.
+
+The two markers are deliberately not combinable. A field is either
+caller-selected (``OPTIONAL``) or always returned with a null sentinel
+(``NULLABLE``); a spec that is both pins nothing.
 
 When a skill begins reading a new field, update the schema in
 ``contract_schemas.py`` AND the mock in ``mcp_mocks/`` in the same PR.
@@ -66,6 +76,9 @@ NUM = (int, float)
 
 
 OPTIONAL = "optional"
+
+
+NULLABLE = "nullable"
 
 
 # --------------------------------------------------------------------------
@@ -104,6 +117,15 @@ def _is_optional_spec(spec: Any) -> bool:
     )
 
 
+def _is_nullable_spec(spec: Any) -> bool:
+    """True iff ``spec`` is a ``(inner, "nullable")`` tuple marker."""
+    return (
+        isinstance(spec, tuple)
+        and len(spec) == 2
+        and spec[1] == NULLABLE
+    )
+
+
 def validate(value: Any, spec: Any, path: str) -> None:
     """Validate ``value`` against ``spec``. Raise AssertionError on mismatch.
 
@@ -112,6 +134,13 @@ def validate(value: Any, spec: Any, path: str) -> None:
     """
     # Optional wrapper: unwrap and validate inner
     if _is_optional_spec(spec):
+        validate(value, spec[0], path)
+        return
+
+    # Nullable wrapper: presence is enforced by the dict branch; null passes here
+    if _is_nullable_spec(spec):
+        if value is None:
+            return
         validate(value, spec[0], path)
         return
 
@@ -169,6 +198,57 @@ def validate(value: Any, spec: Any, path: str) -> None:
 # --------------------------------------------------------------------------
 # Realistic-values helpers (used by per-skill realistic-values tests)
 # --------------------------------------------------------------------------
+
+
+# Trailing legal-form tokens, held as (abbreviation, expanded form) pairs.
+#
+# INVARIANT: an abbreviation and its expansion are both present, always. Half a
+# pair folds "X Ltd" to "x" while leaving "X Limited" as "x limited", so the
+# identity gate reads one company as two and the caller drops a real holding.
+# Add new forms to the pair table; never to the flattened set below.
+_CORPORATE_FORM_PAIRS = (
+    ("inc", "incorporated"),
+    ("corp", "corporation"),
+    ("ltd", "limited"),
+    ("co", "company"),
+    ("ag", "aktiengesellschaft"),
+)
+
+
+# Forms whose expansion runs to several tokens ("public limited company",
+# "société anonyme", "naamloze vennootschap"). The strip is single-token, so
+# these absorb the abbreviation only and a spelled-out variant still diverges.
+_UNPAIRED_CORPORATE_FORMS = frozenset({"plc", "sa", "nv"})
+
+
+_CORPORATE_FORMS = (
+    frozenset(token for pair in _CORPORATE_FORM_PAIRS for token in pair)
+    | _UNPAIRED_CORPORATE_FORMS
+)
+
+
+def normalize_company_name(name: str) -> str:
+    """Fold a company name to the form the identity check compares.
+
+    Executable statement of `parallax-conventions.md` §2 step 2, which is the
+    canonical rule. The tools disagree on name-of-record formatting —
+    ``analyze_portfolio`` returns "Apple Inc" where ``get_company_info``
+    returns "Apple Inc." — so a raw comparison flags nearly every holding.
+    Case-fold, collapse whitespace, then strip trailing punctuation and a
+    trailing corporate-form token until the string stops changing. Stripping
+    is token-wise, never substring, so "Maytag" keeps its "ag"; the candidate
+    token is matched with its own periods and commas removed, so "S.A." folds
+    the same way "SA" does.
+    """
+    folded = " ".join(name.casefold().split())
+    while True:
+        stripped = folded.rstrip(" .,")
+        tokens = stripped.split()
+        if tokens and tokens[-1].replace(".", "").replace(",", "") in _CORPORATE_FORMS:
+            stripped = " ".join(tokens[:-1])
+        if stripped == folded:
+            return stripped
+        folded = stripped
 
 
 def is_iso_date(s: str) -> bool:

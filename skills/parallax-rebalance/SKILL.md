@@ -97,7 +97,7 @@ Per `loader.md` §1-§2: read view if present, validate hash and expiry. If view
    - Apply any parsed per-position weight cap (from `constraints=`) to Target Weight for every recommended position.
 6. For trim candidates: Resolve user thesis vs. view per loader.md §4. If `PARALLAX_LOADER_V2=1` and view active, follow `loader.md` §3 "Application (V2)": decompose replacement theme into parallel per-sector calls, merge, and dedupe. If V1, prepend tilt context and call `build_stock_universe` once.
    - **Divergence assertion** (per loader.md §5 rule 4 — required universally): REQUIRED for V1 paths. If the query named N≥2 sectors/themes, compute `max_sector_share/total` in returned candidates. If > 0.6, emit fail-loud warning. If `PARALLAX_LOADER_V2=1`, use to verify merge quality.
-   - **Ground-truth check per candidate** (per loader.md §5 rule 3): call `get_peer_snapshot` AND `get_company_info` in parallel. Drop any candidate where `returned_name ≠ expected_name` from the replacement pool (flag ⚠ MISMATCH, do not rank).
+   - **Ground-truth check per candidate** (per loader.md §5 rule 3): call `get_peer_snapshot` AND `get_company_info` in parallel. Drop any candidate where `returned_name ≠ expected_name` after normalizing both per conventions §2 step 2 from the replacement pool (flag ⚠ MISMATCH, do not rank).
    - Filter remaining trusted candidates against `tilts.excludes`, `tilts.excludes_freeform`, and any sector/name exclusion parsed from `constraints=`. If an "improve quality score" target bias was parsed, rank remaining candidates by quality sub-score.
 
 ### Batch D — Validation
