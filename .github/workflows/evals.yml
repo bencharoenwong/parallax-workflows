@@ -24,6 +24,19 @@ jobs:
         run: python -m pip install --upgrade pip pytest
       - name: Grader unit tests
         run: python -m pytest evals/graders/ -q
+      - name: Contract, provenance and precision gates
+        run: python -m pytest skills/_parallax/scripts/ -q
+      # The local-only extra term file cannot exist on a runner, and
+      # load_canary_terms() fails closed without it. PARALLAX_ALLOW_PARTIAL_SCAN
+      # is the sanctioned opt-in: CI scans the built-in branding / code-name
+      # terms only, so this step is a floor, not the full gate. The
+      # full-strength scan runs pre-push on a machine that has the file.
+      # scan_commit_messages.py is deliberately NOT wired in here — the shallow
+      # checkout has no usable origin/main..HEAD range; it runs pre-push.
+      - name: Tracked-term scan (built-in terms only)
+        env:
+          PARALLAX_ALLOW_PARTIAL_SCAN: "1"
+        run: python skills/_parallax/scripts/scan_tracked_terms.py
       - name: Section cross-reference lint
         run: python skills/_parallax/scripts/section-ref-lint.py skills/
       - name: Coverage lint (informational)

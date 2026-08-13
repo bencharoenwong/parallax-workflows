@@ -1,12 +1,12 @@
 {
-  "symbol": "AAPL.O",
-  "name": "Apple Inc.",
-  "exchange": "NASDAQ",
-  "sector": "Information Technology",
-  "industry": "Technology Hardware, Storage & Peripherals",
   "country": "United States",
-  "market_cap_usd": 2870000000000,
   "currency": "USD",
-  "description": "Apple Inc. designs, manufactures, and markets smartphones, personal computers, tablets, wearables, and accessories worldwide.",
-  "website": "https://www.apple.com"
+  "description": "Axiom Compute Corp is a synthetic issuer used in Parallax fixture tests. It does not exist. Every value in this fixture is produced by gen_mock_fixtures.py from a pinned seed, so the file can be regenerated and compared byte for byte.",
+  "exchange": "NASDAQ",
+  "industry": "Semiconductors & Semiconductor Equipment",
+  "market_cap_usd": 1274200000000,
+  "name": "Axiom Compute Corp",
+  "sector": "Information Technology",
+  "symbol": "AXCM.O",
+  "website": "https://www.example.com/axiom-compute"
 }
