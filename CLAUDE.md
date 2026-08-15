@@ -18,6 +18,8 @@ This repo contains Claude Code skills for Parallax equity research. Each skill i
 
 **Commit messages are public too.** Keep them functional (describe what the code does, e.g. a security fix). Do not describe what was scrubbed, redacted, or held back — naming the redaction is itself the leak. Development happens in the private repo; only sanitized, self-contained changes land here.
 
+**Run the commit-message scan before every push** — `python3 skills/_parallax/scripts/scan_commit_messages.py`. It checks the outgoing range (`origin/main..HEAD`, falling back to `main..HEAD`) for the vocabulary above and for restricted terms, and prints matched SHAs and rule ids only, never the matched text. It is a **manual** step: no hook invokes it, and CI cannot (a shallow checkout has no usable base-ref range). Exit 0 is clean, 1 is a hit, 2 means the range could not be determined — it fails closed rather than reporting a clean scan of nothing. On a hit, rewrite the message locally before pushing; a pushed message cannot be unpublished.
+
 **Security-audit docs are public too — describe checks generically.** Files under `docs/security/` are tracked and public. When an audit records a canary or grep check, describe the canary set generically (e.g. "internal warehouse/schema identifiers, partner names, framework code-names") — NEVER reproduce the literal terms, even inside a "found none" evidence line: naming a term to prove its absence still publishes it. Before committing any audit artifact, grep it for the canary set. The `security-auditor` agent must follow this too.
 
 ## For Claude Code
