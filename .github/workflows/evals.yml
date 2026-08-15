@@ -3,9 +3,10 @@ name: evals
 permissions:
   contents: read
 
-# Lightweight structural CI: runs the pure-function grader suite and the repo's
-# doc-lint scripts on every PR and on pushes to main. No live Parallax / MCP calls,
-# no secrets — these are the same offline checks contributors run locally.
+# Lightweight structural CI: runs the pure-function grader suite, the contract /
+# fixture-provenance / precision gates, and the repo's doc-lint scripts on every
+# PR and on pushes to main. No live Parallax / MCP calls, no secrets — these are
+# the same offline checks contributors run locally.
 
 on:
   pull_request:
@@ -20,10 +21,47 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+      # pyyaml is required by test_marketing_schema.py, which lives under
+      # skills/_parallax/scripts/ and is therefore collected by the gates step
+      # below. That test predates the step and had never run in CI, so its
+      # import error surfaced only once the step started collecting the whole
+      # directory. Installing the dependency runs the test rather than hiding
+      # it behind an --ignore.
       - name: Install test deps
-        run: python -m pip install --upgrade pip pytest
+        run: python -m pip install --upgrade pip pytest pyyaml
       - name: Grader unit tests
         run: python -m pytest evals/graders/ -q
+      - name: Contract, provenance and precision gates
+        run: python -m pytest skills/_parallax/scripts/ -q
+      # A separate process per top-level test root, not a second path appended
+      # to the line above: three skills ship a `tests/conftest.py` and pytest
+      # names every one `tests.conftest`, so collecting two roots in one process
+      # can abort with "Plugin already registered". See run-gate-tests.sh, which
+      # holds the same invariant for the local gate.
+      #
+      # This root carries the consumer side of the shared contract:
+      # test_mcp_contracts.py reads the `result` envelope, the 0-10 vs 0-100
+      # score scales and the money identities, and test_contribution_edges.py
+      # covers the contribution conversion. The provenance gate above proves a
+      # fixture matches its generator; only these prove the shape is the one
+      # skills actually read.
+      - name: CIO letter-prep contract and contribution gates
+        run: python -m pytest skills/parallax-cio-letter-prep/ -q
+      # The local-only extra term file cannot exist on a runner, and
+      # load_canary_terms() fails closed without it. PARALLAX_ALLOW_PARTIAL_SCAN
+      # is the sanctioned opt-in: CI scans the built-in branding / code-name
+      # terms only, so this step is a floor, not the full gate. The
+      # full-strength scan runs pre-push on a machine that has the file.
+      # scan_commit_messages.py is deliberately NOT wired in here — the shallow
+      # checkout has no usable origin/main..HEAD range. It is a MANUAL step:
+      # run `python3 skills/_parallax/scripts/scan_commit_messages.py` before
+      # pushing. No hook invokes it. Do not describe it as automated until one
+      # does — a gate that is documented as running but never runs is worse
+      # than no gate, because it is trusted.
+      - name: Tracked-term scan (built-in terms only)
+        env:
+          PARALLAX_ALLOW_PARTIAL_SCAN: "1"
+        run: python skills/_parallax/scripts/scan_tracked_terms.py
       - name: Section cross-reference lint
         run: python skills/_parallax/scripts/section-ref-lint.py skills/
       - name: Coverage lint (informational)

@@ -1,37 +1,1185 @@
 {
-  "factor_exposures": { "VALUE": 5.8, "QUALITY": 7.2, "MOMENTUM": 4.6, "DEFENSIVE": 6.1 },
-  "sector_exposures": { "Information Technology": 0.32, "Financials": 0.18, "Health Care": 0.15, "Consumer Staples": 0.12, "Energy": 0.10, "Industrials": 0.08, "Other": 0.05 },
-  "concentration_metrics": { "weight_statistics": { "mean": 0.125, "maximum": 0.22 }, "concentration": { "herfindahl_index": 0.118, "effective_positions": 8.47, "top_5_share": 0.81 } },
-  "risk_metrics": { "weighted_beta": 1.05, "volatility_estimate": 0.164 },
-  "holdings_count": 8,
-  "as_of": "2026-04-30",
-  "portfolio_summary": {
-    "total_return": 0.0842,
-    "annualized_return": 0.1124,
-    "benchmark_return": 0.0631
-  },
-  "performance_metrics": {
-    "portfolio": {
-      "annualized_volatility": 0.1540,
-      "sharpe_ratio": 0.73
+  "result": {
+    "_meta": {
+      "fields_requested": [
+        "portfolio_summary",
+        "performance_metrics",
+        "drawdown_analysis",
+        "portfolio_scores",
+        "concentration_metrics",
+        "company_contribution",
+        "sector_contribution",
+        "sector_allocation",
+        "time_period_returns",
+        "latest_holdings",
+        "portfolio_parameters",
+        "data_quality"
+      ],
+      "fields_returned": [
+        "company_contribution",
+        "concentration_metrics",
+        "data_quality",
+        "drawdown_analysis",
+        "latest_holdings",
+        "performance_metrics",
+        "portfolio_parameters",
+        "portfolio_scores",
+        "portfolio_summary",
+        "sector_allocation",
+        "sector_contribution",
+        "time_period_returns"
+      ],
+      "invalid_fields": null
+    },
+    "company_contribution": [
+      {
+        "avg_allocation": 3491.7923,
+        "avg_weight": 0.349179,
+        "contribution_pct": 0.162021,
+        "name": "Axiom Compute Corp",
+        "return_pct": 0.006658,
+        "ric": "AXCM.O",
+        "total_pl": 23.25
+      },
+      {
+        "avg_allocation": 2566.8309,
+        "avg_weight": 0.256683,
+        "contribution_pct": 0.959059,
+        "name": "Novalux Systems Inc",
+        "return_pct": 0.053617,
+        "ric": "NVLX.O",
+        "total_pl": 137.625
+      },
+      {
+        "avg_allocation": 2500.5583,
+        "avg_weight": 0.250056,
+        "contribution_pct": 0.335366,
+        "name": "Meridian Financial Group",
+        "return_pct": 0.019246,
+        "ric": "MRDN.N",
+        "total_pl": 48.125
+      },
+      {
+        "avg_allocation": 1440.8185,
+        "avg_weight": 0.144082,
+        "contribution_pct": -0.456446,
+        "name": "Petrogen Energy Corp",
+        "return_pct": -0.04546,
+        "ric": "PTRG.N",
+        "total_pl": -65.5
+      }
+    ],
+    "concentration_metrics": {
+      "concentration": {
+        "effective_positions": 3.69,
+        "gini_coefficient": 0.157,
+        "herfindahl_index": 0.2714,
+        "top_10_share": 1.000001,
+        "top_5_share": 1.000001
+      },
+      "diversification": {
+        "market_hhi": 1.0,
+        "num_industries": 4,
+        "num_markets": 1,
+        "num_sectors": 3,
+        "sector_hhi": 0.452
+      },
+      "higher_moments": {
+        "kurtosis": -1.0,
+        "skewness": -0.2284
+      },
+      "weight_statistics": {
+        "maximum": 0.347341,
+        "mean": 0.25,
+        "median": 0.255619,
+        "minimum": 0.141421,
+        "std_dev": 0.084393
+      }
+    },
+    "data_quality": {
+      "data_completeness_pct": 100,
+      "missing_rics": [],
+      "missing_rics_count": 0,
+      "portfolio_data_quality": {
+        "missing_prices": 0,
+        "missing_prices_pct": 0,
+        "missing_quantities": 0,
+        "missing_quantities_pct": 0,
+        "missing_values": 0,
+        "missing_values_pct": 0,
+        "total_positions": 112
+      },
+      "removed_positions_due_to_missing_prices": {
+        "count": 0,
+        "details": [],
+        "unique_rics": 0
+      },
+      "rics_found_in_database": 4,
+      "total_rics_requested": 4
+    },
+    "drawdown_analysis": {
+      "benchmark": {
+        "at_peak": true,
+        "avg_duration_days": 4.67,
+        "avg_recovery_days": 2.67,
+        "current_drawdown": 0.0,
+        "max_drawdown": -0.010569,
+        "max_duration_days": 10,
+        "max_recovery_days": 6,
+        "num_underwater_periods": 3,
+        "total_days_underwater": 11
+      },
+      "episode_details": {
+        "benchmark": [
+          {
+            "duration_days": 2,
+            "end_date": "2033-01-06",
+            "episode": 1,
+            "max_drawdown": -0.000124,
+            "recovered": true,
+            "recovery_days": 1,
+            "start_date": "2033-01-05",
+            "trough_date": "2033-01-05"
+          },
+          {
+            "duration_days": 10,
+            "end_date": "2033-01-19",
+            "episode": 2,
+            "max_drawdown": -0.010569,
+            "recovered": true,
+            "recovery_days": 6,
+            "start_date": "2033-01-10",
+            "trough_date": "2033-01-13"
+          },
+          {
+            "duration_days": 2,
+            "end_date": "2033-01-25",
+            "episode": 3,
+            "max_drawdown": -0.000134,
+            "recovered": true,
+            "recovery_days": 1,
+            "start_date": "2033-01-24",
+            "trough_date": "2033-01-24"
+          }
+        ],
+        "portfolio": [
+          {
+            "duration_days": 12,
+            "end_date": "2033-01-21",
+            "episode": 1,
+            "max_drawdown": -0.021681,
+            "recovered": true,
+            "recovery_days": 7,
+            "start_date": "2033-01-10",
+            "trough_date": "2033-01-14"
+          },
+          {
+            "duration_days": 5,
+            "end_date": null,
+            "episode": 2,
+            "max_drawdown": -0.016364,
+            "recovered": false,
+            "recovery_days": null,
+            "start_date": "2033-01-24",
+            "trough_date": "2033-01-28"
+          }
+        ]
+      },
+      "portfolio": {
+        "at_peak": false,
+        "avg_duration_days": 8.5,
+        "avg_recovery_days": 7.0,
+        "current_drawdown": -0.016364,
+        "max_drawdown": -0.021681,
+        "max_duration_days": 12,
+        "max_recovery_days": 7,
+        "num_underwater_periods": 2,
+        "total_days_underwater": 16
+      },
+      "timeseries": [
+        {
+          "benchmark_drawdown": 0.0,
+          "benchmark_episode": null,
+          "date": "2033-01-01",
+          "portfolio_drawdown": 0.0,
+          "portfolio_episode": null
+        },
+        {
+          "benchmark_drawdown": 0.0,
+          "benchmark_episode": null,
+          "date": "2033-01-02",
+          "portfolio_drawdown": 0.0,
+          "portfolio_episode": null
+        },
+        {
+          "benchmark_drawdown": 0.0,
+          "benchmark_episode": null,
+          "date": "2033-01-03",
+          "portfolio_drawdown": 0.0,
+          "portfolio_episode": null
+        },
+        {
+          "benchmark_drawdown": 0.0,
+          "benchmark_episode": null,
+          "date": "2033-01-04",
+          "portfolio_drawdown": 0.0,
+          "portfolio_episode": null
+        },
+        {
+          "benchmark_drawdown": -0.000124,
+          "benchmark_episode": 1,
+          "date": "2033-01-05",
+          "portfolio_drawdown": 0.0,
+          "portfolio_episode": null
+        },
+        {
+          "benchmark_drawdown": 0.0,
+          "benchmark_episode": null,
+          "date": "2033-01-06",
+          "portfolio_drawdown": 0.0,
+          "portfolio_episode": null
+        },
+        {
+          "benchmark_drawdown": 0.0,
+          "benchmark_episode": null,
+          "date": "2033-01-07",
+          "portfolio_drawdown": 0.0,
+          "portfolio_episode": null
+        },
+        {
+          "benchmark_drawdown": 0.0,
+          "benchmark_episode": null,
+          "date": "2033-01-08",
+          "portfolio_drawdown": 0.0,
+          "portfolio_episode": null
+        },
+        {
+          "benchmark_drawdown": 0.0,
+          "benchmark_episode": null,
+          "date": "2033-01-09",
+          "portfolio_drawdown": 0.0,
+          "portfolio_episode": null
+        },
+        {
+          "benchmark_drawdown": -0.002845,
+          "benchmark_episode": 2,
+          "date": "2033-01-10",
+          "portfolio_drawdown": -0.004522,
+          "portfolio_episode": 1
+        },
+        {
+          "benchmark_drawdown": -0.004521,
+          "benchmark_episode": 2,
+          "date": "2033-01-11",
+          "portfolio_drawdown": -0.009802,
+          "portfolio_episode": 1
+        },
+        {
+          "benchmark_drawdown": -0.005137,
+          "benchmark_episode": 2,
+          "date": "2033-01-12",
+          "portfolio_drawdown": -0.013872,
+          "portfolio_episode": 1
+        },
+        {
+          "benchmark_drawdown": -0.010569,
+          "benchmark_episode": 2,
+          "date": "2033-01-13",
+          "portfolio_drawdown": -0.019824,
+          "portfolio_episode": 1
+        },
+        {
+          "benchmark_drawdown": -0.010507,
+          "benchmark_episode": 2,
+          "date": "2033-01-14",
+          "portfolio_drawdown": -0.021681,
+          "portfolio_episode": 1
+        },
+        {
+          "benchmark_drawdown": -0.010507,
+          "benchmark_episode": 2,
+          "date": "2033-01-15",
+          "portfolio_drawdown": -0.020728,
+          "portfolio_episode": 1
+        },
+        {
+          "benchmark_drawdown": -0.010507,
+          "benchmark_episode": 2,
+          "date": "2033-01-16",
+          "portfolio_drawdown": -0.020728,
+          "portfolio_episode": 1
+        },
+        {
+          "benchmark_drawdown": -0.005703,
+          "benchmark_episode": 2,
+          "date": "2033-01-17",
+          "portfolio_drawdown": -0.013346,
+          "portfolio_episode": 1
+        },
+        {
+          "benchmark_drawdown": -1.2e-05,
+          "benchmark_episode": 2,
+          "date": "2033-01-18",
+          "portfolio_drawdown": -0.010596,
+          "portfolio_episode": 1
+        },
+        {
+          "benchmark_drawdown": 0.0,
+          "benchmark_episode": null,
+          "date": "2033-01-19",
+          "portfolio_drawdown": -0.00363,
+          "portfolio_episode": 1
+        },
+        {
+          "benchmark_drawdown": 0.0,
+          "benchmark_episode": null,
+          "date": "2033-01-20",
+          "portfolio_drawdown": -0.00011,
+          "portfolio_episode": 1
+        },
+        {
+          "benchmark_drawdown": 0.0,
+          "benchmark_episode": null,
+          "date": "2033-01-21",
+          "portfolio_drawdown": 0.0,
+          "portfolio_episode": null
+        },
+        {
+          "benchmark_drawdown": 0.0,
+          "benchmark_episode": null,
+          "date": "2033-01-22",
+          "portfolio_drawdown": 0.0,
+          "portfolio_episode": null
+        },
+        {
+          "benchmark_drawdown": 0.0,
+          "benchmark_episode": null,
+          "date": "2033-01-23",
+          "portfolio_drawdown": 0.0,
+          "portfolio_episode": null
+        },
+        {
+          "benchmark_drawdown": -0.000134,
+          "benchmark_episode": 3,
+          "date": "2033-01-24",
+          "portfolio_drawdown": -0.006376,
+          "portfolio_episode": 2
+        },
+        {
+          "benchmark_drawdown": 0.0,
+          "benchmark_episode": null,
+          "date": "2033-01-25",
+          "portfolio_drawdown": -0.007188,
+          "portfolio_episode": 2
+        },
+        {
+          "benchmark_drawdown": 0.0,
+          "benchmark_episode": null,
+          "date": "2033-01-26",
+          "portfolio_drawdown": -0.009176,
+          "portfolio_episode": 2
+        },
+        {
+          "benchmark_drawdown": 0.0,
+          "benchmark_episode": null,
+          "date": "2033-01-27",
+          "portfolio_drawdown": -0.013612,
+          "portfolio_episode": 2
+        },
+        {
+          "benchmark_drawdown": 0.0,
+          "benchmark_episode": null,
+          "date": "2033-01-28",
+          "portfolio_drawdown": -0.016364,
+          "portfolio_episode": 2
+        }
+      ]
+    },
+    "latest_holdings": [
+      {
+        "close_base": 138.5,
+        "close_local": 138.5,
+        "currency_local": "USD",
+        "defensive": 7,
+        "ending_value": 3523.25,
+        "industry": "Semiconductors & Semiconductor Equipment",
+        "market": "United States",
+        "momentum": 5,
+        "name": "Axiom Compute Corp",
+        "pick_toscore": true,
+        "quality": 6,
+        "quantity": 25.4314,
+        "recommendation": "HOLD",
+        "ric": "AXCM.O",
+        "sector": "Information Technology",
+        "tactical": 4,
+        "total": 5.5,
+        "value": 5,
+        "weight": 0.347341
+      },
+      {
+        "close_base": 96.625,
+        "close_local": 96.625,
+        "currency_local": "USD",
+        "defensive": 7,
+        "ending_value": 2637.625,
+        "industry": "Software",
+        "market": "United States",
+        "momentum": 6,
+        "name": "Novalux Systems Inc",
+        "pick_toscore": true,
+        "quality": 10,
+        "quantity": 27.2851,
+        "recommendation": "BUY",
+        "ric": "NVLX.O",
+        "sector": "Information Technology",
+        "tactical": 5,
+        "total": 6.9,
+        "value": 4,
+        "weight": 0.260031
+      },
+      {
+        "close_base": 65.0,
+        "close_local": 65.0,
+        "currency_local": "USD",
+        "defensive": 8,
+        "ending_value": 2548.125,
+        "industry": "Banks",
+        "market": "United States",
+        "momentum": 5,
+        "name": "Meridian Financial Group",
+        "pick_toscore": true,
+        "quality": 8,
+        "quantity": 39.1389,
+        "recommendation": "BUY",
+        "ric": "MRDN.N",
+        "sector": "Financials",
+        "tactical": 5,
+        "total": 6.4,
+        "value": 5,
+        "weight": 0.251208
+      },
+      {
+        "close_base": 41.625,
+        "close_local": 41.625,
+        "currency_local": "USD",
+        "defensive": 8,
+        "ending_value": 1434.5,
+        "industry": "Oil, Gas & Consumable Fuels",
+        "market": "United States",
+        "momentum": 4,
+        "name": "Petrogen Energy Corp",
+        "pick_toscore": true,
+        "quality": 0,
+        "quantity": 34.384,
+        "recommendation": "HOLD",
+        "ric": "PTRG.N",
+        "sector": "Energy",
+        "tactical": 5,
+        "total": 3.8,
+        "value": 6,
+        "weight": 0.141421
+      }
+    ],
+    "performance_metrics": {
+      "benchmark": {
+        "annualized_return": 0.449291,
+        "annualized_volatility": 0.051215,
+        "best_day": 0.006425,
+        "calmar_ratio": 42.5103,
+        "cvar_95": -0.004153,
+        "cvar_99": -0.00546,
+        "downside_deviation_annual": 0.023586,
+        "final_value": 10288.75,
+        "kurtosis": 0.113,
+        "max_drawdown": -0.010569,
+        "negative_days": 6,
+        "omega_ratio": 3.6306,
+        "positive_days": 14,
+        "sharpe_ratio": 7.9351,
+        "skewness": 0.1206,
+        "sortino_ratio": 17.2305,
+        "total_return": 0.028875,
+        "var_95": -0.002496,
+        "var_99": -0.00478,
+        "win_rate": 0.5,
+        "worst_day": -0.00546
+      },
+      "portfolio": {
+        "annualized_return": 0.204101,
+        "annualized_volatility": 0.084065,
+        "avg_loss": -0.003833,
+        "avg_win": 0.004803,
+        "best_day": 0.009114,
+        "calmar_ratio": 9.4136,
+        "cvar_95": -0.006206,
+        "cvar_99": -0.006376,
+        "days": 28,
+        "downside_deviation_annual": 0.049144,
+        "final_value": 10143.5,
+        "gain_to_pain_ratio": 1.3784,
+        "kurtosis": -0.7337,
+        "max_consecutive_losses": 5,
+        "max_consecutive_wins": 5,
+        "max_drawdown": -0.021681,
+        "negative_days": 10,
+        "omega_ratio": 1.3784,
+        "positive_days": 11,
+        "recovery_days_from_max_dd": 7,
+        "return_over_max_drawdown": 0.6619,
+        "sharpe_ratio": 1.9177,
+        "skewness": 0.3067,
+        "sortino_ratio": 3.2803,
+        "total_return": 0.01435,
+        "var_95": -0.005816,
+        "var_99": -0.006287,
+        "win_rate": 0.3929,
+        "worst_day": -0.006376
+      },
+      "relative": {
+        "alpha_annualized": -0.341279,
+        "beta": 1.2364,
+        "capture_ratio": 0.4422,
+        "correlation": 0.7533,
+        "downside_capture": 2.0569,
+        "excess_return": -0.014525,
+        "excess_volatility": 0.03285,
+        "information_ratio": -4.332,
+        "r_squared": 0.5674,
+        "tracking_error": 0.0566,
+        "treynor_ratio_benchmark": 0.406398,
+        "treynor_ratio_portfolio": 0.130381,
+        "upside_capture": 0.9096
+      }
+    },
+    "portfolio_parameters": {
+      "base_currency": "USD",
+      "benchmark": "WRLDX.O",
+      "end_date": "2033-01-28",
+      "include_transaction_costs": false,
+      "initial_value": 10000,
+      "start_date": "2033-01-01",
+      "transaction_costs_applied": null
+    },
+    "portfolio_scores": {
+      "coverage": 1,
+      "defensive": 73,
+      "momentum": 51,
+      "quality": 66,
+      "tactical": 46,
+      "total": 58,
+      "value": 48
+    },
+    "portfolio_summary": {
+      "final_value": 10143.5,
+      "include_transaction_costs": false,
+      "total_fx_pl": 0,
+      "total_pl": 143.5,
+      "total_price_pl": 143.5,
+      "total_return": 0.01435,
+      "total_transaction_cost": 0,
+      "transaction_cost_pct_of_initial": 0
+    },
+    "sector_allocation": [
+      {
+        "date": "2033-01-01",
+        "sector": "Information Technology",
+        "value": 6000.0,
+        "weight": 0.6
+      },
+      {
+        "date": "2033-01-01",
+        "sector": "Financials",
+        "value": 2500.0,
+        "weight": 0.25
+      },
+      {
+        "date": "2033-01-01",
+        "sector": "Energy",
+        "value": 1500.0,
+        "weight": 0.15
+      },
+      {
+        "date": "2033-01-02",
+        "sector": "Information Technology",
+        "value": 6000.0,
+        "weight": 0.6
+      },
+      {
+        "date": "2033-01-02",
+        "sector": "Financials",
+        "value": 2500.0,
+        "weight": 0.25
+      },
+      {
+        "date": "2033-01-02",
+        "sector": "Energy",
+        "value": 1500.0,
+        "weight": 0.15
+      },
+      {
+        "date": "2033-01-03",
+        "sector": "Information Technology",
+        "value": 6049.25,
+        "weight": 0.602185
+      },
+      {
+        "date": "2033-01-03",
+        "sector": "Financials",
+        "value": 2504.875,
+        "weight": 0.249353
+      },
+      {
+        "date": "2033-01-03",
+        "sector": "Energy",
+        "value": 1491.375,
+        "weight": 0.148462
+      },
+      {
+        "date": "2033-01-04",
+        "sector": "Information Technology",
+        "value": 6085.125,
+        "weight": 0.603563
+      },
+      {
+        "date": "2033-01-04",
+        "sector": "Financials",
+        "value": 2509.75,
+        "weight": 0.248934
+      },
+      {
+        "date": "2033-01-04",
+        "sector": "Energy",
+        "value": 1487.125,
+        "weight": 0.147503
+      },
+      {
+        "date": "2033-01-05",
+        "sector": "Information Technology",
+        "value": 6105.875,
+        "weight": 0.603206
+      },
+      {
+        "date": "2033-01-05",
+        "sector": "Financials",
+        "value": 2529.375,
+        "weight": 0.24988
+      },
+      {
+        "date": "2033-01-05",
+        "sector": "Energy",
+        "value": 1487.125,
+        "weight": 0.146915
+      },
+      {
+        "date": "2033-01-06",
+        "sector": "Information Technology",
+        "value": 6109.0,
+        "weight": 0.602748
+      },
+      {
+        "date": "2033-01-06",
+        "sector": "Financials",
+        "value": 2539.125,
+        "weight": 0.250524
+      },
+      {
+        "date": "2033-01-06",
+        "sector": "Energy",
+        "value": 1487.125,
+        "weight": 0.146728
+      },
+      {
+        "date": "2033-01-07",
+        "sector": "Information Technology",
+        "value": 6177.5,
+        "weight": 0.604001
+      },
+      {
+        "date": "2033-01-07",
+        "sector": "Financials",
+        "value": 2558.75,
+        "weight": 0.25018
+      },
+      {
+        "date": "2033-01-07",
+        "sector": "Energy",
+        "value": 1491.375,
+        "weight": 0.145818
+      },
+      {
+        "date": "2033-01-08",
+        "sector": "Information Technology",
+        "value": 6177.5,
+        "weight": 0.604001
+      },
+      {
+        "date": "2033-01-08",
+        "sector": "Financials",
+        "value": 2558.75,
+        "weight": 0.25018
+      },
+      {
+        "date": "2033-01-08",
+        "sector": "Energy",
+        "value": 1491.375,
+        "weight": 0.145818
+      },
+      {
+        "date": "2033-01-09",
+        "sector": "Information Technology",
+        "value": 6177.5,
+        "weight": 0.604001
+      },
+      {
+        "date": "2033-01-09",
+        "sector": "Financials",
+        "value": 2558.75,
+        "weight": 0.25018
+      },
+      {
+        "date": "2033-01-09",
+        "sector": "Energy",
+        "value": 1491.375,
+        "weight": 0.145818
+      },
+      {
+        "date": "2033-01-10",
+        "sector": "Information Technology",
+        "value": 6149.0,
+        "weight": 0.603946
+      },
+      {
+        "date": "2033-01-10",
+        "sector": "Financials",
+        "value": 2553.875,
+        "weight": 0.250838
+      },
+      {
+        "date": "2033-01-10",
+        "sector": "Energy",
+        "value": 1478.5,
+        "weight": 0.145216
+      },
+      {
+        "date": "2033-01-11",
+        "sector": "Information Technology",
+        "value": 6114.0,
+        "weight": 0.60371
+      },
+      {
+        "date": "2033-01-11",
+        "sector": "Financials",
+        "value": 2539.125,
+        "weight": 0.250719
+      },
+      {
+        "date": "2033-01-11",
+        "sector": "Energy",
+        "value": 1474.25,
+        "weight": 0.145571
+      },
+      {
+        "date": "2033-01-12",
+        "sector": "Information Technology",
+        "value": 6095.0,
+        "weight": 0.604318
+      },
+      {
+        "date": "2033-01-12",
+        "sector": "Financials",
+        "value": 2529.375,
+        "weight": 0.250787
+      },
+      {
+        "date": "2033-01-12",
+        "sector": "Energy",
+        "value": 1461.375,
+        "weight": 0.144895
+      },
+      {
+        "date": "2033-01-13",
+        "sector": "Information Technology",
+        "value": 6056.875,
+        "weight": 0.604185
+      },
+      {
+        "date": "2033-01-13",
+        "sector": "Financials",
+        "value": 2519.625,
+        "weight": 0.251337
+      },
+      {
+        "date": "2033-01-13",
+        "sector": "Energy",
+        "value": 1448.375,
+        "weight": 0.144478
+      },
+      {
+        "date": "2033-01-14",
+        "sector": "Information Technology",
+        "value": 6056.875,
+        "weight": 0.605332
+      },
+      {
+        "date": "2033-01-14",
+        "sector": "Financials",
+        "value": 2504.875,
+        "weight": 0.25034
+      },
+      {
+        "date": "2033-01-14",
+        "sector": "Energy",
+        "value": 1444.125,
+        "weight": 0.144328
+      },
+      {
+        "date": "2033-01-15",
+        "sector": "Information Technology",
+        "value": 6059.125,
+        "weight": 0.604967
+      },
+      {
+        "date": "2033-01-15",
+        "sector": "Financials",
+        "value": 2509.0,
+        "weight": 0.250509
+      },
+      {
+        "date": "2033-01-15",
+        "sector": "Energy",
+        "value": 1447.5,
+        "weight": 0.144524
+      },
+      {
+        "date": "2033-01-16",
+        "sector": "Information Technology",
+        "value": 6059.125,
+        "weight": 0.604967
+      },
+      {
+        "date": "2033-01-16",
+        "sector": "Financials",
+        "value": 2509.0,
+        "weight": 0.250509
+      },
+      {
+        "date": "2033-01-16",
+        "sector": "Energy",
+        "value": 1447.5,
+        "weight": 0.144524
+      },
+      {
+        "date": "2033-01-17",
+        "sector": "Information Technology",
+        "value": 6115.0,
+        "weight": 0.605978
+      },
+      {
+        "date": "2033-01-17",
+        "sector": "Financials",
+        "value": 2528.625,
+        "weight": 0.250579
+      },
+      {
+        "date": "2033-01-17",
+        "sector": "Energy",
+        "value": 1447.5,
+        "weight": 0.143443
+      },
+      {
+        "date": "2033-01-18",
+        "sector": "Information Technology",
+        "value": 6134.0,
+        "weight": 0.606171
+      },
+      {
+        "date": "2033-01-18",
+        "sector": "Financials",
+        "value": 2533.5,
+        "weight": 0.250364
+      },
+      {
+        "date": "2033-01-18",
+        "sector": "Energy",
+        "value": 1451.75,
+        "weight": 0.143464
+      },
+      {
+        "date": "2033-01-19",
+        "sector": "Information Technology",
+        "value": 6199.25,
+        "weight": 0.608336
+      },
+      {
+        "date": "2033-01-19",
+        "sector": "Financials",
+        "value": 2548.125,
+        "weight": 0.250049
+      },
+      {
+        "date": "2033-01-19",
+        "sector": "Energy",
+        "value": 1443.125,
+        "weight": 0.141615
+      },
+      {
+        "date": "2033-01-20",
+        "sector": "Information Technology",
+        "value": 6225.375,
+        "weight": 0.608749
+      },
+      {
+        "date": "2033-01-20",
+        "sector": "Financials",
+        "value": 2558.0,
+        "weight": 0.250134
+      },
+      {
+        "date": "2033-01-20",
+        "sector": "Energy",
+        "value": 1443.125,
+        "weight": 0.141116
+      },
+      {
+        "date": "2033-01-21",
+        "sector": "Information Technology",
+        "value": 6297.0,
+        "weight": 0.610633
+      },
+      {
+        "date": "2033-01-21",
+        "sector": "Financials",
+        "value": 2567.75,
+        "weight": 0.249
+      },
+      {
+        "date": "2033-01-21",
+        "sector": "Energy",
+        "value": 1447.5,
+        "weight": 0.140367
+      },
+      {
+        "date": "2033-01-22",
+        "sector": "Information Technology",
+        "value": 6297.0,
+        "weight": 0.610633
+      },
+      {
+        "date": "2033-01-22",
+        "sector": "Financials",
+        "value": 2567.75,
+        "weight": 0.249
+      },
+      {
+        "date": "2033-01-22",
+        "sector": "Energy",
+        "value": 1447.5,
+        "weight": 0.140367
+      },
+      {
+        "date": "2033-01-23",
+        "sector": "Information Technology",
+        "value": 6297.0,
+        "weight": 0.610633
+      },
+      {
+        "date": "2033-01-23",
+        "sector": "Financials",
+        "value": 2567.75,
+        "weight": 0.249
+      },
+      {
+        "date": "2033-01-23",
+        "sector": "Energy",
+        "value": 1447.5,
+        "weight": 0.140367
+      },
+      {
+        "date": "2033-01-24",
+        "sector": "Information Technology",
+        "value": 6258.875,
+        "weight": 0.610831
+      },
+      {
+        "date": "2033-01-24",
+        "sector": "Financials",
+        "value": 2553.125,
+        "weight": 0.24917
+      },
+      {
+        "date": "2033-01-24",
+        "sector": "Energy",
+        "value": 1434.5,
+        "weight": 0.139999
+      },
+      {
+        "date": "2033-01-25",
+        "sector": "Information Technology",
+        "value": 6255.5,
+        "weight": 0.611001
+      },
+      {
+        "date": "2033-01-25",
+        "sector": "Financials",
+        "value": 2548.125,
+        "weight": 0.248886
+      },
+      {
+        "date": "2033-01-25",
+        "sector": "Energy",
+        "value": 1434.5,
+        "weight": 0.140114
+      },
+      {
+        "date": "2033-01-26",
+        "sector": "Information Technology",
+        "value": 6230.0,
+        "weight": 0.609731
+      },
+      {
+        "date": "2033-01-26",
+        "sector": "Financials",
+        "value": 2553.125,
+        "weight": 0.249875
+      },
+      {
+        "date": "2033-01-26",
+        "sector": "Energy",
+        "value": 1434.5,
+        "weight": 0.140395
+      },
+      {
+        "date": "2033-01-27",
+        "sector": "Information Technology",
+        "value": 6194.125,
+        "weight": 0.608946
+      },
+      {
+        "date": "2033-01-27",
+        "sector": "Financials",
+        "value": 2543.25,
+        "weight": 0.250028
+      },
+      {
+        "date": "2033-01-27",
+        "sector": "Energy",
+        "value": 1434.5,
+        "weight": 0.141026
+      },
+      {
+        "date": "2033-01-28",
+        "sector": "Information Technology",
+        "value": 6160.875,
+        "weight": 0.607372
+      },
+      {
+        "date": "2033-01-28",
+        "sector": "Financials",
+        "value": 2548.125,
+        "weight": 0.251208
+      },
+      {
+        "date": "2033-01-28",
+        "sector": "Energy",
+        "value": 1434.5,
+        "weight": 0.141421
+      }
+    ],
+    "sector_contribution": [
+      {
+        "avg_weight": 0.302931,
+        "contribution_pct": 1.12108,
+        "sector": "Information Technology",
+        "total_pl": 160.875
+      },
+      {
+        "avg_weight": 0.250056,
+        "contribution_pct": 0.335366,
+        "sector": "Financials",
+        "total_pl": 48.125
+      },
+      {
+        "avg_weight": 0.144082,
+        "contribution_pct": -0.456446,
+        "sector": "Energy",
+        "total_pl": -65.5
+      }
+    ],
+    "time_period_returns": {
+      "10yr": {
+        "benchmark_return": null,
+        "excess_return": null,
+        "num_days": null,
+        "portfolio_return": null
+      },
+      "1m": {
+        "benchmark_return": null,
+        "excess_return": null,
+        "num_days": null,
+        "portfolio_return": null
+      },
+      "1w": {
+        "benchmark_return": 0.002705,
+        "excess_return": -0.019069,
+        "num_days": 7,
+        "portfolio_return": -0.016364
+      },
+      "1yr": {
+        "benchmark_return": null,
+        "excess_return": null,
+        "num_days": null,
+        "portfolio_return": null
+      },
+      "3m": {
+        "benchmark_return": null,
+        "excess_return": null,
+        "num_days": null,
+        "portfolio_return": null
+      },
+      "3yr": {
+        "benchmark_return": null,
+        "excess_return": null,
+        "num_days": null,
+        "portfolio_return": null
+      },
+      "5yr": {
+        "benchmark_return": null,
+        "excess_return": null,
+        "num_days": null,
+        "portfolio_return": null
+      },
+      "6m": {
+        "benchmark_return": null,
+        "excess_return": null,
+        "num_days": null,
+        "portfolio_return": null
+      },
+      "inception": {
+        "benchmark_return": 0.028876,
+        "excess_return": -0.014527,
+        "num_days": 28,
+        "portfolio_return": 0.014349
+      },
+      "mtd": {
+        "benchmark_return": 0.028876,
+        "excess_return": -0.014527,
+        "num_days": 28,
+        "portfolio_return": 0.014349
+      },
+      "qtd": {
+        "benchmark_return": 0.028876,
+        "excess_return": -0.014527,
+        "num_days": 28,
+        "portfolio_return": 0.014349
+      },
+      "ytd": {
+        "benchmark_return": 0.028876,
+        "excess_return": -0.014527,
+        "num_days": 28,
+        "portfolio_return": 0.014349
+      }
     }
   },
-  "drawdown_analysis": {
-    "portfolio": {
-      "max_drawdown": -0.0612,
-      "recovery_days": 14
-    }
-  },
-  "company_contribution": [
-    { "symbol": "AAPL.O", "name": "Apple Inc.", "contribution": 0.0312, "weight": 0.22 },
-    { "symbol": "MSFT.O", "name": "Microsoft Corp.", "contribution": 0.0198, "weight": 0.18 }
-  ],
-  "sector_allocation": { "Information Technology": 0.32, "Financials": 0.18, "Health Care": 0.15 },
-  "sector_contribution": { "Information Technology": 0.0415, "Financials": 0.0112 },
-  "time_period_returns": { "1m": 0.0212, "3m": 0.0842, "6m": 0.1124 },
-  "latest_holdings": [
-    { "symbol": "AAPL.O", "name": "Apple Inc.", "weight": 0.22 },
-    { "symbol": "MSFT.O", "name": "Microsoft Corp.", "weight": 0.18 }
-  ],
-  "portfolio_scores": { "VALUE": 5.8, "QUALITY": 7.2, "MOMENTUM": 4.6 }
+  "success": true
 }

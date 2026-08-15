@@ -21,7 +21,8 @@ from contract_validator import (  # noqa: E402
     validate,
 )
 from contract_schemas import (  # noqa: E402
-    ANALYZE_PORTFOLIO_SCHEMA,
+    ANALYZE_PORTFOLIO_ENVELOPE_SCHEMA,
+    ANALYZE_PORTFOLIO_ERROR_SCHEMA,
     CHECK_PORTFOLIO_REDUNDANCY_SCHEMA,
     EXPORT_PRICE_SERIES_SCHEMA,
     GET_ASSESSMENT_SCHEMA,
@@ -46,9 +47,50 @@ def test_get_telemetry_mock_conforms_to_schema():
 def test_analyze_portfolio_mock_conforms_to_schema():
     validate(
         load_mock("analyze_portfolio"),
-        ANALYZE_PORTFOLIO_SCHEMA,
+        ANALYZE_PORTFOLIO_ENVELOPE_SCHEMA,
         "analyze_portfolio",
     )
+
+
+def test_analyze_portfolio_mock_carries_the_response_envelope():
+    """Pins the ACCESS PATH, not merely the block shapes.
+
+    The live response wraps its analytics blocks in ``result``. A fixture that
+    stored them bare would still satisfy the inner schema and still pass every
+    value test below — while teaching consumers to read
+    ``response["portfolio_summary"]``, which returns nothing against the real
+    API. That is the mock-agrees-with-its-own-schema failure this suite exists
+    to prevent, so the envelope gets its own assertion instead of riding along
+    inside another test."""
+    mock = load_mock("analyze_portfolio")
+    assert "result" in mock, (
+        "analyze_portfolio mock lost its response envelope — the blocks belong "
+        "under 'result', and consumers read response['result'][<block>]"
+    )
+    assert isinstance(mock["result"], dict)
+
+    # The blocks live INSIDE result, never alongside it.
+    for block in ("portfolio_summary", "latest_holdings",
+                  "company_contribution", "_meta"):
+        assert block in mock["result"], f"{block} missing from result"
+        assert block not in mock, (
+            f"{block} sits at the top level — the envelope has been flattened"
+        )
+
+
+def test_analyze_portfolio_error_envelope_has_no_result():
+    """``success`` is not a status flag.
+
+    A credit-exhausted call returns ``success: true`` with a ``detail`` object
+    and no ``result`` key at all. Code guarded by ``if payload["success"]``
+    passes here and then raises KeyError, so the only sound guard is the
+    presence of ``result`` — which is what this fixture keeps honest."""
+    mock = load_mock("analyze_portfolio_credit_exhausted")
+    validate(mock, ANALYZE_PORTFOLIO_ERROR_SCHEMA,
+             "analyze_portfolio_credit_exhausted")
+    assert mock["success"] is True, "the failure envelope reports success: true"
+    assert "result" not in mock, "result must be ABSENT, not null"
+    assert mock["detail"]["required"] > mock["detail"]["balance"]
 
 
 def test_export_price_series_mock_conforms_to_schema():
@@ -122,16 +164,48 @@ def test_get_telemetry_mock_has_realistic_values():
 
 
 def test_analyze_portfolio_mock_has_realistic_values():
-    data = load_mock("analyze_portfolio")
-    for factor, score in data["factor_exposures"].items():
-        assert 0 <= score <= 10, f"{factor} score {score} not in [0,10]"
-    sector_total = sum(data["sector_exposures"].values())
-    assert abs(sector_total - 1.0) < 0.05, (
-        f"sector_exposures sum to {sector_total:.4f}, expected ~1.0"
-    )
-    if "concentration" in data:
-        c = data["concentration"]
-        assert 0 <= c["top1_weight"] <= c["top3_weight"] <= 1.0
+    # Read through the envelope, exactly as a consumer must.
+    data = load_mock("analyze_portfolio")["result"]
+
+    holdings = data["latest_holdings"]
+    assert holdings, "latest_holdings is empty"
+    for h in holdings:
+        assert "." in h["ric"], f"{h['ric']!r} is not RIC form"
+        # Per-security factor scores are 0-10, NOT 0-100.
+        for factor in ("value", "quality", "momentum", "defensive", "tactical"):
+            assert 0 <= h[factor] <= 10, f"{h['ric']} {factor} not in [0,10]"
+        assert 0 <= h["total"] <= 10
+
+    # Portfolio-level scores are 0-100 integers — a different scale from the
+    # per-security scores above, and the single most-confused fact in this
+    # payload. ``coverage`` is the exception: it is a 0-1 fraction.
+    scores = data["portfolio_scores"]
+    for factor in ("value", "quality", "momentum", "defensive", "tactical",
+                   "total"):
+        assert isinstance(scores[factor], int), f"{factor} must be an int"
+        assert 0 <= scores[factor] <= 100, f"{factor} not on the 0-100 scale"
+    assert 0 <= scores["coverage"] <= 1
+
+    # The money identity that actually holds. Note which one is NOT asserted:
+    # quantity * close_local != ending_value, because ending_value rides a
+    # dividend-inclusive path while close_local is the raw price.
+    summary = data["portfolio_summary"]
+    assert abs(sum(h["ending_value"] for h in holdings)
+               - summary["final_value"]) < 1e-9
+    assert abs(sum(r["total_pl"] for r in data["company_contribution"])
+               - summary["total_pl"]) < 1e-9
+    assert abs(sum(r["contribution_pct"] for r in data["company_contribution"])
+               - 1.0) < 1e-9
+
+    # sector_allocation is a LIST of (date x sector) rows, not a dict. Weights
+    # within a date sum to 1 only to rounding — they are not force-balanced.
+    by_date: dict[str, float] = {}
+    for row in data["sector_allocation"]:
+        assert is_iso_date(row["date"])
+        by_date[row["date"]] = by_date.get(row["date"], 0.0) + row["weight"]
+    assert by_date, "sector_allocation is empty"
+    for day, total in by_date.items():
+        assert abs(total - 1.0) < 5e-6, f"{day} weights sum to {total}"
 
 
 def test_export_price_series_mock_has_realistic_values():
@@ -178,15 +252,33 @@ def test_get_assessment_mock_has_realistic_values():
 
 def test_get_score_analysis_mock_has_realistic_values():
     data = load_mock("get_score_analysis")
-    assert len(data["history"]) >= 2, "score history should have ≥2 points"
+    rows = data["data"]
+    assert len(rows) >= 2, "score history should have ≥2 points"
+    if "weeks" in data:
+        assert data["weeks"] == len(rows), "weeks disagrees with the row count"
+
     prev_date = None
-    for h in data["history"]:
-        assert is_iso_date(h["date"])
+    for row in rows:
+        assert is_iso_date(row["date"])
         if prev_date is not None:
-            assert h["date"] > prev_date, "score dates not strictly increasing"
-        prev_date = h["date"]
-        for factor in ("VALUE", "QUALITY", "MOMENTUM", "DEFENSIVE"):
-            assert 0 <= h[factor] <= 10
+            assert row["date"] > prev_date, "score dates not strictly increasing"
+        prev_date = row["date"]
+        # Sub-scores are 0-10 integers; the composite is 0-10 with one decimal.
+        for factor in ("value", "quality", "momentum", "defensive", "tactical"):
+            assert 0 <= row[factor] <= 10, f"{factor} not in [0,10]"
+        assert 0 <= row["total"] <= 10
+        # ``total`` is a separately-computed composite. If it ever equals the
+        # mean of the five sub-scores on every row, the fixture has drifted into
+        # modelling a relation the API does not have.
+        assert row["symbol"] == data["symbol"]
+
+    means = [round(sum(row[f] for f in ("value", "quality", "momentum",
+                                        "defensive", "tactical")) / 5, 1)
+             for row in rows]
+    assert any(row["total"] != m for row, m in zip(rows, means)), (
+        "total is the mean of the sub-scores on every row — the live composite "
+        "is not a mean, so this fixture is modelling a false identity"
+    )
 
 
 def test_get_news_synthesis_mock_has_realistic_values():

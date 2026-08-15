@@ -61,7 +61,7 @@ Any skill calling `macro_analyst` or `build_stock_universe` with `country=` or `
 Before reporting any Parallax workflow complete:
 
 1. **Data integrity** — confirm the MCP batch returned real data, not an init race (per §0.1: an empty or interrupted first batch is re-fired in full before "no data" is concluded). Empty ≠ done.
-2. **Field-request integrity** — after any `analyze_portfolio` call, read `result._meta.invalid_fields`. `fields=` is a passthrough, so a bad name returns `success: true` with the block simply absent. A non-empty `invalid_fields` is a **caller error**, not unavailable data: fix the field name, and never render the affected section as "data unavailable." See `_parallax/response-schemas.md` for the requestable-name list and the live-probe evidence.
+2. **Field-request integrity** — after any `analyze_portfolio` call that supplies `fields=`, read `result._meta.invalid_fields`. `fields=` is a passthrough, so a bad name returns `success: true` with the block simply absent. A non-empty `invalid_fields` is a **caller error**, not unavailable data: fix the field name, and never render the affected section as "data unavailable." See `_parallax/response-schemas.md` for the requestable-name list and the live-probe evidence.
 3. **House-view integrity** — when a house view is active, confirm the `view_status` `banner` string actually appears in the rendered output (verify its presence — don't assume it rendered). Per loader.md §2 "Load-time validation" item 6, the **hard-block** states `malformed` / `expired` (tilts do NOT apply) and the **soft** state `critical` (tilts apply; expiry imminent) all surface their banner verbatim — never swallow one to make a workflow look clean.
 
 Integrity failures are flagged explicitly in the output, not omitted. This is the Parallax-domain instance of the completion-claim discipline in `CLAUDE.verification.md` ("a passing metric is necessary, not sufficient"; verify, don't eyeball).
@@ -101,7 +101,7 @@ Only escalate to the user if resolution fails after 2 attempts with the most lik
 
 ## 2. Symbol Cross-Validation
 
-Scoring tools (`get_peer_snapshot`, `get_score_analysis`, `quick_portfolio_scores`) may occasionally return data for a different company than intended — especially for numeric codes (`.HK`, `.T`, `.TW`, `.KS`) but also for alphabetic tickers on any exchange.
+Scoring tools (`get_peer_snapshot`, `get_score_analysis`, `quick_portfolio_scores`) may occasionally return data for a different company than intended — especially for numeric codes (`.HK`, `.T`, `.TW`, `.KS`) but also for alphabetic tickers on any exchange. `analyze_portfolio` is not a scoring tool, but its per-holding rows resolve symbols the same way and are subject to the same mis-mapping, so they belong in the same check.
 
 **After any scoring call:**
 
@@ -113,9 +113,17 @@ Scoring tools (`get_peer_snapshot`, `get_score_analysis`, `quick_portfolio_score
    | `get_peer_snapshot` | `target_company`, **top level**. There is no `name` field anywhere in the response — each peer's name is `comparison[].company` |
    | `get_score_analysis` | no company name in the response — verify `data[0].symbol` matches the requested RIC instead |
    | `quick_portfolio_scores` | `holdings_analyzed[].company_name`, per holding row |
+   | `analyze_portfolio` | no top-level identity field and no peer rollup. Per-holding names are `latest_holdings[].name` and `company_contribution[].name`, matched to `get_company_info` by the row's `ric`. Both blocks are caller-selected via `fields=`, so a holding with no row in whichever block was requested cannot be checked here. Fall back to the `get_peer_snapshot` row above if the workflow calls that tool — `target_company` is an independent name. Otherwise record the holding UNCHECKED and surface it as a coverage gap; never treat the absent comparison as a pass, and never substitute `get_score_analysis`'s `data[0].symbol`, which is the RIC you sent and agrees by construction (see step 2) |
 
-2. If names diverge, warn the user clearly and treat `get_company_info` as the source of truth.
-3. Do not present scores from a mismatched company as belonging to the intended security.
+2. **Normalize both names before comparing.** The check exists to catch a wrong-company mapping for a RIC, not to police punctuation, and the tools disagree on name-of-record formatting: `analyze_portfolio` returns `Apple Inc` where `get_company_info` returns `Apple Inc.` for the same RIC. A raw string comparison therefore flags a mismatch on almost every holding, and a check that fires on every row gets ignored or switched off — the same end state as a check that never fires. Apply to each side, in order, repeating until the string stops changing:
+
+   1. Case-fold and collapse runs of internal whitespace to a single space.
+   2. Strip trailing punctuation.
+   3. Strip a trailing corporate-form token: `inc`/`incorporated`, `corp`/`corporation`, `ltd`/`limited`, `co`/`company`, `ag`/`aktiengesellschaft`, plus `plc`, `sa`, `nv`. Compare token-wise, matching the candidate token with its own periods and commas removed so `S.A.` folds the way `SA` does — never as a substring, or `Maytag` loses its `ag`. Every abbreviation is listed with its expanded form on purpose: a set carrying `ltd` but not `limited` folds `X Ltd` to `x` while leaving `X Limited` as `x limited`, which is the false mismatch this step exists to prevent. `plc`, `sa` and `nv` expand to several words, which a single-token strip cannot absorb, so a spelled-out variant of those three still diverges.
+
+   Repeat because one strip exposes the next: `Samsung Electronics Co., Ltd.` needs the `ltd` strip before the comma it leaves behind is reachable. Compare the normalized forms. `Apple Inc` vs `Apple Inc.` is a formatting difference and MUST NOT flag; `Apple Inc` vs `Apple Hospitality REIT` is a genuine divergence and MUST flag. The RIC cannot serve as the check — it is the input to both calls, so it agrees by construction, which is why the name is the only independent signal and why this rule is written down rather than left to judgement. **If either side normalizes to the empty string** (a name made of nothing but a corporate-form token, e.g. "Inc." or "Ltd") the comparison is undecidable, not a match — `"" == ""` must NOT be read as identity confirmed. Record the holding UNCHECKED per step 1's coverage-gap rule instead. `_parallax/scripts/contract_validator.py` carries `normalize_company_name()`, an executable statement of the steps above, and `names_match()`, which applies this empty-string guard and returns `None` for the undecidable case — used by the contract tests.
+3. If the normalized names diverge, warn the user clearly and treat `get_company_info` as the source of truth.
+4. Do not present scores from a mismatched company as belonging to the intended security.
 
 Field names above were confirmed against live tool responses on 2026-08-11. Two are easy to get wrong from intuition: `get_peer_snapshot` exposes no `name` field at all — the target is `target_company` at top level and each peer's name is `comparison[].company`, so a name-based check there reads nothing; and `get_score_analysis` likewise carries no company name, so its check must compare `data[0].symbol` against the requested RIC.
 
@@ -249,7 +257,7 @@ External integrators and skill authors frequently ask for capabilities that alre
 |---|---|---|
 | Stress book / scenario analysis | `/parallax-scenario-analysis` skill | Forward-looking event analysis (rate shock, USD shock, oil shock, regime replays). Skill orchestrates `get_assessment` + macro + news. NOT a REST primitive — talk track lives in skill layer. |
 | Drawdown attribution ("why am I down X%?") | `/parallax-explain-portfolio` skill | Decomposes drawdown into market-regime / factor / stock-specific components via score-vs-price divergence. 70 billable tokens at 10 holdings. |
-| Per-holding return contribution | `analyze_portfolio` → `company_contribution` field | Returns `total_pl`, `contribution_pct`, `return_pct`, `avg_weight` per holding. **NOTE:** This is RETURN contribution, NOT risk contribution (no marginal vol / component VaR). For risk decomposition, no current capability — flag as gap. |
+| Per-holding return contribution | `analyze_portfolio` → `company_contribution` field | Returns `total_pl`, `contribution_pct`, `return_pct`, `avg_weight` per holding. **NOTE:** This is RETURN contribution, NOT risk contribution (no marginal vol / component VaR). For risk decomposition, no current capability — flag as gap. **`contribution_pct` is a share of total portfolio P&L** (rows sum to 1.0), not a return contribution — convert with `× portfolio_summary.total_return × 10000` to render bps, and take the sign from the converted value. See `response-schemas.md`. |
 | Portfolio drawdown statistics | `analyze_portfolio` → `drawdown_analysis` field | Includes `current_drawdown`, `max_drawdown`, underwater periods, durations, recovery days, and a per-day timeseries. See `response-schemas.md` for nested structure. |
 | Rolling metrics (Sharpe, vol, beta, correlation) | `analyze_portfolio` → `rolling_metrics` field | Three windows: `window_30d` / `window_60d` / `window_90d`, each with daily timeseries. See `response-schemas.md`. |
 | Concentration / effective N / HHI | `analyze_portfolio` → `concentration_metrics` field | `effective_positions` is weight-based (1/HHI on weights). Risk-weighted Effective N is not currently exposed. |
@@ -269,7 +277,7 @@ External integrators and skill authors frequently ask for capabilities that alre
 
 | User-phrased need | Use this | Notes |
 |---|---|---|
-| Plain ticker → RIC | Pass through any tool — most resolve automatically; otherwise apply §1 suffix table | `analyze_portfolio` already routes through `bulk_resolve_symbols` server-side. If a symbol comes back in `data_quality.missing_rics`, it's missing from the IDENTIFIERS table (see §1 escalation). |
+| Plain ticker → RIC | Pass through any tool — most resolve automatically; otherwise apply §1 suffix table | `analyze_portfolio` already routes through `bulk_resolve_symbols` server-side. A symbol returned in `data_quality.missing_rics` is missing from the IDENTIFIERS table — escalate it as a data-coverage issue, not a tool failure (see `response-schemas.md` → `data_quality`). **This escalation only reaches you when `fields=` is omitted**, which is the call shape that returns every block. A call supplying `fields=` gets exactly the blocks it names, so it must add `data_quality` to its own list to receive the signal at all; no current skill's field list does, and those calls have no `missing_rics` to read. |
 | Fuzzy / typo-tolerant search ("apple" / "semiconductor") | `search_stocks` MCP tool | Whoosh-backed; supports market/sector filters. |
 | Validate a single symbol | `validate_symbol` MCP tool (if exposed) — otherwise `get_company_info` | Returns resolved RIC. |
 

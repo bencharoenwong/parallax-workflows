@@ -4,6 +4,22 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-08-15
+
+### Fixed
+- **Identity gates in `parallax-cio-letter-prep` and `parallax-scenario-analysis` now compare fields the response actually carries** — both fanned out a `get_company_info` ground-truth oracle and compared it against a peer-rollup field `analyze_portfolio` does not return, so the comparison read nothing and every holding passed unflagged. They now match `latest_holdings[].name` / `company_contribution[].name` against `get_company_info.name` by `ric`, record an absent comparison as UNCHECKED rather than a pass, and surface it as a coverage gap. `parallax-conventions.md` §2 gained the `analyze_portfolio` row in its per-tool identity table; `parallax-rebalance`, `parallax-portfolio-builder` and `parallax-thematic-screen` picked up the same name-normalization step.
+- **The identity-name normalizer no longer treats two contentless names as a match** — `normalize_company_name()` strips corporate-form tokens, so a name made of nothing else (`"Inc."`, `"Ltd"`) folds to the empty string, and two different contentless inputs compared equal. `names_match()` now returns `None` when either side normalizes empty, forcing callers to record UNCHECKED per the conventions §2 disposition instead of passing silently.
+- **`company_contribution[].contribution_pct` is documented and consumed as a P&L share, not a return contribution** — the field sums to 1.0 across holdings, so rendering it directly as basis points overstated by `1 / total_return` and flipped sign in losing periods (every loser carries a positive `contribution_pct` when total P&L is negative). `parallax-cio-letter-prep` now converts via `contribution_pct × portfolio_summary.total_return × 10000` before ranking contributors/detractors.
+- **`response-schemas.md` corrected: `company_info`, `data_quality` and `portfolio_parameters` are ordinary requestable `fields=` names**, not automatic-only blocks as previously documented — confirmed against live responses. A workflow that needs `data_quality.missing_rics` must name it explicitly.
+
+### Added
+- **`gen_mock_fixtures.py`** — a seeded, deterministic generator for the `analyze_portfolio`, `get_score_analysis` and `get_company_info` mocks, replacing hand-authored fixtures. Cross-block identities (P&L sums, sector rollups, `portfolio_scores` as `floor(10 × weighted mean)`) hold by construction. Three gates keep generated fixtures honest: regeneration byte-equality, a nine-significant-figure precision budget for the remaining hand-authored/pre-existing fixtures, and a fixture-provenance classifier (`MANAGED` / `HAND_AUTHORED` / `PRE_EXISTING`) that fails closed on any unclassified file.
+- **`scan_commit_messages.py`** — a manual, pre-push commit-message canary scanner (prints matched SHAs and rule ids only, never the matched text). Not wired into CI: a shallow checkout has no usable `origin/main..HEAD` range.
+- **`NULLABLE` marker in the `contract_validator.py` schema DSL**, distinct from `OPTIONAL` — models a field that is always present but may carry a null sentinel, e.g. `analyze_portfolio._meta.invalid_fields`.
+
+### Security
+- **`docs/security/audit-2026-08-15.md`** — refreshed checklist audit covering the fixture-generator and identity-gate delta (`CRITICAL_FAILS=0`); `audit-latest.md` symlink repointed. Consumed by the pre-push security gate.
+
 ## 2026-08-13
 
 ### Fixed

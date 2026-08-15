@@ -1,0 +1,9 @@
+{
+  "detail": {
+    "balance": 12,
+    "endpoint": "analyze_portfolio",
+    "error": "Insufficient credits for this request.",
+    "required": 40
+  },
+  "success": true
+}

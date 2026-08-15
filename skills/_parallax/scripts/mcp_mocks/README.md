@@ -19,13 +19,14 @@ A red contract test in CI surfaces drift before a customer hits it.
 | File | Endpoint | Notes |
 |---|---|---|
 | `get_telemetry.json` | `mcp__claude_ai_Parallax__get_telemetry` | Market regime, signals, divergences |
-| `analyze_portfolio.json` | `mcp__claude_ai_Parallax__analyze_portfolio` | Factor + sector + concentration, plus extended fields (company_contribution, portfolio_summary, drawdown_analysis, performance_metrics, latest_holdings, sector_allocation, sector_contribution, time_period_returns, portfolio_scores) used by cio-letter-prep Batch B. Schema updated 2026-06-10 to reflect the corrected `portfolio` + `fields` call shape. `rolling_metrics` is in the schema (OPTIONAL) but not in this mock — contract tests for skills that request it will not exercise that field via this fixture. |
+| `analyze_portfolio.json` | `mcp__claude_ai_Parallax__analyze_portfolio` | **MANAGED — generated.** Full response: `{"success": true, "result": {…}}`. **Consumers read `response["result"][<block>]`** — the blocks are not at the top level. A 4-holding / 3-sector / 28-calendar-day book. `result` carries `_meta`, `portfolio_parameters`, `data_quality`, `portfolio_summary`, `performance_metrics`, `drawdown_analysis`, `portfolio_scores`, `concentration_metrics`, `company_contribution`, `sector_contribution`, `sector_allocation`, `time_period_returns`, `latest_holdings`. Shape corrected 2026-08-13 to the live response: `sector_allocation` and `sector_contribution` are **lists**, not dicts; holdings key on `ric`, not `symbol`; there is no `factor_exposures` block. `rolling_metrics` and `benchmark_prices` are not in this mock. |
+| `analyze_portfolio_credit_exhausted.json` | `mcp__claude_ai_Parallax__analyze_portfolio` | **MANAGED — generated. Failure-mode fixture.** The credit-exhausted envelope: `success: true` on a call that FAILED, a `detail` object, and **no `result` key at all**. Branch on the presence of `result`, never on `success` — `if payload["success"]` passes here and then raises `KeyError`. |
 | `export_price_series.json` | `mcp__claude_ai_Parallax__export_price_series` | One holding's daily OHLCV |
-| `get_company_info.json` | `mcp__claude_ai_Parallax__get_company_info` | One holding; ground-truth name oracle |
+| `get_company_info.json` | `mcp__claude_ai_Parallax__get_company_info` | **MANAGED — generated.** One synthetic holding; ground-truth name oracle. Cross-references the first `analyze_portfolio` holding. |
 | `check_portfolio_redundancy.json` | `mcp__claude_ai_Parallax__check_portfolio_redundancy` | **PROVISIONAL** — see below |
 | `check_portfolio_redundancy_silent_fail.json` | `mcp__claude_ai_Parallax__check_portfolio_redundancy` | **Failure-mode fixture** — models the empty-payload silent-failure on sector-concentrated portfolios. Pair with the happy-path mock when testing skills that have sanity-check gates against this mode (portfolio-builder Step 4 + Step 6 fallback, halal-screen Step 2). |
 | `get_assessment.json` | `mcp__claude_ai_Parallax__get_assessment` | AI synthesis (async, ~30-90s) |
-| `get_score_analysis.json` | `mcp__claude_ai_Parallax__get_score_analysis` | Weekly score history per ticker |
+| `get_score_analysis.json` | `mcp__claude_ai_Parallax__get_score_analysis` | **MANAGED — generated.** Weekly score history per ticker. Shape corrected 2026-08-13 to the live response: rows live under **`data`** (not `history`) with **lowercase** factor keys, sub-scores are 0-10 ints, and `total` is a separately-computed 0-10 composite that is **not** the mean of the five. Resolves the three-way divergence recorded in the 2026-08-11 `DECISIONS.md` entry ("Convert the credit-lens quality-trend bands…", fact D and the deferred fixture-shape alternative). |
 | `get_news_synthesis.json` | `mcp__claude_ai_Parallax__get_news_synthesis` | News synthesis per ticker (async) |
 | `macro_analyst.json` | `mcp__claude_ai_Parallax__macro_analyst` | One country's tactical view |
 
@@ -42,11 +43,33 @@ pattern from any existing `test_mcp_contracts.py`. Per-skill realistic-values
 tests encode the specific value assumptions that skill makes; structural
 conformance is shared via ``contract_validator.validate``.
 
+## Provenance: three categories, and one of them is generated
+
+Every `.json` here is classified in `../test_fixture_provenance.py`, and the union of the three categories must equal this directory's listing. A file nobody classified fails the gate — that is the whole point. An unclassified file is one whose provenance nothing checks, so the gate refuses it until someone states where it came from.
+
+| Category | What it claims | How it is checked |
+|---|---|---|
+| `MANAGED` | Reproducible byte-for-byte from `../gen_mock_fixtures.py` at a pinned seed | **Gate 1**: regenerate and compare. A proof, not a heuristic. |
+| `HAND_AUTHORED` | Deliberately not regenerable (models a failure mode) | **Gate 2** precision budget only |
+| `PRE_EXISTING` | Authored before the generator; outside its scope | **Gate 2** precision budget only |
+
+`analyze_portfolio.json`, `get_company_info.json` and `get_score_analysis.json` are **MANAGED — do not hand-edit them and never paste a live capture over them.** They are generated:
+
+```
+python3 skills/_parallax/scripts/gen_mock_fixtures.py --write
+```
+
+The generator derives every value from a seeded synthetic price path, so the arithmetic identities the live API satisfies hold by construction rather than by transcription. `../test_gen_mock_fixtures.py` asserts those identities independently of the generator, which is what stops a generator edit from quietly changing the contract while gate 1 still agrees with itself.
+
+Read the generator's module docstring before changing it. It documents the traps the fixture exists to keep exercised — the mean-vs-sum split inside `sector_contribution`, `invalid_fields` being `null` rather than `[]`, the calendar (not trading-day) grid, `top_5_share` exceeding 1, and above all that **`quantity × close_local` deliberately does not equal `ending_value`**, which is confirmed API behaviour and must never be asserted as an identity.
+
 ## How to refresh when the live MCP server changes
 
-When upstream Parallax MCP changes a response shape:
+**For a `MANAGED` fixture, do not capture and paste.** Change `../gen_mock_fixtures.py` so it derives the new shape, re-run it with `--write`, and commit the generator change together with the regenerated fixture. Gate 1 fails otherwise, by design. Reading a live response to check the shape is fine as a local, uncommitted reference; it must not be committed.
 
-1. **Capture the new shape.** Hit the live endpoint via the MCP tool and save the response. Sanitize any tenant-specific identifiers.
+For `HAND_AUTHORED` and `PRE_EXISTING` fixtures:
+
+1. **Read the new shape.** Hit the live endpoint via the MCP tool to see the shape. Author the fixture from that shape with your own values. Never commit the response itself, and never edit it down into a fixture — "is this value still from the response?" is an unbounded judgement call, which is exactly the question the `MANAGED` category exists to remove.
 2. **Update the mock** in this directory to match the new shape. Keep the same file name.
 3. **Update the schema** in `../contract_schemas.py` to reflect the new contract — remove dropped fields, add new fields with required/optional markers, change types as needed.
 4. **Re-read every SKILL.md that imports the schema** to confirm those skills are still reading fields that exist in the new shape. If a skill needs to change to read new fields, do that in the same PR.
