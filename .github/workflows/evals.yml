@@ -32,7 +32,11 @@ jobs:
       # terms only, so this step is a floor, not the full gate. The
       # full-strength scan runs pre-push on a machine that has the file.
       # scan_commit_messages.py is deliberately NOT wired in here — the shallow
-      # checkout has no usable origin/main..HEAD range; it runs pre-push.
+      # checkout has no usable origin/main..HEAD range. It is a MANUAL step:
+      # run `python3 skills/_parallax/scripts/scan_commit_messages.py` before
+      # pushing. No hook invokes it. Do not describe it as automated until one
+      # does — a gate that is documented as running but never runs is worse
+      # than no gate, because it is trusted.
       - name: Tracked-term scan (built-in terms only)
         env:
           PARALLAX_ALLOW_PARTIAL_SCAN: "1"

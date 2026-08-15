@@ -251,6 +251,26 @@ def normalize_company_name(name: str) -> str:
         folded = stripped
 
 
+def names_match(a: str, b: str) -> "bool | None":
+    """Decide an identity comparison, or return None when it is not decidable.
+
+    ``normalize_company_name`` strips corporate-form tokens, so a name made of
+    nothing else folds to the empty string: "Inc." and "Ltd" both normalize to
+    "". A caller comparing normalized forms with ``==`` reads that as a match
+    between two different companies -- a fail-open in the one check whose job
+    is catching a wrong-company mapping.
+
+    Returning None for the undecidable case forces the caller to record
+    UNCHECKED rather than pass silently, which is what conventions section 2
+    requires of an absent comparison. Prefer this over comparing normalized
+    forms directly.
+    """
+    na, nb = normalize_company_name(a), normalize_company_name(b)
+    if not na or not nb:
+        return None
+    return na == nb
+
+
 def is_iso_date(s: str) -> bool:
     """True iff ``s`` parses as an ISO 'YYYY-MM-DD' date."""
     try:

@@ -185,3 +185,46 @@ def test_normalize_keeps_genuinely_different_companies_apart():
     assert normalize_company_name("Apple Inc") != normalize_company_name(
         "Apple Hospitality REIT"
     )
+
+
+# ---------------------------------------------------------------------------
+# names_match: the undecidable case must not read as a match
+# ---------------------------------------------------------------------------
+
+
+def test_two_contentless_names_do_not_compare_equal():
+    """The fail-open this function exists to close.
+
+    Both inputs are nothing but a corporate form, so both normalize to "".
+    Comparing normalized forms with == reports a match between two different
+    companies, in the one check whose job is catching a wrong-company mapping.
+    """
+    from contract_validator import names_match, normalize_company_name
+
+    assert normalize_company_name("Inc.") == normalize_company_name("Ltd") == ""
+    assert names_match("Inc.", "Ltd") is None
+
+
+def test_one_contentless_side_is_undecidable_not_a_mismatch():
+    """An empty side is missing evidence, not evidence of divergence.
+
+    Returning False here would flag a genuine holding as a wrong-company
+    mapping; returning None routes it to UNCHECKED, which is the disposition
+    conventions section 2 requires when a comparison cannot be performed.
+    """
+    from contract_validator import names_match
+
+    assert names_match("Acme Test Corp", "Inc.") is None
+    assert names_match("Ltd", "Acme Test Corp") is None
+
+
+def test_formatting_difference_still_matches():
+    from contract_validator import names_match
+
+    assert names_match("Acme Test Corp", "Acme Test Corp.") is True
+
+
+def test_genuine_divergence_still_flags():
+    from contract_validator import names_match
+
+    assert names_match("Acme Test Corp", "Beta Holdings Trust") is False
