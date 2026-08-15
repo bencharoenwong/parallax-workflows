@@ -21,7 +21,9 @@ Design (one engine, per-skill allowlist):
 - Degraded-state notes (async-timeout / pending / unavailable) found in the stripped
   preamble are HOISTED to a trailing status line, never silently dropped.
 - Fail-open: if NO anchor is found the input is returned unchanged — the gate never
-  destroys a report it cannot positively locate.
+  destroys a report it cannot positively locate. That path warns on stderr (stdout
+  stays the report), so anchor drift is visible instead of silently passing scaffold
+  through. See parallax-conventions.md §10.3.
 
 Usage:
     python3 render_gate.py --skill client-review < draft.md     # clean report -> stdout
