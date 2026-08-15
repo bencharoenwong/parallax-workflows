@@ -138,11 +138,27 @@ Zero tool calls. Use `credit_lens_logic.py` to compute every flag, the Altman Z-
 | 52-week Quality change, then its flag | `quality_change_pts(current, prior)` → `flag_quality_change(change_pts)` |
 | Overall traffic-light across all flags | `overall_traffic_light(flags)` |
 
-`metric_key` accepts `debt_ebitda`, `interest_coverage` and `current_ratio`. A metric with no key falls through to the peer-relative rule only.
+`metric_key` selects the direction and any absolute band. Pass one of the registered keys below for every dashboard row:
 
-Two rules that a hand-computation gets wrong:
+| Dashboard row | `metric_key` | Direction | Absolute band |
+|---|---|---|---|
+| Leverage — Debt/EBITDA | `debt_ebitda` | higher is worse | yes |
+| Leverage — Debt/Equity | `debt_equity` | higher is worse | peer-relative only |
+| Leverage — Debt/Assets | `debt_assets` | higher is worse | peer-relative only |
+| Coverage — Interest Coverage | `interest_coverage` | lower is worse | yes |
+| Coverage — EBITDA/Interest | `ebitda_interest_coverage` | lower is worse | peer-relative only |
+| Liquidity — Current Ratio | `current_ratio` | lower is worse | yes |
+| Liquidity — Quick Ratio | `quick_ratio` | lower is worse | peer-relative only |
+| Profitability — EBITDA Margin | `ebitda_margin` | lower is worse | peer-relative only |
+| Profitability — EBIT Margin | `ebit_margin` | lower is worse | peer-relative only |
+| Profitability — FCF Margin | `fcf_margin` | lower is worse | peer-relative only |
+
+An unregistered key has no direction and no absolute band, so both rules return GREEN and the row renders GREEN whatever the value. Never invent a key. To flag a metric that is not in the table, add it to `METRIC_DIRECTIONS` in `credit_lens_logic.py` first.
+
+Three rules that a hand-computation gets wrong:
 
 - Pass the Quality change through `quality_change_pts()` rather than subtracting the two scores inline. The bands are one-decimal and the raw subtraction is not exact, so a true −0.5 can compute as −0.4999999999999996 and flag GREEN.
+- For a `lower is worse` metric, `peer_p75` is the adverse tail, which sits numerically **below** `peer_median`. Pass the peer group's 25th percentile of interest coverage there, not its 75th. `flag_metric` raises `ValueError` when `peer_p75 > peer_median` on these metrics rather than silently inverting the bands; treat the raise as a peer-data error and fall back to the absolute rule by passing `None` for both peer arguments.
 - `compute_altman_z` raises on zero `total_assets` or zero `total_liabilities`, and raises if neither `market_cap` nor `book_equity` is supplied. Treat the raise as the Altman leg being unavailable; do not substitute a zero.
 
 ## Output Format

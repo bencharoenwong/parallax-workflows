@@ -35,6 +35,24 @@ ABSOLUTE_THRESHOLDS: dict[str, tuple[float, float, str]] = {
 }
 
 
+# Direction for every metric the dashboard flags, including the ones that carry
+# no absolute credit band. A metric is peer-comparable whether or not the market
+# publishes a fixed threshold for it, so direction lives here rather than being
+# read off ABSOLUTE_THRESHOLDS; keys absent from both get no peer comparison.
+METRIC_DIRECTIONS: dict[str, str] = {
+    "debt_ebitda":              "high_bad",
+    "debt_equity":              "high_bad",
+    "debt_assets":              "high_bad",
+    "interest_coverage":        "low_bad",
+    "ebitda_interest_coverage": "low_bad",
+    "current_ratio":            "low_bad",
+    "quick_ratio":              "low_bad",
+    "ebitda_margin":            "low_bad",
+    "ebit_margin":              "low_bad",
+    "fcf_margin":               "low_bad",
+}
+
+
 @dataclass
 class AltmanInputs:
     """All values in consistent currency units; market_cap=None triggers Z' variant."""
@@ -115,6 +133,8 @@ def flag_metric(
 
 
 def _direction(metric_key: str) -> Optional[str]:
+    if metric_key in METRIC_DIRECTIONS:
+        return METRIC_DIRECTIONS[metric_key]
     if metric_key in ABSOLUTE_THRESHOLDS:
         return ABSOLUTE_THRESHOLDS[metric_key][2]
     return None

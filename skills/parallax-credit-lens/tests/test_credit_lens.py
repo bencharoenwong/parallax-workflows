@@ -22,6 +22,7 @@ from credit_lens_logic import (  # noqa: E402
     Flag,
     MetricRow,
     ABSOLUTE_THRESHOLDS,
+    METRIC_DIRECTIONS,
     assemble_report,
     build_footer,
     build_header,
@@ -326,6 +327,76 @@ class TestPeerRelativeFlagging:
             6.0, peer_median=3.0, peer_p75=None, metric_key="debt_ebitda"
         )
         assert result == Flag.RED
+
+
+class TestMetricsWithoutAnAbsoluteBand:
+    """Dashboard rows that carry no absolute credit threshold — D/E, D/Assets,
+    the margins, quick ratio — are still peer-comparable. Before the direction
+    registry these returned GREEN for every value, because direction was read
+    off ABSOLUTE_THRESHOLDS and they are not in it."""
+
+    def test_debt_equity_above_peer_p75_is_red(self) -> None:
+        result = flag_metric(
+            3.4, peer_median=1.2, peer_p75=2.5, metric_key="debt_equity"
+        )
+        assert result == Flag.RED
+
+    def test_debt_equity_between_median_and_p75_is_amber(self) -> None:
+        result = flag_metric(
+            1.9, peer_median=1.2, peer_p75=2.5, metric_key="debt_equity"
+        )
+        assert result == Flag.AMBER
+
+    def test_debt_equity_below_peer_median_is_green(self) -> None:
+        result = flag_metric(
+            0.6, peer_median=1.2, peer_p75=2.5, metric_key="debt_equity"
+        )
+        assert result == Flag.GREEN
+
+    def test_ebitda_margin_below_peer_p75_is_red(self) -> None:
+        # Margins are low_bad, so the adverse tail sits below the median.
+        result = flag_metric(
+            0.04, peer_median=0.22, peer_p75=0.15, metric_key="ebitda_margin"
+        )
+        assert result == Flag.RED
+
+    def test_ebitda_margin_above_peer_median_is_green(self) -> None:
+        result = flag_metric(
+            0.31, peer_median=0.22, peer_p75=0.15, metric_key="ebitda_margin"
+        )
+        assert result == Flag.GREEN
+
+    def test_quick_ratio_below_peer_p75_is_red(self) -> None:
+        result = flag_metric(
+            0.4, peer_median=1.1, peer_p75=0.8, metric_key="quick_ratio"
+        )
+        assert result == Flag.RED
+
+    def test_every_registered_key_reaches_red_on_peer_data_alone(self) -> None:
+        """No registered key may be structurally incapable of a non-GREEN flag:
+        that was the defect. Drive each direction with peers it clearly loses
+        against and assert the peer rule actually fires."""
+        never_red = []
+        for key, direction in METRIC_DIRECTIONS.items():
+            if direction == "high_bad":
+                flag = flag_metric(100.0, peer_median=1.0, peer_p75=2.0, metric_key=key)
+            else:
+                flag = flag_metric(-1.0, peer_median=2.0, peer_p75=1.0, metric_key=key)
+            if flag != Flag.RED:
+                never_red.append((key, flag))
+        assert never_red == [], f"keys that cannot flag RED: {never_red}"
+
+    def test_direction_registry_agrees_with_the_absolute_thresholds(self) -> None:
+        """Both structures carry a direction for the three banded metrics. They
+        must not drift apart, or the peer and absolute rules would disagree on
+        which end of the range is bad."""
+        for key, (_, _, threshold_direction) in ABSOLUTE_THRESHOLDS.items():
+            assert key in METRIC_DIRECTIONS, f"{key} missing from METRIC_DIRECTIONS"
+            assert METRIC_DIRECTIONS[key] == threshold_direction
+
+    def test_directions_are_one_of_the_two_known_values(self) -> None:
+        for key, direction in METRIC_DIRECTIONS.items():
+            assert direction in ("high_bad", "low_bad"), key
 
 
 class TestPeerPercentileAssertion:
@@ -813,6 +884,57 @@ class TestIntegrationFixtures:
         # 0.87 < 1.0 → absolute RED
         assert result == Flag.RED
 
+    def test_aapl_debt_equity_flag_from_fixture(self) -> None:
+        """AAPL D/E=1.84 vs peer median 0.52 and peer p75 1.20 → RED.
+
+        The row carries no absolute band, so the peer rule is the only one that
+        can flag it. It rendered GREEN until direction stopped being read off
+        ABSOLUTE_THRESHOLDS.
+        """
+        ratios = _load_fixture("get_financials_ratios.json")["periods"][0]
+        result = flag_metric(
+            ratios["debt_to_equity"],
+            peer_median=ratios["peer_median"]["debt_to_equity"],
+            peer_p75=ratios["peer_p75"]["debt_to_equity"],
+            metric_key="debt_equity",
+        )
+        assert result == Flag.RED
+
+    def test_aapl_ebitda_margin_flag_from_fixture(self) -> None:
+        """AAPL EBITDA margin 33.6% vs peer median 22.1% → GREEN."""
+        ratios = _load_fixture("get_financials_ratios.json")["periods"][0]
+        result = flag_metric(
+            ratios["ebitda_margin"],
+            peer_median=ratios["peer_median"]["ebitda_margin"],
+            peer_p75=ratios["peer_p75"]["ebitda_margin"],
+            metric_key="ebitda_margin",
+        )
+        assert result == Flag.GREEN
+
+    def test_fixture_peer_percentiles_follow_the_adverse_tail_convention(self) -> None:
+        """`peer_p75` carries the adverse tail, so for a low_bad metric it sits
+        below the median. Both fixtures already encode this; `flag_metric`
+        raises when they do not, so a fixture that drifted would break the
+        peer-flag tests in a confusing way rather than an obvious one."""
+        for name in (
+            "get_financials_ratios.json",
+            "get_financials_ratios_distressed.json",
+        ):
+            ratios = _load_fixture(name)["periods"][0]
+            for field_name, key in (
+                ("debt_to_equity", "debt_equity"),
+                ("debt_to_ebitda", "debt_ebitda"),
+                ("interest_coverage", "interest_coverage"),
+                ("current_ratio", "current_ratio"),
+                ("ebitda_margin", "ebitda_margin"),
+            ):
+                median = ratios["peer_median"][field_name]
+                p75 = ratios["peer_p75"][field_name]
+                if METRIC_DIRECTIONS[key] == "low_bad":
+                    assert p75 <= median, f"{name}:{field_name}"
+                else:
+                    assert p75 >= median, f"{name}:{field_name}"
+
     def test_score_analysis_fixture_has_the_live_response_shape(self) -> None:
         """The response is flat, and the rows live under `data`. It carries no
         `factor_trajectory` object and no `growth` pillar — both were in the
@@ -905,6 +1027,29 @@ class TestIntegrationFixtures:
             peer_median=ratios["peer_median"]["current_ratio"],
             peer_p75=ratios["peer_p75"]["current_ratio"],
             metric_key="current_ratio",
+        )
+        assert result == Flag.RED
+
+    def test_distressed_company_debt_equity_is_red(self) -> None:
+        """Distressed fixture: D/E=6.80 above peer p75 4.50 → RED on the peer
+        rule alone, with no absolute band to catch it."""
+        ratios = _load_fixture("get_financials_ratios_distressed.json")["periods"][0]
+        result = flag_metric(
+            ratios["debt_to_equity"],
+            peer_median=ratios["peer_median"]["debt_to_equity"],
+            peer_p75=ratios["peer_p75"]["debt_to_equity"],
+            metric_key="debt_equity",
+        )
+        assert result == Flag.RED
+
+    def test_distressed_company_ebitda_margin_is_red(self) -> None:
+        """Distressed fixture: EBITDA margin 5.1% below peer p75 6.5% → RED."""
+        ratios = _load_fixture("get_financials_ratios_distressed.json")["periods"][0]
+        result = flag_metric(
+            ratios["ebitda_margin"],
+            peer_median=ratios["peer_median"]["ebitda_margin"],
+            peer_p75=ratios["peer_p75"]["ebitda_margin"],
+            metric_key="ebitda_margin",
         )
         assert result == Flag.RED
 
