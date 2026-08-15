@@ -3,9 +3,10 @@ name: evals
 permissions:
   contents: read
 
-# Lightweight structural CI: runs the pure-function grader suite and the repo's
-# doc-lint scripts on every PR and on pushes to main. No live Parallax / MCP calls,
-# no secrets — these are the same offline checks contributors run locally.
+# Lightweight structural CI: runs the pure-function grader suite, the contract /
+# fixture-provenance / precision gates, and the repo's doc-lint scripts on every
+# PR and on pushes to main. No live Parallax / MCP calls, no secrets — these are
+# the same offline checks contributors run locally.
 
 on:
   pull_request:
