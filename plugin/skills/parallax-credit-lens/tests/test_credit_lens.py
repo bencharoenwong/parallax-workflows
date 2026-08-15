@@ -813,12 +813,67 @@ class TestIntegrationFixtures:
         # 0.87 < 1.0 → absolute RED
         assert result == Flag.RED
 
-    def test_aapl_quality_change_flag_from_fixture(self) -> None:
-        """AAPL quality change -0.6 pts → AMBER (between -0.5 and -1.5)."""
+    def test_score_analysis_fixture_has_the_live_response_shape(self) -> None:
+        """The response is flat, and the rows live under `data`. It carries no
+        `factor_trajectory` object and no `growth` pillar — both were in the
+        hand-authored fixture this replaced, and neither exists in the API."""
         score = _load_fixture("get_score_analysis.json")
-        change = score["factor_trajectory"]["quality"]["change_pts"]
-        result = flag_quality_change(change)
-        assert result == Flag.AMBER  # -0.6 is in AMBER zone
+        assert set(score) == {"success", "symbol", "weeks", "data"}
+        assert "factor_trajectory" not in score
+        assert score["data"], "fixture must carry at least one row"
+        for row in score["data"]:
+            assert set(row) == {
+                "date", "symbol", "total",
+                "value", "quality", "momentum", "defensive", "tactical",
+            }
+            assert "growth" not in row
+
+    def test_score_analysis_pillar_types_match_the_ledger(self) -> None:
+        """Sub-scores are integers on 0-10; `total` is a one-decimal float and
+        is a separately-computed composite, not the mean of the five."""
+        score = _load_fixture("get_score_analysis.json")
+        for row in score["data"]:
+            for pillar in ("value", "quality", "momentum", "defensive", "tactical"):
+                assert isinstance(row[pillar], int)
+                assert 0 <= row[pillar] <= 10
+            assert isinstance(row["total"], float)
+            assert 0 <= row["total"] <= 10
+
+    def test_score_analysis_identity_check_uses_data_zero_symbol(self) -> None:
+        """`get_score_analysis` carries no company name, so the conventions
+        identity check compares `data[0].symbol` against the requested RIC."""
+        score = _load_fixture("get_score_analysis.json")
+        requested_ric = score["symbol"]
+        assert score["data"][0]["symbol"] == requested_ric
+
+    def test_quality_change_over_the_fixture_window_is_green(self) -> None:
+        """Rows are oldest-first. The fixture's window is `weeks` long, which is
+        13 here, not the skill's default 52 — assert against the window the
+        fixture actually models rather than restating it as a 52-week change."""
+        score = _load_fixture("get_score_analysis.json")
+        rows = score["data"]
+        change = quality_change_pts(rows[-1]["quality"], rows[0]["quality"])
+        assert change == 0.0
+        assert flag_quality_change(change) == Flag.GREEN
+
+    def test_score_analysis_fixture_is_generator_reproducible(self) -> None:
+        """Provenance, byte for byte. The generator is not shipped in the plugin
+        bundle, so this skips rather than fails when it is absent."""
+        # tests/ -> parallax-credit-lens/ -> skills/
+        gen_dir = (
+            Path(__file__).resolve().parents[2] / "_parallax" / "scripts"
+        )
+        if not (gen_dir / "gen_mock_fixtures.py").exists():
+            pytest.skip("gen_mock_fixtures.py not in this checkout")
+        sys.path.insert(0, str(gen_dir))
+        import gen_mock_fixtures  # noqa: PLC0415
+
+        expected = gen_mock_fixtures.build_fixtures()["get_score_analysis"]
+        on_disk = _load_fixture("get_score_analysis.json")
+        assert on_disk == expected, (
+            "get_score_analysis.json has drifted from the seeded generator — "
+            "regenerate it rather than hand-editing"
+        )
 
     def test_distressed_company_debt_ebitda_is_red(self) -> None:
         """Distressed fixture: D/EBITDA=6.2x → RED."""
