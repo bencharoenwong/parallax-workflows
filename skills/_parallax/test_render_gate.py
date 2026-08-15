@@ -220,7 +220,9 @@ def test_every_skill_has_anchors():
 def _output_format(skill_text: str) -> str:
     marker = "## Output Format"
     assert marker in skill_text, "SKILL.md has no Output Format section"
-    return skill_text.split(marker, 1)[1]
+    after = skill_text.split(marker, 1)[1]
+    end = re.search(r"\n#{1,6} ", after)
+    return after[: end.start()] if end else after
 
 
 def _heading_label(rendered_start: str) -> str:

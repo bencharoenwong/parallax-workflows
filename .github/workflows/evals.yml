@@ -33,6 +33,14 @@ jobs:
         run: python -m pytest evals/graders/ -q
       - name: Contract, provenance and precision gates
         run: python -m pytest skills/_parallax/scripts/ -q
+      # test_render_gate.py sits beside render_gate.py in skills/_parallax/, one
+      # level above the scripts/ root collected by the step above. It is named
+      # explicitly rather than by widening that root, which would also pull in
+      # the white-label conftest subtree. This suite asserts the SKILL.md label /
+      # anchor / gate-command contract across every gated skill, so a PR that
+      # renames a rendered section fails here, not only in a local gate run.
+      - name: Render-gate anchor and SKILL.md wiring gates
+        run: python -m pytest skills/_parallax/test_render_gate.py -q
       # A separate process per top-level test root, not a second path appended
       # to the line above: three skills ship a `tests/conftest.py` and pytest
       # names every one `tests.conftest`, so collecting two roots in one process
