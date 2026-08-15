@@ -32,6 +32,7 @@ from credit_lens_logic import (  # noqa: E402
     flag_metric,
     flag_quality_change,
     overall_traffic_light,
+    quality_change_pts,
     validate_ric,
 )
 
@@ -411,6 +412,63 @@ class TestQualityChangeFlagging:
         # move on a 0-10 score is -10, which the old RED band (-15) could
         # never reach. It must be RED now.
         assert flag_quality_change(-10.0) == Flag.RED
+
+
+# ---------------------------------------------------------------------------
+# TestQualityChangeFloatBoundary
+# ---------------------------------------------------------------------------
+
+
+class TestQualityChangeFloatBoundary:
+    """The bands are one-decimal, but callers reach them by subtracting two
+    one-decimal scores. That subtraction is inexact, so a true boundary value
+    can arrive one ULP outside its band. These tests drive the raw subtraction,
+    not a typed literal, because a typed -0.5 never had the defect."""
+
+    def test_raw_subtraction_at_the_amber_boundary_is_amber(self) -> None:
+        # 3.6 - 4.1 == -0.49999999999999956, which is > -0.5 as a float.
+        raw = 3.6 - 4.1
+        assert raw > -0.5, "precondition: this pair must land outside the band"
+        assert flag_quality_change(raw) == Flag.AMBER
+
+    def test_raw_subtraction_at_the_red_boundary_is_red(self) -> None:
+        # 2.6 - 4.1 == -1.4999999999999996.
+        raw = 2.6 - 4.1
+        assert raw > -1.5, "precondition: this pair must land outside the band"
+        assert flag_quality_change(raw) == Flag.RED
+
+    def test_every_one_decimal_pair_on_a_band_edge_lands_in_the_band(self) -> None:
+        """Exhaustive over the 0-10 one-decimal grid. Any pair whose exact
+        decimal difference is -0.5 or -1.5 must flag AMBER or RED, whichever
+        band it sits on, regardless of how the float subtraction rounds."""
+        misflagged = []
+        for prior_tenths in range(101):
+            for current_tenths in range(101):
+                delta_tenths = current_tenths - prior_tenths
+                if delta_tenths not in (-5, -15):
+                    continue
+                raw = (current_tenths / 10) - (prior_tenths / 10)
+                expected = Flag.AMBER if delta_tenths == -5 else Flag.RED
+                if flag_quality_change(raw) != expected:
+                    misflagged.append((current_tenths / 10, prior_tenths / 10))
+        assert misflagged == [], f"{len(misflagged)} boundary pairs misflagged"
+
+    def test_a_genuine_non_boundary_value_is_not_pulled_across(self) -> None:
+        # The tolerance must not reclassify anything on the 0.1 grid.
+        assert flag_quality_change(-0.4) == Flag.GREEN
+        assert flag_quality_change(-1.4) == Flag.AMBER
+
+    def test_quality_change_pts_snaps_the_subtraction_back(self) -> None:
+        assert quality_change_pts(3.6, 4.1) == -0.5
+        assert quality_change_pts(2.6, 4.1) == -1.5
+        assert flag_quality_change(quality_change_pts(3.6, 4.1)) == Flag.AMBER
+
+    def test_the_defect_was_real_before_the_tolerance(self) -> None:
+        """Guards the guard: if these pairs ever became exact, the exhaustive
+        test above would pass vacuously and the tolerance could be deleted
+        without any test noticing."""
+        assert (3.6 - 4.1) > -0.5
+        assert (2.6 - 4.1) > -1.5
 
 
 # ---------------------------------------------------------------------------

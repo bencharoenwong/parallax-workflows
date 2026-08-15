@@ -16,6 +16,8 @@ description: "Credit risk assessment for publicly traded companies: leverage, co
 ## Gotchas
 
 - RIC format required (AAPL.O, not AAPL). Exchange suffix is critical.
+- `credit_lens_logic.py` is the pure arithmetic layer. Do not put MCP calls or local file writes in it. Every flag, the Altman Z-score and the overall traffic-light are computed there, not re-derived in prose — see Batch C.
+- `assemble_report()` in that module is a reference renderer for its own tests. It omits the §9.1 disclaimer and the §9.2 disclosure, so it must not produce client-facing output.
 - JIT-load _parallax/parallax-conventions.md for parallel execution patterns and RIC resolution.
 - get_financial_analysis is async (2-5 min) — do not block on other calls.
 - Quality factor is a credit health proxy — deteriorating Quality score is an early warning signal for credit stress.
@@ -39,7 +41,7 @@ Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-c
 
 ### Batch 0 — Validation
 
-1. Verify input symbol is in RIC format (ticker.exchange). If plain ticker provided (AAPL), resolve to RIC using parallax-conventions.md suffix table (→ AAPL.O).
+1. Verify input symbol is in RIC format (ticker.exchange) via `validate_ric()` in `credit_lens_logic.py`. If plain ticker provided (AAPL), resolve to RIC using parallax-conventions.md suffix table (→ AAPL.O), then re-validate.
 2. Call `ToolSearch` with query `"+Parallax"` to load MCP tool schemas before first `mcp__claude_ai_Parallax__*` call.
 
 ### Batch A — Core financials (parallel, 4 tokens)
@@ -96,6 +98,8 @@ Thresholds:
 
 If market cap unavailable, compute with book equity instead (Z' variant) and note the substitution.
 
+Compute this via `compute_altman_z()` in `credit_lens_logic.py`, which returns the score, the variant label and the zone flag together. The formula above documents what it computes.
+
 ### Flagging Logic
 
 For each metric, compare against peer median and peer 75th percentile:
@@ -120,6 +124,24 @@ Quality score deterioration is a primary credit health warning signal.
 
 Bands sit on the 0-10 per-security scale that `get_score_analysis` returns. Do not restate them on a 0-100 basis.
 
+### Batch C — Flag computation
+
+Zero tool calls. Use `credit_lens_logic.py` to compute every flag, the Altman Z-score and its zone, and the overall traffic-light. The tables above and the Altman formula are the documentation of the bands; the module is what applies them.
+
+| Quantity | Call |
+|---|---|
+| Per-metric flag (peer-relative and absolute, more conservative wins) | `flag_metric(value, peer_median, peer_p75, metric_key)` |
+| Altman Z-score, variant label (`Z` or `Z'`) and zone flag | `compute_altman_z(AltmanInputs(...))` |
+| 52-week Quality change, then its flag | `quality_change_pts(current, prior)` → `flag_quality_change(change_pts)` |
+| Overall traffic-light across all flags | `overall_traffic_light(flags)` |
+
+`metric_key` accepts `debt_ebitda`, `interest_coverage` and `current_ratio`. A metric with no key falls through to the peer-relative rule only.
+
+Two rules that a hand-computation gets wrong:
+
+- Pass the Quality change through `quality_change_pts()` rather than subtracting the two scores inline. The bands are one-decimal and the raw subtraction is not exact, so a true −0.5 can compute as −0.4999999999999996 and flag GREEN.
+- `compute_altman_z` raises on zero `total_assets` or zero `total_liabilities`, and raises if neither `market_cap` nor `book_equity` is supplied. Treat the raise as the Altman leg being unavailable; do not substitute a zero.
+
 ## Output Format
 
 Structure output in markdown with the following sections:
@@ -128,7 +150,7 @@ Structure output in markdown with the following sections:
 ```
 ## Credit Risk Assessment: [Company] ([RIC]) | Traffic-Light: 🟢/🟡/🔴
 ```
-Overall traffic-light determined by: count of RED flags (→ Red), count of AMBER flags (→ Amber), count of GREEN (→ Green). Majority color wins. If two or more colors tie for the highest count, render the most conservative tied color (Red > Amber > Green) — e.g., a 2-2-2 split renders Red.
+Overall traffic-light determined by: count of RED flags (→ Red), count of AMBER flags (→ Amber), count of GREEN (→ Green). Majority color wins. If two or more colors tie for the highest count, render the most conservative tied color (Red > Amber > Green) — e.g., a 2-2-2 split renders Red. Compute via `overall_traffic_light(flags)`, which also drops UNAVAILABLE legs from the count and returns UNAVAILABLE when every leg is missing.
 
 ### 2. **Metrics Dashboard** (table)
 ```

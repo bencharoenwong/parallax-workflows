@@ -193,6 +193,27 @@ def _worse_flag(a: Flag, b: Flag) -> Flag:
 # ---------------------------------------------------------------------------
 
 
+# The bands below are stated to one decimal place, but a caller reaches them by
+# subtracting two one-decimal scores, and that subtraction is not exact in
+# IEEE-754. 7.2 - 7.7 is -0.4999999999999996, not -0.5, so a true -0.5 decline
+# would test as outside the AMBER band and flag GREEN. Roughly 14 of the 10,201
+# one-decimal pairs in 0-10 land one ULP outside their band this way. The
+# tolerance is six orders of magnitude below the 0.1 grid the scores live on, so
+# it cannot pull a genuinely different value across a boundary.
+_BAND_TOL = 1e-9
+
+
+def quality_change_pts(current: float, prior: float) -> float:
+    """52-week change in a score, snapped back onto the one-decimal grid.
+
+    Prefer this over a bare ``current - prior`` when feeding
+    ``flag_quality_change``: the scores are published to one decimal, so the
+    difference is a one-decimal quantity and the extra binary digits are an
+    artifact of the subtraction, not signal.
+    """
+    return round(current - prior, 10)
+
+
 def flag_quality_change(change_pts: float) -> Flag:
     """AMBER: change ≤ -0.5 pts, RED: change ≤ -1.5 pts (52w deterioration).
 
@@ -200,10 +221,13 @@ def flag_quality_change(change_pts: float) -> Flag:
     The previous -5 / -15 bands were on a 0-100 basis. The largest possible
     decline on a 0-10 score is -10, so the RED band could never fire and the
     AMBER band fired only on a catastrophic decline of 5 points or more.
+
+    Boundary values are inclusive and are compared with ``_BAND_TOL`` so that a
+    change arriving one ULP outside its band still lands in it.
     """
-    if change_pts <= -1.5:
+    if change_pts <= -1.5 + _BAND_TOL:
         return Flag.RED
-    if change_pts <= -0.5:
+    if change_pts <= -0.5 + _BAND_TOL:
         return Flag.AMBER
     return Flag.GREEN
 
