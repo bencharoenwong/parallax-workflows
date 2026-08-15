@@ -146,6 +146,9 @@ def gate(draft: str, skill: str) -> str:
             if notes:
                 body += "\n\n> _Status note (preserved): " + " ".join(notes) + "_"
             return body + "\n"
+    sys.stderr.write(
+        f"[render-gate] WARN: no anchor for skill={skill!r}; returned unchanged\n"
+    )
     return draft  # fail-open: no anchor -> never strip
 
 
