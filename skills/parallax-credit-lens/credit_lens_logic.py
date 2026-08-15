@@ -124,7 +124,33 @@ def flag_metric(
     peer_p75: Optional[float],
     metric_key: str,
 ) -> Flag:
-    """Assign GREEN/AMBER/RED by applying both peer-relative and absolute rules; use more conservative result."""
+    """Assign GREEN/AMBER/RED by applying both peer-relative and absolute rules; use more conservative result.
+
+    Raises ValueError for a key in neither registry, and returns UNAVAILABLE
+    when the key is registered but nothing can actually be applied to it. Both
+    guard the same failure: a metric no rule can judge must not report as
+    healthy. On a credit tool the silent direction is the dangerous one.
+    """
+    known = metric_key in METRIC_DIRECTIONS or metric_key in ABSOLUTE_THRESHOLDS
+    if not known:
+        # A mistyped key is the realistic case, and it used to return GREEN on
+        # any value at all. Fail loudly instead of scoring a metric that was
+        # never registered.
+        raise ValueError(
+            f"unregistered metric_key {metric_key!r}; add it to "
+            f"METRIC_DIRECTIONS (and ABSOLUTE_THRESHOLDS if it has a fixed "
+            f"band) before flagging it. Known keys: "
+            f"{sorted(set(METRIC_DIRECTIONS) | set(ABSOLUTE_THRESHOLDS))}"
+        )
+
+    has_peer = peer_median is not None and peer_p75 is not None
+    has_absolute = metric_key in ABSOLUTE_THRESHOLDS
+    if not has_peer and not has_absolute:
+        # Registered, but this run has no peer row and the metric carries no
+        # fixed band — so there is no rule to apply. Five of the registered
+        # keys hit this whenever the peer response omits them.
+        return Flag.UNAVAILABLE
+
     peer_flag = _peer_relative_flag(value, peer_median, peer_p75, metric_key)
     abs_flag = _absolute_flag(value, metric_key)
 
@@ -213,13 +239,19 @@ def _worse_flag(a: Flag, b: Flag) -> Flag:
 # ---------------------------------------------------------------------------
 
 
-# The bands below are stated to one decimal place, but a caller reaches them by
-# subtracting two one-decimal scores, and that subtraction is not exact in
-# IEEE-754. 7.2 - 7.7 is -0.4999999999999996, not -0.5, so a true -0.5 decline
-# would test as outside the AMBER band and flag GREEN. Roughly 14 of the 10,201
-# one-decimal pairs in 0-10 land one ULP outside their band this way. The
-# tolerance is six orders of magnitude below the 0.1 grid the scores live on, so
-# it cannot pull a genuinely different value across a boundary.
+# The bands below are stated to one decimal place, and a caller reaches them by
+# subtracting two scores, which is not exact in IEEE-754. 3.6 - 4.1 is
+# -0.49999999999999956, not -0.5, so a true -0.5 decline would test as outside
+# the AMBER band and flag GREEN. 14 of the 10,201 one-decimal pairs in 0-10 land
+# one ULP outside their band this way.
+#
+# Which series reaches this matters. `get_score_analysis.data[].quality` is an
+# integer 0-10, so a quality-on-quality subtraction is exact and never trips
+# this. The one-decimal series is `data[].total`, and any caller comparing
+# totals — or a rebased/interpolated quality series — does trip it. The
+# tolerance is six orders of magnitude below the 0.1 grid and four below the
+# 0.05 half-band, so it cannot pull a genuinely different value across a
+# boundary; it is cheap enough to keep for the callers that need it.
 _BAND_TOL = 1e-9
 
 

@@ -1255,10 +1255,37 @@ class TestEdgeCases:
         result = flag_metric(100.0, None, None, "debt_ebitda")
         assert result == Flag.RED
 
-    def test_flag_metric_unknown_key_returns_green(self) -> None:
-        """Unknown metric key has no absolute threshold → GREEN by default."""
-        result = flag_metric(999.0, None, None, "unknown_metric_xyz")
-        assert result == Flag.GREEN
+    def test_flag_metric_unregistered_key_raises(self) -> None:
+        """An unregistered key used to return GREEN on any value, so a typo in
+        a metric_key silently reported a distressed metric as healthy. It must
+        raise instead."""
+        with pytest.raises(ValueError, match="unregistered metric_key"):
+            flag_metric(999.0, None, None, "unknown_metric_xyz")
+
+    def test_flag_metric_typo_in_a_real_key_raises(self) -> None:
+        """The realistic case: one character off a registered key."""
+        with pytest.raises(ValueError, match="debt_ebita"):
+            flag_metric(9.9, 1.0, 2.0, "debt_ebita")
+
+    def test_registered_key_with_no_rule_to_apply_is_unavailable(self) -> None:
+        """Registered, but no peer row this run and no absolute band — nothing
+        can judge it, so it must not report GREEN. Five registered keys hit
+        this whenever the peer response omits them."""
+        for key in (
+            "debt_assets", "ebitda_interest_coverage",
+            "quick_ratio", "ebit_margin", "fcf_margin",
+        ):
+            assert flag_metric(999.0, None, None, key) == Flag.UNAVAILABLE, key
+
+    def test_unavailable_metric_does_not_pull_the_traffic_light(self) -> None:
+        """UNAVAILABLE is excluded from the majority count, so an unjudgeable
+        metric neither improves nor worsens the overall verdict."""
+        unjudgeable = flag_metric(999.0, None, None, "quick_ratio")
+        assert overall_traffic_light([Flag.RED, Flag.RED, unjudgeable]) == Flag.RED
+
+    def test_registered_key_with_an_absolute_band_still_flags_without_peers(self) -> None:
+        """The no-peer-data fallback to the absolute rule must keep working."""
+        assert flag_metric(6.0, None, None, "debt_ebitda") == Flag.RED
 
     def test_overall_traffic_light_large_all_green(self) -> None:
         flags = [Flag.GREEN] * 100
