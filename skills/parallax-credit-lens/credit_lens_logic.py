@@ -179,12 +179,26 @@ def _peer_relative_flag(
     if direction is None:
         return Flag.GREEN  # Unknown metric → neutral
 
-    # Validate peer percentile ordering for low_bad metrics
-    if direction == "low_bad":
-        if not (peer_p75 <= peer_median):
-            raise ValueError(
-                f"peer_p75 ({peer_p75}) must be <= peer_median ({peer_median}) for {metric_key} (low_bad direction)"
-            )
+    # Validate peer percentile ordering in BOTH directions. `peer_p75` carries
+    # the adverse tail either way: numerically above the median when high is
+    # worse, below it when low is worse. An inverted pair means the caller
+    # mapped the fields wrong or the peer row is corrupt, and the bands would
+    # silently invert — so it must raise, not score.
+    #
+    # This guard was low_bad-only until debt_equity and debt_assets were
+    # registered. Those two are high_bad with no entry in ABSOLUTE_THRESHOLDS,
+    # so there is no absolute rule to fall back on and _worse_flag cannot
+    # rescue the verdict: an inverted pair returned GREEN on a value sitting
+    # between the two percentiles. Equality is degenerate but not inverted, so
+    # it stays allowed on both sides.
+    if direction == "low_bad" and not (peer_p75 <= peer_median):
+        raise ValueError(
+            f"peer_p75 ({peer_p75}) must be <= peer_median ({peer_median}) for {metric_key} (low_bad direction)"
+        )
+    if direction == "high_bad" and not (peer_p75 >= peer_median):
+        raise ValueError(
+            f"peer_p75 ({peer_p75}) must be >= peer_median ({peer_median}) for {metric_key} (high_bad direction)"
+        )
 
     if direction == "high_bad":
         if value <= peer_median:

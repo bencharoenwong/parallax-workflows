@@ -414,6 +414,42 @@ class TestPeerPercentileAssertion:
         )
         assert result == Flag.AMBER
 
+    def test_high_bad_inverted_peer_percentiles_raises_error(self) -> None:
+        """The guard was low_bad-only, so an inverted pair on a high_bad metric
+        scored silently instead of raising."""
+        with pytest.raises(ValueError, match="peer_p75.*must be"):
+            flag_metric(
+                5.0, peer_median=8.0, peer_p75=3.0, metric_key="debt_equity"
+            )
+
+    def test_high_bad_correct_peer_percentiles_no_error(self) -> None:
+        result = flag_metric(
+            5.0, peer_median=3.0, peer_p75=8.0, metric_key="debt_equity"
+        )
+        assert result == Flag.AMBER
+
+    def test_inverted_peers_raise_for_every_peer_only_key(self) -> None:
+        """The peer-only keys have no absolute band, so `_worse_flag` cannot
+        rescue an inverted pair — nothing else would catch it. Covers both
+        directions across every registered key without an absolute band."""
+        peer_only = [
+            k for k in METRIC_DIRECTIONS if k not in ABSOLUTE_THRESHOLDS
+        ]
+        assert peer_only, "precondition: some registered key lacks an absolute band"
+        for key in peer_only:
+            if METRIC_DIRECTIONS[key] == "high_bad":
+                median, p75 = 8.0, 3.0      # inverted for high_bad
+            else:
+                median, p75 = 3.0, 8.0      # inverted for low_bad
+            with pytest.raises(ValueError, match="peer_p75.*must be"):
+                flag_metric(5.0, median, p75, key)
+
+    def test_equal_percentiles_are_degenerate_not_inverted(self) -> None:
+        """p75 == median collapses the AMBER band but is not a data error, so
+        it must not raise in either direction."""
+        assert flag_metric(9.0, 5.0, 5.0, "debt_equity") == Flag.RED
+        assert flag_metric(1.0, 5.0, 5.0, "quick_ratio") == Flag.RED
+
 
 class TestConservativeRule:
 
