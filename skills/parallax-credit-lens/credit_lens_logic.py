@@ -296,6 +296,9 @@ class CreditReport:
     overall_flag: Flag
     metric_rows: list[MetricRow] = field(default_factory=list)
     solvency_narrative: str = ""
+    # `get_financial_analysis` returns a liquidity read alongside the solvency
+    # one. Both come from the same call, so both share `palepu_unavailable`.
+    liquidity_narrative: str = ""
     key_flags: list[str] = field(default_factory=list)       # RED + AMBER bullets
     quality_trend_sentence: str = ""
     macro_context_sentence: str = ""
@@ -341,6 +344,18 @@ def build_solvency_section(report: CreditReport) -> str:
     return report.solvency_narrative or "[Solvency assessment not provided]"
 
 
+def build_liquidity_section(report: CreditReport) -> str:
+    """The Palepu liquidity read, not the current/quick ratio.
+
+    The ratio is already a row in the metrics table; this section is the
+    qualitative half of the same `get_financial_analysis` call that supplies
+    the solvency narrative, which is why one failure marks both.
+    """
+    if report.palepu_unavailable:
+        return "[Liquidity assessment unavailable — tool error]"
+    return report.liquidity_narrative or "[Liquidity assessment not provided]"
+
+
 def build_footer() -> str:
     return (
         "*Analytical output based on Parallax factor scores and public "
@@ -361,6 +376,9 @@ def assemble_report(report: CreditReport) -> str:
         "",
         "### Solvency Assessment",
         build_solvency_section(report),
+        "",
+        "### Liquidity Assessment",
+        build_liquidity_section(report),
         "",
         "### Key Flags",
         build_key_flags_section(report.key_flags),

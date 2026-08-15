@@ -22,7 +22,9 @@ description: "Credit risk assessment for publicly traded companies: leverage, co
 - get_financial_analysis is async (2-5 min) — do not block on other calls.
 - Quality factor is a credit health proxy — deteriorating Quality score is an early warning signal for credit stress.
 - Altman Z-score computed using market-cap-based formula for public companies (Z, not Z'). Thresholds: >2.99 Safe, 1.81–2.99 Grey, <1.81 Distress.
-- If Palepu solvency section is unavailable (tool error), degrade gracefully — output remaining metrics and flag Palepu as unavailable.
+- `get_financial_analysis` returns both a solvency and a liquidity read. Render both — see Output Format §3 and §3a. One call, one cost, two sections.
+- The Liquidity row in the Metrics Dashboard and the §3a liquidity narrative are different things and both belong in the output. The row is the quantitative flag from `ratios`; the narrative is the Palepu read that explains why the ratio sits where it does.
+- If the Palepu sections are unavailable (tool error), degrade gracefully — output remaining metrics and flag **both** §3 and §3a as unavailable, since one call supplies both.
 - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
 
 Credit risk assessment for publicly traded companies using Parallax MCP tools.
@@ -66,13 +68,14 @@ Extract from these calls:
 Fire all 3 calls simultaneously. Note: `get_financial_analysis` is async (2-5 min) and should not block the workflow — execute in parallel.
 
 ```
-get_financial_analysis(symbol=<RIC>)   # Palepu solvency assessment (5 tokens, async)
+get_financial_analysis(symbol=<RIC>)   # Palepu solvency AND liquidity read (5 tokens, async)
 get_score_analysis(symbol=<RIC>)       # Quality score 52-week trajectory
 get_telemetry()                        # Market regime tag (no symbol parameter)
 ```
 
 From these:
-- Solvency (Palepu): accruals quality, profitability, liquidity, leverage solvency assessment
+- Solvency (Palepu): accruals quality, profitability and leverage assessment → Output Format §3
+- Liquidity (Palepu): the qualitative liquidity read from the same response → Output Format §3a. Extract it alongside solvency; it is already paid for by this call
 - Quality Trend: 52-week Quality factor score change (deterioration is a red flag)
 - Macro Regime: current market regime context for credit environment
 
@@ -170,6 +173,9 @@ State the Altman Z-score's nearest band boundary (2.99 Safe/Grey or 1.81 Grey/Di
 ### 3. **Solvency Assessment** (narrative)
 Output the Palepu solvency section from `get_financial_analysis`. If unavailable, note: `[Solvency assessment unavailable — tool error]`.
 
+### 3a. **Liquidity Assessment** (narrative)
+Output the Palepu liquidity section from the same `get_financial_analysis` response. This explains *why* the Liquidity row in the Metrics Dashboard reads as it does — working-capital cycle, cash conversion, near-term obligations — and is not a restatement of the current/quick ratio. Do not omit it because the ratio already appears above. If unavailable, note: `[Liquidity assessment unavailable — tool error]`.
+
 ### 4. **Key Flags** (bulleted list)
 List every RED and AMBER flag with one-line explanation:
 - 🔴 RED: Debt/EBITDA 5.2x exceeds peer 75th percentile (3.8x) and absolute threshold (5.0x)
@@ -203,7 +209,7 @@ Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 ## Error Handling
 
 - **Symbol not found**: Return error message with suggestion to check RIC format.
-- **get_financial_analysis fails** (async timeout or error): Continue with remaining metrics; append `[Solvency assessment unavailable]` to output.
+- **get_financial_analysis fails** (async timeout or error): Continue with remaining metrics. One call supplies both Palepu sections, so mark **both**: `[Solvency assessment unavailable]` in §3 and `[Liquidity assessment unavailable]` in §3a. The quantitative Liquidity row in the Metrics Dashboard is unaffected — it comes from `ratios`, a different call.
 - **Peer median unavailable** (peer group too small): Degrade gracefully — show absolute thresholds only, note peer comparison unavailable.
 - **Market cap unavailable** (Altman X4): Compute Z' (book equity variant) and note substitution in Altman section.
 

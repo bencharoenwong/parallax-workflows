@@ -26,6 +26,7 @@ from credit_lens_logic import (  # noqa: E402
     build_footer,
     build_header,
     build_key_flags_section,
+    build_liquidity_section,
     build_metrics_table,
     build_solvency_section,
     compute_altman_z,
@@ -903,6 +904,46 @@ class TestErrorDegradation:
         full = assemble_report(report)
         assert "Credit Risk Assessment" in full
         assert "unavailable" in full.lower()
+
+    def test_one_tool_failure_marks_both_palepu_sections(self) -> None:
+        """Solvency and liquidity come from the same call, so one failure must
+        mark both. Marking only solvency was the shipped behaviour."""
+        report = CreditReport(
+            symbol="MSFT.O",
+            company_name="Microsoft Corp.",
+            overall_flag=Flag.GREEN,
+            palepu_unavailable=True,
+        )
+        assert "unavailable" in build_solvency_section(report).lower()
+        assert "unavailable" in build_liquidity_section(report).lower()
+
+    def test_liquidity_narrative_is_rendered_when_present(self) -> None:
+        report = CreditReport(
+            symbol="MSFT.O",
+            company_name="Microsoft Corp.",
+            overall_flag=Flag.GREEN,
+            solvency_narrative="Leverage is modest and accruals are clean.",
+            liquidity_narrative="Cash conversion has slowed two quarters running.",
+            quality_trend_sentence="Quality stable.",
+            macro_context_sentence="Neutral regime.",
+        )
+        full = assemble_report(report)
+        assert "Cash conversion has slowed two quarters running." in full
+        assert "Leverage is modest and accruals are clean." in full
+        assert "### Liquidity Assessment" in full
+
+    def test_missing_liquidity_narrative_is_marked_not_silently_dropped(self) -> None:
+        """A blank narrative with no tool failure is its own state — the section
+        must still appear, so the gap is visible rather than absent."""
+        report = CreditReport(
+            symbol="MSFT.O",
+            company_name="Microsoft Corp.",
+            overall_flag=Flag.GREEN,
+            solvency_narrative="Leverage is modest.",
+        )
+        assert build_liquidity_section(report) == (
+            "[Liquidity assessment not provided]"
+        )
 
     def test_no_peer_data_defaults_to_absolute_only(self) -> None:
         """None peer data still produces a valid flag via absolute thresholds."""
