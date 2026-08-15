@@ -23,8 +23,8 @@ SHAPE AUTHORITY. Block shapes and arithmetic follow the response-shape ledger
 derived from the untrimmed captures, and ``_parallax/response-schemas.md``.
 Where the repo's older mock disagreed with the live response, the live response
 wins — see ``response-schemas.md`` ("treat this file, not the mock, as the
-current record") and ``deferred-debt.md`` (the three-way ``get_score_analysis``
-shape divergence).
+current record"). ``get_score_analysis`` had three shapes in play at once and is
+resolved the same way.
 
 ENVELOPES ARE PER ENDPOINT, NOT UNIFORM. Each fixture carries the envelope its
 own captures show. Do not generalise from one endpoint to another:

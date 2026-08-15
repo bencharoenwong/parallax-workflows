@@ -40,9 +40,8 @@ GET_TELEMETRY_SCHEMA = {
 # and ``sector_contribution``, ``symbol``/``contribution``/``weight`` rows in
 # ``company_contribution``. That divergence was already on record in
 # ``response-schemas.md`` ("treat this file, not the mock, as the current record
-# of the live contract"), in ``deferred-debt.md`` (the three-way
-# ``get_score_analysis`` shape divergence) and in ``DECISIONS.md`` (the mock
-# "is the wrong artifact"). The mock and this schema now follow the live shape.
+# of the live contract") and in ``DECISIONS.md`` (the mock "is the wrong
+# artifact"). The mock and this schema now follow the live shape.
 #
 # THREE STRUCTURAL POINTS THAT BIT PEOPLE, restated here because a schema is
 # where the next reader looks:
@@ -324,10 +323,10 @@ GET_ASSESSMENT_SCHEMA = {
 }
 
 
-# Corrected 2026-08-13 to the live shape. ``deferred-debt.md`` recorded a
-# three-way divergence here -- a credit-lens fixture on ``factor_trajectory``,
-# this canonical mock on ``history[]`` with uppercase keys, and the live API on
-# ``data[]`` with lowercase keys. The live response wins.
+# Corrected 2026-08-13 to the live shape. Three shapes were in play here at
+# once -- a credit-lens fixture on ``factor_trajectory``, this canonical mock on
+# ``history[]`` with uppercase keys, and the live API on ``data[]`` with
+# lowercase keys. The live response wins.
 #
 # The payload is FLAT: there is no ``result`` wrapper, unlike analyze_portfolio.
 # ``success`` is not a reliable status flag -- a credit-exhausted call returns
