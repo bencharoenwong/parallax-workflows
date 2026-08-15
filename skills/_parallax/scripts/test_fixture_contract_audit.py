@@ -53,7 +53,7 @@ import fixture_precision as fp
 import gen_mock_fixtures as gen
 import test_fixture_provenance as prov
 from contract_schemas import ANALYZE_PORTFOLIO_ENVELOPE_SCHEMA
-from contract_validator import normalize_company_name, validate
+from contract_validator import names_match, normalize_company_name, validate
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MOCKS_DIR = Path(__file__).resolve().parent / "mcp_mocks"
@@ -369,8 +369,9 @@ def test_company_contribution_name_agrees_with_the_oracle(tracked_portfolio):
         "the oracle's RIC must appear in BOTH holding blocks, or one of the "
         "two documented gate inputs is untested")
     for candidate in pairs["candidates"]:
-        assert normalize_company_name(candidate) == normalize_company_name(
-            pairs["oracle"][0])
+        assert names_match(candidate, pairs["oracle"][0]) is True, (
+            "the gate must record a genuine match, not an undecidable "
+            "empty-name comparison")
 
 
 def test_identity_pair_lookup_finds_nothing_for_an_absent_holding():
@@ -408,21 +409,24 @@ def test_a_row_without_a_name_is_not_offered_as_a_comparison():
 
 @pytest.mark.parametrize("blank", ["", "   ", "Inc", "Corp.", "Ltd"])
 def test_normalization_folds_a_contentless_name_to_the_empty_string(blank):
-    """HONESTY PIN, and the reason the UNCHECKED rule cannot be implemented as
-    a plain equality over normalized names.
-
-    ``normalize_company_name`` strips the corporate-form token, so a name that
-    is nothing BUT a corporate form -- and a name that is absent or blank --
-    all fold to ``""``. Two such sides therefore compare EQUAL, which a naive
-    gate would record as a match: the "missing comparison treated as a pass"
-    failure, arriving through the normalizer rather than through the lookup.
-
-    Pinned, not fixed: the guard belongs in the normalizer's callers or in the
-    normalizer itself, and this file is test-only. See the report accompanying
-    this suite.
+    """``normalize_company_name`` strips the corporate-form token, so a name
+    that is nothing BUT a corporate form -- and a name that is absent or
+    blank -- all fold to ``""``. Two such sides therefore compare EQUAL under
+    plain string equality, which is why the gate must never compare
+    normalized forms with ``==`` directly (see the companion test below).
     """
     assert normalize_company_name(blank) == ""
     assert normalize_company_name(blank) == normalize_company_name("")
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "Inc", "Corp.", "Ltd"])
+def test_names_match_refuses_to_confirm_a_contentless_pair(blank):
+    """The guard: ``names_match`` reads the empty-normalized-form collision
+    above as undecidable (``None``), not as a match, so a caller following
+    conventions §2 records the holding UNCHECKED instead of passing it
+    silently."""
+    assert names_match(blank, "") is None
+    assert names_match(blank, "Zulu Alpha Corp") is None
 
 
 def test_a_real_name_never_folds_to_the_empty_string(tracked_portfolio):
@@ -563,8 +567,7 @@ def test_tracked_fixtures_describe_one_issuer_consistently(tracked_portfolio):
                    if h["ric"] == oracle["symbol"])
     assert holding["sector"] == oracle["sector"]
     assert holding["industry"] == oracle["industry"]
-    assert normalize_company_name(holding["name"]) == normalize_company_name(
-        oracle["name"])
+    assert names_match(holding["name"], oracle["name"]) is True
 
 
 def test_cross_fixture_check_fails_on_a_planted_disagreement():

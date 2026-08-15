@@ -6,7 +6,7 @@ read, marked required/optional with expected types. Schema DSL documented in
 
 from __future__ import annotations
 
-from contract_validator import NUM, OPTIONAL
+from contract_validator import NULLABLE, NUM, OPTIONAL
 
 # Several live blocks carry JSON null in a numeric or string slot, and null is
 # NOT the same as absent -- see the OPTIONAL semantics note in
@@ -65,11 +65,8 @@ ANALYZE_PORTFOLIO_SCHEMA = {
             # Same SET in a different ORDER — compare as sets, never as lists.
             "fields_requested": [str],
             "fields_returned": [str],
-            # A list of the offending names, or null on a clean request. Typed
-            # as ``(list, NONE)`` rather than ``([str], NONE)`` because the DSL
-            # cannot express "list-with-element-shape OR null" — a tuple spec
-            # admits plain types only.
-            "invalid_fields": (list, NONE),
+            # A list of the offending names, or null on a clean request.
+            "invalid_fields": ([str], NULLABLE),
         },
         OPTIONAL,
     ),
