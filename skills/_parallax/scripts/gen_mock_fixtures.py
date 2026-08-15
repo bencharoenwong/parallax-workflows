@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Seeded synthetic generator for the managed mock fixtures (gate 1's other half).
 
-WHY THIS EXISTS. Two fixtures under ``mcp_mocks/`` were once rebuilt from live
-API captures, which put live Parallax output about real issuers into a public
-repo. Scrubbing that by hand failed repeatedly because "is this value live?" is
-an unbounded judgement call. Generating the fixtures replaces it with a bounded,
-mechanical one: *is this file byte-identical to what the seeded generator
-emits?* ``test_fixture_provenance.py`` asks exactly that question.
+WHY THIS EXISTS. A hand-authored fixture leaves a reviewer an unbounded
+question: is every value in it synthetic? That question has no mechanical
+answer, so it has to be re-argued on every edit and it is never settled.
+Generating the fixtures replaces it with a bounded question a machine can
+answer: *is this file byte-identical to what the seeded generator emits?*
+``test_fixture_provenance.py`` asks exactly that.
 
 CONTRACT. ``build_fixtures() -> dict[str, Any]`` maps fixture stem to the parsed
 fixture object. Deterministic from ``SEED``, stdlib only, no network, no clock
@@ -1282,11 +1282,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--find-seed", action="store_true",
                         help="search for a seed satisfying the structural "
                              "constraints and print it")
-    args = parser.parse_args(argv)
+    # ``main()`` with no argument means NO command-line arguments, not "go read
+    # sys.argv". Defaulting to sys.argv here would make the function pick up
+    # whatever flags the surrounding process was launched with -- under pytest
+    # that is the pytest command line, which argparse then rejects with
+    # SystemExit. The real entry point passes sys.argv[1:] explicitly at the
+    # bottom of this file. Same rule as ``fixture_precision.main``.
+    args = parser.parse_args([] if argv is None else argv)
 
     if args.find_seed:
         print(_find_seed())
         return 0
+
+    if args.write and not args.out.is_dir():
+        print(f"FAIL: {args.out} is not a directory — nothing was written",
+              file=sys.stderr)
+        return 1
 
     failures = _seed_constraints(build_paths(SEED))
     if failures:
@@ -1307,4 +1318,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

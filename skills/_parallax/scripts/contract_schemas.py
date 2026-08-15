@@ -8,14 +8,12 @@ from __future__ import annotations
 
 from contract_validator import NULLABLE, NUM, OPTIONAL
 
-# Several live blocks carry JSON null in a numeric or string slot, and null is
-# NOT the same as absent -- see the OPTIONAL semantics note in
-# ``contract_validator``. A tuple-of-types including ``type(None)`` says
-# "present, and may be null", which is what these fields actually do. It needs
-# no change to the validator: OPTIONAL still means "may be absent" only.
-NONE = type(None)
-NULLABLE_NUM = (int, float, NONE)
-NULLABLE_STR = (str, NONE)
+# Several blocks carry JSON null in a numeric or string slot, and null is NOT
+# the same as absent -- see the OPTIONAL semantics note in
+# ``contract_validator``. Those fields are spelled ``(inner, NULLABLE)``, which
+# is the one notation for "present, and may be null". Writing ``type(None)``
+# into a tuple of types would say it a second way AND lose the bool rule, since
+# the marker unwraps to a spec the validator checks in full.
 
 
 GET_TELEMETRY_SCHEMA = {
@@ -131,7 +129,7 @@ ANALYZE_PORTFOLIO_SCHEMA = {
                         "date": str,
                         "portfolio_drawdown": NUM,
                         # Null whenever not underwater, not 0.
-                        "portfolio_episode": (int, NONE),
+                        "portfolio_episode": (int, NULLABLE),
                     }
                 ],
                 OPTIONAL,
@@ -146,9 +144,9 @@ ANALYZE_PORTFOLIO_SCHEMA = {
                                 "trough_date": str,
                                 # The still-open final episode carries nulls
                                 # here and ``recovered: false``.
-                                "end_date": NULLABLE_STR,
+                                "end_date": (str, NULLABLE),
                                 "max_drawdown": NUM,
-                                "recovery_days": NULLABLE_NUM,
+                                "recovery_days": (NUM, NULLABLE),
                                 "recovered": bool,
                             }
                         ],

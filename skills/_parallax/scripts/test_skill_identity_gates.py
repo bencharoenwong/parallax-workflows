@@ -30,6 +30,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import build_bundle as bb
+from contract_validator import normalize_company_name
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -122,14 +123,21 @@ def test_conventions_carries_the_per_tool_identity_table():
 
 def test_normalization_rule_and_its_executable_statement_stay_together():
     """conventions §2 step 2 names ``contract_validator.normalize_company_name``
-    as the executable statement of the fold. If the function is renamed or moved
-    the citation goes stale silently, so it is asserted from both ends."""
+    as the executable statement of the fold. If the function is renamed, moved
+    or hollowed out the citation goes stale silently, so the cited module is
+    imported and CALLED here rather than read: the citation is only worth
+    anything if the thing it points at still folds the pair the rule promises
+    it folds."""
     text = (REPO_ROOT / "skills/_parallax/parallax-conventions.md").read_text(
         encoding="utf-8")
     assert "_parallax/scripts/contract_validator.py" in text
-    module = (REPO_ROOT / "skills/_parallax/scripts/contract_validator.py").read_text(
-        encoding="utf-8")
-    assert "def normalize_company_name(" in module
+    assert callable(normalize_company_name)
+    assert (normalize_company_name("Apple Inc")
+            == normalize_company_name("Apple Inc."))
+    assert (normalize_company_name("Siemens Aktiengesellschaft")
+            == normalize_company_name("Siemens AG"))
+    assert (normalize_company_name("Acme Holdings")
+            != normalize_company_name("Beta Holdings"))
 
 
 # --------------------------------------------------------------------------

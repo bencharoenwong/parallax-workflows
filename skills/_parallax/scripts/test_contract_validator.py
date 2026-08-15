@@ -25,6 +25,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from contract_validator import (  # noqa: E402
     NULLABLE,
+    NUM,
     OPTIONAL,
     normalize_company_name,
     validate,
@@ -70,6 +71,29 @@ def test_validator_rejects_bool_for_int():
     # contract's purposes.
     with pytest.raises(AssertionError, match="expected int, got bool"):
         validate({"foo": True}, {"foo": int}, "root")
+
+
+def test_validator_rejects_bool_for_a_numeric_tuple_slot():
+    """``NUM`` is a tuple of types, and every tuple carrying ``int`` inherits
+    the same bool footgun. A fixture emitting ``true`` where a number belongs is
+    drift, so the tuple branch has to refuse it exactly as the single-type
+    branch does."""
+    with pytest.raises(AssertionError, match="got bool"):
+        validate({"foo": True}, {"foo": NUM}, "root")
+
+
+def test_validator_rejects_bool_for_a_nullable_numeric_slot():
+    """``(NUM, NULLABLE)`` unwraps to the tuple branch, so it must refuse bool
+    too — otherwise the marker would be a way to smuggle one back in."""
+    with pytest.raises(AssertionError, match="got bool"):
+        validate({"foo": True}, {"foo": (NUM, NULLABLE)}, "root")
+
+
+def test_validator_accepts_bool_when_the_tuple_names_bool():
+    """The guard keys on the spec, not on the value: a field that genuinely may
+    be a bool says so, and still passes."""
+    validate({"foo": True}, {"foo": (bool, NULLABLE)}, "root")
+    validate({"foo": False}, {"foo": (int, bool)}, "root")
 
 
 def test_validator_validates_list_elements():

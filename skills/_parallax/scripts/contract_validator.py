@@ -29,6 +29,15 @@ Schema DSL (Python-dict)
 For list elements that are dicts, use ``[nested_schema]`` (a one-element list
 whose only element is a dict).
 
+``bool`` never satisfies a numeric slot. Python makes ``bool`` a subclass of
+``int``, so both the single-type and the tuple-of-types forms reject ``True``
+for an ``int`` or ``NUM`` spec. Write ``bool`` into the spec when a field really
+is a boolean; there is no spelling of "int" that also admits ``true``.
+
+Nullability is spelled ONE way — the ``(inner, "nullable")`` marker. Do not
+write ``type(None)`` into a tuple of types: it says the same thing in a second
+notation, and it routes through the tuple branch rather than the marker branch.
+
 Validator limitation — empty lists
 ----------------------------------
 
@@ -176,6 +185,14 @@ def validate(value: Any, spec: Any, path: str) -> None:
         assert all(isinstance(t, type) for t in spec), (
             f"{path}: malformed tuple spec {spec!r}"
         )
+        # Same bool rule as the single-type branch below, applied here because
+        # bool subclasses int: without it ``NUM`` — and every tuple carrying
+        # ``int`` — silently accepts ``true`` in a numeric slot. A tuple that
+        # names ``bool`` explicitly is asking for it and is left alone.
+        if isinstance(value, bool) and bool not in spec:
+            raise AssertionError(
+                f"{path}: expected one of {[t.__name__ for t in spec]}, got bool"
+            )
         assert isinstance(value, spec), (
             f"{path}: expected one of {[t.__name__ for t in spec]}, "
             f"got {type(value).__name__}"

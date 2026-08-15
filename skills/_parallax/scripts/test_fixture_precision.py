@@ -65,9 +65,9 @@ def test_api_emitted_ratio_trips_the_gate(tmp_path):
 
 
 def test_market_cap_to_the_dollar_trips_the_gate(tmp_path):
-    """The identity field named in the incident: a 16-figure integer market cap
-    re-identifies an issuer even after the ticker is renamed. Integers must be
-    in scope, not just floats."""
+    """The hardest identity field to spot by eye: a 16-figure integer market
+    cap re-identifies an issuer even after the ticker is renamed. Integers must
+    be in scope, not just floats."""
     _write(tmp_path, "planted.json", {"mktcap": 3812345678901234})
     violations, _ = fp.scan_dir(tmp_path, allowlist={})
     assert [v.path for v in violations] == ["planted.json:mktcap"]

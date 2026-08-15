@@ -141,12 +141,12 @@ def test_credit_exhausted_envelope_reports_success_with_no_result(fixtures):
 
 
 def test_no_real_issuer_identity_survives(fixtures):
-    """The incident in one assertion. Tickers and names of real issuers must not
-    appear anywhere in generated output."""
+    """The rule in one assertion. Tickers and names of actual listed companies
+    must not appear anywhere in generated output."""
     blob = json.dumps(fixtures)
     for term in ("AAPL", "Apple", "MSFT", "Microsoft", "NVDA", "NVIDIA",
                  "apple.com", "ACWI", "JPM"):
-        assert term not in blob, f"{term!r} leaked into a generated fixture"
+        assert term not in blob, f"{term!r} reached a generated fixture"
 
 
 # --------------------------------------------------------------------------

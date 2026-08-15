@@ -9,7 +9,7 @@ or plausibility. It asks one question of every managed fixture:
     can a seeded generator reproduce this file exactly?
 
 If yes, every byte in it came from code in this repo that anyone can read. If no
--- a pasted live capture, a hand-tweak, a re-run against the live API -- it fails
+-- a pasted response, a hand-tweak, a re-run against the live API -- it fails
 immediately, and it fails on values a precision heuristic cannot see: a
 ``recommendation`` string, a distinctive ``industry`` label, a real score on a
 real date, a market cap that happens to be round.
@@ -26,12 +26,12 @@ the directory listing. The categories differ in what they claim:
   * MANAGED       -- regenerable byte-exact from the seeded generator. Proof.
   * HAND_AUTHORED -- deliberately not regenerable (it models a failure mode
                      with no generator to run against). Reason mandatory.
-  * PRE_EXISTING  -- authored before the generator and before the live
-                     captures; outside the generator's scope. Reason mandatory.
+  * PRE_EXISTING  -- authored before the generator; outside the generator's
+                     scope. Reason mandatory.
 
 The third category is a classification, NOT a loophole. A fixture nobody has
-classified still belongs to none of them and still fails -- which is the move
-that committed the live captures in the first place.
+classified still belongs to none of them and still fails. An unclassified file
+is the one whose provenance nothing states, so the gate refuses it.
 
 GENERATOR CONTRACT. ``gen_mock_fixtures.py`` exposes::
 
@@ -64,11 +64,11 @@ MOCKS_DIR = Path(__file__).resolve().parent / "mcp_mocks"
 
 # Reproducible from gen_mock_fixtures.build_fixtures(). Grow this set.
 #
-# Scoped to the three fixtures that were ever rebuilt from live API captures --
-# the actual leak -- plus the error-envelope companion the generator emits
-# alongside analyze_portfolio. Regenerating the other six would churn
-# known-clean files that predate the incident, for no provenance gain and a real
-# chance of breaking consumers, so they sit in PRE_EXISTING below.
+# Scoped to the three fixtures whose shapes this change re-derived, plus the
+# error-envelope companion the generator emits alongside analyze_portfolio.
+# Regenerating the other six would churn long-stable files for no provenance
+# gain and a real chance of breaking consumers, so they sit in PRE_EXISTING
+# below.
 MANAGED = {
     "analyze_portfolio",
     "analyze_portfolio_credit_exhausted",
@@ -91,9 +91,9 @@ HAND_AUTHORED = {
 # mandatory here for the same purpose it is in HAND_AUTHORED: an unclassified
 # fixture must never become classifiable by accident.
 #
-# These are authored fixtures that predate the generator and predate the live
-# captures. They were already public on main, carry no live provenance, and were
-# never touched by the incident. Teaching the generator to emit them byte-exact
+# These are authored fixtures that predate the generator. They were already
+# public on main and are outside the set this change re-derived. Teaching the
+# generator to emit them byte-exact
 # would mean transcribing their current contents into Python -- which produces a
 # regeneration test that passes by construction and proves nothing. The honest
 # classification is that they are authored, and gate 2's precision budget is
@@ -102,9 +102,9 @@ HAND_AUTHORED = {
 # This is not a permanent parking space. Any of these that acquires a real
 # derivation should move into MANAGED.
 _PRE_EXISTING_REASON = (
-    "Authored fixture predating the generator; no live provenance -- it was "
-    "already public on main before the live captures landed and was not one of "
-    "the three files they touched. Covered by the gate 2 precision budget.")
+    "Authored fixture predating the generator -- already public on main and "
+    "not one of the files this change re-derived. Covered by the gate 2 "
+    "precision budget.")
 
 PRE_EXISTING = {
     "check_portfolio_redundancy": _PRE_EXISTING_REASON,
@@ -242,9 +242,9 @@ def load_generator() -> tuple[Callable[[], dict[str, Any]] | None, str | None]:
 # --------------------------------------------------------------------------
 
 def test_every_tracked_fixture_is_classified():
-    """Runs with or without the generator. A newly dropped fixture -- the exact
-    move that committed the live captures -- fails here until someone states
-    where it came from."""
+    """Runs with or without the generator. A fixture dropped into the directory
+    with no classification fails here until someone states where it came
+    from."""
     errors = classification_errors()
     assert errors == [], "\n".join(errors)
 
@@ -342,8 +342,8 @@ def test_tampered_string_fails(tmp_path):
 
 
 def test_added_field_fails(tmp_path):
-    """A live capture usually carries MORE fields than the generator models --
-    the identity fields nobody meant to commit."""
+    """A raw API response usually carries MORE fields than the generator
+    models -- including identity fields nobody meant to commit."""
     _fake_tracked(tmp_path, "widget", {"symbol": "TESTCO.X", "numshrs": 15728003241})
     errors = regeneration_errors(
         {"widget": {"symbol": "TESTCO.X"}}, tmp_path, {"widget"})

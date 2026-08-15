@@ -32,6 +32,20 @@ jobs:
         run: python -m pytest evals/graders/ -q
       - name: Contract, provenance and precision gates
         run: python -m pytest skills/_parallax/scripts/ -q
+      # A separate process per top-level test root, not a second path appended
+      # to the line above: three skills ship a `tests/conftest.py` and pytest
+      # names every one `tests.conftest`, so collecting two roots in one process
+      # can abort with "Plugin already registered". See run-gate-tests.sh, which
+      # holds the same invariant for the local gate.
+      #
+      # This root carries the consumer side of the shared contract:
+      # test_mcp_contracts.py reads the `result` envelope, the 0-10 vs 0-100
+      # score scales and the money identities, and test_contribution_edges.py
+      # covers the contribution conversion. The provenance gate above proves a
+      # fixture matches its generator; only these prove the shape is the one
+      # skills actually read.
+      - name: CIO letter-prep contract and contribution gates
+        run: python -m pytest skills/parallax-cio-letter-prep/ -q
       # The local-only extra term file cannot exist on a runner, and
       # load_canary_terms() fails closed without it. PARALLAX_ALLOW_PARTIAL_SCAN
       # is the sanctioned opt-in: CI scans the built-in branding / code-name

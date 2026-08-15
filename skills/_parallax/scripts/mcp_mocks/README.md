@@ -65,11 +65,11 @@ Read the generator's module docstring before changing it. It documents the traps
 
 ## How to refresh when the live MCP server changes
 
-**For a `MANAGED` fixture, do not capture and paste.** Change `../gen_mock_fixtures.py` so it derives the new shape, re-run it with `--write`, and commit the generator change together with the regenerated fixture. Gate 1 fails otherwise, by design. Capturing a live response to "check the shape" is fine as a local, uncommitted reference; committing it is the incident.
+**For a `MANAGED` fixture, do not capture and paste.** Change `../gen_mock_fixtures.py` so it derives the new shape, re-run it with `--write`, and commit the generator change together with the regenerated fixture. Gate 1 fails otherwise, by design. Reading a live response to check the shape is fine as a local, uncommitted reference; it must not be committed.
 
 For `HAND_AUTHORED` and `PRE_EXISTING` fixtures:
 
-1. **Capture the new shape.** Hit the live endpoint via the MCP tool to read the shape. Author the fixture from that shape with your own values — do not commit captured output, and do not rely on scrubbing it, which has failed every time it was attempted.
+1. **Read the new shape.** Hit the live endpoint via the MCP tool to see the shape. Author the fixture from that shape with your own values. Never commit the response itself, and never edit it down into a fixture — "is this value still from the response?" is an unbounded judgement call, which is exactly the question the `MANAGED` category exists to remove.
 2. **Update the mock** in this directory to match the new shape. Keep the same file name.
 3. **Update the schema** in `../contract_schemas.py` to reflect the new contract — remove dropped fields, add new fields with required/optional markers, change types as needed.
 4. **Re-read every SKILL.md that imports the schema** to confirm those skills are still reading fields that exist in the new shape. If a skill needs to change to read new fields, do that in the same PR.
