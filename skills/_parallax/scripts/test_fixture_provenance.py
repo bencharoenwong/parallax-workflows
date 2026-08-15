@@ -219,8 +219,9 @@ def load_generator() -> tuple[Callable[[], dict[str, Any]] | None, str | None]:
 
     Absence of the module is a skip. A module that is PRESENT but broken --
     syntax error, bad import, wrong signature at call time -- must raise, not
-    skip: the generator is under active development and a silently-skipped gate
-    during exactly that window is how the leak got in."""
+    skip: the generator is under active development, and a gate that skips
+    silently during exactly that window is a gate that reports green while
+    proving nothing about any fixture."""
     try:
         import gen_mock_fixtures  # type: ignore[import-not-found]
     except ModuleNotFoundError as exc:
