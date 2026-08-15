@@ -177,6 +177,8 @@ Structure output in markdown with the following sections:
 ```
 Overall traffic-light determined by: count of RED flags (→ Red), count of AMBER flags (→ Amber), count of GREEN (→ Green). Majority color wins. If two or more colors tie for the highest count, render the most conservative tied color (Red > Amber > Green) — e.g., a 2-2-2 split renders Red. Compute via `overall_traffic_light(flags)`, which also drops UNAVAILABLE legs from the count and returns UNAVAILABLE when every leg is missing.
 
+**State the coverage whenever any leg is UNAVAILABLE.** Dropping those legs is right for the vote but silent in the header, so a 🟢 can rest on two judged metrics out of six and still read as a full clean bill. Append the count to the header line — `| Judged: 2 of 6 metrics` — and list which metrics were not judged, and why, in Key Flags. Never present a majority verdict computed from a minority of the metrics without saying so.
+
 ### 2. **Metrics Dashboard** (table)
 ```
 | Category      | Signal | Metric Value | Peer Median | Interpretation |
