@@ -444,6 +444,46 @@ class TestPeerPercentileAssertion:
             with pytest.raises(ValueError, match="peer_p75.*must be"):
                 flag_metric(5.0, median, p75, key)
 
+    def test_non_finite_value_is_unavailable_not_green(self) -> None:
+        """Every IEEE-754 comparison against NaN is False, so a NaN fell through
+        both threshold tests and landed on the trailing `return GREEN`. It hit
+        exactly the three keys that carry an absolute band — the load-bearing
+        credit metrics."""
+        for key in ABSOLUTE_THRESHOLDS:
+            assert flag_metric(float("nan"), None, None, key) == Flag.UNAVAILABLE, key
+            assert flag_metric(float("inf"), None, None, key) == Flag.UNAVAILABLE, key
+        # and with a partial peer bound present, which was also GREEN
+        assert flag_metric(float("nan"), 3.0, None, "current_ratio") == Flag.UNAVAILABLE
+
+    def test_negative_high_bad_ratio_is_not_green(self) -> None:
+        """A negative debt ratio sits below any positive peer median and fails
+        every `value > threshold` test, so both legs returned GREEN on what is
+        either a distress signature or a net-cash position. It is not scoreable
+        either way, so it must not read as healthy."""
+        for value, median, p75, key in (
+            (-8.0, None, None, "debt_ebitda"),
+            (-8.0, 1.1, 1.8, "debt_ebitda"),
+            (-6.5, 0.5, 1.2, "debt_equity"),
+            (-2.0, 0.3, 0.5, "debt_assets"),
+            (float("-inf"), None, None, "debt_ebitda"),
+        ):
+            assert flag_metric(value, median, p75, key) == Flag.UNAVAILABLE, key
+
+    def test_negative_low_bad_metric_still_flags_red(self) -> None:
+        """The low_bad direction never had this defect and must keep working —
+        a negative interest coverage is unambiguously distress."""
+        assert flag_metric(-3.0, None, None, "interest_coverage") == Flag.RED
+        assert flag_metric(-0.04, 0.22, 0.15, "ebitda_margin") == Flag.RED
+
+    def test_non_finite_peer_bound_degrades_like_a_missing_row(self) -> None:
+        """A NaN peer bound is a peer-data gap, not an inverted ordering. It
+        must not raise with a message that misdescribes the cause."""
+        # banded key: falls back to the absolute rule
+        assert flag_metric(6.0, float("nan"), float("nan"), "debt_ebitda") == Flag.RED
+        assert flag_metric(20.0, float("nan"), 6.0, "interest_coverage") == Flag.GREEN
+        # peer-only key: nothing left to judge it with
+        assert flag_metric(2.0, float("nan"), 1.0, "debt_equity") == Flag.UNAVAILABLE
+
     def test_equal_percentiles_are_degenerate_not_inverted(self) -> None:
         """p75 == median collapses the AMBER band but is not a data error, so
         it must not raise in either direction."""

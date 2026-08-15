@@ -80,12 +80,31 @@ def compute_altman_z(inputs: AltmanInputs) -> tuple[float, str, Flag]:
     x3 = inputs.ebit / inputs.total_assets
     x5 = inputs.revenue / inputs.total_assets
 
-    if inputs.market_cap is not None:
+    # `is not None` alone accepted 0.0, which is how a missing market cap is
+    # commonly coded. That selected the Z variant, set X4 to zero, discarded a
+    # supplied book_equity and mislabelled the result "Z". With negative book
+    # equity the substitution raised the score and softened the verdict, so the
+    # output both misreported which formula ran and understated the risk.
+    # A listed issuer cannot have a zero or negative market cap; treat it as
+    # absent and fall through to the documented Z' path.
+    market_cap_usable = (
+        inputs.market_cap is not None
+        and math.isfinite(inputs.market_cap)
+        and inputs.market_cap > 0
+    )
+    if market_cap_usable:
         x4_numerator = inputs.market_cap
         variant = "Z"
     elif inputs.book_equity is not None:
         x4_numerator = inputs.book_equity
         variant = "Z'"
+    elif inputs.market_cap is not None:
+        # Unusable cap and no book equity to fall back on. Preserved rather
+        # than made an error: a zero cap still yields X4 = 0, and a non-finite
+        # cap still propagates to a non-finite z, which _altman_zone_flag
+        # already reports as UNAVAILABLE.
+        x4_numerator = inputs.market_cap
+        variant = "Z"
     else:
         raise ValueError(
             "Either market_cap or book_equity must be provided for X4"
@@ -142,6 +161,37 @@ def flag_metric(
             f"band) before flagging it. Known keys: "
             f"{sorted(set(METRIC_DIRECTIONS) | set(ABSOLUTE_THRESHOLDS))}"
         )
+
+    if not math.isfinite(value):
+        # Every IEEE-754 comparison against NaN is False, so a NaN fell through
+        # both threshold tests in _absolute_flag and landed on its trailing
+        # `return GREEN`. json.loads accepts a bare NaN token, so this can
+        # arrive straight off a tool response. compute_altman_z already treats
+        # a non-finite result as UNAVAILABLE; this matches it.
+        return Flag.UNAVAILABLE
+
+    direction = _direction(metric_key)
+    if direction == "high_bad" and value < 0:
+        # A negative debt ratio does not mean "better than every peer", which
+        # is what the high_bad rule concluded: any negative sits below any
+        # positive median, and it also fails every `value > threshold` test, so
+        # both legs returned GREEN on a distress signature.
+        #
+        # It is not safely scoreable either. A negative Debt/EBITDA is negative
+        # EBITDA against positive debt, which is distress; but on a net-debt
+        # convention it is net cash, which is healthy. The sign inverts the
+        # economic meaning and this module cannot tell the two apart, so it
+        # refuses to guess. The orchestrator must explain the sign in the
+        # narrative — see SKILL.md Batch C.
+        return Flag.UNAVAILABLE
+
+    # A non-finite peer bound is a peer-data gap, not an inverted ordering.
+    # Treated as absent so it degrades the same way a missing row does, rather
+    # than raising with a message that misdescribes the cause.
+    if peer_median is not None and not math.isfinite(peer_median):
+        peer_median = None
+    if peer_p75 is not None and not math.isfinite(peer_p75):
+        peer_p75 = None
 
     has_peer = peer_median is not None and peer_p75 is not None
     has_absolute = metric_key in ABSOLUTE_THRESHOLDS
@@ -291,6 +341,11 @@ def flag_quality_change(change_pts: float) -> Flag:
     Boundary values are inclusive and are compared with ``_BAND_TOL`` so that a
     change arriving one ULP outside its band still lands in it.
     """
+    if not math.isfinite(change_pts):
+        # Same NaN fall-through as flag_metric: both comparisons are False, so
+        # a NaN reached the trailing `return GREEN` and a missing trend read as
+        # a healthy one.
+        return Flag.UNAVAILABLE
     if change_pts <= -1.5 + _BAND_TOL:
         return Flag.RED
     if change_pts <= -0.5 + _BAND_TOL:
