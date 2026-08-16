@@ -98,16 +98,16 @@ def compute_altman_z(inputs: AltmanInputs) -> tuple[float, str, Flag]:
     elif inputs.book_equity is not None:
         x4_numerator = inputs.book_equity
         variant = "Z'"
-    elif inputs.market_cap is not None:
-        # Unusable cap and no book equity to fall back on. Preserved rather
-        # than made an error: a zero cap still yields X4 = 0, and a non-finite
-        # cap still propagates to a non-finite z, which _altman_zone_flag
-        # already reports as UNAVAILABLE.
-        x4_numerator = inputs.market_cap
-        variant = "Z"
     else:
+        # Covers an absent cap and an unusable one (zero, negative, non-finite)
+        # with no book equity behind it. Both used to fabricate X4 and label the
+        # result "Z", which downstream cannot tell from a real market-cap Z.
+        # SKILL.md already tells the orchestrator to treat the raise as the
+        # Altman leg being unavailable, so raising is the documented contract.
         raise ValueError(
-            "Either market_cap or book_equity must be provided for X4"
+            "Either market_cap or book_equity must be provided for X4 "
+            f"(market_cap={inputs.market_cap!r} is not usable: a listed issuer "
+            f"cannot have a zero, negative or non-finite market cap)"
         )
 
     if inputs.total_liabilities == 0:
@@ -122,8 +122,16 @@ def compute_altman_z(inputs: AltmanInputs) -> tuple[float, str, Flag]:
 
 
 def _altman_zone_flag(z: float) -> Flag:
-    """Map Altman Z value to credit flag per SKILL.md thresholds."""
-    if math.isnan(z):
+    """Map Altman Z value to credit flag per SKILL.md thresholds.
+
+    Screens every non-finite z, not just NaN. `inf > 2.99` is True, so an
+    infinite z used to return GREEN — "Safe Zone" on a score that overflowed.
+    It does not take a non-finite input to get there: a large working capital
+    over a tiny total-assets figure overflows from entirely finite inputs.
+    `-inf` is treated the same way rather than left as RED, because an
+    overflowed score is not a distress reading, it is an absent one.
+    """
+    if not math.isfinite(z):
         return Flag.UNAVAILABLE
     if z > 2.99:
         return Flag.GREEN
@@ -170,7 +178,24 @@ def flag_metric(
         # a non-finite result as UNAVAILABLE; this matches it.
         return Flag.UNAVAILABLE
 
+    # A non-finite peer bound is a peer-data gap, not an inverted ordering.
+    # Treated as absent so it degrades the same way a missing row does, rather
+    # than raising with a message that misdescribes the cause.
+    if peer_median is not None and not math.isfinite(peer_median):
+        peer_median = None
+    if peer_p75 is not None and not math.isfinite(peer_p75):
+        peer_p75 = None
+
     direction = _direction(metric_key)
+
+    # Ordering is validated BEFORE the negative-value guard below. The guard
+    # returns early, so putting it first swallowed a corrupt peer row for
+    # exactly the distressed inputs where a mis-mapped peer field is most
+    # likely — the same pair raised on a positive value and passed silently on
+    # a negative one.
+    if peer_median is not None and peer_p75 is not None:
+        _validate_peer_ordering(peer_median, peer_p75, direction, metric_key)
+
     if direction == "high_bad" and value < 0:
         # A negative debt ratio does not mean "better than every peer", which
         # is what the high_bad rule concluded: any negative sits below any
@@ -184,14 +209,6 @@ def flag_metric(
         # refuses to guess. The orchestrator must explain the sign in the
         # narrative — see SKILL.md Batch C.
         return Flag.UNAVAILABLE
-
-    # A non-finite peer bound is a peer-data gap, not an inverted ordering.
-    # Treated as absent so it degrades the same way a missing row does, rather
-    # than raising with a message that misdescribes the cause.
-    if peer_median is not None and not math.isfinite(peer_median):
-        peer_median = None
-    if peer_p75 is not None and not math.isfinite(peer_p75):
-        peer_p75 = None
 
     has_peer = peer_median is not None and peer_p75 is not None
     has_absolute = metric_key in ABSOLUTE_THRESHOLDS
@@ -214,6 +231,32 @@ def _direction(metric_key: str) -> Optional[str]:
     if metric_key in ABSOLUTE_THRESHOLDS:
         return ABSOLUTE_THRESHOLDS[metric_key][2]
     return None
+
+
+def _validate_peer_ordering(
+    peer_median: float,
+    peer_p75: float,
+    direction: Optional[str],
+    metric_key: str,
+) -> None:
+    """Raise when the peer pair is inverted for its direction.
+
+    `peer_p75` carries the adverse tail either way: numerically above the
+    median when high is worse, below it when low is worse. An inverted pair
+    means the caller mapped the fields wrong or the peer row is corrupt, and
+    the bands would silently invert — so it must raise, not score.
+
+    Equality is degenerate but not inverted. It collapses the AMBER band while
+    leaving the GREEN/RED partition correctly oriented, so it stays allowed.
+    """
+    if direction == "low_bad" and not (peer_p75 <= peer_median):
+        raise ValueError(
+            f"peer_p75 ({peer_p75}) must be <= peer_median ({peer_median}) for {metric_key} (low_bad direction)"
+        )
+    if direction == "high_bad" and not (peer_p75 >= peer_median):
+        raise ValueError(
+            f"peer_p75 ({peer_p75}) must be >= peer_median ({peer_median}) for {metric_key} (high_bad direction)"
+        )
 
 
 def _peer_relative_flag(
@@ -241,14 +284,7 @@ def _peer_relative_flag(
     # rescue the verdict: an inverted pair returned GREEN on a value sitting
     # between the two percentiles. Equality is degenerate but not inverted, so
     # it stays allowed on both sides.
-    if direction == "low_bad" and not (peer_p75 <= peer_median):
-        raise ValueError(
-            f"peer_p75 ({peer_p75}) must be <= peer_median ({peer_median}) for {metric_key} (low_bad direction)"
-        )
-    if direction == "high_bad" and not (peer_p75 >= peer_median):
-        raise ValueError(
-            f"peer_p75 ({peer_p75}) must be >= peer_median ({peer_median}) for {metric_key} (high_bad direction)"
-        )
+    _validate_peer_ordering(peer_median, peer_p75, direction, metric_key)
 
     if direction == "high_bad":
         if value <= peer_median:
@@ -429,12 +465,29 @@ class CreditReport:
     palepu_unavailable: bool = False
 
 
+def coverage(flags: list[Flag]) -> tuple[int, int]:
+    """Return (judged, total). `judged` excludes UNAVAILABLE legs.
+
+    `overall_traffic_light` drops those legs from the vote, which is right for
+    the arithmetic and silent in the output: a GREEN header can rest on a small
+    minority of the metrics and still read as a full clean bill. This is not a
+    corner case — five of the ten registered keys carry no absolute band, and
+    the `ratios` response supplies peer percentiles for none of them, so they
+    are UNAVAILABLE on a routine run.
+    """
+    return sum(1 for f in flags if f != Flag.UNAVAILABLE), len(flags)
+
+
 def build_header(report: CreditReport) -> str:
     emoji = EMOJI.get(report.overall_flag, "")
-    return (
+    line = (
         f"## Credit Risk Assessment: {report.company_name} ({report.symbol})"
         f" | Traffic-Light: {emoji} {report.overall_flag.value}"
     )
+    judged, total = coverage([row.flag for row in report.metric_rows])
+    if total and judged < total:
+        line += f" | Judged: {judged} of {total} metrics"
+    return line
 
 
 def build_metrics_table(rows: list[MetricRow]) -> str:

@@ -26,6 +26,7 @@ from credit_lens_logic import (  # noqa: E402
     assemble_report,
     build_footer,
     build_header,
+    coverage,
     build_key_flags_section,
     build_liquidity_section,
     build_metrics_table,
@@ -142,7 +143,11 @@ class TestAltmanZScore:
             total_assets=100.0,
             total_liabilities=1.0,
             revenue=299.0,  # X5 = 299/100 = 2.99 → Z = 2.99
-            market_cap=0.0,
+            # book_equity=0.0 zeroes X4 the same way market_cap=0.0 used to,
+            # but honestly: a zero book equity is a real figure, whereas a zero
+            # market cap is missing data and now raises.
+            market_cap=None,
+            book_equity=0.0,
         )
         z, _, flag = compute_altman_z(inputs)
         assert abs(z - 2.99) < 1e-9
@@ -156,7 +161,8 @@ class TestAltmanZScore:
             total_assets=100.0,
             total_liabilities=1.0,
             revenue=181.0,  # Z = 1.81
-            market_cap=0.0,
+            market_cap=None,
+            book_equity=0.0,  # zeroes X4; see the 2.99 boundary test above
         )
         z, _, flag = compute_altman_z(inputs)
         assert abs(z - 1.81) < 1e-9
@@ -202,12 +208,65 @@ class TestAltmanZScore:
         z_neg, _, _ = compute_altman_z(negative_wc)
         assert z_neg < z_base
 
-    def test_altman_z_nan_market_cap_returns_unavailable(self) -> None:
-        import math
+    def test_unusable_market_cap_with_no_book_equity_raises(self) -> None:
+        """A zero, negative or non-finite cap with nothing to fall back on used
+        to fabricate X4 and label the result "Z" — indistinguishable downstream
+        from a real market-cap computation. SKILL.md tells the orchestrator to
+        treat the raise as the Altman leg being unavailable, so it raises."""
+        for bad_cap in (0.0, -5000.0, float("nan"), float("inf")):
+            with pytest.raises(ValueError, match="market_cap or book_equity"):
+                compute_altman_z(self._safe_inputs(market_cap=bad_cap))
 
-        inputs = self._safe_inputs(market_cap=float("nan"))
-        z, variant, flag = compute_altman_z(inputs)
-        assert math.isnan(z)
+    def test_unusable_market_cap_falls_back_to_book_equity(self) -> None:
+        """With book equity present the unusable cap is treated as absent, and
+        the variant label must say Z' so the output does not misreport which
+        formula ran."""
+        for bad_cap in (0.0, -5000.0, float("nan"), float("inf")):
+            _, variant, _ = compute_altman_z(
+                self._safe_inputs(market_cap=bad_cap, book_equity=10000.0)
+            )
+            assert variant == "Z'", bad_cap
+
+    def test_unusable_cap_does_not_soften_an_insolvent_verdict(self) -> None:
+        """The concrete harm: a zero cap zeroed X4 instead of using a negative
+        book equity, raising the score and moving RED to AMBER."""
+        insolvent = dict(
+            working_capital=0.0, retained_earnings=0.0, ebit=0.0,
+            total_assets=100.0, total_liabilities=100.0, revenue=190.0,
+        )
+        z_true, variant, flag = compute_altman_z(
+            AltmanInputs(**insolvent, market_cap=None, book_equity=-20.0)
+        )
+        z_zero_cap, variant_zc, flag_zc = compute_altman_z(
+            AltmanInputs(**insolvent, market_cap=0.0, book_equity=-20.0)
+        )
+        assert (z_zero_cap, variant_zc, flag_zc) == (z_true, variant, flag)
+        assert flag == Flag.RED and variant == "Z'"
+
+    def test_infinite_z_is_unavailable_not_safe_zone(self) -> None:
+        """`inf > 2.99` is True, so an overflowed score read as Safe Zone. No
+        non-finite input is needed to reach it — this overflows from entirely
+        finite figures."""
+        z, _, flag = compute_altman_z(
+            AltmanInputs(
+                working_capital=1e300, retained_earnings=0.0, ebit=0.0,
+                total_assets=1e-300, total_liabilities=1.0, revenue=0.0,
+                market_cap=1.0,
+            )
+        )
+        assert z == float("inf")
+        assert flag == Flag.UNAVAILABLE
+
+    def test_negative_infinite_z_is_unavailable_not_distress(self) -> None:
+        """An overflowed score is an absent reading, not a distress reading."""
+        z, _, flag = compute_altman_z(
+            AltmanInputs(
+                working_capital=-1e300, retained_earnings=0.0, ebit=0.0,
+                total_assets=1e-300, total_liabilities=1.0, revenue=0.0,
+                market_cap=1.0,
+            )
+        )
+        assert z == float("-inf")
         assert flag == Flag.UNAVAILABLE
 
 
@@ -483,6 +542,55 @@ class TestPeerPercentileAssertion:
         assert flag_metric(20.0, float("nan"), 6.0, "interest_coverage") == Flag.GREEN
         # peer-only key: nothing left to judge it with
         assert flag_metric(2.0, float("nan"), 1.0, "debt_equity") == Flag.UNAVAILABLE
+
+    def test_header_states_coverage_when_legs_are_unjudged(self) -> None:
+        """A green header resting on a minority of judged metrics must say so
+        on the header line, not only in prose the orchestrator may skip."""
+        rows = [
+            MetricRow("Leverage", Flag.GREEN, "D/E", "0.4x", "0.9x", ""),
+            MetricRow("Liquidity", Flag.UNAVAILABLE, "Quick", "—", "—", ""),
+            MetricRow("Profitability", Flag.UNAVAILABLE, "FCF", "—", "—", ""),
+        ]
+        report = CreditReport(
+            symbol="MSFT.O", company_name="Microsoft Corp.",
+            overall_flag=Flag.GREEN, metric_rows=rows,
+        )
+        assert coverage([r.flag for r in rows]) == (1, 3)
+        assert "Judged: 1 of 3 metrics" in build_header(report)
+
+    def test_header_omits_coverage_when_everything_was_judged(self) -> None:
+        rows = [
+            MetricRow("Leverage", Flag.GREEN, "D/E", "0.4x", "0.9x", ""),
+            MetricRow("Coverage", Flag.RED, "IntCov", "1.1x", "8.0x", ""),
+        ]
+        report = CreditReport(
+            symbol="MSFT.O", company_name="Microsoft Corp.",
+            overall_flag=Flag.RED, metric_rows=rows,
+        )
+        assert coverage([r.flag for r in rows]) == (2, 2)
+        assert "Judged:" not in build_header(report)
+
+    def test_non_finite_quality_change_is_unavailable(self) -> None:
+        """No test passed a non-finite value to flag_quality_change, so
+        deleting its guard left the suite green."""
+        for bad in (float("nan"), float("inf"), float("-inf")):
+            assert flag_quality_change(bad) == Flag.UNAVAILABLE, bad
+        assert flag_quality_change(quality_change_pts(float("nan"), 4.1)) == (
+            Flag.UNAVAILABLE
+        )
+
+    def test_non_finite_peer_p75_with_finite_median(self) -> None:
+        """Every non-finite-peer test put the NaN in peer_median, so the
+        peer_p75 coercion branch was never exercised."""
+        assert flag_metric(2.0, 1.0, float("nan"), "debt_equity") == Flag.UNAVAILABLE
+        assert flag_metric(6.0, 1.1, float("nan"), "debt_ebitda") == Flag.RED
+
+    def test_inverted_peers_raise_even_on_a_negative_value(self) -> None:
+        """The negative-value guard returns early, so ordering must be checked
+        before it or a corrupt peer row is swallowed on exactly the distressed
+        inputs where a mis-mapped field is most likely."""
+        with pytest.raises(ValueError, match="peer_p75.*must be"):
+            flag_metric(-2.0, 8.0, 3.0, "debt_equity")
 
     def test_equal_percentiles_are_degenerate_not_inverted(self) -> None:
         """p75 == median collapses the AMBER band but is not a data error, so
