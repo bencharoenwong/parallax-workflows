@@ -524,13 +524,23 @@ def dashboard_rows(report: CreditReport) -> list[MetricRow]:
     # dashboard shows the same twelve legs the verdict is voted over. Without
     # this the caller controls the row set, and dropping the rows it could not
     # compute made the dashboard look complete while the caveat went quiet.
-    supplied = {row.metric_key for row in report.metric_rows}
+    # Same validation report_flags applies, so a duplicated key cannot render
+    # twice here just because the caller skipped the header path.
+    supplied = _validated_row_keys(report)
     for key in METRIC_DIRECTIONS:
         if key in supplied:
             continue
+        # The module knows the metric was not supplied; it does NOT know why.
+        # Asserting "no absolute band" was false for the three keys that have
+        # one, and it told the reader a metric failing to arrive was a benign
+        # structural gap rather than an anomaly worth chasing.
+        if key in ABSOLUTE_THRESHOLDS:
+            why = "Not supplied for this run; this metric has an absolute band"
+        else:
+            why = "Not supplied for this run; no absolute band for this metric"
         rows.append(MetricRow(
             _METRIC_CATEGORY.get(key, key), Flag.UNAVAILABLE, key,
-            "—", "—", "No peer data and no absolute band",
+            "—", "—", why,
             metric_key=key,
         ))
 
@@ -568,6 +578,10 @@ def _cell(text: str) -> str:
     """
     if not text:
         return "—"
+    # Zero-width characters are not whitespace to str.split(), so a sentence
+    # of only U+200B passed both emptiness tests and rendered an invisible
+    # cell instead of the em dash. Strip them before folding.
+    text = text.translate({0x200B: None, 0x200C: None, 0x200D: None, 0xFEFF: None})
     collapsed = " ".join(text.split())          # folds \n, \r and \t alike
     if not collapsed:
         return "—"
@@ -586,30 +600,17 @@ _ALTMAN_ZONE_TEXT = {
 }
 
 
-def report_flags(report: CreditReport) -> list[Flag]:
-    """The canonical leg list — every flag the verdict is computed from.
+def _validated_row_keys(report: CreditReport) -> set[str]:
+    """Validate `metric_rows` and return the set of keys it supplies.
 
-    Exists because the verdict and the coverage count were read off two
-    different lists and nothing reconciled them. `build_header` counted
-    `metric_rows`, while the vote ran over the per-metric flags; SKILL.md
-    groups ten metrics into four rendered category rows, so a routine run
-    counted 6 of 6 judged while the vote saw 5 of 10, and the coverage caveat
-    never rendered on exactly the run that needed it.
-
-    Two legs also sat outside `metric_rows` entirely: `altman_flag`, which
-    defaults to UNAVAILABLE on a bare report, and the Quality trend, which had
-    no field at all. Both vote, so both are counted here.
-
-    Derive BOTH the verdict and the coverage figure from this one list — that
-    is what `finalize_verdict` is for.
-
-    Raises if `metric_rows` carries an Altman or Quality row. Those two legs
-    live in their own fields and are rendered by `dashboard_rows`; a caller
-    following SKILL.md's example dashboard would otherwise supply them as rows
-    as well, and each would then vote TWICE. That is not merely a miscount —
-    doubling two legs flips a real verdict: three RED metrics against two GREEN
-    is RED, but with both GREEN legs doubled it becomes 3 RED against 4 GREEN
-    and reports GREEN. Loud is the only safe behaviour.
+    Shared by `report_flags` and `dashboard_rows` so BOTH entry points are
+    guarded. `report_flags` used to hold these four checks inline while
+    `dashboard_rows` did its own unvalidated `{row.metric_key for row in ...}`,
+    so a duplicated key rendered twice — thirteen rows against twelve legs —
+    and only the header path caught it. SKILL.md documents `finalize_verdict`
+    as optional when merely rendering, so that protection was a rule about
+    call order rather than a property of the code. Every guarantee in this
+    module that rested on call order has failed at least once.
     """
     seen: set[str] = set()
     for row in report.metric_rows:
@@ -640,6 +641,35 @@ def report_flags(report: CreditReport) -> list[Flag]:
                 f"vote twice. SKILL.md requires one row per metric."
             )
         seen.add(key)
+    return seen
+
+
+def report_flags(report: CreditReport) -> list[Flag]:
+    """The canonical leg list — every flag the verdict is computed from.
+
+    Exists because the verdict and the coverage count were read off two
+    different lists and nothing reconciled them. `build_header` counted
+    `metric_rows`, while the vote ran over the per-metric flags; SKILL.md
+    groups ten metrics into four rendered category rows, so a routine run
+    counted 6 of 6 judged while the vote saw 5 of 10, and the coverage caveat
+    never rendered on exactly the run that needed it.
+
+    Two legs also sat outside `metric_rows` entirely: `altman_flag`, which
+    defaults to UNAVAILABLE on a bare report, and the Quality trend, which had
+    no field at all. Both vote, so both are counted here.
+
+    Derive BOTH the verdict and the coverage figure from this one list — that
+    is what `finalize_verdict` is for.
+
+    Raises if `metric_rows` carries an Altman or Quality row. Those two legs
+    live in their own fields and are rendered by `dashboard_rows`; a caller
+    following SKILL.md's example dashboard would otherwise supply them as rows
+    as well, and each would then vote TWICE. That is not merely a miscount —
+    doubling two legs flips a real verdict: three RED metrics against two GREEN
+    is RED, but with both GREEN legs doubled it becomes 3 RED against 4 GREEN
+    and reports GREEN. Loud is the only safe behaviour.
+    """
+    seen = _validated_row_keys(report)
 
     # Pad every registered metric the caller did not supply. The denominator is
     # the registry, not the row list, because otherwise omission is silent:
@@ -721,10 +751,16 @@ def build_metrics_table(rows: list[MetricRow]) -> str:
     lines = []
     for row in rows:
         emoji = EMOJI.get(row.flag, "")
+        # EVERY caller-supplied cell goes through _cell, not just one of them.
+        # An earlier version sanitised only the quality sentence, leaving four
+        # columns raw. The worst variant is a pipe in `category`: the cells
+        # shift right, the flag leaves the Signal column, and the header still
+        # counts that leg as judged. The Signal cell is module-generated from a
+        # Flag enum, so it needs no escaping.
         lines.append(
-            f"| {row.category} | {emoji} {row.flag.value} "
-            f"| {row.metric_value} | {row.peer_median_label} "
-            f"| {row.interpretation} |"
+            f"| {_cell(row.category)} | {emoji} {row.flag.value} "
+            f"| {_cell(row.metric_value)} | {_cell(row.peer_median_label)} "
+            f"| {_cell(row.interpretation)} |"
         )
     return header + "\n".join(lines)
 

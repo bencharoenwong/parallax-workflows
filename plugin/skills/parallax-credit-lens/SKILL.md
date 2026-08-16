@@ -180,8 +180,10 @@ Structure output in markdown with the following sections:
 
 ### 1. **Header** (1 line)
 ```
-## Credit Risk Assessment: [Company] ([RIC]) | Traffic-Light: 🟢/🟡/🔴
+## Credit Risk Assessment: [Company] ([RIC]) | Traffic-Light: 🟢/🟡/🔴 | Judged: N of M metrics
 ```
+
+Emit this with `build_header(report)` rather than by copying the template. The `| Judged: N of M metrics` clause is appended only when a leg is unjudged, and on a routine run several are — so a hand-copied header without it understates the gap on exactly the runs that need it stated.
 Overall traffic-light determined by: count of RED flags (→ Red), count of AMBER flags (→ Amber), count of GREEN (→ Green). Majority color wins. If two or more colors tie for the highest count, render the most conservative tied color (Red > Amber > Green) — e.g., a 2-2-2 split renders Red. Compute via `overall_traffic_light(flags)`, which also drops UNAVAILABLE legs from the count and returns UNAVAILABLE when every leg is missing.
 
 **State the coverage whenever any leg is UNAVAILABLE.** Dropping those legs is right for the vote but silent in the header, so a 🟢 can rest on two judged metrics out of six and still read as a full clean bill.

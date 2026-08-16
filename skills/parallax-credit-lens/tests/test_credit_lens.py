@@ -60,14 +60,6 @@ from credit_lens_logic import (  # noqa: E402
 
 _FIXTURES = Path(__file__).parent / "fixtures"
 
-# Distinct registered keys for building throwaway dashboard rows. `report_flags`
-# rejects an unregistered key and rejects the same key twice, so test rows need
-# real, distinct keys rather than arbitrary labels.
-_ROW_KEYS = [
-    "debt_ebitda", "debt_equity", "debt_assets", "interest_coverage",
-    "ebitda_interest_coverage", "current_ratio", "quick_ratio",
-    "ebitda_margin", "ebit_margin", "fcf_margin",
-]
 
 
 def _load_fixture(filename: str) -> dict:
@@ -1924,7 +1916,13 @@ class TestPrivateGuardsUnreachableThroughThePublicApi:
 
 
 def _row(key: str, flag: Flag, category: str = "Cat") -> MetricRow:
-    return MetricRow(category, flag, key, "1", "1", "", metric_key=key)
+    """`metric_label` deliberately DIFFERS from `metric_key`.
+
+    An earlier helper set the label equal to the key, so a mutant that deduped
+    on `metric_label` instead of `metric_key` survived the whole suite: the
+    discriminating field could not discriminate. Real labels look like
+    "D/EBITDA", not "debt_ebitda"."""
+    return MetricRow(category, flag, f"label::{key}", "1", "1", "", metric_key=key)
 
 
 def _all_registered(flag: Flag = Flag.GREEN) -> list[MetricRow]:
@@ -2397,3 +2395,151 @@ class TestDashboardCellsAreSafeToRender:
         assert "THE-VALUE" in table
         assert "THE-LABEL" not in table
         assert "PEER" in table and "INTERP" in table
+
+
+class TestEveryCallerCellIsSanitised:
+    """`_cell` was applied to one of five columns. The other four interpolated
+    caller text raw, so the defect the quality cell was fixed for was still live
+    in `category`, `metric_value`, `peer_median_label` and `interpretation`."""
+
+    def _separators(self, line: str) -> int:
+        """GFM: a pipe preceded by an EVEN number of backslashes is live."""
+        count = backslashes = 0
+        for ch in line:
+            if ch == "\\":
+                backslashes += 1
+            else:
+                if ch == "|" and backslashes % 2 == 0:
+                    count += 1
+                backslashes = 0
+        return count
+
+    def _cells(self, line: str) -> list[str]:
+        """Split on LIVE separators only. A naive split("|") breaks on the
+        escaped pipe the renderer correctly emitted, which is the same
+        escape-blind mistake the escaping itself was fixed for."""
+        cells, buf, backslashes = [], [], 0
+        for ch in line:
+            if ch == "\\":
+                backslashes += 1
+                buf.append(ch)
+                continue
+            if ch == "|" and backslashes % 2 == 0:
+                cells.append("".join(buf))
+                buf = []
+            else:
+                buf.append(ch)
+            backslashes = 0
+        cells.append("".join(buf))
+        return [c.strip() for c in cells[1:-1]]
+
+    def _row_with(self, **kw) -> MetricRow:
+        base = dict(category="Leverage", flag=Flag.RED, metric_label="D/EBITDA",
+                    metric_value="2.1x", peer_median_label="Peer 1.2x",
+                    interpretation="Above peer", metric_key="debt_equity")
+        base.update(kw)
+        return MetricRow(**base)
+
+    def test_a_pipe_in_any_caller_cell_keeps_the_column_count(self) -> None:
+        """The worst variant was a pipe in `category`: cells shift right and the
+        flag leaves the Signal column while the header still counts the leg as
+        judged."""
+        for field in ("category", "metric_value", "peer_median_label",
+                      "interpretation"):
+            row = self._row_with(**{field: "cash | debt mix unclear"})
+            body = build_metrics_table([row]).splitlines()[2:]
+            assert len(body) == 1, field
+            assert self._separators(body[0]) == 6, (field, body[0])
+
+    def test_a_newline_in_any_caller_cell_cannot_fabricate_a_row(self) -> None:
+        for field in ("category", "metric_value", "peer_median_label",
+                      "interpretation"):
+            row = self._row_with(**{field: "first line\nsecond line"})
+            body = build_metrics_table([row]).splitlines()[2:]
+            assert len(body) == 1, field
+            assert "second line" in body[0], field
+
+    def test_the_flag_stays_in_the_signal_column(self) -> None:
+        """The specific harm: a displaced RED flag."""
+        row = self._row_with(category="Lever|age")
+        body = build_metrics_table([row]).splitlines()[2:]
+        cells = self._cells(body[0])
+        assert len(cells) == 5, cells
+        assert "RED" in cells[1] and "\U0001f534" in cells[1], cells
+
+    def test_zero_width_only_text_renders_the_em_dash(self) -> None:
+        """U+200B is not whitespace to str.split(), so a zero-width-only cell
+        passed both emptiness tests and rendered invisible."""
+        for blank in ("​", "﻿", "​‌‍"):
+            row = self._row_with(interpretation=blank)
+            body = build_metrics_table([row]).splitlines()[2:]
+            cells = self._cells(body[0])
+            assert cells[4] == "—", repr(blank)
+
+
+class TestPaddedRowsStateWhatIsTrue:
+    """Padded rows asserted "No peer data and no absolute band" for every
+    omitted metric. That is false for the three keys that carry a band, and it
+    told the reader a metric failing to arrive was a benign structural gap."""
+
+    def _report(self) -> CreditReport:
+        return CreditReport(
+            "X.O", "X", Flag.GREEN,
+            metric_rows=[_row("ebitda_margin", Flag.GREEN)],
+        )
+
+    def test_a_banded_metric_is_not_described_as_bandless(self) -> None:
+        rows = {r.metric_key: r for r in dashboard_rows(self._report())}
+        for key in ABSOLUTE_THRESHOLDS:
+            text = rows[key].interpretation
+            assert "no absolute band" not in text.lower(), (key, text)
+            assert "has an absolute band" in text, (key, text)
+
+    def test_an_unbanded_metric_says_so(self) -> None:
+        rows = {r.metric_key: r for r in dashboard_rows(self._report())}
+        unbanded = [k for k in METRIC_DIRECTIONS if k not in ABSOLUTE_THRESHOLDS]
+        for key in unbanded:
+            if key == "ebitda_margin":
+                continue                      # supplied, not padded
+            assert "no absolute band" in rows[key].interpretation.lower(), key
+
+    def test_every_padded_row_says_it_was_not_supplied(self) -> None:
+        """The content cells were unasserted, so a mutant setting the padded
+        interpretation to "Safe Zone" survived the whole suite."""
+        for row in dashboard_rows(self._report()):
+            if row.metric_key in ("ebitda_margin", ALTMAN_LEG_KEY, QUALITY_LEG_KEY):
+                continue
+            assert "Not supplied" in row.interpretation, row.metric_key
+            assert "Safe" not in row.interpretation, row.metric_key
+            assert row.metric_value == "—" and row.peer_median_label == "—"
+
+    def test_metric_category_covers_the_registry_exactly(self) -> None:
+        """Nothing pinned the category map, so deleting or misrouting an entry
+        survived. It is the only identity a padded row shows a reader, because
+        `metric_label` is never rendered."""
+        from credit_lens_logic import _METRIC_CATEGORY
+        assert set(_METRIC_CATEGORY) == set(METRIC_DIRECTIONS)
+        assert _METRIC_CATEGORY["fcf_margin"] == "Profitability"
+        assert _METRIC_CATEGORY["debt_assets"] == "Leverage"
+        assert _METRIC_CATEGORY["quick_ratio"] == "Liquidity"
+        assert _METRIC_CATEGORY["interest_coverage"] == "Coverage"
+
+    def test_dashboard_rows_rejects_a_duplicate_key_like_report_flags(self) -> None:
+        """dashboard_rows did its own unvalidated key set, so a duplicated key
+        rendered twice — 13 rows against 12 legs — and only the header path
+        caught it. SKILL.md documents that path as optional when rendering."""
+        dup = CreditReport(
+            "X.O", "X", Flag.GREEN,
+            metric_rows=[_row("debt_ebitda", Flag.GREEN),
+                         _row("debt_ebitda", Flag.RED)],
+        )
+        with pytest.raises(ValueError, match="more than once"):
+            dashboard_rows(dup)
+
+    def test_dashboard_rows_rejects_an_unkeyed_row(self) -> None:
+        bad = CreditReport(
+            "X.O", "X", Flag.GREEN,
+            metric_rows=[MetricRow("Leverage", Flag.GREEN, "D/E", "1", "1", "")],
+        )
+        with pytest.raises(ValueError, match="no metric_key"):
+            dashboard_rows(bad)
