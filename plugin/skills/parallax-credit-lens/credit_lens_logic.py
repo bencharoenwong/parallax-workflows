@@ -453,6 +453,16 @@ class MetricRow:
     metric_value: str
     peer_median_label: str
     interpretation: str
+    # Which leg this row IS, by registry key — not by its display label.
+    # An earlier version identified the reserved Altman and Quality legs by
+    # matching `category` against a tuple of strings. That failed open on every
+    # near miss ("Altman", "altman z", "Altman Z " with a trailing space,
+    # "Solvency"), and its coverage was anti-correlated with the failure: it
+    # fired only on a caller who copied the SKILL.md example verbatim, while
+    # the caller who duplicates a leg is by definition one who deviated from it.
+    # `metric_key` is the same identifier `flag_metric` already validates and
+    # already raises on, so duplication becomes detectable rather than guessed.
+    metric_key: Optional[str] = None
 
 
 @dataclass
@@ -478,10 +488,12 @@ class CreditReport:
     palepu_unavailable: bool = False
 
 
-# The Altman and Quality legs are carried by their own fields, not by rows.
-# SKILL.md's example dashboard renders both as rows, so an orchestrator that
-# also populates the fields would have each of them vote twice.
-RESERVED_ROW_CATEGORIES = ("Altman Z", "Quality Trend")
+# Sentinel keys for the two legs that live in their own report fields rather
+# than in `metric_rows`. They are not metrics in METRIC_DIRECTIONS — they have
+# no peer bands — so they get reserved keys instead of registry entries.
+ALTMAN_LEG_KEY = "__altman_z__"
+QUALITY_LEG_KEY = "__quality_trend__"
+RESERVED_LEG_KEYS = (ALTMAN_LEG_KEY, QUALITY_LEG_KEY)
 
 
 def dashboard_rows(report: CreditReport) -> list[MetricRow]:
@@ -492,17 +504,33 @@ def dashboard_rows(report: CreditReport) -> list[MetricRow]:
     what stops them being counted twice.
     """
     rows = list(report.metric_rows)
-    z = "—" if report.altman_z is None else f"{report.altman_variant} = {report.altman_z:.2f}"
+    if report.altman_z is None or not math.isfinite(report.altman_z):
+        # "Z = inf" / "Z = nan" is not a value a reader should see in a score
+        # cell; a non-finite score means the computation did not produce one.
+        z = "—"
+    else:
+        z = f"{report.altman_variant} = {report.altman_z:.2f}"
     rows.append(MetricRow(
         "Altman Z", report.altman_flag, "Altman Z", z, "—",
         _ALTMAN_ZONE_TEXT.get(report.altman_flag, "Not computed"),
+        metric_key=ALTMAN_LEG_KEY,
     ))
     rows.append(MetricRow(
         "Quality Trend", report.quality_flag, "Quality Trend",
-        report.quality_trend_sentence or "—", "—",
+        _cell(report.quality_trend_sentence), "—",
         "52-week factor change",
+        metric_key=QUALITY_LEG_KEY,
     ))
     return rows
+
+
+def _cell(text: str) -> str:
+    """Make a string safe to drop into a markdown table cell.
+
+    An unescaped pipe splits the row into extra columns, so a quality-trend
+    sentence containing one silently corrupts the dashboard.
+    """
+    return text.replace("|", "\\|").strip() if text else "—"
 
 
 _ALTMAN_ZONE_TEXT = {
@@ -538,17 +566,35 @@ def report_flags(report: CreditReport) -> list[Flag]:
     is RED, but with both GREEN legs doubled it becomes 3 RED against 4 GREEN
     and reports GREEN. Loud is the only safe behaviour.
     """
-    duplicated = [
-        row.category for row in report.metric_rows
-        if row.category in RESERVED_ROW_CATEGORIES
-    ]
-    if duplicated:
-        raise ValueError(
-            f"metric_rows must not contain {duplicated}: those legs are carried "
-            f"by report.altman_flag and report.quality_flag and are rendered by "
-            f"dashboard_rows(). Supplying them as rows too makes each vote "
-            f"twice and can flip the verdict."
-        )
+    seen: set[str] = set()
+    for row in report.metric_rows:
+        key = row.metric_key
+        if key is None:
+            raise ValueError(
+                f"MetricRow(category={row.category!r}) has no metric_key. Set it "
+                f"to the registry key the row was flagged with, so the leg can "
+                f"be identified by what it IS rather than by how it is labelled. "
+                f"Known keys: {sorted(set(METRIC_DIRECTIONS) | set(ABSOLUTE_THRESHOLDS))}"
+            )
+        if key in RESERVED_LEG_KEYS:
+            raise ValueError(
+                f"metric_rows must not carry the reserved leg {key!r}: it is held "
+                f"by report.altman_flag / report.quality_flag and rendered by "
+                f"dashboard_rows(). Supplying it as a row as well makes that leg "
+                f"vote twice, which can flip the verdict."
+            )
+        if key not in METRIC_DIRECTIONS and key not in ABSOLUTE_THRESHOLDS:
+            raise ValueError(
+                f"MetricRow metric_key {key!r} is not registered; the same check "
+                f"flag_metric applies. Known keys: "
+                f"{sorted(set(METRIC_DIRECTIONS) | set(ABSOLUTE_THRESHOLDS))}"
+            )
+        if key in seen:
+            raise ValueError(
+                f"metric_rows carries {key!r} more than once, so that leg would "
+                f"vote twice. SKILL.md requires one row per metric."
+            )
+        seen.add(key)
     return [row.flag for row in report.metric_rows] + [
         report.altman_flag,
         report.quality_flag,
@@ -584,12 +630,25 @@ def coverage(flags: list[Flag]) -> tuple[int, int]:
 
 
 def build_header(report: CreditReport) -> str:
-    emoji = EMOJI.get(report.overall_flag, "")
+    """Render the header from the legs as they stand NOW.
+
+    Deliberately does NOT read `report.overall_flag`. That field is a snapshot
+    taken when `finalize_verdict` ran, while the judged count was computed
+    live, so a leg resolving afterwards — `altman_flag` needs an external market
+    cap, `quality_flag` arrives in Batch B — refreshed the count and left the
+    verdict stale. The caveat then vanished while the verdict stayed green,
+    which is the failure mode disappearing exactly when it was needed.
+
+    Both halves now read one list, at one instant, so they cannot disagree.
+    """
+    legs = report_flags(report)
+    flag = overall_traffic_light(legs)
+    emoji = EMOJI.get(flag, "")
     line = (
         f"## Credit Risk Assessment: {report.company_name} ({report.symbol})"
-        f" | Traffic-Light: {emoji} {report.overall_flag.value}"
+        f" | Traffic-Light: {emoji} {flag.value}"
     )
-    judged, total = coverage(report_flags(report))
+    judged, total = coverage(legs)
     if judged < total:
         line += f" | Judged: {judged} of {total} metrics"
     return line

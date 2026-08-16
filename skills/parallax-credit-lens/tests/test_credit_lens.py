@@ -23,11 +23,13 @@ from credit_lens_logic import (  # noqa: E402
     Flag,
     MetricRow,
     ABSOLUTE_THRESHOLDS,
+    ALTMAN_LEG_KEY,
     METRIC_DIRECTIONS,
+    QUALITY_LEG_KEY,
+    RESERVED_LEG_KEYS,
     assemble_report,
     build_footer,
     build_header,
-    RESERVED_ROW_CATEGORIES,
     coverage,
     dashboard_rows,
     finalize_verdict,
@@ -57,6 +59,15 @@ from credit_lens_logic import (  # noqa: E402
 # ---------------------------------------------------------------------------
 
 _FIXTURES = Path(__file__).parent / "fixtures"
+
+# Distinct registered keys for building throwaway dashboard rows. `report_flags`
+# rejects an unregistered key and rejects the same key twice, so test rows need
+# real, distinct keys rather than arbitrary labels.
+_ROW_KEYS = [
+    "debt_ebitda", "debt_equity", "debt_assets", "interest_coverage",
+    "ebitda_interest_coverage", "current_ratio", "quick_ratio",
+    "ebitda_margin", "ebit_margin", "fcf_margin",
+]
 
 
 def _load_fixture(filename: str) -> dict:
@@ -846,6 +857,11 @@ class TestRICValidation:
 class TestReportBuilders:
 
     def _sample_report(self, *, flag: Flag = Flag.GREEN) -> CreditReport:
+        """`flag` drives the LEGS, not the stored field. `build_header` derives
+        the verdict from `report_flags` rather than reading `overall_flag`, so a
+        report whose stored flag disagrees with its legs renders the legs — that
+        is the point of the change, and asserting on a stored flag here would
+        test behaviour the module deliberately no longer has."""
         return CreditReport(
             symbol="AAPL.O",
             company_name="Apple Inc.",
@@ -853,19 +869,21 @@ class TestReportBuilders:
             metric_rows=[
                 MetricRow(
                     category="Leverage",
-                    flag=Flag.GREEN,
+                    flag=flag,
                     metric_label="D/EBITDA",
                     metric_value="1.2x",
                     peer_median_label="Peer 1.8x",
                     interpretation="Below peer median",
+                    metric_key="debt_ebitda",
                 ),
                 MetricRow(
                     category="Coverage",
-                    flag=Flag.GREEN,
+                    flag=flag,
                     metric_label="Int Cov",
                     metric_value="29.1x",
                     peer_median_label="Peer 18.2x",
                     interpretation="Top quartile",
+                    metric_key="interest_coverage",
                 ),
             ],
             solvency_narrative="Strong solvency across all Palepu dimensions.",
@@ -874,7 +892,8 @@ class TestReportBuilders:
             macro_context_sentence="Late-cycle regime; credit spreads widening.",
             altman_z=4.2,
             altman_variant="Z",
-            altman_flag=Flag.GREEN,
+            altman_flag=flag,
+            quality_flag=flag,
         )
 
     def test_header_contains_company_and_symbol(self) -> None:
@@ -1914,7 +1933,8 @@ class TestVerdictAndCoverageCannotDiverge:
 
     def _rows(self, *flags: Flag) -> list[MetricRow]:
         return [
-            MetricRow(f"m{i}", f, "metric", "1", "1", "")
+            MetricRow(f"m{i}", f, "metric", "1", "1", "",
+                      metric_key=_ROW_KEYS[i])
             for i, f in enumerate(flags)
         ]
 
@@ -2008,44 +2028,80 @@ class TestVerdictAndCoverageCannotDiverge:
 
 
 class TestReservedLegsCannotVoteTwice:
-    """SKILL.md's example dashboard renders Altman Z and Quality Trend as rows,
-    while both legs also live in their own report fields. An orchestrator
-    following that example supplied them in both places, so each voted twice —
-    and doubling two legs flips a real verdict, in the unsafe direction."""
+    """The Altman and Quality legs live in their own report fields. An earlier
+    guard identified them by matching `MetricRow.category` against a tuple of
+    display labels, which failed open on every near miss — "Altman", "altman z",
+    "Altman Z " with a trailing space, "Solvency" — and reproduced the verdict
+    flip. Its coverage was anti-correlated with the failure: it fired only on a
+    caller who copied the SKILL.md example verbatim, while a caller who
+    duplicates a leg is by definition one who deviated from it. Identification
+    is now by registry key."""
 
-    def _rows(self, *pairs) -> list[MetricRow]:
-        return [MetricRow(c, f, "metric", "1", "1", "") for c, f in pairs]
+    def _row(self, key: str, flag: Flag, category: str = "Leverage") -> MetricRow:
+        return MetricRow(category, flag, "metric", "1", "1", "", metric_key=key)
 
-    def test_duplicated_leg_raises_rather_than_double_counting(self) -> None:
+    def test_reserved_altman_key_is_rejected(self) -> None:
+        """Hardcoded, not read off RESERVED_LEG_KEYS. An oracle that iterates
+        the constant under test disappears when the constant shrinks — that is
+        how the previous version of this test passed while a mutant that
+        dropped the Quality half survived."""
         report = CreditReport(
             "X.O", "X", Flag.GREEN,
-            metric_rows=self._rows(
-                ("Leverage", Flag.RED), ("Altman Z", Flag.GREEN),
-            ),
-            altman_flag=Flag.GREEN, quality_flag=Flag.GREEN,
+            metric_rows=[self._row("__altman_z__", Flag.GREEN)],
         )
-        with pytest.raises(ValueError, match="must not contain"):
+        with pytest.raises(ValueError, match="reserved leg"):
             report_flags(report)
 
-    def test_every_reserved_category_is_rejected(self) -> None:
-        for reserved in RESERVED_ROW_CATEGORIES:
-            report = CreditReport(
+    def test_reserved_quality_key_is_rejected(self) -> None:
+        report = CreditReport(
+            "X.O", "X", Flag.GREEN,
+            metric_rows=[self._row("__quality_trend__", Flag.GREEN)],
+        )
+        with pytest.raises(ValueError, match="reserved leg"):
+            report_flags(report)
+
+    def test_the_constants_still_hold_the_two_keys_the_tests_hardcode(self) -> None:
+        """Pins the constants to the literals above, so renaming one without
+        updating both tests fails loudly instead of silently un-testing a leg."""
+        assert ALTMAN_LEG_KEY == "__altman_z__"
+        assert QUALITY_LEG_KEY == "__quality_trend__"
+        assert set(RESERVED_LEG_KEYS) == {"__altman_z__", "__quality_trend__"}
+
+    def test_near_miss_labels_no_longer_matter(self) -> None:
+        """Every one of these labels bypassed the old label-matching guard and
+        reproduced the flip. The row is now identified by its key, so a
+        duplicated leg is caught whatever it is called — and a legitimately
+        registered metric is accepted whatever it is called."""
+        for label in (
+            "Altman", "altman z", "Altman Z ", "Solvency",
+            "Altman Z (Z')", "**Altman Z**", "Altman Z-Score",
+        ):
+            duplicated = CreditReport(
                 "X.O", "X", Flag.GREEN,
-                metric_rows=self._rows(("Leverage", Flag.RED), (reserved, Flag.GREEN)),
+                metric_rows=[self._row(ALTMAN_LEG_KEY, Flag.GREEN, label)],
             )
-            with pytest.raises(ValueError, match="must not contain"):
-                report_flags(report)
+            with pytest.raises(ValueError, match="reserved leg"):
+                report_flags(duplicated)
+
+            legitimate = CreditReport(
+                "X.O", "X", Flag.GREEN,
+                metric_rows=[self._row("debt_equity", Flag.RED, label)],
+            )
+            assert report_flags(legitimate) == [
+                Flag.RED, Flag.UNAVAILABLE, Flag.UNAVAILABLE,
+            ], label
 
     def test_the_verdict_the_double_count_used_to_flip(self) -> None:
         """Three RED metrics against two GREEN is RED. With the Altman and
-        Quality legs doubled it became 3 RED against 4 GREEN and reported
-        GREEN — a distressed issuer reading healthy."""
+        Quality legs doubled it became three RED against four GREEN and
+        rendered GREEN — a distressed issuer reading healthy."""
         report = CreditReport(
             "X.O", "X", Flag.GREEN,
-            metric_rows=self._rows(
-                ("Leverage", Flag.RED), ("Coverage", Flag.RED),
-                ("Liquidity", Flag.RED),
-            ),
+            metric_rows=[
+                self._row("debt_equity", Flag.RED),
+                self._row("interest_coverage", Flag.RED),
+                self._row("current_ratio", Flag.RED),
+            ],
             altman_flag=Flag.GREEN, quality_flag=Flag.GREEN,
         )
         finalize_verdict(report)
@@ -2053,35 +2109,143 @@ class TestReservedLegsCannotVoteTwice:
             Flag.RED, Flag.RED, Flag.RED, Flag.GREEN, Flag.GREEN,
         ]
         assert report.overall_flag == Flag.RED
+        assert "🔴 RED" in build_header(report)
 
-    def test_dashboard_still_renders_the_two_reserved_rows(self) -> None:
-        """The caller stops supplying them, so the module must render them or
-        they vanish from the output."""
+    def test_a_row_without_a_key_is_rejected(self) -> None:
+        """A row that cannot say which leg it is cannot be checked for
+        duplication, so it must not be silently counted."""
         report = CreditReport(
             "X.O", "X", Flag.GREEN,
-            metric_rows=self._rows(("Leverage", Flag.RED)),
-            altman_flag=Flag.AMBER, quality_flag=Flag.RED,
-            altman_z=2.10, altman_variant="Z",
+            metric_rows=[MetricRow("Leverage", Flag.GREEN, "D/E", "1", "1", "")],
+        )
+        with pytest.raises(ValueError, match="no metric_key"):
+            report_flags(report)
+
+    def test_an_unregistered_row_key_is_rejected(self) -> None:
+        report = CreditReport(
+            "X.O", "X", Flag.GREEN,
+            metric_rows=[self._row("debt_ebita", Flag.GREEN)],
+        )
+        with pytest.raises(ValueError, match="not registered"):
+            report_flags(report)
+
+    def test_the_same_metric_twice_is_rejected(self) -> None:
+        """One row per metric. Two rows for one key double that leg's vote just
+        as surely as duplicating a reserved leg does."""
+        report = CreditReport(
+            "X.O", "X", Flag.GREEN,
+            metric_rows=[
+                self._row("debt_equity", Flag.GREEN, "Leverage"),
+                self._row("debt_equity", Flag.GREEN, "Leverage (again)"),
+            ],
+        )
+        with pytest.raises(ValueError, match="more than once"):
+            report_flags(report)
+
+    def test_dashboard_rows_tags_its_own_rows_with_reserved_keys(self) -> None:
+        report = CreditReport(
+            "X.O", "X", Flag.GREEN,
+            metric_rows=[self._row("debt_equity", Flag.RED)],
+            altman_flag=Flag.AMBER, quality_flag=Flag.RED, altman_z=2.10,
         )
         rows = dashboard_rows(report)
-        assert [r.category for r in rows] == [
-            "Leverage", "Altman Z", "Quality Trend",
+        assert [r.metric_key for r in rows] == [
+            "debt_equity", ALTMAN_LEG_KEY, QUALITY_LEG_KEY,
         ]
-        assert rows[1].flag == Flag.AMBER and "2.10" in rows[1].metric_value
-        assert rows[2].flag == Flag.RED
+        assert len(rows) == len(report_flags(report))
 
-    def test_rendered_row_count_matches_the_counted_leg_count(self) -> None:
-        """The dashboard and the coverage denominator must describe the same
-        set — that equality is the whole point of the reserved-row rule."""
+    def test_assemble_report_renders_the_module_owned_rows(self) -> None:
+        """Guards the claim that the two reserved rows still appear once the
+        caller stops supplying them. Rendering `metric_rows` instead of
+        `dashboard_rows` was an unkilled mutant."""
         report = CreditReport(
             "X.O", "X", Flag.GREEN,
-            metric_rows=self._rows(
-                ("Leverage", Flag.RED), ("Coverage", Flag.UNAVAILABLE),
-            ),
-            altman_flag=Flag.GREEN, quality_flag=Flag.UNAVAILABLE,
+            metric_rows=[self._row("debt_equity", Flag.RED)],
+            altman_flag=Flag.AMBER, quality_flag=Flag.RED, altman_z=2.10,
         )
+        out = assemble_report(finalize_verdict(report))
+        assert "Altman Z" in out
+        assert "Quality Trend" in out
+
+
+class TestHeaderReadsLegsNotASnapshot:
+    """`build_header` rendered `report.overall_flag` — a snapshot from whenever
+    `finalize_verdict` ran — against a live judged count. A leg resolving
+    afterwards refreshed the count and left the verdict stale, so the caveat
+    disappeared while the verdict stayed green."""
+
+    def _report(self) -> CreditReport:
+        return CreditReport(
+            "X.O", "X", Flag.GREEN,
+            metric_rows=[
+                MetricRow("Leverage", Flag.GREEN, "m", "1", "1", "",
+                          metric_key="debt_equity"),
+                MetricRow("Coverage", Flag.GREEN, "m", "1", "1", "",
+                          metric_key="interest_coverage"),
+            ],
+        )
+
+    def test_late_resolving_legs_are_reflected_in_the_verdict(self) -> None:
+        report = self._report()
         finalize_verdict(report)
-        legs = report_flags(report)
-        assert len(dashboard_rows(report)) == len(legs)
-        assert coverage(legs) == (2, 4)
+        assert "🟢 GREEN" in build_header(report)
         assert "Judged: 2 of 4 metrics" in build_header(report)
+
+        # Batch B lands after finalize_verdict: both legs come back RED.
+        report.altman_flag = Flag.RED
+        report.quality_flag = Flag.RED
+
+        header = build_header(report)
+        assert "🔴 RED" in header, "verdict must follow the legs, not the snapshot"
+        assert "Judged:" not in header, "all four legs are judged now"
+
+    def test_a_stale_stored_flag_cannot_contradict_the_header(self) -> None:
+        """Even a deliberately wrong stored flag must not reach the header."""
+        report = self._report()
+        report.altman_flag = Flag.RED
+        report.quality_flag = Flag.RED
+        report.overall_flag = Flag.GREEN  # never finalized, or finalized early
+        assert "🔴 RED" in build_header(report)
+
+
+class TestDashboardCellsAreSafeToRender:
+    """The two module-rendered rows put computed values straight into markdown
+    table cells. Neither the value nor the sentence was sanitised."""
+
+    def _report(self, **kw) -> CreditReport:
+        base = dict(
+            metric_rows=[MetricRow("Leverage", Flag.RED, "m", "1", "1", "",
+                                   metric_key="debt_equity")],
+            altman_flag=Flag.UNAVAILABLE, quality_flag=Flag.GREEN,
+        )
+        base.update(kw)
+        return CreditReport("X.O", "X", Flag.GREEN, **base)
+
+    def test_non_finite_z_is_not_printed_as_a_score(self) -> None:
+        """`Z = inf` / `Z = nan` in a score cell reads as a computed value. A
+        non-finite z means no score was produced, and the flag already says
+        UNAVAILABLE."""
+        for bad in (float("inf"), float("-inf"), float("nan")):
+            rows = dashboard_rows(self._report(altman_z=bad))
+            altman = next(r for r in rows if r.metric_key == ALTMAN_LEG_KEY)
+            assert altman.metric_value == "—", bad
+            assert "inf" not in altman.metric_value
+            assert "nan" not in altman.metric_value
+
+    def test_a_finite_z_is_still_printed(self) -> None:
+        rows = dashboard_rows(self._report(altman_z=2.104, altman_variant="Z'"))
+        altman = next(r for r in rows if r.metric_key == ALTMAN_LEG_KEY)
+        assert altman.metric_value == "Z' = 2.10"
+
+    def test_a_pipe_in_the_quality_sentence_cannot_break_the_table(self) -> None:
+        """An unescaped pipe splits the row into extra columns, silently
+        corrupting the dashboard for every downstream reader."""
+        report = self._report(
+            quality_trend_sentence="Quality fell 1.4 pts | driven by margins",
+        )
+        rows = dashboard_rows(report)
+        quality = next(r for r in rows if r.metric_key == QUALITY_LEG_KEY)
+        assert "\\|" in quality.metric_value
+        table = build_metrics_table(rows)
+        for line in table.splitlines()[2:]:
+            assert line.count("|") - line.count("\\|") == 6, line
