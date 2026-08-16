@@ -136,13 +136,13 @@ Zero tool calls. Use `credit_lens_logic.py` to compute every flag, the Altman Z-
 | Per-metric flag (peer-relative and absolute, more conservative wins) | `flag_metric(value, peer_median, peer_p75, metric_key)` |
 | Altman Z-score, variant label (`Z` or `Z'`) and zone flag | `compute_altman_z(AltmanInputs(...))` |
 | 52-week Quality change, then its flag | `quality_change_pts(current, prior)` → `flag_quality_change(change_pts)` |
-| Overall traffic-light across all flags | `overall_traffic_light(flags)` |
+| Overall traffic-light, set on the report | `finalize_verdict(report)` — wraps `overall_traffic_light(report_flags(report))` |
 
 `metric_key` selects the direction and any absolute band. Pass one of the registered keys below for every dashboard row:
 
-The Metrics Dashboard groups these ten metrics into the four category rows of §2; the table below is keyed by metric, not by rendered row.
+**Render one dashboard row per metric — ten rows, not four grouped categories.** The §2 example shows one row per category for brevity; that grouping is not the contract. `build_header()` counts one leg per metric, so grouping ten metrics into four rows makes the judged-count describe a different set than the verdict, and the coverage caveat then fails to fire on exactly the runs that need it. Use the Category column below as the row's group label, not as the row itself.
 
-| Metric | `metric_key` | Direction | Absolute band |
+| Category / Metric | `metric_key` | Direction | Absolute band |
 |---|---|---|---|
 | Leverage — Debt/EBITDA | `debt_ebitda` | higher is worse | yes |
 | Leverage — Debt/Equity | `debt_equity` | higher is worse | peer-relative only |
@@ -178,9 +178,13 @@ Structure output in markdown with the following sections:
 ```
 Overall traffic-light determined by: count of RED flags (→ Red), count of AMBER flags (→ Amber), count of GREEN (→ Green). Majority color wins. If two or more colors tie for the highest count, render the most conservative tied color (Red > Amber > Green) — e.g., a 2-2-2 split renders Red. Compute via `overall_traffic_light(flags)`, which also drops UNAVAILABLE legs from the count and returns UNAVAILABLE when every leg is missing.
 
-**State the coverage whenever any leg is UNAVAILABLE.** Dropping those legs is right for the vote but silent in the header, so a 🟢 can rest on two judged metrics out of six and still read as a full clean bill. `build_header()` appends `| Judged: N of M metrics` for you via `coverage(flags)` — do not hand-compute it. List which metrics went unjudged, and why, in Key Flags.
+**State the coverage whenever any leg is UNAVAILABLE.** Dropping those legs is right for the vote but silent in the header, so a 🟢 can rest on two judged metrics out of six and still read as a full clean bill.
 
-This is the normal case, not an edge case: five of the ten registered keys carry no absolute band and the `ratios` response supplies peer percentiles for none of them, so a routine run judges about half the dashboard. Never present a majority verdict drawn from a minority of the metrics without saying so.
+**Call `finalize_verdict(report)` rather than assigning `overall_flag` yourself.** It sets the verdict from `report_flags(report)` — every `metric_rows` flag plus `altman_flag` plus `quality_flag` — and `build_header()` counts that same list, so the verdict and the `| Judged: N of M metrics` count cannot describe different metric sets. Assigning the flag by hand reintroduces exactly that divergence, which is how the caveat came to be missing from the run it was written for. Populate `quality_flag` and `altman_flag` on the report; they vote, and a leg you leave at its default counts as unjudged.
+
+List which metrics went unjudged, and why, in Key Flags.
+
+This is the normal case, not an edge case: seven of the ten registered keys carry no absolute band, and the `ratios` response supplies peer percentiles for only five metrics, so the five with neither are unjudged on a routine run. Never present a majority verdict drawn from a minority of the metrics without saying so.
 
 ### 2. **Metrics Dashboard** (table)
 ```

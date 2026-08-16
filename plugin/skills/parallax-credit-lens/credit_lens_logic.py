@@ -72,8 +72,14 @@ def compute_altman_z(inputs: AltmanInputs) -> tuple[float, str, Flag]:
     variant_label is "Z" (market-cap) or "Z'" (book-equity fallback).
     Raises ValueError if total_assets is zero.
     """
-    if inputs.total_assets == 0:
-        raise ValueError("total_assets must be non-zero")
+    # Screened for finiteness, not just for zero, and for the same reason the
+    # market cap is: a non-finite denominator silently fabricates a term rather
+    # than failing. total_liabilities=inf drives X4 to 0.0 and yields a
+    # confident GREEN; total_assets=inf zeroes X1, X2, X3 and X5 alike.
+    if not math.isfinite(inputs.total_assets) or inputs.total_assets == 0:
+        raise ValueError(
+            f"total_assets must be non-zero and finite (got {inputs.total_assets!r})"
+        )
 
     x1 = inputs.working_capital / inputs.total_assets
     x2 = inputs.retained_earnings / inputs.total_assets
@@ -110,8 +116,11 @@ def compute_altman_z(inputs: AltmanInputs) -> tuple[float, str, Flag]:
             f"cannot have a zero, negative or non-finite market cap)"
         )
 
-    if inputs.total_liabilities == 0:
-        raise ValueError("total_liabilities must be non-zero for X4 computation")
+    if not math.isfinite(inputs.total_liabilities) or inputs.total_liabilities == 0:
+        raise ValueError(
+            "total_liabilities must be non-zero and finite for X4 computation "
+            f"(got {inputs.total_liabilities!r})"
+        )
 
     x4 = x4_numerator / inputs.total_liabilities
 
@@ -170,14 +179,6 @@ def flag_metric(
             f"{sorted(set(METRIC_DIRECTIONS) | set(ABSOLUTE_THRESHOLDS))}"
         )
 
-    if not math.isfinite(value):
-        # Every IEEE-754 comparison against NaN is False, so a NaN fell through
-        # both threshold tests in _absolute_flag and landed on its trailing
-        # `return GREEN`. json.loads accepts a bare NaN token, so this can
-        # arrive straight off a tool response. compute_altman_z already treats
-        # a non-finite result as UNAVAILABLE; this matches it.
-        return Flag.UNAVAILABLE
-
     # A non-finite peer bound is a peer-data gap, not an inverted ordering.
     # Treated as absent so it degrades the same way a missing row does, rather
     # than raising with a message that misdescribes the cause.
@@ -188,13 +189,21 @@ def flag_metric(
 
     direction = _direction(metric_key)
 
-    # Ordering is validated BEFORE the negative-value guard below. The guard
-    # returns early, so putting it first swallowed a corrupt peer row for
-    # exactly the distressed inputs where a mis-mapped peer field is most
-    # likely — the same pair raised on a positive value and passed silently on
-    # a negative one.
+    # Ordering is validated ahead of BOTH early-return guards below. Either one
+    # returns before the peer rule runs, so a guard placed first swallows a
+    # corrupt peer row — and it does so on the distressed and missing-data
+    # inputs where a mis-mapped peer field is most likely. The same pair used to
+    # raise on a healthy value and pass silently on a negative or NaN one.
     if peer_median is not None and peer_p75 is not None:
         _validate_peer_ordering(peer_median, peer_p75, direction, metric_key)
+
+    if not math.isfinite(value):
+        # Every IEEE-754 comparison against NaN is False, so a NaN fell through
+        # both threshold tests in _absolute_flag and landed on its trailing
+        # `return GREEN`. json.loads accepts a bare NaN token, so this can
+        # arrive straight off a tool response. compute_altman_z already treats
+        # a non-finite result as UNAVAILABLE; this matches it.
+        return Flag.UNAVAILABLE
 
     if direction == "high_bad" and value < 0:
         # A negative debt ratio does not mean "better than every peer", which
@@ -462,7 +471,45 @@ class CreditReport:
     altman_z: Optional[float] = None
     altman_variant: str = "Z"
     altman_flag: Flag = Flag.UNAVAILABLE
+    # The Quality-trend leg votes in the traffic-light like any other, but had
+    # no field — only the rendered sentence. That made it uncountable, so a
+    # coverage figure taken off this report silently omitted it.
+    quality_flag: Flag = Flag.UNAVAILABLE
     palepu_unavailable: bool = False
+
+
+def report_flags(report: CreditReport) -> list[Flag]:
+    """The canonical leg list — every flag the verdict is computed from.
+
+    Exists because the verdict and the coverage count were read off two
+    different lists and nothing reconciled them. `build_header` counted
+    `metric_rows`, while the vote ran over the per-metric flags; SKILL.md
+    groups ten metrics into four rendered category rows, so a routine run
+    counted 6 of 6 judged while the vote saw 5 of 10, and the coverage caveat
+    never rendered on exactly the run that needed it.
+
+    Two legs also sat outside `metric_rows` entirely: `altman_flag`, which
+    defaults to UNAVAILABLE on a bare report, and the Quality trend, which had
+    no field at all. Both vote, so both are counted here.
+
+    Derive BOTH the verdict and the coverage figure from this one list — that
+    is what `finalize_verdict` is for.
+    """
+    return [row.flag for row in report.metric_rows] + [
+        report.altman_flag,
+        report.quality_flag,
+    ]
+
+
+def finalize_verdict(report: CreditReport) -> CreditReport:
+    """Set `overall_flag` from the canonical leg list and return the report.
+
+    Call this instead of assigning `overall_flag` by hand. It makes the header
+    verdict and the header's judged-count arithmetically inseparable: both read
+    `report_flags(report)`, so they cannot describe different metric sets.
+    """
+    report.overall_flag = overall_traffic_light(report_flags(report))
+    return report
 
 
 def coverage(flags: list[Flag]) -> tuple[int, int]:
@@ -471,9 +518,13 @@ def coverage(flags: list[Flag]) -> tuple[int, int]:
     `overall_traffic_light` drops those legs from the vote, which is right for
     the arithmetic and silent in the output: a GREEN header can rest on a small
     minority of the metrics and still read as a full clean bill. This is not a
-    corner case — five of the ten registered keys carry no absolute band, and
-    the `ratios` response supplies peer percentiles for none of them, so they
-    are UNAVAILABLE on a routine run.
+    corner case — seven of the ten registered keys carry no absolute band, and
+    the `ratios` response supplies peer percentiles for only five metrics, so
+    the five keys with neither are UNAVAILABLE on a routine run.
+
+    Pass `report_flags(report)`, not a hand-assembled list. Counting a
+    different list than the one the verdict was computed from is the bug this
+    docstring used to describe incorrectly.
     """
     return sum(1 for f in flags if f != Flag.UNAVAILABLE), len(flags)
 
@@ -484,8 +535,8 @@ def build_header(report: CreditReport) -> str:
         f"## Credit Risk Assessment: {report.company_name} ({report.symbol})"
         f" | Traffic-Light: {emoji} {report.overall_flag.value}"
     )
-    judged, total = coverage([row.flag for row in report.metric_rows])
-    if total and judged < total:
+    judged, total = coverage(report_flags(report))
+    if judged < total:
         line += f" | Judged: {judged} of {total} metrics"
     return line
 

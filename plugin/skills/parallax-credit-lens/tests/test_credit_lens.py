@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Optional
@@ -27,6 +28,8 @@ from credit_lens_logic import (  # noqa: E402
     build_footer,
     build_header,
     coverage,
+    finalize_verdict,
+    report_flags,
     build_key_flags_section,
     build_liquidity_section,
     build_metrics_table,
@@ -37,6 +40,14 @@ from credit_lens_logic import (  # noqa: E402
     overall_traffic_light,
     quality_change_pts,
     validate_ric,
+    # Private helpers, imported deliberately for the mutation-kill and
+    # invariant tests below: several guards inside these functions are
+    # unreachable through the public functions above (flag_metric already
+    # screens what would reach them), so they can only be exercised, and
+    # their deletion only detected, by calling the private function directly.
+    _direction,
+    _peer_relative_flag,
+    _worse_flag,
 )
 
 # ---------------------------------------------------------------------------
@@ -543,33 +554,6 @@ class TestPeerPercentileAssertion:
         # peer-only key: nothing left to judge it with
         assert flag_metric(2.0, float("nan"), 1.0, "debt_equity") == Flag.UNAVAILABLE
 
-    def test_header_states_coverage_when_legs_are_unjudged(self) -> None:
-        """A green header resting on a minority of judged metrics must say so
-        on the header line, not only in prose the orchestrator may skip."""
-        rows = [
-            MetricRow("Leverage", Flag.GREEN, "D/E", "0.4x", "0.9x", ""),
-            MetricRow("Liquidity", Flag.UNAVAILABLE, "Quick", "—", "—", ""),
-            MetricRow("Profitability", Flag.UNAVAILABLE, "FCF", "—", "—", ""),
-        ]
-        report = CreditReport(
-            symbol="MSFT.O", company_name="Microsoft Corp.",
-            overall_flag=Flag.GREEN, metric_rows=rows,
-        )
-        assert coverage([r.flag for r in rows]) == (1, 3)
-        assert "Judged: 1 of 3 metrics" in build_header(report)
-
-    def test_header_omits_coverage_when_everything_was_judged(self) -> None:
-        rows = [
-            MetricRow("Leverage", Flag.GREEN, "D/E", "0.4x", "0.9x", ""),
-            MetricRow("Coverage", Flag.RED, "IntCov", "1.1x", "8.0x", ""),
-        ]
-        report = CreditReport(
-            symbol="MSFT.O", company_name="Microsoft Corp.",
-            overall_flag=Flag.RED, metric_rows=rows,
-        )
-        assert coverage([r.flag for r in rows]) == (2, 2)
-        assert "Judged:" not in build_header(report)
-
     def test_non_finite_quality_change_is_unavailable(self) -> None:
         """No test passed a non-finite value to flag_quality_change, so
         deleting its guard left the suite green."""
@@ -770,6 +754,16 @@ class TestOverallTrafficLight:
 
     def test_unavailable_flags_excluded_from_count(self) -> None:
         flags = [Flag.GREEN, Flag.UNAVAILABLE, Flag.GREEN]
+        assert overall_traffic_light(flags) == Flag.GREEN
+
+    def test_single_real_flag_wins_against_an_unavailable_plurality(self) -> None:
+        """UNAVAILABLE is excluded from the vote entirely, not merely
+        outvoted, so one real flag against four UNAVAILABLE must still
+        decide the outcome. The GREEN-vs-UNAVAILABLE test above is 2 vs 1 --
+        a real majority -- and cannot tell a majority case apart from a
+        plurality one; adding Flag.UNAVAILABLE into the internal `counts`
+        dict would silently change this result with nothing else noticing."""
+        flags = [Flag.GREEN, Flag.UNAVAILABLE, Flag.UNAVAILABLE, Flag.UNAVAILABLE, Flag.UNAVAILABLE]
         assert overall_traffic_light(flags) == Flag.GREEN
 
     def test_all_unavailable_returns_unavailable(self) -> None:
@@ -1534,3 +1528,473 @@ class TestEdgeCases:
             assert key in ABSOLUTE_THRESHOLDS, f"Missing threshold for {key}"
             amber, red, direction = ABSOLUTE_THRESHOLDS[key]
             assert direction in ("high_bad", "low_bad")
+
+
+# ---------------------------------------------------------------------------
+# TestFlagMetricNeverGreensAnUnjudgedValue
+# ---------------------------------------------------------------------------
+#
+# All ten defects fixed over five review rounds were one class: an unhandled
+# branch fell through to `return Flag.GREEN` (or, for the ordering guard,
+# scored silently instead of raising). Every prior test in this file is a
+# spot check for one of those ten paths. The tests below instead enumerate
+# the input space and assert the invariant directly, so a future reviewer
+# does not have to find defect #11 by inspection.
+
+_ALL_REGISTERED_KEYS = sorted(set(METRIC_DIRECTIONS) | set(ABSOLUTE_THRESHOLDS))
+
+# Every ABSOLUTE_THRESHOLDS boundary value (3.5, 5.0, 3.0, 1.5, 1.2, 1.0) plus
+# ordinary finite values, signed zero, signed ULP-scale (smallest subnormal),
+# and the three non-finite IEEE-754 values.
+_INVARIANT_VALUES = [
+    2.0, -2.0, 0.0, -0.0,
+    100.0, -100.0,
+    3.5, 5.0, 3.0, 1.5, 1.2, 1.0,
+    float("inf"), float("-inf"), float("nan"),
+    5e-324, -5e-324,
+]
+
+
+def _peer_states_for(direction: str) -> list:
+    """Both present ordered, both present inverted, both equal, one None,
+    both None, non-finite bound with a finite partner, both non-finite."""
+    lo, hi = 3.0, 5.0
+    if direction == "high_bad":
+        ordered, inverted = (lo, hi), (hi, lo)
+    else:
+        ordered, inverted = (hi, lo), (lo, hi)
+    return [
+        ordered,
+        inverted,
+        (4.0, 4.0),
+        (4.0, None),
+        (None, 4.0),
+        (None, None),
+        (float("nan"), 4.0),
+        (4.0, float("nan")),
+        (float("nan"), float("nan")),
+        (float("inf"), 4.0),
+        (4.0, float("inf")),
+    ]
+
+
+def _usable_peer_bound(bound: Optional[float]) -> Optional[float]:
+    """Mirrors flag_metric's own coercion: a non-finite bound degrades to
+    absent, same as a missing row."""
+    if bound is None or not math.isfinite(bound):
+        return None
+    return bound
+
+
+def _ordering_inverted(median: float, p75: float, direction: str) -> bool:
+    if direction == "high_bad":
+        return p75 < median
+    return p75 > median
+
+
+class TestFlagMetricNeverGreensAnUnjudgedValue:
+    """The central invariant: `flag_metric` must never return GREEN -- or any
+    flag at all -- unless a rule actually judged the value. Enumerate the
+    full cross product of registered key x value class x peer-pair state
+    (10 x 17 x 11 = 1,870 cases) and check it directly."""
+
+    def test_invariant_holds_over_the_full_cross_product(self) -> None:
+        cases = 0
+        for key in _ALL_REGISTERED_KEYS:
+            direction = _direction(key)
+            assert direction is not None, key  # precondition for this loop
+            for value in _INVARIANT_VALUES:
+                for median, p75 in _peer_states_for(direction):
+                    cases += 1
+                    usable_median = _usable_peer_bound(median)
+                    usable_p75 = _usable_peer_bound(p75)
+
+                    # Ordering is validated ahead of BOTH early-return guards
+                    # below (the non-finite-value guard and the negative
+                    # high_bad guard) -- whichever guard sat first used to
+                    # swallow a corrupt peer row on exactly the distressed or
+                    # missing-data inputs where a mis-mapped peer field is
+                    # most likely. So an inverted, finite, present peer pair
+                    # must raise regardless of the value -- NaN, +-inf, and
+                    # negative included.
+                    expected_raise = (
+                        usable_median is not None
+                        and usable_p75 is not None
+                        and _ordering_inverted(usable_median, usable_p75, direction)
+                    )
+
+                    try:
+                        result = flag_metric(value, median, p75, key)
+                    except ValueError as exc:
+                        assert expected_raise, (
+                            key, value, median, p75,
+                            "raised unexpectedly", str(exc),
+                        )
+                        continue
+
+                    # If a mutant deletes the ordering-validation call, an
+                    # inverted pair scores silently instead of raising --
+                    # catch that here rather than only accepting an absence
+                    # of exceptions.
+                    assert not expected_raise, (
+                        key, value, median, p75,
+                        "should have raised but returned", result,
+                    )
+
+                    if not math.isfinite(value):
+                        assert result == Flag.UNAVAILABLE, (
+                            key, value, median, p75, result,
+                        )
+                        continue
+
+                    if direction == "high_bad" and value < 0:
+                        assert result == Flag.UNAVAILABLE, (
+                            key, value, median, p75, result,
+                        )
+                        continue
+
+                    has_peer = usable_median is not None and usable_p75 is not None
+                    has_absolute = key in ABSOLUTE_THRESHOLDS
+                    if not has_peer and not has_absolute:
+                        assert result == Flag.UNAVAILABLE, (
+                            key, value, median, p75, result,
+                        )
+                    else:
+                        assert result in (Flag.GREEN, Flag.AMBER, Flag.RED), (
+                            key, value, median, p75, result,
+                        )
+
+        expected_cases = len(_ALL_REGISTERED_KEYS) * len(_INVARIANT_VALUES) * 11
+        assert cases == expected_cases, "cross product size drifted silently"
+
+
+# ---------------------------------------------------------------------------
+# TestQualityChangeNeverFallsThroughToGreen
+# ---------------------------------------------------------------------------
+
+
+class TestQualityChangeNeverFallsThroughToGreen:
+    """The `flag_quality_change` analogue: UNAVAILABLE iff the input is
+    non-finite, over a wider and more extreme value set (subnormals, huge
+    magnitudes) than the existing 0-10-grid boundary sweep exercises -- that
+    sweep checks band-edge correctness, this checks the non-finite
+    fall-through never resolves to a judged flag."""
+
+    def test_unavailable_iff_non_finite_over_an_extreme_value_set(self) -> None:
+        values = [
+            0.0, -0.0, 0.3, -0.4, -0.5, -1.5, -10.0, 10.0, 50.0, -100.0,
+            1e300, -1e300,
+            1e-300, -1e-300,
+            5e-324, -5e-324,
+            float("inf"), float("-inf"), float("nan"),
+        ]
+        for value in values:
+            result = flag_quality_change(value)
+            if math.isfinite(value):
+                assert result in (Flag.GREEN, Flag.AMBER, Flag.RED), (value, result)
+            else:
+                assert result == Flag.UNAVAILABLE, (value, result)
+
+
+# ---------------------------------------------------------------------------
+# TestAltmanNeverConfidentOnFabricatedOrMislabeledInputs
+# ---------------------------------------------------------------------------
+
+
+class TestAltmanNeverConfidentOnFabricatedOrMislabeledInputs:
+    """`compute_altman_z`'s analogue of the flag_metric invariant: never a
+    confident zone flag on a non-finite/overflowed score, and never a variant
+    label that misreports which formula actually ran. The market_cap=0.0
+    defect was found by inspecting four hand-picked values; this enumerates
+    market_cap x book_equity exhaustively instead."""
+
+    _BASE = dict(
+        working_capital=1000.0, retained_earnings=2000.0, ebit=1500.0,
+        total_assets=10000.0, total_liabilities=6000.0, revenue=9000.0,
+    )
+
+    def test_variant_and_raise_behavior_over_the_full_cap_x_equity_cross_product(self) -> None:
+        market_caps = [
+            None, 0.0, -100.0, float("nan"), float("inf"), float("-inf"),
+            1.0, 25000.0,
+        ]
+        book_equities = [None, 10000.0, -5000.0, 0.0]
+        cases = 0
+        for mc in market_caps:
+            for be in book_equities:
+                cases += 1
+                cap_usable = mc is not None and math.isfinite(mc) and mc > 0
+                inputs = AltmanInputs(market_cap=mc, book_equity=be, **self._BASE)
+
+                if cap_usable:
+                    z, variant, _ = compute_altman_z(inputs)
+                    assert variant == "Z", (mc, be)
+                    # A usable cap must win regardless of book_equity, and
+                    # must not silently borrow its value: swapping
+                    # book_equity while the cap stays usable must not move z.
+                    swapped = AltmanInputs(
+                        market_cap=mc,
+                        book_equity=(be if be is not None else 0.0) + 12345.0,
+                        **self._BASE,
+                    )
+                    z_swapped, variant_swapped, _ = compute_altman_z(swapped)
+                    assert (z_swapped, variant_swapped) == (z, variant), (mc, be)
+
+                elif be is not None:
+                    z, variant, _ = compute_altman_z(inputs)
+                    assert variant == "Z'", (mc, be)
+                    # The book-equity fallback must actually use the
+                    # supplied value, not fabricate X4 as zero the way
+                    # market_cap=0.0 used to: a different book_equity must
+                    # move z.
+                    other = AltmanInputs(
+                        market_cap=mc, book_equity=be + 12345.0, **self._BASE,
+                    )
+                    z_other, _, _ = compute_altman_z(other)
+                    assert z_other != z, (mc, be)
+
+                else:
+                    with pytest.raises(ValueError, match="market_cap or book_equity"):
+                        compute_altman_z(inputs)
+
+        assert cases == len(market_caps) * len(book_equities)
+
+    def test_non_finite_total_assets_or_total_liabilities_raises(self) -> None:
+        """total_assets is every ratio's denominator and total_liabilities is
+        X4's denominator; a non-finite value in either fabricates a term
+        instead of failing (total_liabilities=inf drives X4 to 0.0 and used
+        to produce a confident GREEN out of an impossible input). Both must
+        raise, the same contract as a zero total_assets or total_liabilities."""
+        base = dict(self._BASE, market_cap=5000.0)
+        for bad in (float("nan"), float("inf"), float("-inf")):
+            with pytest.raises(ValueError, match="total_assets"):
+                compute_altman_z(AltmanInputs(**dict(base, total_assets=bad)))
+            with pytest.raises(ValueError, match="total_liabilities"):
+                compute_altman_z(AltmanInputs(**dict(base, total_liabilities=bad)))
+
+    def test_non_finite_numerator_inputs_never_flag_confidently(self) -> None:
+        """Injecting a non-finite value into any of the four ratio numerators
+        propagates to a non-finite z (nan/inf arithmetic), which must land
+        UNAVAILABLE rather than overflow into a confident GREEN/AMBER/RED --
+        the same failure shape as the infinite-z defect, reached from a
+        different cause."""
+        base = dict(self._BASE, market_cap=5000.0)
+        for field in ("working_capital", "retained_earnings", "ebit", "revenue"):
+            for bad in (float("nan"), float("inf"), float("-inf")):
+                kwargs = dict(base)
+                kwargs[field] = bad
+                z, _, flag = compute_altman_z(AltmanInputs(**kwargs))
+                assert not math.isfinite(z), (field, bad, z)
+                assert flag == Flag.UNAVAILABLE, (field, bad, z, flag)
+
+
+# ---------------------------------------------------------------------------
+# TestKnownKeyIffDirectionResolves
+# ---------------------------------------------------------------------------
+
+
+class TestKnownKeyIffDirectionResolves:
+    """Registry-consistency invariant, second half.
+    `test_direction_registry_agrees_with_the_absolute_thresholds` (above)
+    already covers METRIC_DIRECTIONS and ABSOLUTE_THRESHOLDS agreeing on
+    direction for the three banded keys. This covers the other half of the
+    same divergence risk: `flag_metric`'s `known` gate must accept a key
+    exactly when `_direction` can resolve one for it -- if the two ever
+    disagreed, either a registered key would be wrongly rejected or an
+    unregistered one would silently reach the direction-conditional guards
+    with `direction=None`."""
+
+    def test_every_registered_key_resolves_a_direction_and_is_accepted(self) -> None:
+        for key in _ALL_REGISTERED_KEYS:
+            assert _direction(key) is not None, key
+            flag_metric(1.0, None, None, key)  # must not raise
+
+    def test_every_unregistered_key_resolves_no_direction_and_is_rejected(self) -> None:
+        for bad_key in ("unknown_metric_xyz", "debt_ebita", "", "DEBT_EBITDA"):
+            assert _direction(bad_key) is None, bad_key
+            with pytest.raises(ValueError, match="unregistered metric_key"):
+                flag_metric(1.0, None, None, bad_key)
+
+
+# ---------------------------------------------------------------------------
+# TestPeerRelativeExactBoundaryValues
+# ---------------------------------------------------------------------------
+
+
+class TestPeerRelativeExactBoundaryValues:
+    """Every existing peer-comparison test uses a value strictly inside a
+    band; none set value exactly equal to peer_median or peer_p75. A
+    `<=`/`>=` -> `<`/`>` mutation on any of the four peer-threshold
+    comparisons in `_peer_relative_flag` survived the full suite untouched
+    until these were added (mutation-kill table, mutants M20-M23)."""
+
+    def test_high_bad_value_exactly_at_median_is_green(self) -> None:
+        result = flag_metric(3.0, peer_median=3.0, peer_p75=4.5, metric_key="debt_equity")
+        assert result == Flag.GREEN
+
+    def test_high_bad_value_exactly_at_p75_is_amber(self) -> None:
+        result = flag_metric(4.5, peer_median=3.0, peer_p75=4.5, metric_key="debt_equity")
+        assert result == Flag.AMBER
+
+    def test_low_bad_value_exactly_at_median_is_green(self) -> None:
+        result = flag_metric(10.0, peer_median=10.0, peer_p75=6.0, metric_key="quick_ratio")
+        assert result == Flag.GREEN
+
+    def test_low_bad_value_exactly_at_p75_is_amber(self) -> None:
+        result = flag_metric(6.0, peer_median=10.0, peer_p75=6.0, metric_key="quick_ratio")
+        assert result == Flag.AMBER
+
+
+# ---------------------------------------------------------------------------
+# TestPrivateGuardsUnreachableThroughThePublicApi
+# ---------------------------------------------------------------------------
+
+
+class TestPrivateGuardsUnreachableThroughThePublicApi:
+    """Some guards inside the private helpers can never be exercised through
+    `flag_metric`: `_peer_relative_flag`'s `direction is None` branch is dead
+    on that path because `flag_metric`'s own `known` gate already rejects any
+    key `_direction` cannot resolve, and its internal ordering-validation
+    call is dead because `flag_metric` already validates under the identical
+    post-coercion condition before ever calling this helper. Call the
+    private functions directly so a future deletion of either guard is still
+    a code change a test can see (mutation-kill table, mutants M18, M19,
+    M28, M29)."""
+
+    def test_peer_relative_flag_direction_none_defaults_to_green_not_a_low_bad_read(self) -> None:
+        """Bypass flag_metric's registration check by calling the private
+        helper with an unregistered key. `direction` resolves to None, and
+        the documented behaviour is a neutral GREEN regardless of value vs.
+        peer data. Chosen so that falling through to the low_bad comparison
+        instead (what happens if this guard is deleted) gives a different,
+        detectable answer: 5.0 is below both 8.0 and 10.0, so the low_bad
+        branch would return RED, not GREEN."""
+        result = _peer_relative_flag(5.0, 8.0, 10.0, "totally_unregistered_key")
+        assert result == Flag.GREEN
+
+    def test_peer_relative_flag_validates_ordering_even_when_called_directly(self) -> None:
+        with pytest.raises(ValueError, match="peer_p75.*must be"):
+            _peer_relative_flag(5.0, peer_median=3.0, peer_p75=1.0, metric_key="debt_ebitda")
+
+    def test_worse_flag_matches_severity_ordering_exhaustively(self) -> None:
+        """`_worse_flag`'s two UNAVAILABLE arms are unreachable through
+        `flag_metric`: `_peer_relative_flag` and `_absolute_flag` never
+        return UNAVAILABLE, so `flag_metric` never calls `_worse_flag` with
+        an UNAVAILABLE argument. Exercise every (Flag, Flag) pair directly."""
+        severity = {Flag.GREEN: 0, Flag.AMBER: 1, Flag.RED: 2}
+        all_flags = [Flag.GREEN, Flag.AMBER, Flag.RED, Flag.UNAVAILABLE]
+        for a in all_flags:
+            for b in all_flags:
+                result = _worse_flag(a, b)
+                if a == Flag.UNAVAILABLE and b == Flag.UNAVAILABLE:
+                    assert result == Flag.UNAVAILABLE, (a, b, result)
+                elif a == Flag.UNAVAILABLE:
+                    assert result == b, (a, b, result)
+                elif b == Flag.UNAVAILABLE:
+                    assert result == a, (a, b, result)
+                else:
+                    expected = a if severity[a] >= severity[b] else b
+                    assert result == expected, (a, b, result)
+
+
+# ---------------------------------------------------------------------------
+# TestVerdictAndCoverageCannotDiverge
+# ---------------------------------------------------------------------------
+
+
+class TestVerdictAndCoverageCannotDiverge:
+    """`build_header` counted `metric_rows` while the verdict was voted over the
+    per-metric flags. SKILL.md grouped ten metrics into four rendered rows, so a
+    routine run counted 6 of 6 judged while the vote saw 5 of 10 — and the
+    coverage caveat never rendered on the run it exists for. Two legs also sat
+    outside `metric_rows`: `altman_flag`, UNAVAILABLE by default, and the
+    Quality trend, which had no field at all."""
+
+    def _rows(self, *flags: Flag) -> list[MetricRow]:
+        return [
+            MetricRow(f"m{i}", f, "metric", "1", "1", "")
+            for i, f in enumerate(flags)
+        ]
+
+    def test_report_flags_includes_the_legs_outside_metric_rows(self) -> None:
+        report = CreditReport(
+            symbol="AAPL.O", company_name="Apple Inc.", overall_flag=Flag.GREEN,
+            metric_rows=self._rows(Flag.GREEN, Flag.RED),
+            altman_flag=Flag.AMBER, quality_flag=Flag.RED,
+        )
+        assert report_flags(report) == [
+            Flag.GREEN, Flag.RED, Flag.AMBER, Flag.RED,
+        ]
+
+    def test_a_bare_report_counts_its_two_defaulted_legs_as_unjudged(self) -> None:
+        """`altman_flag` and `quality_flag` both default to UNAVAILABLE. A leg
+        left at its default is unjudged and must be counted as such, not
+        silently omitted."""
+        report = CreditReport("X.O", "X", Flag.GREEN)
+        assert coverage(report_flags(report)) == (0, 2)
+
+    def test_the_routine_run_renders_the_caveat(self) -> None:
+        """The exact shape that produced no caveat: judged legs in the majority
+        of rendered rows, unjudged legs present, green verdict."""
+        report = CreditReport(
+            symbol="AAPL.O", company_name="Apple Inc.", overall_flag=Flag.GREEN,
+            metric_rows=self._rows(
+                Flag.GREEN, Flag.GREEN, Flag.GREEN, Flag.GREEN,
+                Flag.UNAVAILABLE, Flag.UNAVAILABLE,
+            ),
+            altman_flag=Flag.UNAVAILABLE, quality_flag=Flag.UNAVAILABLE,
+        )
+        finalize_verdict(report)
+        assert coverage(report_flags(report)) == (4, 8)
+        assert "Judged: 4 of 8 metrics" in build_header(report)
+
+    def test_an_unjudged_altman_leg_alone_triggers_the_caveat(self) -> None:
+        """Every rendered row is judged, but the Altman leg is not. Counting
+        `metric_rows` alone reported full coverage here."""
+        report = CreditReport(
+            symbol="X.O", company_name="X", overall_flag=Flag.GREEN,
+            metric_rows=self._rows(Flag.GREEN, Flag.GREEN),
+            altman_flag=Flag.UNAVAILABLE, quality_flag=Flag.GREEN,
+        )
+        finalize_verdict(report)
+        assert "Judged: 3 of 4 metrics" in build_header(report)
+
+    def test_header_omits_the_caveat_only_when_every_leg_was_judged(self) -> None:
+        report = CreditReport(
+            symbol="X.O", company_name="X", overall_flag=Flag.RED,
+            metric_rows=self._rows(Flag.GREEN, Flag.RED),
+            altman_flag=Flag.RED, quality_flag=Flag.GREEN,
+        )
+        finalize_verdict(report)
+        assert coverage(report_flags(report)) == (4, 4)
+        assert "Judged:" not in build_header(report)
+
+    def test_finalize_verdict_matches_the_counted_list(self) -> None:
+        """The invariant that makes divergence impossible: the verdict is the
+        vote over exactly the list the header counts."""
+        import itertools
+        opts = [Flag.GREEN, Flag.AMBER, Flag.RED, Flag.UNAVAILABLE]
+        for combo in itertools.product(opts, repeat=3):
+            for altman, quality in itertools.product(opts, repeat=2):
+                report = CreditReport(
+                    "X.O", "X", Flag.GREEN,
+                    metric_rows=self._rows(*combo),
+                    altman_flag=altman, quality_flag=quality,
+                )
+                finalize_verdict(report)
+                legs = report_flags(report)
+                assert report.overall_flag == overall_traffic_light(legs)
+                judged, total = coverage(legs)
+                assert total == len(legs) == 5
+                assert judged == sum(1 for f in legs if f != Flag.UNAVAILABLE)
+                # the caveat renders exactly when something went unjudged
+                assert ("Judged:" in build_header(report)) == (judged < total)
+
+    def test_all_legs_unjudged_yields_an_unavailable_verdict_not_green(self) -> None:
+        report = CreditReport(
+            "X.O", "X", Flag.GREEN,
+            metric_rows=self._rows(Flag.UNAVAILABLE, Flag.UNAVAILABLE),
+        )
+        finalize_verdict(report)
+        assert report.overall_flag == Flag.UNAVAILABLE
+        assert "Judged: 0 of 4 metrics" in build_header(report)
