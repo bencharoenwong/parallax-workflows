@@ -136,11 +136,13 @@ Zero tool calls. Use `credit_lens_logic.py` to compute every flag, the Altman Z-
 | Per-metric flag (peer-relative and absolute, more conservative wins) | `flag_metric(value, peer_median, peer_p75, metric_key)` |
 | Altman Z-score, variant label (`Z` or `Z'`) and zone flag | `compute_altman_z(AltmanInputs(...))` |
 | 52-week Quality change, then its flag | `quality_change_pts(current, prior)` → `flag_quality_change(change_pts)` |
-| Overall traffic-light, set on the report | `finalize_verdict(report)` — wraps `overall_traffic_light(report_flags(report))` |
+| Overall traffic-light, stored on the report | `finalize_verdict(report)` — wraps `overall_traffic_light(report_flags(report))` |
 | The dashboard's full row set, Altman and Quality included | `dashboard_rows(report)` |
 | The header line, verdict and judged-count together | `build_header(report)` |
 
 `build_header` derives the verdict from the legs as they stand when it runs; it does not read `report.overall_flag`. So a leg that resolves late — `altman_flag` needs an external market cap, `quality_flag` arrives in Batch B — is reflected without re-running `finalize_verdict`. Populate every leg before rendering.
+
+That makes `finalize_verdict` optional for rendering: it stores the verdict on the report for any downstream consumer, but the header does not read it. Call it if you need `report.overall_flag`; skip it if you only render. Do not assign `overall_flag` by hand — a stored value that disagrees with the legs is not what the reader will see.
 
 `metric_key` selects the direction and any absolute band. Pass one of the registered keys below for every dashboard row:
 
@@ -195,12 +197,22 @@ This is the normal case, not an edge case: seven of the ten registered keys carr
 | Category      | Signal | Metric Value | Peer Median | Interpretation |
 |---------------|--------|--------------|-------------|-----------------|
 | Leverage      | 🔴 RED  | D/E 2.1x     | Peer 1.2x   | 75% above peer |
+| Leverage      | 🟡 AMBER| D/EBITDA 3.9x | Peer 2.8x  | Above peer |
+| Leverage      | ➖ UNAVAILABLE | —     | —           | No peer data and no absolute band |
 | Coverage      | 🟢 GREEN| Int Cov 5.2x | Peer 3.1x   | Top quartile |
+| Coverage      | ➖ UNAVAILABLE | —     | —           | No peer data and no absolute band |
 | Liquidity     | 🟡 AMBER| Curr Ratio 1.3x | Peer 1.8x | Below median |
+| Liquidity     | ➖ UNAVAILABLE | —     | —           | No peer data and no absolute band |
 | Profitability | 🟢 GREEN| EBITDA Margin 28% | Peer 22% | Above peer |
+| Profitability | ➖ UNAVAILABLE | —     | —           | No peer data and no absolute band |
+| Profitability | ➖ UNAVAILABLE | —     | —           | No peer data and no absolute band |
 | Altman Z      | 🟡 AMBER| Z = 2.1      | —           | Grey Zone |
 | Quality Trend | 🔴 RED  | –1.8 pts (52w) | —         | Deteriorating |
 ```
+
+Twelve rows: ten registered metrics plus the two module-owned legs. **Category repeats** — it is a grouping label, not the row identity. Five rows read `➖ UNAVAILABLE` on a routine run because those metrics carry no absolute band and `ratios` returns no peer pair for them; that is the normal shape, not a failure.
+
+An earlier version of this example showed four grouped rows, which is the shape that silences the coverage caveat. `dashboard_rows()` now renders the omitted metrics for you, so following this example produces the right row set either way.
 
 **Build the table with `dashboard_rows(report)`, not from `metric_rows` directly.** It returns your metric rows plus the Altman and Quality rows, which it renders from `altman_flag` / `quality_flag`. Those two are legs in their own right: supplying them as rows as well makes each vote twice, and doubling two legs flips real verdicts — three RED metrics against two GREEN is RED, but with both GREEN legs doubled it becomes 3 RED against 4 GREEN and renders GREEN.
 

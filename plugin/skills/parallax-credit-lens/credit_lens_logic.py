@@ -491,6 +491,21 @@ class CreditReport:
 # Sentinel keys for the two legs that live in their own report fields rather
 # than in `metric_rows`. They are not metrics in METRIC_DIRECTIONS — they have
 # no peer bands — so they get reserved keys instead of registry entries.
+# Dashboard category label per registered metric, used when the module renders
+# a row the caller omitted. Matches the four groupings in SKILL.md §2.
+_METRIC_CATEGORY = {
+    "debt_ebitda": "Leverage",
+    "debt_equity": "Leverage",
+    "debt_assets": "Leverage",
+    "interest_coverage": "Coverage",
+    "ebitda_interest_coverage": "Coverage",
+    "current_ratio": "Liquidity",
+    "quick_ratio": "Liquidity",
+    "ebitda_margin": "Profitability",
+    "ebit_margin": "Profitability",
+    "fcf_margin": "Profitability",
+}
+
 ALTMAN_LEG_KEY = "__altman_z__"
 QUALITY_LEG_KEY = "__quality_trend__"
 RESERVED_LEG_KEYS = (ALTMAN_LEG_KEY, QUALITY_LEG_KEY)
@@ -504,6 +519,21 @@ def dashboard_rows(report: CreditReport) -> list[MetricRow]:
     what stops them being counted twice.
     """
     rows = list(report.metric_rows)
+
+    # Render a row for every registered metric the caller omitted, so the
+    # dashboard shows the same twelve legs the verdict is voted over. Without
+    # this the caller controls the row set, and dropping the rows it could not
+    # compute made the dashboard look complete while the caveat went quiet.
+    supplied = {row.metric_key for row in report.metric_rows}
+    for key in METRIC_DIRECTIONS:
+        if key in supplied:
+            continue
+        rows.append(MetricRow(
+            _METRIC_CATEGORY.get(key, key), Flag.UNAVAILABLE, key,
+            "—", "—", "No peer data and no absolute band",
+            metric_key=key,
+        ))
+
     if report.altman_z is None or not math.isfinite(report.altman_z):
         # "Z = inf" / "Z = nan" is not a value a reader should see in a score
         # cell; a non-finite score means the computation did not produce one.
@@ -527,10 +557,25 @@ def dashboard_rows(report: CreditReport) -> list[MetricRow]:
 def _cell(text: str) -> str:
     """Make a string safe to drop into a markdown table cell.
 
-    An unescaped pipe splits the row into extra columns, so a quality-trend
-    sentence containing one silently corrupts the dashboard.
+    Two characters break a row, not one. An unescaped pipe splits it into extra
+    columns; a newline ENDS it, so the remainder of the sentence becomes a
+    fabricated row with no Category and no Signal cell — a table line the reader
+    sees but no leg produced. An earlier version escaped only the pipe while its
+    docstring claimed the cell was safe.
+
+    Whitespace is collapsed before the emptiness test, so a sentence of only
+    spaces or a bare newline yields the em dash rather than a blank cell.
     """
-    return text.replace("|", "\\|").strip() if text else "—"
+    if not text:
+        return "—"
+    collapsed = " ".join(text.split())          # folds \n, \r and \t alike
+    if not collapsed:
+        return "—"
+    # Backslash first, then pipe — the standard escaping order, and it matters.
+    # Escaping only the pipe turns an already-escaped `\|` into `\\|`, which GFM
+    # reads as a literal backslash followed by a LIVE separator, so text that
+    # arrived correctly escaped was the one input that still broke the row.
+    return collapsed.replace("\\", "\\\\").replace("|", "\\|")
 
 
 _ALTMAN_ZONE_TEXT = {
@@ -595,10 +640,24 @@ def report_flags(report: CreditReport) -> list[Flag]:
                 f"vote twice. SKILL.md requires one row per metric."
             )
         seen.add(key)
-    return [row.flag for row in report.metric_rows] + [
-        report.altman_flag,
-        report.quality_flag,
-    ]
+
+    # Pad every registered metric the caller did not supply. The denominator is
+    # the registry, not the row list, because otherwise omission is silent:
+    # dropping the unjudgeable rows turned "7 of 12 judged" into "7 of 7" and
+    # the coverage caveat — the whole point of the last three fixes —
+    # disappeared. Dropping two RED rows likewise turned RED into GREEN with no
+    # caveat to show a leg had gone missing.
+    #
+    # Over-supply already raises four ways; under-supply used to raise none.
+    # A metric with no row IS unjudged, so counting it as UNAVAILABLE is simply
+    # true, and it keeps the caveat honest without failing a legitimately
+    # partial tool response.
+    missing = [k for k in METRIC_DIRECTIONS if k not in seen]
+    return (
+        [row.flag for row in report.metric_rows]
+        + [Flag.UNAVAILABLE] * len(missing)
+        + [report.altman_flag, report.quality_flag]
+    )
 
 
 def finalize_verdict(report: CreditReport) -> CreditReport:
