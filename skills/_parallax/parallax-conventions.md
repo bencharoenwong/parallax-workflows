@@ -345,7 +345,7 @@ Every workflow output that contains AI-generated narrative, synthesis, or recomm
 
 ## 10. Render Gate
 
-Portfolio-family skills (`client-review`, `morning-brief`, `portfolio-builder`, `portfolio-checkup`, `rebalance`, `explain-portfolio`, `watchlist-monitor`) plus the single-stock report skills (`should-i-buy`, `score-explainer`) MUST pass their drafted report through the shared deterministic render gate as their **MANDATORY last step**.
+Portfolio-family skills (`client-review`, `morning-brief`, `portfolio-builder`, `portfolio-checkup`, `rebalance`, `explain-portfolio`, `watchlist-monitor`), the desk-level skill `desk-call-list`, and the single-stock report skills (`should-i-buy`, `score-explainer`) MUST pass their drafted report through the shared deterministic render gate as their **MANDATORY last step**. `SKILL_ANCHORS` in `render_gate.py` is the authoritative registry of gated skills; `test_render_gate.py` enforces it against each SKILL.md in both directions. When adding a gated skill, update this list alongside the registry — the test checks the registry and the SKILL.md files, not this prose.
 
 ### 10.1 Why it exists
 
@@ -374,7 +374,7 @@ REPORT
 python3 "<skill-dir>/../_parallax/render_gate.py" --skill <skill-key> < "$DRAFT"; rm -f "$DRAFT"
 ```
 
-The skill's **entire final message** is exactly that command's stdout. `render_gate.py` uses a fail-open design: if no anchor is found, the input is returned unchanged, ensuring the gate never destroys a report it cannot positively locate.
+The skill's **entire final message** is exactly that command's stdout. `render_gate.py` uses a fail-open design: if no anchor is found, the input is returned unchanged, ensuring the gate never destroys a report it cannot positively locate. The fail-open path also writes one `[render-gate] WARN: no anchor for skill='<key>'; returned unchanged` line to **stderr**; stdout is untouched. That line is diagnostics — never include it in the reply and never feed it to a downstream translate step. It means the drafted opening drifted from the skill's documented Output Format start: fix the opening and re-run the gate.
 
 ---
 

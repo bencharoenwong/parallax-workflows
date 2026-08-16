@@ -119,6 +119,8 @@ python3 "<skill-dir>/../_parallax/render_gate.py" --skill portfolio-checkup < "$
 
 **Your entire final message is exactly that command's stdout** — nothing before it (no "composing", no step notes, no scratch computation), nothing after it.
 
+The Bash result may show a `[render-gate] WARN:` line above the report. That line is stderr diagnostics, not stdout. Never include it in the reply. It means the drafted opening drifted from the documented Output Format start; fix the opening and re-run the gate.
+
 `_parallax/render_gate.py` is pure-stdlib and deterministically drops anything before the first rendered block (House View Preamble banner / Branding Header / Ground-truth Integrity / Portfolio Health Status / Portfolio Checkup title). It preserves the active-house-view banner in **every** `view_status` state (active / warning / critical / not-yet-effective / expired) and hoists any async-degraded note rather than dropping it. Same operator-agnostic-helper pattern as `view_status.py` / `loader.py` (a real Bash tool call, not prose).
 
 ## Output Format

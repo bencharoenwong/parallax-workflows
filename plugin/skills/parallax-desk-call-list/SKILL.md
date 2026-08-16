@@ -128,6 +128,8 @@ python3 "<skill-dir>/../_parallax/render_gate.py" --skill desk-call-list < "$DRA
 
 The entire final message is exactly that command's stdout. Put degraded notes inside the relevant report section so they survive the gate.
 
+The Bash result may show a `[render-gate] WARN:` line above the report. That line is stderr diagnostics, not stdout. Never include it in the reply. It means the drafted opening drifted from the documented Output Format start; fix the opening and re-run the gate.
+
 ## Output Format
 
 1. House View Preamble, only if active, per `_parallax/house-view/loader.md §5`.

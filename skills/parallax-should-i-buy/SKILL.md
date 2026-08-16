@@ -118,6 +118,8 @@ python3 "<skill-dir>/../_parallax/render_gate.py" --skill should-i-buy < "$DRAFT
 
 **Your entire final English message is exactly that command's stdout** — nothing before it, nothing after it. If Step 5 translation runs, it consumes this gated stdout; translated output is not re-gated.
 
+The Bash result may show a `[render-gate] WARN:` line above the report. That line is stderr diagnostics, not stdout. Never include it in the reply and never pass it to Step 5 translation. It means the drafted opening drifted from the documented Output Format start; fix the opening and re-run the gate.
+
 ## Output Format
 
 **Begin the response immediately with the rendered report — no preamble.** The first expected line is `## The Company`, or the Branding Header / House View Preamble when active.

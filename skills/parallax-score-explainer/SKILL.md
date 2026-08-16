@@ -90,6 +90,8 @@ python3 "<skill-dir>/../_parallax/render_gate.py" --skill score-explainer < "$DR
 
 **Your entire final message is exactly that command's stdout** — nothing before it, nothing after it.
 
+The Bash result may show a `[render-gate] WARN:` line above the report. That line is stderr diagnostics, not stdout. Never include it in the reply. It means the drafted opening drifted from the documented Output Format start; fix the opening and re-run the gate.
+
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
 Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.

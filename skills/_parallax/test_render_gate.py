@@ -5,6 +5,7 @@ Run: python3 -m pytest skills/_parallax/test_render_gate.py -q
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -145,6 +146,22 @@ def test_failopen_no_anchor_returns_input():
     assert gate(junk, "portfolio-checkup") == junk
 
 
+def test_failopen_no_anchor_warns_on_stderr(capsys):
+    junk = "no recognizable header here\nmore text\n"
+    assert gate(junk, "portfolio-checkup") == junk
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == (
+        "[render-gate] WARN: no anchor for skill='portfolio-checkup'; "
+        "returned unchanged\n"
+    )
+
+
+def test_anchored_draft_does_not_warn(capsys):
+    gate(SCAFFOLD + PC_BODY, "portfolio-checkup")
+    assert capsys.readouterr().err == ""
+
+
 # --- per-skill: first rendered section anchors; scaffold stripped -------------
 
 FIRST_SECTION = {
@@ -157,6 +174,7 @@ FIRST_SECTION = {
     "portfolio-builder": "## Investment Thesis",
     "should-i-buy": "## The Company",
     "score-explainer": "## The Question",
+    "desk-call-list": "# Desk Call List",
 }
 
 
@@ -195,18 +213,65 @@ def test_idempotent():
 
 
 def test_every_skill_has_anchors():
-    for skill in [
-        "portfolio-checkup",
-        "client-review",
-        "morning-brief",
-        "explain-portfolio",
-        "rebalance",
-        "watchlist-monitor",
-        "portfolio-builder",
-        "should-i-buy",
-        "score-explainer",
-    ]:
+    for skill in FIRST_SECTION:
         assert SKILL_ANCHORS.get(skill), f"no anchors for {skill}"
+
+
+def _output_format(skill_text: str) -> str:
+    marker = "## Output Format"
+    assert marker in skill_text, "SKILL.md has no Output Format section"
+    after = skill_text.split(marker, 1)[1]
+    end = re.search(r"\n#{1,6} ", after)
+    return after[: end.start()] if end else after
+
+
+def _heading_label(rendered_start: str) -> str:
+    label = re.sub(r"^#{1,4}\s*", "", rendered_start).strip()
+    return label.split(":", 1)[0]
+
+
+def test_documented_first_sections_match_anchors():
+    """Catch Output Format label drift before the gate can fail open."""
+    repo_root = Path(__file__).resolve().parents[2]
+    assert set(FIRST_SECTION) == set(SKILL_ANCHORS)
+
+    for skill, rendered_start in FIRST_SECTION.items():
+        skill_md = repo_root / "skills" / f"parallax-{skill}" / "SKILL.md"
+        assert skill_md.is_file(), f"missing skill file for anchor key {skill!r}"
+        output_format = _output_format(skill_md.read_text(encoding="utf-8"))
+        label = _heading_label(rendered_start)
+        assert re.search(rf"\b{re.escape(label)}\b", output_format, re.IGNORECASE), (
+            f"{skill}: documented first label {label!r} is absent from Output Format"
+        )
+
+        out = gate(SCAFFOLD + rendered_start + "\nbody\n", skill)
+        assert out.lstrip().startswith(rendered_start), (
+            f"{skill}: SKILL_ANCHORS does not match documented start {rendered_start!r}"
+        )
+
+
+def test_anchor_keys_and_skill_gate_commands_are_bidirectional():
+    """Every anchor key must be wired, and every wired key must be registered."""
+    repo_root = Path(__file__).resolve().parents[2]
+    skills_root = repo_root / "skills"
+    gate_call = re.compile(r"render_gate\.py[\"']?\s+--skill\s+([a-z0-9-]+)\b")
+
+    wired: dict[str, Path] = {}
+    for skill_md in skills_root.glob("parallax-*/SKILL.md"):
+        for key in gate_call.findall(skill_md.read_text(encoding="utf-8")):
+            assert key not in wired or wired[key] == skill_md, (
+                f"render-gate key {key!r} is wired by multiple skills"
+            )
+            wired[key] = skill_md
+            assert key in SKILL_ANCHORS, (
+                f"{skill_md.relative_to(repo_root)} wires unregistered key {key!r}"
+            )
+
+    for key in SKILL_ANCHORS:
+        expected = skills_root / f"parallax-{key}" / "SKILL.md"
+        assert wired.get(key) == expected, (
+            f"anchor key {key!r} is not wired by {expected.relative_to(repo_root)}"
+        )
 
 
 def test_should_i_buy_active_banner_survives_scaffold():
