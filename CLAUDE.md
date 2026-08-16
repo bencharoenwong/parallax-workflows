@@ -22,6 +22,8 @@ This repo contains Claude Code skills for Parallax equity research. Each skill i
 
 **Security-audit docs are public too — describe checks generically.** Files under `docs/security/` are tracked and public. When an audit records a canary or grep check, describe the canary set generically (e.g. "internal warehouse/schema identifiers, partner names, framework code-names") — NEVER reproduce the literal terms, even inside a "found none" evidence line: naming a term to prove its absence still publishes it. Before committing any audit artifact, grep it for the canary set. The `security-auditor` agent must follow this too.
 
+`docs/security/audit-latest.md` is a **symlink** to the current dated audit, not a file. Write the new `audit-YYYY-MM-DD.md` first and repoint the link — a plain redirect (`cat >`, `>`, `tee`) onto `audit-latest.md` follows it and silently overwrites the previous dated audit. After any audit write, `git status` should show exactly one new dated file plus a modified symlink.
+
 ## For Claude Code
 
 When a user invokes `/parallax-<workflow>`, read the corresponding `skills/parallax-<workflow>/SKILL.md` (directory name matches the skill name) and follow it exactly. All skills share conventions in `skills/_parallax/parallax-conventions.md`.
@@ -31,7 +33,7 @@ When a user invokes `/parallax-<workflow>`, read the corresponding `skills/paral
 - Symbols use RIC format (AAPL.O, JPM.N). `/parallax-should-i-buy` auto-resolves plain tickers.
 - Independent MCP tool calls should fire in parallel (batch pattern in conventions).
 - Cross-validate company identity after any scoring call — the field differs per tool (conventions §2 is canonical; `get_score_analysis` has none, so check `data[0].symbol` matches the requested RIC).
-- Handle tool failures gracefully — mark sections as "unavailable" rather than erroring out.
+- Handle tool failures gracefully — mark sections as "unavailable" rather than erroring out. Gates (pass/fail verdicts) are the exception: they fail closed to `UNVERIFIED` rather than defaulting to "unavailable and continue" — see `parallax-conventions.md` §4.0.
 
 ## Structure
 

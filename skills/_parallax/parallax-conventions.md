@@ -179,10 +179,25 @@ C1.5 does NOT gate C2 or C3 because C2 and C3 only need the rank C1 produced —
 
 ## 4. Graceful Fallback Patterns
 
+### 4.0 Gates fail closed; display sections degrade
+
+Everything else in §4 is a **display-section** rule: a tool fails, you mark that section unavailable, and the rest of the report still stands. That is the correct default for narrative and analysis output.
+
+It is the **wrong** default for a gate. A gate is any step whose output is a pass/fail, include/exclude, or eligible/ineligible verdict on a named security — Shariah compliance, a stated eligibility screen, a hard mandate constraint. For a gate, "continue without the data" silently converts *unknown* into *pass*, and the failure concentrates exactly where the data is thinnest: the obscure, poorly-covered names a screen exists to catch.
+
+**Rule.** When a tool call that feeds a gate fails, returns empty, or returns null/missing values for a gated field, after the normal retry for its tool class:
+
+1. The name's verdict is **`UNVERIFIED`** — never `pass`, never `fail`, and never silently omitted.
+2. `UNVERIFIED` names are **excluded from any "eligible" / "compliant" / "passes" list** and from aggregates computed over that list.
+3. The verdict table carries `UNVERIFIED` as a **rendered state with the reason** (which field or tool was unavailable), so the gap is visible to the reader rather than inferred from an absence.
+4. Never substitute model judgement for the missing value. If a gated field is unavailable, it is unavailable — do not estimate it from sector, peers, or narrative text. (`parallax-thematic-screen` applies this shape to market exposure: on a missing `country`, set the neutral tag and continue, "never infer market from sector or LLM judgement.")
+
+Absence is not a pass. A reader who cannot distinguish "screened and cleared" from "could not be screened" has been given a false negative on risk.
+
 ### Fast-response tools
 `get_company_info`, `get_peer_snapshot`, `get_score_analysis`, `get_financials`, `get_stock_outlook`, `explain_methodology`, `list_macro_countries`, `macro_analyst`
 
-→ Retry once on failure. If second attempt fails, mark section as **"Data unavailable"** and continue.
+→ Retry once on failure. If second attempt fails, mark section as **"Data unavailable"** and continue. **If the failed call feeds a gate, apply §4.0 instead** — "mark unavailable and continue" would turn an unknown into a pass.
 
 Note: "fast-response" refers to latency, not token cost. Token costs vary per tool — see `token-costs.md` for the full table. In particular, `macro_analyst` returns quickly but costs 5 tokens per call.
 
@@ -211,7 +226,7 @@ If `check_portfolio_redundancy` covers **<60% of holdings**, flag redundancy res
 For portfolios with fewer than 7 holdings, concentration flags (>15% single, >45% top-3) are structural and reflect portfolio size, not poor diversification. Note them but don't alarm.
 
 ### Empty-output handling
-If any tool returns successfully but with no output content (not an error, just empty), treat as a failure and apply standard retry logic. Do not treat empty-but-successful as valid data.
+If any tool returns successfully but with no output content (not an error, just empty), treat as a failure and apply standard retry logic. Do not treat empty-but-successful as valid data. When the empty response feeds a gate, the post-retry outcome is §4.0 `UNVERIFIED`, not an unmarked omission.
 
 ---
 
@@ -469,7 +484,7 @@ Unrecognized values fall back to `internal_analyst` with a one-line notice in th
 | Methodology/ops apparatus (tool sequences, token-cost lines, per-cell source-tag columns) | inline | **relocated** to a clearly-separable trailing "Methodology appendix (internal)" section, or omitted where nothing requires retention. Anything under a compliance contract (e.g. portfolio-builder Tilt Source tags) is relocated, **never deleted** |
 | Footer ("About This Report") | rendered | rendered, plus one extra line: `Audience mode: client-safe` (auditability of mode state) |
 
-Non-suppressible in ANY mode: the §9.2 AI-interaction disclosure banner; the §9.1/bespoke disclaimers; the AI-profile family's verbatim disclaimer (output-template.md §8); Ground-truth Integrity / ⚠ MISMATCH data-integrity warnings; the House View Preamble banner; the About This Report footer itself.
+Non-suppressible in ANY mode: the §9.2 AI-interaction disclosure banner; the §9.1/bespoke disclaimers; the AI-profile family's verbatim disclaimer (output-template.md §8); Ground-truth Integrity / ⚠ MISMATCH data-integrity warnings; §4.0 `UNVERIFIED` gate states and the section that lists them; the House View Preamble banner; the About This Report footer itself.
 
 The §9.2 AI-interaction disclosure banner is not suppressible, rewordable, or movable by audience mode; its wording and placement are fixed pending counsel sign-off.
 
