@@ -1,38 +1,137 @@
 {
-  "symbol": "AAPL.O",
-  "company_name": "Apple Inc.",
-  "analysis_date": "2024-09-30",
-  "factor_trajectory": {
-    "quality": {
-      "current": 7.2,
-      "52w_ago": 7.8,
-      "change_pts": -0.6,
-      "trend": "deteriorating"
+  "data": [
+    {
+      "date": "2032-11-05",
+      "defensive": 7,
+      "momentum": 3,
+      "quality": 6,
+      "symbol": "AXCM.O",
+      "tactical": 5,
+      "total": 4.0,
+      "value": 0
     },
-    "value": {
-      "current": 3.8,
-      "52w_ago": 4.1,
-      "change_pts": -0.3,
-      "trend": "stable"
+    {
+      "date": "2032-11-12",
+      "defensive": 7,
+      "momentum": 2,
+      "quality": 6,
+      "symbol": "AXCM.O",
+      "tactical": 4,
+      "total": 3.8,
+      "value": 1
     },
-    "momentum": {
-      "current": 6.1,
-      "52w_ago": 5.5,
-      "change_pts": 0.6,
-      "trend": "improving"
+    {
+      "date": "2032-11-19",
+      "defensive": 8,
+      "momentum": 2,
+      "quality": 5,
+      "symbol": "AXCM.O",
+      "tactical": 5,
+      "total": 4.0,
+      "value": 2
     },
-    "growth": {
-      "current": 5.5,
-      "52w_ago": 5.8,
-      "change_pts": -0.3,
-      "trend": "stable"
+    {
+      "date": "2032-11-26",
+      "defensive": 7,
+      "momentum": 1,
+      "quality": 5,
+      "symbol": "AXCM.O",
+      "tactical": 5,
+      "total": 3.6,
+      "value": 2
     },
-    "total": {
-      "current": 6.7,
-      "52w_ago": 7.1,
-      "change_pts": -0.4,
-      "trend": "stable"
+    {
+      "date": "2032-12-03",
+      "defensive": 8,
+      "momentum": 2,
+      "quality": 5,
+      "symbol": "AXCM.O",
+      "tactical": 4,
+      "total": 3.9,
+      "value": 2
+    },
+    {
+      "date": "2032-12-10",
+      "defensive": 7,
+      "momentum": 2,
+      "quality": 5,
+      "symbol": "AXCM.O",
+      "tactical": 4,
+      "total": 4.0,
+      "value": 3
+    },
+    {
+      "date": "2032-12-17",
+      "defensive": 7,
+      "momentum": 3,
+      "quality": 6,
+      "symbol": "AXCM.O",
+      "tactical": 4,
+      "total": 4.5,
+      "value": 3
+    },
+    {
+      "date": "2032-12-24",
+      "defensive": 7,
+      "momentum": 4,
+      "quality": 7,
+      "symbol": "AXCM.O",
+      "tactical": 3,
+      "total": 5.0,
+      "value": 3
+    },
+    {
+      "date": "2032-12-31",
+      "defensive": 7,
+      "momentum": 4,
+      "quality": 6,
+      "symbol": "AXCM.O",
+      "tactical": 3,
+      "total": 4.9,
+      "value": 4
+    },
+    {
+      "date": "2033-01-07",
+      "defensive": 8,
+      "momentum": 4,
+      "quality": 5,
+      "symbol": "AXCM.O",
+      "tactical": 4,
+      "total": 4.9,
+      "value": 4
+    },
+    {
+      "date": "2033-01-14",
+      "defensive": 7,
+      "momentum": 4,
+      "quality": 5,
+      "symbol": "AXCM.O",
+      "tactical": 4,
+      "total": 4.7,
+      "value": 4
+    },
+    {
+      "date": "2033-01-21",
+      "defensive": 7,
+      "momentum": 4,
+      "quality": 6,
+      "symbol": "AXCM.O",
+      "tactical": 3,
+      "total": 4.9,
+      "value": 4
+    },
+    {
+      "date": "2033-01-28",
+      "defensive": 7,
+      "momentum": 5,
+      "quality": 6,
+      "symbol": "AXCM.O",
+      "tactical": 4,
+      "total": 5.5,
+      "value": 5
     }
-  },
-  "summary": "Quality factor has deteriorated moderately over the past 52 weeks, driven by margin compression. Other factors remain stable or improving."
+  ],
+  "success": true,
+  "symbol": "AXCM.O",
+  "weeks": 13
 }

@@ -16,11 +16,15 @@ description: "Credit risk assessment for publicly traded companies: leverage, co
 ## Gotchas
 
 - RIC format required (AAPL.O, not AAPL). Exchange suffix is critical.
+- `credit_lens_logic.py` is the pure arithmetic layer. Do not put MCP calls or local file writes in it. Every flag, the Altman Z-score and the overall traffic-light are computed there, not re-derived in prose — see Batch C.
+- `assemble_report()` in that module is a reference renderer for its own tests. It omits the §9.1 disclaimer and the §9.2 disclosure, so it must not produce client-facing output.
 - JIT-load _parallax/parallax-conventions.md for parallel execution patterns and RIC resolution.
 - get_financial_analysis is async (2-5 min) — do not block on other calls.
 - Quality factor is a credit health proxy — deteriorating Quality score is an early warning signal for credit stress.
 - Altman Z-score computed using market-cap-based formula for public companies (Z, not Z'). Thresholds: >2.99 Safe, 1.81–2.99 Grey, <1.81 Distress.
-- If Palepu solvency section is unavailable (tool error), degrade gracefully — output remaining metrics and flag Palepu as unavailable.
+- `get_financial_analysis` returns both a solvency and a liquidity read. Render both — see Output Format §3 and §3a. One call, one cost, two sections.
+- The Liquidity row in the Metrics Dashboard and the §3a liquidity narrative are different things and both belong in the output. The row is the quantitative flag from `ratios`; the narrative is the Palepu read that explains why the ratio sits where it does.
+- If the Palepu sections are unavailable (tool error), degrade gracefully — output remaining metrics and flag **both** §3 and §3a as unavailable, since one call supplies both.
 - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
 
 Credit risk assessment for publicly traded companies using Parallax MCP tools.
@@ -39,7 +43,7 @@ Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-c
 
 ### Batch 0 — Validation
 
-1. Verify input symbol is in RIC format (ticker.exchange). If plain ticker provided (AAPL), resolve to RIC using parallax-conventions.md suffix table (→ AAPL.O).
+1. Verify input symbol is in RIC format (ticker.exchange) via `validate_ric()` in `credit_lens_logic.py`. If plain ticker provided (AAPL), resolve to RIC using parallax-conventions.md suffix table (→ AAPL.O), then re-validate.
 2. Call `ToolSearch` with query `"+Parallax"` to load MCP tool schemas before first `mcp__claude_ai_Parallax__*` call.
 
 ### Batch A — Core financials (parallel, 4 tokens)
@@ -64,13 +68,14 @@ Extract from these calls:
 Fire all 3 calls simultaneously. Note: `get_financial_analysis` is async (2-5 min) and should not block the workflow — execute in parallel.
 
 ```
-get_financial_analysis(symbol=<RIC>)   # Palepu solvency assessment (5 tokens, async)
+get_financial_analysis(symbol=<RIC>)   # Palepu solvency AND liquidity read (5 tokens, async)
 get_score_analysis(symbol=<RIC>)       # Quality score 52-week trajectory
 get_telemetry()                        # Market regime tag (no symbol parameter)
 ```
 
 From these:
-- Solvency (Palepu): accruals quality, profitability, liquidity, leverage solvency assessment
+- Solvency (Palepu): accruals quality, profitability and leverage assessment → Output Format §3
+- Liquidity (Palepu): the qualitative liquidity read from the same response → Output Format §3a. Extract it alongside solvency; it is already paid for by this call
 - Quality Trend: 52-week Quality factor score change (deterioration is a red flag)
 - Macro Regime: current market regime context for credit environment
 
@@ -96,6 +101,8 @@ Thresholds:
 
 If market cap unavailable, compute with book equity instead (Z' variant) and note the substitution.
 
+Compute this via `compute_altman_z()` in `credit_lens_logic.py`, which returns the score, the variant label and the zone flag together. The formula above documents what it computes.
+
 ### Flagging Logic
 
 For each metric, compare against peer median and peer 75th percentile:
@@ -120,33 +127,107 @@ Quality score deterioration is a primary credit health warning signal.
 
 Bands sit on the 0-10 per-security scale that `get_score_analysis` returns. Do not restate them on a 0-100 basis.
 
+### Batch C — Flag computation
+
+Zero tool calls. Use `credit_lens_logic.py` to compute every flag, the Altman Z-score and its zone, and the overall traffic-light. The tables above and the Altman formula are the documentation of the bands; the module is what applies them.
+
+| Quantity | Call |
+|---|---|
+| Per-metric flag (peer-relative and absolute, more conservative wins) | `flag_metric(value, peer_median, peer_p75, metric_key)` |
+| Altman Z-score, variant label (`Z` or `Z'`) and zone flag | `compute_altman_z(AltmanInputs(...))` |
+| 52-week Quality change, then its flag | `quality_change_pts(current, prior)` → `flag_quality_change(change_pts)` |
+| Overall traffic-light, stored on the report | `finalize_verdict(report)` — wraps `overall_traffic_light(report_flags(report))` |
+| The dashboard's full row set, Altman and Quality included | `dashboard_rows(report)` |
+| The header line, verdict and judged-count together | `build_header(report)` |
+
+`build_header` derives the verdict from the legs as they stand when it runs; it does not read `report.overall_flag`. So a leg that resolves late — `altman_flag` needs an external market cap, `quality_flag` arrives in Batch B — is reflected without re-running `finalize_verdict`. Populate every leg before rendering.
+
+That makes `finalize_verdict` optional for rendering: it stores the verdict on the report for any downstream consumer, but the header does not read it. Call it if you need `report.overall_flag`; skip it if you only render. Do not assign `overall_flag` by hand — a stored value that disagrees with the legs is not what the reader will see.
+
+`metric_key` selects the direction and any absolute band. Pass one of the registered keys below for every dashboard row:
+
+**Render one dashboard row per metric — ten rows, not four grouped categories.** The §2 example shows one row per category for brevity; that grouping is not the contract. `build_header()` counts one leg per metric, so grouping ten metrics into four rows makes the judged-count describe a different set than the verdict, and the coverage caveat then fails to fire on exactly the runs that need it. Use the Category column below as the row's group label, not as the row itself.
+
+| Category / Metric | `metric_key` | Direction | Absolute band |
+|---|---|---|---|
+| Leverage — Debt/EBITDA | `debt_ebitda` | higher is worse | yes |
+| Leverage — Debt/Equity | `debt_equity` | higher is worse | peer-relative only |
+| Leverage — Debt/Assets | `debt_assets` | higher is worse | peer-relative only |
+| Coverage — Interest Coverage | `interest_coverage` | lower is worse | yes |
+| Coverage — EBITDA/Interest | `ebitda_interest_coverage` | lower is worse | peer-relative only |
+| Liquidity — Current Ratio | `current_ratio` | lower is worse | yes |
+| Liquidity — Quick Ratio | `quick_ratio` | lower is worse | peer-relative only |
+| Profitability — EBITDA Margin | `ebitda_margin` | lower is worse | peer-relative only |
+| Profitability — EBIT Margin | `ebit_margin` | lower is worse | peer-relative only |
+| Profitability — FCF Margin | `fcf_margin` | lower is worse | peer-relative only |
+
+`flag_metric` raises `ValueError` on a key outside this table, so a typo stops the run instead of scoring the row. Never invent a key. To flag a metric that is not in the table, add it to `METRIC_DIRECTIONS` in `credit_lens_logic.py` first.
+
+The `peer-relative only` rows have no absolute band, and the `ratios` response carries `peer_median` / `peer_p75` for only five metrics — `debt_to_equity`, `debt_to_ebitda`, `interest_coverage`, `current_ratio`, `ebitda_margin`. When a row has neither a peer pair nor a band, `flag_metric` returns UNAVAILABLE rather than GREEN: nothing can judge it, so it must not read as healthy. Render those rows as `➖ UNAVAILABLE` and leave them out of the traffic-light count, which `overall_traffic_light()` already does.
+
+Three rules that a hand-computation gets wrong:
+
+- Pass the Quality change through `quality_change_pts()` rather than subtracting the two scores inline. The bands are one-decimal and the raw subtraction is not exact, so a true −0.5 can compute as −0.4999999999999996 and flag GREEN.
+- `peer_p75` always carries the **adverse** tail, in both directions: numerically above `peer_median` when higher is worse, below it when lower is worse. The `ratios` field literally named `peer_p75` already holds it either way (`interest_coverage`: `peer_p75` 8.5 against `peer_median` 18.2). So pass `peer_p75` through unchanged. Do not go looking for a 25th-percentile field; none is returned, and do not recompute or invert the value yourself. `flag_metric` raises `ValueError` on an inverted pair in **either** direction rather than silently inverting the bands. Treat the raise as a peer-data error and fall back to the absolute rule by passing `None` for both peer arguments — but note the `peer-relative only` rows have no absolute rule, so they degrade to UNAVAILABLE rather than to a band.
+- `compute_altman_z` raises on zero `total_assets` or zero `total_liabilities`. A zero, negative or non-finite `market_cap` counts as **absent**, not as a value: with `book_equity` present it falls back to the Z' variant, and with no `book_equity` it raises like any other missing X4. Treat the raise as the Altman leg being unavailable; do not substitute a zero. Report the variant label the function returns rather than assuming `Z`.
+- The Altman leg can come back UNAVAILABLE with no raise, when the score itself is non-finite — a large working capital over a near-zero total-assets figure overflows from ordinary finite inputs. When that happens, set `altman_flag` to UNAVAILABLE and leave `altman_z` as `None` — `dashboard_rows()` renders the row for you. **Do not construct an Altman `MetricRow` yourself**; that is what produces a duplicated leg. Skip the §2a sensitivity line entirely (there is no distance-to-boundary to state) and say the score could not be computed.
+
+- `flag_metric` returns UNAVAILABLE, never GREEN, when it cannot judge a value: a non-finite metric value, and a **negative value on a `higher is worse` metric**. A negative Debt/EBITDA or Debt/Equity is either negative EBITDA / negative book equity, which is distress, or a net-cash position on a net-debt convention, which is healthy. The module cannot tell those apart from the number alone, so it refuses to score it. When a row comes back UNAVAILABLE for this reason, say so in Key Flags and explain the sign from the balance sheet — do not silently drop the row, and do not report it as healthy.
+
 ## Output Format
 
 Structure output in markdown with the following sections:
 
 ### 1. **Header** (1 line)
 ```
-## Credit Risk Assessment: [Company] ([RIC]) | Traffic-Light: 🟢/🟡/🔴
+## Credit Risk Assessment: [Company] ([RIC]) | Traffic-Light: 🟢/🟡/🔴 | Judged: N of M metrics
 ```
-Overall traffic-light determined by: count of RED flags (→ Red), count of AMBER flags (→ Amber), count of GREEN (→ Green). Majority color wins. If two or more colors tie for the highest count, render the most conservative tied color (Red > Amber > Green) — e.g., a 2-2-2 split renders Red.
+
+Emit this with `build_header(report)` rather than by copying the template. The `| Judged: N of M metrics` clause is appended only when a leg is unjudged, and on a routine run several are — so a hand-copied header without it understates the gap on exactly the runs that need it stated.
+Overall traffic-light determined by: count of RED flags (→ Red), count of AMBER flags (→ Amber), count of GREEN (→ Green). Majority color wins. If two or more colors tie for the highest count, render the most conservative tied color (Red > Amber > Green) — e.g., a 2-2-2 split renders Red. Compute via `overall_traffic_light(flags)`, which also drops UNAVAILABLE legs from the count and returns UNAVAILABLE when every leg is missing.
+
+**State the coverage whenever any leg is UNAVAILABLE.** Dropping those legs is right for the vote but silent in the header, so a 🟢 can rest on two judged metrics out of six and still read as a full clean bill.
+
+**Call `finalize_verdict(report)` rather than assigning `overall_flag` yourself.** It sets the verdict from `report_flags(report)` — every `metric_rows` flag plus `altman_flag` plus `quality_flag` — and `build_header()` counts that same list, so the verdict and the `| Judged: N of M metrics` count cannot describe different metric sets. Assigning the flag by hand reintroduces exactly that divergence, which is how the caveat came to be missing from the run it was written for. Populate `quality_flag` and `altman_flag` on the report; they vote, and a leg you leave at its default counts as unjudged.
+
+List which metrics went unjudged, and why, in Key Flags.
+
+This is the normal case, not an edge case: seven of the ten registered keys carry no absolute band, and the `ratios` response supplies peer percentiles for only five metrics, so the five with neither are unjudged on a routine run. Never present a majority verdict drawn from a minority of the metrics without saying so.
 
 ### 2. **Metrics Dashboard** (table)
 ```
 | Category      | Signal | Metric Value | Peer Median | Interpretation |
 |---------------|--------|--------------|-------------|-----------------|
 | Leverage      | 🔴 RED  | D/E 2.1x     | Peer 1.2x   | 75% above peer |
+| Leverage      | 🟡 AMBER| D/EBITDA 3.9x | Peer 2.8x  | Above peer |
+| Leverage      | ➖ UNAVAILABLE | —     | —           | No peer data and no absolute band |
 | Coverage      | 🟢 GREEN| Int Cov 5.2x | Peer 3.1x   | Top quartile |
+| Coverage      | ➖ UNAVAILABLE | —     | —           | No peer data and no absolute band |
 | Liquidity     | 🟡 AMBER| Curr Ratio 1.3x | Peer 1.8x | Below median |
+| Liquidity     | ➖ UNAVAILABLE | —     | —           | No peer data and no absolute band |
 | Profitability | 🟢 GREEN| EBITDA Margin 28% | Peer 22% | Above peer |
+| Profitability | ➖ UNAVAILABLE | —     | —           | No peer data and no absolute band |
+| Profitability | ➖ UNAVAILABLE | —     | —           | No peer data and no absolute band |
 | Altman Z      | 🟡 AMBER| Z = 2.1      | —           | Grey Zone |
 | Quality Trend | 🔴 RED  | –1.8 pts (52w) | —         | Deteriorating |
 ```
+
+Twelve rows: ten registered metrics plus the two module-owned legs. **Category repeats** — it is a grouping label, not the row identity. Five rows read `➖ UNAVAILABLE` on a routine run because those metrics carry no absolute band and `ratios` returns no peer pair for them; that is the normal shape, not a failure.
+
+An earlier version of this example showed four grouped rows, which is the shape that silences the coverage caveat. `dashboard_rows()` now renders the omitted metrics for you, so following this example produces the right row set either way.
+
+**Build the table with `dashboard_rows(report)`, not from `metric_rows` directly.** It returns your metric rows plus the Altman and Quality rows, which it renders from `altman_flag` / `quality_flag`. Those two are legs in their own right: supplying them as rows as well makes each vote twice, and doubling two legs flips real verdicts — three RED metrics against two GREEN is RED, but with both GREEN legs doubled it becomes 3 RED against 4 GREEN and renders GREEN.
+
+Every `MetricRow` you build needs `metric_key` set to the registry key it was flagged with. `report_flags()` identifies a leg by that key, not by its display label, and raises on a missing key, an unregistered key, a reserved key, or the same key twice. Labels are free text; the key is the identity.
 
 ### 2a. **Verdict sensitivity** (one line)
 State the Altman Z-score's nearest band boundary (2.99 Safe/Grey or 1.81 Grey/Distress) and the arithmetic flip condition, per `parallax-conventions.md` §11. Example: "Altman Z = 2.85 is within the Grey Zone, 0.14 below the 2.99 Safe threshold; a Z rise above 2.99 would move this leg to Safe." Applies only to the Altman Z band — the overall traffic-light header is a multi-metric majority vote, not a single published numeric cutoff, and is out of scope for this line.
 
 ### 3. **Solvency Assessment** (narrative)
 Output the Palepu solvency section from `get_financial_analysis`. If unavailable, note: `[Solvency assessment unavailable — tool error]`.
+
+### 3a. **Liquidity Assessment** (narrative)
+Output the Palepu liquidity section from the same `get_financial_analysis` response. This explains *why* the Liquidity row in the Metrics Dashboard reads as it does — working-capital cycle, cash conversion, near-term obligations — and is not a restatement of the current/quick ratio. Do not omit it because the ratio already appears above. If unavailable, note: `[Liquidity assessment unavailable — tool error]`.
 
 ### 4. **Key Flags** (bulleted list)
 List every RED and AMBER flag with one-line explanation:
@@ -181,7 +262,8 @@ Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 ## Error Handling
 
 - **Symbol not found**: Return error message with suggestion to check RIC format.
-- **get_financial_analysis fails** (async timeout or error): Continue with remaining metrics; append `[Solvency assessment unavailable]` to output.
+- **get_financial_analysis fails** (async timeout or error): Continue with remaining metrics. One call supplies both Palepu sections, so mark **both**: `[Solvency assessment unavailable]` in §3 and `[Liquidity assessment unavailable]` in §3a. The quantitative Liquidity row in the Metrics Dashboard is unaffected — it comes from `ratios`, a different call.
+- **`report_flags()` raises** (a row with no `metric_key`, an unregistered key, a reserved leg key, or the same key twice): this is a construction error in your own row list, not a data problem. Fix the rows and re-render — do not catch it and continue, because every one of those conditions means a leg would have been miscounted or double-counted. The message names the offending key.
 - **Peer median unavailable** (peer group too small): Degrade gracefully — show absolute thresholds only, note peer comparison unavailable.
 - **Market cap unavailable** (Altman X4): Compute Z' (book equity variant) and note substitution in Altman section.
 
