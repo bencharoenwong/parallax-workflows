@@ -27,7 +27,9 @@ from credit_lens_logic import (  # noqa: E402
     assemble_report,
     build_footer,
     build_header,
+    RESERVED_ROW_CATEGORIES,
     coverage,
+    dashboard_rows,
     finalize_verdict,
     report_flags,
     build_key_flags_section,
@@ -1998,3 +2000,88 @@ class TestVerdictAndCoverageCannotDiverge:
         finalize_verdict(report)
         assert report.overall_flag == Flag.UNAVAILABLE
         assert "Judged: 0 of 4 metrics" in build_header(report)
+
+
+# ---------------------------------------------------------------------------
+# TestReservedLegsCannotVoteTwice
+# ---------------------------------------------------------------------------
+
+
+class TestReservedLegsCannotVoteTwice:
+    """SKILL.md's example dashboard renders Altman Z and Quality Trend as rows,
+    while both legs also live in their own report fields. An orchestrator
+    following that example supplied them in both places, so each voted twice —
+    and doubling two legs flips a real verdict, in the unsafe direction."""
+
+    def _rows(self, *pairs) -> list[MetricRow]:
+        return [MetricRow(c, f, "metric", "1", "1", "") for c, f in pairs]
+
+    def test_duplicated_leg_raises_rather_than_double_counting(self) -> None:
+        report = CreditReport(
+            "X.O", "X", Flag.GREEN,
+            metric_rows=self._rows(
+                ("Leverage", Flag.RED), ("Altman Z", Flag.GREEN),
+            ),
+            altman_flag=Flag.GREEN, quality_flag=Flag.GREEN,
+        )
+        with pytest.raises(ValueError, match="must not contain"):
+            report_flags(report)
+
+    def test_every_reserved_category_is_rejected(self) -> None:
+        for reserved in RESERVED_ROW_CATEGORIES:
+            report = CreditReport(
+                "X.O", "X", Flag.GREEN,
+                metric_rows=self._rows(("Leverage", Flag.RED), (reserved, Flag.GREEN)),
+            )
+            with pytest.raises(ValueError, match="must not contain"):
+                report_flags(report)
+
+    def test_the_verdict_the_double_count_used_to_flip(self) -> None:
+        """Three RED metrics against two GREEN is RED. With the Altman and
+        Quality legs doubled it became 3 RED against 4 GREEN and reported
+        GREEN — a distressed issuer reading healthy."""
+        report = CreditReport(
+            "X.O", "X", Flag.GREEN,
+            metric_rows=self._rows(
+                ("Leverage", Flag.RED), ("Coverage", Flag.RED),
+                ("Liquidity", Flag.RED),
+            ),
+            altman_flag=Flag.GREEN, quality_flag=Flag.GREEN,
+        )
+        finalize_verdict(report)
+        assert report_flags(report) == [
+            Flag.RED, Flag.RED, Flag.RED, Flag.GREEN, Flag.GREEN,
+        ]
+        assert report.overall_flag == Flag.RED
+
+    def test_dashboard_still_renders_the_two_reserved_rows(self) -> None:
+        """The caller stops supplying them, so the module must render them or
+        they vanish from the output."""
+        report = CreditReport(
+            "X.O", "X", Flag.GREEN,
+            metric_rows=self._rows(("Leverage", Flag.RED)),
+            altman_flag=Flag.AMBER, quality_flag=Flag.RED,
+            altman_z=2.10, altman_variant="Z",
+        )
+        rows = dashboard_rows(report)
+        assert [r.category for r in rows] == [
+            "Leverage", "Altman Z", "Quality Trend",
+        ]
+        assert rows[1].flag == Flag.AMBER and "2.10" in rows[1].metric_value
+        assert rows[2].flag == Flag.RED
+
+    def test_rendered_row_count_matches_the_counted_leg_count(self) -> None:
+        """The dashboard and the coverage denominator must describe the same
+        set — that equality is the whole point of the reserved-row rule."""
+        report = CreditReport(
+            "X.O", "X", Flag.GREEN,
+            metric_rows=self._rows(
+                ("Leverage", Flag.RED), ("Coverage", Flag.UNAVAILABLE),
+            ),
+            altman_flag=Flag.GREEN, quality_flag=Flag.UNAVAILABLE,
+        )
+        finalize_verdict(report)
+        legs = report_flags(report)
+        assert len(dashboard_rows(report)) == len(legs)
+        assert coverage(legs) == (2, 4)
+        assert "Judged: 2 of 4 metrics" in build_header(report)

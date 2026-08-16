@@ -478,6 +478,41 @@ class CreditReport:
     palepu_unavailable: bool = False
 
 
+# The Altman and Quality legs are carried by their own fields, not by rows.
+# SKILL.md's example dashboard renders both as rows, so an orchestrator that
+# also populates the fields would have each of them vote twice.
+RESERVED_ROW_CATEGORIES = ("Altman Z", "Quality Trend")
+
+
+def dashboard_rows(report: CreditReport) -> list[MetricRow]:
+    """Every row the dashboard renders: the peer/absolute metrics the caller
+    supplied, plus the Altman and Quality rows built from their own flags.
+
+    The module renders those two so the caller never has to add them, which is
+    what stops them being counted twice.
+    """
+    rows = list(report.metric_rows)
+    z = "—" if report.altman_z is None else f"{report.altman_variant} = {report.altman_z:.2f}"
+    rows.append(MetricRow(
+        "Altman Z", report.altman_flag, "Altman Z", z, "—",
+        _ALTMAN_ZONE_TEXT.get(report.altman_flag, "Not computed"),
+    ))
+    rows.append(MetricRow(
+        "Quality Trend", report.quality_flag, "Quality Trend",
+        report.quality_trend_sentence or "—", "—",
+        "52-week factor change",
+    ))
+    return rows
+
+
+_ALTMAN_ZONE_TEXT = {
+    Flag.GREEN: "Safe Zone",
+    Flag.AMBER: "Grey Zone",
+    Flag.RED: "Distress Zone",
+    Flag.UNAVAILABLE: "Not computed",
+}
+
+
 def report_flags(report: CreditReport) -> list[Flag]:
     """The canonical leg list — every flag the verdict is computed from.
 
@@ -494,7 +529,26 @@ def report_flags(report: CreditReport) -> list[Flag]:
 
     Derive BOTH the verdict and the coverage figure from this one list — that
     is what `finalize_verdict` is for.
+
+    Raises if `metric_rows` carries an Altman or Quality row. Those two legs
+    live in their own fields and are rendered by `dashboard_rows`; a caller
+    following SKILL.md's example dashboard would otherwise supply them as rows
+    as well, and each would then vote TWICE. That is not merely a miscount —
+    doubling two legs flips a real verdict: three RED metrics against two GREEN
+    is RED, but with both GREEN legs doubled it becomes 3 RED against 4 GREEN
+    and reports GREEN. Loud is the only safe behaviour.
     """
+    duplicated = [
+        row.category for row in report.metric_rows
+        if row.category in RESERVED_ROW_CATEGORIES
+    ]
+    if duplicated:
+        raise ValueError(
+            f"metric_rows must not contain {duplicated}: those legs are carried "
+            f"by report.altman_flag and report.quality_flag and are rendered by "
+            f"dashboard_rows(). Supplying them as rows too makes each vote "
+            f"twice and can flip the verdict."
+        )
     return [row.flag for row in report.metric_rows] + [
         report.altman_flag,
         report.quality_flag,
@@ -597,7 +651,7 @@ def assemble_report(report: CreditReport) -> str:
         build_header(report),
         "",
         "### Metrics Dashboard",
-        build_metrics_table(report.metric_rows),
+        build_metrics_table(dashboard_rows(report)),
         "",
         "### Solvency Assessment",
         build_solvency_section(report),

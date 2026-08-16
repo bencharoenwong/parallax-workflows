@@ -198,6 +198,8 @@ This is the normal case, not an edge case: seven of the ten registered keys carr
 | Quality Trend | 🔴 RED  | –1.8 pts (52w) | —         | Deteriorating |
 ```
 
+**The last two rows are rendered by `dashboard_rows()` from `altman_flag` and `quality_flag`. Do not add them to `metric_rows`.** They are legs in their own right, so supplying them as rows as well makes each vote twice — and doubling two legs flips real verdicts: three RED metrics against two GREEN is RED, but with both GREEN legs doubled it becomes 3 RED against 4 GREEN and renders GREEN. `report_flags()` raises on a reserved category rather than miscounting silently. Put only the peer/absolute metrics in `metric_rows`.
+
 ### 2a. **Verdict sensitivity** (one line)
 State the Altman Z-score's nearest band boundary (2.99 Safe/Grey or 1.81 Grey/Distress) and the arithmetic flip condition, per `parallax-conventions.md` §11. Example: "Altman Z = 2.85 is within the Grey Zone, 0.14 below the 2.99 Safe threshold; a Z rise above 2.99 would move this leg to Safe." Applies only to the Altman Z band — the overall traffic-light header is a multi-metric majority vote, not a single published numeric cutoff, and is out of scope for this line.
 
