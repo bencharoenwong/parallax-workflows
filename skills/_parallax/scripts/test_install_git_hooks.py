@@ -339,3 +339,53 @@ def test_a_symlinked_hooks_directory_does_not_bypass_the_outside_repo_guard(
 
     assert _install(clone, env={"PARALLAX_HOOKS_FORCE": "1"}).returncode == 0
     assert (outside / "pre-push").exists()
+
+
+def test_a_deletion_only_push_scans_nothing_not_the_current_branch(clone: Path) -> None:
+    """Every ref was a deletion, so no commits are being published and there is
+    nothing to scan. Falling through to the scanner's default range scanned the
+    CHECKED-OUT branch instead — unrelated to the ref being deleted, and the
+    same wrong-range family this layer exists to fix. Harmless only while that
+    branch happens to be clean; from a branch with a hit it blocked an unrelated
+    deletion."""
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text(
+        "import sys\n"
+        "# fails only if invoked with NO explicit range, i.e. the default path\n"
+        "sys.exit(1 if len(sys.argv) == 1 else 0)\n")
+    _write_hook(clone, "#!/usr/bin/env bash\nexit 0\n")
+    assert _install(clone).returncode == 0
+    hook = clone / ".git/hooks/pre-push"
+    ref_line = ("(delete) 0000000000000000000000000000000000000000 "
+                "refs/heads/gone bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
+    r = subprocess.run(["bash", str(hook), "origin", "http://example.invalid"],
+                       cwd=clone, capture_output=True, text=True, input=ref_line)
+    assert r.returncode == 0, "fell back to the default range on a deletion-only push"
+
+
+def test_a_new_branch_scans_only_what_it_adds_over_the_default_branch(clone: Path) -> None:
+    """A bare sha is NOT a range: `git log <sha>` walks every ancestor, so the
+    first push of a new branch scanned the whole published history. On the real
+    repo that produced 60 hits against already-published commits and blocked the
+    push with nothing fixable locally."""
+    scanned = clone / "range.txt"
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text(
+        "import sys, pathlib\n"
+        f"pathlib.Path({str(scanned)!r}).write_text(sys.argv[1] if len(sys.argv) > 1 else 'DEFAULT')\n"
+        "sys.exit(0)\n")
+    _run(["git", "update-ref", "refs/remotes/origin/main", "HEAD"], clone)
+    _run(["git", "checkout", "-q", "-b", "feature"], clone)
+    (clone / "new.txt").write_text("x")
+    _run(["git", "add", "-A"], clone)
+    _run(["git", "commit", "-qm", "feat: add a thing"], clone)
+    head = _run(["git", "rev-parse", "HEAD"], clone).stdout.strip()
+
+    _write_hook(clone, "#!/usr/bin/env bash\nexit 0\n")
+    assert _install(clone).returncode == 0
+    hook = clone / ".git/hooks/pre-push"
+    ref_line = (f"refs/heads/feature {head} refs/heads/feature "
+                "0000000000000000000000000000000000000000\n")
+    subprocess.run(["bash", str(hook), "origin", "http://example.invalid"],
+                   cwd=clone, capture_output=True, text=True, input=ref_line)
+    rng = scanned.read_text()
+    assert ".." in rng, f"scanned a bare rev, not a range: {rng}"
+    assert rng.endswith(head), rng

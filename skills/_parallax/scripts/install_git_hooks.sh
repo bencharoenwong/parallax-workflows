@@ -127,7 +127,13 @@ if [ -f "$_PARALLAX_SCAN" ]; then
     # `while read` drains stdin, and this layer is prepended — so every gate
     # after it (security, perimeter, git-lfs) would receive an EMPTY ref list
     # and silently do nothing. `exec <` restores it for the rest of the hook.
-    _PARALLAX_STDIN="$(mktemp "${TMPDIR:-/tmp}/parallax-prepush.XXXXXX")"
+    _PARALLAX_STDIN="$(mktemp "${TMPDIR:-/tmp}/parallax-prepush.XXXXXX" 2>/dev/null)"
+    if [ -z "$_PARALLAX_STDIN" ] || [ ! -f "$_PARALLAX_STDIN" ]; then
+        # Unchecked, this degraded to the scanner's default range — silently
+        # reverting to the wrong-range behaviour this layer exists to fix.
+        printf '\n\033[31m[pre-push] BLOCKED: cannot create a temp file to read the ref list.\033[0m\n' >&2
+        exit 2
+    fi
     cat > "$_PARALLAX_STDIN"
     _PARALLAX_SCAN_RC=0
     _PARALLAX_SAW_REF=0
@@ -162,13 +168,31 @@ if [ -f "$_PARALLAX_SCAN" ]; then
         esac
         python3 "$_PARALLAX_SCAN" "$_PARALLAX_RANGE" || _PARALLAX_SCAN_RC=$?
     done < "$_PARALLAX_STDIN"
+    # Record whether git supplied ANY ref lines before the file goes away.
+    # The emptiness test has to happen here: `rm -f` below unlinks it, and the
+    # later check then always saw "no input" and fell through to the default
+    # range — the exact fallback it was meant to distinguish.
+    # `exec <` keeps a live fd, so unlinking after it is safe on POSIX.
+    _PARALLAX_HAD_INPUT=0
+    [ -s "$_PARALLAX_STDIN" ] && _PARALLAX_HAD_INPUT=1
     exec < "$_PARALLAX_STDIN"
     rm -f "$_PARALLAX_STDIN"
     # No ref info (invoked by hand, or a deletion-only push): fall back to the
     # scanner's own default rather than skipping, so it never passes vacuously.
     if [ "$_PARALLAX_SAW_REF" -eq 0 ]; then
-        python3 "$_PARALLAX_SCAN"
-        _PARALLAX_SCAN_RC=$?
+        if [ "$_PARALLAX_HAD_INPUT" -eq 1 ]; then
+            # Refs were supplied but every one was a deletion. There are no
+            # commits being published, so there is nothing to scan. Falling
+            # through to the default range scanned the CHECKED-OUT branch, which
+            # has nothing to do with the ref being deleted — the same wrong-range
+            # family this layer was written to fix.
+            _PARALLAX_SCAN_RC=0
+        else
+            # No ref info at all (invoked by hand). Use the scanner's default
+            # rather than skipping, so it cannot pass vacuously.
+            python3 "$_PARALLAX_SCAN"
+            _PARALLAX_SCAN_RC=$?
+        fi
     fi
     if [ "$_PARALLAX_SCAN_RC" -ne 0 ]; then
         printf '\n\033[31m[pre-push] BLOCKED: commit-message scan failed (exit %s).\033[0m\n' "$_PARALLAX_SCAN_RC" >&2
@@ -180,7 +204,14 @@ fi
 # --- end parallax:commit-message-scan ----------------------------------------
 LAYER_EOF
 
-mkdir -p "$HOOKS_DIR" || exit 2
+if ! mkdir -p "$HOOKS_DIR" 2>/dev/null; then
+    # A linked worktree's .git is a FILE, so a relative hooks path joined to the
+    # worktree root cannot be created. The no-mistakes gate runs in exactly such
+    # a worktree, and the failure was a raw mkdir error with no diagnostic.
+    printf '\033[31mFATAL:\033[0m cannot create hooks directory: %s\n' "$HOOKS_DIR" >&2
+    printf 'In a linked git worktree the hooks live with the main checkout; install there.\n' >&2
+    exit 2
+fi
 
 if [ -f "$HOOK" ]; then
     BACKUP="$HOOK.bak.$(date +%Y%m%d%H%M%S)"
