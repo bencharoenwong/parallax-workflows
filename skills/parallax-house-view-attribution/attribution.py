@@ -349,6 +349,7 @@ def attribute_segment(
     per_tilt = shapley_tilt_attribution(neutral, mults, returns)
 
     covered = [s for s in neutral if s in returns]
+    dropped = [s for s in neutral if s not in returns]
     return {
         "active_return_bps": actual_bps,
         "model_active_bps": model_bps,
@@ -356,7 +357,14 @@ def attribute_segment(
         "per_tilt": per_tilt,
         "counterfactual_quality": quality,
         "holdings_covered": len(covered),
-        "holdings_dropped": len(neutral) - len(covered),
+        "holdings_dropped": len(dropped),
+        # Symbol sets, INTERNAL to the merge step. loader.md §6.3 forbids
+        # logging holdings arrays, so these must never reach the audit row —
+        # merge_segments unions them and emits counts only. They exist because
+        # counts cannot be merged: the same holding appearing in three version
+        # segments was counted three times.
+        "_covered_symbols": set(covered),
+        "_dropped_symbols": set(dropped),
     }
 
 
@@ -366,28 +374,39 @@ def merge_segments(segment_results: list[dict[str, Any]]) -> dict[str, Any]:
     ``counterfactual_quality`` degrades to "approximate" if ANY segment was
     approximate. Per-tilt contributions sum across segments (bps are
     additive under the arithmetic convention).
+
+    Holdings do NOT sum. They are a set: a 3-holding portfolio spanning three
+    version segments reported 9 covered holdings, which SKILL.md renders as
+    "[C] holdings covered" — a wrong number in a client-facing report. Counts
+    are taken over the union instead, and a holding covered in any segment is
+    covered, not dropped, even if another segment lacked its price.
+
+    Only the counts are returned. loader.md §6.3 forbids logging holdings
+    arrays, and this return value is the audit-row payload.
     """
     if not segment_results:
         raise InsufficientProvenance("no segments to merge")
     per_tilt_totals = {g: 0.0 for g in GROUPS}
     total_active = 0.0
     total_model = 0.0
-    covered = 0
-    dropped = 0
+    covered_syms: set[str] = set()
+    dropped_syms: set[str] = set()
     quality = "exact"
     for seg in segment_results:
         total_active += seg["active_return_bps"]
         total_model += seg["model_active_bps"]
-        covered += seg["holdings_covered"]
-        dropped += seg["holdings_dropped"]
+        covered_syms |= seg.get("_covered_symbols", set())
+        dropped_syms |= seg.get("_dropped_symbols", set())
         if seg["counterfactual_quality"] != "exact":
             quality = "approximate"
         for row in seg["per_tilt"]:
             per_tilt_totals[row["group"]] += row["realized_contribution_bps"]
     return {
         "segments": len(segment_results),
-        "holdings_covered": covered,
-        "holdings_dropped": dropped,
+        # A holding covered in ANY segment is covered; only holdings never
+        # priced in any segment count as dropped.
+        "holdings_covered": len(covered_syms),
+        "holdings_dropped": len(dropped_syms - covered_syms),
         "active_return_bps": total_active,
         "model_active_bps": total_model,
         "selection_residual_bps": total_active - total_model,

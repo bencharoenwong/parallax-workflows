@@ -288,3 +288,64 @@ def test_a_non_numeric_tilt_does_not_crash_the_run():
     meta = {"A": {"sector": "Tech", "region": "US", "themes": []}}
     m = attribution.group_multipliers(view, meta)
     assert m["sectors"]["A"] == 1.0, m["sectors"]
+
+
+def test_holdings_are_unioned_across_segments_not_summed():
+    """A 3-holding portfolio spanning three version segments reported 9 covered
+    holdings, which SKILL.md renders as "[C] holdings covered" — a wrong number
+    in a client-facing report. Holdings are a set, not an additive quantity."""
+    def seg(covered, dropped):
+        return {
+            "active_return_bps": 0.0, "model_active_bps": 0.0,
+            "selection_residual_bps": 0.0,
+            "per_tilt": [{"group": g, "realized_contribution_bps": 0.0}
+                         for g in attribution.GROUPS],
+            "counterfactual_quality": "exact",
+            "holdings_covered": len(covered), "holdings_dropped": len(dropped),
+            "_covered_symbols": set(covered), "_dropped_symbols": set(dropped),
+        }
+    same = ["A", "B", "C"]
+    merged = attribution.merge_segments([seg(same, []) for _ in range(3)])
+    assert merged["segments"] == 3
+    assert merged["holdings_covered"] == 3, merged["holdings_covered"]
+    assert merged["holdings_dropped"] == 0
+
+
+def test_a_holding_priced_in_any_segment_is_not_counted_as_dropped():
+    """C has no price in segment 1 but does in segment 2. Summing would report
+    it both covered and dropped."""
+    def seg(covered, dropped):
+        return {
+            "active_return_bps": 0.0, "model_active_bps": 0.0,
+            "selection_residual_bps": 0.0,
+            "per_tilt": [{"group": g, "realized_contribution_bps": 0.0}
+                         for g in attribution.GROUPS],
+            "counterfactual_quality": "exact",
+            "holdings_covered": len(covered), "holdings_dropped": len(dropped),
+            "_covered_symbols": set(covered), "_dropped_symbols": set(dropped),
+        }
+    merged = attribution.merge_segments([
+        seg(["A", "B"], ["C"]),
+        seg(["A", "B", "C"], []),
+    ])
+    assert merged["holdings_covered"] == 3
+    assert merged["holdings_dropped"] == 0
+
+
+def test_the_audit_payload_carries_no_holdings_array():
+    """loader.md §6.3 forbids logging holdings arrays and merge_segments'
+    return value IS the audit-row payload. The symbol sets are internal to the
+    merge and must not leak into it."""
+    seg = {
+        "active_return_bps": 1.0, "model_active_bps": 1.0,
+        "selection_residual_bps": 0.0,
+        "per_tilt": [{"group": g, "realized_contribution_bps": 0.0}
+                     for g in attribution.GROUPS],
+        "counterfactual_quality": "exact",
+        "holdings_covered": 2, "holdings_dropped": 0,
+        "_covered_symbols": {"AAPL.O", "MSFT.O"}, "_dropped_symbols": set(),
+    }
+    merged = attribution.merge_segments([seg])
+    flat = repr(merged)
+    assert "AAPL.O" not in flat and "MSFT.O" not in flat, flat
+    assert not any(k.startswith("_") for k in merged), list(merged)
