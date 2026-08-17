@@ -341,9 +341,13 @@ def transform_token_costs(text: str) -> str:
     workflows a plugin user cannot run."""
     out = []
     dropped = 0
+    # Every operator command absent from PLUGIN_SKILLS must appear here, or its
+    # row survives into the public bundle and prices a workflow the plugin user
+    # cannot run. /parallax-house-view-attribution was added to token-costs.md
+    # without being added here and did exactly that.
     excluded = ("/parallax-load-house-view", "/parallax-make-house-view",
                 "/parallax-judge-house-view", "/parallax-stress-house-view",
-                "/parallax-house-view-diff")
+                "/parallax-house-view-diff", "/parallax-house-view-attribution")
     for line in text.splitlines(keepends=True):
         if line.startswith("|") and any(f"`{c}`" in line for c in excluded):
             dropped += 1

@@ -358,13 +358,20 @@ def attribute_segment(
         "counterfactual_quality": quality,
         "holdings_covered": len(covered),
         "holdings_dropped": len(dropped),
-        # Symbol sets, INTERNAL to the merge step. loader.md §6.3 forbids
-        # logging holdings arrays, so these must never reach the audit row —
-        # merge_segments unions them and emits counts only. They exist because
-        # counts cannot be merged: the same holding appearing in three version
-        # segments was counted three times.
-        "_covered_symbols": set(covered),
-        "_dropped_symbols": set(dropped),
+        # Symbol lists for the merge step. They exist because counts cannot be
+        # merged: the same holding appearing in three version segments was
+        # counted three times.
+        #
+        # SORTED LISTS, not sets. SKILL.md Phase 5 writes per-segment detail
+        # into report.json, and json.dumps raises on a set — the report would
+        # have crashed on write. Deterministic order also keeps report bundles
+        # diffable between runs.
+        #
+        # loader.md §6.3 forbids logging holdings arrays, so these must not
+        # reach the AUDIT row. merge_segments emits counts only; report.json is
+        # a local operator bundle and is not bound by that rule.
+        "_covered_symbols": sorted(covered),
+        "_dropped_symbols": sorted(dropped),
     }
 
 
@@ -395,8 +402,8 @@ def merge_segments(segment_results: list[dict[str, Any]]) -> dict[str, Any]:
     for seg in segment_results:
         total_active += seg["active_return_bps"]
         total_model += seg["model_active_bps"]
-        covered_syms |= seg.get("_covered_symbols", set())
-        dropped_syms |= seg.get("_dropped_symbols", set())
+        covered_syms |= set(seg.get("_covered_symbols") or ())
+        dropped_syms |= set(seg.get("_dropped_symbols") or ())
         if seg["counterfactual_quality"] != "exact":
             quality = "approximate"
         for row in seg["per_tilt"]:

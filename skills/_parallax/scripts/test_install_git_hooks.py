@@ -148,6 +148,22 @@ def test_non_shell_hook_is_refused_not_corrupted(clone: Path) -> None:
     assert h.read_text() == body, "corrupted a non-shell hook"
 
 
+def test_non_shell_hook_whose_body_stays_bash_parseable_is_still_refused(
+        clone: Path) -> None:
+    """The `test_non_shell_hook_is_refused_not_corrupted` case above passes even
+    with the shebang check deleted: prepending the layer into a Python hook
+    produces invalid bash, `bash -n` catches THAT, and the installer's own
+    syntax-error recovery restores the backup — so the same pass/fail result
+    comes from a different guard. This body stays syntactically valid bash
+    after the layer is prepended (`print "...";` parses as an ordinary command
+    invocation), so only the explicit shebang check can refuse it."""
+    body = '#!/usr/bin/env perl\nprint "hello world\\n";\n'
+    h = _write_hook(clone, body)
+    r = _install(clone)
+    assert r.returncode != 0
+    assert h.read_text() == body, "corrupted a non-shell hook"
+
+
 def test_hooks_dir_outside_the_repo_requires_explicit_force(clone: Path,
                                                             tmp_path: Path) -> None:
     """A shared hooksPath makes this a global edit wearing a per-repo costume."""

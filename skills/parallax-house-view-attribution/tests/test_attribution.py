@@ -262,6 +262,21 @@ def test_renormalization_uses_only_the_covered_set():
     assert abs(bps - 66.6667) < 0.01, bps
 
 
+def test_region_multipliers_actually_reach_the_result():
+    """Replacing the region multiplier with a literal 1.0 survives every other
+    test in this file: the only test that sets a region tilt
+    (`test_shapley_sums_to_model_active`) asserts just the Shapley sum
+    invariant, which holds for any value function — including one where
+    regions never contribute. Pinned with a direct numeric check, the same
+    shape as the theme-multiplier test above."""
+    view = {"tilts": {"sectors": {}, "regions": {"japan": 2}, "themes": {}}}
+    meta = {"A": {"sector": "Tech", "region": "japan", "themes": []},
+            "B": {"sector": "Tech", "region": "us", "themes": []}}
+    m = attribution.group_multipliers(view, meta)
+    assert m["regions"]["A"] == 1.50, m["regions"]
+    assert m["regions"]["B"] == 1.00, m["regions"]
+
+
 def test_theme_multipliers_actually_reach_the_result():
     """Replacing the theme multiplier with 1.0 survived all 11 original tests:
     the one test that set a theme tilt asserted only the Shapley sum, which
@@ -349,3 +364,19 @@ def test_the_audit_payload_carries_no_holdings_array():
     flat = repr(merged)
     assert "AAPL.O" not in flat and "MSFT.O" not in flat, flat
     assert not any(k.startswith("_") for k in merged), list(merged)
+
+
+def test_segment_output_is_json_serialisable():
+    """SKILL.md Phase 5 writes per-segment detail into report.json. The symbol
+    collections were `set` objects, and json.dumps raises on a set — the report
+    would have crashed on write. Sorted lists also keep bundles diffable."""
+    import json
+    chain = {"final_portfolio": {"weights": {"A": 0.6, "B": 0.4}},
+             "view": {"tilts": {"sectors": {}, "regions": {}, "themes": {}}}}
+    seg = attribution.attribute_segment(
+        chain, {"A": 0.05, "B": 0.01},
+        {"A": {"sector": "Tech", "region": "US", "themes": []},
+         "B": {"sector": "Tech", "region": "US", "themes": []}})
+    json.dumps(seg)                       # must not raise
+    assert seg["_covered_symbols"] == ["A", "B"], seg["_covered_symbols"]
+    assert isinstance(seg["_dropped_symbols"], list)
