@@ -176,12 +176,25 @@ def test_hooks_dir_outside_the_repo_requires_explicit_force(clone: Path,
     assert MARKER in (shared / "pre-push").read_text()
 
 
-def test_tilde_hooks_path_is_expanded_not_taken_literally(clone: Path) -> None:
+def test_tilde_hooks_path_is_expanded_not_taken_literally(clone: Path,
+                                                          tmp_path: Path) -> None:
     """`git config --get` does not expand `~`; the first version created a
-    literal `~` directory inside the work tree and left the real hook alone."""
-    _run(["git", "config", "core.hooksPath", "~/nonexistent-parallax-hooks"], clone)
-    _install(clone, env={"PARALLAX_HOOKS_FORCE": "1"})
+    literal `~` directory inside the work tree and left the real hook alone.
+
+    HOME is redirected at a temp dir. An earlier version of this test let git
+    expand `~` against the DEVELOPER'S REAL HOME and created a directory there
+    — a test with a side effect outside its own tmp_path. It also asserted only
+    that no literal `~` appeared, never that the hook landed at the expanded
+    path, so it would have passed even if nothing was written anywhere."""
+    fake_home = tmp_path / "fakehome"
+    fake_home.mkdir()
+    _run(["git", "config", "core.hooksPath", "~/parallax-hooks-under-test"], clone)
+    r = _install(clone, env={"HOME": str(fake_home), "PARALLAX_HOOKS_FORCE": "1"})
+    assert r.returncode == 0, r.stderr
     assert not (clone / "~").exists(), "created a literal ~ directory"
+    landed = fake_home / "parallax-hooks-under-test/pre-push"
+    assert landed.exists(), "hook did not land at the expanded path"
+    assert MARKER in landed.read_text()
 
 
 # --- idempotency and self-repair -------------------------------------------
@@ -252,8 +265,14 @@ def test_the_layer_scans_the_pushed_ref_not_the_checked_out_branch(clone: Path) 
 def test_a_deletion_push_does_not_scan_a_bogus_range(clone: Path) -> None:
     """An all-zero local sha is a branch deletion. There are no commits to
     scan, and treating the zero sha as a rev would error."""
+    # The stub FAILS if handed any range mentioning the zero sha. A stub that
+    # always exits 0 cannot tell "skipped the deletion" from "scanned a bogus
+    # range" — the earlier version of this test could not fail, and deleting the
+    # zero-sha guard left the whole suite green.
     (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text(
-        "import sys\nsys.exit(0)\n")
+        "import sys\n"
+        "bad = any('0000000000' in a for a in sys.argv[1:])\n"
+        "sys.exit(1 if bad else 0)\n")
     _write_hook(clone, "#!/usr/bin/env bash\nexit 0\n")
     assert _install(clone).returncode == 0
     hook = clone / ".git/hooks/pre-push"

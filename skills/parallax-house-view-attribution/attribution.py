@@ -56,6 +56,11 @@ WEIGHT_MULT = {-2: 0.50, -1: 0.75, 0: 1.00, 1: 1.25, 2: 1.50}
 # matched theme, so the product exceeds this without an explicit cap.
 EXPOSURE_CAP = 2.0
 
+# Redistribution passes for the exposure cap. Capping one holding lifts the
+# others, which can push a second over the cap; three passes settles every
+# configuration measured, and the bound stops a pathological input spinning.
+_CAP_PASSES = 3
+
 # Tilt groups the weight-effect decomposition covers. Factor tilts re-rank
 # the composite (loader.md §3 factor table) rather than multiplying weights,
 # and style tilts are universe filters — both fall into the selection
@@ -175,17 +180,34 @@ def neutral_weights(chain: dict[str, Any]) -> tuple[dict[str, float], str]:
 
 
 def _tilt_mult(raw: Any) -> float:
-    """Multiplier for a raw tilt value, degrading to neutral on junk.
+    """Multiplier for a raw tilt value, degrading to neutral on anything that
+    is not an exact integer in the table.
 
     `int(raw)` raised an uncaught ValueError on a non-numeric tilt, aborting an
     entire attribution run over one malformed cell in hand-edited view YAML.
     An unparseable or out-of-range tilt means "no instruction I can act on",
     which is 1.0 — the same neutral the table gives tilt 0.
     """
-    try:
-        return WEIGHT_MULT.get(int(raw or 0), 1.0)
-    except (TypeError, ValueError):
+    # bool is an int in Python, so YAML `tech: yes` arrived as True and became
+    # a +1 overweight. neutral_weights() in this same file already excludes bool
+    # for the same reason; this now matches it.
+    if isinstance(raw, bool):
         return 1.0
+    if raw is None or raw == "":
+        return 1.0
+    # Only an exact integer is a tilt. int(2.9) truncated INTO range and
+    # returned 1.50, and 1.5 vs the string "1.5" — the same authored value under
+    # different YAML quoting — gave different multipliers.
+    if isinstance(raw, int):
+        return WEIGHT_MULT.get(raw, 1.0)
+    if isinstance(raw, float):
+        return WEIGHT_MULT.get(int(raw), 1.0) if raw.is_integer() else 1.0
+    if isinstance(raw, str):
+        try:
+            return WEIGHT_MULT.get(int(raw.strip()), 1.0)
+        except ValueError:
+            return 1.0
+    return 1.0
 
 
 def group_multipliers(
@@ -247,12 +269,38 @@ def weights_for_groups(
         m = 1.0
         for g in active_groups:
             m *= group_mults.get(g, {}).get(symbol, 1.0)
-        m = min(m, EXPOSURE_CAP)
         raw[symbol] = w * m
     total = sum(raw.values())
     if total <= 0:
         raise AttributionError("degenerate weights: multipliers zeroed the portfolio")
-    return {s: v / total for s, v in raw.items()}
+    weights = {s: v / total for s, v in raw.items()}
+
+    # Cap FINAL exposure, not the raw multiplier. Clamping the multiplier before
+    # normalisation does not bound what loader.md actually constrains: the ratio
+    # that survives normalisation is m / mean(m), which grows without limit as
+    # OTHER holdings' multipliers fall. Measured with a pre-normalisation cap of
+    # 2.0: one holding still reached 3.37x neutral.
+    #
+    # Clamp, redistribute the excess across the uncapped holdings, repeat.
+    # Capping one name lifts the others, which can push a second name over, so
+    # this iterates. It converges quickly; the bound stops a pathological input
+    # from spinning, and leaving the last pass slightly over is preferable to
+    # looping — the overshoot is then far smaller than the 3.37x above.
+    for _ in range(_CAP_PASSES):
+        over = {s for s, w in weights.items()
+                if neutral_w[s] > 0 and w > EXPOSURE_CAP * neutral_w[s] + 1e-12}
+        if not over:
+            break
+        excess = sum(weights[s] - EXPOSURE_CAP * neutral_w[s] for s in over)
+        for s in over:
+            weights[s] = EXPOSURE_CAP * neutral_w[s]
+        free = {s: w for s, w in weights.items() if s not in over}
+        free_total = sum(free.values())
+        if free_total <= 0:
+            break
+        for s in free:
+            weights[s] += excess * (free[s] / free_total)
+    return weights
 
 
 # --------------------------------------------------------------------------
@@ -402,6 +450,19 @@ def merge_segments(segment_results: list[dict[str, Any]]) -> dict[str, Any]:
     for seg in segment_results:
         total_active += seg["active_return_bps"]
         total_model += seg["model_active_bps"]
+        # A segment declaring a holdings count but carrying no symbol list
+        # cannot be merged: the count is not additive, and defaulting to an
+        # empty set silently reported 0 holdings covered for a run that had
+        # some. SKILL.md invites hand-built segments and renders this figure
+        # client-facing as "[C] holdings covered", so it must fail loudly
+        # rather than under-report.
+        if "_covered_symbols" not in seg and seg.get("holdings_covered"):
+            raise AttributionError(
+                "segment declares holdings_covered but carries no "
+                "_covered_symbols; holdings are merged as a set, so the count "
+                "alone cannot be combined. Build segments with "
+                "attribute_segment()."
+            )
         covered_syms |= set(seg.get("_covered_symbols") or ())
         dropped_syms |= set(seg.get("_dropped_symbols") or ())
         if seg["counterfactual_quality"] != "exact":

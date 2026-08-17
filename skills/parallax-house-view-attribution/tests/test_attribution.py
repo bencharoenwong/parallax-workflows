@@ -170,6 +170,10 @@ def test_merge_segments_sums_and_degrades_quality():
         "active_return_bps": 100.0, "model_active_bps": 90.0,
         "selection_residual_bps": 10.0, "counterfactual_quality": "exact",
         "holdings_covered": 3, "holdings_dropped": 0,
+        # Symbol lists, as attribute_segment() emits. This test previously
+        # omitted them and never asserted holdings_covered, so it could not
+        # notice that the merged count was being silently zeroed.
+        "_covered_symbols": ["A", "B", "C"], "_dropped_symbols": [],
         "per_tilt": [{"group": "sectors", "realized_contribution_bps": 90.0},
                      {"group": "regions", "realized_contribution_bps": 0.0},
                      {"group": "themes", "realized_contribution_bps": 0.0}],
@@ -181,6 +185,7 @@ def test_merge_segments_sums_and_degrades_quality():
     assert merged["segments"] == 2
     assert merged["active_return_bps"] == pytest.approx(80.0)
     assert merged["counterfactual_quality"] == "approximate"
+    assert merged["holdings_covered"] == 3, "same three holdings, not six"
     sectors = next(r for r in merged["per_tilt"] if r["group"] == "sectors")
     assert sectors["realized_contribution_bps"] == pytest.approx(180.0)
     with pytest.raises(attribution.InsufficientProvenance):
@@ -193,24 +198,45 @@ def test_merge_segments_sums_and_degrades_quality():
 
 
 def test_compounded_exposure_is_capped_at_the_documented_2x():
-    """loader.md's tilt table caps final exposure at 2x neutral "to prevent
-    runaway". Multipliers compound across sector, region and every matched
-    theme, and the cap was missing: a +2 sector with three +1 themes reached
-    2.93x and a +2 sector with a +2 theme reached 2.25x. The excess inflated
-    model_active_bps and landed in selection_residual_bps with the opposite
-    sign."""
-    neutral = {"A": 0.5, "B": 0.5}
-    # A carries the runaway product (1.5 x 1.25^3 = 2.93x); B is untilted.
+    """loader.md caps FINAL exposure at 2x neutral. The first version clamped
+    the raw multiplier before normalisation, which does not bound that: the
+    ratio surviving normalisation is m / mean(m) and grows as OTHER holdings'
+    multipliers fall. Measured with the old pre-normalisation cap, this exact
+    input reached 3.37x neutral while EXPOSURE_CAP was 2.0.
+
+    The assertion is on the ratio to neutral, which is the documented quantity —
+    the previous version asserted raw weights of 2/3 vs 1/3, a 1.33x exposure,
+    and so never checked the property it was named for.
+    """
+    neutral = {k: 0.25 for k in "ABCD"}
     mults = {
-        "sectors": {"A": 1.50, "B": 1.0},
-        "regions": {"A": 1.00, "B": 1.0},
-        "themes": {"A": 1.25 ** 3, "B": 1.0},
+        "sectors": {"A": 1.50, "B": 0.5, "C": 0.5, "D": 0.5},
+        "regions": {"A": 1.25, "B": 0.5, "C": 0.5, "D": 0.5},
+        "themes":  {"A": 1.50, "B": 0.5, "C": 0.5, "D": 0.5},
     }
     w = attribution.weights_for_groups(
         neutral, mults, frozenset({"sectors", "regions", "themes"}))
-    # Capped at 2.0 against B's 1.0 => 2/3 vs 1/3. Uncapped would be ~0.745.
-    assert abs(w["A"] - 2.0 / 3.0) < 1e-9, w
-    assert abs(w["B"] - 1.0 / 3.0) < 1e-9, w
+    assert abs(sum(w.values()) - 1.0) < 1e-9, sum(w.values())
+    ratio = w["A"] / neutral["A"]
+    assert ratio <= attribution.EXPOSURE_CAP + 1e-9, ratio
+    assert abs(ratio - attribution.EXPOSURE_CAP) < 1e-9, ratio
+
+
+def test_no_holding_exceeds_the_cap_across_random_configurations():
+    """One hand-built case cannot show the redistribution never pushes a second
+    holding over the cap."""
+    import itertools
+    vals = [0.5, 0.75, 1.0, 1.25, 1.5]
+    syms = list("ABCD")
+    neutral = {k: 0.25 for k in syms}
+    for combo in itertools.product(vals, repeat=4):
+        mults = {"sectors": dict(zip(syms, combo)),
+                 "regions": {k: 1.0 for k in syms},
+                 "themes": {k: 1.0 for k in syms}}
+        w = attribution.weights_for_groups(neutral, mults, frozenset({"sectors"}))
+        assert abs(sum(w.values()) - 1.0) < 1e-9, combo
+        for sym in syms:
+            assert w[sym] / neutral[sym] <= attribution.EXPOSURE_CAP + 1e-6, (combo, sym)
 
 
 def test_the_cap_does_not_break_the_shapley_sum_invariant():
@@ -380,3 +406,74 @@ def test_segment_output_is_json_serialisable():
     json.dumps(seg)                       # must not raise
     assert seg["_covered_symbols"] == ["A", "B"], seg["_covered_symbols"]
     assert isinstance(seg["_dropped_symbols"], list)
+
+
+def test_tilt_parsing_is_consistent_across_yaml_spellings():
+    """Three separate inconsistencies, all reachable from hand-edited view YAML:
+
+    `tech: yes` is boolean True under YAML 1.1, and bool is an int in Python, so
+    it silently became a +1 overweight — while neutral_weights() in the same
+    file already excluded bool for exactly this reason.
+
+    `int(2.9)` truncated INTO range and returned the +2 multiplier, though the
+    docstring promised out-of-range degrades to neutral.
+
+    `1.5` and the string `"1.5"` — the same authored value under different
+    quoting — returned different multipliers.
+    """
+    m = attribution._tilt_mult
+    assert m(True) == 1.0 and m(False) == 1.0, "bool must not act as a tilt"
+    assert m(2.9) == 1.0, "a non-integer must not truncate into range"
+    assert m(1.5) == m("1.5") == 1.0, "quoting must not change the multiplier"
+    assert m(3) == 1.0 and m(-3) == 1.0, "out of range degrades to neutral"
+    # Real tilts still work, quoted or not.
+    assert m(2) == m("2") == 1.50
+    assert m(-2) == m("-2") == 0.50
+    assert m(2.0) == 1.50, "an integral float is a legitimate YAML integer"
+
+
+def test_merged_residual_keeps_its_sign():
+    """`selection_residual_bps = active - model`. Flipping it to model - active
+    survived the suite, so a wrong-sign residual would have shipped into the
+    audit row and the client-facing report unnoticed."""
+    def seg(active, model):
+        return {"active_return_bps": active, "model_active_bps": model,
+                "selection_residual_bps": active - model,
+                "per_tilt": [{"group": g, "realized_contribution_bps": 0.0}
+                             for g in attribution.GROUPS],
+                "counterfactual_quality": "exact",
+                "holdings_covered": 1, "holdings_dropped": 0,
+                "_covered_symbols": ["A"], "_dropped_symbols": []}
+    merged = attribution.merge_segments([seg(120.0, 50.0)])
+    assert merged["active_return_bps"] == 120.0
+    assert merged["model_active_bps"] == 50.0, "model total is unpinned"
+    assert merged["selection_residual_bps"] == 70.0, "residual sign flipped"
+
+
+def test_merge_unions_rather_than_taking_the_last_segment():
+    """Both earlier union tests used identical or nested symbol sets, so neither
+    could distinguish a union from last-segment-wins."""
+    def seg(covered):
+        return {"active_return_bps": 0.0, "model_active_bps": 0.0,
+                "selection_residual_bps": 0.0,
+                "per_tilt": [{"group": g, "realized_contribution_bps": 0.0}
+                             for g in attribution.GROUPS],
+                "counterfactual_quality": "exact",
+                "holdings_covered": len(covered), "holdings_dropped": 0,
+                "_covered_symbols": sorted(covered), "_dropped_symbols": []}
+    merged = attribution.merge_segments([seg(["A", "B"]), seg(["C"])])
+    assert merged["holdings_covered"] == 3, "last-segment-wins would give 1"
+
+
+def test_a_segment_without_symbol_keys_is_rejected_not_silently_zeroed():
+    """`.get(..., ())` reported 0 holdings covered for a hand-built segment that
+    declared a real count. SKILL.md invites hand-built segments, and the count
+    is rendered client-facing as "[C] holdings covered"."""
+    seg = {"active_return_bps": 0.0, "model_active_bps": 0.0,
+           "selection_residual_bps": 0.0,
+           "per_tilt": [{"group": g, "realized_contribution_bps": 0.0}
+                        for g in attribution.GROUPS],
+           "counterfactual_quality": "exact",
+           "holdings_covered": 3, "holdings_dropped": 1}
+    with pytest.raises(attribution.AttributionError, match="_covered_symbols"):
+        attribution.merge_segments([seg])

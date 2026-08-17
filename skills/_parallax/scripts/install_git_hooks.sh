@@ -137,7 +137,27 @@ if [ -f "$_PARALLAX_SCAN" ]; then
         _PARALLAX_SAW_REF=1
         case "$_r_sha" in
             ""|*[!0-9a-f]*|0000000000000000000000000000000000000000)
-                _PARALLAX_RANGE="$_l_sha" ;;               # new branch: all of it
+                # New branch: the remote has no counterpart, so there is no
+                # "$_r_sha..$_l_sha" to scan. A BARE rev is NOT a range —
+                # `git log <sha>` walks every ancestor, so this scanned the
+                # whole published history, hit 60 old messages, and blocked the
+                # first push of every new branch with nothing fixable locally.
+                # Scan only what this branch adds over the default branch.
+                _PARALLAX_BASE=""
+                for _cand in origin/main origin/master main master; do
+                    if git rev-parse --verify --quiet "$_cand" >/dev/null 2>&1; then
+                        _PARALLAX_BASE="$(git merge-base "$_cand" "$_l_sha" 2>/dev/null)"
+                        [ -n "$_PARALLAX_BASE" ] && break
+                    fi
+                done
+                if [ -n "$_PARALLAX_BASE" ]; then
+                    _PARALLAX_RANGE="$_PARALLAX_BASE..$_l_sha"
+                else
+                    # No default branch to diff against (a fresh repo whose
+                    # first push IS the first branch). Scanning all of it is
+                    # correct there, and it is genuinely new work.
+                    _PARALLAX_RANGE="$_l_sha"
+                fi ;;
             *) _PARALLAX_RANGE="$_r_sha..$_l_sha" ;;
         esac
         python3 "$_PARALLAX_SCAN" "$_PARALLAX_RANGE" || _PARALLAX_SCAN_RC=$?
