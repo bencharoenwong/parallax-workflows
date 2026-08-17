@@ -108,6 +108,12 @@ if [ -f "$_PARALLAX_SCAN" ]; then
     # wrong range whenever the pushed branch is not the checked-out one:
     # `git push origin feature` from `main` scanned an empty range, reported
     # clean, and published unscanned commits.
+    # Capture stdin to a file and RE-POINT it before returning control. A bare
+    # `while read` drains stdin, and this layer is prepended — so every gate
+    # after it (security, perimeter, git-lfs) would receive an EMPTY ref list
+    # and silently do nothing. `exec <` restores it for the rest of the hook.
+    _PARALLAX_STDIN="$(mktemp "${TMPDIR:-/tmp}/parallax-prepush.XXXXXX")"
+    cat > "$_PARALLAX_STDIN"
     _PARALLAX_SCAN_RC=0
     _PARALLAX_SAW_REF=0
     while read -r _l_ref _l_sha _r_ref _r_sha; do
@@ -120,7 +126,9 @@ if [ -f "$_PARALLAX_SCAN" ]; then
             *) _PARALLAX_RANGE="$_r_sha..$_l_sha" ;;
         esac
         python3 "$_PARALLAX_SCAN" "$_PARALLAX_RANGE" || _PARALLAX_SCAN_RC=$?
-    done
+    done < "$_PARALLAX_STDIN"
+    exec < "$_PARALLAX_STDIN"
+    rm -f "$_PARALLAX_STDIN"
     # No ref info (invoked by hand, or a deletion-only push): fall back to the
     # scanner's own default rather than skipping, so it never passes vacuously.
     if [ "$_PARALLAX_SAW_REF" -eq 0 ]; then

@@ -246,3 +246,37 @@ def test_a_deletion_push_does_not_scan_a_bogus_range(clone: Path) -> None:
     r = subprocess.run(["bash", str(hook), "origin", "http://example.invalid"],
                        cwd=clone, capture_output=True, text=True, input=ref_line)
     assert r.returncode == 0, r.stderr
+
+
+def test_stdin_is_passed_through_to_the_rest_of_the_hook(clone: Path) -> None:
+    """The layer is PREPENDED and reads git's ref list from stdin. A bare
+    `while read` drains it, so every gate after the layer — security gate,
+    perimeter gate, git-lfs — would receive an EMPTY ref list and silently do
+    nothing. Verified as a real regression before the fix: downstream saw 0 of
+    2 ref lines.
+
+    This is what a toy hook cannot show. The assertion is on what the REST of
+    the hook receives, not on what the layer does.
+    """
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text(
+        "import sys\nsys.exit(0)\n")
+    out = clone / "downstream.txt"
+    _write_hook(clone, (
+        "#!/usr/bin/env bash\n"
+        'T=$(mktemp); cat > "$T"\n'
+        f'wc -l < "$T" | tr -d " " > {out}\n'
+        "exit 0\n"
+    ))
+    assert _install(clone).returncode == 0
+
+    hook = clone / ".git/hooks/pre-push"
+    refs = ("refs/heads/f aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa "
+            "refs/heads/f bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"
+            "refs/heads/g cccccccccccccccccccccccccccccccccccccccc "
+            "refs/heads/g dddddddddddddddddddddddddddddddddddddddd\n")
+    r = subprocess.run(["bash", str(hook), "origin", "http://example.invalid"],
+                       cwd=clone, capture_output=True, text=True, input=refs)
+    assert r.returncode == 0, r.stderr
+    assert out.read_text().strip() == "2", (
+        f"downstream saw {out.read_text().strip()} ref lines, expected 2 — "
+        "the layer drained stdin")
