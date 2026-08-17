@@ -95,6 +95,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 
 | Workflow | Tokens (typical) | Key cost drivers |
 |---|---|---|
+| `/parallax-house-view-attribution` | **~7** (scales with holdings) | `export_price_series` per holding (FREE, 0) + `analyze_portfolio` (5) + `get_company_info` (1) + `get_peer_snapshot` (1). Ex-post measurement over a closed window — read-only, and the price leg costs nothing, so it is the cheapest house-view workflow. |
 
 
 ### Cost Context
