@@ -185,3 +185,106 @@ def test_merge_segments_sums_and_degrades_quality():
     assert sectors["realized_contribution_bps"] == pytest.approx(180.0)
     with pytest.raises(attribution.InsufficientProvenance):
         attribution.merge_segments([])
+
+
+# ---------------------------------------------------------------------------
+# Gaps found by adversarial review: paths the original 11 tests did not pin
+# ---------------------------------------------------------------------------
+
+
+def test_compounded_exposure_is_capped_at_the_documented_2x():
+    """loader.md's tilt table caps final exposure at 2x neutral "to prevent
+    runaway". Multipliers compound across sector, region and every matched
+    theme, and the cap was missing: a +2 sector with three +1 themes reached
+    2.93x and a +2 sector with a +2 theme reached 2.25x. The excess inflated
+    model_active_bps and landed in selection_residual_bps with the opposite
+    sign."""
+    neutral = {"A": 0.5, "B": 0.5}
+    # A carries the runaway product (1.5 x 1.25^3 = 2.93x); B is untilted.
+    mults = {
+        "sectors": {"A": 1.50, "B": 1.0},
+        "regions": {"A": 1.00, "B": 1.0},
+        "themes": {"A": 1.25 ** 3, "B": 1.0},
+    }
+    w = attribution.weights_for_groups(
+        neutral, mults, frozenset({"sectors", "regions", "themes"}))
+    # Capped at 2.0 against B's 1.0 => 2/3 vs 1/3. Uncapped would be ~0.745.
+    assert abs(w["A"] - 2.0 / 3.0) < 1e-9, w
+    assert abs(w["B"] - 1.0 / 3.0) < 1e-9, w
+
+
+def test_the_cap_does_not_break_the_shapley_sum_invariant():
+    """Shapley efficiency holds for any value function, so capping inside
+    weights_for_groups must not disturb the sum. Asserted directly because the
+    cap changes what every coalition is worth."""
+    neutral = {"A": 0.4, "B": 0.35, "C": 0.25}
+    mults = {
+        "sectors": {"A": 1.50, "B": 0.75, "C": 1.0},
+        "regions": {"A": 1.25, "B": 1.00, "C": 1.0},
+        "themes": {"A": 1.50, "B": 1.00, "C": 1.25},
+    }
+    returns = {"A": 0.10, "B": -0.04, "C": 0.02}
+    parts = attribution.shapley_tilt_attribution(neutral, mults, returns)
+    total = sum(p["realized_contribution_bps"] for p in parts)
+    full = attribution.weights_for_groups(
+        neutral, mults, frozenset({"sectors", "regions", "themes"}))
+    model = attribution.active_return_bps(full, neutral, returns)
+    assert abs(total - model) < 1e-6, (total, model)
+
+
+def test_a_negative_tilt_is_not_floored():
+    """loader.md specifies a 2x upside cap and NO downside floor, so a -2 tilt
+    compounding toward zero is correct. Pinned so a symmetric floor is not
+    added later on the assumption that the cap should mirror."""
+    neutral = {"A": 0.5, "B": 0.5}
+    mults = {
+        "sectors": {"A": 0.50, "B": 1.0},
+        "regions": {"A": 1.00, "B": 1.0},
+        "themes": {"A": 0.50, "B": 1.0},
+    }
+    w = attribution.weights_for_groups(
+        neutral, mults, frozenset({"sectors", "regions", "themes"}))
+    assert abs(w["A"] - 0.2) < 1e-9, w   # 0.25 vs 1.0 => 1/5
+
+
+def test_renormalization_uses_only_the_covered_set():
+    """`test_missing_price_drops_and_renormalizes` asserts only the covered and
+    dropped COUNTS, so replacing the covered-set sum with a sum over all
+    neutral weights survived it. That mutant changes the number: on a 3-holding
+    portfolio with one missing return the correct answer is 62.5 bps and the
+    mutant returns 150.0."""
+    neutral = {"A": 1 / 3, "B": 1 / 3, "C": 1 / 3}
+    tilted = {"A": 0.5, "B": 0.25, "C": 0.25}
+    returns = {"A": 0.05, "B": 0.01}          # C has no price data
+    bps = attribution.active_return_bps(tilted, neutral, returns)
+    # Renormalized over {A,B}: neutral .5/.5, tilted 2/3,1/3.
+    # (2/3-1/2)*.05 + (1/3-1/2)*.01 = .008333-.001667 = .006667 -> 66.67 bps
+    assert abs(bps - 66.6667) < 0.01, bps
+
+
+def test_theme_multipliers_actually_reach_the_result():
+    """Replacing the theme multiplier with 1.0 survived all 11 original tests:
+    the one test that set a theme tilt asserted only the Shapley sum, which
+    still holds when themes contribute nothing."""
+    view = {"tilts": {"sectors": {}, "regions": {}, "themes": {"ai": 2}}}
+    meta = {"A": {"sector": "Tech", "region": "US", "themes": ["ai"]},
+            "B": {"sector": "Tech", "region": "US", "themes": []}}
+    m = attribution.group_multipliers(view, meta)
+    assert m["themes"]["A"] == 1.50, m["themes"]
+    assert m["themes"]["B"] == 1.00, m["themes"]
+
+
+def test_multiple_matched_themes_compound():
+    view = {"tilts": {"sectors": {}, "regions": {}, "themes": {"ai": 1, "energy": 1}}}
+    meta = {"A": {"sector": "Tech", "region": "US", "themes": ["ai", "energy"]}}
+    m = attribution.group_multipliers(view, meta)
+    assert abs(m["themes"]["A"] - 1.25 * 1.25) < 1e-12, m["themes"]
+
+
+def test_a_non_numeric_tilt_does_not_crash_the_run():
+    """`int()` on a tilt value raises an uncaught ValueError on malformed view
+    YAML, which would abort an attribution run rather than degrade it."""
+    view = {"tilts": {"sectors": {"Tech": "big"}, "regions": {}, "themes": {}}}
+    meta = {"A": {"sector": "Tech", "region": "US", "themes": []}}
+    m = attribution.group_multipliers(view, meta)
+    assert m["sectors"]["A"] == 1.0, m["sectors"]

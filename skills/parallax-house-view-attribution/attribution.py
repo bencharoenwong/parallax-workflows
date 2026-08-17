@@ -51,6 +51,11 @@ DEFAULT_CHAIN_DIR = Path.home() / ".parallax" / "reasoning-chains"
 # loader.md §3 "Sector / region / theme tilts" weight multipliers.
 WEIGHT_MULT = {-2: 0.50, -1: 0.75, 0: 1.00, 1: 1.25, 2: 1.50}
 
+# loader.md tilt table: "+2 (Big OW) ... Cap final exposure at 2x neutral to
+# prevent runaway". Multipliers compound across sector, region and every
+# matched theme, so the product exceeds this without an explicit cap.
+EXPOSURE_CAP = 2.0
+
 # Tilt groups the weight-effect decomposition covers. Factor tilts re-rank
 # the composite (loader.md §3 factor table) rather than multiplying weights,
 # and style tilts are universe filters — both fall into the selection
@@ -169,6 +174,20 @@ def neutral_weights(chain: dict[str, Any]) -> tuple[dict[str, float], str]:
     return {h: eq for h in holdings}, "approximate"
 
 
+def _tilt_mult(raw: Any) -> float:
+    """Multiplier for a raw tilt value, degrading to neutral on junk.
+
+    `int(raw)` raised an uncaught ValueError on a non-numeric tilt, aborting an
+    entire attribution run over one malformed cell in hand-edited view YAML.
+    An unparseable or out-of-range tilt means "no instruction I can act on",
+    which is 1.0 — the same neutral the table gives tilt 0.
+    """
+    try:
+        return WEIGHT_MULT.get(int(raw or 0), 1.0)
+    except (TypeError, ValueError):
+        return 1.0
+
+
 def group_multipliers(
     view: dict[str, Any],
     holding_meta: dict[str, dict[str, Any]],
@@ -190,11 +209,11 @@ def group_multipliers(
         sector = meta.get("sector")
         region = meta.get("region")
         themes = meta.get("themes") or []
-        out["sectors"][symbol] = WEIGHT_MULT.get(int(sector_tilts.get(sector, 0) or 0), 1.0) if sector else 1.0
-        out["regions"][symbol] = WEIGHT_MULT.get(int(region_tilts.get(region, 0) or 0), 1.0) if region else 1.0
+        out["sectors"][symbol] = _tilt_mult(sector_tilts.get(sector, 0)) if sector else 1.0
+        out["regions"][symbol] = _tilt_mult(region_tilts.get(region, 0)) if region else 1.0
         theme_mult = 1.0
         for t in themes:
-            theme_mult *= WEIGHT_MULT.get(int(theme_tilts.get(t, 0) or 0), 1.0)
+            theme_mult *= _tilt_mult(theme_tilts.get(t, 0))
         out["themes"][symbol] = theme_mult
     return out
 
@@ -204,12 +223,31 @@ def weights_for_groups(
     group_mults: dict[str, dict[str, float]],
     active_groups: frozenset[str] | set[str],
 ) -> dict[str, float]:
-    """Model-implied weights with only ``active_groups``' multipliers applied."""
+    """Model-implied weights with only ``active_groups``' multipliers applied.
+
+    The per-group multipliers COMPOUND — sector × region × every matched theme —
+    so the product runs past what any single tilt authorises. loader.md's tilt
+    table caps final exposure at 2× neutral "to prevent runaway", and that cap
+    was missing here: a +2 sector with three +1 themes reached 2.93×, and a +2
+    sector with a +2 theme reached 2.25×. The excess inflated model_active_bps
+    and landed in selection_residual_bps with the opposite sign, distorting the
+    verdict this skill exists to produce.
+
+    Capping inside this function rather than at the call sites is deliberate:
+    it is the single place the product is formed, so every Shapley coalition
+    sees the same rule. The sum invariant is unaffected — Shapley efficiency
+    holds for any value function, and this only changes what that function
+    returns.
+
+    loader.md specifies no downside floor, so none is invented here; -2 tilts
+    compound unbounded toward zero exactly as the table describes.
+    """
     raw = {}
     for symbol, w in neutral_w.items():
         m = 1.0
         for g in active_groups:
             m *= group_mults.get(g, {}).get(symbol, 1.0)
+        m = min(m, EXPOSURE_CAP)
         raw[symbol] = w * m
     total = sum(raw.values())
     if total <= 0:
