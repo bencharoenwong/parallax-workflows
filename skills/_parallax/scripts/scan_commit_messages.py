@@ -133,9 +133,21 @@ def scan(repo: Path | None = None,
     return sorted(set(findings))
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    """Scan the outgoing range. An explicit range may be passed as argv[0].
+
+    The pre-push hook passes the range git actually reports on stdin. Without
+    that the default `origin/main..HEAD` silently scans the WRONG commits when
+    the pushed branch is not the checked-out one: `git push origin feature`
+    from `main` scanned an empty range and reported clean while the push
+    published unscanned commits. An explicit range closes that.
+    """
+    # Never read sys.argv here: called as a library (tests, other tooling)
+    # that would pick up the HOST process's arguments — under pytest it made
+    # main() try to use `-q` as a rev-range. The __main__ block passes argv.
+    args = list(argv or [])
     try:
-        rev_range = resolve_range()
+        rev_range = args[0] if args else resolve_range()
         findings = scan(rev_range=rev_range)
     except ScanError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
@@ -160,4 +172,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

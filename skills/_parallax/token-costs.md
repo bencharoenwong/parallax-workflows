@@ -99,6 +99,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 | `/parallax-house-view-diff` | **2× child** | Runs the target skill twice (Leg A without view, Leg B with view) — no additional Parallax tokens beyond the child, but total cost doubles: e.g. 2 × 36 = **72 tokens** with `/parallax-portfolio-builder`. |
 | `/parallax-stress-house-view` | **~30** (scales with tilted markets) | `check_macro_health` (5) + `get_telemetry` (1) + `macro_analyst` × tilted markets (5 each); cap 12 markets |
 | `/parallax-judge-house-view` | **~282** | Same recipe as make: 14 markets × 4 components + telemetry |
+| `/parallax-house-view-attribution` | **~7** (scales with holdings) | `export_price_series` per holding (FREE, 0) + `analyze_portfolio` (5) + `get_company_info` (1) + `get_peer_snapshot` (1). Ex-post measurement over a closed window — read-only, and the price leg costs nothing, so it is the cheapest house-view workflow. |
 | `/parallax-make-house-view` | **~282** (scales with `--markets`) | `list_macro_countries` (1) + `get_telemetry` (1) + `macro_analyst` × 14 markets × 4 components (280); `--markets` flag reduces the market set and scales cost proportionally |
 
 > **Cost gotcha:** `/parallax-make-house-view` and `/parallax-judge-house-view` are the costliest workflows in the library at ~$56 each at Standard plan overage rates ($0.20/token). Run them intentionally — not as part of a routine check. For lightweight view assessment without full re-synthesis, prefer `/parallax-stress-house-view`.

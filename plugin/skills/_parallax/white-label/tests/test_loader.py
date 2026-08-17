@@ -15,6 +15,8 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+
+_HOME_LIKE = Path.home() if Path.home().is_absolute() else Path("/home/analyst")
 import yaml
 
 
@@ -707,7 +709,17 @@ def test_empty_logo_path_is_silent(
         ("https://internal.acme-capital.example/clients/acme/brand.pdf?sig=secret", "https://internal.acme-capital.example"),
         ("http://10.0.0.5:8080/private/deck.pptx", "http://10.0.0.5"),
         ("https://s3.amazonaws.com/bucket/key?X-Amz-Signature=xyz", "https://s3.amazonaws.com"),
-        ("/Users/operator/Dropbox/Clients/Acme/brand.pdf", "brand.pdf"),
+        # Derived from the running user's home rather than hardcoded: the case
+        # under test is "absolute path under a home directory redacts to its
+        # basename", which is exactly the shape a real brand-asset reference
+        # takes. A hardcoded absolute home path also trips the repo path-check.
+        # Anchored to _HOME_LIKE rather than Path.home() directly. Measured
+        # here: HOME="" makes Path.home() return "/", which is absolute and
+        # still exercises the branch — so this is insurance, not a live bug.
+        # The case under test is "an absolute path under a home directory
+        # collapses to its basename", which does not need the real user's
+        # home, and should not depend on the environment to stay absolute.
+        (str(_HOME_LIKE / "Dropbox/Clients/Acme/brand.pdf"), "brand.pdf"),
         ("~/Downloads/acme-brand.pptx", "acme-brand.pptx"),
     ],
 )

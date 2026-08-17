@@ -279,6 +279,27 @@ def test_main_exits_two_when_the_range_is_undeterminable(tmp_path, monkeypatch,
     assert "no base ref resolved" in capsys.readouterr().err
 
 
+def test_main_uses_the_explicit_argv_range_over_the_resolved_default(
+        tmp_path, monkeypatch):
+    """The pre-push hook passes the range git actually reports on stdin as
+    argv[0] specifically because the default `origin/main..HEAD` is the WRONG
+    range whenever the pushed branch is not the checked-out one. If `main`
+    silently ignored argv and always resolved the default, a hit on the
+    explicitly-requested range would be missed while HEAD sits on a clean
+    branch -- exactly the bug `install_git_hooks.sh`'s docstring describes."""
+    root = _repo(tmp_path / "r")
+    base = _commit(root, "chore: base")
+    _run(root, "update-ref", "refs/remotes/origin/main", "HEAD")
+    _branch_off_main(root)
+    _commit(root, "feat: an ordinary change")
+    _run(root, "checkout", "-q", "-b", "other", base)
+    bad = _commit(root, "chore: scrub the fixture")
+    _run(root, "checkout", "-q", "feature")
+    monkeypatch.setattr(scm, "REPO_ROOT", root)
+    assert scm.main() == 0, "default range (origin/main..HEAD) should be clean"
+    assert scm.main([f"{base}..{bad}"]) == 1, "explicit argv range was ignored"
+
+
 def test_main_exits_one_on_a_hit(tmp_path, monkeypatch):
     root = _repo(tmp_path / "r")
     _commit(root, "chore: base")
@@ -287,3 +308,25 @@ def test_main_exits_one_on_a_hit(tmp_path, monkeypatch):
     _commit(root, "chore: rebuild the mocks from a live capture")
     monkeypatch.setattr(scm, "REPO_ROOT", root)
     assert scm.main() == 1
+
+
+def test_main_honours_an_explicit_range_argument(tmp_path, monkeypatch):
+    """`main()`'s argv branch is the entire point of the pre-push hook change:
+    the hook passes the range git reports on stdin. Every other test in this
+    file calls `main()` with no arguments, so a regression that dropped argv[0]
+    and always used resolve_range() would pass all of them untouched.
+
+    Same repo, two ranges. The default sees the flagged commit and fails; an
+    explicit range that excludes it passes. Only an honoured argv can produce
+    both results.
+    """
+    root = _repo(tmp_path / "r")
+    _commit(root, "chore: base")
+    _run(root, "update-ref", "refs/remotes/origin/main", "HEAD")
+    base = _run(root, "rev-parse", "HEAD").stdout.strip()
+    _branch_off_main(root)
+    _commit(root, "chore: rebuild the mocks from a live capture")
+    monkeypatch.setattr(scm, "REPO_ROOT", root)
+
+    assert scm.main() == 1, "default range should see the flagged commit"
+    assert scm.main([f"{base}..{base}"]) == 0, "explicit empty range was ignored"

@@ -475,3 +475,29 @@ def test_load_canary_terms_includes_extra_file_when_present(tmp_path, monkeypatc
     extra_file.write_text("# comment\nprivate_marker\n", encoding="utf-8")
     monkeypatch.setattr(bb, "EXTRA_CANARY_FILE", extra_file)
     assert len(bb.load_canary_terms()) > len(bb.CANARY_TERMS)
+
+
+def test_no_unbundled_operator_command_is_priced_in_the_public_bundle():
+    """A token-costs row for a command absent from PLUGIN_SKILLS advertises a
+    workflow the plugin user cannot run.
+
+    This happened: /parallax-house-view-attribution was added to
+    token-costs.md and shipped into the public bundle priced at "~7 tokens,
+    the cheapest house-view workflow", while no such command exists there. Its
+    five siblings were stripped by name; the new one was simply not on the list.
+
+    The staleness check cannot catch it — a wholly-new, self-consistent row
+    regenerates identically. This asserts the property directly: every command
+    priced in the BUNDLE's token-costs must be a skill the bundle ships.
+    """
+    import re
+    bundle = Path(__file__).resolve().parents[3] / "plugin/skills/_parallax/token-costs.md"
+    if not bundle.exists():
+        import pytest
+        pytest.skip("plugin bundle not built in this checkout")
+    priced = set(re.findall(r"^\|\s*`(/parallax-[a-z0-9-]+)`", bundle.read_text(), re.M))
+    shipped = {f"/{name}" for name in bb.PLUGIN_SKILLS}
+    orphans = sorted(priced - shipped)
+    assert not orphans, (
+        f"token-costs in the PUBLIC bundle prices commands the bundle does not "
+        f"ship: {orphans}. Add them to `excluded` in transform_token_costs.")
