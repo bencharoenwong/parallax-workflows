@@ -42,12 +42,27 @@ SCANNER="skills/_parallax/scripts/scan_commit_messages.py"
 HOOKS_DIR="$(git rev-parse --git-path hooks 2>/dev/null)"
 [ -n "$HOOKS_DIR" ] || { echo "FATAL: cannot resolve hooks dir" >&2; exit 2; }
 case "$HOOKS_DIR" in /*) ;; *) HOOKS_DIR="$ROOT/$HOOKS_DIR" ;; esac
+
+# Resolve symlinks before the inside-the-repo test below. That test is a string
+# prefix match, so a SYMLINKED hooks directory — .git/hooks pointing elsewhere —
+# string-matches "$ROOT/*" and sails past the outside-repo guard, and the write
+# then lands through the link. Needs the symlink to be planted already, so it is
+# defence in depth rather than a live hole, but a prefix test on an unresolved
+# path is not the check it looks like.
+_resolve() {
+    if command -v realpath >/dev/null 2>&1; then realpath "$1" 2>/dev/null || echo "$1"
+    elif command -v python3 >/dev/null 2>&1; then
+        python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$1"
+    else echo "$1"; fi
+}
+HOOKS_DIR="$(_resolve "$HOOKS_DIR")"
+ROOT_REAL="$(_resolve "$ROOT")"
 HOOK="$HOOKS_DIR/pre-push"
 
 # A hooksPath outside this repo is shared by every clone that points at it.
 # Editing it is a global change wearing the costume of a per-repo install.
 case "$HOOKS_DIR" in
-    "$ROOT"/*) ;;
+    "$ROOT_REAL"/*) ;;
     *)
         printf '\n\033[33mWARNING: hooks dir is OUTSIDE this repo:\033[0m %s\n' "$HOOKS_DIR" >&2
         printf 'It is shared by every clone configured to use it, so this is a GLOBAL edit.\n' >&2

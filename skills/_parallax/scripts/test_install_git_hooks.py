@@ -280,3 +280,27 @@ def test_stdin_is_passed_through_to_the_rest_of_the_hook(clone: Path) -> None:
     assert out.read_text().strip() == "2", (
         f"downstream saw {out.read_text().strip()} ref lines, expected 2 — "
         "the layer drained stdin")
+
+
+def test_a_symlinked_hooks_directory_does_not_bypass_the_outside_repo_guard(
+        clone: Path, tmp_path: Path) -> None:
+    """The guard was a string-prefix test on an UNRESOLVED path, so
+    `.git/hooks` symlinked elsewhere still matched "$ROOT/*" and the write
+    landed through the link. Resolving both sides first closes it.
+
+    Needs the symlink planted beforehand, so this is defence in depth rather
+    than a live hole — but a prefix test on an unresolved path is not the check
+    it appears to be."""
+    outside = tmp_path / "elsewhere-hooks"
+    outside.mkdir()
+    real_hooks = clone / ".git/hooks"
+    if real_hooks.exists():
+        shutil.rmtree(real_hooks)
+    real_hooks.symlink_to(outside)
+
+    r = _install(clone)
+    assert r.returncode != 0, "wrote through a symlinked hooks directory"
+    assert not (outside / "pre-push").exists()
+
+    assert _install(clone, env={"PARALLAX_HOOKS_FORCE": "1"}).returncode == 0
+    assert (outside / "pre-push").exists()
