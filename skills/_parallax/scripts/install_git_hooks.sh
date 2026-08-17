@@ -2,15 +2,30 @@
 # Install the blocking commit-message scan into this clone's pre-push hook.
 #
 # WHY THIS EXISTS. `scan_commit_messages.py` guards a PUBLIC repo whose commit
-# messages are public with it. It was documented as a step to run by hand, and
-# on 2026-08-17 that failed: a push ran in a shell line after a FAILED scan
-# rather than gated on it, and a flagged message reached the remote before it
-# was force-pushed over. A pushed message cannot be unpublished, so the check
-# belongs in a hook, not in a habit.
+# messages are public with it. Running it by hand failed once: a push ran in a
+# shell line after a FAILED scan rather than gated on its exit code. A pushed
+# message cannot be unpublished, so the check belongs in a hook.
 #
 # CI cannot do this job: a shallow checkout has no usable base-ref range.
 #
-# Idempotent. Safe to re-run. Backs up any hook it modifies.
+# DESIGN: THE LAYER IS PREPENDED, NOT APPENDED.
+# The first version searched for the hook's last `exit ` and inserted above it.
+# That was wrong in five separate ways, each of which printed "installed" while
+# a real push went through unscanned:
+#   - an `exit` indented inside an `if` body matched, so the layer landed in a
+#     branch that does not always run
+#   - a hook ending in a bare `exit` (no trailing space) did not match at all
+#   - a hook ending in `exec ...` never reaches anything appended after it
+#   - appending discarded the original hook's exit status, silently disabling
+#     a gate the user already had
+#   - a `core.hooksPath` of `~/hooks` was not tilde-expanded, so the layer was
+#     written to a literal `~` directory inside the work tree
+#
+# Prepending immediately after the shebang removes that whole class: the layer
+# is the first executable statement, so it is reachable by construction, and
+# the original hook body runs after it with its exit status intact.
+#
+# Idempotent. Refuses rather than guesses. Backs up any hook it modifies.
 
 set -uo pipefail
 
@@ -21,22 +36,66 @@ cd "$ROOT" || exit 2
 SCANNER="skills/_parallax/scripts/scan_commit_messages.py"
 [ -f "$SCANNER" ] || { echo "FATAL: $SCANNER not found — wrong repo?" >&2; exit 2; }
 
-# Respect a configured hooksPath; fall back to the default.
-HOOKS_DIR="$(git config --get core.hooksPath || true)"
-[ -n "$HOOKS_DIR" ] || HOOKS_DIR="$(git rev-parse --git-dir)/hooks"
+# `git rev-parse --git-path hooks` resolves core.hooksPath correctly, including
+# a leading `~` and a relative path. `git config --get core.hooksPath` does not
+# expand `~`, which is how the first version wrote into a literal `~` directory.
+HOOKS_DIR="$(git rev-parse --git-path hooks 2>/dev/null)"
+[ -n "$HOOKS_DIR" ] || { echo "FATAL: cannot resolve hooks dir" >&2; exit 2; }
 case "$HOOKS_DIR" in /*) ;; *) HOOKS_DIR="$ROOT/$HOOKS_DIR" ;; esac
-mkdir -p "$HOOKS_DIR" || exit 2
 HOOK="$HOOKS_DIR/pre-push"
+
+# A hooksPath outside this repo is shared by every clone that points at it.
+# Editing it is a global change wearing the costume of a per-repo install.
+case "$HOOKS_DIR" in
+    "$ROOT"/*) ;;
+    *)
+        printf '\n\033[33mWARNING: hooks dir is OUTSIDE this repo:\033[0m %s\n' "$HOOKS_DIR" >&2
+        printf 'It is shared by every clone configured to use it, so this is a GLOBAL edit.\n' >&2
+        printf 'Re-run with PARALLAX_HOOKS_FORCE=1 if that is what you intend.\n\n' >&2
+        [ "${PARALLAX_HOOKS_FORCE:-0}" = "1" ] || exit 3
+        ;;
+esac
 
 MARKER="parallax:commit-message-scan"
 
-if [ -f "$HOOK" ] && grep -q "$MARKER" "$HOOK" 2>/dev/null; then
+# Match the marker only as an installed layer, never as a passing mention in a
+# comment someone wrote. The first version's bare grep let a TODO note make the
+# installer report "already installed" while nothing was installed — which also
+# blocked it from ever repairing a broken install.
+already_installed() {
+    [ -f "$1" ] && grep -q "^# --- ${MARKER} (BLOCKING)" "$1" 2>/dev/null
+}
+
+if already_installed "$HOOK"; then
     echo "  ✓ already installed in $HOOK"
     exit 0
 fi
 
+if [ -L "$HOOK" ]; then
+    printf '\033[31mFATAL:\033[0m %s is a symlink.\n' "$HOOK" >&2
+    printf 'Editing it would either detach this clone from its managed source or mutate\n' >&2
+    printf 'the shared target. Install the layer in the source hook instead.\n' >&2
+    exit 3
+fi
+
+if [ -f "$HOOK" ]; then
+    FIRST_LINE="$(head -1 "$HOOK")"
+    case "$FIRST_LINE" in
+        '#!'*sh*) ;;   # sh, bash, zsh, dash
+        *)
+            printf '\033[31mFATAL:\033[0m %s is not a shell hook (first line: %s)\n' "$HOOK" "$FIRST_LINE" >&2
+            printf 'Appending shell into it would corrupt it. Add the layer by hand.\n' >&2
+            exit 3
+            ;;
+    esac
+fi
+
 read -r -d '' LAYER <<'LAYER_EOF' || true
 # --- parallax:commit-message-scan (BLOCKING) ---------------------------------
+# Prepended deliberately: first executable statement, so it cannot be stranded
+# behind an `exit` or an `exec` further down. The original hook body runs after
+# this and keeps its own exit status.
+#
 # Blocks on BOTH exit codes: 1 = a hit, 2 = the outgoing range could not be
 # determined. 2 must block: the scanner fails closed rather than reporting a
 # clean scan of nothing. Guarded on the script's presence so this hook stays
@@ -45,44 +104,53 @@ _PARALLAX_SCAN="$(git rev-parse --show-toplevel 2>/dev/null)/skills/_parallax/sc
 if [ -f "$_PARALLAX_SCAN" ]; then
     python3 "$_PARALLAX_SCAN"
     _PARALLAX_SCAN_RC=$?
-    if [ $_PARALLAX_SCAN_RC -ne 0 ]; then
+    if [ "$_PARALLAX_SCAN_RC" -ne 0 ]; then
         printf '\n\033[31m[pre-push] BLOCKED: commit-message scan failed (exit %s).\033[0m\n' "$_PARALLAX_SCAN_RC" >&2
         printf '           Rewrite the message locally before pushing; a pushed message\n' >&2
         printf '           cannot be unpublished. See CLAUDE.md, "Commit messages are public too".\n' >&2
-        exit $_PARALLAX_SCAN_RC
+        exit "$_PARALLAX_SCAN_RC"
     fi
 fi
 # --- end parallax:commit-message-scan ----------------------------------------
 LAYER_EOF
 
+mkdir -p "$HOOKS_DIR" || exit 2
+
 if [ -f "$HOOK" ]; then
-    BACKUP="$HOOK.bak.$(git rev-parse --short HEAD 2>/dev/null || echo manual)"
+    BACKUP="$HOOK.bak.$(date +%Y%m%d%H%M%S)"
     cp "$HOOK" "$BACKUP" || exit 2
     echo "  backed up existing hook -> $BACKUP"
-    # Insert BEFORE the last top-level `exit`, not at the end of the file.
-    # Appending looks correct and is not: a hook ending in `exit 0` — which the
-    # chained hook in this repo does — leaves the appended layer after the exit,
-    # so it is installed, reported as installed, and never runs. That is the
-    # same shape as a guard that returns healthy because it never executed.
-    #
-    # Insertion point is the last line matching a bare top-level exit. If there
-    # is none, appending is safe because nothing terminates before it.
-    LAST_EXIT="$(grep -n '^[[:space:]]*exit ' "$HOOK" | tail -1 | cut -d: -f1)"
-    if [ -n "$LAST_EXIT" ]; then
-        HEAD_N=$((LAST_EXIT - 1))
-        {
-            head -n "$HEAD_N" "$HOOK"
-            printf '\n%s\n\n' "$LAYER"
-            tail -n +"$LAST_EXIT" "$HOOK"
-        } > "$HOOK.new" && mv "$HOOK.new" "$HOOK" || exit 2
-    else
-        printf '\n%s\n' "$LAYER" >> "$HOOK"
-    fi
+    SHEBANG="$(head -1 "$HOOK")"
+    {
+        printf '%s\n\n' "$SHEBANG"
+        printf '%s\n\n' "$LAYER"
+        tail -n +2 "$HOOK"
+    } > "$HOOK.new" || exit 2
+    mv "$HOOK.new" "$HOOK" || exit 2
 else
-    printf '#!/usr/bin/env bash\nset -uo pipefail\n\n%s\n\nexit 0\n' "$LAYER" > "$HOOK"
+    printf '#!/usr/bin/env bash\n\n%s\n\nexit 0\n' "$LAYER" > "$HOOK" || exit 2
 fi
 
 chmod +x "$HOOK" || exit 2
-bash -n "$HOOK" || { echo "FATAL: hook has a syntax error; restore from the backup" >&2; exit 2; }
+
+if ! bash -n "$HOOK" 2>/dev/null; then
+    printf '\033[31mFATAL:\033[0m installed hook has a syntax error; restoring backup.\n' >&2
+    [ -n "${BACKUP:-}" ] && cp "$BACKUP" "$HOOK"
+    exit 2
+fi
+
+# Reachability, not just syntax. `bash -n` parses; it does not prove the layer
+# executes. Assert the marker precedes any top-level `exit`/`exec`, which is
+# what "installed" has to mean — the first version passed `bash -n` while the
+# guard sat after the hook's terminal exit and never ran.
+MARK_LINE="$(grep -n "^# --- ${MARKER} (BLOCKING)" "$HOOK" | head -1 | cut -d: -f1)"
+TERM_LINE="$(grep -nE '^[[:space:]]*(exit|exec)([[:space:]]|$)' "$HOOK" | head -1 | cut -d: -f1)"
+if [ -n "$MARK_LINE" ] && [ -n "$TERM_LINE" ] && [ "$MARK_LINE" -gt "$TERM_LINE" ]; then
+    printf '\033[31mFATAL:\033[0m layer is unreachable (line %s, after a terminator at %s); restoring backup.\n' \
+        "$MARK_LINE" "$TERM_LINE" >&2
+    [ -n "${BACKUP:-}" ] && cp "$BACKUP" "$HOOK"
+    exit 2
+fi
+
 echo "  ✓ installed into $HOOK"
 echo "  verify with: git push --dry-run <remote> <branch>"
