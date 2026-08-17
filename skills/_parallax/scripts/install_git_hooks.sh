@@ -102,8 +102,31 @@ read -r -d '' LAYER <<'LAYER_EOF' || true
 # valid in a clone that does not ship it.
 _PARALLAX_SCAN="$(git rev-parse --show-toplevel 2>/dev/null)/skills/_parallax/scripts/scan_commit_messages.py"
 if [ -f "$_PARALLAX_SCAN" ]; then
-    python3 "$_PARALLAX_SCAN"
-    _PARALLAX_SCAN_RC=$?
+    # Scan what is ACTUALLY being pushed. git supplies
+    # "<local_ref> <local_sha> <remote_ref> <remote_sha>" per ref on stdin.
+    # Without this the scanner defaults to origin/main..HEAD, which is the
+    # wrong range whenever the pushed branch is not the checked-out one:
+    # `git push origin feature` from `main` scanned an empty range, reported
+    # clean, and published unscanned commits.
+    _PARALLAX_SCAN_RC=0
+    _PARALLAX_SAW_REF=0
+    while read -r _l_ref _l_sha _r_ref _r_sha; do
+        [ -z "${_l_sha:-}" ] && continue
+        case "$_l_sha" in *[!0]*) ;; *) continue ;; esac   # all-zero = deletion
+        _PARALLAX_SAW_REF=1
+        case "$_r_sha" in
+            ""|*[!0-9a-f]*|0000000000000000000000000000000000000000)
+                _PARALLAX_RANGE="$_l_sha" ;;               # new branch: all of it
+            *) _PARALLAX_RANGE="$_r_sha..$_l_sha" ;;
+        esac
+        python3 "$_PARALLAX_SCAN" "$_PARALLAX_RANGE" || _PARALLAX_SCAN_RC=$?
+    done
+    # No ref info (invoked by hand, or a deletion-only push): fall back to the
+    # scanner's own default rather than skipping, so it never passes vacuously.
+    if [ "$_PARALLAX_SAW_REF" -eq 0 ]; then
+        python3 "$_PARALLAX_SCAN"
+        _PARALLAX_SCAN_RC=$?
+    fi
     if [ "$_PARALLAX_SCAN_RC" -ne 0 ]; then
         printf '\n\033[31m[pre-push] BLOCKED: commit-message scan failed (exit %s).\033[0m\n' "$_PARALLAX_SCAN_RC" >&2
         printf '           Rewrite the message locally before pushing; a pushed message\n' >&2

@@ -206,3 +206,43 @@ def test_a_clean_scanner_does_not_block(clone: Path) -> None:
     _write_hook(clone, "#!/usr/bin/env bash\nexit 0\n")
     assert _install(clone).returncode == 0
     assert not _hook_blocks(clone), "blocked a clean scan"
+
+
+def test_the_layer_scans_the_pushed_ref_not_the_checked_out_branch(clone: Path) -> None:
+    """The layer originally ran the scanner with no arguments, so it scanned
+    `origin/main..HEAD`. Pushing a branch you are not on therefore scanned the
+    wrong range: `git push origin feature` from `main` scanned nothing, reported
+    clean, and published unscanned commits. The hook now passes the range git
+    reports on stdin.
+
+    Driven with a stub scanner that fails only when given an explicit range, so
+    a hook that ignores stdin passes and a hook that honours it blocks.
+    """
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text(
+        "import sys\n"
+        "sys.exit(1 if len(sys.argv) > 1 else 0)\n"
+    )
+    _write_hook(clone, "#!/usr/bin/env bash\nexit 0\n")
+    assert _install(clone).returncode == 0
+
+    hook = clone / ".git/hooks/pre-push"
+    ref_line = "refs/heads/feature aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa " \
+               "refs/heads/feature bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"
+    r = subprocess.run(["bash", str(hook), "origin", "http://example.invalid"],
+                       cwd=clone, capture_output=True, text=True, input=ref_line)
+    assert r.returncode != 0, "hook ignored the pushed ref and scanned the default range"
+
+
+def test_a_deletion_push_does_not_scan_a_bogus_range(clone: Path) -> None:
+    """An all-zero local sha is a branch deletion. There are no commits to
+    scan, and treating the zero sha as a rev would error."""
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text(
+        "import sys\nsys.exit(0)\n")
+    _write_hook(clone, "#!/usr/bin/env bash\nexit 0\n")
+    assert _install(clone).returncode == 0
+    hook = clone / ".git/hooks/pre-push"
+    ref_line = ("(delete) 0000000000000000000000000000000000000000 "
+                "refs/heads/gone bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
+    r = subprocess.run(["bash", str(hook), "origin", "http://example.invalid"],
+                       cwd=clone, capture_output=True, text=True, input=ref_line)
+    assert r.returncode == 0, r.stderr
