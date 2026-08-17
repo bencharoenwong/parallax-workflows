@@ -37,6 +37,8 @@ description: "Pressure-tests a written investment thesis: decomposes it into fal
 /parallax-stress-test-thesis "Rotate into crypto-adjacent equities now that the halving cycle plus ETF inflows are re-rating the space" client_profile={"age":27,"horizon":"20+ years","risk_capacity":"high","income_reliance":"accumulating","position_size_pct_networth":0.05,"risk_tolerance":"high"}
 /parallax-stress-test-thesis "…thesis…" --house-view-audit        # opt in to logging house-view consumption (off by default)
 /parallax-stress-test-thesis book.md        # a file (or several inline theses) → per-thesis reports + Phase 6 cross-thesis concentration roll-up
+/parallax-stress-test-thesis "…thesis…" --json                    # structured output for embedding (no prose required)
+/parallax-stress-test-thesis "…thesis…" compare=<prior-run JSON>  # decay-compare: what changed vs. last run (reads today live)
 ```
 
 The input is either an inline argument or a path/URL to a memo (extracted locally — the source never
@@ -62,6 +64,14 @@ switches**: neither may skip Phase 0, report a status without a live read, or dr
 - **Detail toggle** — after the report, offer `expand` (full per-assumption reasoning) / `collapse`
   (TL;DR + fragile points). Re-renders from the same records; never re-runs tools or re-derives a
   status. Collapsing never hides a Contradicted/Unconfirmed status or the disclaimer.
+- **Structured (JSON) output** — on `--json` / "machine-readable", emit a fenced `json` block
+  mirroring the records (assumption map, statuses, verdict) for embedding. **No `action`/`rating`/`weight`
+  key ever**; carries `disclaimer_variant` + `not_a_recommendation: true`; no new derivation; still
+  read-only (rendered in-chat, writes nothing). → `references/output-modes.md` §7
+- **Decay-compare** — "what changed since last time?": the caller pastes a prior run's JSON (or names
+  the prior statuses) as a **session input** — the skill re-reads today's data live, diffs Assumption
+  Strength / status flips into a **What Changed** section, and writes nothing. This is the
+  no-persistence monitoring loop (state lives with the caller). → `references/output-modes.md` §8
 
 ## Where artifacts live
 
@@ -177,6 +187,7 @@ request, and the base skill always exposes the full layered view.
 - **Suitability-Relevant Flags** *(only if profile supplied)* — risk observations only — **never a call and never a suitability determination**; each flag is phrased descriptively and **must** close with the qualified-professional reminder (mandatory, not optional). The client-conditioning pass is heuristic reasoning over a partial profile and is **pending compliance sign-off before production reliance** — see `COMPLIANCE.md`. Where it makes a flag concrete, you may add **illustrative arithmetic** (e.g., a drawdown as a share of net worth given the position size) explicitly marked *illustrative, not a prediction* — never a forecast of magnitude or likelihood. **If none fired, render a one-line "No suitability flags fired" rather than omitting the section**, so the reader can see the check ran and nothing escalated (a legitimate, common outcome for a long-horizon/accumulating holder)
 - **Client-Conditioned Verdict** *(only if profile supplied)* — what this means for this investor specifically
 - **What to Watch** — open with a single **"This works only if …"** line: the minimal condition set that would validate the thesis, stated plainly (the falsification, put positively) so a reader has one crisp thing to track. Then 2–3 signals that would confirm or invalidate it; if a profile was supplied, note any that are specifically holder-relevant
+- **What Changed** *(decay-compare only — a prior-run JSON/statuses were supplied)* — per assumption `prior_status → current_status`, break conditions newly fired/cleared, and the net Assumption Strength move; reads today's data live, reports the drift, recommends nothing. → `references/output-modes.md` §8
 - **Confidence & Caveats** (extraction quality, Unconfirmed/out-of-scope assumptions, data staleness) — **and always a standing note that the 🔴/🟡/🟢 Assumption-Strength and Bias & Conviction lights are heuristic reads of argument quality, not outcome-calibrated scores** (a decision aid, not a screen)
 - **Detail toggle** *(footer line)* — offer `expand` (full per-assumption reasoning at `deep` verbosity) / `collapse` (TL;DR + fragile points only). Re-renders from the same records — never re-runs tools or re-derives statuses. Collapsing never hides a Contradicted/Unconfirmed status or the disclaimer
 

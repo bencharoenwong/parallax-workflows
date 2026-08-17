@@ -66,6 +66,7 @@ _SECTION_LABELS = [
     "Suitability-Relevant Flags",        # profile-only
     "Client-Conditioned Verdict",        # profile-only
     "What to Watch",
+    "What Changed",                      # decay-compare only (prior-run supplied)
     "Confidence & Caveats",
     "Book Overview",                     # book-mode only (>1 thesis)
     "Shared / Concentrated Assumptions", # book-mode only
@@ -140,19 +141,41 @@ def _json_keys(obj) -> set[str]:
 
 
 def _c_json_no_rec(t, spec) -> Check:
-    """No recommendation-shaped keys in fenced JSON blocks. Prose recommendations
-    remain verdict_no_rec's job; invalid JSON fences are skipped."""
+    """No recommendation-shaped key in ANY fenced JSON block, and — when the block
+    is this skill's own structured payload — an explicit not_a_recommendation flag.
+
+    Merged from two independently-developed checks that gave OPPOSITE verdicts on
+    the same input. The earlier schema-scoped variant skipped any block whose
+    `schema` key did not start with "stress-test-thesis", which is a fail-open: a
+    payload emitted with a missing or misspelled schema key was not judged at all
+    and the check returned green. This skill emits exactly one JSON block — its
+    own payload — and never quotes third-party JSON, so there is no legitimate
+    fence for that exemption to protect. Scope is therefore every fence, and the
+    forbidden-key set is the union of both variants.
+
+    Prose recommendations remain verdict_no_rec's job; unparseable fences are
+    skipped, since a fence that is not JSON carries no keys to judge.
+    """
     bad = set()
+    flag_missing = False
     for m in _JSON_FENCE_RE.finditer(t.final_prose or ""):
         block = m.group(1).strip()
         if not block.startswith(("{", "[")):
             continue
-        try:
-            parsed = json.loads(block)
-        except json.JSONDecodeError:
+        parsed = _loads_lenient(block)
+        if parsed is None:
             continue
-        bad.update(_json_keys(parsed) & _JSON_REC_KEYS)
-    return Check("json_no_rec", not bad, f"rec_keys_in_json={sorted(bad)}")
+        bad.update({k for k in _walk_keys(parsed)
+                    if k.lower() in _JSON_REC_KEYS | _FORBIDDEN_JSON_KEYS})
+        if (isinstance(parsed, dict)
+                and str(parsed.get("schema", "")).startswith("stress-test-thesis")
+                and parsed.get("not_a_recommendation") is not True):
+            flag_missing = True
+    if bad:
+        return Check("json_no_rec", False, f"rec_keys_in_json={sorted(bad)}")
+    if flag_missing:
+        return Check("json_no_rec", False, "not_a_recommendation flag missing/false")
+    return Check("json_no_rec", True, "no rec-shaped keys in fenced JSON")
 
 
 def _c_assumption_map_layered(t, spec) -> Check:
@@ -231,6 +254,49 @@ def _c_break_condition_fields(t, spec) -> Check:
         if mag in _EMPTY_CELLS or tim in _EMPTY_CELLS:
             bad.append(c[0] or "?")
     return Check("break_condition_fields", not bad, f"rows_missing_magnitude_or_time={bad}")
+
+
+# Structured (JSON) output mode carries the same no-recommendation invariant as
+# the prose verdict, but on a channel a downstream tool consumes directly — so a
+# signal-shaped key leaking in is worse here than in prose. This guards it: any
+# fenced json block that is this skill's payload must (a) contain none of the
+# signal keys anywhere in the tree, and (b) carry not_a_recommendation == true.
+# Vacuously passes when no such block is present (the common prose-only case).
+import json as _json  # noqa: E402
+
+_JSON_BLOCK_RE = re.compile(r"```json\s*(\{.*?\})\s*```", re.S | re.I)
+_FORBIDDEN_JSON_KEYS = {
+    "action", "rating", "recommendation", "buy_sell_hold", "target_price",
+    "price_target", "weight", "allocation", "position_size", "conviction_score",
+}
+
+
+_TRAILING_COMMA_RE = re.compile(r",(\s*[}\]])")
+
+
+def _walk_keys(obj):
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            yield k
+            yield from _walk_keys(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            yield from _walk_keys(v)
+
+
+def _loads_lenient(raw: str):
+    """Parse a JSON block, tolerating a trailing comma before a closing brace/bracket.
+    A payload that intends our schema but carries that common slop must still be graded,
+    not silently skipped as unparseable (which would let a missing flag pass vacuously)."""
+    try:
+        return _json.loads(raw)
+    except ValueError:
+        try:
+            return _json.loads(_TRAILING_COMMA_RE.sub(r"\1", raw))
+        except ValueError:
+            return None
+
+
 
 
 _READ_TIME_RE = re.compile(r"~\s*\d+\s*min\s+read", re.I)
