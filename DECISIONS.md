@@ -4,7 +4,7 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
-## 2026-08-19: Enforce the exposure cap on the model leg after coverage renormalization, and never on the realized leg
+## 2026-08-18: Enforce the exposure cap on the model leg after coverage renormalization, and never on the realized leg
 
 **Why.** The previous round made `weights_for_groups` honour the 2× cap on the dict it returns. That is not the quantity the report is built from. `active_return_bps` drops symbols with no return data and renormalizes both legs over the covered set, which multiplies every surviving ratio by `nw_total / w_total`. Dropping an overweighted name pushes that factor above 1 and carries a survivor past the cap. Roughly 38–40% of random 10–25 holding portfolios breached at realistic 5–20% drop rates, worst observed 3.09×. So the cap held on an intermediate value and failed on the reported one — a `loader.md` contract that reads "cap final exposure at 2× neutral" was true of a dict nobody consumes and false of `model_active_bps`.
 
