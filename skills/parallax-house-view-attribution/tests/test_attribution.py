@@ -528,7 +528,8 @@ def test_the_cap_holds_across_seeded_random_portfolios():
     """One counterexample cannot show the bound holds everywhere.
 
     Convergence of the old loop was geometric, not finite: the worst case over
-    20,000 random portfolios still needed 50 redistribution passes to reach the
+    20,000 random portfolios still needed 70 redistribution passes (this
+    module's seed; 124 under seed 4242) to reach the
     cap. Any fixed pass count therefore has a counterexample. This test asserts
     the bound itself over a seeded sweep, so it fails for a loop that merely
     converges slowly as well as for one that oscillates.

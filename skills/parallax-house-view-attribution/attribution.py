@@ -263,7 +263,11 @@ def weights_for_groups(
     this module builds): the weights sum to 1.0, and every holding with a
     positive neutral weight satisfies ``w[s] <= EXPOSURE_CAP * neutral[s]``.
     That is the loader.md contract stated exactly, and it is what the tests
-    assert — no "usually", no residual overshoot, no dependence on a pass count.
+    assert — no "usually", no dependence on a pass count. The bound is exact up
+    to the absolute ``1e-12`` slack in the over-cap test below, which in ratio
+    terms is ``1e-12 / neutral[s]``; that is ~4e-10 at the smallest neutral
+    weight in the pinned fixtures, and only matters if neutral weights many
+    orders of magnitude smaller are ever fed in.
 
     loader.md specifies no downside floor, so none is invented here; -2 tilts
     compound unbounded toward zero exactly as the table describes.
@@ -294,9 +298,13 @@ def weights_for_groups(
     # cap, which the strict `>` test rejects — so they fell back into the free
     # set and redistribution lifted them over again. The result oscillated and
     # was non-monotone in the pass count: one reachable 5-holding view measured
-    # 2.925x at one pass, 2.413x at two, 2.453x at three, and needed 200 passes
-    # to reach 2.000x. Convergence was geometric, so NO fixed pass count bounds
-    # it; the worst of 20,000 random portfolios needed 50 passes.
+    # 2.925x at one pass, 2.413x at two, 2.453x at three, and did not reach
+    # 2.000x (to six decimals) until pass 28 — and never lands exactly on the
+    # cap at all, still reading 2.000000000005 at pass 200. Convergence was geometric, so NO fixed pass count bounds
+    # it: over 20,000 random portfolios the worst needed 70 passes under the
+    # suite's own seed (20260818) and 124 under seed 4242. The figure is
+    # seed-dependent, so treat it as "tens of passes, unbounded", not a
+    # constant — that is the whole point.
     #
     # With the capped set persistent the loop is finite, not asymptotic: each
     # pass that does anything adds at least one name to the capped set, so it
