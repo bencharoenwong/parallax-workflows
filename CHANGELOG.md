@@ -4,6 +4,15 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-08-19
+
+### Fixed
+- **The 2× exposure cap now survives coverage renormalization on the model leg** — `weights_for_groups` honoured the cap on the dict it returned, but `active_return_bps` drops symbols with no return data and renormalizes both legs over the covered set, rescaling every surviving ratio by `nw_total / w_total`. When the dropped name was overweighted that factor exceeds 1 and carried a survivor past the cap, so the figure the skill *reported* breached while the dict it came from did not. Measured: neutral `{A .1, B .1, C .8}` with a +2 sector and +2 region on A and B returns both at exactly 2.00×; drop A and B's effective ratio was 2.25×. Across 20,000 random 10–25 holding portfolios roughly 38–40% of runs breached at 5–20% drop rates, worst observed 3.09×. The excess inflated `model_active_bps` and landed in `selection_residual_bps` with the opposite sign — the exact distortion the cap exists to prevent, arriving through the coverage path rather than the multiplier product. The capping loop is now a reusable `_apply_exposure_cap` helper, re-applied after renormalization on the **model** legs only (`shapley_tilt_attribution`'s value function and the `model_active_bps` call site). After the fix: 0 breaches over 20,000 portfolios at a 20% drop rate, worst ratio exactly 2.000000000.
+- **The realized leg is explicitly never capped.** `tilted_actual` is reconstructed from the chain and is a measured fact; clamping it would overwrite what the book actually held and silently move `selection_residual_bps`, which is defined as actual minus model. `enforce_cap` defaults to False for that reason, and a regression test pins a book genuinely 3× neutral in one name reporting 3×.
+
+### Added
+- **`skills/parallax-house-view-attribution/` now runs in GitHub Actions.** It was absent from every root in `.github/workflows/evals.yml`, so the exposure-cap fix and its regression suite landed with CI never executing one of those tests — the safety argument rested entirely on a suite only the local pre-push gate ran. `run-gate-tests.sh` auto-discovers roots and did cover it; `evals.yml` does not auto-discover, and the new step's comment says so, since the next skill with tests will hit the same gap.
+
 ## 2026-08-18
 
 ### Fixed

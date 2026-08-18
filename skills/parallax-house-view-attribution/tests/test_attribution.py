@@ -644,3 +644,123 @@ def test_the_redistribution_bound_scales_with_the_portfolio_not_a_constant():
     assert abs(sum(w.values()) - 1.0) < 1e-9, sum(w.values())
     worst = max(w[s] / neutral[s] for s in neutral)
     assert worst <= attribution.EXPOSURE_CAP + 1e-9, worst
+
+
+# ---------------------------------------------------------------------------
+# The cap survives coverage renormalization -- on the model leg only
+# ---------------------------------------------------------------------------
+
+
+def test_the_cap_holds_after_a_dropped_holding_renormalizes_the_model_leg():
+    """`weights_for_groups` honouring the cap is not enough on its own.
+
+    `active_return_bps` drops symbols with no return data and renormalizes both
+    legs over the covered set, which rescales every surviving ratio by
+    `nw_total / w_total`. When the dropped name was overweighted that factor
+    exceeds 1 and carries a survivor above the cap -- so the number the skill
+    REPORTS breached 2x while the dict it was built from did not.
+
+    Neutral {A .1, B .1, C .8}, +2 sector and +2 region on A and B: the returned
+    weights put A and B at exactly 2.00x. Drop A for missing prices and B's
+    effective ratio was 2.25x before this fix.
+    """
+    neutral = {"A": 0.1, "B": 0.1, "C": 0.8}
+    mults = {"sectors": {"A": 1.5, "B": 1.5, "C": 0.5},
+             "regions": {"A": 1.5, "B": 1.5, "C": 0.5}}
+    w = attribution.weights_for_groups(neutral, mults, frozenset(mults))
+    assert max(w[s] / neutral[s] for s in neutral) <= attribution.EXPOSURE_CAP + 1e-9
+
+    covered = ["B", "C"]                      # A dropped: no return data
+    nt = sum(neutral[s] for s in covered)
+    wt = sum(w[s] for s in covered)
+    nw_cov = {s: neutral[s] / nt for s in covered}
+    w_cov = {s: w[s] / wt for s in covered}
+    assert max(w_cov[s] / nw_cov[s] for s in covered) > attribution.EXPOSURE_CAP + 1e-9, \
+        "premise gone: renormalization no longer breaches, so this test proves nothing"
+
+    capped = attribution._apply_exposure_cap(dict(w_cov), nw_cov)
+    assert abs(sum(capped.values()) - 1.0) < 1e-9, sum(capped.values())
+    worst = max(capped[s] / nw_cov[s] for s in covered)
+    assert worst <= attribution.EXPOSURE_CAP + 1e-9, worst
+
+
+def test_the_realized_leg_is_never_capped():
+    """The cap constrains what the MODEL may imply, never what the book held.
+
+    `tilted_actual` is a measured fact reconstructed from the chain. Clamping it
+    would overwrite that fact and silently move `selection_residual_bps`, which
+    is defined as actual minus model. A book genuinely 3x neutral in one name
+    must report 3x.
+    """
+    neutral = {"A": 0.25, "B": 0.25, "C": 0.5}
+    actual = {"A": 0.75, "B": 0.125, "C": 0.125}      # A at 3x neutral
+    returns = {"A": 0.10, "B": 0.0, "C": 0.0}
+
+    uncapped = attribution.active_return_bps(actual, neutral, returns)
+    capped = attribution.active_return_bps(
+        actual, neutral, returns, enforce_cap=True)
+    assert uncapped != capped, "enforce_cap made no difference; the test is vacuous"
+
+    # the default (realized) path must report the full 3x exposure
+    expected = (actual["A"] - neutral["A"]) * returns["A"] * 10_000.0
+    assert uncapped == pytest.approx(expected), uncapped
+
+
+def test_model_and_shapley_legs_agree_after_capping():
+    """Shapley efficiency must survive the changed value function.
+
+    Efficiency holds for any value function, but both legs must use the SAME
+    one -- `shapley_tilt_attribution` and the `model_active_bps` call site both
+    pass enforce_cap=True. If one drifts, the per-tilt contributions stop
+    summing to the total they are reported against.
+    """
+    neutral = {"A": 0.1, "B": 0.1, "C": 0.8}
+    mults = {g: {"A": 1.5, "B": 1.5, "C": 0.5} for g in attribution.GROUPS}
+    returns = {"B": 0.05, "C": -0.02}                  # A dropped
+    per = attribution.shapley_tilt_attribution(neutral, mults, returns)
+    model_w = attribution.weights_for_groups(
+        neutral, mults, frozenset(attribution.GROUPS))
+    model_bps = attribution.active_return_bps(
+        model_w, neutral, returns, enforce_cap=True)
+    total = sum(p["realized_contribution_bps"] for p in per)
+    assert total == pytest.approx(model_bps, abs=1e-9), (total, model_bps)
+
+
+def test_attribute_segment_wires_the_cap_into_model_active_bps():
+    """Test the WIRING, not the helper.
+
+    `test_model_and_shapley_legs_agree_after_capping` passes enforce_cap=True
+    itself, so it stays green even if the real call site inside
+    `attribute_segment` drops the flag. Mutation proved that: removing
+    `enforce_cap=True` from the `model_bps` line left all 35 tests passing.
+    This test drives the public entry point instead.
+
+    Inline scores 1 / 2 / 7 make neutral unequal (equal-weight neutral cannot
+    reach a breach with three holdings). Dropping the overweighted BBB.Y
+    renormalizes the covered set to a 2.667x effective ratio before the cap.
+    """
+    view = _view(sector_tilts={"information_technology": -2, "energy": -1,
+                               "health_care": -2},
+                 region_tilts={"us": 1, "japan": -2},
+                 theme_tilts={"ai_infrastructure": 2})
+    chain = _chain({"AAA.X": 1 / 3, "BBB.Y": 1 / 3, "CCC.Z": 1 / 3}, view=view,
+                   scores={"AAA.X": 1, "BBB.Y": 2, "CCC.Z": 7})
+    returns = {"AAA.X": 0.05, "CCC.Z": -0.02}          # BBB.Y dropped
+
+    seg = attribution.attribute_segment(chain, returns, META)
+    assert seg["holdings_dropped"] == 1, seg["holdings_dropped"]
+
+    neutral, quality = attribution.neutral_weights(chain)
+    assert quality == "exact", quality
+    mults = attribution.group_multipliers(view, META)
+    model_w = attribution.weights_for_groups(
+        neutral, mults, frozenset(attribution.GROUPS))
+    uncapped = attribution.active_return_bps(model_w, neutral, returns)
+    capped = attribution.active_return_bps(
+        model_w, neutral, returns, enforce_cap=True)
+    assert uncapped != capped, "premise gone: renormalization no longer breaches"
+
+    assert seg["model_active_bps"] == pytest.approx(capped, abs=1e-9), (
+        "attribute_segment is not passing enforce_cap=True to the model leg")
+    assert seg["selection_residual_bps"] == pytest.approx(
+        seg["active_return_bps"] - seg["model_active_bps"], abs=1e-9)
