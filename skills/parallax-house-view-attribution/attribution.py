@@ -54,12 +54,10 @@ WEIGHT_MULT = {-2: 0.50, -1: 0.75, 0: 1.00, 1: 1.25, 2: 1.50}
 # loader.md tilt table: "+2 (Big OW) ... Cap final exposure at 2x neutral to
 # prevent runaway". Multipliers compound across sector, region and every
 # matched theme, so the product exceeds this without an explicit cap.
+#
+# This is a HARD bound, not a target approached by iteration: weights_for_groups
+# guarantees w[s] <= EXPOSURE_CAP * neutral[s] for every holding on return.
 EXPOSURE_CAP = 2.0
-
-# Redistribution passes for the exposure cap. Capping one holding lifts the
-# others, which can push a second over the cap; three passes settles every
-# configuration measured, and the bound stops a pathological input spinning.
-_CAP_PASSES = 3
 
 # Tilt groups the weight-effect decomposition covers. Factor tilts re-rank
 # the composite (loader.md §3 factor table) rather than multiplying weights,
@@ -261,6 +259,12 @@ def weights_for_groups(
     holds for any value function, and this only changes what that function
     returns.
 
+    THE GUARANTEE ON RETURN, for any ``neutral_w`` summing to 1 (the only kind
+    this module builds): the weights sum to 1.0, and every holding with a
+    positive neutral weight satisfies ``w[s] <= EXPOSURE_CAP * neutral[s]``.
+    That is the loader.md contract stated exactly, and it is what the tests
+    assert — no "usually", no residual overshoot, no dependence on a pass count.
+
     loader.md specifies no downside floor, so none is invented here; -2 tilts
     compound unbounded toward zero exactly as the table describes.
     """
@@ -281,20 +285,43 @@ def weights_for_groups(
     # OTHER holdings' multipliers fall. Measured with a pre-normalisation cap of
     # 2.0: one holding still reached 3.37x neutral.
     #
-    # Clamp, redistribute the excess across the uncapped holdings, repeat.
-    # Capping one name lifts the others, which can push a second name over, so
-    # this iterates. It converges quickly; the bound stops a pathological input
-    # from spinning, and leaving the last pass slightly over is preferable to
-    # looping — the overshoot is then far smaller than the 3.37x above.
-    for _ in range(_CAP_PASSES):
-        over = {s for s, w in weights.items()
-                if neutral_w[s] > 0 and w > EXPOSURE_CAP * neutral_w[s] + 1e-12}
-        if not over:
+    # Clamp, redistribute the excess across the holdings not yet capped, repeat.
+    # The capped set is PERSISTENT: once a name is clamped it stays at exactly
+    # EXPOSURE_CAP * neutral and never re-enters redistribution.
+    #
+    # That persistence is the whole fix. Recomputing the over-cap set from
+    # scratch each pass excluded already-capped names — they sit at exactly the
+    # cap, which the strict `>` test rejects — so they fell back into the free
+    # set and redistribution lifted them over again. The result oscillated and
+    # was non-monotone in the pass count: one reachable 5-holding view measured
+    # 2.925x at one pass, 2.413x at two, 2.453x at three, and needed 200 passes
+    # to reach 2.000x. Convergence was geometric, so NO fixed pass count bounds
+    # it; the worst of 20,000 random portfolios needed 50 passes.
+    #
+    # With the capped set persistent the loop is finite, not asymptotic: each
+    # pass that does anything adds at least one name to the capped set, so it
+    # settles in at most one pass per holding, landing exactly at the cap. The
+    # free set can never empty while sum(neutral) == 1 — all names over the cap
+    # would need sum(weights) > EXPOSURE_CAP — but the guard below keeps a
+    # degenerate neutral from dividing by zero.
+    #
+    # DO NOT replace `len(weights) + 1` with a small constant. The bound has to
+    # scale with the holding count: a 14-holding view built only from documented
+    # tilt values needs SEVEN passes, so range(3), range(5) and range(6) all
+    # leave a holding above the cap. That view is pinned in
+    # test_the_redistribution_bound_scales_with_the_portfolio_not_a_constant.
+    capped: set[str] = set()
+    for _ in range(len(weights) + 1):
+        newly = {s for s, w in weights.items()
+                 if s not in capped and neutral_w[s] > 0
+                 and w > EXPOSURE_CAP * neutral_w[s] + 1e-12}
+        if not newly:
             break
-        excess = sum(weights[s] - EXPOSURE_CAP * neutral_w[s] for s in over)
-        for s in over:
+        capped |= newly
+        excess = sum(weights[s] - EXPOSURE_CAP * neutral_w[s] for s in newly)
+        for s in newly:
             weights[s] = EXPOSURE_CAP * neutral_w[s]
-        free = {s: w for s, w in weights.items() if s not in over}
+        free = {s: w for s, w in weights.items() if s not in capped}
         free_total = sum(free.values())
         if free_total <= 0:
             break

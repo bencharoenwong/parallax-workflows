@@ -477,3 +477,169 @@ def test_a_segment_without_symbol_keys_is_rejected_not_silently_zeroed():
            "holdings_covered": 3, "holdings_dropped": 1}
     with pytest.raises(attribution.AttributionError, match="_covered_symbols"):
         attribution.merge_segments([seg])
+
+
+# ---------------------------------------------------------------------------
+# The exposure cap: bounded, not "usually settles"
+# ---------------------------------------------------------------------------
+
+
+def test_the_cap_holds_on_the_measured_multi_group_counterexample():
+    """A fixed-pass redistribution loop does not bound exposure at all.
+
+    The shipped loop recomputed the over-cap set from scratch each pass. A name
+    clamped in pass N sits at exactly EXPOSURE_CAP x neutral, so the strict `>`
+    test dropped it from the over-set in pass N+1, it fell back into the free
+    set, and redistribution lifted it above the cap again. The iteration
+    oscillated instead of settling, and convergence was NON-MONOTONE in the
+    pass count: on this exact input the max exposure went 2.925448 (1 pass) ->
+    2.412839 (2) -> 2.453204 (3, the shipped setting) -> 2.182907 (4) ->
+    2.007906 (10) -> 2.000000 (200).
+
+    Raising the pass count is therefore not a fix. The property the code must
+    hold is the loader.md tilt-table contract: final per-holding exposure is
+    bounded at EXPOSURE_CAP x neutral. That needs a persistent capped set, which
+    terminates at the cap in at most one pass per holding.
+
+    Multipliers here are drawn only from the documented tilt table
+    (0.50 / 0.75 / 1.00 / 1.25 / 1.50), so this is a reachable view, not a
+    synthetic input.
+    """
+    neutral = {
+        "S0": 0.31130298136963735,
+        "S1": 0.22315873398843988,
+        "S2": 0.13497491145738316,
+        "S3": 0.23614376719175859,
+        "S4": 0.09441960599278096,
+    }
+    mults = {
+        "sector": {"S0": 0.5, "S1": 0.5, "S2": 1.25, "S3": 1.25, "S4": 0.5},
+        "region": {"S0": 0.75, "S1": 0.5, "S2": 1.5, "S3": 1.5, "S4": 0.75},
+        "theme1": {"S0": 0.5, "S1": 1.5, "S2": 1.25, "S3": 1.5, "S4": 1.0},
+        "theme2": {"S0": 0.5, "S1": 0.5, "S2": 1.0, "S3": 1.25, "S4": 1.0},
+    }
+    w = attribution.weights_for_groups(neutral, mults, frozenset(mults))
+    assert abs(sum(w.values()) - 1.0) < 1e-9, sum(w.values())
+    worst = max(w[s] / neutral[s] for s in neutral)
+    assert worst <= attribution.EXPOSURE_CAP + 1e-9, worst
+
+
+def test_the_cap_holds_across_seeded_random_portfolios():
+    """One counterexample cannot show the bound holds everywhere.
+
+    Convergence of the old loop was geometric, not finite: the worst case over
+    20,000 random portfolios still needed 50 redistribution passes to reach the
+    cap. Any fixed pass count therefore has a counterexample. This test asserts
+    the bound itself over a seeded sweep, so it fails for a loop that merely
+    converges slowly as well as for one that oscillates.
+
+    Multipliers are sampled from the documented tilt table only. Four
+    compounding groups mirror `group_multipliers`, where the theme group is
+    already a product over every matched theme. The seed is fixed so a failure
+    is reproducible.
+    """
+    import random
+
+    rng = random.Random(20260818)
+    table = [0.5, 0.75, 1.0, 1.25, 1.5]
+    worst = 0.0
+    worst_case = None
+    for _ in range(3000):
+        n = rng.randint(3, 8)
+        syms = [f"S{i}" for i in range(n)]
+        draws = [rng.random() + 0.05 for _ in syms]
+        tot = sum(draws)
+        neutral = {s: d / tot for s, d in zip(syms, draws)}
+        mults = {
+            g: {s: rng.choice(table) for s in syms}
+            for g in ("sector", "region", "theme1", "theme2")
+        }
+        w = attribution.weights_for_groups(neutral, mults, frozenset(mults))
+        assert abs(sum(w.values()) - 1.0) < 1e-9, (neutral, mults)
+        ratio = max(w[s] / neutral[s] for s in syms)
+        if ratio > worst:
+            worst, worst_case = ratio, (neutral, mults)
+    assert worst <= attribution.EXPOSURE_CAP + 1e-9, (worst, worst_case)
+
+
+# ---------------------------------------------------------------------------
+# Bool is not a score
+# ---------------------------------------------------------------------------
+
+
+def test_a_bool_inline_score_falls_back_to_approximate():
+    """`bool` is a subclass of `int`, so a YAML `true` in `base_scores.
+    response_inline` passes a bare `isinstance(v, (int, float))` and scores as
+    1.0. Deleting `and not isinstance(v, bool)` left the whole suite green.
+
+    The weights are wrong (True/(True+4) = 0.2 instead of the 0.5 equal-weight
+    fallback), but the severe part is the quality tag: without the guard the run
+    reports `"exact"`, so corrupt input is presented on the high-confidence
+    path. Both are asserted.
+    """
+    chain = _chain({"AAPL.O": 0.5, "MSFT.O": 0.5},
+                   scores={"AAPL.O": True, "MSFT.O": 4})
+    w, quality = attribution.neutral_weights(chain)
+    assert quality == "approximate", quality
+    assert w["AAPL.O"] == pytest.approx(0.5), w
+    assert w["MSFT.O"] == pytest.approx(0.5), w
+
+
+def test_the_redistribution_bound_scales_with_the_portfolio_not_a_constant():
+    """The pass bound is `len(weights) + 1`, and that is load-bearing.
+
+    With the capped set persistent, each pass that does anything adds at least
+    one name to it, so a bound of one pass per holding always suffices. A small
+    fixed constant does not. This 14-holding view — multipliers drawn only from
+    the documented tilt table, in the exact three-group shape
+    `group_multipliers` emits, where `themes` is already a product over every
+    matched theme — needs SEVEN passes to settle. Measured max exposure against
+    a cap of 2.0 when the bound is replaced by a constant:
+
+        range(3) -> 2.356220    range(6) -> 2.002722
+        range(4) -> 2.154241    range(7) -> 2.000000
+        range(5) -> 2.083134
+
+    So `range(3)` and `range(5)` — the two most likely "simplifications" — both
+    breach here, as does `range(6)`. A constant of 7 or more would survive this
+    single case; the guarantee for a constant does not exist at all, because the
+    termination argument bounds the passes by the holding count and nothing
+    smaller. Directed search over portfolios up to 26 holdings did not exceed 7
+    passes, so the linear bound is sufficient but not tight — it is chosen
+    because it is PROVABLE, not because 7 was the largest number found.
+
+    The literals are pinned rather than searched: the suite must stay
+    deterministic and fast.
+    """
+    neutral = {
+        "S0": 0.054398458226485855, "S1": 0.002851675930842207,
+        "S2": 0.024024739647950093, "S3": 0.006785453657828538,
+        "S4": 0.005784625822735527, "S5": 0.350549974937791,
+        "S6": 0.002614504440067373, "S7": 0.19343221501984695,
+        "S8": 0.02397587066931312, "S9": 0.03389871759794953,
+        "S10": 0.042575840187557765, "S11": 0.17768347872099916,
+        "S12": 0.053473927312974935, "S13": 0.027950517827657943
+    }
+    mults = {
+        "sectors": {
+            "S0": 1.5, "S1": 0.75, "S2": 0.75, "S3": 1.5, "S4": 1.25, "S5": 0.75,
+            "S6": 0.5, "S7": 1.0, "S8": 0.75, "S9": 0.5, "S10": 0.75, "S11": 0.5,
+            "S12": 0.5, "S13": 1.5
+        },
+        "regions": {
+            "S0": 1.0, "S1": 0.75, "S2": 1.5, "S3": 1.0, "S4": 1.25, "S5": 0.5,
+            "S6": 0.75, "S7": 1.5, "S8": 1.5, "S9": 0.5, "S10": 0.75, "S11": 0.5,
+            "S12": 1.25, "S13": 0.75
+        },
+        "themes": {
+            "S0": 3.375, "S1": 1.6875, "S2": 1.875, "S3": 0.28125, "S4": 0.25,
+            "S5": 0.125, "S6": 1.171875, "S7": 0.84375, "S8": 0.5, "S9": 0.1875,
+            "S10": 0.84375, "S11": 0.1875, "S12": 1.40625, "S13": 0.5
+        },
+    }
+    assert len(neutral) == 14, len(neutral)
+    assert abs(sum(neutral.values()) - 1.0) < 1e-12, sum(neutral.values())
+    w = attribution.weights_for_groups(neutral, mults, frozenset(mults))
+    assert abs(sum(w.values()) - 1.0) < 1e-9, sum(w.values())
+    worst = max(w[s] / neutral[s] for s in neutral)
+    assert worst <= attribution.EXPOSURE_CAP + 1e-9, worst
