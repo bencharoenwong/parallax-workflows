@@ -300,11 +300,12 @@ def weights_for_groups(
     # was non-monotone in the pass count: one reachable 5-holding view measured
     # 2.925x at one pass, 2.413x at two, 2.453x at three, and did not reach
     # 2.000x (to six decimals) until pass 28 — and never lands exactly on the
-    # cap at all, still reading 2.000000000005 at pass 200. Convergence was geometric, so NO fixed pass count bounds
-    # it: over 20,000 random portfolios the worst needed 70 passes under the
-    # suite's own seed (20260818) and 124 under seed 4242. The figure is
-    # seed-dependent, so treat it as "tens of passes, unbounded", not a
-    # constant — that is the whole point.
+    # cap at all, still reading 2.000000000005 at pass 200. Convergence was
+    # geometric, so NO fixed pass count bounds it: over 20,000 random
+    # portfolios the worst needed 70 passes under the suite's own seed
+    # (20260818) and 124 under seed 4242. The figure is seed-dependent, so
+    # treat it as "tens of passes, unbounded", not a constant — that is the
+    # whole point.
     #
     # With the capped set persistent the loop is finite, not asymptotic: each
     # pass that does anything adds at least one name to the capped set, so it
