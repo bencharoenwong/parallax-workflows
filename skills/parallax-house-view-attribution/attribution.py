@@ -341,36 +341,8 @@ def weights_for_groups(
     # OTHER holdings' multipliers fall. Measured with a pre-normalisation cap of
     # 2.0: one holding still reached 3.37x neutral.
     #
-    # Clamp, redistribute the excess across the holdings not yet capped, repeat.
-    # The capped set is PERSISTENT: once a name is clamped it stays at exactly
-    # EXPOSURE_CAP * neutral and never re-enters redistribution.
-    #
-    # That persistence is the whole fix. Recomputing the over-cap set from
-    # scratch each pass excluded already-capped names — they sit at exactly the
-    # cap, which the strict `>` test rejects — so they fell back into the free
-    # set and redistribution lifted them over again. The result oscillated and
-    # was non-monotone in the pass count: one reachable 5-holding view measured
-    # 2.925x at one pass, 2.413x at two, 2.453x at three, and did not reach
-    # 2.000x (to six decimals) until pass 28 — and never lands exactly on the
-    # cap at all, still reading 2.000000000005 at pass 200. Convergence was
-    # geometric, so NO fixed pass count bounds it: over 20,000 random
-    # portfolios the worst needed 70 passes under the suite's own seed
-    # (20260818) and 124 under seed 4242. The figure is seed-dependent, so
-    # treat it as "tens of passes, unbounded", not a constant — that is the
-    # whole point.
-    #
-    # With the capped set persistent the loop is finite, not asymptotic: each
-    # pass that does anything adds at least one name to the capped set, so it
-    # settles in at most one pass per holding, landing exactly at the cap. The
-    # free set can never empty while sum(neutral) == 1 — all names over the cap
-    # would need sum(weights) > EXPOSURE_CAP — but the guard below keeps a
-    # degenerate neutral from dividing by zero.
-    #
-    # DO NOT replace `len(weights) + 1` with a small constant. The bound has to
-    # scale with the holding count: a 14-holding view built only from documented
-    # tilt values needs SEVEN passes, so range(3), range(5) and range(6) all
-    # leave a holding above the cap. That view is pinned in
-    # test_the_redistribution_bound_scales_with_the_portfolio_not_a_constant.
+    # See _apply_exposure_cap's docstring for the redistribution algorithm and
+    # why the capped set must be persistent.
     return _apply_exposure_cap(weights, neutral_w)
 
 

@@ -725,6 +725,19 @@ def test_model_and_shapley_legs_agree_after_capping():
     total = sum(p["realized_contribution_bps"] for p in per)
     assert total == pytest.approx(model_bps, abs=1e-9), (total, model_bps)
 
+    # Independent value, not derived from active_return_bps itself: catches a
+    # mutation that caps against the un-renormalized neutral_w (0.1/0.8)
+    # instead of the covered-set renormalization nw_cov (1/9, 8/9). model_w is
+    # {A: .2, B: .2, C: .6} (weights_for_groups' own cap already lands A and B
+    # on exactly 2x). Dropping A and renormalizing over {B, C} gives nw_cov =
+    # {B: 1/9, C: 8/9}, w_cov = {B: .25, C: .75} -- B breaches at 2.25x. Capping
+    # against nw_cov (correct) clamps B to 2/9 and lifts C to 7/9, giving
+    # active = (2/9 - 1/9)*0.05 + (7/9 - 8/9)*(-0.02) = 700/9 bps. Capping
+    # against the raw un-renormalized {B: .1, C: .8} instead clamps B to .2 and
+    # lifts C to .8, giving 560/9 bps -- a different, wrong number that every
+    # self-referential assertion above stays blind to.
+    assert model_bps == pytest.approx(700 / 9, abs=1e-6), model_bps
+
 
 def test_attribute_segment_wires_the_cap_into_model_active_bps():
     """Test the WIRING, not the helper.
@@ -764,3 +777,29 @@ def test_attribute_segment_wires_the_cap_into_model_active_bps():
         "attribute_segment is not passing enforce_cap=True to the model leg")
     assert seg["selection_residual_bps"] == pytest.approx(
         seg["active_return_bps"] - seg["model_active_bps"], abs=1e-9)
+
+
+def test_attribute_segment_never_caps_the_realized_leg():
+    """Test the WIRING of the realized leg, not just `active_return_bps` itself.
+
+    `test_the_realized_leg_is_never_capped` calls `active_return_bps` directly
+    and never drives `attribute_segment`, so it cannot catch `enforce_cap=True`
+    creeping onto the `actual_bps` call site. This drives the public entry
+    point with a chain whose actual holdings are 2.25x neutral -- a real
+    breach -- and pins the uncapped value.
+    """
+    chain = _chain({"AAA.X": 0.75, "BBB.Y": 0.125, "CCC.Z": 0.125})
+    returns = {"AAA.X": 0.10, "BBB.Y": 0.0, "CCC.Z": 0.0}
+
+    seg = attribution.attribute_segment(chain, returns, META)
+
+    neutral, quality = attribution.neutral_weights(chain)
+    assert quality == "approximate", quality
+    assert neutral["AAA.X"] == pytest.approx(1 / 3)
+    ratio = 0.75 / neutral["AAA.X"]
+    assert ratio > attribution.EXPOSURE_CAP + 1e-9, \
+        "premise gone: AAA.X no longer breaches the cap"
+
+    expected = (0.75 - neutral["AAA.X"]) * 0.10 * 10_000.0
+    assert seg["active_return_bps"] == pytest.approx(expected, abs=1e-6), (
+        "attribute_segment is capping the realized leg -- it must not")
