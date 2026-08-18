@@ -389,3 +389,115 @@ def test_a_new_branch_scans_only_what_it_adds_over_the_default_branch(clone: Pat
     rng = scanned.read_text()
     assert ".." in rng, f"scanned a bare rev, not a range: {rng}"
     assert rng.endswith(head), rng
+
+
+# --- fail closed when the scan cannot RUN, not only when it finds a hit ------
+#
+# The tests above prove the layer blocks on a HIT. That is not the same property
+# as blocking when the scan could not be performed at all. Two guards cover the
+# second case, and both were mutation-tested green by the whole suite above:
+#
+#   - the mktemp check: without a temp file the ref list is lost, and the layer
+#     silently degrades to the scanner's DEFAULT range — the wrong-range bug it
+#     exists to fix. Deleting `exit 2` there still prints "BLOCKED" and returns
+#     0, so never assert on that string alone; the exit code is the evidence.
+#   - the `-ne 0` check: the scanner returns 2 on ScanError (an unresolvable
+#     rev-range, a git failure). Narrowing it to `= 1` lets a scan that never
+#     ran report a clean push.
+#
+# Anything added here must keep asserting on the RETURN CODE, and must keep a
+# non-zero-but-not-1 scanner exit in the matrix.
+
+
+_REF_LINE = ("refs/heads/feature aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa "
+             "refs/heads/feature bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
+
+
+def _run_hook(work: Path, refs: str, env=None):
+    """Run the installed hook the way git does, with a ref list on stdin.
+
+    Asserts the layer is actually in the hook first. A missing hook and a
+    working hook can both return non-zero for unrelated reasons, so "the
+    installer exited 0" is not enough to make a push-behaviour assertion mean
+    anything.
+    """
+    hook = work / ".git/hooks/pre-push"
+    assert hook.exists(), "no pre-push hook was installed"
+    assert MARKER in hook.read_text(), "the layer is not in the installed hook"
+    return subprocess.run(["bash", str(hook), "origin", "http://example.invalid"],
+                          cwd=work, capture_output=True, text=True, input=refs,
+                          env={**os.environ, **(env or {})})
+
+
+def test_the_hook_blocks_when_the_ref_list_temp_file_cannot_be_created(
+        clone: Path, tmp_path: Path) -> None:
+    """`mktemp` failing loses git's ref list. Unguarded, the layer falls through
+    to the scanner's default range and reports a clean push of commits it never
+    read — so the failure has to block.
+
+    Driven with a stub that PASSES on the default range and FAILS on an explicit
+    one. That asymmetry is what makes the difference observable: a hook that
+    keeps the ref list blocks, a hook that loses it passes.
+
+    Deleting the guard still PRINTS "BLOCKED" and then exits 0, so the return
+    code is the only admissible evidence here.
+    """
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text(
+        "import sys\nsys.exit(1 if len(sys.argv) > 1 else 0)\n")
+    _write_hook(clone, "#!/usr/bin/env bash\nexit 0\n")
+    assert _install(clone).returncode == 0
+
+    missing = tmp_path / "no-such-tmpdir"
+    assert not missing.exists()
+    r = _run_hook(clone, _REF_LINE, env={"TMPDIR": str(missing)})
+    assert r.returncode != 0, (
+        "lost the ref list and let the push through on the default range")
+    assert "cannot create a temp file" in r.stderr, (
+        f"blocked for some other reason: {r.stderr}")
+
+
+def test_a_usable_temp_dir_does_not_block_a_clean_scan(clone: Path,
+                                                       tmp_path: Path) -> None:
+    """The negative direction for the guard above. A layer that blocked on every
+    push would satisfy the fail-closed test while being useless."""
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text(
+        "import sys\nsys.exit(0)\n")
+    _write_hook(clone, "#!/usr/bin/env bash\nexit 0\n")
+    assert _install(clone).returncode == 0
+
+    usable = tmp_path / "usable-tmpdir"
+    usable.mkdir()
+    r = _run_hook(clone, _REF_LINE, env={"TMPDIR": str(usable)})
+    assert r.returncode == 0, r.stderr
+    assert "cannot create a temp file" not in r.stderr
+    assert not list(usable.iterdir()), "left the ref-list temp file behind"
+
+
+@pytest.mark.parametrize("scanner_rc, should_block", [
+    (0, False),   # clean scan: must NOT block
+    (1, True),    # a hit
+    (2, True),    # the scan could not RUN — scan_commit_messages.py returns 2
+                  # on ScanError (unresolvable rev-range, git failure)
+])
+def test_the_hook_blocks_on_every_nonzero_scanner_exit_not_just_a_hit(
+        clone: Path, scanner_rc: int, should_block: bool) -> None:
+    """Exit 2 means "I could not determine the outgoing range", not "clean".
+    Treating only exit 1 as a failure turns a scan that never ran into a
+    permitted push, which is the failure mode the whole layer exists to prevent.
+
+    The hook also propagates the scanner's own code, so a blocked push reports
+    WHICH failure it was.
+    """
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text(
+        f"import sys\nsys.exit({scanner_rc})\n")
+    _write_hook(clone, "#!/usr/bin/env bash\nexit 0\n")
+    assert _install(clone).returncode == 0
+
+    r = _run_hook(clone, _REF_LINE)
+    if should_block:
+        assert r.returncode == scanner_rc, (
+            f"scanner exited {scanner_rc}; the hook returned {r.returncode} "
+            "— a scan that failed was reported as a permitted push")
+        assert "BLOCKED" in r.stderr
+    else:
+        assert r.returncode == 0, f"blocked a clean scan: {r.stderr}"
