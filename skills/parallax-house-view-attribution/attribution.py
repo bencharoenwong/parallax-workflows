@@ -238,6 +238,58 @@ def group_multipliers(
     return out
 
 
+def _apply_exposure_cap(
+    weights: dict[str, float],
+    neutral_w: dict[str, float],
+) -> dict[str, float]:
+    """Clamp every holding to ``EXPOSURE_CAP`` x its neutral weight, in place.
+
+    Both legs must already be normalized over the SAME symbol set. Returns
+    ``weights`` with the cap enforced and the total preserved.
+
+    The capped set is PERSISTENT: once a name is clamped it stays at exactly
+    EXPOSURE_CAP * neutral and never re-enters redistribution. That persistence
+    is the whole fix. Recomputing the over-cap set from scratch each pass
+    excluded already-capped names -- they sit at exactly the cap, which the
+    strict `>` test rejects -- so they fell back into the free set and
+    redistribution lifted them over again. The result oscillated and was
+    non-monotone in the pass count: one reachable 5-holding view measured
+    2.925x at one pass, 2.413x at two, 2.453x at three, and did not reach
+    2.000x (to six decimals) until pass 28 -- never landing exactly on the cap,
+    still reading 2.000000000005 at pass 200. Convergence was geometric, so NO
+    fixed pass count bounds it: over 20,000 random portfolios the worst needed
+    70 passes under the suite's own seed (20260818) and 124 under seed 4242.
+
+    With the capped set persistent the loop is finite, not asymptotic: each
+    pass that does anything adds at least one name to the capped set, so it
+    settles in at most one pass per holding, landing exactly at the cap.
+
+    DO NOT replace ``len(weights) + 1`` with a small constant. The bound has to
+    scale with the holding count: a 14-holding view built only from documented
+    tilt values needs SEVEN passes, so range(3), range(5) and range(6) all
+    leave a holding above the cap. That view is pinned in
+    test_the_redistribution_bound_scales_with_the_portfolio_not_a_constant.
+    """
+    capped: set[str] = set()
+    for _ in range(len(weights) + 1):
+        newly = {s for s, w in weights.items()
+                 if s not in capped and neutral_w.get(s, 0.0) > 0
+                 and w > EXPOSURE_CAP * neutral_w[s] + 1e-12}
+        if not newly:
+            break
+        capped |= newly
+        excess = sum(weights[s] - EXPOSURE_CAP * neutral_w[s] for s in newly)
+        for s in newly:
+            weights[s] = EXPOSURE_CAP * neutral_w[s]
+        free = {s: w for s, w in weights.items() if s not in capped}
+        free_total = sum(free.values())
+        if free_total <= 0:
+            break
+        for s in free:
+            weights[s] += excess * (free[s] / free_total)
+    return weights
+
+
 def weights_for_groups(
     neutral_w: dict[str, float],
     group_mults: dict[str, dict[str, float]],
@@ -289,54 +341,9 @@ def weights_for_groups(
     # OTHER holdings' multipliers fall. Measured with a pre-normalisation cap of
     # 2.0: one holding still reached 3.37x neutral.
     #
-    # Clamp, redistribute the excess across the holdings not yet capped, repeat.
-    # The capped set is PERSISTENT: once a name is clamped it stays at exactly
-    # EXPOSURE_CAP * neutral and never re-enters redistribution.
-    #
-    # That persistence is the whole fix. Recomputing the over-cap set from
-    # scratch each pass excluded already-capped names — they sit at exactly the
-    # cap, which the strict `>` test rejects — so they fell back into the free
-    # set and redistribution lifted them over again. The result oscillated and
-    # was non-monotone in the pass count: one reachable 5-holding view measured
-    # 2.925x at one pass, 2.413x at two, 2.453x at three, and did not reach
-    # 2.000x (to six decimals) until pass 28 — and never lands exactly on the
-    # cap at all, still reading 2.000000000005 at pass 200. Convergence was
-    # geometric, so NO fixed pass count bounds it: over 20,000 random
-    # portfolios the worst needed 70 passes under the suite's own seed
-    # (20260818) and 124 under seed 4242. The figure is seed-dependent, so
-    # treat it as "tens of passes, unbounded", not a constant — that is the
-    # whole point.
-    #
-    # With the capped set persistent the loop is finite, not asymptotic: each
-    # pass that does anything adds at least one name to the capped set, so it
-    # settles in at most one pass per holding, landing exactly at the cap. The
-    # free set can never empty while sum(neutral) == 1 — all names over the cap
-    # would need sum(weights) > EXPOSURE_CAP — but the guard below keeps a
-    # degenerate neutral from dividing by zero.
-    #
-    # DO NOT replace `len(weights) + 1` with a small constant. The bound has to
-    # scale with the holding count: a 14-holding view built only from documented
-    # tilt values needs SEVEN passes, so range(3), range(5) and range(6) all
-    # leave a holding above the cap. That view is pinned in
-    # test_the_redistribution_bound_scales_with_the_portfolio_not_a_constant.
-    capped: set[str] = set()
-    for _ in range(len(weights) + 1):
-        newly = {s for s, w in weights.items()
-                 if s not in capped and neutral_w[s] > 0
-                 and w > EXPOSURE_CAP * neutral_w[s] + 1e-12}
-        if not newly:
-            break
-        capped |= newly
-        excess = sum(weights[s] - EXPOSURE_CAP * neutral_w[s] for s in newly)
-        for s in newly:
-            weights[s] = EXPOSURE_CAP * neutral_w[s]
-        free = {s: w for s, w in weights.items() if s not in capped}
-        free_total = sum(free.values())
-        if free_total <= 0:
-            break
-        for s in free:
-            weights[s] += excess * (free[s] / free_total)
-    return weights
+    # See _apply_exposure_cap's docstring for the redistribution algorithm and
+    # why the capped set must be persistent.
+    return _apply_exposure_cap(weights, neutral_w)
 
 
 # --------------------------------------------------------------------------
@@ -347,12 +354,33 @@ def active_return_bps(
     weights: dict[str, float],
     neutral_w: dict[str, float],
     returns: dict[str, float],
+    *,
+    enforce_cap: bool = False,
 ) -> float:
     """First-order active return of ``weights`` vs neutral, in bps.
 
     Symbols missing from ``returns`` are dropped from BOTH legs with weights
     renormalized over the covered set (mirrors loader.md §3b partial-result
     semantics); the caller reports the drop count.
+
+    ``enforce_cap`` re-applies the exposure cap AFTER that renormalization, and
+    must be True for a MODEL-implied leg and False for a REALIZED one.
+
+    Renormalizing rescales every surviving ratio by ``nw_total / w_total``, so a
+    holding dropped for missing return data can carry a survivor above the cap
+    even though the dict ``weights_for_groups`` returned honours it. Measured:
+    neutral {A .1, B .1, C .8} with a +2 sector and +2 region on A and B returns
+    A and B at exactly 2.00x; drop A for missing prices and B's effective ratio
+    is 2.25x. Over 20,000 random 10-25 holding portfolios ~38-40% of runs
+    breached at 5-20% drop rates, worst observed 3.09x. The excess inflates
+    model_active_bps and lands in selection_residual_bps with the opposite sign
+    -- exactly the distortion the cap exists to prevent, arriving through the
+    coverage path instead of through the multiplier product.
+
+    It is NOT applied to the realized leg. ``tilted_actual`` is what the
+    portfolio actually held; clamping it would overwrite a measured fact and
+    silently move the residual. The cap constrains what the MODEL may imply,
+    never what the book did.
     """
     covered = [s for s in neutral_w if s in returns]
     if not covered:
@@ -361,10 +389,13 @@ def active_return_bps(
     w_total = sum(weights.get(s, 0.0) for s in covered)
     if nw_total <= 0 or w_total <= 0:
         raise AttributionError("degenerate coverage after dropping missing returns")
+    nw_cov = {s: neutral_w[s] / nw_total for s in covered}
+    w_cov = {s: weights.get(s, 0.0) / w_total for s in covered}
+    if enforce_cap:
+        w_cov = _apply_exposure_cap(w_cov, nw_cov)
     active = 0.0
     for s in covered:
-        dw = weights.get(s, 0.0) / w_total - neutral_w[s] / nw_total
-        active += dw * returns[s]
+        active += (w_cov[s] - nw_cov[s]) * returns[s]
     return active * 10_000.0
 
 
@@ -390,7 +421,8 @@ def shapley_tilt_attribution(
                 value_cache[subset] = 0.0
             else:
                 w = weights_for_groups(neutral_w, group_mults, subset)
-                value_cache[subset] = active_return_bps(w, neutral_w, returns)
+                value_cache[subset] = active_return_bps(
+                    w, neutral_w, returns, enforce_cap=True)
         return value_cache[subset]
 
     import math
@@ -429,7 +461,7 @@ def attribute_segment(
 
     actual_bps = active_return_bps(tilted_actual, neutral, returns)
     model_w = weights_for_groups(neutral, mults, frozenset(GROUPS))
-    model_bps = active_return_bps(model_w, neutral, returns)
+    model_bps = active_return_bps(model_w, neutral, returns, enforce_cap=True)
     per_tilt = shapley_tilt_attribution(neutral, mults, returns)
 
     covered = [s for s in neutral if s in returns]

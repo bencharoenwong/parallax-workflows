@@ -55,6 +55,37 @@ jobs:
       # skills actually read.
       - name: CIO letter-prep contract and contribution gates
         run: python -m pytest skills/parallax-cio-letter-prep/ -q
+      # Its own process for the same conftest reason. This root was MISSING
+      # until 2026-08-18: the exposure-cap fix and its regression suite landed
+      # with GitHub CI never executing a single one of those tests, so the whole
+      # safety argument for that change rested on a suite only the local
+      # pre-push gate ran. run-gate-tests.sh auto-discovers roots and did cover
+      # it; this file does not auto-discover, so a new skill with tests still
+      # needs a step added here. Check that when adding one.
+      - name: House-view attribution gates
+        run: python -m pytest skills/parallax-house-view-attribution/ -q
+      # Same reasoning as the attribution step above, extended to the other
+      # roots run-gate-tests.sh already discovers locally but this hand-listed
+      # file did not: each of the six named steps below is its own pytest
+      # process for the same conftest-collision reason. house-view/tests and
+      # white-label/tests both nest under skills/_parallax/ alongside the
+      # scripts/ and test_render_gate.py roots above, but each is named
+      # explicitly so a missing root stays visible in the step list.
+      - name: House-view core gates
+        run: python -m pytest skills/_parallax/house-view/tests -q
+      # -m "not npx" matches run-gate-tests.sh's offline default: one test in
+      # this root shells out to `npx -y`, which can download and execute a
+      # package. That is opt-in network behavior, not something CI should run.
+      - name: White-label extraction and validation gates
+        run: python -m pytest skills/_parallax/white-label/tests -q -m "not npx"
+      - name: Make-house-view gates
+        run: python -m pytest skills/parallax-make-house-view/tests -q
+      - name: Judge-house-view gates
+        run: python -m pytest skills/parallax-judge-house-view/tests -q
+      - name: Desk-call-list gates
+        run: python -m pytest skills/parallax-desk-call-list/tests -q
+      - name: White-label stock-report gates
+        run: python -m pytest skills/parallax-white-label-stock-report/tests -q
       # The local-only extra term file cannot exist on a runner, and
       # load_canary_terms() fails closed without it. PARALLAX_ALLOW_PARTIAL_SCAN
       # is the sanctioned opt-in: CI scans the built-in branding / code-name
