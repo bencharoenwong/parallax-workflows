@@ -40,6 +40,7 @@ classification from get_peer_snapshot / get_company_info).
 from __future__ import annotations
 
 import itertools
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -56,8 +57,28 @@ WEIGHT_MULT = {-2: 0.50, -1: 0.75, 0: 1.00, 1: 1.25, 2: 1.50}
 # matched theme, so the product exceeds this without an explicit cap.
 #
 # This is a HARD bound, not a target approached by iteration: weights_for_groups
-# guarantees w[s] <= EXPOSURE_CAP * neutral[s] for every holding on return.
+# guarantees w[s] <= EXPOSURE_CAP * neutral[s] * (1 + CAP_REL_TOL) for every
+# holding on return.
 EXPOSURE_CAP = 2.0
+
+# Slack on the over-cap tests. BOTH are RELATIVE to ``EXPOSURE_CAP * neutral[s]``,
+# never absolute. An absolute slack against a quantity that SCALES with
+# neutral[s] admits a ratio of ``EXPOSURE_CAP + slack / neutral[s]``, which is
+# unbounded as the neutral weight shrinks: the previous absolute ``1e-12``
+# returned 3.000000x on a three-name view whose smallest neutral weight was
+# 1e-13, entirely inside the documented contract (neutral weights summing to
+# 1.0, multipliers drawn only from WEIGHT_MULT).
+#
+# CAP_REL_TOL is the DETECTION slack inside _apply_exposure_cap; it is part of
+# the output contract, so a free name may legitimately sit at
+# ``EXPOSURE_CAP * neutral[s] * (1 + CAP_REL_TOL)`` on return.
+# CAP_POST_TOL is the POST-CONDITION slack. It is deliberately three orders
+# LOOSER than CAP_REL_TOL so that no weight permitted by detection can trip it:
+# its job is to catch gross regression (a dropped redistribution, a lost capped
+# set), not float noise. Keep CAP_POST_TOL > CAP_REL_TOL; swapping them makes
+# the post-condition raise on legitimate in-contract input.
+CAP_REL_TOL = 1e-12
+CAP_POST_TOL = 1e-9
 
 # Tilt groups the weight-effect decomposition covers. Factor tilts re-rank
 # the composite (loader.md §3 factor table) rather than multiplying weights,
@@ -238,6 +259,40 @@ def group_multipliers(
     return out
 
 
+def _assert_cap_satisfied(
+    weights: dict[str, float],
+    neutral_w: dict[str, float],
+) -> None:
+    """Raises AttributionError if any holding exceeds the cap.
+
+    Post-condition on the output of _apply_exposure_cap. The threshold is
+    RELATIVE (``EXPOSURE_CAP * nv * (1 + CAP_POST_TOL)``) for the same reason
+    the detection test is: an absolute slack here would re-create the very
+    defect this guard exists to catch, silently passing a 2.000000020x breach
+    at a neutral weight of 1e-13 while looking correct at ordinary weights.
+
+    A neutral weight of exactly 0.0 is in contract: the limit is then 0.0 and
+    any strictly positive weight is a breach, so the test still bites. No ratio
+    is reported in that case because it is undefined.
+    """
+    # No re-validation of neutral_w here, deliberately. _apply_exposure_cap's
+    # precondition runs first and guarantees every key of `weights` has a
+    # present, finite, non-negative neutral weight, so repeating those three
+    # checks would be a SECOND SOURCE OF TRUTH for the same rule -- the failure
+    # this module's decision log records as the one that keeps recurring. It
+    # also MASKED the precondition under mutation: with the checks duplicated,
+    # deleting the precondition entirely still raised on three of the four bad
+    # inputs, so the precondition was only partly pinned. One owner, one test.
+    for s, w in weights.items():
+        nv = neutral_w[s]
+        limit = EXPOSURE_CAP * nv
+        if w > limit * (1.0 + CAP_POST_TOL):
+            ratio = f"{w / nv:.9f}x neutral" if nv > 0.0 else "undefined (neutral is 0)"
+            raise AttributionError(
+                f"cap post-condition violated for {s!r}: weight {w!r} exceeds "
+                f"{EXPOSURE_CAP} x neutral {nv!r} = {limit!r}; ratio {ratio}")
+
+
 def _apply_exposure_cap(
     weights: dict[str, float],
     neutral_w: dict[str, float],
@@ -246,6 +301,22 @@ def _apply_exposure_cap(
 
     Both legs must already be normalized over the SAME symbol set. Returns
     ``weights`` with the cap enforced and the total preserved.
+
+    PRECONDITION: every key of ``weights`` has a neutral weight that is present,
+    finite and non-negative. Each failure raises AttributionError naming the
+    symbol. A neutral weight of exactly 0.0 stays IN CONTRACT and is benign --
+    the raw weight is ``0 * m == 0``, the over-cap test ``0 > 0`` is False, and
+    the output ``0 <= EXPOSURE_CAP * 0`` -- so it is not rejected. A NEGATIVE
+    neutral weight is the real hazard: it silently emitted a negative weight
+    (measured w = -0.2 on neutral {A: -0.1, B: 0.6, C: 0.5}).
+
+    The over-cap threshold is RELATIVE -- ``EXPOSURE_CAP * neutral_w[s] *
+    (1 + CAP_REL_TOL)`` -- because the quantity it guards SCALES with
+    neutral_w[s]. The previous ABSOLUTE form ``+ 1e-12`` admitted a ratio of
+    ``EXPOSURE_CAP + 1e-12 / neutral_w[s]``, unbounded as the neutral weight
+    shrinks: it returned 3.000000x on neutral {A: (1-1e-13)/2, B: (1-1e-13)/2,
+    C: 1e-13} with multipliers drawn only from WEIGHT_MULT. The relative form
+    caps that at 2.000000x.
 
     The capped set is PERSISTENT: once a name is clamped it stays at exactly
     EXPOSURE_CAP * neutral and never re-enters redistribution. That persistence
@@ -269,12 +340,36 @@ def _apply_exposure_cap(
     tilt values needs SEVEN passes, so range(3), range(5) and range(6) all
     leave a holding above the cap. That view is pinned in
     test_the_redistribution_bound_scales_with_the_portfolio_not_a_constant.
+
+    The tolerance does not touch termination. It appears only in the SECOND
+    conjunct of ``newly``, which selects among FREE names; capped names are
+    excluded by ``s not in capped``, a set-membership test. No float comparison
+    can return a capped name to the free set, so changing the tolerance's form
+    or value cannot reintroduce the oscillation. Each productive pass still adds
+    at least one name to the capped set, so the loop settles in at most one pass
+    per holding.
     """
+    # PRECONDITION. Iterate the keys of ``weights``, not ``neutral_w``: a symbol
+    # present only in ``weights`` must still be caught, and the over-cap test
+    # below indexes ``neutral_w[s]`` directly. Order matters -- ``nv < 0.0`` is
+    # False for NaN, so non-finite must be tested before negative.
+    for s in weights:
+        nv = neutral_w.get(s)
+        if nv is None:
+            raise AttributionError(
+                f"exposure cap: {s!r} has no neutral weight")
+        if not math.isfinite(nv):
+            raise AttributionError(
+                f"exposure cap: {s!r} has non-finite neutral weight {nv!r}")
+        if nv < 0.0:
+            raise AttributionError(
+                f"exposure cap: {s!r} has negative neutral weight {nv!r}")
+
     capped: set[str] = set()
     for _ in range(len(weights) + 1):
         newly = {s for s, w in weights.items()
-                 if s not in capped and neutral_w.get(s, 0.0) > 0
-                 and w > EXPOSURE_CAP * neutral_w[s] + 1e-12}
+                 if s not in capped
+                 and w > EXPOSURE_CAP * neutral_w[s] * (1.0 + CAP_REL_TOL)}
         if not newly:
             break
         capped |= newly
@@ -287,6 +382,11 @@ def _apply_exposure_cap(
             break
         for s in free:
             weights[s] += excess * (free[s] / free_total)
+    # POST-CONDITION. It lives HERE, not in weights_for_groups: active_return_bps
+    # calls this routine directly on its enforce_cap=True path, and a guard sited
+    # at the caller would leave that path -- the exact site of a prior defect --
+    # unguarded.
+    _assert_cap_satisfied(weights, neutral_w)
     return weights
 
 
@@ -313,13 +413,17 @@ def weights_for_groups(
 
     THE GUARANTEE ON RETURN, for any ``neutral_w`` summing to 1 (the only kind
     this module builds): the weights sum to 1.0, and every holding with a
-    positive neutral weight satisfies ``w[s] <= EXPOSURE_CAP * neutral[s]``.
+    NON-NEGATIVE neutral weight satisfies
+    ``w[s] <= EXPOSURE_CAP * neutral[s] * (1 + CAP_REL_TOL)``.
     That is the loader.md contract stated exactly, and it is what the tests
-    assert — no "usually", no dependence on a pass count. The bound is exact up
-    to the absolute ``1e-12`` slack in the over-cap test below, which in ratio
-    terms is ``1e-12 / neutral[s]``; that is ~4e-10 at the smallest neutral
-    weight in the pinned fixtures, and only matters if neutral weights many
-    orders of magnitude smaller are ever fed in.
+    assert — no "usually", no dependence on a pass count. The slack is RELATIVE,
+    so the guarantee no longer depends on the SCALE of the neutral weights: the
+    worst ratio is ``EXPOSURE_CAP * (1 + 1e-12)`` whether the smallest neutral
+    weight is 0.07 or 1e-300. The earlier ABSOLUTE ``1e-12`` slack scaled as
+    ``1e-12 / neutral[s]`` and reached 3.000000x on in-contract input.
+    A negative, non-finite or missing neutral weight raises AttributionError
+    rather than being silently exempted from the cap; a neutral weight of
+    exactly 0.0 is in contract and returns 0.0.
 
     loader.md specifies no downside floor, so none is invented here; -2 tilts
     compound unbounded toward zero exactly as the table describes.
@@ -425,7 +529,6 @@ def shapley_tilt_attribution(
                     w, neutral_w, returns, enforce_cap=True)
         return value_cache[subset]
 
-    import math
     n = len(groups)
     result = []
     for g in GROUPS:
