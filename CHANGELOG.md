@@ -4,6 +4,16 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-08-19
+
+### Fixed
+- **The exposure cap's over-cap tolerance is now RELATIVE, so the guarantee no longer depends on the scale of the neutral weights** — `_apply_exposure_cap` tested `w > EXPOSURE_CAP * neutral[s] + 1e-12`. That slack is absolute while the quantity it bounds scales with `neutral[s]`, so the largest undetected exposure ratio was `EXPOSURE_CAP + 1e-12 / neutral[s]` — unbounded as neutral weights shrink. A three-name view whose smallest neutral weight was `1e-13` returned that holding at **3.000000x** against a 2.0 cap, entirely inside the documented contract (neutral summing to exactly 1.0, multipliers drawn only from `WEIGHT_MULT`). The threshold is now `EXPOSURE_CAP * neutral[s] * (1 + CAP_REL_TOL)`, bounding the worst undetected ratio at `EXPOSURE_CAP * (1 + 1e-12)` at every scale. **The defect was not confined to tiny weights:** a directed fixture at an ordinary neutral of `0.1` (two matched +2 themes, `1.5 x 1.5`) overshoots by `2.000178e-12` under the old form. Both fixtures are pinned in the suite rather than quoted from a sweep.
+- **A negative, non-finite, or missing neutral weight now raises instead of being silently exempted from the cap.** The old `neutral_w.get(s, 0.0) > 0` conjunct excluded such a holding from the over-cap test entirely, leaving its ratio unbounded and undefined; a negative neutral silently emitted a negative weight. **A neutral weight of exactly `0.0` stays in contract** — the raw weight is `0 * m == 0`, the over-cap test `0 > 0` is False, and the output satisfies `0 <= EXPOSURE_CAP * 0` — so it is not rejected and the documented guarantee is unchanged for it.
+
+### Added
+- **A post-condition on `_apply_exposure_cap`'s output**, raising `AttributionError` rather than asserting (`python -O` strips `assert`, and this guards a figure that reaches `model_active_bps`). It lives inside `_apply_exposure_cap`, not `weights_for_groups`, so it covers the `active_return_bps(..., enforce_cap=True)` path as well — the site of the defect fixed in the previous entry. **Its threshold is relative too:** an absolute form here re-creates the very bug it guards, passes the entire suite, and silently admits a `2.000000020x` breach. `CAP_POST_TOL` (1e-9) is deliberately looser than `CAP_REL_TOL` (1e-12) so no weight permitted by detection can trip it; the ordering is pinned by a test, because swapping the two passes the suite and then raises on legitimate in-contract input.
+- **Eight regression tests (37 -> 45), all directed boundary fixtures rather than seeded sweeps.** The window in which the old form misbehaves has relative width `1e-12`, so random draws essentially never enter it — a 6,000-portfolio sweep found zero breaches and supported a false conclusion. Every threshold assertion references `EXPOSURE_CAP` / `CAP_REL_TOL` / `CAP_POST_TOL` rather than a repeated literal, so a constant edit cannot slip through.
+
 ## 2026-08-18
 
 ### Fixed

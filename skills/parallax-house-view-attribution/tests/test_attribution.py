@@ -803,3 +803,234 @@ def test_attribute_segment_never_caps_the_realized_leg():
     expected = (0.75 - neutral["AAA.X"]) * 0.10 * 10_000.0
     assert seg["active_return_bps"] == pytest.approx(expected, abs=1e-6), (
         "attribute_segment is capping the realized leg -- it must not")
+
+
+# ---------------------------------------------------------------------------
+# BUG-003: the exposure-cap tolerance is RELATIVE, not absolute
+# ---------------------------------------------------------------------------
+#
+# Every threshold below is derived from `attribution.EXPOSURE_CAP`,
+# `attribution.CAP_REL_TOL` and `attribution.CAP_POST_TOL`. None of them repeat
+# a literal: a constant edited in the module must move these assertions with
+# it, or the drift surface the relative form exists to close reopens silently.
+
+
+def test_the_cap_holds_when_a_neutral_weight_is_many_orders_smaller():
+    """The absolute slack `+ 1e-12` is unbounded in RATIO terms.
+
+    The old over-cap test was `w > EXPOSURE_CAP * neutral[s] + 1e-12`, so the
+    largest undetected ratio was `EXPOSURE_CAP + 1e-12 / neutral[s]` -- it grows
+    without limit as the neutral weight shrinks. This three-name neutral sums to
+    exactly 1.0 (asserted below as a premise guard), so it satisfies the
+    `weights_for_groups` precondition exactly as documented, and the tiny name
+    carries the only positive tilt.
+
+    Measured: 3.000000000000x before the fix, exactly 2.0x after.
+    """
+    neutral = {"A": (1 - 1e-13) / 2, "B": (1 - 1e-13) / 2, "C": 1e-13}
+    assert sum(neutral.values()) == 1.0, (
+        "premise gone: the fixture no longer sums to exactly 1.0, so it no "
+        "longer exercises the documented precondition")
+    mults = {"sectors": {"A": 0.5, "B": 0.5, "C": 1.5}}
+
+    w = attribution.weights_for_groups(neutral, mults, frozenset(mults))
+
+    assert sum(w.values()) == pytest.approx(1.0, abs=1e-9), sum(w.values())
+    worst = max(w[s] / neutral[s] for s in neutral)
+    assert worst <= attribution.EXPOSURE_CAP * (1.0 + attribution.CAP_POST_TOL), worst
+
+
+def test_the_cap_holds_at_an_ordinary_neutral_weight_too():
+    """The absolute form breaches at 0.1 neutral, not only at 1e-13.
+
+    A seeded sweep cannot find this: the window in which the absolute slack
+    exceeds the relative one has relative width ~1e-12, so random draws miss it
+    with probability ~1. It has to be hit by construction. With one active group
+    of multiplier M, the tilted weight of a single name is
+    `w_A = nM / (nM + 1 - n)`, which crosses `2n` at `n = (M - 2) / (2(M - 1))`
+    -- exactly 0.1 for `M = 2.25` (1.5 x 1.5, both documented table values). So
+    ULPs around 0.1 place the overshoot anywhere inside the window.
+
+    Measured on the absolute form: relative overshoot 2.000178e-12, i.e. above
+    CAP_REL_TOL and therefore a real breach. The bound asserted here is the
+    DETECTION tolerance, not the post-condition tolerance: 2e-12 sits below
+    CAP_POST_TOL, so the post-condition cannot fire on this fixture and this
+    test kills the absolute detection form on its own assertion rather than by
+    inheriting a raise from elsewhere.
+    """
+    neutral = {"A": 0.09999999999820006, "B": 0.90000000000179994}
+    assert sum(neutral.values()) == 1.0, (
+        "premise gone: the fixture no longer sums to exactly 1.0")
+    mults = {"themes": {"A": 2.25, "B": 1.0}}
+
+    w = attribution.weights_for_groups(neutral, mults, frozenset(mults))
+
+    assert sum(w.values()) == pytest.approx(1.0, abs=1e-9), sum(w.values())
+    worst = max(w[s] / neutral[s] for s in neutral)
+    assert worst <= attribution.EXPOSURE_CAP * (1.0 + attribution.CAP_REL_TOL), worst
+
+
+def test_an_overshoot_inside_the_detection_tolerance_is_left_alone():
+    """The false-positive boundary: correct code legitimately overshoots.
+
+    The detection tolerance is part of the OUTPUT contract. Capped names land on
+    exactly `EXPOSURE_CAP * neutral`, but FREE names are only ever guaranteed
+    `w <= EXPOSURE_CAP * neutral * (1 + CAP_REL_TOL)` -- anything inside that
+    window is correct and must not be clamped, and must not trip the
+    post-condition either.
+
+    Same construction as the ordinary-weight fixture above, one ULP band lower:
+    the fixed code's relative overshoot here is 2.000622e-13, inside CAP_REL_TOL.
+    Without this test, tightening CAP_REL_TOL to 0 (or tightening CAP_POST_TOL
+    below CAP_REL_TOL) looks green and then fires on in-contract input in a
+    client-facing run.
+    """
+    neutral = {"A": 0.09999999999981998, "B": 0.90000000000018002}
+    assert sum(neutral.values()) == 1.0, (
+        "premise gone: the fixture no longer sums to exactly 1.0")
+    mults = {"themes": {"A": 2.25, "B": 1.0}}
+
+    w = attribution.weights_for_groups(neutral, mults, frozenset(mults))
+
+    ratio = w["A"] / neutral["A"]
+    assert ratio > attribution.EXPOSURE_CAP, (
+        "premise gone: A no longer overshoots at all, so this fixture no "
+        "longer pins the false-positive boundary")
+    assert ratio <= attribution.EXPOSURE_CAP * (1.0 + attribution.CAP_REL_TOL), ratio
+    assert sum(w.values()) == pytest.approx(1.0, abs=1e-9), sum(w.values())
+
+
+def test_the_post_condition_tolerance_is_relative_not_absolute():
+    """`CAP_POST_TOL` must scale with the neutral weight it guards.
+
+    An ABSOLUTE post-condition (`w > EXPOSURE_CAP * nv + CAP_POST_TOL`) passes
+    the entire rest of this suite while failing to detect a real breach -- it is
+    BUG-003 rebuilt inside the guard that exists to catch BUG-003. The first
+    dict below sits at ratio ~2.00000002 against a 1e-13 neutral weight: a
+    breach ten times the relative tolerance, and invisible to any absolute
+    slack of 1e-9.
+    """
+    nv = 1e-13
+    breach = attribution.EXPOSURE_CAP * nv * (1.0 + 10.0 * attribution.CAP_POST_TOL)
+    with pytest.raises(attribution.AttributionError):
+        attribution._assert_cap_satisfied(
+            {"A": breach, "B": 1.0}, {"A": nv, "B": 1.0})
+
+    # ...and it must NOT fire on the two in-contract shapes: a name sitting on
+    # exactly the cap, and a free name sitting at exactly the detection
+    # tolerance (legitimate on every loop exit -- see the boundary test above).
+    at_cap = {s: attribution.EXPOSURE_CAP * v
+              for s, v in {"A": 0.1, "B": 1e-13}.items()}
+    attribution._assert_cap_satisfied(at_cap, {"A": 0.1, "B": 1e-13})
+
+    at_detection_tol = {
+        s: attribution.EXPOSURE_CAP * v * (1.0 + attribution.CAP_REL_TOL)
+        for s, v in {"A": 0.1, "B": 1e-13}.items()}
+    attribution._assert_cap_satisfied(at_detection_tol, {"A": 0.1, "B": 1e-13})
+
+
+def test_the_precondition_rejects_neutral_weights_the_cap_cannot_bound():
+    """`EXPOSURE_CAP * neutral[s]` is meaningless for these, so they must raise.
+
+    HEAD exempted them instead: the `neutral_w.get(s, 0.0) > 0` conjunct made
+    the cap skip any holding whose neutral weight was absent or non-positive, so
+    its ratio was unbounded AND undefined. A negative neutral weight silently
+    emitted a negative portfolio weight; a NaN one silently returned all-NaN
+    weights that flowed straight into the reported bps.
+
+    The message must name the symbol -- these arrive from hand-edited view YAML
+    and a bare "invalid neutral weight" is not actionable.
+    """
+    good = {"GOOD": 0.6, "BADSYM": 0.4}
+    for label, neutral in (
+        ("negative", {"GOOD": 1.2, "BADSYM": -0.2}),
+        ("nan", {"GOOD": 0.6, "BADSYM": float("nan")}),
+        ("inf", {"GOOD": 0.6, "BADSYM": float("inf")}),
+        ("missing", {"GOOD": 1.0}),
+    ):
+        with pytest.raises(attribution.AttributionError, match="BADSYM") as exc:
+            attribution._apply_exposure_cap(dict(good), dict(neutral))
+        assert "BADSYM" in str(exc.value), (label, str(exc.value))
+
+    # ...and the guard is wired, not merely present: the public entry point
+    # must raise too rather than returning a negative weight.
+    with pytest.raises(attribution.AttributionError, match="BADSYM"):
+        attribution.weights_for_groups(
+            {"GOOD": 1.2, "BADSYM": -0.2},
+            {"sectors": {"GOOD": 1.0, "BADSYM": 1.0}},
+            frozenset({"sectors"}))
+
+
+def test_a_zero_neutral_weight_stays_in_contract():
+    """`neutral == 0.0` is documented input and must NOT raise.
+
+    It sums to 1.0, so it meets the stated precondition, and it is provably
+    benign under the relative test: the raw weight is `0 * m == 0`, detection
+    `0 > 0` is false, and the output `0 <= EXPOSURE_CAP * 0` holds. Raising here
+    would narrow the contract HEAD honours -- a behaviour change smuggled in
+    under a bug fix.
+    """
+    neutral = {"A": 0.0, "B": 0.6, "C": 0.4}
+    assert sum(neutral.values()) == 1.0
+    mults = {"sectors": {"A": 1.0, "B": 1.0, "C": 1.0}}
+
+    w = attribution.weights_for_groups(neutral, mults, frozenset(mults))
+
+    assert w == {"A": pytest.approx(0.0), "B": pytest.approx(0.6),
+                 "C": pytest.approx(0.4)}, w
+    assert sum(w.values()) == pytest.approx(1.0, abs=1e-9)
+
+
+def test_the_post_condition_tolerance_is_looser_than_the_detection_tolerance():
+    """Ordering, pinned. Swapping the two constants passes every other test.
+
+    It then raises `AttributionError` on legitimate input: free names exit the
+    loop anywhere inside `CAP_REL_TOL`, so a post-condition tighter than the
+    detection tolerance rejects the module's own documented output. Measured on
+    a prototype with the constants exchanged: 2 in-contract portfolios out of
+    4000 crashed.
+    """
+    assert attribution.CAP_POST_TOL > attribution.CAP_REL_TOL, (
+        attribution.CAP_POST_TOL, attribution.CAP_REL_TOL)
+
+
+def test_the_post_condition_guards_the_enforce_cap_path_too(monkeypatch):
+    """Test the WIRING of the guard, not just the helper.
+
+    `_apply_exposure_cap` has TWO call sites: `weights_for_groups`, and the
+    `enforce_cap=True` branch of `active_return_bps` that re-applies the cap
+    after coverage renormalization. A guard placed in `weights_for_groups`
+    leaves the second one -- the exact site of the bug fixed in `bd55028` --
+    unguarded, and every fixture above stays green. This repo's recurring defect
+    is a test that pins a helper while the wired path goes unchecked.
+
+    Driving a real breach through `active_return_bps` is not possible on correct
+    code (the cap fixes it before the guard runs), so the guard is made
+    hyper-sensitive instead: with `CAP_POST_TOL` patched to -0.5 anything above
+    1.0x neutral trips it, and the weights below sit at exactly 2.0x. Liveness
+    of the patch is asserted first, so an implementation that reads the
+    tolerance once at import time fails here loudly rather than passing
+    vacuously.
+    """
+    neutral = {"A": 0.1, "B": 0.1, "C": 0.8}
+    weights = {"A": 0.2, "B": 0.2, "C": 0.6}          # A and B at exactly 2.0x
+    returns = {"A": 0.01, "B": 0.0, "C": 0.0}
+
+    # Unpatched, this is in-contract: nothing raises on either path.
+    attribution._assert_cap_satisfied(dict(weights), dict(neutral))
+    attribution.active_return_bps(
+        dict(weights), dict(neutral), returns, enforce_cap=True)
+
+    monkeypatch.setattr(attribution, "CAP_POST_TOL", -0.5)
+    with pytest.raises(attribution.AttributionError):
+        attribution._assert_cap_satisfied(dict(weights), dict(neutral))
+
+    with pytest.raises(attribution.AttributionError):
+        attribution.active_return_bps(
+            dict(weights), dict(neutral), returns, enforce_cap=True)
+
+    # The realized leg never enters `_apply_exposure_cap`, so it must still
+    # return a number even with the guard armed.
+    assert isinstance(
+        attribution.active_return_bps(dict(weights), dict(neutral), returns),
+        float)
