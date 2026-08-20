@@ -4,6 +4,27 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-08-20: Relabel `parallax-halal-screen`'s thresholds from "AAOIFI/DJIM" to conventional screening ratios — no threshold value changes
+
+**Why.** The skill's three Shariah screening thresholds carried the label "AAOIFI/DJIM" in six places, including the client-facing disclaimer emitted on every run. Verified against the published methodology documents (sources below), that label matches neither named standard: AAOIFI Standard 21 sets the debt cutoff at 30% of 12-month average market capitalization; Dow Jones/S&P Shariah sets it at 33% of trailing 24-month average market capitalization; the skill uses 33% of **total assets**, which is the MSCI Islamic Index Series / FTSE Shariah (Yasaar) denominator shape, not AAOIFI's or DJIM's. The 5% non-permissible-income threshold IS common to AAOIFI, S&P/DJ, and MSCI, so that element of the label was defensible; the debt-ratio attribution was not. Every screen run therefore shipped a false standards-conformance claim on its disclaimer.
+
+**Impact.**
+- The six "AAOIFI/DJIM" mentions in `skills/parallax-halal-screen/SKILL.md` are relabeled to describe the thresholds as conventional screening ratios, with the denominator (total assets) stated explicitly rather than implied by a standard name.
+- **No threshold value changed.** The 33% debt cutoff, the total-assets denominator, and the 5% non-permissible-income threshold are all unchanged.
+- The regenerated `plugin/skills/parallax-halal-screen/SKILL.md` lands in the same change; `plugin/` is machine-built by `build_bundle.py plugin` and is never hand-edited.
+
+**Alternatives.** [DROP] Relabel to "MSCI/FTSE" — rejected for this pass; the skill's 33% is not identical to MSCI/FTSE's 33.33%, so claiming that standard verbatim would be the same category of error being fixed. [DROP] Change the debt cutoff to 33.33% to match MSCI/FTSE exactly, or to 30% to match AAOIFI, while relabeling — rejected; a threshold VALUE change flips verdicts for holdings near the boundary, which is a behavior change requiring its own PR, its own regression fixtures, and its own decision entry. This entry covers the label only.
+
+**Flip conditions:** (a) a decision to match MSCI/FTSE exactly at 33.33% (with the value-change PR referenced above) — the label would then legitimately read "MSCI/FTSE-style"; (b) a Shariah board approves a specific named methodology for this skill — the label should then name that methodology and the thresholds should be brought into conformance with it in a value-change PR.
+
+**Sources:**
+- AAOIFI Standard 21: https://oicexchanges.org/files/1---shari-ah-screening-in-the-islamic-capital-markets-dr-hamed-merah-secretary-general-aaoifi.pdf
+- S&P Dow Jones Islamic Market Indices Methodology: https://www.spglobal.com/spdji/en/documents/methodologies/methodology-dj-islamic-market-indices.pdf
+- MSCI Islamic Index Series Methodology (2024-10-30): https://www.msci.com/indexes/documents/methodology/2_MSCI_Islamic_Index_Series_Methodology_20241030.pdf
+- FTSE Russell Shariah methodology: https://research.ftserussell.com/products/index-notices/home/getmethodology/?id=266328
+
+**Note:** the pre-existing "AAOIFI/DJIM" mentions elsewhere in this file (2026-05-25, halal-screen concentration sanity-check, N≥8) document an unrelated sector-exclusion heuristic decision and are not contradicted by this fix; left untouched.
+
 ## 2026-08-19: Make both cap tolerances relative, and derive the post-condition's value structurally rather than from a sweep
 
 **Why.** `_apply_exposure_cap` tested `w > EXPOSURE_CAP * neutral[s] + 1e-12`. An absolute slack against a quantity that scales with `neutral[s]` admits a ratio of `EXPOSURE_CAP + 1e-12 / neutral[s]`, unbounded as the weight shrinks — 3.000000x at `neutral = 1e-13`, inside the documented contract. This is the fifth round on this function. The first three fixed the algorithm; this one fixes a constant whose FORM was wrong.
