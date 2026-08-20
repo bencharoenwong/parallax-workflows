@@ -17,17 +17,17 @@ description: "Shariah-compliant stock screening: filter for halal investments, c
 
 - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
 - explain_methodology does NOT support shariah/halal — valid concepts are value, quality, momentum, defensive, tactical, overall, factor_weighting, scoring
-- Shariah thresholds are hardcoded in this skill (conventional screening ratios) — derive compliance from get_financials data
+- Shariah thresholds are hardcoded in this skill (commonly used screening ratios) — derive compliance from get_financials data
 - get_financial_analysis (Palepu framework) is async ~2-5 min — warn user before calling
 - Financial ratios from get_financials help verify debt/revenue compliance thresholds
 - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
 - Cost: ~4 tokens single-stock, +5 optional if Palepu is called; ~4-5/holding in portfolio mode. Breakdown in `_parallax/token-costs.md`.
 
-Screen stocks and portfolios for Shariah compliance using conventional screening ratios applied to Parallax financial data.
+Screen stocks and portfolios for Shariah compliance using commonly used screening ratios applied to Parallax financial data.
 
 ## Screening Thresholds
 
-These are the Shariah compliance thresholds used in this skill. They are conventional ratios, not a claim of conformance to any named published standard. They are applied to data retrieved from `get_financials`.
+These are the Shariah compliance thresholds applied by this skill. They are commonly used screening ratios, not a claim of conformance to any named published standard. They are applied to data retrieved from `get_financials`.
 
 | Ratio | Threshold | Pass condition |
 |-------|-----------|----------------|
@@ -81,7 +81,7 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 
 ## Output Format
 
-- **Screening Criteria** (conventional screening ratios as listed above)
+- **Screening Criteria** (commonly used screening ratios as listed above)
 - **Plain-Language Summary** (under `audience=client_safe` only): 2-3 sentences stating the screen outcome counts in plain terms for a non-specialist reader; factor names carry the §13.3 gloss if used, no cutoff arithmetic, framed per §12 as informational with no directives. **State all three counts whenever any name is `UNVERIFIED`** — compliant, non-compliant, and unverified — in plain words (e.g. "2 holdings could not be screened because financial data was unavailable"). A summary reporting only "18 of 20 compliant" while 2 went unscreened is the §4.0 failure this skill exists to prevent, and it is the first line the client reads.
 - **Compliance Results** (table: symbol, status ∈ `COMPLIANT` / `NON-COMPLIANT` / `UNVERIFIED`, reason if non-compliant or unverified). `UNVERIFIED` is a rendered state, never an omission: give the reason as the field or call that was unavailable (e.g. `UNVERIFIED — total revenue unavailable from get_financials(ratios)`). Do not collapse the three states into a binary Y/N column, and never leave a screened symbol out of this table.
 - **Unverified Names** (render only if any row is `UNVERIFIED`): one line per name stating what was missing and that the name is excluded from the Compliant Subset pending a re-screen. Per `parallax-conventions.md` §4.0 this is a data-integrity warning and is **not suppressible under `audience=client_safe`** — a client reading a compliant list must be able to tell "screened and cleared" from "could not be screened."
@@ -101,4 +101,4 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 
 Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 
-> These are analytical outputs based on conventional Shariah screening ratios (debt and interest-bearing-asset thresholds measured against total assets) applied to Parallax financial data, not investment advice or a fatwa. Consult a qualified Shariah advisor for binding rulings.
+> These are analytical outputs based on commonly used Shariah screening ratios (debt and interest-bearing-asset thresholds measured against total assets) applied to Parallax financial data, not investment advice or a fatwa. Consult a qualified Shariah advisor for binding rulings.

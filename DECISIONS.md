@@ -4,12 +4,12 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
-## 2026-08-20: Relabel `parallax-halal-screen`'s thresholds from "AAOIFI/DJIM" to conventional screening ratios — no threshold value changes
+## 2026-08-20: Relabel `parallax-halal-screen`'s thresholds from "AAOIFI/DJIM" to commonly used screening ratios — no threshold value changes
 
 **Why.** The skill's three Shariah screening thresholds carried the label "AAOIFI/DJIM" in six places, including the client-facing disclaimer emitted on every run. Verified against the published methodology documents (sources below), that label matches neither named standard: AAOIFI Standard 21 sets the debt cutoff at 30% of 12-month average market capitalization; Dow Jones/S&P Shariah sets it at 33% of trailing 24-month average market capitalization; the skill uses 33% of **total assets**, a denominator neither AAOIFI nor DJIM uses. The 5% non-permissible-income threshold IS common to AAOIFI, S&P/DJ, and MSCI, so that element of the label was defensible; the debt-ratio attribution was not. Every screen run therefore shipped a false standards-conformance claim on its disclaimer.
 
 **Impact.**
-- The six "AAOIFI/DJIM" mentions in `skills/parallax-halal-screen/SKILL.md` are relabeled to describe the thresholds as conventional screening ratios, with the denominator (total assets) stated explicitly rather than implied by a standard name.
+- The six "AAOIFI/DJIM" mentions in `skills/parallax-halal-screen/SKILL.md` are relabeled to describe the thresholds as commonly used screening ratios, with the denominator (total assets) stated explicitly rather than implied by a standard name. "Conventional" was avoided as the label because in Islamic finance it is the standard antonym of Shariah-compliant, and this same file uses it in that sense for a prohibited industry.
 - **No threshold value changed.** The 33% debt cutoff, the total-assets denominator, and the 5% non-permissible-income threshold are all unchanged.
 - The regenerated `plugin/skills/parallax-halal-screen/SKILL.md` lands in the same change; `plugin/` is machine-built by `build_bundle.py plugin` and is never hand-edited.
 
