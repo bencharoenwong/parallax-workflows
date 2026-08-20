@@ -35,7 +35,7 @@ These are the Shariah compliance thresholds used in this skill. They are convent
 | (Cash + interest-bearing securities) / Total assets | < 33% | Limited exposure to interest-bearing instruments |
 | (Interest income + non-permissible revenue) / Total revenue | < 5% | Negligible income from haram activities |
 
-Debt and interest-bearing-asset ratios are measured against **total assets**, matching the MSCI Islamic Index Series / FTSE Shariah (Yasaar) methodology shape. The 5% non-permissible-income threshold is common to AAOIFI, S&P/Dow Jones, and MSCI alike. The 33% cutoff here is marginally stricter than the 33.33% MSCI and FTSE apply; this is deliberate and is not a rounding error.
+Debt and interest-bearing-asset ratios are measured against **total assets**, not against market capitalization. Published Shariah screening standards differ from one another on the denominator, on the exact cutoffs, and on the set of ratios screened, so a verdict from this skill is not interchangeable with any named index provider's or standards body's screen. The 33% and 5% cutoffs are this skill's own fixed values; they are not maintained to conform to any published standard.
 
 **Business activity screen (qualitative):** The company's primary business must not be in prohibited industries (conventional banking/insurance, alcohol, tobacco, gambling, pork, weapons, adult entertainment). This is assessed from `get_company_info` sector/industry data.
 

@@ -7,7 +7,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 ## 2026-08-20
 
 ### Fixed
-- **`parallax-halal-screen`'s Shariah screening thresholds are relabeled from "AAOIFI/DJIM" to conventional screening ratios, with the denominator stated explicitly** — the label appeared in six places, including the client-facing disclaimer on every run, and matched neither named standard (AAOIFI uses 30% of market cap; DJIM uses 33% of market cap; the skill uses 33% of total assets, the MSCI/FTSE shape). No threshold value changes; anyone relying on the old "AAOIFI/DJIM-compliant" claim in output or reports should treat it as a conventional 33%-of-total-assets debt screen instead.
+- **`parallax-halal-screen`'s Shariah screening thresholds are relabeled from "AAOIFI/DJIM" to conventional screening ratios, with the denominator stated explicitly** — the label appeared in six places, including the client-facing disclaimer on every run, and matched neither named standard (AAOIFI uses 30% of market cap; DJIM uses 33% of market cap; the skill uses 33% of total assets). No threshold value changes; anyone relying on the old "AAOIFI/DJIM-compliant" claim in output or reports should treat it as a conventional 33%-of-total-assets debt screen instead.
 
 ## 2026-08-19
 
