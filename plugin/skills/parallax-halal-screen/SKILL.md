@@ -17,23 +17,25 @@ description: "Shariah-compliant stock screening: filter for halal investments, c
 
 - JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
 - explain_methodology does NOT support shariah/halal — valid concepts are value, quality, momentum, defensive, tactical, overall, factor_weighting, scoring
-- Shariah thresholds are hardcoded in this skill (AAOIFI/DJIM standards) — derive compliance from get_financials data
+- Shariah thresholds are hardcoded in this skill (commonly used screening ratios) — derive compliance from get_financials data
 - get_financial_analysis (Palepu framework) is async ~2-5 min — warn user before calling
 - Financial ratios from get_financials help verify debt/revenue compliance thresholds
 - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
 - Cost: ~4 tokens single-stock, +5 optional if Palepu is called; ~4-5/holding in portfolio mode. Breakdown in `_parallax/token-costs.md`.
 
-Screen stocks and portfolios for Shariah compliance using AAOIFI/DJIM screening thresholds applied to Parallax financial data.
+Screen stocks and portfolios for Shariah compliance using commonly used screening ratios applied to Parallax financial data.
 
-## AAOIFI / DJIM Screening Thresholds
+## Screening Thresholds
 
-These are the standard Shariah compliance thresholds used in this skill. They are applied to data retrieved from `get_financials`.
+These are the Shariah compliance thresholds applied by this skill. They are commonly used screening ratios, not a claim of conformance to any named published standard. They are applied to data retrieved from `get_financials`.
 
 | Ratio | Threshold | Pass condition |
 |-------|-----------|----------------|
 | Total debt / Total assets | < 33% | Low leverage — no excessive interest-bearing debt |
 | (Cash + interest-bearing securities) / Total assets | < 33% | Limited exposure to interest-bearing instruments |
 | (Interest income + non-permissible revenue) / Total revenue | < 5% | Negligible income from haram activities |
+
+Debt and interest-bearing-asset ratios are measured against **total assets**, not against market capitalization. Published Shariah screening standards differ from one another on the denominator, on the exact cutoffs, and on the set of ratios screened, so a verdict from this skill is not interchangeable with any named index provider's or standards body's screen. The 33% and 5% cutoffs are this skill's own fixed values; they are not maintained to conform to any published standard.
 
 **Business activity screen (qualitative):** The company's primary business must not be in prohibited industries (conventional banking/insurance, alcohol, tobacco, gambling, pork, weapons, adult entertainment). This is assessed from `get_company_info` sector/industry data.
 
@@ -79,12 +81,12 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 
 ## Output Format
 
-- **Screening Criteria** (AAOIFI/DJIM thresholds as listed above)
+- **Screening Criteria** (commonly used screening ratios as listed above)
 - **Plain-Language Summary** (under `audience=client_safe` only): 2-3 sentences stating the screen outcome counts in plain terms for a non-specialist reader; factor names carry the §13.3 gloss if used, no cutoff arithmetic, framed per §12 as informational with no directives. **State all three counts whenever any name is `UNVERIFIED`** — compliant, non-compliant, and unverified — in plain words (e.g. "2 holdings could not be screened because financial data was unavailable"). A summary reporting only "18 of 20 compliant" while 2 went unscreened is the §4.0 failure this skill exists to prevent, and it is the first line the client reads.
 - **Compliance Results** (table: symbol, status ∈ `COMPLIANT` / `NON-COMPLIANT` / `UNVERIFIED`, reason if non-compliant or unverified). `UNVERIFIED` is a rendered state, never an omission: give the reason as the field or call that was unavailable (e.g. `UNVERIFIED — total revenue unavailable from get_financials(ratios)`). Do not collapse the three states into a binary Y/N column, and never leave a screened symbol out of this table.
 - **Unverified Names** (render only if any row is `UNVERIFIED`): one line per name stating what was missing and that the name is excluded from the Compliant Subset pending a re-screen. Per `parallax-conventions.md` §4.0 this is a data-integrity warning and is **not suppressible under `audience=client_safe`** — a client reading a compliant list must be able to tell "screened and cleared" from "could not be screened."
 - **Key Ratios** (debt/assets %, interest-bearing/assets %, non-permissible revenue %; render each unavailable ratio as `UNVERIFIED`, not as a blank, a dash, or an estimate)
-- **Verdict sensitivity**: the ratio nearest its AAOIFI/DJIM cutoff (33% debt/assets, 33% interest-bearing/assets, or 5% non-permissible-revenue) and the arithmetic flip condition, per `parallax-conventions.md` §11 (internal_analyst mode only per conventions §13.2). Applies only to the three quantitative ratios above — never to the qualitative business-activity screen. **Select only among ratios that were actually computed**: an `UNVERIFIED` ratio has no distance to its cutoff, so it can never be the surfaced input, and a name whose overall verdict is `UNVERIFIED` renders no sensitivity line at all (per §11.2, omitting it is the compliant behavior — never infer a flip number from a missing input).
+- **Verdict sensitivity**: the ratio nearest its cutoff (33% debt/assets, 33% interest-bearing/assets, or 5% non-permissible-revenue) and the arithmetic flip condition, per `parallax-conventions.md` §11 (internal_analyst mode only per conventions §13.2). Applies only to the three quantitative ratios above — never to the qualitative business-activity screen. **Select only among ratios that were actually computed**: an `UNVERIFIED` ratio has no distance to its cutoff, so it can never be the surfaced input, and a name whose overall verdict is `UNVERIFIED` renders no sensitivity line at all (per §11.2, omitting it is the compliant behavior — never infer a flip number from a missing input).
 - **Purification Amount** (if applicable — percentage of dividends requiring purification)
 - **Alternatives** (for non-compliant holdings: scored compliant replacements in same sector — informational candidates, not replacement instructions)
 - **Compliant Subset** (if portfolio mode: the screened-compliant holdings and their current weights — an informational screen result per conventions §12, not a rebalancing instruction; for construction use /parallax-portfolio-builder then re-screen). Contains **verified-compliant names only** — `UNVERIFIED` holdings are excluded per conventions §4.0. If any were excluded, state the count and that weights were renormalised over verified-compliant names, so the subset is never mistaken for a full screen of the portfolio.
@@ -99,4 +101,4 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 
 Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 
-> These are analytical outputs based on AAOIFI/DJIM screening thresholds applied to Parallax financial data, not investment advice or a fatwa. Consult a qualified Shariah advisor for binding rulings.
+> These are analytical outputs based on commonly used Shariah screening ratios (debt and interest-bearing-asset thresholds measured against total assets) applied to Parallax financial data, not investment advice or a fatwa. Consult a qualified Shariah advisor for binding rulings.
