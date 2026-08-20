@@ -27,8 +27,26 @@ jobs:
       # import error surfaced only once the step started collecting the whole
       # directory. Installing the dependency runs the test rather than hiding
       # it behind an --ignore.
+      #
+      # The other names carry the roots wired in below. Adding a test root to
+      # this file also means adding whatever that root imports, because nothing
+      # here auto-discovers dependencies:
+      #   - house-view/requirements.txt pins rfc8785 + pynacl, which
+      #     manifest_verify.py imports at module scope (it raises SystemExit
+      #     when they are absent, which aborts pytest collection outright).
+      #     The house-view, make-house-view and judge-house-view roots all
+      #     import it. Installing the pinned lockfile, not loose names, keeps
+      #     CI on the versions the manifest fixtures were hashed against.
+      #   - python-docx / python-pptx back extract/ooxml.py, exercised by the
+      #     white-label doc-extractor and round-trip tests.
+      #   - jsonschema is optional at runtime for white-label loader.py, which
+      #     skips validation without it — so its schema_invalid tests assert
+      #     nothing unless it is installed here.
       - name: Install test deps
-        run: python -m pip install --upgrade pip pytest pyyaml
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest pyyaml jsonschema python-docx python-pptx
+          python -m pip install -r skills/_parallax/house-view/requirements.txt
       - name: Grader unit tests
         run: python -m pytest evals/graders/ -q
       - name: Contract, provenance and precision gates
