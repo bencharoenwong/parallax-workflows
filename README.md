@@ -196,11 +196,12 @@ Bring your own house view. The CIO memo, IC strategy doc, or macro-desk PDF that
 | `/parallax-judge-house-view --dry` | Skip the Phase 5 LLM recommendation step; return deterministic drift severity from MCP signals alone |
 | `/parallax-judge-house-view --mock-mcp <path>` | Replace live MCP fan-out with a canned JSON payload (CI / testing). Independent of `--dry` — combinable |
 
-**Three design choices worth knowing about:**
+**Four design choices worth knowing about:**
 
 1. **Your LLM, your prompt.** Extraction runs in your harness, against your model. Documents do not leave your machine.
 2. **Local by default.** The view lives at `~/.parallax/active-house-view/` — `view.yaml`, `prose.md`, `provenance.yaml`, `audit.jsonl`. Files are written `0600`, the directory is `0700`. We do not host it.
 3. **Audit was a design input.** Every save writes a hash-chained audit entry, an Ed25519-signed reasoning chain, and a per-tilt provenance record. `--export` produces a regulator-grade bundle. `--why tilts.factors.momentum` traces any tilt back to the source span (or rule, or manual edit) that generated it.
+4. **PDF extraction is not deterministic.** LLM-based extraction can read the same document differently on different runs, especially on long PDFs. Nothing is saved without your confirmation at the gate — treat the draft YAML as a first read to check, not a precise transcription of the source.
 
 Active view is consumed by: `parallax-portfolio-builder`, `parallax-rebalance`, `parallax-thematic-screen`, `parallax-morning-brief`, `parallax-client-review`, `parallax-explain-portfolio`. Conflict-flag-only by: `parallax-should-i-buy`, `parallax-deep-dive`. See `skills/parallax-load-house-view/samples/` for sample CIO views, `skills/_parallax/house-view/loader.md` for the multiplier mapping and conflict-resolution rules, and `skills/_parallax/house-view/README.md` for the module reference.
 
