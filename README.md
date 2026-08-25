@@ -196,7 +196,7 @@ Bring your own house view. The CIO memo, IC strategy doc, or macro-desk PDF that
 | `/parallax-judge-house-view --dry` | Skip the Phase 5 LLM recommendation step; return deterministic drift severity from MCP signals alone |
 | `/parallax-judge-house-view --mock-mcp <path>` | Replace live MCP fan-out with a canned JSON payload (CI / testing). Independent of `--dry` — combinable |
 
-**Three design choices worth knowing about:**
+**Four design choices worth knowing about:**
 
 1. **Your LLM, your prompt.** Extraction runs in your harness, against your model. Documents do not leave your machine.
 2. **Local by default.** The view lives at `~/.parallax/active-house-view/` — `view.yaml`, `prose.md`, `provenance.yaml`, `audit.jsonl`. Files are written `0600`, the directory is `0700`. We do not host it.
