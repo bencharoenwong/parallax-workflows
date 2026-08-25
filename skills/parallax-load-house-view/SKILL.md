@@ -16,6 +16,7 @@ description: "Ingest a CIO house view (PDF / text / URL / wizard) into the Paral
 - JIT-load _parallax/house-view/schema.yaml before extraction — it is the single source of truth for the YAML shape
 - JIT-load _parallax/house-view/loader.md to see what consumer skills will validate (helps you produce a valid view first time). Note: loader.md §3 (Multiplier mapping) is a normative replay dependency per reasoning chain spec — changes to multiplier values, factor ordering, or composite formula MUST coincide with a `skill_version` bump and break replay byte-identity for chains pinned to prior versions.
 - PDF input — use the Read tool with `pages` parameter for >10 pages; do NOT defuddle PDFs (we want figure context)
+- **PDF extraction is not deterministic, especially on large PDFs.** LLM-based text extraction can read the same PDF differently across runs. This risk is highest on long documents processed in chunks (Step 1). The confirmation gate (Step 3) is the safeguard: never treat draft YAML from a PDF as final without uploader review, and never re-run extraction silently to "fix" a value the uploader did not flag.
 - URL input — use the defuddle skill if Bash is available, else WebFetch
 - Confirmation gate is REQUIRED — the uploader must explicitly confirm extracted YAML before save (uploader_confirmed=true). Saving without confirmation breaks downstream loaders.
 - Always compute view_hash from the canonical tilts body per schema.yaml §"view_hash computation" — sorted keys, no comments, no empty fields
@@ -71,6 +72,8 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 If a path or URL was given: read the source via the appropriate tool. For PDFs:
 - **≤10 pages:** use `Read` with `pages` parameter in one call; proceed to Step 2.
 - **>10 pages:** use streaming extraction — read in 5-page chunks via `Read` with `pages: "N-(N+4)"`, parse YAML incrementally, merge results. Track `extraction_confidence` per chunk (if a chunk fails to parse, flag ≤ 0.5 for that chunk and continue). Merged result proceeds to Step 2 with average confidence score across chunks.
+
+**Determinism note.** Chunked extraction on a large PDF is the least deterministic path in this skill — re-running the same document can produce different draft values. Do not present it to the uploader as a precise read of the source. Surface a lower confidence when the source is long or dense, and rely on the Step 3 confirmation gate, not on repeated extraction attempts, to reach a value the uploader trusts.
 
 For URLs: use `defuddle` or `WebFetch`. Skip the wizard and proceed to Step 2.
 
