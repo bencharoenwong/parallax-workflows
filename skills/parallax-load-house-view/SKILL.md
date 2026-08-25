@@ -16,7 +16,7 @@ description: "Ingest a CIO house view (PDF / text / URL / wizard) into the Paral
 - JIT-load _parallax/house-view/schema.yaml before extraction — it is the single source of truth for the YAML shape
 - JIT-load _parallax/house-view/loader.md to see what consumer skills will validate (helps you produce a valid view first time). Note: loader.md §3 (Multiplier mapping) is a normative replay dependency per reasoning chain spec — changes to multiplier values, factor ordering, or composite formula MUST coincide with a `skill_version` bump and break replay byte-identity for chains pinned to prior versions.
 - PDF input — use the Read tool with `pages` parameter for >10 pages; do NOT defuddle PDFs (we want figure context)
-- **PDF extraction is not deterministic, especially on large PDFs.** LLM-based text extraction can read the same PDF differently across runs. This risk is highest on long documents processed in chunks (Step 1). The confirmation gate (Step 3) is the safeguard: never treat draft YAML from a PDF as final without uploader review, and never re-run extraction silently to "fix" a value the uploader did not flag.
+- PDF extraction is not deterministic, especially on large chunked PDFs — see the determinism note in Step 1.
 - URL input — use the defuddle skill if Bash is available, else WebFetch
 - Confirmation gate is REQUIRED — the uploader must explicitly confirm extracted YAML before save (uploader_confirmed=true). Saving without confirmation breaks downstream loaders.
 - Always compute view_hash from the canonical tilts body per schema.yaml §"view_hash computation" — sorted keys, no comments, no empty fields
