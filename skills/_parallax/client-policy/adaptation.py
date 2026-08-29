@@ -30,8 +30,11 @@ CLI:
     python adaptation.py --policy <file.yaml> --exposures <file.json> \\
         --view-tilts <file.json> --today 2026-08-29 --json
 
-Exit 0 on any data-level outcome, validation errors included. Exit 2 only on an
-unreadable file, unparseable YAML/JSON, or bad arguments.
+Exit 0 on any data-level outcome, validation errors included — a policy that
+parses but is not a mapping is one of those, and returns the `no_policy` tier
+with a blocking error and an empty `policy_hash`. Exit 2 only on an unreadable
+file, unparseable YAML/JSON, bad arguments, or an `--exposures` / `--view-tilts`
+payload that parses but is not a JSON object (an operator mistake, not data).
 
 --------------------------------------------------------------------------
 `--exposures` payload schema (pinned; stated identically in `policy-loader.md`
@@ -209,9 +212,11 @@ class Conflict:
 
 @dataclass(frozen=True)
 class DataQualityRow:
-    """One disclosure about coverage, conversion, staleness, or an unevaluated budget."""
+    """One disclosure about coverage, conversion, staleness, an unevaluated budget, or an
+    unresolvable tilt inheritance."""
     kind: str          # uncovered_dimension|unmapped_holding|basis_converted|stale_policy|
-                       # te_budget_not_evaluated|missing_bands|unknown_segment_key
+                       # te_budget_not_evaluated|missing_bands|unknown_segment_key|
+                       # ambiguous_broad_tilt
     detail: str
 
 
@@ -372,6 +377,15 @@ def validate_policy(policy: dict) -> list[PolicyError]:
                 "basis 'total' requires a non-zero mandate.strategic_allocation.equity",
                 severity="dimension", dimension=dim_name))
 
+        # Fail loud on an unrecognized (or absent) code list. An unknown name
+        # would silently disable the segment-key check in `run_pipeline`, so a
+        # typo'd key set would pass validation AND emit no disclosure.
+        if dim.get("code_list") not in CODE_LISTS:
+            errors.append(PolicyError(
+                f"{base}.code_list",
+                f"unrecognized code list {dim.get('code_list')!r}; expected one of "
+                f"{sorted(CODE_LISTS)}. The segment key set is never guessed."))
+
         allocation = dim.get("strategic_allocation") or {}
         if not isinstance(allocation, dict):
             errors.append(PolicyError(f"{base}.strategic_allocation", "not a mapping"))
@@ -507,10 +521,17 @@ def compute_policy_hash(policy: dict) -> str:
     `metadata` and `governance` are out of scope on purpose: re-supplying the
     same mandate with a new `supplied_at` must preserve the digest, so the audit
     row correlates policy CONTENT, not delivery events.
+
+    A non-mapping argument is canonicalized as an empty body rather than raising
+    (invariant 6: never raise on a data problem). `run_pipeline` does not rely on
+    that: it reports `policy_hash = ""` for a policy that is not a mapping,
+    because R-2 carries a digest only when the policy parsed AS a mapping.
     """
+    if not isinstance(policy, dict):
+        policy = {}
     body = {
-        "mandate": _strip_empty((policy or {}).get("mandate", {}) or {}),
-        "adaptation": _strip_empty((policy or {}).get("adaptation", {}) or {}),
+        "mandate": _strip_empty(policy.get("mandate", {}) or {}),
+        "adaptation": _strip_empty(policy.get("adaptation", {}) or {}),
     }
     canonical = yaml.safe_dump(
         body, sort_keys=True, default_flow_style=False,
@@ -629,23 +650,63 @@ def _distance_to_edge(current: float, band_min: float | None, band_max: float | 
     return min(abs(current - e) for e in edges)
 
 
+def _tilt_section(dimension: str, view_tilts: dict | None) -> dict:
+    if not isinstance(view_tilts, dict):
+        return {}
+    section = view_tilts.get(_TILT_SECTION.get(dimension, dimension)) or {}
+    return section if isinstance(section, dict) else {}
+
+
+def _broad_bucket_tilts(dimension: str, key: str, section: dict) -> list[tuple[str, int]]:
+    """(bucket, tilt) for every tilted broad bucket containing `key`, in map order.
+
+    Only the `region` dimension has broad buckets; sectors and every other
+    dimension inherit nothing.
+    """
+    if dimension != "region":
+        return []
+    return [(bucket, int(section[bucket]))
+            for bucket, members in BROAD_REGION_MEMBERS.items()
+            if key in members and _is_number(section.get(bucket))]
+
+
+def ambiguous_broad_tilt(dimension: str, key: str, view_tilts: dict | None
+                         ) -> list[tuple[str, int]] | None:
+    """The conflicting (bucket, tilt) pairs when a key inherits DISAGREEING buckets.
+
+    None when there is no ambiguity: the key carries its own tilt, no bucket
+    contains it, or every containing bucket agrees.
+    """
+    section = _tilt_section(dimension, view_tilts)
+    if _is_number(section.get(key)):
+        return None
+    candidates = _broad_bucket_tilts(dimension, key, section)
+    if len({tilt for _, tilt in candidates}) > 1:
+        return candidates
+    return None
+
+
 def resolve_tilt(dimension: str, key: str, view_tilts: dict | None) -> int:
     """Tilt for one policy segment, applying `loader.md` §3 broad-vs-specific precedence.
 
     A specific country key wins over a broad bucket for its members. A specific
     tilt and a broad tilt are never summed.
+
+    A key can belong to more than one broad bucket (`india` is in both
+    `apac_ex_japan` and `em_ex_china`). With no specific tilt: agreeing buckets
+    inherit their shared tilt; disagreeing buckets resolve to 0 and `run_pipeline`
+    discloses the collision as an `ambiguous_broad_tilt` row rather than picking
+    a winner by map order.
     """
-    section = (view_tilts or {}).get(_TILT_SECTION.get(dimension, dimension)) or {}
-    if not isinstance(section, dict):
-        return 0
+    section = _tilt_section(dimension, view_tilts)
     value = section.get(key)
     if _is_number(value):
         return int(value)
-    if dimension == "region":
-        for bucket, members in BROAD_REGION_MEMBERS.items():
-            if key in members and _is_number(section.get(bucket)):
-                return int(section[bucket])
-    return 0
+    candidates = _broad_bucket_tilts(dimension, key, section)
+    if not candidates:
+        return 0
+    tilts = {tilt for _, tilt in candidates}
+    return candidates[0][1] if len(tilts) == 1 else 0
 
 
 def compute_drift(segments: list[Segment], current_exposures: dict,
@@ -782,7 +843,8 @@ def run_pipeline(policy: dict | None, exposures: dict | None,
     """S0-S2 orchestration plus fallback-ladder tier resolution.
 
     Tier resolution (pinned decision table):
-      - no policy, or any blocking validation error   -> `no_policy`, no rows
+      - no policy, a policy that is not a mapping, or any blocking validation
+        error                                        -> `no_policy`, no rows
       - >= 1 covered dimension, no covered segment banded -> `weights_only`
       - both dimensions covered, every segment two-sided  -> `full`
       - anything else                                  -> `partial_dimensions`
@@ -796,11 +858,24 @@ def run_pipeline(policy: dict | None, exposures: dict | None,
     structure and the outcome stays data-level (exit 0 at the CLI).
     """
     today = today or date.today()
-    view_tilts = view_tilts or {}
+    # Non-mapping payloads are data problems, never exceptions. A non-mapping
+    # exposures payload reads as "no portfolio supplied"; the CLI grades it
+    # more strictly (exit 2) because there it is an operator mistake.
+    view_tilts = view_tilts if isinstance(view_tilts, dict) else {}
+    if exposures is not None and not isinstance(exposures, dict):
+        exposures = None
 
     if policy is None:
         return _empty_result("no_policy", DEFAULT_K, "default", CALIBRATION_STATUS,
                              [], [], _budget(0.0, None, False, 1.0), "")
+
+    if not isinstance(policy, dict):
+        # Parseable but not a mapping. `validate_policy` reports the blocking
+        # failure; `policy_hash` stays empty because R-2 carries a digest only
+        # when the policy parsed AS a mapping.
+        return _empty_result("no_policy", DEFAULT_K, "default", CALIBRATION_STATUS,
+                             validate_policy(policy), [],
+                             _budget(0.0, None, False, 1.0), "")
 
     errors = validate_policy(policy)
     policy_hash = compute_policy_hash(policy)
@@ -878,6 +953,15 @@ def run_pipeline(policy: dict | None, exposures: dict | None,
                     kind="missing_bands",
                     detail=(f"{dim_name}.{key}: one-sided band, `{missing}` absent; that "
                             "direction has no room and is never inferred."),
+                ))
+            conflicting = ambiguous_broad_tilt(dim_name, key, view_tilts)
+            if conflicting:
+                pairs = ", ".join(f"{bucket} {tilt:+d}" for bucket, tilt in conflicting)
+                data_quality.append(DataQualityRow(
+                    kind="ambiguous_broad_tilt",
+                    detail=(f"{dim_name}.{key}: inherits disagreeing broad-bucket tilts "
+                            f"({pairs}) and carries no specific tilt; resolved to 0. Add a "
+                            f"specific `{key}` tilt to the view to settle it."),
                 ))
             segments.append(Segment(dim_name, key, float(weight), band_min, band_max))
 
@@ -1118,6 +1202,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: cannot read policy {args.policy}: {type(e).__name__}", file=sys.stderr)
         return 2
 
+    # A payload that parses but is not a JSON object is an operator mistake (the
+    # wrong file, or a bare array), so it is graded with the unparseable class.
+    # The policy is different: there a parseable non-mapping is a DATA problem
+    # and stays exit 0 with a blocking validation error.
     exposures = None
     if args.exposures:
         try:
@@ -1125,6 +1213,10 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError) as e:
             print(f"error: cannot read exposures {args.exposures}: {type(e).__name__}",
                   file=sys.stderr)
+            return 2
+        if not isinstance(exposures, dict):
+            print(f"error: exposures {args.exposures} must be a JSON object, got "
+                  f"{type(exposures).__name__}", file=sys.stderr)
             return 2
 
     view_tilts = None
@@ -1134,6 +1226,10 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError) as e:
             print(f"error: cannot read view tilts {args.view_tilts}: {type(e).__name__}",
                   file=sys.stderr)
+            return 2
+        if not isinstance(view_tilts, dict):
+            print(f"error: view tilts {args.view_tilts} must be a JSON object, got "
+                  f"{type(view_tilts).__name__}", file=sys.stderr)
             return 2
 
     today = None

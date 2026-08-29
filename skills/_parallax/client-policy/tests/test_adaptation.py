@@ -53,6 +53,21 @@ def sample_tilts() -> dict:
     return load_json("view_tilts_sample.json")
 
 
+def india_policy() -> dict:
+    """policy_full with `em_ex_china` renamed to `india`, a member of two broad buckets."""
+    policy = full_policy()
+    region = policy["mandate"]["sub_allocations"]["dimensions"]["region"]
+    region["strategic_allocation"]["india"] = region["strategic_allocation"].pop("em_ex_china")
+    region["allocation_bands"]["india"] = region["allocation_bands"].pop("em_ex_china")
+    return policy
+
+
+def india_exposures() -> dict:
+    exposures = sample_exposures()
+    exposures["dimensions"]["region"]["india"] = exposures["dimensions"]["region"].pop("em_ex_china")
+    return exposures
+
+
 def taa_row(key: str, desired, tilt: int = 1, dimension: str = "region"):
     """A synthetic TaaRow for unit-testing apply_budget_cap in isolation."""
     return adaptation.TaaRow(
@@ -281,6 +296,59 @@ def test_breach_with_opposite_sign_tilt_is_passive():
     )
     assert inside[0].band_status == "inside"
     assert inside[0].breach_kind is None
+
+
+# ==========================================================================
+# §4.2.7 — broad-vs-specific tilt precedence
+# ==========================================================================
+
+def test_specific_region_tilt_wins_over_broad():
+    tilts = {"regions": {"europe": 2, "germany": -1}}
+    # `germany` is a member of the `europe` bucket but carries its own tilt.
+    assert adaptation.resolve_tilt("region", "germany", tilts) == -1
+    # A sibling member with no specific tilt inherits the bucket.
+    assert adaptation.resolve_tilt("region", "france", tilts) == 2
+    # Never summed: -1 and +2 do not combine into +1.
+    assert adaptation.resolve_tilt("region", "germany", tilts) != 1
+
+
+def test_broad_bucket_tilt_inherited_by_member():
+    tilts = {"regions": {"em_ex_china": 1}}
+    assert adaptation.resolve_tilt("region", "brazil", tilts) == 1
+    assert adaptation.resolve_tilt("region", "mexico", tilts) == 1
+    # A non-member inherits nothing.
+    assert adaptation.resolve_tilt("region", "us", tilts) == 0
+    # The bucket key itself resolves to its own tilt, not by inheritance.
+    assert adaptation.resolve_tilt("region", "em_ex_china", tilts) == 1
+    # Sector keys have no broad buckets at all.
+    assert adaptation.resolve_tilt("sector", "financials", {"sectors": {"energy": 2}}) == 0
+
+
+def test_overlapping_broad_tilts_agreeing_inherit():
+    # `india` is a member of both `apac_ex_japan` and `em_ex_china`.
+    tilts = {"regions": {"apac_ex_japan": -1, "em_ex_china": -1}}
+    assert adaptation.resolve_tilt("region", "india", tilts) == -1
+    result = adaptation.run_pipeline(india_policy(), india_exposures(), tilts)
+    assert [r for r in result.data_quality if r.kind == "ambiguous_broad_tilt"] == []
+    assert row_by_key(result.taa, "region", "india").tilt == -1
+
+
+def test_overlapping_broad_tilts_differing_zero_with_disclosure():
+    tilts = {"regions": {"apac_ex_japan": 1, "em_ex_china": -2}}
+    assert adaptation.resolve_tilt("region", "india", tilts) == 0
+    result = adaptation.run_pipeline(india_policy(), india_exposures(), tilts)
+    rows = [r for r in result.data_quality if r.kind == "ambiguous_broad_tilt"]
+    assert len(rows) == 1
+    assert "india" in rows[0].detail
+    assert "apac_ex_japan" in rows[0].detail and "em_ex_china" in rows[0].detail
+    india = row_by_key(result.taa, "region", "india")
+    assert india.tilt == 0
+    assert india.alignment == "no_view"
+    # A specific tilt on the same key overrides both buckets and clears the disclosure.
+    tilts["regions"]["india"] = 2
+    resolved = adaptation.run_pipeline(india_policy(), india_exposures(), tilts)
+    assert [r for r in resolved.data_quality if r.kind == "ambiguous_broad_tilt"] == []
+    assert row_by_key(resolved.taa, "region", "india").tilt == 2
 
 
 # ==========================================================================
@@ -571,6 +639,44 @@ def test_cli_invalid_policy_exits_zero_with_errors_in_json():
     assert payload["taa"] == []
     assert len(payload["errors"]) >= 5
     assert len(payload["policy_hash"]) == 64
+
+
+def test_cli_non_mapping_policy_exits_zero_with_blocking_error(tmp_path: Path):
+    # Parseable YAML that is not a mapping is a DATA problem, not a read problem:
+    # exit 0 with a blocking error, never an unhandled exception.
+    for name, body in (("list.yaml", "- a\n- b\n"), ("scalar.yaml", "42\n")):
+        path = tmp_path / name
+        path.write_text(body)
+        proc = run_cli("--policy", str(path), "--json")
+        assert proc.returncode == 0, proc.stderr
+        payload = json.loads(proc.stdout)
+        assert payload["fallback_tier"] == "no_policy"
+        assert payload["drift"] == [] and payload["taa"] == []
+        assert payload["errors"] != []
+        assert any(e["severity"] == "blocking" for e in payload["errors"])
+        # R-2: `policy_hash` is carried only when the policy parsed as a mapping.
+        assert payload["policy_hash"] == ""
+
+
+def test_cli_non_mapping_exposures_exits_two(tmp_path: Path):
+    # An exposures payload that is not a JSON object is an operator mistake,
+    # graded with the unreadable/unparseable class.
+    for name, body in (("arr.json", "[1, 2, 3]\n"), ("scalar.json", "42\n")):
+        path = tmp_path / name
+        path.write_text(body)
+        proc = run_cli("--policy", str(FIXTURES / "policy_full.yaml"),
+                       "--exposures", str(path), "--json")
+        assert proc.returncode == 2, proc.stdout
+
+
+def test_cli_non_mapping_view_tilts_exits_two(tmp_path: Path):
+    for name, body in (("arr.json", "[1, 2, 3]\n"), ("scalar.json", '"us"\n')):
+        path = tmp_path / name
+        path.write_text(body)
+        proc = run_cli("--policy", str(FIXTURES / "policy_full.yaml"),
+                       "--exposures", str(FIXTURES / "exposures_sample.json"),
+                       "--view-tilts", str(path), "--json")
+        assert proc.returncode == 2, proc.stdout
 
 
 def test_cli_unreadable_file_exits_two(tmp_path: Path):

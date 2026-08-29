@@ -141,6 +141,32 @@ def test_validator_collects_every_error_not_just_the_first():
     assert any(e.severity == "blocking" for e in result.errors)
 
 
+def test_unknown_code_list_is_a_blocking_error():
+    # An unrecognized code list disables the segment-key check, so it must fail
+    # loud rather than fail open: the whole policy drops to the `no_policy` rung.
+    policy = load_policy("policy_full.yaml")
+    region = policy["mandate"]["sub_allocations"]["dimensions"]["region"]
+    region["code_list"] = "parallax_region_v2"
+    region["strategic_allocation"]["us"] = 0.45
+    region["strategic_allocation"]["atlantis"] = 0.10        # sum stays 1.0
+    hits = [e for e in adaptation.validate_policy(policy)
+            if e.path == "mandate.sub_allocations.dimensions.region.code_list"]
+    assert len(hits) == 1
+    assert hits[0].severity == "blocking"
+
+    result = adaptation.run_pipeline(
+        policy, load_json("exposures_sample.json"), load_json("view_tilts_sample.json")
+    )
+    assert result.fallback_tier == "no_policy"
+    assert result.drift == [] and result.taa == []
+    # An ABSENT code list is unrecognized too — the key set is never guessed.
+    del region["code_list"]
+    assert any(e.path.endswith(".region.code_list") and e.severity == "blocking"
+               for e in adaptation.validate_policy(policy))
+    # Both code lists declared by the shipped fixtures stay clean.
+    assert adaptation.validate_policy(load_policy("policy_full.yaml")) == []
+
+
 def test_unknown_segment_key_is_a_data_quality_row_not_an_error():
     policy = load_policy("policy_full.yaml")
     weights = region_weights(policy)
