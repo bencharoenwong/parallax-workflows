@@ -1,0 +1,54 @@
+# Carries five distinct validator failures AT ONCE so the collect-all contract is
+# provable in a single assertion. Expected error paths:
+#
+#   1. mandate.sub_allocations.dimensions.region.allocation_bands.us
+#        band min 0.65 > band max 0.45
+#   2. mandate.sub_allocations.dimensions.region.strategic_allocation.japan
+#        policy weight 0.10 lies outside its own band {min 0.20, max 0.30}
+#   3. mandate.sub_allocations.dimensions.region.basis
+#        `basis` absent — never assumed (schema.yaml constraint 3)
+#   4. mandate.sub_allocations.dimensions.region.strategic_allocation
+#        weights sum to 0.90 — neither 1.0 (sleeve) nor 0.60 (equity, total)
+#   5. adaptation.k
+#        explicit k 1.5 is outside 0 < k <= 1.0; never clamped silently
+
+metadata:
+  schema_version: 1
+  policy_id: "1e5b8c07-4f2d-49aa-b0c6-72d1f3a9e884"
+  policy_name: "Deliberately Invalid"
+  client_ref: "acct-7fd2"
+  supplied_by: "rm@firm.example"
+  supplied_at: "2026-08-29T10:00:00Z"
+  as_of_date: "2026-06-30"
+  review_due: "2026-12-31"
+  calibration_status: heuristic_phase0
+
+mandate:
+  base_currency: "USD"
+  strategic_allocation:
+    equity: 0.60
+  allocation_bands:
+    equity: {min: 0.50, max: 0.70}
+  tactical_overlay:
+    enabled: true
+    max_total_tilt: 0.10
+    max_tracking_error: null
+  prohibited_products: []
+  sub_allocations:
+    dimensions:
+      region:
+        code_list: parallax_region_v1
+        strategic_allocation:
+          us: 0.55
+          europe: 0.25
+          japan: 0.10
+        allocation_bands:
+          us: {min: 0.65, max: 0.45}
+          japan: {min: 0.20, max: 0.30}
+
+adaptation:
+  k_preset: balanced
+  k: 1.5
+
+governance:
+  human_review_recorded: []

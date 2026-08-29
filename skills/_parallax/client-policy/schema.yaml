@@ -203,7 +203,7 @@ governance:
 #   Fixture lives in `tests/fixtures/policy_hash_fixture.yaml`, carrying
 #   `expected_policy_hash`; asserted by `tests/test_adaptation.py`.
 #
-#   Expected policy_hash (sha256 hex): <pinned-in-task-2>
+#   Expected policy_hash (sha256 hex): 64bb76bcaac010eeef80367d7fddec6fdaa8de58053c3dfabef58f15cbfac311
 #
 # If a future change requires the canonicalization to evolve (e.g., to include
 # new top-level keys), bump `schema_version` and emit a migration note — never
