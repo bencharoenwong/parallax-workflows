@@ -13,6 +13,7 @@ import importlib.util
 import json
 import os
 import shutil
+import sys
 import threading
 import uuid
 from contextlib import contextmanager
@@ -34,11 +35,21 @@ class PersistenceError(RuntimeError):
 
 def _load_sibling(module_name: str, filename: str):
     path = Path(__file__).resolve().parent / filename
+    cached = sys.modules.get(module_name)
+    if cached is not None:
+        return cached
     spec = importlib.util.spec_from_file_location(module_name, path)
     if spec is None or spec.loader is None:
         raise ImportError(f"cannot load white-label module: {path}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # Register before exec_module so a sibling that defines a dataclass can
+    # resolve its own __module__ during class creation. See rm_consumer.py.
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        sys.modules.pop(module_name, None)
+        raise
     return module
 
 
@@ -179,9 +190,11 @@ def save_confirmed_branding(
     os.chmod(root, 0o700)
     staging_root = root / ".staging"
     staging_root.mkdir(exist_ok=True, mode=0o700)
+    os.chmod(staging_root, 0o700)
     transaction_id = uuid.uuid4().hex
     staging = staging_root / transaction_id
     staging.mkdir(mode=0o700)
+    os.chmod(staging, 0o700)
 
     originals: dict[str, bytes | None] = {}
     replacements_started = False
@@ -204,11 +217,20 @@ def save_confirmed_branding(
             # the documented workflow, archive failure is non-blocking.
             if originals["config.yaml"] is not None:
                 try:
-                    archive = root / ".archive" / (
+                    # mkdir(parents=True, mode=...) applies the mode ONLY to the
+                    # final component; intermediate parents are created with the
+                    # process umask (0o755 by default). Create and chmod the
+                    # .archive parent explicitly so superseded client configs are
+                    # never listed through a world-readable directory.
+                    archive_parent = root / ".archive"
+                    archive_parent.mkdir(exist_ok=True, mode=0o700)
+                    os.chmod(archive_parent, 0o700)
+                    archive = archive_parent / (
                         datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
                         + f"-{transaction_id[:8]}"
                     )
-                    archive.mkdir(parents=True, mode=0o700)
+                    archive.mkdir(mode=0o700)
+                    os.chmod(archive, 0o700)
                     _write_staged(archive / "config.yaml", originals["config.yaml"])
                     archive_created = archive
                 except OSError:

@@ -189,3 +189,42 @@ def test_design_md_lint_timeout_cleans_tempdir_even_if_path_unlink_fails(
     assert result["status"] == "skipped"
     assert "timed out" in result["note"]
     assert list(tmp_path.iterdir()) == []
+
+
+# --- Regressions from the 2026-08-29 live RM brand-ingest exercise ----------
+
+
+def test_archive_parent_directory_is_not_world_traversable(tmp_path) -> None:
+    """mkdir(parents=True, mode=...) applies the mode only to the leaf.
+
+    The intermediate .archive directory was therefore created with the process
+    umask (0o755), so superseded client configs sat behind a world-traversable
+    container. Only root's own 0o700 masked it.
+    """
+    import os
+    import stat
+
+    import persistence
+
+    root = tmp_path / "branding"
+    # Two saves: the second supersedes the first and creates .archive.
+    persistence.save_confirmed_branding(
+        _draft("First Client", "#111111"), branding_root=root, client_name="First Client"
+    )
+    persistence.save_confirmed_branding(
+        _draft("Second Client", "#222222"), branding_root=root, client_name="Second Client"
+    )
+
+    archive = root / ".archive"
+    assert archive.is_dir(), "second save should have archived the superseded config"
+
+    def mode(path: Path) -> int:
+        return stat.S_IMODE(os.stat(path).st_mode)
+
+    assert mode(archive) == 0o700, f".archive is {oct(mode(archive))}"
+    for entry in archive.iterdir():
+        assert mode(entry) == 0o700, f"{entry.name} is {oct(mode(entry))}"
+        for item in entry.iterdir():
+            assert mode(item) == 0o600, f"{item.name} is {oct(mode(item))}"
+    assert mode(root) == 0o700
+    assert mode(root / ".staging") == 0o700

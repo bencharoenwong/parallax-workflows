@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
 from pathlib import Path
+import re
 import sys
 from types import ModuleType
 from typing import Any
@@ -203,3 +204,146 @@ def test_rm_skill_uses_executable_branding_seam(skill_name: str, label: str) -> 
 
     assert "load_rm_branding_context" in skill_text
     assert f'load_rm_branding_context("{label}")' in skill_text
+
+
+# --- Regressions from the 2026-08-29 live RM brand-ingest exercise ----------
+
+
+def _name_region(output: str) -> str:
+    """The header lines into which client_name is interpolated."""
+    return "\n".join(
+        line for line in output.splitlines() if line.startswith(("!", "**"))
+    )
+
+
+def _rm_branding(**overrides: Any) -> dict[str, Any]:
+    base: dict[str, Any] = {
+        "client_name": "Meridian",
+        "error": None,
+        "colors": {"primary": {"hex": "#14213D"}},
+        "fonts": {},
+        "logos": {},
+        "source": {"type": "folder", "reference": "/tmp/deck.pptx"},
+        "render": {},
+    }
+    base.update(overrides)
+    return base
+
+
+def test_rm_module_loads_without_sys_modules_registration() -> None:
+    """rm_consumer must survive the package's own importlib idiom.
+
+    persistence.py::_load_sibling execs a module without registering it in
+    sys.modules. Combined with ``from __future__ import annotations``, a
+    ``@dataclass`` in the loaded module resolves its string annotations through
+    ``sys.modules[__module__]`` and raises AttributeError on Python 3.11.
+    """
+    import importlib.util
+
+    path = _WHITE_LABEL_DIR / "rm_consumer.py"
+    spec = importlib.util.spec_from_file_location("wl_rm_unregistered", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules.pop("wl_rm_unregistered", None)
+    spec.loader.exec_module(module)  # deliberately left unregistered
+
+    ctx = module.RMBrandingContext(header_lines=("a",), about_lines=("b",))
+    assert ctx.header_lines == ("a",)
+    assert ctx.about_lines == ("b",)
+
+
+@pytest.mark.parametrize(
+    "hostile_name",
+    [
+        "Acme](javascript:alert(1))",
+        "Acme <img src=x onerror=alert(1)>",
+        "Acme\n\n## Injected Heading",
+        "Acme `backtick` Co",
+        "Acme | Bogus | Row",
+        "Acme\\](x)",
+        "Acme<script>fetch('//evil')</script>",
+    ],
+)
+def test_client_name_cannot_inject_markdown_or_html(hostile_name: str) -> None:
+    """client_name originates in client-supplied collateral and is untrusted."""
+    branding = _rm_branding(
+        client_name=hostile_name,
+        logos={"primary": "https://cdn.example.com/logo.png"},
+    )
+    output = render_rm_markdown(
+        "Body.", "portfolio review", branding_loader=lambda: branding
+    )
+
+    region = _name_region(output)
+    # The header must still be exactly the two templated lines, with the name
+    # occupying the label slot and carrying no markdown/HTML metacharacters.
+    image = re.fullmatch(
+        r"!\[(?P<name>[^\[\]()<>*_`#!|\\\n]*)\]\(https://cdn\.example\.com/logo\.png\)",
+        region.splitlines()[0],
+    )
+    assert image is not None, f"header broke out of the image template: {region!r}"
+    bold = re.fullmatch(
+        r"\*\*(?P<name>[^\[\]()<>*_`#!|\\\n]*)\*\* portfolio review",
+        region.splitlines()[1],
+    )
+    assert bold is not None, f"header broke out of the bold template: {region!r}"
+    assert image.group("name") == bold.group("name")
+
+    # A hostile name is neutralised by flattening it to inert label text, not by
+    # word blacklisting: "onerror" may survive as literal prose, but it can no
+    # longer sit inside an HTML tag or a link destination. Assert the construct
+    # is dead rather than that the substring is absent.
+    assert "<" not in output and ">" not in output
+    assert "## Injected Heading" not in output
+    assert not re.search(r"\]\(\s*javascript:", output)
+    assert output.count("](") == 1  # only the one templated image destination
+
+    # The report body and footer must survive intact.
+    assert "Body." in output
+    assert "## About This Report" in output
+
+
+def test_client_name_is_length_bounded() -> None:
+    output = render_rm_markdown(
+        "Body.",
+        "portfolio review",
+        branding_loader=lambda: _rm_branding(client_name="A" * 5000),
+    )
+    assert len(_name_region(output)) < 400
+
+
+def test_relative_source_path_is_redacted_to_basename() -> None:
+    """Only absolute paths were redacted; relative ones leaked their directory."""
+    branding = _rm_branding(
+        source={
+            "type": "folder",
+            "reference": "client-collateral/acme-confidential-deck.pptx",
+        }
+    )
+    output = render_rm_markdown(
+        "Body.", "portfolio review", branding_loader=lambda: branding
+    )
+
+    assert "client-collateral/" not in output
+    assert "acme-confidential-deck.pptx" in output
+
+
+def test_contentless_branding_does_not_claim_white_label() -> None:
+    """Active state with nothing to render must not assert white-label provenance."""
+    for branding in ({}, {"error": None}, {"client_name": None, "error": None}):
+        ctx = load_rm_branding_context(
+            "portfolio review", branding_loader=lambda b=branding: b
+        )
+        joined = " ".join(ctx.about_lines)
+        assert "white-label" not in joined
+        assert "default Parallax" in joined
+        assert ctx.header_lines == ()
+
+
+def test_non_mapping_branding_degrades() -> None:
+    for junk in (None, "config.yaml", 42, ["a"]):
+        ctx = load_rm_branding_context(
+            "portfolio review", branding_loader=lambda j=junk: j
+        )
+        assert ctx.header_lines == ()
+        assert "default Parallax" in " ".join(ctx.about_lines)

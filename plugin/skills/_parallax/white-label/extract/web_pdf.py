@@ -1175,7 +1175,25 @@ def extract_from_pdf(pdf_path: str) -> Dict[str, Any]:
                         if text
                     )
             except ImportError:
-                pdf_text = "(PDF text extraction unavailable)"
+                # Neither backend is installed. Returning placeholder prose with
+                # no error field made this indistinguishable from a real but
+                # text-free PDF: the caller merged an empty palette and pushed
+                # the placeholder itself into the voice corpus as real words.
+                return {
+                    "colors": {},
+                    "logos": {},
+                    "fonts": {},
+                    "source": {"type": "pdf", "reference": pdf_path},
+                    "extracted_at": datetime.now(timezone.utc)
+                    .isoformat()
+                    .replace("+00:00", "Z"),
+                    "confidence_scores": {},
+                    "voice_corpus": dict(_EMPTY_VOICE_CORPUS),
+                    "error": (
+                        "PDF text extraction unavailable: install pypdf or "
+                        "pdfplumber to ingest PDF brand collateral"
+                    ),
+                }
 
         colors_list = ColorExtractor.extract_hex_colors(pdf_text)
         logo_paths = LogoExtractor.extract_logo_paths(pdf_text)

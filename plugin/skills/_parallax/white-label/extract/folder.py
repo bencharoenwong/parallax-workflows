@@ -63,7 +63,20 @@ def inventory_folder(
     if not folder.is_dir():
         raise ValueError(f"Folder not found: {folder}")
     overrides = {str(Path(key)): value for key, value in (classifications or {}).items()}
-    overrides.update({Path(key).name: value for key, value in (classifications or {}).items()})
+    # A basename shorthand is only safe while it is unambiguous. Mapping every
+    # override onto its basename let one operator disposition silently apply to
+    # an identically-named file in a sibling directory, so a file the operator
+    # never classified could inherit "branded" or "skip". Drop any basename
+    # that more than one inventoried file answers to, and fall back to that
+    # file's automatic classification instead.
+    basename_counts: dict[str, int] = {}
+    for item in folder.rglob("*"):
+        if item.is_file():
+            basename_counts[item.name] = basename_counts.get(item.name, 0) + 1
+    for key, value in (classifications or {}).items():
+        name = Path(key).name
+        if basename_counts.get(name, 0) <= 1:
+            overrides.setdefault(name, value)
     inventory: list[dict[str, Any]] = []
     files = (item for item in folder.rglob("*") if item.is_file())
     for path in sorted(files, key=lambda item: str(item)):
@@ -273,4 +286,23 @@ def extract_from_folder(
     if extraction_errors:
         draft["extraction_errors"] = extraction_errors
     draft["folder_inventory"] = inventory
+
+    # Image files auto-classify to "skip" so the operator, not the filename,
+    # decides which asset is the logo. Left implicit, a folder holding an
+    # obvious logo-primary.png produced logos={} with nothing in the draft
+    # saying a candidate had been seen and dropped. Surface the unclaimed
+    # candidates so the confirmation gate can prompt for a disposition.
+    claimed = {
+        str(role_paths[0])
+        for role_paths in logo_roles.values()
+    }
+    unclaimed = [
+        item["path"]
+        for item in inventory
+        if item["role"] == "visual_asset"
+        and item["classification"] == "skip"
+        and item["path"] not in claimed
+    ]
+    if unclaimed:
+        draft["logo_candidates"] = unclaimed
     return draft

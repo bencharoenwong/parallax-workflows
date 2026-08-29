@@ -388,3 +388,96 @@ def test_extract_package_imports_from_unrelated_working_directory(tmp_path):
         "word_count": 2,
         "truncated": False,
     }
+
+
+# --- Regressions from the 2026-08-29 live RM brand-ingest exercise ----------
+
+
+def test_basename_override_does_not_contaminate_same_named_sibling(tmp_path) -> None:
+    """One operator disposition must not silently classify a file they never saw.
+
+    Overrides were keyed by BOTH full path and basename, so classifying
+    a/report.pdf also classified b/report.pdf.
+    """
+    from extract.folder import inventory_folder
+
+    for sub in ("a", "b"):
+        (tmp_path / sub).mkdir()
+        (tmp_path / sub / "report.pdf").write_bytes(b"%PDF-1.4 stub")
+
+    inventory = inventory_folder(tmp_path, {str(tmp_path / "a" / "report.pdf"): "skip"})
+    by_rel = {
+        str(Path(item["path"]).relative_to(tmp_path)): item["classification"]
+        for item in inventory
+    }
+
+    assert by_rel["a/report.pdf"] == "skip"
+    assert by_rel["b/report.pdf"] != "skip"
+    assert by_rel["b/report.pdf"] == "ambiguous"
+
+
+def test_unambiguous_basename_shorthand_still_works(tmp_path) -> None:
+    """The collision fix must not break the basename shorthand it narrows."""
+    from extract.folder import inventory_folder
+
+    (tmp_path / "quarterly-newsletter.pptx").write_bytes(b"stub")
+    inventory = inventory_folder(tmp_path, {"quarterly-newsletter.pptx": "voice_only"})
+
+    assert inventory[0]["classification"] == "voice_only"
+
+
+def test_unclaimed_logo_candidates_are_surfaced(tmp_path) -> None:
+    """Images auto-classify to skip; the draft must still name the candidates.
+
+    A folder holding an obvious logo-primary.png previously produced logos={}
+    with nothing recording that a candidate had been seen and dropped.
+    """
+    (tmp_path / "brand-notes.md").write_text("Our house style. " * 60, encoding="utf-8")
+    (tmp_path / "logo-primary.png").write_bytes(b"\x89PNG\r\n\x1a\n stub")
+    (tmp_path / "favicon.ico").write_bytes(b"stub")
+
+    draft = extract_from_folder(tmp_path)
+
+    candidates = {Path(p).name for p in draft.get("logo_candidates", [])}
+    assert candidates == {"logo-primary.png", "favicon.ico"}
+    assert draft["logos"] == {}
+
+
+def test_claimed_logo_is_not_listed_as_an_unclaimed_candidate(tmp_path) -> None:
+    (tmp_path / "brand-notes.md").write_text("Our house style. " * 60, encoding="utf-8")
+    logo = tmp_path / "logo-primary.png"
+    logo.write_bytes(b"\x89PNG\r\n\x1a\n stub")
+
+    draft = extract_from_folder(tmp_path, {str(logo): "branded"})
+
+    assert draft["logos"]["primary"]["local_path"] == str(logo)
+    assert "logo_candidates" not in draft
+
+
+def test_pdf_without_extraction_backend_returns_structured_error(tmp_path, monkeypatch) -> None:
+    """Absent pypdf AND pdfplumber must be a structured failure, not placeholder prose.
+
+    The placeholder "(PDF text extraction unavailable)" previously entered the
+    voice corpus as four real words with error=None, so the caller could not
+    tell a missing backend from a genuinely text-free PDF.
+    """
+    import builtins
+
+    pdf = tmp_path / "brand-guide.pdf"
+    pdf.write_bytes(b"%PDF-1.4 stub")
+
+    real_import = builtins.__import__
+
+    def blocked(name, *args, **kwargs):
+        if name in ("pypdf", "pdfplumber"):
+            raise ImportError(f"blocked {name}")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", blocked)
+    result = extract_from_pdf(str(pdf))
+
+    assert result["error"]
+    assert "pypdf" in result["error"]
+    assert result["voice_corpus"]["word_count"] == 0
+    assert "unavailable" not in result["voice_corpus"]["text"]
+    assert result["colors"] == {}
