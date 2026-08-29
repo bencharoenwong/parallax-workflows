@@ -99,10 +99,14 @@ governance:
 #    unrecognized key is a validation *warning*, emits an `unknown_segment_key`
 #    Data Quality row, and that segment is dropped from band math. It is not a
 #    hard failure.
-# 3. `basis` is required per dimension. A missing `basis` is a validation error
+# 3. `code_list` itself is required per dimension. An unrecognized or absent
+#    `code_list` is a BLOCKING error that rejects the whole policy — the
+#    segment-key check in constraint 2 is never silently disabled by a typo'd
+#    or missing code list.
+# 4. `basis` is required per dimension. A missing `basis` is a validation error
 #    and that dimension falls back to multiplier semantics. It never crashes
 #    and never silently assumes `sleeve`.
-# 4. Bands are hard in computation. An RM override is permitted, but must be
+# 5. Bands are hard in computation. An RM override is permitted, but must be
 #    written into `governance.human_review_recorded` and surfaced in the
 #    rendered output.
 

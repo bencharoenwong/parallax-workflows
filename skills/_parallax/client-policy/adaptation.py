@@ -54,8 +54,11 @@ payload that parses but is not a JSON object (an operator mistake, not data).
                     "sector": "information_technology"}]
     }
 
-  - `basis` is REQUIRED and describes the exposure weights, not the policy
-    weights. The two bases are converted independently.
+  - `basis` must be `"sleeve"` — Phase 1 accepts sleeve-relative exposures only;
+    the producer converts before calling. A missing or non-`"sleeve"` `basis`
+    is rejected at the CLI (exit 2, naming the file and the offending value),
+    the same operator-mistake class as a non-object payload; no conversion is
+    implemented in Phase 1.
   - Per dimension, weights are renormalized over MAPPED holdings and sum to 1.0
     within 1e-6. Every dimension in the example above sums to 1.0.
   - `coverage[dim]` is the mapped weight fraction BEFORE renormalization. A
@@ -947,6 +950,18 @@ def run_pipeline(policy: dict | None, exposures: dict | None,
             band = bands.get(key) or {}
             band_min = float(band["min"]) if _is_number(band.get("min")) else None
             band_max = float(band["max"]) if _is_number(band.get("max")) else None
+            if dim_name in forced_fallback:
+                # The dimension's basis could not be resolved (missing `basis`,
+                # or `basis: total` without a usable equity weight). Whatever
+                # band edges are on file were declared against that unresolved
+                # basis and must never be read against the (possibly
+                # unconverted) weight below — that would render a band verdict
+                # against a basis nobody confirmed. Segment assembly drops the
+                # edges here so `band_status` reports `no_bands`, matching
+                # ladder row 2 intent: `multiplier_fallback` rows carry drift
+                # flags only, never a band comparison.
+                band_min = None
+                band_max = None
             if (band_min is None) != (band_max is None):
                 missing = "max" if band_max is None else "min"
                 data_quality.append(DataQualityRow(
@@ -1217,6 +1232,16 @@ def main(argv: list[str] | None = None) -> int:
         if not isinstance(exposures, dict):
             print(f"error: exposures {args.exposures} must be a JSON object, got "
                   f"{type(exposures).__name__}", file=sys.stderr)
+            return 2
+        # Phase 1 accepts sleeve-relative exposures only (see the `--exposures`
+        # payload schema above). An absent or non-"sleeve" `basis` is graded
+        # with the operator-mistake class, same as a non-object payload: this
+        # is never silently converted or assumed.
+        exposures_basis = exposures.get("basis")
+        if exposures_basis != "sleeve":
+            print(f"error: exposures {args.exposures} must declare basis 'sleeve'; got "
+                  f"{exposures_basis!r}. Phase 1 accepts sleeve-relative exposures only; "
+                  "the producer converts before calling.", file=sys.stderr)
             return 2
 
     view_tilts = None

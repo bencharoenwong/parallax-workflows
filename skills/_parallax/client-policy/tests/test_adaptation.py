@@ -669,6 +669,35 @@ def test_cli_non_mapping_exposures_exits_two(tmp_path: Path):
         assert proc.returncode == 2, proc.stdout
 
 
+def test_cli_exposures_missing_basis_exits_two(tmp_path: Path):
+    # I2: Phase 1 accepts sleeve-relative exposures only. An absent `basis` is
+    # never assumed to be "sleeve" — it is graded as an operator mistake, exit
+    # 2, naming the file and the offending value.
+    exposures = sample_exposures()
+    del exposures["basis"]
+    path = tmp_path / "exposures_no_basis.json"
+    path.write_text(json.dumps(exposures))
+    proc = run_cli("--policy", str(FIXTURES / "policy_full.yaml"),
+                   "--exposures", str(path), "--json")
+    assert proc.returncode == 2, proc.stdout
+    assert "basis" in proc.stderr
+    assert str(path) in proc.stderr
+
+
+def test_cli_exposures_non_sleeve_basis_exits_two(tmp_path: Path):
+    # A "total"-basis exposures payload is a Phase-1-scoped rejection, not a
+    # silent mis-score: no conversion is implemented for this payload.
+    exposures = sample_exposures()
+    exposures["basis"] = "total"
+    path = tmp_path / "exposures_total_basis.json"
+    path.write_text(json.dumps(exposures))
+    proc = run_cli("--policy", str(FIXTURES / "policy_full.yaml"),
+                   "--exposures", str(path), "--json")
+    assert proc.returncode == 2, proc.stdout
+    assert "total" in proc.stderr
+    assert str(path) in proc.stderr
+
+
 def test_cli_non_mapping_view_tilts_exits_two(tmp_path: Path):
     for name, body in (("arr.json", "[1, 2, 3]\n"), ("scalar.json", '"us"\n')):
         path = tmp_path / name

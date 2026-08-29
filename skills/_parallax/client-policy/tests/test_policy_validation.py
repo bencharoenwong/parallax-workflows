@@ -114,6 +114,32 @@ def test_missing_basis_is_an_error_not_an_assumption():
     assert errs != []
 
 
+def test_forced_fallback_dimension_reports_no_bands_not_breach():
+    # I1 repro: deleting `region.basis` from `policy_full` forces the region
+    # dimension to `multiplier_fallback` (a dimension-scoped error). The raw
+    # band edges on file were declared against the basis that could not be
+    # resolved and must never be read as a comparison against the weight
+    # below — that would render a false band verdict (e.g. breach_high) on an
+    # unresolved basis. `us` exposure (0.66) sits above the on-file band max
+    # (0.65), so this would previously breach; it must now read `no_bands`.
+    policy = load_policy("policy_full.yaml")
+    del policy["mandate"]["sub_allocations"]["dimensions"]["region"]["basis"]
+    result = adaptation.run_pipeline(
+        policy, load_json("exposures_sample.json"), load_json("view_tilts_sample.json")
+    )
+    dimension_errors = [e for e in result.errors if e.severity == "dimension"]
+    assert any(e.dimension == "region" for e in dimension_errors)
+    us = next(r for r in result.drift if r.dimension == "region" and r.key == "us")
+    assert us.band_status == "no_bands"
+    assert us.band_min is None and us.band_max is None
+    assert us.breach_kind is None
+    # The forced-fallback dimension loses its bands; an unaffected dimension
+    # (sector, whose `basis` is still declared) keeps its bands unchanged.
+    it = next(r for r in result.drift
+              if r.dimension == "sector" and r.key == "information_technology")
+    assert it.band_min is not None and it.band_max is not None
+
+
 # ==========================================================================
 # Validator surface
 # ==========================================================================

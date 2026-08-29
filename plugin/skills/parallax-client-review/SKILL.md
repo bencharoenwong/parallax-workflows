@@ -36,7 +36,7 @@ Presentation-ready portfolio review with health flags and prioritized recommenda
 ## Usage
 
 ```
-/parallax-client-review [{"symbol":"AAPL.O","weight":0.25},{"symbol":"BRK-B.N","weight":0.20}] client="conservative retiree, income focus, 10yr horizon" policy="/path/to/client-policy.yaml"
+/parallax-client-review [{"symbol":"AAPL.O","weight":0.25},{"symbol":"BRK-B.N","weight":0.20}] client="conservative retiree, income focus, 10yr horizon"
 /parallax-client-review [{"symbol":"AAPL.O","weight":0.25},{"symbol":"BRK-B.N","weight":0.20}] client="conservative retiree, income focus, 10yr horizon" lang=zh-CN register=retail policy="/path/to/client-policy.yaml"
 ```
 
@@ -115,7 +115,12 @@ News (selective, async): `get_news_synthesis` for holdings >10% weight AND flagg
    `analyze_portfolio` `sector_allocation` block, with `get_peer_snapshot` /
    `get_company_info` as a per-holding backstop. Renormalize each dimension's
    weights over MAPPED holdings only and record `coverage` plus every `unmapped`
-   holding. Payload shape is pinned in policy-loader.md §3.
+   holding. Payload shape is pinned in policy-loader.md §3. `basis` must be
+   `"sleeve"` — Phase 1 accepts sleeve-relative exposures only; the producer
+   converts before calling. A missing or non-`"sleeve"` `basis` is rejected at
+   the CLI (exit 2, naming the file and the offending value), the same
+   operator-mistake class as a non-object payload; no conversion is
+   implemented in Phase 1.
 2. Assemble view tilts from the loaded view after the loader.md §3 alias collapse:
    regions, sectors, and excludes only. Factors, styles, and themes are tactical-only
    and never enter band math.
@@ -219,8 +224,9 @@ Client-ready report:
   tracking-error budget present but not evaluated, missing or one-sided bands,
   unknown segment keys, and any validation errors that forced tier `no_policy`.
 
-Under the section group, render one disclosure line stating the resolved k with its
-source and `calibration_status: heuristic_phase0`, per policy-loader.md §7.
+- **Resolved-k Disclosure** (only if policy supplied) — under the section group,
+  one disclosure line stating the resolved k with its source and
+  `calibration_status: heuristic_phase0`, per policy-loader.md §7.
 - **Per-Holding Analysis** (for drill-down holdings: score trend, risk profile, flags, news highlights; view conflicts called out)
 - **Suitability Assessment** (alignment with client goals AND with active house view if present; cite basis_statement)
 - **Recommended Actions** (prioritized High/Medium/Low per recommendation-matrix.md, with specific action types; rationale cites view tilts where applicable), framed per conventions §12 (informational preface required; `action_labels=plain` supported)

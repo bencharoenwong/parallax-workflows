@@ -27,6 +27,8 @@ Shell out to `_parallax/client-policy/adaptation.py`; never validate in prose. E
 
 The two classes never overlap and the tier resolution never mixes them: any blocking error anywhere in the document forces `no_policy` regardless of how many dimension-scoped errors also exist; with zero blocking errors, dimension-scoped errors are partitioned per dimension per the fallback ladder in §4.
 
+`severity: dimension` also covers one case with no dimension attached: a malformed `adaptation` block (`adaptation` not a mapping, `k` out of range, or an unknown `k_preset`) is reported with `dimension: null`. No dimension drops to `multiplier_fallback` for this case — `resolve_k` falls back preset-then-default instead, and the error row still renders in Policy Data Quality.
+
 On a schema-invalid policy (i.e. at least one blocking error), do **not** partially apply: run the review without the policy and surface the full error list in Policy Data Quality. This mirrors the fail-loud posture of `_parallax/house-view/loader.md` §2. A stale policy (`today > review_due`) is a Data Quality row, never a block.
 
 Failure-handling table, in the shape of `loader.md:51-59`. The two `validate_policy` rows are split explicitly by severity class per the two-class model above — they are not alternative descriptions of the same event:
@@ -67,7 +69,7 @@ Holdings map to region by RIC suffix per `_parallax/parallax-conventions.md` §1
 }
 ```
 
-- `basis` is REQUIRED and describes the exposure weights, not the policy weights. The two bases are converted independently.
+- `basis` must be `"sleeve"` — Phase 1 accepts sleeve-relative exposures only; the producer converts before calling. A missing or non-`"sleeve"` `basis` is rejected at the CLI (exit 2, naming the file and the offending value), the same operator-mistake class as a non-object payload; no conversion is implemented in Phase 1.
 - Per dimension, weights are renormalized over MAPPED holdings and sum to 1.0 within 1e-6. Every dimension in the example above sums to 1.0.
 - `coverage[dim]` is the mapped weight fraction BEFORE renormalization. A coverage below 1.0 emits `unmapped_holding` rows and is disclosed in the rendered table.
 - `unmapped` lists every holding excluded from a dimension's denominator.
@@ -138,7 +140,7 @@ One row per covered segment: dimension, segment, current, policy, drift, band, b
 
 ### §7.2 TAA Alignment (only if policy supplied)
 
-One row per covered segment: tilt, room in the tilt direction, desired active, current active, alignment (`aligned` / `opposed` / `capped_by_band` / `not_evaluable` / `no_view`). Source: `taa[]`. Below the table: the budget line (`budget.sum_abs_desired` vs `budget.max_total_tilt`, and `budget.scale` if `budget.cap_applied`). Tag every `multiplier_fallback`-semantics row visibly as sized without a band benchmark.
+One row per covered segment: tilt, room in the tilt direction, desired active, current active, alignment (`aligned` / `opposed` / `capped_by_band` / `not_evaluable` / `no_view`). Source: `taa[]`. Below the table: the budget line (`budget.sum_abs_desired` vs `budget.max_total_tilt`, and `budget.scale` if `budget.cap_applied`). Tag every `multiplier_fallback`-semantics row visibly as sized without a band benchmark. Under `weights_only` (§4 ladder row 2), `budget.sum_abs_desired` is `Σ|current − policy|` — a drift diagnostic, not a sizing total — because there is nothing to scale; see §4's Ladder row 2 semantics note.
 
 **`tactical_overlay.enabled: false` (binding, no exceptions).** S1 drift is unaffected — it still renders per §7.1. S2 emits no rows at all. TAA Alignment renders exactly one line: "tactical overlay disabled by mandate." No budget line is rendered in this state.
 
