@@ -278,6 +278,7 @@ External integrators and skill authors frequently ask for capabilities that alre
 | Concentration / effective N / HHI | `analyze_portfolio` → `concentration_metrics` field | `effective_positions` is weight-based (1/HHI on weights). Risk-weighted Effective N is not currently exposed. |
 | Score time series (per symbol) | `get_score_analysis` with `weeks` parameter | Returns weeks-windowed factor history. Default 52 weeks. **Portfolio-level score history is not currently exposed** — must aggregate per-holding client-side. |
 | Sector/market overlap, redundancy | `check_portfolio_redundancy` | Pairwise overlap + clustering at the portfolio level. |
+| Client SAA / policy drift and tilt-vs-mandate diagnostic | `/parallax-client-review` with `policy=` | Strategic-allocation drift, band status, and tactical-alignment diagnostics against a supplied client policy. Contract in `_parallax/client-policy/policy-loader.md`. Diagnostic only — no target-weight or trade math. |
 | Build/tilt a stock universe | `build_stock_universe` (V2: per-tilt parallel calls per §0) | Free-text query, sector-scoped. |
 
 ### Multi-stock / consensus
