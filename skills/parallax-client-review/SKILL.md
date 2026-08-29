@@ -18,6 +18,9 @@ description: "RIA/wealth advisor client portfolio review: full analysis, redunda
 - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §3 (multipliers), §4 (conflict resolution), §5 (output rendering), §6 (audit). The view shapes the suitability assessment AND the recommendations: holdings misaligned with view get higher priority for trimming, view-aligned holdings get implicit support.
 - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
 - JIT-load references/recommendation-matrix.md for priority classification and drill-down criteria
+- JIT-load _parallax/client-policy/policy-loader.md when `policy=` is present. Fallback ladder per that file. S1/S2 math via adaptation.py only — never inline.
+- Policy sections never precede the first render-gate anchor. Render them in the body, after House View Alignment, per policy-loader.md §7 placement rule.
+- No `policy=` supplied means today's behavior, unchanged. No policy sections, no disclosure line.
 - Holdings in RIC format, weights sum to ~1.0
 - analyze_portfolio called twice — once for performance/returns fields, once for concentration/attribution fields (split to manage response size). **Required call shape:** `portfolio=[{date: <today ISO>, symbol: <ric>, weight: <w>}, ...]` with `fields=[...]`. The parameters `holdings` and `lens` do not exist in the deployed schema. **Fallback** (on MCP schema validation error OR truncated/oversized response): `check_portfolio_redundancy` (concentration) + `quick_portfolio_scores` (factor tilt) + individual `get_stock_outlook` with `aspect="risk_return"` (performance).
 - Per-holding drill-down capped at 8 holdings to manage latency
@@ -33,11 +36,13 @@ Presentation-ready portfolio review with health flags and prioritized recommenda
 ## Usage
 
 ```
-/parallax-client-review [{"symbol":"AAPL.O","weight":0.25},{"symbol":"BRK-B.N","weight":0.20}] client="conservative retiree, income focus, 10yr horizon"
-/parallax-client-review [{"symbol":"AAPL.O","weight":0.25},{"symbol":"BRK-B.N","weight":0.20}] client="conservative retiree, income focus, 10yr horizon" lang=zh-CN register=retail
+/parallax-client-review [{"symbol":"AAPL.O","weight":0.25},{"symbol":"BRK-B.N","weight":0.20}] client="conservative retiree, income focus, 10yr horizon" policy="/path/to/client-policy.yaml"
+/parallax-client-review [{"symbol":"AAPL.O","weight":0.25},{"symbol":"BRK-B.N","weight":0.20}] client="conservative retiree, income focus, 10yr horizon" lang=zh-CN register=retail policy="/path/to/client-policy.yaml"
 ```
 
 Optional: append `lang=<code>` (`en` default; `zh-CN`, `zh-TW`, `zh-HK`, `th`) and `register=retail` after the existing parameters. `register=retail` is passed only when translation is requested; absent means institutional register.
+
+Optional: append `policy=` after the existing parameters. `policy=` accepts a file path or inline YAML/JSON describing the client's strategic allocation, bands, and tactical budget. Absent means the review runs exactly as today. **Do not add an invocation `k=` flag.** The locked spec allows a firm-level default and a per-mandate override only; both live in the policy artifact's `adaptation` block.
 
 **Note on `benchmark=` parameter.** The current workflow body does NOT consume a `benchmark=` parameter — the example above intentionally omits it. If a future revision adds benchmark-relative attribution: pass benchmarks as **plain ETF tickers** (e.g., `SPY`, `QQQ`, `EWJ`) and route through `etf_daily_price` — NOT `export_price_series`. The two endpoints are separate. Equity tickers (with RIC suffix like `.O` or `.N`) go through `export_price_series`; ETFs (plain ticker) go through `etf_daily_price`. Mixing them silently fails-empty.
 
@@ -50,6 +55,20 @@ Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-c
 Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
 
 Per `loader.md` §1-§2. If view present, capture tilt vector, excludes, basis_statement (used to frame Suitability Assessment in firm voice). The view's tilts become an additional layer of recommendation justification: when trimming, "view tilts UW [sector]" is cited alongside health flags. If validation fails or no view present, run review without view.
+
+### Batch 0.5 — Client policy load (only if `policy=` present)
+
+JIT-load `_parallax/client-policy/policy-loader.md`. Write inline policy input to a
+private mktemp file first. Then, in one Bash step:
+
+python3 "<skill-dir>/../_parallax/client-policy/adaptation.py" --policy "$POLICY" --json
+
+Capture `errors`, `fallback_tier`, `resolved_k`, `k_source`, `policy_hash`, and
+`data_quality`. Blocking errors mean tier `no_policy` for the rest of the run;
+dimension-scoped errors (missing basis, total-basis without equity weight) drop only
+that dimension to multiplier_fallback — policy-loader.md §2 defines the classes.
+Render the error list in Policy Data Quality and continue the review unchanged.
+Exposure-dependent S1/S2 runs after Batch A, in Batch C.
 
 ### Batch A — Portfolio-level analysis (parallel)
 
@@ -72,7 +91,7 @@ Derive home markets from RIC suffixes (available from the input holdings before 
 ### Batch C — Health flags + drill-down (after A + B)
 
 1. Evaluate the 5 health flags **per holding** — binding flag conditions in `references/recommendation-matrix.md` (same taxonomy and threshold values as `parallax-portfolio-checkup/references/health-flags.md`, whose canonical portfolio-level weighted-average definitions apply to portfolio-checkup, not here): Low Score (holding total score ≤5.0), Concentration (holding weight >15%, or holding among the top-3 when their combined weight >45%), Redundancy (holding is part of a redundant pair), Value Trap (holding value score ≤3.0), Macro Misalignment (holding's sector has a negative tactical outlook). Per-holding flag counts drive priority and drill-down selection.
-2. **House-view alignment** (if view active): add View Misalignment (>25% off view-tilted target) and View Excluded (on tilts.excludes) as additional flags. Surface a portfolio-level "view alignment score" (% of weight in view-aligned positions).
+2. **House-view alignment** (if view active): add View Misalignment (>25% off view-tilted target) and View Excluded (on tilts.excludes) as additional flags. Surface a portfolio-level "view alignment score" (% of weight in view-aligned positions). <!-- "view-tilted target" wording debt is assigned to Phase 2 per the rollout sequencing; this flag keeps its Phase 1 semantics unchanged, do not "fix" the wording here -->
 3. Flag redundancy as low-confidence if coverage <60%.
 4. Assign health status: **Healthy** (0) · **Monitor** (1-2) · **Attention** (3+). View Excluded counts as Attention regardless of other flags.
 5. Select up to 8 holdings for drill-down per `references/recommendation-matrix.md`: weight >10%, any flag (including View flags), or macro-misaligned. Prioritize by flag count then weight.
@@ -89,11 +108,30 @@ For each drill-down holding (parallel):
 
 News (selective, async): `get_news_synthesis` for holdings >10% weight AND flagged, or in sectors with active macro developments. Cap at 5.
 
+**Client policy S1 + S2** (only if `policy=` present and tier is not `no_policy`)
+
+1. Assemble current sleeve exposures: region from RIC suffixes per
+   `_parallax/parallax-conventions.md` §1; sector from the Batch A
+   `analyze_portfolio` `sector_allocation` block, with `get_peer_snapshot` /
+   `get_company_info` as a per-holding backstop. Renormalize each dimension's
+   weights over MAPPED holdings only and record `coverage` plus every `unmapped`
+   holding. Payload shape is pinned in policy-loader.md §3.
+2. Assemble view tilts from the loaded view after the loader.md §3 alias collapse:
+   regions, sectors, and excludes only. Factors, styles, and themes are tactical-only
+   and never enter band math.
+3. Write both to private mktemp JSON files, then in one Bash step:
+
+python3 "<skill-dir>/../_parallax/client-policy/adaptation.py" \
+  --policy "$POLICY" --exposures "$EXPOSURES" --view-tilts "$TILTS" --json
+
+4. Capture the full result. Every rendered number comes from it. Do not recompute,
+   round, or re-derive any figure inline.
+
 ### Batch D — Recommendations + Assessment (after A + B + C)
 
 1. Per `references/recommendation-matrix.md`, assign each flagged holding a priority (High/Medium/Low) and action type (trim/exit/hold/investigate/reweight). Every recommendation must cite a specific finding. View Excluded → Exit (priority High). View Misalignment → Trim or Reweight (priority Medium unless paired with other flags).
-2. Call `get_assessment` with comprehensive prompt incorporating: portfolio composition, factor scores, health flags (including View flags), macro context, per-holding drill-down findings, recommendations, client context, AND active house view (basis_statement + tilt vector + excludes if present). Fire this call as soon as recommendations are assigned (a deterministic matrix lookup — do not wait for pending `get_news_synthesis` calls; include news highlights only if already resolved). While `get_assessment` runs, proceed to compose all non-assessment sections; insert the assessment result into the Suitability Assessment section when it resolves, or render the degraded-state note per the existing rule on timeout.
-3. Append audit log entry per loader.md §6.
+2. Call `get_assessment` with comprehensive prompt incorporating: portfolio composition, factor scores, health flags (including View flags), macro context, per-holding drill-down findings, recommendations, client context, AND active house view (basis_statement + tilt vector + excludes if present), AND, when a client policy is present, the SAA drift findings, TAA alignment verdicts, the resolved k with its source, and the fallback tier. Fire this call as soon as recommendations are assigned (a deterministic matrix lookup — do not wait for pending `get_news_synthesis` calls; include news highlights only if already resolved). While `get_assessment` runs, proceed to compose all non-assessment sections; insert the assessment result into the Suitability Assessment section when it resolves, or render the degraded-state note per the existing rule on timeout.
+3. Append audit log entry per loader.md §6. When a client policy was supplied, include the §6.2 conditional fields `client_policy_applied`, `policy_hash`, `policy_fallback_tier`, `resolved_k`, and `k_source`. Never log a client name; `client_ref` and `policy_hash` only.
 
 ### Pre-Render — Load white-label branding
 
@@ -158,6 +196,31 @@ Client-ready report:
 - **Factor Analysis** (scores with macro context interpretation for this client type; if view active, compare against view-target factor)
 - **Concentration & Redundancy** (flagged issues; coverage reliability note if applicable)
 - **House View Alignment** (only if view active) — table of view tilt direction vs current portfolio exposure per sector/region/factor; flagged misalignments
+- **SAA Drift** (only if policy supplied) — one row per covered segment: dimension,
+  segment, current, policy, drift, band, band status, breach kind. Disclose the
+  near-edge threshold under the table. Render **Verdict sensitivity** per
+  `_parallax/parallax-conventions.md` §11 — band status is a published-numeric-cutoff
+  verdict, so name the nearest-boundary segment and the arithmetic flip condition,
+  third person, no advice language.
+- **TAA Alignment** (only if policy supplied) — one row per covered segment: tilt,
+  room in the tilt direction, desired active, current active, alignment
+  (aligned / opposed / capped-by-band / not evaluable / no view). Below the table:
+  the budget line (Σ|desired| vs max_total_tilt, and the cap scale if one fired).
+  Tag every `multiplier_fallback` row visibly as sized without a band benchmark.
+  When `tactical_overlay.enabled` is `false`, SAA Drift renders unaffected but TAA
+  Alignment renders exactly one line — "tactical overlay disabled by mandate" — with
+  no budget line.
+- **Policy Conflicts** (only if policy supplied) — tilt-vs-band rows and
+  excludes / prohibited-vs-holding rows. Framed per `_parallax/parallax-conventions.md`
+  §12: informational preface above the table, no imperative trade verbs. Any recorded
+  RM band override renders here with its rationale.
+- **Policy Data Quality** (only if policy supplied) — uncovered dimensions, unmapped
+  holdings and the coverage fraction, basis conversions, policy staleness,
+  tracking-error budget present but not evaluated, missing or one-sided bands,
+  unknown segment keys, and any validation errors that forced tier `no_policy`.
+
+Under the section group, render one disclosure line stating the resolved k with its
+source and `calibration_status: heuristic_phase0`, per policy-loader.md §7.
 - **Per-Holding Analysis** (for drill-down holdings: score trend, risk profile, flags, news highlights; view conflicts called out)
 - **Suitability Assessment** (alignment with client goals AND with active house view if present; cite basis_statement)
 - **Recommended Actions** (prioritized High/Medium/Low per recommendation-matrix.md, with specific action types; rationale cites view tilts where applicable), framed per conventions §12 (informational preface required; `action_labels=plain` supported)
