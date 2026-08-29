@@ -22,7 +22,7 @@ Shell out to `_parallax/client-policy/adaptation.py`; never validate in prose. E
 
 **Two-class error model (binding).** Every `PolicyError` carries a `severity` of `blocking` or `dimension`:
 
-- **Blocking** — a structural failure (`mandate` or `sub_allocations.dimensions` not a mapping, wrong `schema_version`), a non-numeric or out-of-range weight, a band with `min > max`, a policy weight lying outside its own band, or a dimension weight-sum violation. A blocking error puts the **whole policy** on tier `no_policy`: nothing applies, no dimension partially computes.
+- **Blocking** — a structural failure (`mandate` or `sub_allocations.dimensions` not a mapping, wrong `schema_version`), a non-numeric or out-of-range weight, a band with `min > max`, a policy weight lying outside its own band, a dimension weight-sum violation, or an unrecognized or absent `code_list` on a dimension. A blocking error puts the **whole policy** on tier `no_policy`: nothing applies, no dimension partially computes.
 - **Dimension** — a missing `basis`, or `basis: total` without a usable `strategic_allocation.equity`. A dimension-scoped error drops **only that dimension** to `multiplier_fallback`; every other covered dimension proceeds normally.
 
 The two classes never overlap and the tier resolution never mixes them: any blocking error anywhere in the document forces `no_policy` regardless of how many dimension-scoped errors also exist; with zero blocking errors, dimension-scoped errors are partitioned per dimension per the fallback ladder in §4.
@@ -37,6 +37,7 @@ Failure-handling table, in the shape of `loader.md:51-59`. The two `validate_pol
 | Policy file unreadable or unparseable (CLI exit 2) | Tier `no_policy`. Render one Policy Data Quality line naming the failure. Never guess at the content. |
 | Policy parsed but is not a mapping | Tier `no_policy`, `policy_hash` empty (this is itself a **blocking** error — "policy document is not a mapping"). Render the error row. |
 | `validate_policy` returned a **blocking** error (see class definition above) | Tier `no_policy`. Render every error row. Do not partially apply any dimension. |
+| A dimension declares an unrecognized or absent `code_list` | **Blocking.** Tier `no_policy`. Render the error row. The segment-key check is never silently disabled by a typo'd or missing code list — the whole policy falls back rather than guessing the key set. |
 | `validate_policy` returned only **dimension-scoped** errors (missing `basis`; `basis: total` without a usable equity weight) | Only the affected dimension(s) fall to `multiplier_fallback`. Every other covered dimension proceeds normally. Emit the error row per affected dimension. Never assume `sleeve`. |
 | `review_due` passed | Apply normally. Emit a `stale_policy` row. Never a block. |
 | Helper invocation itself fails (non-validation runtime failure) | Render the policy sections as unavailable with the reason. Do not compute any figure inline. |
