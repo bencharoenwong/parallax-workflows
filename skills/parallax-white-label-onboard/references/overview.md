@@ -59,7 +59,7 @@ pdf_builder.set_font(branding["fonts"].get("header", "Helvetica"))
 
 ### Components
 
-- **`extract/`** (package) — Asset extraction from URLs (web scraping), PDFs (OCR), or wizard intake. Public symbols re-exported at the package root (`from ...extract import ColorExtractor`); modules: `colors`, `voice`, `ooxml`, `web_pdf`, `wizard`, `merge`
+- **`extract/`** (package) — Asset extraction from folders, URLs (web scraping), PDFs (OCR), or wizard intake. Public symbols re-exported at the package root (`from ...extract import ColorExtractor`); modules: `colors`, `voice`, `ooxml`, `web_pdf`, `wizard`, `merge`, `folder`
   - `ColorExtractor` — Hex color and RGB pattern matching
   - `LogoExtractor` — URL and file path detection
   - `FontExtractor` — CSS font-family parsing and OCR text analysis
@@ -102,7 +102,7 @@ skills/white-label-onboard/
 │   ├── validation-rules.md (color/logo/font validation reference)
 │   └── supported-fonts.md (web-safe fonts + fallback chains)
 └── (Python modules in skills/_parallax/white-label/)
-    ├── extract/           (package: __init__ re-exports colors, voice, ooxml, web_pdf, wizard, merge)
+    ├── extract/           (package: __init__ re-exports colors, voice, ooxml, web_pdf, wizard, merge, folder)
     ├── validator.py
     ├── loader.py
     ├── schema.yaml

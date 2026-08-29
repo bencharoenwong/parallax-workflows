@@ -25,7 +25,7 @@ description: "RIA/wealth advisor client portfolio review: full analysis, redunda
 - Output should be presentation-ready for client meetings
 - LANGUAGE HAND-OFF — if `lang=` is present and ≠ `en`, the terminal Translate step is mandatory. Route `zh-CN`/`zh-TW`/`zh-HK` → `/translate-chinese-finance`, `th` → `/translate-thai-finance`, using the delimited routing-directive block (never a prose sentence the translator could echo). Unsupported values → English output with the standard warning footer.
 - get_assessment prompt should incorporate all findings including macro, flags, and recommendations
-- Pre-Render step loads white-label branding via `_parallax/white-label/loader.py` → `load_visual_branding()` (the 7-key visual subset wrapper). Voice/typography/etc. are structurally absent from the returned dict — `branding["voice"]` raises `KeyError`. About This Report state-to-text mapping and Branding Header semantics follow `_parallax/white-label/integration-pattern.md` §5 + §7 — that doc is the canonical specification; client-review's Output Format bullets reference it rather than reproducing the table.
+- Pre-Render calls `_parallax/white-label/rm_consumer.py` → `load_rm_branding_context("portfolio review")`. This executable visual-only seam owns source redaction, voice isolation, and branding fallback. Use its `header_lines` and `about_lines` exactly once. The state mapping follows `_parallax/white-label/integration-pattern.md` §5 + §7.
 - Branding Header uses `**<client_name>** portfolio review` (skill-specific framing), not the generic `**<client_name>** report` template in integration-pattern.md §5. Intentional divergence — do not "fix" to match the generic template.
 
 Presentation-ready portfolio review with health flags and prioritized recommendations for wealth advisors.
@@ -97,9 +97,7 @@ News (selective, async): `get_news_synthesis` for holdings >10% weight AND flagg
 
 ### Pre-Render — Load white-label branding
 
-Before composing the Output Format, JIT-load `_parallax/white-label/integration-pattern.md` and call `load_visual_branding()` per §2. The loader returns exactly seven keys: `client_name`, `colors`, `logos`, `fonts`, `source`, `error`, `render`. Set `white_label_active = is_white_label_active(branding)` and `client_name = branding.get("client_name", "")` for use in the Branding Header. See §4 (error states), §5 + §6 (substitution semantics), §7 (About This Report template). Any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`. Apply §5 + §7 when composing the Output Format below.
-
-`white_label_active` is the rendering flag. `client_name` may be `""` on legacy configs — tolerate without erroring (skip the Branding Header in that case per integration-pattern.md §5).
+Before composing the Output Format, JIT-load `_parallax/white-label/integration-pattern.md`. Import `load_rm_branding_context` from `_parallax/white-label/rm_consumer.py`. Call `load_rm_branding_context("portfolio review")` once. Place its `header_lines` below any House View Preamble. Place its `about_lines` in About This Report. Do not inspect the branding mapping directly. The helper preserves the RM analysis and selects default Parallax if branding is corrupt.
 
 ### Render — deterministic gate (LAST step, mandatory)
 

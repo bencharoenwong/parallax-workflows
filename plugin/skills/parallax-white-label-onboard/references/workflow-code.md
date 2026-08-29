@@ -8,83 +8,23 @@ JIT-load `_parallax/white-label/extract/` (the extract package), `_parallax/whit
 
 ## Step 1 — Folder extraction (after F-3 operator confirmation)
 
-Folder mode F-4 — extract per classification, merge OOXML drafts, append voice-only chunks:
+Folder mode F-4 uses the callable extraction boundary. It applies the confirmed
+classifications, merges branded drafts, drops visuals from voice-only files,
+and enforces the exact 3,000-word retained-corpus limit:
 
 ```python
-import os
-from pathlib import Path
-folder = Path(folder_path)
-drafts: list = []
-voice_only_corpus_chunks: list[str] = []  # text from non-OOXML voice-only files
+from extract import extract_from_folder
 
-for f, classification in classified_files.items():
-    if classification == "skip":
-        continue
-    if classification in ("branded_visual_voice", "branded"):
-        if f.suffix.lower() == ".pptx":
-            drafts.append(extract_from_pptx(str(f)))
-        elif f.suffix.lower() == ".docx":
-            drafts.append(extract_from_docx(str(f)))
-        elif f.suffix.lower() == ".pdf":
-            drafts.append(extract_from_pdf(str(f)))
-    elif classification == "voice_only":
-        if f.suffix.lower() in (".pptx", ".docx", ".pdf"):
-            # extract for voice corpus only — discard the (likely-default) visual fields
-            d = (extract_from_pptx if f.suffix.lower() == ".pptx"
-                 else extract_from_docx if f.suffix.lower() == ".docx"
-                 else extract_from_pdf)(str(f))
-            voice_only_corpus_chunks.append(d.get("voice_corpus", {}).get("text", ""))
-        else:
-            # Text-only file — use Read tool, strip markup if HTML/EML, append
-            text = read_text_file(str(f))  # operator-side helper; see below
-            voice_only_corpus_chunks.append(text)
-
-if not drafts and not voice_only_corpus_chunks:
-    # Empty supported-file inventory; surface error and offer wizard fallback
-    ...
-
-# Merge OOXML drafts (visual + voice)
-if len(drafts) == 1:
-    draft = drafts[0]
-elif len(drafts) > 1:
-    draft = merge_drafts(drafts)
-    xv = cross_validate_visual(drafts)
-    draft["multi_source"] = {
-        "sources": [d["source"] for d in drafts],
-        "mismatches": xv["mismatches"],
-        "agreements": xv["agreements"],
-    }
-else:
-    # Voice-only folder — start with an empty visual draft
-    from datetime import datetime, timezone
-    draft = {
-        "colors": {}, "logos": {}, "fonts": {},
-        "source": {"type": "folder-voice-only", "reference": str(folder)},
-        "extracted_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "confidence_scores": {},
-        "voice_corpus": {"text": "", "word_count": 0, "truncated": False},
-    }
-
-# Append voice-only corpus chunks to draft's voice_corpus
-if voice_only_corpus_chunks:
-    extra_text = "\n\n".join(voice_only_corpus_chunks)
-    existing = draft.get("voice_corpus", {}).get("text", "")
-    combined = (existing + "\n\n" + extra_text).strip()
-    # Truncate again if needed (3000-word cap matches _voice_corpus_from_text)
-    words = combined.split()
-    if len(words) > 3000:
-        combined = " ".join(words[:3000])
-        truncated = True
-    else:
-        truncated = False
-    draft["voice_corpus"] = {
-        "text": combined,
-        "word_count": len(words),
-        "truncated": truncated,
-    }
+draft = extract_from_folder(
+    folder_path,
+    classifications=classified_files,
+)
 ```
 
-`read_text_file` is an inline helper — operator just uses the Read tool for `.md`/`.txt`/`.html`/`.eml`, strips HTML tags if present (BeautifulSoup or simple regex), strips email headers if `.eml`, returns the body. No new Python dependency required for v1.
+`classified_files` maps an absolute path or filename to `branded`,
+`branded_visual_voice`, `voice_only`, or `skip`. The two branded labels are
+aliases. Any remaining ambiguous file raises `AmbiguousClassificationError`
+before an extractor runs.
 
 ---
 

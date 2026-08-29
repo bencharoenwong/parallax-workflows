@@ -16,6 +16,7 @@ description: "Configure white-label client branding for Parallax report output. 
 
 - JIT-load _parallax/white-label/schema.yaml before extraction — it is the single source of truth for config.yaml shape
 - JIT-load _parallax/white-label/extract/ (the extract package) and _parallax/white-label/validator.py before running Steps 1 and 2
+- JIT-load `_parallax/white-label/persistence.py` before the confirmation gate. Route the final disposition through `persist_disposition()`; do not reproduce the config/DESIGN.md/audit write sequence inline.
 - URL input — use `extract_from_url()` from `_parallax/white-label/extract/` so public-destination
   validation, redirect checks, and bounded reads cannot be bypassed; do not fetch the URL with
   defuddle, WebFetch, or another network path
@@ -151,7 +152,7 @@ Assemble the `draft` dict from wizard answers. Skip any field the user leaves bl
 
 **URL mode:** `draft = extract_from_url(url)`. If `draft` contains `"error"`, surface it: `"Extraction returned partial results due to: <error>. Review and edit before confirming."`
 
-**PDF mode:** `draft = extract_from_pdf(pdf_path)`. Reads up to 5 pages by default. If the brand guide appears to be a dedicated multi-page document and extraction confidence is low (<0.6 average), offer to read more pages or switch to wizard mode.
+**PDF mode:** `draft = extract_from_pdf(pdf_path)`. Reads up to 10 pages by default. If the brand guide appears to be a dedicated multi-page document and extraction confidence is low (<0.6 average), offer to read more pages or switch to wizard mode.
 
 **PPTX mode:** `draft = extract_from_pptx(pptx_path)`. Reads `ppt/theme/theme1.xml` directly, so colors and fonts come from the canonical OOXML theme declarations (confidence 0.9). Body text from every text frame is aggregated into `draft["voice_corpus"]` for the voice extraction step. The OOXML slot mapping is fixed: `accent1`→primary, `accent2`→secondary, `accent3`→accent, `dk1`→text, `lt1`→background. If the deck uses a heavily customized theme that overrides these slots inline, theme XML may understate the actual on-slide colors — flag this and offer wizard override.
 
@@ -248,12 +249,22 @@ Compute `avg_conf` and `lowest_field` from `draft["confidence_scores"]` for the 
 
 Decision points to preserve:
 - **DESIGN.md preview + lint are informational** — generated via `emit_design_md(...)` (split on `---`, indent YAML) and `DesignMdValidator.lint(...)`; they never auto-block the save.
-- **Mismatch resolution (multi-source):** if mismatches are present, the user MUST pick a winner per field via `AskUserQuestion` (candidate values shown with source attribution). Apply the choice to `draft` before save. Do NOT auto-pick by confidence or recency — the PM/CIO is canonical on which brand version is current.
+- **Mismatch resolution (multi-source):** if mismatches are present, the user MUST pick a winner per field via `AskUserQuestion` (candidate values shown with source attribution). Collect `{field: source_reference}` choices and call `merge_resolved_drafts(drafts, resolutions)` before save. The helper refuses an unresolved or unknown source choice. Do NOT auto-pick by confidence or recency — the PM/CIO is canonical on which brand version is current.
 - **Edit / Re-extract / Abort** each have their own disposition and audit handling: `edited` archives the pre-edit draft and hashes the pre-edit draft; `re_extracted` returns to Step 0; `rejected` writes no files; `confirmed` proceeds to Step 4.
 
 > Full draft display template, color-swatch fallback, and the per-option procedures (Edit-fields 7-step / Re-extract / Abort / Confirm): see `references/confirmation-gate.md`.
 
 ### Step 4 — Save
+
+**Callable transaction boundary (required).** After Step 4b has prepared any
+local logo paths in the draft, call `persist_disposition(draft, disposition=...,
+branding_root=...)` from `_parallax/white-label/persistence.py`. It builds
+`config.yaml` and `DESIGN.md` from the same draft, serializes concurrent writers,
+stages the compatible hash-chained audit entry, and rolls all three live files
+back if any replacement fails. For `rejected` and `re_extracted`, call the same
+function before returning; it appends an `extraction_attempt` entry and cannot
+activate the draft. The subsections below define inputs and artifact contracts;
+they are not separate write operations.
 
 #### 4a. Pre-write validation
 

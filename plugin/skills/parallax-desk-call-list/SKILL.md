@@ -20,7 +20,7 @@ description: "Desk-level morning call list for relationship managers covering mu
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.1 tool loading, §0.2 typed integer params, §3 parallel execution, §3.1 annotation/rank separation, §9.1/§9.2 disclosures, §10 render gate, §11 verdict sensitivity, §12 information framing, and §13 audience mode.
 - JIT-load `_parallax/coverage-matrix.md` before Batch A. `export_price_series` is equity-only and FREE, and its `success:false` response classifies ETFs; ETFs then price via `etf_daily_price`. This skill does not call `etf_profile`.
 - JIT-load `_parallax/house-view/loader.md` §1-§2, §5, and §6. The house view annotates movers but never changes rank order or membership.
-- JIT-load `_parallax/white-label/integration-pattern.md` before Pre-Render. Loader call is `load_visual_branding()`; do not access `branding["voice"]`.
+- JIT-load `_parallax/white-label/integration-pattern.md` before Pre-Render. Call `load_rm_branding_context("desk call list")` from `_parallax/white-label/rm_consumer.py`. This visual-only seam blocks voice access and redacts source references.
 - JIT-load `references/desk-book-format.md` before loading/validating any desk book.
 - JIT-load `references/ranking-and-bounding.md` before thresholding, ranking, or rendering bounded sections.
 - JIT-load `references/talk-tracks.md` before drafting per-client talk tracks.
@@ -112,7 +112,7 @@ Zero tool calls. Use `desk_call_list_logic.py` to compute triggered exposure, si
 
 ### Pre-Render - Load White-Label Branding
 
-Load `_parallax/white-label/integration-pattern.md` §2. Call `load_visual_branding()`, `is_white_label_active(branding)`, and `safe_source_reference(branding)`. The branding is for the desk's firm: one report, one brand.
+Load `_parallax/white-label/integration-pattern.md` §2. Import `load_rm_branding_context` from `_parallax/white-label/rm_consumer.py`. Call `load_rm_branding_context("desk call list")` once. Place its `header_lines` below any House View Preamble. Place its `about_lines` in About This Report. Do not inspect the branding mapping directly. The helper preserves the call list and selects default Parallax if branding is corrupt. The branding is for the desk's firm: one report, one brand.
 
 ### Render - deterministic gate
 

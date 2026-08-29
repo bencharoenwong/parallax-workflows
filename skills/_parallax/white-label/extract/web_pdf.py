@@ -34,6 +34,7 @@ _STYLESHEET_TOTAL_TIMEOUT_SECONDS = 8
 # response larger than the validator will accept can only fail validation, so
 # there is no reason to spill it to disk first.
 _MAX_ASSET_BYTES = 5 * 1024 * 1024
+PDF_PAGE_LIMIT = 10
 
 # Blocks whose CONTENT is markup machinery, not prose. Stripping tags alone
 # leaves their bodies behind, and on a modern page the head is dominated by
@@ -1128,7 +1129,7 @@ def extract_from_url(url: str) -> Dict[str, Any]:
 def extract_from_pdf(pdf_path: str) -> Dict[str, Any]:
     """Extract branding from a PDF file (brand guide, logo, etc.).
 
-    Reads up to 5 pages by default. Confidence is reduced to reflect
+    Reads up to 10 pages by default. Confidence is reduced to reflect
     the fragility of PDF text extraction vs canonical OOXML theme XML.
     """
     pdf_file = Path(pdf_path)
@@ -1153,12 +1154,26 @@ def extract_from_pdf(pdf_path: str) -> Dict[str, Any]:
             import pypdf
             with open(pdf_path, "rb") as f:
                 reader = pypdf.PdfReader(f)
-                pdf_text = "\n".join(t for t in (page.extract_text() for page in reader.pages[:5]) if t)
+                pdf_text = "\n".join(
+                    text
+                    for text in (
+                        page.extract_text()
+                        for page in reader.pages[:PDF_PAGE_LIMIT]
+                    )
+                    if text
+                )
         except ImportError:
             try:
                 import pdfplumber
                 with pdfplumber.open(pdf_path) as pdf:
-                    pdf_text = "\n".join(t for t in (page.extract_text() for page in pdf.pages[:5]) if t)
+                    pdf_text = "\n".join(
+                        text
+                        for text in (
+                            page.extract_text()
+                            for page in pdf.pages[:PDF_PAGE_LIMIT]
+                        )
+                        if text
+                    )
             except ImportError:
                 pdf_text = "(PDF text extraction unavailable)"
 

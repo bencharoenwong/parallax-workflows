@@ -40,6 +40,8 @@ white_label_active = is_white_label_active(branding)
 client_name = branding.get("client_name", "")
 ```
 
+RM markdown consumers use the executable wrapper in `rm_consumer.py` instead. Call `load_rm_branding_context(<deliverable label>)`, then place its `header_lines` and `about_lines` in the locations defined by §5 and §7. The wrapper calls `load_visual_branding()` internally. It centralizes source redaction, voice isolation, and default-brand fallback for client-review and desk-call-list.
+
 `white_label_active` is the rendering flag. The predicate is centralized in `loader.py` — do NOT re-implement it inline (the `schema_unavailable` branch is easy to miss; see §4 and §8). `client_name` is safe to read with `.get(..., "")` because legacy configs predating the field return `""` rather than `KeyError`.
 
 **Do not load the YAML directly.** A second `yaml.safe_load` against the same config file bypasses the loader's error handling, schema validation, and logo resolution, and creates a race window between the loader's existence check and the second read.

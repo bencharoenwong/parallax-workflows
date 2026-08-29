@@ -14,6 +14,29 @@ from .voice import _voice_corpus_from_text
 
 
 _OOXML_A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+MAX_OOXML_XML_MEMBER_BYTES = 2 * 1024 * 1024
+MAX_OOXML_TOTAL_UNCOMPRESSED_BYTES = 64 * 1024 * 1024
+MAX_OOXML_MEMBERS = 5000
+
+
+def _validate_ooxml_archive(zf) -> None:
+    """Reject archives whose declared expansion exceeds bounded processing caps."""
+    members = zf.infolist()
+    if len(members) > MAX_OOXML_MEMBERS:
+        raise ValueError(f"OOXML archive exceeds {MAX_OOXML_MEMBERS} members")
+    total = sum(member.file_size for member in members)
+    if total > MAX_OOXML_TOTAL_UNCOMPRESSED_BYTES:
+        raise ValueError(
+            f"OOXML archive exceeds {MAX_OOXML_TOTAL_UNCOMPRESSED_BYTES} uncompressed bytes"
+        )
+    for member in members:
+        if (
+            member.filename.lower().endswith(".xml")
+            and member.file_size > MAX_OOXML_XML_MEMBER_BYTES
+        ):
+            raise ValueError(
+                f"OOXML XML member exceeds {MAX_OOXML_XML_MEMBER_BYTES} bytes: {member.filename}"
+            )
 
 
 
@@ -297,6 +320,7 @@ def extract_from_pptx(pptx_path: str) -> Dict[str, Any]:
         # Single open — theme parse, typography parse, and radii detection all
         # operate on the same archive (previously opened twice).
         with zipfile.ZipFile(pptx_path, "r") as zf:
+            _validate_ooxml_archive(zf)
             theme_paths = [n for n in zf.namelist() if n.startswith("ppt/theme/") and n.endswith(".xml")]
             if theme_paths:
                 with zf.open(theme_paths[0]) as f:
@@ -380,6 +404,7 @@ def extract_from_docx(docx_path: str) -> Dict[str, Any]:
         rounded: Dict[str, str] = {}
         # Single open — theme parse and typography parse share the archive.
         with zipfile.ZipFile(docx_path, "r") as zf:
+            _validate_ooxml_archive(zf)
             theme_paths = [n for n in zf.namelist() if n.startswith("word/theme/") and n.endswith(".xml")]
             if theme_paths:
                 with zf.open(theme_paths[0]) as f:
