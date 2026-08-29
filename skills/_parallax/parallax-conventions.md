@@ -20,25 +20,30 @@ Gemini CLI uses feature flags to roll out architectural changes. These can be se
 Run this once at the top of any should-i-buy / two-lens / house-view / portfolio workflow, **before the first data call** — not as a mid-run recovery:
 
 1. **Resolve paths.** Resolve every `_parallax/...` conventions and house-view path to the canonical `parallax-workflows` copy (see `_parallax/skill-structure-conventions.md` → "Canonical source & path resolution"). Do not assume the installed skill directory contains them.
-2. **Confirm MCP readiness.** Call `ToolSearch` with `"+Parallax"` to load the `mcp__claude_ai_Parallax__*` schemas before the first tool call (§0.1). If the first data batch then comes back empty or interrupted, treat it as a schema-registration race (not "no data") and re-fire the full batch once (§0.1) before concluding unavailability.
-3. **Abort cleanly on a gap.** If a required convention/house-view file cannot be resolved, or the Parallax schemas have still not appeared after that re-fire, **stop and tell the operator exactly what is missing.** Do not silently proceed on partial inputs or fall through to fabricated data.
+2. **Discover live capabilities.** Use the host's live tool-discovery surface once before the first data call (for example, `ToolSearch` with `"+Parallax"` in Claude Code). Inspect the returned callable names and input schemas, then bind each logical operation used by the workflow to the exact callable exposed in this session.
+3. **Let the live contract win.** Live capability discovery is authoritative for the callable namespace, tool availability, parameter names, required fields, types, and enums. Names and schemas in this repository are implementation notes, not permission to call an alias or argument shape that the runtime did not advertise.
+4. **Abort or degrade cleanly on a gap.** If a required convention/house-view file cannot be resolved, or a required logical capability is absent from the discovered set, **stop for gates or mark the affected display section unavailable per §4.** Tell the operator exactly what is missing. Do not invent a namespace, guess a parameter variant, silently proceed through a gate, or fabricate data.
 
-Most should-i-buy failures trace to one of two causes this pre-flight removes — missing convention/house-view files, and MCP calls racing schema registration. Converting those mid-run recoveries into one up-front check is what prevents sessions that burn the turn budget before producing output. This is the open-side complement to §0.3 (validation before reporting done).
+Most should-i-buy failures trace to one of two causes this pre-flight removes — missing convention/house-view files, and stale assumptions about the live connector contract. Resolving both before execution prevents sessions that burn the turn budget retrying calls the runtime cannot accept. This is the open-side complement to §0.3 (validation before reporting done).
 
 ---
 
-## 0.1 MCP Tool Loading
+## 0.1 Live MCP Capability Discovery
 
+Parallax tool namespaces are runtime-assigned and may differ across Claude Code, Claude.ai, Codex, plugins, or multiple connections in the same host. Before the first Parallax data call:
 
-Parallax tools (`mcp__claude_ai_Parallax__*`) are deferred MCP tools. Before the first Parallax tool call in any session, call `ToolSearch` with query `"+Parallax"` to load the tool schemas. Without this step, tool calls will fail with "tool not found."
+1. Use the host's live discovery mechanism to find Parallax capabilities and load their current schemas. `ToolSearch` with query `"+Parallax"` is the Claude Code example, not a universal namespace contract.
+2. Build a session-local binding map from each logical tool name used by the skill (for example, `get_company_info`) to the exact callable name returned by discovery.
+3. Read the callable's live input schema immediately before constructing its arguments. Send only advertised parameters, with the advertised types and enum values. If static prose conflicts with discovery, discovery wins.
+4. Never synthesize a callable by attaching a remembered namespace to a logical tool name. A configured server alias, README example, previous transcript, or cached skill instruction does not prove that callable exists in the current session.
 
-**Empty or cancelled first batch ≠ "no data."** If the first batch of Parallax calls after `ToolSearch` comes back empty, or is interrupted by an unrelated error (a stray `ls`, a 502, a cancelled sibling call), re-fire the entire batch once before concluding the data is unavailable — schemas may not have finished registering when the first calls fired. Only after a clean re-fire still returns empty do the §4 fallback patterns apply. This is distinct from §4's per-tool empty-output retry, which applies after initialization is confirmed — this rule is batch-level and first-call-only.
+**Retry classification.** A transient transport failure, cancellation, or empty success may be retried once for the affected call after discovery remains available. Do not re-fire an entire batch because one sibling failed. A tool-not-found or schema-validation response is a deterministic contract failure: do not repeat the same payload and do not try guessed aliases or argument variants. Re-read the discovered schema and make one corrected call only when the mapping is unambiguous; otherwise use a discovered fallback per §4 and mark the missing coverage explicitly.
 
 ---
 
 ## 0.2 Tool Parameter Reference
 
-Parameter names that commonly trip up skill authors (and LLMs guessing from prose). Use the exact names below when calling these tools:
+The table below records commonly observed parameter names. It is a maintenance aid, not a runtime contract. Use an entry only when the live discovered schema advertises the same parameter and type; the live schema overrides every row.
 
 | Tool | Parameter | Type | Notes |
 |---|---|---|---|
@@ -52,7 +57,7 @@ Parameter names that commonly trip up skill authors (and LLMs guessing from pros
 | `export_price_series` | `days` | integer | Defaults to 100 (range 1-365). Same serialization caveat as `periods`. |
 | `get_peer_snapshot` | N/A | — | Symbol only; company-identity field in response is `target_company` (top-level). The response has no `name` field — each peer's name is `comparison[].company`. `comparison[]` carries the target's own row alongside its peers (`peer_count` counts peers only), so exclude the row whose `symbol` equals the queried symbol when iterating the peer set. |
 
-Any skill calling `macro_analyst` or `build_stock_universe` with `country=` or `description=` will fail with an MCP parameter validation error. Skills should always use the names in this table.
+When the live schemas match these observations, `country=` and `description=` are invalid for the two examples above. If the live schemas differ, follow the discovered names instead of retrying the remembered shape.
 
 ---
 
@@ -60,9 +65,10 @@ Any skill calling `macro_analyst` or `build_stock_universe` with `country=` or `
 
 Before reporting any Parallax workflow complete:
 
-1. **Data integrity** — confirm the MCP batch returned real data, not an init race (per §0.1: an empty or interrupted first batch is re-fired in full before "no data" is concluded). Empty ≠ done.
-2. **Field-request integrity** — after any `analyze_portfolio` call that supplies `fields=`, read `result._meta.invalid_fields`. `fields=` is a passthrough, so a bad name returns `success: true` with the block simply absent. A non-empty `invalid_fields` is a **caller error**, not unavailable data: fix the field name, and never render the affected section as "data unavailable." See `_parallax/response-schemas.md` for the requestable-name list and the live-probe evidence.
-3. **House-view integrity** — when a house view is active, confirm the `view_status` `banner` string actually appears in the rendered output (verify its presence — don't assume it rendered). Per loader.md §2 "Load-time validation" item 6, the **hard-block** states `malformed` / `expired` (tilts do NOT apply) and the **soft** state `critical` (tilts apply; expiry imminent) all surface their banner verbatim — never swallow one to make a workflow look clean.
+1. **Capability integrity** — confirm every invoked callable came from this session's discovery result and every request conformed to that callable's live input schema. A remembered namespace or a previously valid payload is not evidence of current availability.
+2. **Data integrity** — confirm the MCP batch returned real data. Empty ≠ done. Retry only the affected call when §0.1 classifies the failure as transient; never replay a full expensive batch by default.
+3. **Field-request integrity** — after any `analyze_portfolio` call that supplies `fields=`, read `result._meta.invalid_fields`. A non-empty value is a deterministic caller mismatch, even if the envelope says `success: true`. Do not retry with guessed field names. Make a corrected call only when the live schema or response metadata explicitly identifies accepted values; otherwise use discovered fallback capabilities for the affected sections and record the coverage loss. `_parallax/response-schemas.md` is historical shape guidance only.
+4. **House-view integrity** — when a house view is active, confirm the `view_status` `banner` string actually appears in the rendered output (verify its presence — don't assume it rendered). Per loader.md §2 "Load-time validation" item 6, the **hard-block** states `malformed` / `expired` (tilts do NOT apply) and the **soft** state `critical` (tilts apply; expiry imminent) all surface their banner verbatim — never swallow one to make a workflow look clean.
 
 Integrity failures are flagged explicitly in the output, not omitted. This is the Parallax-domain instance of the completion-claim discipline in `CLAUDE.verification.md` ("a passing metric is necessary, not sufficient"; verify, don't eyeball).
 
@@ -185,7 +191,7 @@ Everything else in §4 is a **display-section** rule: a tool fails, you mark tha
 
 It is the **wrong** default for a gate. A gate is any step whose output is a pass/fail, include/exclude, or eligible/ineligible verdict on a named security — Shariah compliance, a stated eligibility screen, a hard mandate constraint. For a gate, "continue without the data" silently converts *unknown* into *pass*, and the failure concentrates exactly where the data is thinnest: the obscure, poorly-covered names a screen exists to catch.
 
-**Rule.** When a tool call that feeds a gate fails, returns empty, or returns null/missing values for a gated field, after the normal retry for its tool class:
+**Rule.** When a tool call that feeds a gate fails, returns empty, or returns null/missing values for a gated field, after any retry permitted by §0.1:
 
 1. The name's verdict is **`UNVERIFIED`** — never `pass`, never `fail`, and never silently omitted.
 2. `UNVERIFIED` names are **excluded from any "eligible" / "compliant" / "passes" list** and from aggregates computed over that list.
@@ -197,7 +203,7 @@ Absence is not a pass. A reader who cannot distinguish "screened and cleared" fr
 ### Fast-response tools
 `get_company_info`, `get_peer_snapshot`, `get_score_analysis`, `get_financials`, `get_stock_outlook`, `explain_methodology`, `list_macro_countries`, `macro_analyst`
 
-→ Retry once on failure. If second attempt fails, mark section as **"Data unavailable"** and continue. **If the failed call feeds a gate, apply §4.0 instead** — "mark unavailable and continue" would turn an unknown into a pass.
+→ Invoke only when the logical capability is present in live discovery. Retry once for a transient transport failure or empty success. Do **not** retry a tool-not-found or schema-validation failure; use another discovered capability or mark the section **"Data unavailable"** and continue. **If the failed call feeds a gate, apply §4.0 instead** — "mark unavailable and continue" would turn an unknown into a pass.
 
 Note: "fast-response" refers to latency, not token cost. Token costs vary per tool — see `token-costs.md` for the full table. In particular, `macro_analyst` returns quickly but costs 5 tokens per call.
 
@@ -218,7 +224,7 @@ If `quick_portfolio_scores` (Legacy/V1) covers **<50% of holdings by weight**, e
 3. Merge into portfolio-weighted result.
 4. Note: "Scoring used split-and-merge due to partial coverage."
 
-**For `PARALLAX_LOADER_V2=1` (Preferred path):** Always use parallel per-holding `get_peer_snapshot` aggregation. If a specific holding returns "No scores available," retry once. If it still fails, skip the holding's contribution to the weighted average and report degraded coverage.
+**For `PARALLAX_LOADER_V2=1` (Preferred path):** When live discovery exposes it, use parallel per-holding `get_peer_snapshot` aggregation. If a specific holding returns "No scores available," retry that holding once. A schema-validation failure is not retryable. If the call still fails, skip the holding's contribution to the weighted average and report degraded coverage.
 
 If `check_portfolio_redundancy` covers **<60% of holdings**, flag redundancy results as **"Low confidence — limited coverage."**
 
@@ -226,7 +232,7 @@ If `check_portfolio_redundancy` covers **<60% of holdings**, flag redundancy res
 For portfolios with fewer than 7 holdings, concentration flags (>15% single, >45% top-3) are structural and reflect portfolio size, not poor diversification. Note them but don't alarm.
 
 ### Empty-output handling
-If any tool returns successfully but with no output content (not an error, just empty), treat as a failure and apply standard retry logic. Do not treat empty-but-successful as valid data. When the empty response feeds a gate, the post-retry outcome is §4.0 `UNVERIFIED`, not an unmarked omission.
+If any tool returns successfully but with no output content (not an error, just empty), treat it as a transient failure and retry that call once. Do not replay sibling calls and do not treat empty-but-successful as valid data. When the empty response feeds a gate, the post-retry outcome is §4.0 `UNVERIFIED`, not an unmarked omission.
 
 ---
 
@@ -264,7 +270,7 @@ If no covered markets are relevant, return `"macro": "unavailable"` — don't fo
 
 ## 7. Capability Index — "I want to do X, which skill/tool?"
 
-External integrators and skill authors frequently ask for capabilities that already exist under a different name. Check this index before proposing a new skill or REST endpoint.
+External integrators and skill authors frequently ask for capabilities that have existed under a different name. Use this index for semantic orientation only, then confirm the capability and its schema through live discovery. A row that says a capability is absent or uses a particular tool is a dated observation, not authority over the current runtime.
 
 ### Portfolio analytics
 
@@ -307,7 +313,7 @@ External integrators and skill authors frequently ask for capabilities that alre
 
 ### Reverse-lookup: "I have a Parallax response field, what is it?"
 
-If you see a field in a response and don't know what it means, check `response-schemas.md` (nested structure of `rolling_metrics`, `drawdown_analysis`, `concentration_metrics`, `company_contribution`, `portfolio_scores`, `data_quality`). That file is authoritative until upstream OpenAPI publishes example responses.
+If you see a field in a response and don't know what it means, inspect the live discovered schema/metadata first, then use `response-schemas.md` for historical nested-shape guidance (`rolling_metrics`, `drawdown_analysis`, `concentration_metrics`, `company_contribution`, `portfolio_scores`, `data_quality`). The reference file never overrides a live schema or response.
 
 ---
 
