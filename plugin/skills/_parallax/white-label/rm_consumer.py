@@ -10,33 +10,45 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 import importlib.util
 import sys
+import threading
 from pathlib import Path
 from typing import Any, NamedTuple
 from urllib.parse import urlsplit
 
 
+_LOADER_LOCK = threading.Lock()
+_LOADED: dict[str, Any] = {}
+
+
 def _load_loader():
-    """Load the hyphenated sibling without relying on the caller's CWD."""
-    path = Path(__file__).resolve().with_name("loader.py")
+    """Load the hyphenated sibling without relying on the caller's CWD.
+
+    The module is registered in sys.modules DURING execution so a sibling that
+    defines a dataclass can resolve its own __module__, but it is published to
+    callers only after exec_module returns. Reading sys.modules directly would
+    hand a concurrent caller a half-executed module.
+    """
     name = "parallax_white_label_rm_loader"
-    cached = sys.modules.get(name)
-    if cached is not None:
-        return cached
-    spec = importlib.util.spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"cannot load white-label loader: {path}")
-    module = importlib.util.module_from_spec(spec)
-    # Register before exec_module. A module that defines a dataclass resolves
-    # its own __module__ through sys.modules during class creation, so an
-    # unregistered module raises AttributeError on Python 3.11 instead of
-    # importing. Registering first also makes repeat loads idempotent.
-    sys.modules[name] = module
-    try:
-        spec.loader.exec_module(module)
-    except BaseException:
-        sys.modules.pop(name, None)
-        raise
-    return module
+    module = _LOADED.get(name)
+    if module is not None:
+        return module
+    with _LOADER_LOCK:
+        module = _LOADED.get(name)
+        if module is not None:
+            return module
+        path = Path(__file__).resolve().with_name("loader.py")
+        spec = importlib.util.spec_from_file_location(name, path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"cannot load white-label loader: {path}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        try:
+            spec.loader.exec_module(module)
+        except BaseException:
+            sys.modules.pop(name, None)
+            raise
+        _LOADED[name] = module
+        return module
 
 
 _loader = _load_loader()
