@@ -302,7 +302,12 @@ def merge_resolved_drafts(
             "Operator resolution required for: " + ", ".join(unresolved)
         )
     canonical_drafts = _sorted_drafts(drafts)
-    merged = merge_drafts(canonical_drafts)
+    # merge_drafts hands back the winning draft's own typography, rounded and
+    # spacing dicts by reference, so writing a resolution through them edited
+    # the caller's input. The per-source candidates the confirmation gate
+    # displays were overwritten with the operator's pick, and re-validating the
+    # same drafts then reported consensus where a mismatch had been.
+    merged = deepcopy(merge_drafts(canonical_drafts))
     for field in sorted(resolutions):
         value = _value_from_source(canonical_drafts, field, resolutions[field])
         target = merged

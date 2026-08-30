@@ -89,19 +89,36 @@ def inventory_folder(
     # land, so an ambiguous one is refused outright: falling back to the
     # automatic classification would answer with keyword matching, turning
     # {"newsletter.pdf": "skip"} into "branded" without telling anyone.
+    #
+    # A key that reaches no inventoried file at all — a typo, or a name only a
+    # file below the two inventoried levels answers to — is refused for the
+    # same reason. Registering it is a silent no-op, and the file the operator
+    # meant to disposition is then classified by keyword instead.
+    inventoried_paths = {str(item) for item in inventoried}
     overrides: dict[str, str] = {}
     for key, value in (classifications or {}).items():
         text = str(Path(key))
         name = Path(key).name
-        unique = basename_counts.get(name, 0) <= 1
+        count = basename_counts.get(name, 0)
+        unique = count <= 1
         if text != name:
+            if text not in inventoried_paths and not (count == 1):
+                raise AmbiguousClassificationError(
+                    f"{key} names no file in the two inventoried levels of "
+                    f"{folder}; check the path"
+                )
             overrides[text] = value
             if unique:
                 overrides.setdefault(name, value)
             continue
+        if count == 0:
+            raise AmbiguousClassificationError(
+                f"{name} names no file in the two inventoried levels of "
+                f"{folder}; check the name"
+            )
         if not unique:
             raise AmbiguousClassificationError(
-                f"{name} matches {basename_counts[name]} files; supply a full path"
+                f"{name} matches {count} files; supply a full path"
             )
         overrides[name] = value
 

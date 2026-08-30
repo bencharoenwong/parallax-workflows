@@ -100,6 +100,45 @@ def test_visual_mismatch_requires_source_attributed_resolution():
         )
 
 
+def test_resolving_a_mismatch_leaves_the_source_drafts_untouched():
+    """The gate re-displays per-source candidates, so they must survive a merge.
+
+    merge_drafts returns the winning draft's typography/rounded/spacing dicts by
+    reference, so writing the operator's pick into the merged draft wrote it
+    into their input. The losing candidate was replaced by the winning value,
+    and re-validating the same drafts then reported source consensus on a field
+    the operator had just been asked to arbitrate.
+    """
+    from extract.merge import cross_validate_visual
+
+    def _themed(reference, radius, family, confidence):
+        return {
+            "source": {"type": "pptx", "reference": reference},
+            "colors": {},
+            "fonts": {},
+            "logos": {},
+            "rounded": {"sm": radius},
+            "typography": {"h1": {"fontFamily": family, "fontSize": "32px"}},
+            "confidence_scores": {"rounded": confidence, "typography.h1": confidence},
+        }
+
+    high = _themed("a.pptx", "4px", "Inter", 0.9)
+    low = _themed("b.pptx", "8px", "Georgia", 0.1)
+    resolutions = {"rounded.sm": "b.pptx", "typography.h1.fontFamily": "b.pptx"}
+    before = [m["field"] for m in cross_validate_visual([high, low])["mismatches"]]
+
+    merged = merge_resolved_drafts([high, low], resolutions)
+
+    assert merged["rounded"]["sm"] == "8px"
+    assert merged["typography"]["h1"]["fontFamily"] == "Georgia"
+    assert high["rounded"] == {"sm": "4px"}
+    assert high["typography"]["h1"]["fontFamily"] == "Inter"
+    assert low["rounded"] == {"sm": "8px"}
+    assert [
+        m["field"] for m in cross_validate_visual([high, low])["mismatches"]
+    ] == before
+
+
 def test_mixed_folder_classification_controls_visual_and_voice(tmp_path, monkeypatch):
     folder = tmp_path / "synthetic-brand"
     folder.mkdir()
@@ -432,6 +471,48 @@ def test_ambiguous_basename_shorthand_is_refused(tmp_path) -> None:
 
     with pytest.raises(AmbiguousClassificationError, match="report.pdf"):
         inventory_folder(tmp_path, {"report.pdf": "skip"})
+
+
+def test_classification_key_matching_no_inventoried_file_is_refused(tmp_path) -> None:
+    """A disposition that cannot land must not be accepted and dropped.
+
+    A key naming no inventoried file was registered and then never looked up,
+    so the file the operator meant to disposition fell through to keyword
+    matching: one transposed character in "newsletter.pdf" ingested it as
+    branded client collateral instead of skipping it.
+    """
+    from extract.folder import AmbiguousClassificationError, inventory_folder
+
+    (tmp_path / "newsletter.pdf").write_bytes(b"%PDF-1.4 stub")
+
+    with pytest.raises(AmbiguousClassificationError, match="newsletetr.pdf"):
+        inventory_folder(tmp_path, {"newsletetr.pdf": "skip"})
+
+
+def test_classification_key_below_the_inventory_depth_is_refused(tmp_path) -> None:
+    """The inventory reports two levels, so a deeper key can never land."""
+    from extract.folder import AmbiguousClassificationError, inventory_folder
+
+    (tmp_path / "newsletter.pdf").write_bytes(b"%PDF-1.4 stub")
+    deep = tmp_path / "archive" / "2019" / "q1"
+    deep.mkdir(parents=True)
+    (deep / "old-deck.pptx").write_bytes(b"stub")
+
+    with pytest.raises(AmbiguousClassificationError, match="old-deck.pptx"):
+        inventory_folder(tmp_path, {"old-deck.pptx": "skip"})
+
+
+def test_full_path_from_another_directory_still_lands_by_basename(tmp_path) -> None:
+    """The refusal must not narrow the shorthand for keys that do reach a file."""
+    from extract.folder import inventory_folder
+
+    (tmp_path / "newsletter.pdf").write_bytes(b"%PDF-1.4 stub")
+
+    inventory = inventory_folder(
+        tmp_path, {"/somewhere/else/newsletter.pdf": "skip"}
+    )
+
+    assert inventory[0]["classification"] == "skip"
 
 
 def test_basename_shorthand_ignores_files_below_the_inventory_depth(tmp_path) -> None:
