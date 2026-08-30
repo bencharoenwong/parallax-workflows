@@ -27,8 +27,30 @@ jobs:
       # import error surfaced only once the step started collecting the whole
       # directory. Installing the dependency runs the test rather than hiding
       # it behind an --ignore.
+      # Every dependency any collected root needs. The six test roots added on
+      # 2026-08-18 were wired in without their dependencies, so `House-view core
+      # gates` failed collection on rfc8785 and, because a failed step ends the
+      # job, the five steps after it never ran at all. CI reported one red step
+      # while four were actually broken and the rest were untested.
+      #
+      # Keep this in sync when adding a step below. A missing dependency here
+      # does not look like a missing dependency; it looks like a passing job
+      # that silently stopped early.
       - name: Install test deps
-        run: python -m pip install --upgrade pip pytest pyyaml
+        run: |
+          python -m pip install --upgrade pip
+          # pyyaml: test_marketing_schema.py under skills/_parallax/scripts/.
+          # jsonschema: loader.py treats it as optional and SKIPS config schema
+          # validation when absent, so without it three loader tests that assert
+          # a malformed config is rejected fail — and the runtime silently stops
+          # validating client configs at all.
+          python -m pip install pytest pyyaml jsonschema
+          # pynacl + rfc8785: manifest_verify.py raises SystemExit on import
+          # without them, which aborts collection for three house-view roots.
+          python -m pip install -r skills/_parallax/house-view/requirements.txt
+          # python-pptx + python-docx: build the .pptx/.docx fixtures the OOXML
+          # extractor tests feed. Without them 18 tests error at fixture setup.
+          python -m pip install -r skills/_parallax/white-label/requirements-test.txt
       - name: Grader unit tests
         run: python -m pytest evals/graders/ -q
       - name: Contract, provenance and precision gates
