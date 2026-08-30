@@ -289,33 +289,19 @@ Compute `config_hash = sha256(yaml.safe_dump(config["branding"], sort_keys=True)
 
 > Full code (builder call + v2 yaml shape + v1 legacy fallback): see `references/workflow-code.md` § Step 4c — Construct config.yaml.
 
-#### 4d. Archive existing config (if present)
+#### 4d–4f. Persist the disposition (single transaction boundary)
 
-Copy any existing `config.yaml` to `~/.parallax/client-branding/.archive/<YYYYMMDDTHHMMSSZ>/config.yaml` before overwriting. Archive failures are non-blocking — log and continue.
+Call `persist_disposition(draft, disposition=..., client_name=..., validation_summary=..., lint_status=...)`. One call archives any existing `config.yaml`, writes `config.yaml` and `DESIGN.md`, and appends the hash-chained audit entry — the three files are one transaction under a writer lock, so a failure restores the previous active state instead of leaving them describing different brands. Do not write them separately.
 
-> Full code: see `references/workflow-code.md` § Step 4d — Archive existing config.
-
-#### 4e. Write files (atomic-swap pattern)
-
-Write `config.yaml` to a staging directory, then `shutil.move` to the live path. Enforce `0600` on config.yaml and `0700` on assets/. On write failure: report cleanly and DO NOT proceed to Step 4e' or Step 4f — the previous active config remains unchanged.
-
-> Full code: see `references/workflow-code.md` § Step 4e — Staging write + atomic-swap.
-
-#### 4e'. Write DESIGN.md (Google Labs spec)
-
-Emit `DESIGN.md` from the draft via `emit_design_md(draft, client_name=..., extracted_at=..., source_refs=[...])`, write to staging, atomic-move to `~/.parallax/client-branding/DESIGN.md`, chmod `0600`. Compute `design_md_hash` (sha256) for the audit entry. `emit_design_md` raises `ValueError` on invalid hex tokens — treat as write failure, do not proceed to Step 4f.
-
-> Full code: see `references/workflow-code.md` § Step 4e' — Write DESIGN.md.
-
-#### 4f. Append hash-chained audit entry
-
-**Audit-entry schema bump (intentional chain discontinuity).** With the DESIGN.md emit at Step 4e', save entries now include `design_md_hash` and `lint_status`. The chain hash is `sha256(prior-line-bytes)`, so the first new-shape entry after a v1 audit log will appear as a chain break to any downstream verifier comparing entry shape across the bump. This is intentional: keep the prior chain readable for forensics but treat entries before this point as belonging to the v1 audit schema. If a verifier exists, gate it on `entry.get("design_md_hash") is not None` to detect schema-2 entries; absent that field, treat the entry as v1.
-
-Read the last line of `audit.jsonl`, sha256 it to get `prev_entry_hash`, then append a new entry with `action: "save"`, `applied: true`, the config_hash, client_name, validation_status, disposition, draft_yaml_hash, design_md_hash, and lint_status. Chmod `audit.jsonl` to `0600`.
+`confirmed` and `edited` activate and return `{"applied": True, "config_hash": ..., "design_md_hash": ..., "client_name": ...}`. `re_extracted` and `rejected` write no active artifact and return `{"applied": False, "disposition": ...}`.
 
 **Every extraction attempt that does not result in a save also appends an audit entry** (`action: "extraction_attempt"`, `applied: false`) with `disposition`: `confirmed` / `edited` / `re_extracted` / `rejected`. This includes aborted sessions.
 
-> Full code: see `references/workflow-code.md` § Step 4f — Append hash-chained audit entry.
+On failure the call raises `PersistenceError`; report it cleanly and treat the save as not applied. `RecoveryError` means an earlier interrupted save left a state this process cannot repair — surface it rather than retrying.
+
+**Audit-entry schema bump (intentional chain discontinuity).** Save entries include `design_md_hash` and `lint_status`. The chain hash is `sha256(prior-line-bytes)`, so the first new-shape entry after a v1 audit log will appear as a chain break to any downstream verifier comparing entry shape across the bump. This is intentional: keep the prior chain readable for forensics but treat entries before this point as belonging to the v1 audit schema. If a verifier exists, gate it on `entry.get("design_md_hash") is not None` to detect schema-2 entries; absent that field, treat the entry as v1.
+
+> Full code: see `references/workflow-code.md` § Step 4d–4f — Persist the disposition.
 
 ### Step 5 — Confirmation summary
 

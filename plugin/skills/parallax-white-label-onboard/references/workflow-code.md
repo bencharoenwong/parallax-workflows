@@ -292,121 +292,58 @@ Compute `config_hash = sha256(yaml.safe_dump(config["branding"], sort_keys=True)
 
 ---
 
-## Step 4d — Archive existing config (if present)
+## Step 4d–4f — Persist the disposition (single transaction boundary)
+
+Every confirmation-gate outcome goes through one call. `persist_disposition`
+routes an activating disposition to `save_confirmed_branding` and a
+non-activating one to `record_extraction_attempt`. Do not reproduce the
+config.yaml / DESIGN.md / audit.jsonl write sequence inline: the three files are
+one transaction, and writing them separately can leave config.yaml on the new
+brand while DESIGN.md still describes the old one and audit.jsonl records
+neither.
 
 ```python
-import shutil
+from persistence import persist_disposition, PersistenceError
 
-existing = os.path.expanduser("~/.parallax/client-branding/config.yaml")
-if os.path.exists(existing):
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    archive_dir = os.path.expanduser(f"~/.parallax/client-branding/.archive/{ts}")
-    os.makedirs(archive_dir, mode=0o700, exist_ok=True)
-    shutil.copy2(existing, f"{archive_dir}/config.yaml")
-```
-
-Archive failures are non-blocking — log a warning but do not abort.
-
----
-
-## Step 4e — Staging write + atomic-swap
-
-```python
-staging_dir = os.path.expanduser("~/.parallax/client-branding/.staging")
-os.makedirs(staging_dir, mode=0o700, exist_ok=True)
-
-# Write config.yaml to staging
-config_path = f"{staging_dir}/config.yaml"
-with open(config_path, "w") as f:
-    yaml.safe_dump(config, f, sort_keys=False, allow_unicode=True)
-
-# Move from staging to active (atomic)
-shutil.move(f"{staging_dir}/config.yaml",
-            os.path.expanduser("~/.parallax/client-branding/config.yaml"))
-
-# Enforce permissions
-os.chmod(os.path.expanduser("~/.parallax/client-branding/config.yaml"), 0o600)
-os.chmod(assets_dir, 0o700)
-```
-
-On write failure: report `"Save failed: <file> write error. No files written. Safe to retry."` Do not proceed to Step 4e' or Step 4f.
-
----
-
-## Step 4e' — Write DESIGN.md (Google Labs spec)
-
-Emit the DESIGN.md companion file from the in-memory draft and write it atomically alongside `config.yaml`:
-
-```python
-from skills._parallax.white_label.emit_design_md import emit_design_md
-import hashlib
-
-design_md_text = emit_design_md(
+result = persist_disposition(
     draft,
-    client_name=config["metadata"]["client_name"],
-    extracted_at=config["metadata"]["extracted_at"],
-    source_refs=[config["metadata"]["source"]["reference"]] if isinstance(config["metadata"].get("source"), dict) else [],
+    disposition=disposition,          # "confirmed" | "edited" | "re_extracted" | "rejected"
+    client_name=client_name,
+    validation_summary=validation_results,
+    extracted_by=extracted_by,        # optional
+    notes=notes,                      # optional
+    lint_status=lint_status,          # "pass" | "warn" | "fail" | "skipped"
 )
-
-design_staging = f"{staging_dir}/DESIGN.md"
-with open(design_staging, "w", encoding="utf-8") as f:
-    f.write(design_md_text)
-shutil.move(design_staging, os.path.expanduser("~/.parallax/client-branding/DESIGN.md"))
-os.chmod(os.path.expanduser("~/.parallax/client-branding/DESIGN.md"), 0o600)
-
-design_md_hash = hashlib.sha256(design_md_text.encode("utf-8")).hexdigest()
-lint_status = validation_results.get("design_md", {}).get("status", "skipped")
 ```
 
-`emit_design_md` raises `ValueError` on invalid hex tokens in the draft — caller should have validated at Step 2 already, but if it raises here, treat as a write failure and surface the path of the bad hex. Do not proceed to Step 4f.
+`confirmed` and `edited` activate: the call builds `config.yaml` via
+`build_config_from_draft`, emits `DESIGN.md` via `emit_design_md`, appends the
+hash-chained audit entry, archives any superseded config, and replaces all three
+live files under a writer lock. It returns
+`{"applied": True, "config_hash": ..., "design_md_hash": ..., "client_name": ...}`.
 
----
+`re_extracted` and `rejected` do not activate: the call appends an
+`action: "extraction_attempt"`, `applied: false` audit entry and writes no
+active artifact. It returns `{"applied": False, "disposition": ...}`. Every
+extraction attempt that does not result in a save is recorded this way,
+including aborted sessions.
 
-## Step 4f — Append hash-chained audit entry
+`emit_design_md` raises `ValueError` on invalid hex tokens in the draft, which
+surfaces as a failed save. On any failure the previous active state is restored
+and `PersistenceError` is raised; report it cleanly and treat the save as not
+applied. `RecoveryError` (a `PersistenceError`) means an earlier interrupted
+save left a state this process cannot repair — surface it rather than retrying.
+Call `recover_interrupted_save()` to repair a branding root explicitly; every
+save already begins with that repair.
 
-**Audit-entry schema bump (intentional chain discontinuity).** With the DESIGN.md emit at Step 4e', save entries now include `design_md_hash` and `lint_status`. The chain hash is `sha256(prior-line-bytes)`, so the first new-shape entry after a v1 audit log will appear as a chain break to any downstream verifier comparing entry shape across the bump. This is intentional: keep the prior chain readable for forensics but treat entries before this point as belonging to the v1 audit schema. If a verifier exists, gate it on `entry.get("design_md_hash") is not None` to detect schema-2 entries; absent that field, treat the entry as v1.
-
-```python
-import json, hashlib
-
-audit_path = os.path.expanduser("~/.parallax/client-branding/audit.jsonl")
-
-# Read last entry hash for chaining
-prev_hash = "0" * 64
-if os.path.exists(audit_path):
-    with open(audit_path) as f:
-        lines = [l.strip() for l in f if l.strip()]
-    if lines:
-        prev_hash = hashlib.sha256(lines[-1].encode()).hexdigest()
-
-entry = {
-    "schema_version": 1,
-    "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-    "skill": "parallax-white-label-onboard",
-    "action": "save",
-    "applied": True,
-    "source": config["metadata"]["source"],
-    "config_hash": config_hash,
-    "client_name": config["metadata"]["client_name"],
-    "prev_entry_hash": prev_hash,
-    "validation_status": {
-        "colors": {k: v.get("status") for k, v in validation_results.get("colors", {}).items()},
-        "logos":  {k: v.get("status") for k, v in validation_results.get("logos",  {}).items()},
-        "fonts":  {k: v.get("status") for k, v in validation_results.get("fonts",  {}).items()},
-    },
-    "disposition": disposition,   # "confirmed" | "edited"
-    "draft_yaml_hash": draft_yaml_hash,
-    "design_md_hash": design_md_hash,   # sha256 of DESIGN.md text written at Step 4e'
-    "lint_status": lint_status,         # "pass" | "warn" | "fail" | "skipped"
-}
-
-with open(audit_path, "a") as f:
-    f.write(json.dumps(entry, separators=(",", ":")) + "\n")
-
-os.chmod(audit_path, 0o600)
-```
-
-**Every extraction attempt that does not result in a save also appends an audit entry** (`action: "extraction_attempt"`, `applied: false`) with `disposition`: `confirmed` / `edited` / `re_extracted` / `rejected`. This includes aborted sessions.
+**Audit-entry schema bump (intentional chain discontinuity).** Save entries
+include `design_md_hash` and `lint_status`. The chain hash is
+`sha256(prior-line-bytes)`, so the first new-shape entry after a v1 audit log
+appears as a chain break to any downstream verifier comparing entry shape across
+the bump. This is intentional: keep the prior chain readable for forensics but
+treat entries before this point as belonging to the v1 audit schema. Gate a
+verifier on `entry.get("design_md_hash") is not None` to detect schema-2
+entries; absent that field, treat the entry as v1.
 
 ---
 
