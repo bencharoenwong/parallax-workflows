@@ -771,7 +771,14 @@ def build_config_from_draft(
         config["voice"] = {"enabled": False}
 
     if "multi_source" in draft:
-        config["multi_source"] = draft["multi_source"]
+        # component_drafts is a confirmation-gate affordance carrying each
+        # source's full draft, voice corpus included. It is what the operator
+        # resolves mismatches from, never part of the activated config.
+        config["multi_source"] = {
+            key: value
+            for key, value in draft["multi_source"].items()
+            if key != "component_drafts"
+        }
     if "render" in draft:
         config["render"] = draft["render"]
 

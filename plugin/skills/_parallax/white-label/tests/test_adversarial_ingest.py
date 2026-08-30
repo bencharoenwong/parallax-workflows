@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import subprocess
@@ -592,3 +593,110 @@ def test_pdf_without_extraction_backend_returns_structured_error(tmp_path, monke
     assert result["voice_corpus"]["word_count"] == 0
     assert "unavailable" not in result["voice_corpus"]["text"]
     assert result["colors"] == {}
+
+
+def _themed_pptx_draft(reference: str, primary: str, confidence: float) -> dict:
+    return {
+        "source": {"type": "pptx", "reference": reference},
+        "colors": {"primary": {"hex": primary, "confidence": confidence}},
+        "fonts": {},
+        "logos": {},
+        "confidence_scores": {"colors.primary": confidence},
+    }
+
+
+def test_folder_mismatch_exposes_the_drafts_its_resolver_needs(monkeypatch, tmp_path):
+    """Folder mode merged internally and never returned the per-source drafts.
+
+    The gate is documented to resolve every mismatch by source via
+    merge_resolved_drafts(drafts, resolutions), but extract_from_folder kept
+    visual_drafts local, so folder mode could only keep merge_drafts' own
+    confidence pick — the auto-resolution the gate exists to prevent.
+    """
+    from extract import folder as folder_module
+    from extract.folder import extract_from_folder
+    from extract.merge import merge_resolved_drafts
+
+    for name in ("alpha.pptx", "beta.pptx"):
+        (tmp_path / name).write_bytes(b"stub")
+
+    drafts = {
+        "alpha.pptx": _themed_pptx_draft("alpha.pptx", "#111111", 0.9),
+        "beta.pptx": _themed_pptx_draft("beta.pptx", "#222222", 0.1),
+    }
+    monkeypatch.setattr(
+        folder_module,
+        "extract_from_pptx",
+        lambda path: copy.deepcopy(drafts[Path(path).name]),
+    )
+
+    draft = extract_from_folder(
+        tmp_path, classifications={"alpha.pptx": "branded", "beta.pptx": "branded"}
+    )
+
+    assert [m["field"] for m in draft["multi_source"]["mismatches"]] == ["colors.primary"]
+    components = draft["multi_source"]["component_drafts"]
+    assert {c["source"]["reference"] for c in components} == {"alpha.pptx", "beta.pptx"}
+    # merge_drafts alone keeps the high-confidence value; the operator overrides it.
+    assert draft["colors"]["primary"]["hex"] == "#111111"
+
+    resolved = merge_resolved_drafts(components, {"colors.primary": "beta.pptx"})
+
+    assert resolved["colors"]["primary"]["hex"] == "#222222"
+    assert resolved["multi_source"]["resolutions"] == {"colors.primary": "beta.pptx"}
+
+
+def test_component_drafts_are_isolated_from_the_merged_draft(monkeypatch, tmp_path):
+    """merge_drafts aliases nested dicts, so the copies must be independent."""
+    from extract import folder as folder_module
+    from extract.folder import extract_from_folder
+
+    for name in ("alpha.pptx", "beta.pptx"):
+        (tmp_path / name).write_bytes(b"stub")
+
+    drafts = {
+        "alpha.pptx": _themed_pptx_draft("alpha.pptx", "#111111", 0.9),
+        "beta.pptx": _themed_pptx_draft("beta.pptx", "#222222", 0.1),
+    }
+    monkeypatch.setattr(
+        folder_module,
+        "extract_from_pptx",
+        lambda path: copy.deepcopy(drafts[Path(path).name]),
+    )
+
+    draft = extract_from_folder(
+        tmp_path, classifications={"alpha.pptx": "branded", "beta.pptx": "branded"}
+    )
+    draft["colors"]["primary"]["hex"] = "#EDITED"
+
+    winner = next(
+        c for c in draft["multi_source"]["component_drafts"]
+        if c["source"]["reference"] == "alpha.pptx"
+    )
+    assert winner["colors"]["primary"]["hex"] == "#111111"
+
+
+def test_component_drafts_never_reach_the_activated_config(monkeypatch, tmp_path):
+    """They carry each source's full draft, so config.yaml must not copy them."""
+    import loader
+
+    draft = {
+        "client_name": "Meridian",
+        "colors": {"primary": {"hex": "#111111"}},
+        "fonts": {},
+        "logos": {},
+        "source": {"type": "folder", "reference": "/tmp/collateral"},
+        "extracted_at": "2026-08-30T00:00:00Z",
+        "confidence_scores": {},
+        "multi_source": {
+            "sources": [],
+            "mismatches": [{"field": "colors.primary", "values": []}],
+            "agreements": [],
+            "component_drafts": [_themed_pptx_draft("alpha.pptx", "#111111", 0.9)],
+        },
+    }
+
+    config = loader.build_config_from_draft(draft, client_name="Meridian")
+
+    assert "component_drafts" not in config["multi_source"]
+    assert config["multi_source"]["mismatches"] == draft["multi_source"]["mismatches"]

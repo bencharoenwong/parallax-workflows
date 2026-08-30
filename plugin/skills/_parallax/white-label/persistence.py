@@ -97,9 +97,12 @@ def _append_audit_line(audit_bytes: bytes, entry: dict[str, Any]) -> bytes:
     return audit_bytes + separator + _canonical_line(entry) + b"\n"
 
 
+def _draft_bytes(draft: dict[str, Any]) -> bytes:
+    return yaml.safe_dump(draft, sort_keys=True, allow_unicode=True).encode("utf-8")
+
+
 def _draft_hash(draft: dict[str, Any]) -> str:
-    serialized = yaml.safe_dump(draft, sort_keys=True, allow_unicode=True).encode("utf-8")
-    return hashlib.sha256(serialized).hexdigest()
+    return hashlib.sha256(_draft_bytes(draft)).hexdigest()
 
 
 def _validation_status(validation_summary: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -394,6 +397,8 @@ def save_confirmed_branding(
     notes: str = "",
     disposition: str = "confirmed",
     lint_status: str = "skipped",
+    pre_edit_draft: dict[str, Any] | None = None,
+    edit_notes: str = "",
     fault_injector: FaultInjector | None = None,
 ) -> dict[str, Any]:
     """Build and atomically activate one confirmed branding state.
@@ -402,9 +407,16 @@ def save_confirmed_branding(
     authorize activation.  Rejections and re-extractions must go through
     :func:`persist_disposition`, which records audit evidence without writing
     either active artifact.
+
+    An ``edited`` disposition must supply ``pre_edit_draft``: the audit entry
+    hashes what extraction produced, not what the operator settled on, so an
+    edit is distinguishable from a plain confirmation and the change itself is
+    reconstructable. ``config_hash`` already records the activated state.
     """
     if disposition not in {"confirmed", "edited"}:
         raise ValueError("only confirmed or edited drafts may be activated")
+    if disposition == "edited" and pre_edit_draft is None:
+        raise ValueError("an edited disposition must supply pre_edit_draft")
 
     root = _branding_root(branding_root)
     # Build both representations before creating staging state. Validation or
@@ -479,8 +491,10 @@ def save_confirmed_branding(
                     originals[name] = live.read_bytes() if live.exists() else None
 
                 # Preserve the superseded canonical config for traceability. As in
-                # the documented workflow, archive failure is non-blocking.
-                if originals["config.yaml"] is not None:
+                # the documented workflow, archive failure is non-blocking. An
+                # edited disposition also archives what extraction produced, so
+                # the archive runs on a first-ever save too.
+                if originals["config.yaml"] is not None or pre_edit_draft is not None:
                     try:
                         # mkdir(parents=True, mode=...) applies the mode ONLY to the
                         # final component; intermediate parents are created with the
@@ -496,7 +510,21 @@ def save_confirmed_branding(
                         )
                         archive.mkdir(mode=0o700)
                         os.chmod(archive, 0o700)
-                        _write_staged(archive / "config.yaml", originals["config.yaml"])
+                        if originals["config.yaml"] is not None:
+                            _write_staged(
+                                archive / "config.yaml", originals["config.yaml"]
+                            )
+                        if pre_edit_draft is not None:
+                            # The same bytes _draft_hash digests, so the audit
+                            # entry's draft_yaml_hash verifies this file.
+                            _write_staged(
+                                archive / "pre_edit.yaml", _draft_bytes(pre_edit_draft)
+                            )
+                            if edit_notes.strip():
+                                _write_staged(
+                                    archive / "edit_notes.md",
+                                    edit_notes.encode("utf-8"),
+                                )
                         archive_created = archive
                     except OSError:
                         pass
@@ -514,7 +542,9 @@ def save_confirmed_branding(
                     "prev_entry_hash": _prior_entry_hash(audit_before),
                     "validation_status": _validation_status(validation),
                     "disposition": disposition,
-                    "draft_yaml_hash": _draft_hash(draft),
+                    "draft_yaml_hash": _draft_hash(
+                        draft if pre_edit_draft is None else pre_edit_draft
+                    ),
                     "design_md_hash": design_hash,
                     "lint_status": lint_status,
                 }
@@ -632,6 +662,7 @@ def save_confirmed_branding(
         "config_hash": config_hash,
         "design_md_hash": design_hash,
         "client_name": actual_client_name,
+        "archive_dir": None if archive_created is None else str(archive_created),
     }
 
 

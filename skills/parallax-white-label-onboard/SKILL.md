@@ -249,8 +249,8 @@ Compute `avg_conf` and `lowest_field` from `draft["confidence_scores"]` for the 
 
 Decision points to preserve:
 - **DESIGN.md preview + lint are informational** — generated via `emit_design_md(...)` (split on `---`, indent YAML) and `DesignMdValidator.lint(...)`; they never auto-block the save.
-- **Mismatch resolution (multi-source):** if mismatches are present, the user MUST pick a winner per field via `AskUserQuestion` (candidate values shown with source attribution). Collect `{field: source_reference}` choices and call `merge_resolved_drafts(drafts, resolutions)` before save. The helper refuses an unresolved or unknown source choice. Do NOT auto-pick by confidence or recency — the PM/CIO is canonical on which brand version is current.
-- **Edit / Re-extract / Abort** each have their own disposition and audit handling: `edited` archives the pre-edit draft and hashes the pre-edit draft; `re_extracted` returns to Step 0; `rejected` writes no files; `confirmed` proceeds to Step 4.
+- **Mismatch resolution (multi-source):** if mismatches are present, the user MUST pick a winner per field via `AskUserQuestion` (candidate values shown with source attribution). Collect `{field: source_reference}` choices and call `merge_resolved_drafts(drafts, resolutions)` before save. `drafts` is the per-source draft list: multi-source mode builds it directly; folder mode reads it from `draft["multi_source"]["component_drafts"]`, which `extract_from_folder` attaches whenever it records a mismatch. The helper refuses an unresolved or unknown source choice. Do NOT auto-pick by confidence or recency — the PM/CIO is canonical on which brand version is current.
+- **Edit / Re-extract / Abort** each have their own disposition and audit handling: `edited` archives the pre-edit draft and hashes the pre-edit draft (pass `pre_edit_draft=`, and `edit_notes=` for the optional one-liner); `re_extracted` returns to Step 0; `rejected` writes no files; `confirmed` proceeds to Step 4.
 
 > Full draft display template, color-swatch fallback, and the per-option procedures (Edit-fields 7-step / Re-extract / Abort / Confirm): see `references/confirmation-gate.md`.
 
@@ -291,9 +291,9 @@ Compute `config_hash = sha256(yaml.safe_dump(config["branding"], sort_keys=True)
 
 #### 4d–4f. Persist the disposition (single transaction boundary)
 
-Call `persist_disposition(draft, disposition=..., client_name=..., validation_summary=..., lint_status=...)`. One call archives any existing `config.yaml`, writes `config.yaml` and `DESIGN.md`, and appends the hash-chained audit entry — the three files are one transaction under a writer lock, so a failure restores the previous active state instead of leaving them describing different brands. Do not write them separately.
+Call `persist_disposition(draft, disposition=..., client_name=..., validation_summary=..., lint_status=...)`, adding `pre_edit_draft=` (required) and optional `edit_notes=` when the disposition is `edited`. One call archives any existing `config.yaml`, writes `config.yaml` and `DESIGN.md`, and appends the hash-chained audit entry — the three files are one transaction under a writer lock, so a failure restores the previous active state instead of leaving them describing different brands. Do not write them separately.
 
-`confirmed` and `edited` activate and return `{"applied": True, "config_hash": ..., "design_md_hash": ..., "client_name": ...}`. `re_extracted` and `rejected` write no active artifact and return `{"applied": False, "disposition": ...}`.
+`confirmed` and `edited` activate and return `{"applied": True, "config_hash": ..., "design_md_hash": ..., "client_name": ..., "archive_dir": ...}`. An `edited` save hashes the pre-edit draft into the audit entry and archives it as `pre_edit.yaml` under `archive_dir`; omitting `pre_edit_draft` raises `ValueError`. `re_extracted` and `rejected` write no active artifact and return `{"applied": False, "disposition": ...}`.
 
 **Every extraction attempt that does not result in a save also appends an audit entry** (`action: "extraction_attempt"`, `applied: false`) with `disposition`: `confirmed` / `edited` / `re_extracted` / `rejected`. This includes aborted sessions.
 

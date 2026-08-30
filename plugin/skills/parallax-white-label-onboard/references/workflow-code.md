@@ -21,6 +21,19 @@ draft = extract_from_folder(
 )
 ```
 
+When two or more branded files disagree, `draft["multi_source"]["mismatches"]`
+records each field and `draft["multi_source"]["component_drafts"]` carries the
+per-source drafts. Pass that list to `merge_resolved_drafts` at the Step 3 gate:
+
+```python
+mismatches = draft.get("multi_source", {}).get("mismatches", [])
+if mismatches:
+    # resolutions = {field: source_reference}, one per mismatch, operator-chosen
+    draft = merge_resolved_drafts(
+        draft["multi_source"]["component_drafts"], resolutions
+    )
+```
+
 `classified_files` maps an absolute path or filename to `branded`,
 `branded_visual_voice`, `voice_only`, or `skip`. The two branded labels are
 aliases. A bare filename that more than one inventoried file answers to raises
@@ -313,14 +326,27 @@ result = persist_disposition(
     extracted_by=extracted_by,        # optional
     notes=notes,                      # optional
     lint_status=lint_status,          # "pass" | "warn" | "fail" | "skipped"
+    pre_edit_draft=pre_edit_draft,    # REQUIRED when disposition == "edited"
+    edit_notes=edit_notes,            # optional one-liner, written beside it
 )
 ```
+
+An `edited` disposition must pass the pre-edit draft — the call raises
+`ValueError` without it. `draft_yaml_hash` is then the hash of what extraction
+produced rather than what the operator settled on, so an edit is
+distinguishable from a plain confirmation, and the same bytes are archived as
+`pre_edit.yaml` (with `edit_notes.md` beside it when `edit_notes` is non-empty)
+under the returned `archive_dir`. `config_hash` already records the activated
+state.
 
 `confirmed` and `edited` activate: the call builds `config.yaml` via
 `build_config_from_draft`, emits `DESIGN.md` via `emit_design_md`, appends the
 hash-chained audit entry, archives any superseded config, and replaces all three
 live files under a writer lock. It returns
-`{"applied": True, "config_hash": ..., "design_md_hash": ..., "client_name": ...}`.
+`{"applied": True, "config_hash": ..., "design_md_hash": ..., "client_name": ...,
+"archive_dir": ...}` — `archive_dir` is the `.archive/<ts>-<txid>` directory
+holding the superseded config and any pre-edit evidence, or `None` when nothing
+was archived.
 
 `re_extracted` and `rejected` do not activate: the call appends an
 `action: "extraction_attempt"`, `applied: false` audit entry and writes no

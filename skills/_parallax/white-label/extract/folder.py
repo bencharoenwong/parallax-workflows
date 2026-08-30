@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Mapping
@@ -274,16 +275,23 @@ def extract_from_folder(
         draft["voice_corpus"] = bounded_corpus
         if len(visual_drafts) > 1:
             validation = cross_validate_visual(visual_drafts)
+            ordered = sorted(
+                visual_drafts, key=lambda item: item["source"]["reference"]
+            )
             draft["multi_source"] = {
-                "sources": [
-                    d["source"]
-                    for d in sorted(
-                        visual_drafts,
-                        key=lambda item: item["source"]["reference"],
-                    )
-                ],
+                "sources": [d["source"] for d in ordered],
                 **validation,
             }
+            if validation["mismatches"]:
+                # The confirmation gate resolves each mismatch by source, which
+                # needs the per-source drafts this function merged. Without them
+                # folder mode could only keep merge_drafts' confidence pick —
+                # the auto-resolution the gate exists to prevent.
+                #
+                # Deep-copied because merge_drafts aliases the winning draft's
+                # typography, rounded and spacing dicts into the merged draft,
+                # so an edit there would otherwise rewrite a source's candidate.
+                draft["multi_source"]["component_drafts"] = deepcopy(ordered)
     elif voice_parts or logo_assets:
         source_type = "folder-voice-only" if not logo_assets else "multi"
         draft = {

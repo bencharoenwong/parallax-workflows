@@ -698,3 +698,67 @@ def test_concurrent_savers_never_see_a_half_executed_sibling_module() -> None:
 
     assert not errors
     assert seen == [True] * 8
+
+
+def test_edited_save_records_the_pre_edit_draft(tmp_path) -> None:
+    """An edited entry must record what extraction produced, not the operator's pick.
+
+    save_confirmed_branding hashed the single post-edit draft, which config_hash
+    already describes, so an "edited" entry was hash-indistinguishable from a
+    "confirmed" one and nothing recorded what the operator changed.
+    """
+    import persistence
+
+    root = tmp_path / "branding"
+    extracted = _draft("Meridian", "#111111")
+    edited = _draft("Meridian", "#222222")
+
+    result = persistence.save_confirmed_branding(
+        edited,
+        branding_root=root,
+        client_name="Meridian",
+        disposition="edited",
+        pre_edit_draft=extracted,
+        edit_notes="primary was the print swatch, not the web one",
+    )
+
+    entry = json.loads((root / "audit.jsonl").read_text().splitlines()[-1])
+    assert entry["disposition"] == "edited"
+    assert entry["draft_yaml_hash"] == persistence._draft_hash(extracted)
+    assert entry["draft_yaml_hash"] != persistence._draft_hash(edited)
+
+    archive = Path(result["archive_dir"])
+    pre_edit = archive / "pre_edit.yaml"
+    assert hashlib.sha256(pre_edit.read_bytes()).hexdigest() == entry["draft_yaml_hash"]
+    assert yaml.safe_load(pre_edit.read_text()) == extracted
+    assert "print swatch" in (archive / "edit_notes.md").read_text()
+
+    config = yaml.safe_load((root / "config.yaml").read_text())
+    assert config["branding"]["colors"]["primary"] == "#222222"
+
+
+def test_edited_save_without_the_pre_edit_draft_is_refused(tmp_path) -> None:
+    """Silently falling back to the post-edit hash is the bug, not a default."""
+    import persistence
+
+    with pytest.raises(ValueError, match="pre_edit_draft"):
+        persistence.save_confirmed_branding(
+            _draft("Meridian", "#222222"),
+            branding_root=tmp_path / "branding",
+            client_name="Meridian",
+            disposition="edited",
+        )
+
+
+def test_confirmed_save_still_hashes_its_own_draft(tmp_path) -> None:
+    import persistence
+
+    root = tmp_path / "branding"
+    draft = _draft("Meridian", "#111111")
+
+    persistence.save_confirmed_branding(
+        draft, branding_root=root, client_name="Meridian"
+    )
+
+    entry = json.loads((root / "audit.jsonl").read_text().splitlines()[-1])
+    assert entry["draft_yaml_hash"] == persistence._draft_hash(draft)
