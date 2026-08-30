@@ -37,6 +37,7 @@ jobs:
       # does not look like a missing dependency; it looks like a passing job
       # that silently stopped early.
       - name: Install test deps
+        id: deps
         run: |
           python -m pip install --upgrade pip
           # pyyaml: test_marketing_schema.py under skills/_parallax/scripts/.
@@ -44,7 +45,10 @@ jobs:
           # validation when absent, so without it three loader tests that assert
           # a malformed config is rejected fail — and the runtime silently stops
           # validating client configs at all.
-          python -m pip install pytest pyyaml jsonschema
+          # pillow: validator.py treats it as optional and returns a pass with
+          # unknown dimensions when absent, so without it the logo size gate
+          # stops running and its three tests skip instead of covering it.
+          python -m pip install pytest pyyaml jsonschema pillow
           # pynacl + rfc8785: manifest_verify.py raises SystemExit on import
           # without them, which aborts collection for three house-view roots.
           python -m pip install -r skills/_parallax/house-view/requirements.txt
@@ -52,8 +56,10 @@ jobs:
           # extractor tests feed. Without them 18 tests error at fixture setup.
           python -m pip install -r skills/_parallax/white-label/requirements-test.txt
       - name: Grader unit tests
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest evals/graders/ -q
       - name: Contract, provenance and precision gates
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/_parallax/scripts/ -q
       # test_render_gate.py sits beside render_gate.py in skills/_parallax/, one
       # level above the scripts/ root collected by the step above. It is named
@@ -62,6 +68,7 @@ jobs:
       # anchor / gate-command contract across every gated skill, so a PR that
       # renames a rendered section fails here, not only in a local gate run.
       - name: Render-gate anchor and SKILL.md wiring gates
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/_parallax/test_render_gate.py -q
       # A separate process per top-level test root, not a second path appended
       # to the line above: three skills ship a `tests/conftest.py` and pytest
@@ -76,6 +83,7 @@ jobs:
       # fixture matches its generator; only these prove the shape is the one
       # skills actually read.
       - name: CIO letter-prep contract and contribution gates
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/parallax-cio-letter-prep/ -q
       # Its own process for the same conftest reason. This root was MISSING
       # until 2026-08-18: the exposure-cap fix and its regression suite landed
@@ -85,6 +93,7 @@ jobs:
       # it; this file does not auto-discover, so a new skill with tests still
       # needs a step added here. Check that when adding one.
       - name: House-view attribution gates
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/parallax-house-view-attribution/ -q
       # Same reasoning as the attribution step above, extended to the other
       # roots run-gate-tests.sh already discovers locally but this hand-listed
@@ -94,20 +103,39 @@ jobs:
       # scripts/ and test_render_gate.py roots above, but each is named
       # explicitly so a missing root stays visible in the step list.
       - name: House-view core gates
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/_parallax/house-view/tests -q
       # -m "not npx" matches run-gate-tests.sh's offline default: one test in
       # this root shells out to `npx -y`, which can download and execute a
       # package. That is opt-in network behavior, not something CI should run.
       - name: White-label extraction and validation gates
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/_parallax/white-label/tests -q -m "not npx"
       - name: Make-house-view gates
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/parallax-make-house-view/tests -q
       - name: Judge-house-view gates
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/parallax-judge-house-view/tests -q
       - name: Desk-call-list gates
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/parallax-desk-call-list/tests -q
       - name: White-label stock-report gates
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/parallax-white-label-stock-report/tests -q
+      - name: Credit-lens gates
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: python -m pytest skills/parallax-credit-lens/ -q
+      # The translate suites keep their tests beside the validator they
+      # exercise, under references/ rather than tests/. run-gate-tests.sh
+      # discovers them by test-file glob, so the root is named here rather
+      # than a tests/ subdirectory that does not exist.
+      - name: Chinese translation validator gates
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: python -m pytest skills/translate-chinese-finance/ -q
+      - name: Thai translation validator gates
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: python -m pytest skills/translate-thai-finance/ -q
       # The local-only extra term file cannot exist on a runner, and
       # load_canary_terms() fails closed without it. PARALLAX_ALLOW_PARTIAL_SCAN
       # is the sanctioned opt-in: CI scans the built-in branding / code-name
@@ -119,10 +147,13 @@ jobs:
       # CLAUDE.md owns that contract. A clone without the hook falls back to
       # running the scanner by hand before pushing.
       - name: Tracked-term scan (built-in terms only)
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         env:
           PARALLAX_ALLOW_PARTIAL_SCAN: "1"
         run: python skills/_parallax/scripts/scan_tracked_terms.py
       - name: Section cross-reference lint
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python skills/_parallax/scripts/section-ref-lint.py skills/
       - name: Coverage lint (informational)
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: bash skills/_parallax/scripts/coverage-lint.sh || true
