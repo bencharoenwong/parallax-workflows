@@ -1094,6 +1094,21 @@ def run_pipeline(policy: dict | None, exposures: dict | None,
             ))
             continue
         covered.append(dim_name)
+        if dim_name in forced_fallback:
+            # The policy weight below is never converted to sleeve basis when
+            # the basis itself could not be resolved, while `current` in the
+            # drift row always comes from sleeve-basis exposures. `drift` and
+            # `current_active` for this dimension's segments therefore compare
+            # two potentially incompatible bases; disclose that rather than
+            # let a numeric drift render as trustworthy as a confirmed-basis
+            # segment's.
+            data_quality.append(DataQualityRow(
+                kind="basis_unconfirmed_drift",
+                detail=(f"{dim_name}: basis could not be resolved, so policy weights were "
+                        "never converted to sleeve basis; drift and TAA alignment for this "
+                        "dimension's segments are not basis-comparable and TAA alignment "
+                        "reports `not_evaluable`."),
+            ))
 
         basis = dim.get("basis") if dim.get("basis") in ("sleeve", "total") else ""
         weights, conversion_rows, _ = normalize_to_sleeve(allocation, basis, equity)
@@ -1187,7 +1202,13 @@ def run_pipeline(policy: dict | None, exposures: dict | None,
             semantics = _segment_semantics(segment, tier, forced_fallback)
             if semantics == "multiplier_fallback":
                 desired = None
-                alignment = _classify_alignment_fallback(current_active, tilt)
+                if segment.dimension in forced_fallback:
+                    # Basis unresolved: current_active's sign is not trustworthy
+                    # either (see basis_unconfirmed_drift above), so this must
+                    # not fall through to a sign-based aligned/opposed verdict.
+                    alignment = "no_view" if tilt == 0 else "not_evaluable"
+                else:
+                    alignment = _classify_alignment_fallback(current_active, tilt)
             else:
                 desired = desired_active(tilt, resolved_k, room_up, room_down)
                 room_in_dir = None if tilt == 0 else (room_up if tilt > 0 else room_down)

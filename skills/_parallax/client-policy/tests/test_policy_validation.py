@@ -138,6 +138,15 @@ def test_forced_fallback_dimension_reports_no_bands_not_breach():
     it = next(r for r in result.drift
               if r.dimension == "sector" and r.key == "information_technology")
     assert it.band_min is not None and it.band_max is not None
+    # F1 repro: the policy weight for a forced-fallback dimension stays on its
+    # unconverted (possibly non-sleeve) basis while `current` is always sleeve
+    # basis, so `drift`/`current_active` for `us` compare incompatible bases.
+    # TAA alignment must not render a sign-based aligned/opposed verdict on
+    # that unreliable sign, and Policy Data Quality must disclose the gap.
+    us_taa = next(r for r in result.taa if r.dimension == "region" and r.key == "us")
+    assert us_taa.alignment in ("not_evaluable", "no_view")
+    assert any(row.kind == "basis_unconfirmed_drift" and "region" in row.detail
+              for row in result.data_quality)
 
 
 # ==========================================================================
