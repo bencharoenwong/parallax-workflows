@@ -23,8 +23,9 @@ draft = extract_from_folder(
 
 `classified_files` maps an absolute path or filename to `branded`,
 `branded_visual_voice`, `voice_only`, or `skip`. The two branded labels are
-aliases. Any remaining ambiguous file raises `AmbiguousClassificationError`
-before an extractor runs.
+aliases. A bare filename that more than one inventoried file answers to raises
+`AmbiguousClassificationError` — supply the full path for those. Any remaining
+ambiguous file raises `AmbiguousClassificationError` before an extractor runs.
 
 ---
 

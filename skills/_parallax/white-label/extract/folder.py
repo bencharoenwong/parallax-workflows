@@ -62,30 +62,51 @@ def inventory_folder(
     folder = Path(folder_path)
     if not folder.is_dir():
         raise ValueError(f"Folder not found: {folder}")
-    overrides = {str(Path(key)): value for key, value in (classifications or {}).items()}
-    # A basename shorthand is only safe while it is unambiguous. Mapping every
-    # override onto its basename let one operator disposition silently apply to
-    # an identically-named file in a sibling directory, so a file the operator
-    # never classified could inherit "branded" or "skip". Drop any basename
-    # that more than one inventoried file answers to, and fall back to that
-    # file's automatic classification instead.
-    basename_counts: dict[str, int] = {}
-    for item in folder.rglob("*"):
-        if item.is_file():
-            basename_counts[item.name] = basename_counts.get(item.name, 0) + 1
-    for key, value in (classifications or {}).items():
-        name = Path(key).name
-        if basename_counts.get(name, 0) <= 1:
-            overrides.setdefault(name, value)
-    inventory: list[dict[str, Any]] = []
-    files = (item for item in folder.rglob("*") if item.is_file())
-    for path in sorted(files, key=lambda item: str(item)):
+    inventoried: list[Path] = []
+    for item in sorted(folder.rglob("*"), key=str):
+        if not item.is_file():
+            continue
         try:
-            depth = len(path.relative_to(folder).parts)
+            depth = len(item.relative_to(folder).parts)
         except ValueError:
             continue
         if depth > 2:
             continue
+        inventoried.append(item)
+
+    # A basename shorthand is only safe while it is unambiguous. Mapping every
+    # override onto its basename let one operator disposition silently apply to
+    # an identically-named file in a sibling directory, so a file the operator
+    # never classified could inherit "branded" or "skip". Count basenames over
+    # the files this inventory actually reports, so a deeper file the caller
+    # never sees cannot make an otherwise unique shorthand look ambiguous.
+    basename_counts: dict[str, int] = {}
+    for item in inventoried:
+        basename_counts[item.name] = basename_counts.get(item.name, 0) + 1
+
+    # A full path always applies to exactly the file it names, and additionally
+    # claims its basename while that is unique. A BARE name has no other way to
+    # land, so an ambiguous one is refused outright: falling back to the
+    # automatic classification would answer with keyword matching, turning
+    # {"newsletter.pdf": "skip"} into "branded" without telling anyone.
+    overrides: dict[str, str] = {}
+    for key, value in (classifications or {}).items():
+        text = str(Path(key))
+        name = Path(key).name
+        unique = basename_counts.get(name, 0) <= 1
+        if text != name:
+            overrides[text] = value
+            if unique:
+                overrides.setdefault(name, value)
+            continue
+        if not unique:
+            raise AmbiguousClassificationError(
+                f"{name} matches {basename_counts[name]} files; supply a full path"
+            )
+        overrides[name] = value
+
+    inventory: list[dict[str, Any]] = []
+    for path in inventoried:
         automatic, role = _automatic_classification(path)
         classification = overrides.get(str(path), overrides.get(path.name, automatic))
         classification = _CLASSIFICATION_ALIASES.get(classification, classification)

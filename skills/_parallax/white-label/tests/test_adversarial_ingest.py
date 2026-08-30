@@ -416,6 +416,46 @@ def test_unambiguous_basename_shorthand_still_works(tmp_path) -> None:
     assert inventory[0]["classification"] == "voice_only"
 
 
+def test_ambiguous_basename_shorthand_is_refused(tmp_path) -> None:
+    """The documented bare-name shorthand skipped the collision guard entirely.
+
+    A bare key is registered under the basename directly, so the guard that
+    withholds the shorthand never applied to it. One disposition then classified
+    every same-named file in the folder, in either direction: a sibling could
+    inherit "skip" and be dropped, or "branded" and be ingested unreviewed.
+    """
+    from extract.folder import AmbiguousClassificationError, inventory_folder
+
+    for sub in ("a", "b"):
+        (tmp_path / sub).mkdir()
+        (tmp_path / sub / "report.pdf").write_bytes(b"%PDF-1.4 stub")
+
+    with pytest.raises(AmbiguousClassificationError, match="report.pdf"):
+        inventory_folder(tmp_path, {"report.pdf": "skip"})
+
+
+def test_basename_shorthand_ignores_files_below_the_inventory_depth(tmp_path) -> None:
+    """Only inventoried files can make a shorthand ambiguous.
+
+    inventory_folder reports two levels. Counting basenames over the whole tree
+    would let a file the caller never sees refuse an otherwise unique shorthand.
+    """
+    from extract.folder import inventory_folder
+
+    (tmp_path / "newsletter.pdf").write_bytes(b"%PDF-1.4 stub")
+    deep = tmp_path / "archive" / "2019" / "q1"
+    deep.mkdir(parents=True)
+    (deep / "newsletter.pdf").write_bytes(b"%PDF-1.4 stub")
+
+    inventory = inventory_folder(tmp_path, {"newsletter.pdf": "voice_only"})
+
+    reported = {
+        str(Path(item["path"]).relative_to(tmp_path)): item["classification"]
+        for item in inventory
+    }
+    assert reported == {"newsletter.pdf": "voice_only"}
+
+
 def test_unclaimed_logo_candidates_are_surfaced(tmp_path) -> None:
     """Images auto-classify to skip; the draft must still name the candidates.
 
