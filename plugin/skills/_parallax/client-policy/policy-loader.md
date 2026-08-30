@@ -12,7 +12,7 @@ Not part of the house view. The house view is firm-level and carries no client p
 
 The RM supplies the policy inline (YAML or JSON) or as a file path via `policy=` at invocation. There is no default on-disk location, no on-disk resolution, and no platform fetch. Absence means fallback tier `no_policy` and today's unchanged behavior — no policy sections render.
 
-Inline input is written to a private `mktemp` file before invoking the helper, using the `mktemp "${TMPDIR:-/tmp}/..."` form already used at `parallax-client-review/SKILL.md:107` (never a fixed or predictable path — `/tmp` symlink hazard).
+Inline input is written to a private `mktemp` file before invoking the helper, using the `mktemp "${TMPDIR:-/tmp}/..."` form already used by the render-gate step of `parallax-client-review/SKILL.md` (the step headed "Render — deterministic gate", whose draft file is written as `DRAFT="$(mktemp "${TMPDIR:-/tmp}/clientrev.XXXXXX")"`). Never a fixed or predictable path — `/tmp` symlink hazard.
 
 ---
 
@@ -50,7 +50,9 @@ Failure-handling table, in the shape of `loader.md:51-59`. The two `validate_pol
 
 The house view loads per `_parallax/house-view/loader.md`, unchanged.
 
-Holdings map to region by RIC suffix per `_parallax/parallax-conventions.md` §1. Holdings map to sector from `analyze_portfolio`'s `sector_allocation` block (client-review already calls it, `SKILL.md:59`), with `get_peer_snapshot` / `get_company_info` as a per-holding backstop. An unmapped holding produces an `unmapped_holding` Data Quality row and is excluded from that dimension's denominator; the exclusion is disclosed. All weights convert to sleeve basis; every conversion is disclosed as a `basis_converted` row.
+Holdings map to region by RIC suffix per `_parallax/parallax-conventions.md` §1. Holdings map to sector from `analyze_portfolio`'s `sector_allocation` block (client-review already calls `analyze_portfolio` in its Batch A parallel block), with `get_peer_snapshot` / `get_company_info` as a per-holding backstop. An unmapped holding produces an `unmapped_holding` Data Quality row and is excluded from that dimension's denominator; the exclusion is disclosed. All weights convert to sleeve basis; every conversion is disclosed as a `basis_converted` row.
+
+**Classification basis (binding disclosure).** Region is classified by listing venue (the RIC suffix), not by issuer domicile or economic exposure; ADR and fund look-through is not applied in phase 1. The rendered output states this basis (§7.4).
 
 **`--exposures` payload schema (pinned; stated identically in `adaptation.py`'s module docstring, here, and in `parallax-client-review/SKILL.md` Batch C — this is one of the three places that must agree):**
 
@@ -64,16 +66,18 @@ Holdings map to region by RIC suffix per `_parallax/parallax-conventions.md` §1
   },
   "coverage": {"region": 0.97, "sector": 1.00},
   "unmapped": [{"symbol": "ABC.L", "weight": 0.03, "dimension": "region"}],
-  "holdings": [{"symbol": "AAPL.O", "weight": 0.25, "region": "us",
-                "sector": "information_technology"}]
+  "holdings": [{"symbol": "AAPL.O", "isin": "US0378331005", "weight": 0.25,
+                "region": "us", "sector": "information_technology"}]
 }
 ```
 
 - `basis` must be `"sleeve"` — Phase 1 accepts sleeve-relative exposures only; the producer converts before calling. A missing or non-`"sleeve"` `basis` is rejected at the CLI (exit 2, naming the file and the offending value), the same operator-mistake class as a non-object payload; no conversion is implemented in Phase 1.
+- The whole payload is checked by `validate_exposures` against this contract (known dimensions, finite weights in [0, 1], per-dimension sums, coverage consistent with the `unmapped` weight it implies). At the CLI a violation is an operator mistake: exit 2, naming the file and every violation. Called as a library the helper proceeds WITHOUT exposures and discloses one `invalid_exposures` Data Quality row per violation; it never certifies an impossible payload with a band verdict.
 - Per dimension, weights are renormalized over MAPPED holdings and sum to 1.0 within 1e-6. Every dimension in the example above sums to 1.0.
-- `coverage[dim]` is the mapped weight fraction BEFORE renormalization. A coverage below 1.0 emits `unmapped_holding` rows and is disclosed in the rendered table.
+- `coverage[dim]` is the mapped weight fraction BEFORE renormalization. A coverage below 1.0 emits `unmapped_holding` rows and is disclosed in the rendered table. `coverage` passes through onto the result unchanged so the consumer can caveat a conditional diagnostic.
 - `unmapped` lists every holding excluded from a dimension's denominator.
 - `holdings` is required only for the exclude and prohibited-product conflict checks. Absent `holdings` suppresses those two conflict kinds and emits nothing; the check is a disclosure, not a gate.
+- `isin` on a holding is OPTIONAL. When present it is matched against `mandate.prohibited_products` alongside `symbol` (case-insensitive). An ISIN-shaped prohibition with any holding lacking an `isin` emits a `hard_constraint_not_checkable` row: the check ran on partial identifiers.
 
 **`--view-tilts` payload schema (pinned).** Produced from the loaded house view after the `loader.md` §3 alias collapse. Factors, styles, and themes are deliberately absent — they are tactical-only and never enter band math:
 
@@ -120,7 +124,14 @@ Precedence: excludes and prohibited products outrank bands and user constraints,
 
 - `tilt_vs_band` — a nonzero tilt with no room in the tilt direction, or a band already breached in the tilt direction.
 - `exclude_vs_holding` — a holding whose symbol, region, or sector matches a view-tilts excludes entry.
-- `prohibited_vs_holding` — a holding whose symbol matches `mandate.prohibited_products`.
+- `prohibited_vs_holding` — a holding whose `symbol` **or** optional `isin` matches `mandate.prohibited_products`. Both sides normalize to upper case before comparison; `detail.matched_on` names which identifier matched.
+
+**What the helper cannot match (binding).** Two hard-constraint classes have no field to match against, so they are disclosed rather than silently missed, as `hard_constraint_not_checkable` Data Quality rows (§7.4):
+
+- a view exclude entry that is neither a known region key, nor a known sector key, nor a held symbol — a theme or category entry. Theme-class excludes are enforced by the house-view flow at skill level, not by this helper.
+- an ISIN-shaped `prohibited_products` entry while one or more holdings carry no `isin`; the prohibition check then ran on incomplete ISIN coverage.
+
+**An empty Conflicts table means "checked clean" ONLY when no `hard_constraint_not_checkable` row is present.** With such a row present, the empty table means "no collision among the constraints this helper can match."
 
 An RM band override is permitted but must be written into `governance.human_review_recorded` (`{ts, by, segment, override, rationale}`) and surfaced in the rendered output (Policy Conflicts, §7). A silent override is a contract violation.
 
@@ -136,11 +147,11 @@ Renders as four additive section families in the consumer skill's Output Format,
 
 ### §7.1 SAA Drift (only if policy supplied)
 
-One row per covered segment: dimension, segment, current, policy, drift, band, band status, breach kind. Source: `drift[]`. Disclose the near-edge threshold (`near_edge_fraction`, default 20% of the room on that side) under the table. Render **Verdict sensitivity** per `_parallax/parallax-conventions.md` §11 — band status is a published-numeric-cutoff verdict, so name the nearest-boundary segment (`distance_to_edge`) and the arithmetic flip condition, third person, no advice language.
+One row per covered segment: dimension, segment, current, policy, drift, band, band status, breach kind. Source: `drift[]`. When `coverage[dim] < 1.0`, the drift table for that dimension carries a caveat line — "diagnostics conditional on N% mapped coverage" — because `current` is renormalized over mapped holdings and is not the known full-sleeve exposure. Source for N: `coverage[]`. Disclose the near-edge threshold (`near_edge_fraction`, default 20% of the room on that side) under the table. Render **Verdict sensitivity** per `_parallax/parallax-conventions.md` §11 — band status is a published-numeric-cutoff verdict, so name the nearest-boundary segment (`distance_to_edge`) and the arithmetic flip condition, third person, no advice language.
 
 ### §7.2 TAA Alignment (only if policy supplied)
 
-One row per covered segment: tilt, room in the tilt direction, desired active, current active, alignment (`aligned` / `opposed` / `capped_by_band` / `not_evaluable` / `no_view`). Source: `taa[]`. Below the table: the budget line (`budget.sum_abs_desired` vs `budget.max_total_tilt`, and `budget.scale` if `budget.cap_applied`). Tag every `multiplier_fallback`-semantics row visibly as sized without a band benchmark. Under `weights_only` (§4 ladder row 2), `budget.sum_abs_desired` is `Σ|current − policy|` — a drift diagnostic, not a sizing total — because there is nothing to scale; see §4's Ladder row 2 semantics note.
+One row per covered segment: tilt, room in the tilt direction, desired active, current active, alignment (`aligned` / `opposed` / `capped_by_band` / `not_evaluable` / `no_view`). Source: `taa[]`. Below the table: the budget line (`budget.sum_abs_desired` vs `budget.max_total_tilt`, and `budget.scale` if `budget.cap_applied`). The budget sums |desired active| gross across region and sector independently, and one overlapping holding may satisfy both a region and a sector active at once — a phase-1 heuristic characteristic, resolved by the phase-2 holdings-level optimizer; state this with the budget line. Tag every `multiplier_fallback`-semantics row visibly as **sign-only alignment — not sized (no band benchmark)**. Under `weights_only` (§4 ladder row 2), `budget.sum_abs_desired` is `Σ|current − policy|` — a drift diagnostic, not a sizing total — because there is nothing to scale; see §4's Ladder row 2 semantics note.
 
 **`tactical_overlay.enabled: false` (binding, no exceptions).** S1 drift is unaffected — it still renders per §7.1. S2 emits no rows at all. TAA Alignment renders exactly one line: "tactical overlay disabled by mandate." No budget line is rendered in this state.
 
@@ -148,9 +159,13 @@ One row per covered segment: tilt, room in the tilt direction, desired active, c
 
 `tilt_vs_band` rows and `exclude_vs_holding` / `prohibited_vs_holding` rows. Source: `conflicts[]`. Framed per `_parallax/parallax-conventions.md` §12: an informational preface above the table, no imperative trade verbs. Any recorded RM band override (`governance.human_review_recorded`, §6) renders here with its rationale.
 
+An empty table means "checked clean" ONLY when no `hard_constraint_not_checkable` row is present in §7.4 (§6). When one is present, say so here in one line: the table covers the constraints this helper can match, and the named theme-class or partially-identified constraints are not among them. Theme-class excludes are enforced by the house-view flow at skill level, not by this helper.
+
 ### §7.4 Policy Data Quality (only if policy supplied)
 
-Source: `data_quality[]`, plus any validation errors that forced tier `no_policy` or forced a dimension to `multiplier_fallback` (§2). Kinds rendered here: `uncovered_dimension`, `unmapped_holding` (with the coverage fraction), `basis_converted`, `stale_policy`, `te_budget_not_evaluated`, `missing_bands`, `unknown_segment_key`, and `ambiguous_broad_tilt`.
+Source: `data_quality[]`, plus **every** `errors[]` row the run produced, whatever its severity or scope: blocking errors that forced tier `no_policy`, dimension-scoped errors that forced a dimension to `multiplier_fallback`, and the `dimension: null` k-configuration class of §2 (`adaptation` not a mapping, `k` out of range, unknown `k_preset`) — that class forces no dimension to fallback and would otherwise render nowhere. Kinds rendered here: `uncovered_dimension`, `unmapped_holding` (with the coverage fraction), `basis_converted`, `stale_policy`, `te_budget_not_evaluated`, `missing_bands`, `unknown_segment_key`, `ambiguous_broad_tilt`, `invalid_exposures`, `hard_constraint_not_checkable`, and `off_policy_exposure`.
+
+**Section intro (binding).** The standing intro to this section states the classification basis: region is classified by listing venue (RIC suffix), and ADR/fund look-through is not applied in phase 1 (§3). This is a standing disclosure, not a row kind — it renders whenever the section renders, with or without any row.
 
 **`ambiguous_broad_tilt` (rendering guidance).** A region segment key can belong to more than one broad tilt bucket (e.g. `india` is a member of both `apac_ex_japan` and `em_ex_china`). When the key carries no specific tilt of its own: if every containing tilted bucket agrees on the same tilt value, the segment inherits that shared tilt silently — no disclosure row, because there is nothing ambiguous to report. If the containing buckets disagree, the segment's tilt resolves to `0` (never picked by map order or first-match) and an `ambiguous_broad_tilt` Data Quality row is rendered naming the segment, the conflicting bucket/tilt pairs, and pointing the reader to add a specific tilt on that segment to settle it. Render this row in Policy Data Quality, not as a `conflicts[]` row — it is a resolution disclosure on the tilt input, not a precedence collision between policy artifacts.
 
@@ -164,7 +179,9 @@ Under the section group, render one disclosure line stating the resolved `k` wit
 
 ## 8. Audit logging
 
-Reference `_parallax/house-view/loader.md` §6 and its §6.2 conditional fields `client_policy_applied`, `policy_hash`, `policy_fallback_tier`, `resolved_k` / `k_source`. Never log client names: `client_ref` and `policy_hash` only, per `loader.md` §6.3's no-PII rule.
+Reference `_parallax/house-view/loader.md` §6 and its §6.2 conditional fields `client_ref`, `client_policy_applied`, `policy_hash`, `policy_fallback_tier`, `resolved_k` / `k_source`. Never log client names: `client_ref` (the pseudonymous `metadata.client_ref` from the policy) and `policy_hash` only, per `loader.md` §6.3's no-PII rule.
+
+**Tier translation (binding).** The helper's `no_policy` tier is not an audit value: a supplied-but-unusable policy records `policy_fallback_tier: invalid` in the audit row, and a valid policy whose helper invocation failed at runtime (§2's last failure row) records `unavailable`.
 
 ---
 

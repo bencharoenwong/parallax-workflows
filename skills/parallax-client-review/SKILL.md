@@ -113,14 +113,26 @@ News (selective, async): `get_news_synthesis` for holdings >10% weight AND flagg
 1. Assemble current sleeve exposures: region from RIC suffixes per
    `_parallax/parallax-conventions.md` §1; sector from the Batch A
    `analyze_portfolio` `sector_allocation` block, with `get_peer_snapshot` /
-   `get_company_info` as a per-holding backstop. Renormalize each dimension's
-   weights over MAPPED holdings only and record `coverage` plus every `unmapped`
-   holding. Payload shape is pinned in policy-loader.md §3. `basis` must be
-   `"sleeve"` — Phase 1 accepts sleeve-relative exposures only; the producer
-   converts before calling. A missing or non-`"sleeve"` `basis` is rejected at
-   the CLI (exit 2, naming the file and the offending value), the same
-   operator-mistake class as a non-object payload; no conversion is
-   implemented in Phase 1.
+   `get_company_info` as a per-holding backstop. Region is therefore classified
+   by listing venue, not by issuer domicile or economic exposure; ADR/fund
+   look-through is not applied in phase 1, and the Policy Data Quality intro
+   states this basis. Renormalize each dimension's weights over MAPPED holdings
+   only and record `coverage` plus every `unmapped` holding. `coverage` passes
+   through onto the result unchanged so the drift table can carry its caveat.
+   Carry each holding's `isin` when one is available — OPTIONAL, and when
+   present matched against `mandate.prohibited_products` alongside `symbol`
+   (case-insensitive); an ISIN-shaped prohibition with any holding lacking an
+   `isin` emits a `hard_constraint_not_checkable` row, the check having run on
+   partial identifiers. Payload shape is pinned in policy-loader.md §3. `basis`
+   must be `"sleeve"` — Phase 1 accepts sleeve-relative exposures only; the
+   producer converts before calling. The whole payload is checked by
+   `validate_exposures` against that contract (known dimensions, finite weights
+   in [0, 1], per-dimension sums, coverage consistent with the `unmapped` weight
+   it implies). A missing or non-`"sleeve"` `basis`, or any other contract
+   violation, is rejected at the CLI (exit 2, naming the file and every
+   violation), the same operator-mistake class as a non-object payload; no
+   conversion is implemented in Phase 1. Fix the payload and re-run — never work
+   around the exit by dropping the offending field.
 2. Assemble view tilts from the loaded view after the loader.md §3 alias collapse:
    regions, sectors, and excludes only. Factors, styles, and themes are tactical-only
    and never enter band math.
@@ -136,7 +148,7 @@ python3 "<skill-dir>/../_parallax/client-policy/adaptation.py" \
 
 1. Per `references/recommendation-matrix.md`, assign each flagged holding a priority (High/Medium/Low) and action type (trim/exit/hold/investigate/reweight). Every recommendation must cite a specific finding. View Excluded → Exit (priority High). View Misalignment → Trim or Reweight (priority Medium unless paired with other flags).
 2. Call `get_assessment` with comprehensive prompt incorporating: portfolio composition, factor scores, health flags (including View flags), macro context, per-holding drill-down findings, recommendations, client context, AND active house view (basis_statement + tilt vector + excludes if present), AND, when a client policy is present, the SAA drift findings, TAA alignment verdicts, the resolved k with its source, and the fallback tier. Fire this call as soon as recommendations are assigned (a deterministic matrix lookup — do not wait for pending `get_news_synthesis` calls; include news highlights only if already resolved). While `get_assessment` runs, proceed to compose all non-assessment sections; insert the assessment result into the Suitability Assessment section when it resolves, or render the degraded-state note per the existing rule on timeout.
-3. Append audit log entry per loader.md §6. When a client policy was supplied, include the §6.2 conditional fields `client_policy_applied`, `policy_hash`, `policy_fallback_tier`, `resolved_k`, and `k_source`. Never log a client name; `client_ref` and `policy_hash` only.
+3. Append audit log entry per loader.md §6. When a client policy was supplied, include the §6.2 conditional fields `client_ref`, `client_policy_applied`, `policy_hash`, `policy_fallback_tier`, `resolved_k`, and `k_source`. Never log a client name; `client_ref` (the policy's own pseudonymous `metadata.client_ref`) and `policy_hash` only. `policy_fallback_tier` takes an audit value, not the helper's tier string: `weights_only` / `full` / `partial_dimensions` carry over unchanged, the helper's `no_policy` tier (a policy supplied but unusable) is written as `invalid`, and a valid policy whose helper invocation failed at runtime is written as `unavailable`. Never write `no_policy` into the row.
 
 ### Pre-Render — Load white-label branding
 
@@ -201,32 +213,11 @@ Client-ready report:
 - **Factor Analysis** (scores with macro context interpretation for this client type; if view active, compare against view-target factor)
 - **Concentration & Redundancy** (flagged issues; coverage reliability note if applicable)
 - **House View Alignment** (only if view active) — table of view tilt direction vs current portfolio exposure per sector/region/factor; flagged misalignments
-- **SAA Drift** (only if policy supplied) — one row per covered segment: dimension,
-  segment, current, policy, drift, band, band status, breach kind. Disclose the
-  near-edge threshold under the table. Render **Verdict sensitivity** per
-  `_parallax/parallax-conventions.md` §11 — band status is a published-numeric-cutoff
-  verdict, so name the nearest-boundary segment and the arithmetic flip condition,
-  third person, no advice language.
-- **TAA Alignment** (only if policy supplied) — one row per covered segment: tilt,
-  room in the tilt direction, desired active, current active, alignment
-  (aligned / opposed / capped-by-band / not evaluable / no view). Below the table:
-  the budget line (Σ|desired| vs max_total_tilt, and the cap scale if one fired).
-  Tag every `multiplier_fallback` row visibly as sized without a band benchmark.
-  When `tactical_overlay.enabled` is `false`, SAA Drift renders unaffected but TAA
-  Alignment renders exactly one line — "tactical overlay disabled by mandate" — with
-  no budget line.
-- **Policy Conflicts** (only if policy supplied) — tilt-vs-band rows and
-  excludes / prohibited-vs-holding rows. Framed per `_parallax/parallax-conventions.md`
-  §12: informational preface above the table, no imperative trade verbs. Any recorded
-  RM band override renders here with its rationale.
-- **Policy Data Quality** (only if policy supplied) — uncovered dimensions, unmapped
-  holdings and the coverage fraction, basis conversions, policy staleness,
-  tracking-error budget present but not evaluated, missing or one-sided bands,
-  unknown segment keys, and any validation errors that forced tier `no_policy`.
-
-- **Resolved-k Disclosure** (only if policy supplied) — under the section group,
-  one disclosure line stating the resolved k with its source and
-  `calibration_status: heuristic_phase0`, per policy-loader.md §7.
+- **SAA Drift** (only if policy supplied) — one row per covered segment: dimension, segment, current, policy, drift, band, band status, breach kind. When `coverage[dim] < 1.0`, carry a caveat line for that dimension — "diagnostics conditional on N% mapped coverage" — because `current` is renormalized over mapped holdings and is not the known full-sleeve exposure. Disclose the near-edge threshold under the table. Render **Verdict sensitivity** per `_parallax/parallax-conventions.md` §11 — band status is a published-numeric-cutoff verdict, so name the nearest-boundary segment and the arithmetic flip condition, third person, no advice language.
+- **TAA Alignment** (only if policy supplied) — one row per covered segment: tilt, room in the tilt direction, desired active, current active, alignment (aligned / opposed / capped-by-band / not evaluable / no view). Below the table: the budget line (Σ|desired| vs max_total_tilt, and the cap scale if one fired). State with the budget line that it sums |desired active| gross across region and sector independently, and that one overlapping holding may satisfy both a region and a sector active at once — a phase-1 heuristic characteristic, resolved by the phase-2 holdings-level optimizer. Tag every `multiplier_fallback` row visibly as **sign-only alignment — not sized (no band benchmark)**. When `tactical_overlay.enabled` is `false`, SAA Drift renders unaffected but TAA Alignment renders exactly one line — "tactical overlay disabled by mandate" — with no budget line.
+- **Policy Conflicts** (only if policy supplied) — tilt-vs-band rows and excludes / prohibited-vs-holding rows. Framed per `_parallax/parallax-conventions.md` §12: informational preface above the table, no imperative trade verbs. Any recorded RM band override renders here with its rationale. An empty table means "checked clean" ONLY when no `hard_constraint_not_checkable` row is present in Policy Data Quality; when one is present, say in one line that the table covers the constraints this helper can match and that the named theme-class or partially-identified constraints are not among them. Theme-class excludes are enforced by the house-view flow at skill level, not by the policy helper.
+- **Policy Data Quality** (only if policy supplied) — uncovered dimensions, unmapped holdings and the coverage fraction, basis conversions, policy staleness, tracking-error budget present but not evaluated, missing or one-sided bands, unknown segment keys, rejected exposure payloads (`invalid_exposures`), unclassifiable hard constraints (`hard_constraint_not_checkable`), exposure weight outside the policy (`off_policy_exposure`), and any validation errors that forced tier `no_policy`. The section intro states the classification basis: region by listing venue (RIC suffix), ADR/fund look-through not applied in phase 1.
+- **Resolved-k Disclosure** (only if policy supplied) — under the section group, one disclosure line stating the resolved k with its source and `calibration_status: heuristic_phase0`, per policy-loader.md §7.
 - **Per-Holding Analysis** (for drill-down holdings: score trend, risk profile, flags, news highlights; view conflicts called out)
 - **Suitability Assessment** (alignment with client goals AND with active house view if present; cite basis_statement)
 - **Recommended Actions** (prioritized High/Medium/Low per recommendation-matrix.md, with specific action types; rationale cites view tilts where applicable), framed per conventions §12 (informational preface required; `action_labels=plain` supported)

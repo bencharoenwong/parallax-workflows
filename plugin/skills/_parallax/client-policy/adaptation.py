@@ -50,8 +50,8 @@ payload that parses but is not a JSON object (an operator mistake, not data).
       },
       "coverage": {"region": 0.97, "sector": 1.00},
       "unmapped": [{"symbol": "ABC.L", "weight": 0.03, "dimension": "region"}],
-      "holdings": [{"symbol": "AAPL.O", "weight": 0.25, "region": "us",
-                    "sector": "information_technology"}]
+      "holdings": [{"symbol": "AAPL.O", "isin": "US0378331005", "weight": 0.25,
+                    "region": "us", "sector": "information_technology"}]
     }
 
   - `basis` must be `"sleeve"` — Phase 1 accepts sleeve-relative exposures only;
@@ -59,15 +59,27 @@ payload that parses but is not a JSON object (an operator mistake, not data).
     is rejected at the CLI (exit 2, naming the file and the offending value),
     the same operator-mistake class as a non-object payload; no conversion is
     implemented in Phase 1.
+  - The whole payload is checked by `validate_exposures` against this contract
+    (known dimensions, finite weights in [0, 1], per-dimension sums, coverage
+    consistent with the `unmapped` weight it implies). At the CLI a violation is
+    an operator mistake: exit 2, naming the file and every violation. Called as
+    a library the helper proceeds WITHOUT exposures and discloses one
+    `invalid_exposures` Data Quality row per violation; it never certifies an
+    impossible payload with a band verdict.
   - Per dimension, weights are renormalized over MAPPED holdings and sum to 1.0
     within 1e-6. Every dimension in the example above sums to 1.0.
   - `coverage[dim]` is the mapped weight fraction BEFORE renormalization. A
     coverage below 1.0 emits `unmapped_holding` rows and is disclosed in the
-    rendered table.
+    rendered table. `coverage` passes through onto the result unchanged so the
+    consumer can caveat a conditional diagnostic.
   - `unmapped` lists every holding excluded from a dimension's denominator.
   - `holdings` is required only for the exclude and prohibited-product conflict
     checks. Absent `holdings` suppresses those two conflict kinds and emits
     nothing; the check is a disclosure, not a gate.
+  - `isin` on a holding is OPTIONAL. When present it is matched against
+    `mandate.prohibited_products` alongside `symbol` (case-insensitive). An
+    ISIN-shaped prohibition with any holding lacking an `isin` emits a
+    `hard_constraint_not_checkable` row: the check ran on partial identifiers.
 
 --------------------------------------------------------------------------
 `--view-tilts` payload schema (pinned)
@@ -89,6 +101,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
+import re
 import sys
 from dataclasses import asdict, dataclass, replace
 from datetime import date
@@ -109,6 +123,11 @@ DIMENSIONS = ("region", "sector")  # Phase 1 dimensions, in render order
 EQUITY_KEY = "equity"
 
 SUM_TOLERANCE = 1e-6
+
+# Shape of a security identifier of the 12-character checksummed kind: two letter
+# country prefix, nine alphanumerics, one check digit. Used only to recognize
+# which `prohibited_products` entries need an `isin` on the holding to match.
+ISIN_PATTERN = re.compile(r"^[A-Z]{2}[A-Z0-9]{9}[0-9]$")
 
 # Segment key sets, verbatim from `house-view/schema.yaml`. `code_list` on a
 # dimension names which of these the segment keys must come from.
@@ -215,11 +234,13 @@ class Conflict:
 
 @dataclass(frozen=True)
 class DataQualityRow:
-    """One disclosure about coverage, conversion, staleness, an unevaluated budget, or an
-    unresolvable tilt inheritance."""
+    """One disclosure about coverage, conversion, staleness, an unevaluated budget, an
+    unresolvable tilt inheritance, a rejected exposures payload, an unclassifiable hard
+    constraint, or exposure weight sitting outside the policy."""
     kind: str          # uncovered_dimension|unmapped_holding|basis_converted|stale_policy|
                        # te_budget_not_evaluated|missing_bands|unknown_segment_key|
-                       # ambiguous_broad_tilt
+                       # ambiguous_broad_tilt|invalid_exposures|
+                       # hard_constraint_not_checkable|off_policy_exposure
     detail: str
 
 
@@ -236,6 +257,7 @@ class AdaptationResult:
     taa: list[TaaRow]
     conflicts: list[Conflict]
     data_quality: list[DataQualityRow]
+    coverage: dict                 # exposures `coverage` passthrough; {} when absent or rejected
     budget: dict                   # {sum_abs_desired, max_total_tilt, cap_applied, scale}
     policy_hash: str
 
@@ -273,6 +295,117 @@ def _budget(sum_abs_desired: float, max_total_tilt: Any, cap_applied: bool, scal
 # --------------------------------------------------------------------------
 # Validation
 # --------------------------------------------------------------------------
+
+def _finite_weight(value: Any) -> bool:
+    """True for a real, finite number in [0, 1]. NaN and infinities are excluded."""
+    return _is_number(value) and math.isfinite(float(value)) and 0.0 <= float(value) <= 1.0
+
+
+def validate_exposures(exposures: Any) -> list[str]:
+    """Check the `--exposures` payload against its pinned contract; return violations.
+
+    The producer of this payload is a non-deterministic operator LLM, so the
+    helper never trusts its arithmetic: without these checks an impossible input
+    (a 120% weight, a coverage fraction contradicting the disclosed unmapped
+    weight) is certified downstream as a band verdict. Basis is checked
+    separately at the CLI and is not repeated here.
+
+    Every violation is one human-readable string; the list is empty when the
+    payload conforms. This function never raises on a data problem.
+    """
+    violations: list[str] = []
+    if not isinstance(exposures, dict):
+        return ["exposures payload is not a mapping"]
+
+    dimensions = exposures.get("dimensions")
+    if not isinstance(dimensions, dict):
+        violations.append("`dimensions` is missing or not a mapping")
+        dimensions = {}
+    for dim_name, weights in dimensions.items():
+        if dim_name not in DIMENSIONS:
+            violations.append(
+                f"dimensions.{dim_name}: unknown dimension; expected one of {list(DIMENSIONS)}")
+            continue
+        if not isinstance(weights, dict):
+            violations.append(f"dimensions.{dim_name}: not a mapping of segment key to weight")
+            continue
+        usable = True
+        for key, weight in weights.items():
+            if not isinstance(key, str):
+                violations.append(f"dimensions.{dim_name}: segment key {key!r} is not a string")
+                usable = False
+                continue
+            if not _finite_weight(weight):
+                violations.append(
+                    f"dimensions.{dim_name}.{key}: weight {weight!r} is not a finite number "
+                    "in [0, 1]")
+                usable = False
+        if usable and weights:
+            total = sum(float(v) for v in weights.values())
+            if abs(total - 1.0) > SUM_TOLERANCE:
+                violations.append(
+                    f"dimensions.{dim_name}: mapped weights must sum to 1.0 within "
+                    f"{SUM_TOLERANCE} (got {total:.6f})")
+
+    unmapped = exposures.get("unmapped")
+    unmapped_by_dim: dict[str, float] = {}
+    if unmapped is not None:
+        if not isinstance(unmapped, list):
+            violations.append("`unmapped` is present but is not a sequence")
+            unmapped = []
+        for index, entry in enumerate(unmapped):
+            if not isinstance(entry, dict):
+                violations.append(f"unmapped[{index}]: entry is not a mapping")
+                continue
+            dim_name = entry.get("dimension")
+            if dim_name not in DIMENSIONS:
+                violations.append(
+                    f"unmapped[{index}].dimension: {dim_name!r} is not a known dimension; "
+                    f"expected one of {list(DIMENSIONS)}")
+            weight = entry.get("weight")
+            if not _finite_weight(weight):
+                violations.append(
+                    f"unmapped[{index}].weight: {weight!r} is not a finite number in [0, 1]")
+                continue
+            if isinstance(dim_name, str):
+                unmapped_by_dim[dim_name] = unmapped_by_dim.get(dim_name, 0.0) + float(weight)
+
+    coverage = exposures.get("coverage")
+    if coverage is not None:
+        if not isinstance(coverage, dict):
+            violations.append("`coverage` is present but is not a mapping")
+        else:
+            for dim_name, value in coverage.items():
+                if not _finite_weight(value):
+                    violations.append(
+                        f"coverage.{dim_name}: {value!r} is not a finite number in [0, 1]")
+                    continue
+                implied = 1.0 - unmapped_by_dim.get(dim_name, 0.0)
+                if abs(float(value) - implied) > SUM_TOLERANCE:
+                    if dim_name not in unmapped_by_dim:
+                        violations.append(
+                            f"coverage.{dim_name}: {float(value)} is below 1.0 but no `unmapped` "
+                            "entry is disclosed for that dimension")
+                    else:
+                        violations.append(
+                            f"coverage.{dim_name}: {float(value)} disagrees with the disclosed "
+                            f"unmapped weight for that dimension (implies {implied:.6f})")
+
+    holdings = exposures.get("holdings")
+    if holdings is not None:
+        if not isinstance(holdings, list):
+            violations.append("`holdings` is present but is not a sequence")
+            holdings = []
+        for index, entry in enumerate(holdings):
+            if not isinstance(entry, dict):
+                violations.append(f"holdings[{index}]: entry is not a mapping")
+                continue
+            if not _finite_weight(entry.get("weight")):
+                violations.append(
+                    f"holdings[{index}].weight: {entry.get('weight')!r} is not a finite number "
+                    "in [0, 1]")
+    return violations
+
 
 def validate_policy(policy: dict) -> list[PolicyError]:
     """Collect every validation failure; never raise on a data problem, never partial-apply.
@@ -824,7 +957,8 @@ def _classify_alignment_fallback(current_active: float, tilt: int) -> str:
 
 def _empty_result(tier: str, resolved_k: float, k_source: str, calibration: str,
                   errors: list[PolicyError], data_quality: list[DataQualityRow],
-                  budget: dict, policy_hash: str) -> AdaptationResult:
+                  budget: dict, policy_hash: str,
+                  coverage: dict | None = None) -> AdaptationResult:
     return AdaptationResult(
         fallback_tier=tier,
         resolved_k=resolved_k,
@@ -836,6 +970,7 @@ def _empty_result(tier: str, resolved_k: float, k_source: str, calibration: str,
         taa=[],
         conflicts=[],
         data_quality=data_quality,
+        coverage=dict(coverage or {}),
         budget=budget,
         policy_hash=policy_hash,
     )
@@ -848,9 +983,16 @@ def run_pipeline(policy: dict | None, exposures: dict | None,
     Tier resolution (pinned decision table):
       - no policy, a policy that is not a mapping, or any blocking validation
         error                                        -> `no_policy`, no rows
+      - >= 1 covered dimension error-forced to fallback  -> `partial_dimensions`
       - >= 1 covered dimension, no covered segment banded -> `weights_only`
       - both dimensions covered, every segment two-sided  -> `full`
       - anything else                                  -> `partial_dimensions`
+
+    A non-empty error-forced set forecloses both `weights_only` and `full`:
+    `weights_only` asserts the policy carried no bands at all, which is a
+    different statement from "the bands on file could not be read against a
+    confirmed basis". Both fall to `partial_dimensions`, matching
+    `policy-loader.md` §4 ladder row 4.
 
     "Covered" means the dimension exists under `sub_allocations.dimensions` with
     a non-empty `strategic_allocation`. An uncovered dimension is absent from
@@ -858,7 +1000,10 @@ def run_pipeline(policy: dict | None, exposures: dict | None,
 
     With no `exposures` payload there is nothing to compare the policy against,
     so `drift` and `taa` are empty; the tier still resolves from the policy
-    structure and the outcome stays data-level (exit 0 at the CLI).
+    structure and the outcome stays data-level (exit 0 at the CLI). An exposures
+    payload that violates `validate_exposures` is treated the same way — the
+    payload is dropped and every violation renders as an `invalid_exposures`
+    disclosure, so an impossible input is never certified as a band verdict.
     """
     today = today or date.today()
     # Non-mapping payloads are data problems, never exceptions. A non-mapping
@@ -868,17 +1013,35 @@ def run_pipeline(policy: dict | None, exposures: dict | None,
     if exposures is not None and not isinstance(exposures, dict):
         exposures = None
 
+    exposure_violations: list[str] = []
+    if exposures is not None:
+        exposure_violations = validate_exposures(exposures)
+        if exposure_violations:
+            exposures = None
+    coverage = {}
+    if exposures is not None and isinstance(exposures.get("coverage"), dict):
+        coverage = dict(exposures["coverage"])
+    invalid_exposure_rows = [
+        DataQualityRow(
+            kind="invalid_exposures",
+            detail=(f"{violation}. The exposures payload was rejected in full; drift, TAA, "
+                    "and conflicts are not computed."),
+        )
+        for violation in exposure_violations
+    ]
+
     if policy is None:
         return _empty_result("no_policy", DEFAULT_K, "default", CALIBRATION_STATUS,
-                             [], [], _budget(0.0, None, False, 1.0), "")
+                             [], invalid_exposure_rows,
+                             _budget(0.0, None, False, 1.0), "", coverage)
 
     if not isinstance(policy, dict):
         # Parseable but not a mapping. `validate_policy` reports the blocking
         # failure; `policy_hash` stays empty because R-2 carries a digest only
         # when the policy parsed AS a mapping.
         return _empty_result("no_policy", DEFAULT_K, "default", CALIBRATION_STATUS,
-                             validate_policy(policy), [],
-                             _budget(0.0, None, False, 1.0), "")
+                             validate_policy(policy), invalid_exposure_rows,
+                             _budget(0.0, None, False, 1.0), "", coverage)
 
     errors = validate_policy(policy)
     policy_hash = compute_policy_hash(policy)
@@ -888,9 +1051,10 @@ def run_pipeline(policy: dict | None, exposures: dict | None,
 
     if any(e.severity == "blocking" for e in errors):
         return _empty_result("no_policy", resolved_k, k_source, calibration,
-                             errors, [], _budget(0.0, None, False, 1.0), policy_hash)
+                             errors, invalid_exposure_rows,
+                             _budget(0.0, None, False, 1.0), policy_hash, coverage)
 
-    data_quality: list[DataQualityRow] = []
+    data_quality: list[DataQualityRow] = list(invalid_exposure_rows)
 
     review_due = _parse_date(metadata.get("review_due"))
     if review_due is not None and today > review_due:
@@ -918,6 +1082,7 @@ def run_pipeline(policy: dict | None, exposures: dict | None,
 
     segments: list[Segment] = []
     covered: list[str] = []
+    policy_keys: dict[str, set] = {}
     for dim_name in DIMENSIONS:
         dim = dimensions.get(dim_name)
         allocation = (dim or {}).get("strategic_allocation") or {} if isinstance(dim, dict) else {}
@@ -932,6 +1097,7 @@ def run_pipeline(policy: dict | None, exposures: dict | None,
 
         basis = dim.get("basis") if dim.get("basis") in ("sleeve", "total") else ""
         weights, conversion_rows, _ = normalize_to_sleeve(allocation, basis, equity)
+        policy_keys[dim_name] = set(weights)
         data_quality.extend(conversion_rows)
         bands = dim.get("allocation_bands") or {}
         if basis == "total" and dim_name not in forced_fallback and _is_number(equity):
@@ -986,19 +1152,21 @@ def run_pipeline(policy: dict | None, exposures: dict | None,
         return _empty_result(tier, resolved_k, k_source, calibration, errors,
                              data_quality,
                              _budget(0.0, overlay.get("max_total_tilt"), False, 1.0),
-                             policy_hash)
+                             policy_hash, coverage)
 
     current_exposures = exposures.get("dimensions") or {}
     for entry in exposures.get("unmapped") or []:
         if not isinstance(entry, dict):
             continue
         dim_name = entry.get("dimension")
-        coverage = (exposures.get("coverage") or {}).get(dim_name)
         data_quality.append(DataQualityRow(
             kind="unmapped_holding",
             detail=(f"{entry.get('symbol')} (weight {entry.get('weight')}) is excluded from "
-                    f"the {dim_name} denominator; coverage[{dim_name}]={coverage}."),
+                    f"the {dim_name} denominator; coverage[{dim_name}]="
+                    f"{coverage.get(dim_name)}."),
         ))
+
+    data_quality.extend(_off_policy_rows(covered, policy_keys, current_exposures))
 
     drift = compute_drift(segments, current_exposures, view_tilts)
     status_by_key = {(r.dimension, r.key): r.band_status for r in drift}
@@ -1049,6 +1217,7 @@ def run_pipeline(policy: dict | None, exposures: dict | None,
                 max_total_tilt, cap_applied, scale)
 
     conflicts = _collect_conflicts(policy, exposures, view_tilts, segments, taa, status_by_key)
+    data_quality.extend(_not_checkable_rows(policy, exposures, view_tilts))
 
     return AdaptationResult(
         fallback_tier=tier,
@@ -1061,14 +1230,104 @@ def run_pipeline(policy: dict | None, exposures: dict | None,
         taa=taa,
         conflicts=conflicts,
         data_quality=data_quality,
+        coverage=coverage,
         budget=budget,
         policy_hash=policy_hash,
     )
 
 
+def _off_policy_rows(covered: list[str], policy_keys: dict[str, set],
+                     current_exposures: dict) -> list[DataQualityRow]:
+    """Disclose exposure weight sitting in segments the policy does not declare.
+
+    Segment assembly iterates POLICY keys, so an exposure key absent from the
+    policy contributes to no drift row and to no conflict — it simply vanishes.
+    The rendered drift table then reads as a complete account of the sleeve when
+    it is not. One row per dimension carrying off-policy weight.
+    """
+    rows: list[DataQualityRow] = []
+    for dim_name in covered:
+        weights = current_exposures.get(dim_name)
+        if not isinstance(weights, dict):
+            continue
+        declared = policy_keys.get(dim_name, set())
+        off = {k: float(v) for k, v in weights.items()
+               if k not in declared and _is_number(v)}
+        total = sum(off.values())
+        if total <= SUM_TOLERANCE:
+            continue
+        named = ", ".join(f"{k} {off[k]}" for k in sorted(off))
+        rows.append(DataQualityRow(
+            kind="off_policy_exposure",
+            detail=(f"{dim_name}: {total:.4f} of mapped exposure sits in segments the policy "
+                    f"does not declare ({named}); absent from drift and TAA."),
+        ))
+    return rows
+
+
+def _not_checkable_rows(policy: dict, exposures: dict,
+                        view_tilts: dict) -> list[DataQualityRow]:
+    """Disclose hard constraints the helper cannot classify or cannot fully match.
+
+    An empty Conflicts table means "checked clean" only when no row from here is
+    present. Two classes are disclosed:
+
+      a. a view exclude entry that is neither a known region key, nor a known
+         sector key, nor a holding symbol — a theme or category the helper has
+         no field to match against;
+      b. an ISIN-shaped `prohibited_products` entry while one or more holdings
+         carry no `isin`, so the match ran on partial identifiers.
+
+    Both are silent-miss classes, never precedence collisions, so they render in
+    Policy Data Quality rather than as `conflicts[]` rows.
+    """
+    holdings = [h for h in ((exposures or {}).get("holdings") or []) if isinstance(h, dict)]
+    if not holdings:
+        # The exclude and prohibited checks never ran; §3's pinned contract says
+        # absent `holdings` emits nothing at all for those two kinds.
+        return []
+
+    rows: list[DataQualityRow] = []
+    symbols = {h["symbol"].lower() for h in holdings if isinstance(h.get("symbol"), str)}
+    known_keys = REGION_KEYS | SECTOR_KEYS
+    excludes = [e for e in ((view_tilts or {}).get("excludes") or []) if isinstance(e, str)]
+    unclassifiable = [e for e in excludes
+                      if e.lower() not in known_keys and e.lower() not in symbols]
+    if unclassifiable:
+        rows.append(DataQualityRow(
+            kind="hard_constraint_not_checkable",
+            detail=(f"view exclude entries {sorted(unclassifiable)} name neither a known "
+                    "region key, a known sector key, nor a held symbol; this helper has no "
+                    "field to match them against. They are enforced by the house-view flow "
+                    "at skill level, not here. An empty Conflicts table does not clear them."),
+        ))
+
+    prohibited = [p for p in ((policy.get("mandate") or {}).get("prohibited_products") or [])
+                  if isinstance(p, str)]
+    isin_shaped = [p for p in prohibited if ISIN_PATTERN.match(p.strip().upper())]
+    without_isin = [h.get("symbol") for h in holdings
+                    if not isinstance(h.get("isin"), str) or not h["isin"].strip()]
+    if isin_shaped and without_isin:
+        rows.append(DataQualityRow(
+            kind="hard_constraint_not_checkable",
+            detail=(f"{len(isin_shaped)} prohibited entr"
+                    f"{'y is' if len(isin_shaped) == 1 else 'ies are'} ISIN-shaped while "
+                    f"{len(without_isin)} holding(s) carry no `isin` field; the prohibition "
+                    "check ran on incomplete ISIN coverage and cannot clear those holdings."),
+        ))
+    return rows
+
+
 def _resolve_tier(covered: list[str], segments: list[Segment],
                   forced_fallback: set) -> str:
     if not covered:
+        return "partial_dimensions"
+    if forced_fallback & set(covered):
+        # A covered dimension forced to `multiplier_fallback` by a
+        # dimension-scoped error is ladder row 4. `weights_only` would assert
+        # the policy declared no bands at all, and `full` would assert every
+        # covered segment is two-sided against a confirmed basis. Neither is
+        # true here, so both rungs are foreclosed.
         return "partial_dimensions"
     usable = [s for s in segments if s.dimension not in forced_fallback]
     if not any(s.band_min is not None or s.band_max is not None for s in usable):
@@ -1134,7 +1393,7 @@ def _collect_conflicts(policy: dict, exposures: dict, view_tilts: dict,
     exclude_set = {e.lower() for e in excludes}
     prohibited = [p for p in ((policy.get("mandate") or {}).get("prohibited_products") or [])
                   if isinstance(p, str)]
-    prohibited_set = {p.lower(): p for p in prohibited}
+    prohibited_set = {p.strip().upper(): p for p in prohibited}
 
     for holding in holdings:
         if not isinstance(holding, dict):
@@ -1149,11 +1408,21 @@ def _collect_conflicts(policy: dict, exposures: dict, view_tilts: dict,
                     "matched_on": field,
                     "exclude_entry": value,
                 }))
-        if isinstance(symbol, str) and symbol.lower() in prohibited_set:
+        # A prohibition may name either identifier. Both sides normalize to
+        # upper case; an absent `isin` simply does not match (and is disclosed
+        # as `hard_constraint_not_checkable` when a prohibition is ISIN-shaped).
+        for field in ("symbol", "isin"):
+            value = holding.get(field)
+            if not isinstance(value, str):
+                continue
+            entry = prohibited_set.get(value.strip().upper())
+            if entry is None:
+                continue
             conflicts.append(Conflict(kind="prohibited_vs_holding", detail={
                 "symbol": symbol,
                 "weight": holding.get("weight"),
-                "prohibited_entry": prohibited_set[symbol.lower()],
+                "matched_on": field,
+                "prohibited_entry": entry,
             }))
     return conflicts
 
@@ -1242,6 +1511,16 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: exposures {args.exposures} must declare basis 'sleeve'; got "
                   f"{exposures_basis!r}. Phase 1 accepts sleeve-relative exposures only; "
                   "the producer converts before calling.", file=sys.stderr)
+            return 2
+        # The rest of the pinned contract. A payload the producer got wrong is
+        # an operator mistake at the CLI, graded with the same class: the helper
+        # must never certify an impossible exposure as a band verdict.
+        violations = validate_exposures(exposures)
+        if violations:
+            print(f"error: exposures {args.exposures} violate the pinned payload contract:",
+                  file=sys.stderr)
+            for violation in violations:
+                print(f"  - {violation}", file=sys.stderr)
             return 2
 
     view_tilts = None

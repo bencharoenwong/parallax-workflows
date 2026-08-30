@@ -716,3 +716,154 @@ def test_cli_unreadable_file_exits_two(tmp_path: Path):
     assert run_cli("--policy", str(broken), "--json").returncode == 2
     # Bad arguments exit 2 as well (argparse convention).
     assert run_cli("--nope").returncode == 2
+
+
+# ==========================================================================
+# R1 — the exposures payload is validated against its pinned contract
+# ==========================================================================
+
+def _write_exposures(tmp_path: Path, exposures: dict, name: str = "exposures.json") -> Path:
+    path = tmp_path / name
+    path.write_text(json.dumps(exposures))
+    return path
+
+
+def test_cli_exposures_weight_out_of_range_exits_two(tmp_path: Path):
+    # The audited probe: region weights {us: 1.2, europe: -0.2} were accepted and
+    # rendered `breach_high` / `breach_low` — an impossible input certified as a
+    # band verdict. Out-of-range weights are an operator mistake, graded exit 2.
+    exposures = sample_exposures()
+    exposures["dimensions"]["region"] = {"us": 1.2, "europe": -0.2}
+    path = _write_exposures(tmp_path, exposures)
+    proc = run_cli("--policy", str(FIXTURES / "policy_full.yaml"),
+                   "--exposures", str(path), "--json")
+    assert proc.returncode == 2, proc.stdout
+    assert str(path) in proc.stderr
+    assert "1.2" in proc.stderr or "us" in proc.stderr
+
+
+def test_cli_exposures_sum_violation_exits_two(tmp_path: Path):
+    # Mapped weights must sum to 1.0 within SUM_TOLERANCE; a dimension that does
+    # not sum cannot be compared with a policy weight defined over the sleeve.
+    exposures = sample_exposures()
+    exposures["dimensions"]["sector"] = {"information_technology": 0.40,
+                                         "financials": 0.25, "health_care": 0.20}
+    path = _write_exposures(tmp_path, exposures)
+    proc = run_cli("--policy", str(FIXTURES / "policy_full.yaml"),
+                   "--exposures", str(path), "--json")
+    assert proc.returncode == 2, proc.stdout
+    assert "sector" in proc.stderr
+
+
+def test_cli_exposures_coverage_inconsistent_exits_two(tmp_path: Path):
+    # The audited probe: coverage.region = 0.50 with `unmapped: []` produced no
+    # disclosure at all. Coverage must agree with the unmapped weight it implies.
+    exposures = sample_exposures()
+    exposures["coverage"]["region"] = 0.50
+    exposures["unmapped"] = []
+    path = _write_exposures(tmp_path, exposures)
+    proc = run_cli("--policy", str(FIXTURES / "policy_full.yaml"),
+                   "--exposures", str(path), "--json")
+    assert proc.returncode == 2, proc.stdout
+    assert "coverage" in proc.stderr
+
+
+def test_pipeline_invalid_exposures_degrades_with_disclosure():
+    # Called as a library (not via the CLI) the helper never raises and never
+    # certifies the payload: it proceeds WITHOUT exposures and discloses one
+    # `invalid_exposures` row per violation.
+    exposures = sample_exposures()
+    exposures["dimensions"]["region"] = {"us": 1.2, "europe": -0.2}
+    result = adaptation.run_pipeline(full_policy(), exposures, sample_tilts())
+    assert result.drift == []
+    assert result.taa == []
+    assert result.conflicts == []
+    rows = [r for r in result.data_quality if r.kind == "invalid_exposures"]
+    assert len(rows) == len(adaptation.validate_exposures(exposures))
+    assert rows != []
+    # No unmapped_holding row leaks from a payload that was rejected.
+    assert [r for r in result.data_quality if r.kind == "unmapped_holding"] == []
+    assert result.coverage == {}
+
+
+def test_validate_exposures_accepts_the_pinned_sample():
+    assert adaptation.validate_exposures(sample_exposures()) == []
+
+
+# ==========================================================================
+# R2 — hard-constraint matching honesty
+# ==========================================================================
+
+def test_prohibited_matches_isin_when_provided():
+    # The audited probe: a policy prohibiting an ISIN against a holding carrying
+    # that ISIN produced `conflicts = []`.
+    policy = full_policy()
+    policy["mandate"]["prohibited_products"] = ["us0378331005"]
+    exposures = sample_exposures()
+    exposures["holdings"] = [{"symbol": "AAPL.O", "isin": "US0378331005", "weight": 0.25,
+                              "region": "us", "sector": "information_technology"}]
+    result = adaptation.run_pipeline(policy, exposures, sample_tilts())
+    rows = [c for c in result.conflicts if c.kind == "prohibited_vs_holding"]
+    assert len(rows) == 1
+    assert rows[0].detail["symbol"] == "AAPL.O"
+    assert rows[0].detail["matched_on"] == "isin"
+
+
+def test_theme_exclude_emits_not_checkable_row():
+    # A theme/category exclude is neither a known region key, nor a known sector
+    # key, nor a holding symbol. The helper cannot classify it, so an empty
+    # Conflicts table must not read as "checked clean".
+    result = adaptation.run_pipeline(full_policy(), sample_exposures(), sample_tilts())
+    rows = [r for r in result.data_quality if r.kind == "hard_constraint_not_checkable"]
+    assert len(rows) == 1
+    assert "tobacco" in rows[0].detail
+
+
+def test_isin_prohibition_without_holding_isin_emits_not_checkable_row():
+    policy = full_policy()
+    policy["mandate"]["prohibited_products"] = ["US0378331005"]
+    exposures = sample_exposures()          # no holding carries an `isin`
+    result = adaptation.run_pipeline(policy, exposures, sample_tilts())
+    rows = [r for r in result.data_quality if r.kind == "hard_constraint_not_checkable"
+            and "isin" in r.detail.lower()]
+    assert len(rows) == 1
+
+
+# ==========================================================================
+# R4 — conditional-estimate honesty
+# ==========================================================================
+
+def test_off_policy_exposure_disclosed():
+    # The audited probe: a 5% Canada exposure absent from the policy appeared in
+    # no section at all, hiding where off-policy weight sits.
+    exposures = sample_exposures()
+    exposures["dimensions"]["region"] = {"us": 0.61, "europe": 0.20, "japan": 0.06,
+                                         "em_ex_china": 0.08, "canada": 0.05}
+    result = adaptation.run_pipeline(full_policy(), exposures, sample_tilts())
+    rows = [r for r in result.data_quality if r.kind == "off_policy_exposure"]
+    assert len(rows) == 1
+    assert "region" in rows[0].detail
+    assert "canada" in rows[0].detail
+    assert "0.05" in rows[0].detail
+
+
+def test_coverage_passthrough_in_result():
+    result = adaptation.run_pipeline(full_policy(), sample_exposures(), sample_tilts())
+    assert result.coverage == {"region": 0.97, "sector": 1.00}
+    # Absent exposures leave it empty rather than absent.
+    assert adaptation.run_pipeline(full_policy(), None, sample_tilts()).coverage == {}
+
+
+# ==========================================================================
+# R8 — `_resolve_tier` aligns to the fallback-ladder contract
+# ==========================================================================
+
+def test_all_covered_dimensions_forced_resolves_partial_dimensions():
+    # Every covered dimension error-forced to `multiplier_fallback` is ladder row
+    # 4, not row 2: `weights_only` claims the policy carried no bands at all.
+    policy = full_policy()
+    for dim in policy["mandate"]["sub_allocations"]["dimensions"].values():
+        del dim["basis"]
+    result = adaptation.run_pipeline(policy, sample_exposures(), sample_tilts())
+    assert result.fallback_tier == "partial_dimensions"
+    assert {r.semantics for r in result.taa} == {"multiplier_fallback"}
