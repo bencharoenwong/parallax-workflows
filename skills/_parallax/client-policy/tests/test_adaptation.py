@@ -790,6 +790,17 @@ def test_validate_exposures_accepts_the_pinned_sample():
     assert adaptation.validate_exposures(sample_exposures()) == []
 
 
+def test_validate_exposures_flags_coverage_disagreeing_with_unmapped_weight():
+    # The other coverage branch: an `unmapped` entry EXISTS for the dimension but
+    # its weight does not add up to the disclosed coverage.
+    exposures = sample_exposures()
+    exposures["coverage"]["region"] = 0.80      # unmapped weight is 0.03, implying 0.97
+    violations = adaptation.validate_exposures(exposures)
+    assert len(violations) == 1
+    assert "coverage.region" in violations[0]
+    assert "disagrees" in violations[0]
+
+
 # ==========================================================================
 # R2 — hard-constraint matching honesty
 # ==========================================================================

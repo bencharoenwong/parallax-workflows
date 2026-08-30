@@ -110,29 +110,11 @@ News (selective, async): `get_news_synthesis` for holdings >10% weight AND flagg
 
 **Client policy S1 + S2** (only if `policy=` present and tier is not `no_policy`)
 
-1. Assemble current sleeve exposures: region from RIC suffixes per
-   `_parallax/parallax-conventions.md` §1; sector from the Batch A
-   `analyze_portfolio` `sector_allocation` block, with `get_peer_snapshot` /
-   `get_company_info` as a per-holding backstop. Region is therefore classified
-   by listing venue, not by issuer domicile or economic exposure; ADR/fund
-   look-through is not applied in phase 1, and the Policy Data Quality intro
-   states this basis. Renormalize each dimension's weights over MAPPED holdings
-   only and record `coverage` plus every `unmapped` holding. `coverage` passes
-   through onto the result unchanged so the drift table can carry its caveat.
-   Carry each holding's `isin` when one is available — OPTIONAL, and when
-   present matched against `mandate.prohibited_products` alongside `symbol`
-   (case-insensitive); an ISIN-shaped prohibition with any holding lacking an
-   `isin` emits a `hard_constraint_not_checkable` row, the check having run on
-   partial identifiers. Payload shape is pinned in policy-loader.md §3. `basis`
-   must be `"sleeve"` — Phase 1 accepts sleeve-relative exposures only; the
-   producer converts before calling. The whole payload is checked by
-   `validate_exposures` against that contract (known dimensions, finite weights
-   in [0, 1], per-dimension sums, coverage consistent with the `unmapped` weight
-   it implies). A missing or non-`"sleeve"` `basis`, or any other contract
-   violation, is rejected at the CLI (exit 2, naming the file and every
-   violation), the same operator-mistake class as a non-object payload; no
-   conversion is implemented in Phase 1. Fix the payload and re-run — never work
-   around the exit by dropping the offending field.
+1. Assemble current sleeve exposures: region from RIC suffixes per `_parallax/parallax-conventions.md` §1; sector from the Batch A `analyze_portfolio` `sector_allocation` block, with `get_peer_snapshot` / `get_company_info` as a per-holding backstop. Region is therefore classified by listing venue, not by issuer domicile or economic exposure; ADR/fund look-through is not applied in phase 1, and the Policy Data Quality intro states this basis. Renormalize each dimension's weights over MAPPED holdings only and record `coverage` plus every `unmapped` holding. Carry each holding's `isin` when one is available. Payload shape is pinned in policy-loader.md §3; these clauses of it bind the producer and are stated identically in `adaptation.py`'s module docstring and policy-loader.md §3 — one of the three copies that must agree:
+   - `basis` must be `"sleeve"` — Phase 1 accepts sleeve-relative exposures only; the producer converts before calling. A missing or non-`"sleeve"` `basis` is rejected at the CLI (exit 2, naming the file and the offending value), the same operator-mistake class as a non-object payload; no conversion is implemented in Phase 1.
+   - The whole payload is checked by `validate_exposures` against this contract (known dimensions, finite weights in [0, 1], per-dimension sums, coverage consistent with the `unmapped` weight it implies). At the CLI a violation is an operator mistake: exit 2, naming the file and every violation. Called as a library the helper proceeds WITHOUT exposures and discloses one `invalid_exposures` Data Quality row per violation; it never certifies an impossible payload with a band verdict.
+   - `coverage[dim]` is the mapped weight fraction BEFORE renormalization. A coverage below 1.0 emits `unmapped_holding` rows and is disclosed in the rendered table. `coverage` passes through onto the result unchanged so the consumer can caveat a conditional diagnostic.
+   - `isin` on a holding is OPTIONAL. When present it is matched against `mandate.prohibited_products` alongside `symbol` (case-insensitive). An ISIN-shaped prohibition with any holding lacking an `isin` emits a `hard_constraint_not_checkable` row: the check ran on partial identifiers.
 2. Assemble view tilts from the loaded view after the loader.md §3 alias collapse:
    regions, sectors, and excludes only. Factors, styles, and themes are tactical-only
    and never enter band math.
