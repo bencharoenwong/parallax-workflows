@@ -106,6 +106,15 @@ def _safe_display_name(value: Any) -> str:
     return collapsed
 
 
+#: Characters that end, reopen, or escape a markdown link destination. A URL is
+#: a destination rather than label text, so it is validated and refused instead
+#: of being flattened: rewriting these would silently point the image somewhere
+#: the operator never configured. Narrower than _MARKDOWN_META on purpose —
+#: "_", "!", "*" and "|" are inert inside a destination and common in real logo
+#: filenames, so refusing them would drop legitimate logos.
+_URL_UNSAFE = "()<>[]`\\"
+
+
 def _safe_logo_url(value: str) -> str:
     """Return a public-looking logo URL without credentials or URL values."""
     try:
@@ -121,6 +130,13 @@ def _safe_logo_url(value: str) -> str:
         or parsed.fragment
     ):
         return ""
+    for char in value:
+        if (
+            char.isspace()
+            or char in _URL_UNSAFE
+            or unicodedata.category(char) in _INVISIBLE_CATEGORIES
+        ):
+            return ""
     return value
 
 BrandingLoader = Callable[[], Mapping[str, Any]]

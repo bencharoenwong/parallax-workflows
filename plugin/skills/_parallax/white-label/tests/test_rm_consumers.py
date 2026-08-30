@@ -171,6 +171,59 @@ def test_rm_header_omits_logo_urls_with_secrets(logo_url: str) -> None:
     assert "![Example Advisory]" not in output
 
 
+@pytest.mark.parametrize(
+    "logo_url",
+    [
+        "https://cdn.example.test/a)![x](https://evil.test/y.png",
+        "https://cdn.example.test/<img src=x onerror=alert(1)>.png",
+        "https://cdn.example.test/a b.png",
+    ],
+)
+def test_logo_url_cannot_break_out_of_the_image_destination(logo_url: str) -> None:
+    """A logo URL is a link destination, so it is refused rather than flattened.
+
+    Every other interpolated string takes the markdown pass, but rewriting a URL
+    would point the image somewhere the operator never configured. The URL
+    checks covered credentials, query and fragment only, so a path holding ")"
+    closed the templated image early and appended a second, attacker-chosen
+    remote image to the deliverable.
+    """
+    branding = _branding("https://assets.example.test/brand.pdf")
+    branding._values["logos"] = {"primary": logo_url}
+
+    output = render_rm_markdown(
+        "# Synthetic RM analysis",
+        "portfolio review",
+        branding_loader=lambda: branding,
+    )
+
+    assert "evil.test" not in output
+    assert output.count("](") == 0
+    assert "<" not in output and ">" not in output
+    assert "# Synthetic RM analysis" in output
+
+
+def test_ordinary_logo_url_still_renders() -> None:
+    """The refusal must not drop logos whose filenames are merely punctuated.
+
+    "_", "!", "*" and "|" cannot end a link destination, so refusing them would
+    silently drop a legitimate logo instead of a hostile one.
+    """
+    branding = _branding("https://assets.example.test/brand.pdf")
+    branding._values["logos"] = {"primary": "https://cdn.example.test/brand_logo!.png"}
+
+    output = render_rm_markdown(
+        "# Synthetic RM analysis",
+        "portfolio review",
+        branding_loader=lambda: branding,
+    )
+
+    assert (
+        "![Example Advisory](https://cdn.example.test/brand_logo!.png)"
+        in output
+    )
+
+
 def test_actual_corrupt_yaml_loader_preserves_valid_rm_output(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
