@@ -46,8 +46,11 @@ jobs:
           # a malformed config is rejected fail — and the runtime silently stops
           # validating client configs at all.
           # pillow: validator.py treats it as optional and returns a pass with
-          # unknown dimensions when absent, so without it the logo size gate
-          # stops running and its three tests skip instead of covering it.
+          # unknown dimensions when absent, so the logo dimension gate stops
+          # running and its three tests skip. It already resolved here as a
+          # transitive requirement of python-pptx below; naming it directly
+          # keeps that coverage from depending on a fixture-building package's
+          # dependency list, which can drop it without touching this file.
           python -m pip install pytest pyyaml jsonschema pillow
           # pynacl + rfc8785: manifest_verify.py raises SystemExit on import
           # without them, which aborts collection for three house-view roots.

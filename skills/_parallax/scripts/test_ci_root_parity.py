@@ -16,6 +16,14 @@ covers both.
 evals.yml is parsed into a step model and its pytest arguments resolved as
 paths; the discovered set comes from invoking the real script rather than a
 second copy of its find pipeline, which would drift from it the same way.
+
+The parse must UNDER-approximate rather than over-approximate. A path this
+module credits to CI that CI does not actually collect is a hole in the gate
+itself, so a step contributes only the positional arguments of a sub-command
+that really invokes pytest: comments, option values and non-pytest commands
+(`pip install -r <path>`) are not coverage. A step that reaches pytest through
+a wrapper this parser cannot read therefore reports its files as uncovered,
+which fails loudly instead of passing on an assumption.
 """
 from __future__ import annotations
 
@@ -33,6 +41,15 @@ WORKFLOW = REPO_ROOT / ".github" / "workflows" / "evals.yml"
 
 TEST_GLOBS = ("test_*.py", "*_test.py")
 
+# Options whose VALUE is a separate token. `-m "not npx"` is the one this
+# workflow uses; the rest are pytest options whose value can itself look like a
+# repo path, which is exactly what must not be mistaken for a collected root.
+VALUE_OPTIONS = frozenset({
+    "-m", "-k", "-p", "-o", "-c", "-W", "-n", "-r",
+    "--rootdir", "--ignore", "--deselect", "--confcutdir",
+})
+COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|"})
+
 
 def _discovered_roots() -> list[Path]:
     proc = subprocess.run(
@@ -46,18 +63,68 @@ def _discovered_roots() -> list[Path]:
     return roots
 
 
-def _ci_pytest_paths() -> list[Path]:
-    """Every path argument CI hands to pytest, as a resolved path."""
-    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+def _sub_commands(tokens: list[str]) -> list[list[str]]:
+    commands: list[list[str]] = [[]]
+    for token in tokens:
+        if token in COMMAND_SEPARATORS:
+            commands.append([])
+        else:
+            commands[-1].append(token)
+    return [c for c in commands if c]
+
+
+def _pytest_argv(command: list[str]) -> list[str] | None:
+    """The arguments after the pytest command word, or None if not pytest."""
+    head = Path(command[0]).name
+    if head == "pytest":
+        return command[1:]
+    if head.startswith("python") and command[1:3] == ["-m", "pytest"]:
+        return command[3:]
+    return None
+
+
+def _positional_args(argv: list[str]) -> list[str]:
+    positionals = []
+    skip_next = False
+    for token in argv:
+        if skip_next:
+            skip_next = False
+            continue
+        if token in VALUE_OPTIONS:
+            skip_next = True
+            continue
+        if token.startswith("-"):
+            continue
+        positionals.append(token)
+    return positionals
+
+
+def _ci_pytest_paths(workflow_text: str | None = None) -> list[Path]:
+    """Every path argument CI actually hands to pytest, as a resolved path."""
+    if workflow_text is None:
+        workflow_text = WORKFLOW.read_text(encoding="utf-8")
+    workflow = yaml.safe_load(workflow_text)
     paths = []
     for job in workflow["jobs"].values():
         for step in job["steps"]:
             run = step.get("run") or ""
-            if "pytest" not in run:
-                continue
-            for token in shlex.split(run):
-                if token.startswith(("skills/", "evals/")):
-                    paths.append(REPO_ROOT / token.rstrip("/"))
+            for line in run.replace("\\\n", " ").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    tokens = shlex.split(line, comments=True)
+                except ValueError as exc:
+                    pytest.fail(
+                        f"step {step.get('name')!r} has a line this gate cannot "
+                        f"parse, so its pytest arguments cannot be checked: "
+                        f"{exc}\n  {line.strip()}")
+                for command in _sub_commands(tokens):
+                    argv = _pytest_argv(command)
+                    if argv is None:
+                        continue
+                    for arg in _positional_args(argv):
+                        if arg.startswith(("skills/", "evals/")):
+                            paths.append(REPO_ROOT / arg.rstrip("/"))
     return paths
 
 
@@ -117,6 +184,68 @@ def test_uncovered_root_is_detected(tmp_path):
     # The narrowing four steps use: a file beside `tests/` escapes that step.
     assert not _covers(root / "tests", beside)
     assert _covers(root, beside)
+
+
+def _workflow(*runs: str) -> str:
+    steps = "\n".join(
+        f"      - name: step-{i}\n        run: |\n"
+        + "\n".join(f"          {line}" for line in run.splitlines())
+        for i, run in enumerate(runs))
+    return "jobs:\n  structural:\n    steps:\n" + steps
+
+
+def test_a_comment_naming_a_test_path_is_not_coverage():
+    """The install step names paths in prose and hands paths to `pip -r`. If
+    either counted as coverage, a skill could be mentioned in a dependency
+    comment, have no pytest step, and still pass this gate -- the exact drift
+    it exists to catch."""
+    text = _workflow(
+        "# somedep: needed by skills/parallax-foo/tests/test_foo.py\n"
+        "python -m pip install pytest\n"
+        "python -m pip install -r skills/_parallax/house-view/requirements.txt")
+
+    assert _ci_pytest_paths(text) == []
+
+
+def test_option_values_are_not_collected_paths():
+    text = _workflow(
+        'python -m pytest skills/parallax-foo/tests -q -m "not npx" '
+        "--ignore=skills/parallax-bar -p no:cacheprovider "
+        "-k skills/parallax-baz")
+
+    assert _ci_pytest_paths(text) == [REPO_ROOT / "skills/parallax-foo/tests"]
+
+
+def test_an_apostrophe_in_a_comment_does_not_break_the_parse():
+    """Unbalanced quotes in prose used to abort the whole gate with an opaque
+    shlex error rather than reporting anything."""
+    text = _workflow(
+        "# this root doesn't ship a conftest\n"
+        "python -m pytest skills/parallax-foo/tests -q")
+
+    assert _ci_pytest_paths(text) == [REPO_ROOT / "skills/parallax-foo/tests"]
+
+
+def test_only_real_pytest_invocations_contribute():
+    text = _workflow(
+        "python skills/_parallax/scripts/scan_tracked_terms.py",
+        "bash skills/_parallax/scripts/coverage-lint.sh || true",
+        "pytest skills/parallax-foo/tests -q",
+        "cd skills && python -m pytest evals/graders/ -q")
+
+    assert _ci_pytest_paths(text) == [
+        REPO_ROOT / "skills/parallax-foo/tests",
+        REPO_ROOT / "evals/graders",
+    ]
+
+
+def test_unparseable_pytest_line_fails_loudly():
+    """An unbalanced quote on a real command must not silently yield zero
+    paths, which would read as `this step collects nothing`."""
+    text = _workflow('python -m pytest skills/parallax-foo/tests -q -m "not npx')
+
+    with pytest.raises(pytest.fail.Exception, match="cannot parse"):
+        _ci_pytest_paths(text)
 
 
 def test_list_roots_rejects_an_unknown_argument():
