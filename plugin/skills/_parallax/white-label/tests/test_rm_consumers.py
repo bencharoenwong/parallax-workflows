@@ -8,6 +8,7 @@ import re
 import sys
 from types import ModuleType
 from typing import Any
+import unicodedata
 
 import pytest
 
@@ -299,6 +300,37 @@ def test_client_name_cannot_inject_markdown_or_html(hostile_name: str) -> None:
     assert output.count("](") == 1  # only the one templated image destination
 
     # The report body and footer must survive intact.
+    assert "Body." in output
+    assert "## About This Report" in output
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"client_name": "Acme\x1b[2K\x1b[1;1HFAKE HEADER\x07 Advisory"},
+        {"client_name": "Acme‮gnitekraM‬ Co"},
+        {"source": {"type": "folder", "reference": "/tmp/deck\x1b[31m.pptx"}},
+        {"logos": {"primary": "/tmp/logo\x07​.png"}},
+    ],
+)
+def test_untrusted_branding_cannot_inject_terminal_control_sequences(
+    overrides: dict[str, Any],
+) -> None:
+    """RM markdown is opened in terminals; invisible characters must not survive.
+
+    str.split collapses whitespace only, so ESC, BEL and bidi overrides used to
+    reach the rendered deliverable verbatim from every untrusted field.
+    """
+    output = render_rm_markdown(
+        "Body.",
+        "portfolio review",
+        branding_loader=lambda: _rm_branding(**overrides),
+    )
+
+    invisible = [
+        ch for ch in output if unicodedata.category(ch) in {"Cc", "Cf", "Cs", "Co"}
+    ]
+    assert invisible == ["\n"] * len(invisible), f"invisible characters survived: {output!r}"
     assert "Body." in output
     assert "## About This Report" in output
 

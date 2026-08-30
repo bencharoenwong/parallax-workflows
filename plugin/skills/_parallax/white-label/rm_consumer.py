@@ -11,6 +11,7 @@ from collections.abc import Callable, Mapping
 import importlib.util
 import sys
 import threading
+import unicodedata
 from pathlib import Path
 from typing import Any, NamedTuple
 from urllib.parse import urlsplit
@@ -66,6 +67,32 @@ _MAX_CLIENT_NAME_CHARS = 120
 _MARKDOWN_META = "[]()<>*_`#!|\\"
 
 
+#: Unicode general categories with no printable width. Cc and Cf carry the
+#: terminal escapes (ESC, BEL) and bidi overrides that ``str.split`` leaves
+#: alone, because they are not whitespace; Cs and Co have no defined rendering.
+_INVISIBLE_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Co"})
+
+
+def _safe_markdown_text(value: Any) -> str:
+    """Flatten untrusted config text into inert single-line markdown content.
+
+    Every string this module interpolates into a report — the client name, the
+    redacted source reference, the logo filename — reaches it from
+    client-supplied collateral, so all three take the same pass. Control and
+    format characters are replaced before the markdown pass: ``str.split``
+    collapses whitespace only, so ESC and BEL used to survive into a rendered
+    deliverable and rewrite what an RM sees in a terminal.
+    """
+    if not isinstance(value, str):
+        return ""
+    printable = "".join(
+        " " if unicodedata.category(ch) in _INVISIBLE_CATEGORIES else ch
+        for ch in value
+    )
+    inert = "".join(" " if ch in _MARKDOWN_META else ch for ch in printable)
+    return " ".join(inert.split())
+
+
 def _safe_display_name(value: Any) -> str:
     """Flatten an extracted client name into inert markdown link/label text.
 
@@ -73,13 +100,7 @@ def _safe_display_name(value: Any) -> str:
     Interpolating it raw into ``![{name}]({url})`` and ``**{name}**`` let a
     crafted name close the image, inject HTML, and open new report sections.
     """
-    if not isinstance(value, str):
-        return ""
-    # Collapse every control character and line break first; a newline alone is
-    # enough to start a new markdown block inside the header.
-    flattened = " ".join(value.split())
-    stripped = "".join(" " if ch in _MARKDOWN_META else ch for ch in flattened)
-    collapsed = " ".join(stripped.split())
+    collapsed = _safe_markdown_text(value)
     if len(collapsed) > _MAX_CLIENT_NAME_CHARS:
         collapsed = collapsed[:_MAX_CLIENT_NAME_CHARS].rstrip() + "…"
     return collapsed
@@ -194,14 +215,18 @@ def load_rm_branding_context(
                 "Branding: white-label (best-effort, schema unavailable)"
             )
         else:
-            safe_reference = safe_source_reference(branding)  # type: ignore[arg-type]
+            safe_reference = _safe_markdown_text(
+                safe_source_reference(branding)  # type: ignore[arg-type]
+            )
             line = f"Branding: white-label (source: {safe_reference})"
             if "logo_missing" in error:
                 line += " (logo unavailable, omitted)"
             about_lines.append(line)
 
         if primary_logo.startswith(("/", "~")):
-            about_lines.append(f"Logo on file: {Path(primary_logo).name}")
+            logo_name = _safe_markdown_text(Path(primary_logo).name)
+            if logo_name:
+                about_lines.append(f"Logo on file: {logo_name}")
     elif error == "config_not_found":
         about_lines.append("Branding: default Parallax")
     else:

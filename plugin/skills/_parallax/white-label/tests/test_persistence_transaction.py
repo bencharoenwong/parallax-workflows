@@ -408,6 +408,38 @@ def test_recovery_fails_loudly_when_neither_copy_survives(tmp_path) -> None:
     assert ".staging" in str(excinfo.value)
 
 
+def test_retrying_an_unresolvable_root_keeps_its_recovery_evidence(tmp_path) -> None:
+    """A save must not delete the journal of a transaction it did not publish.
+
+    The failure handler used to unlink the journal unconditionally. On the
+    ordinary retry path, the pre-commit repair raises RecoveryError for an
+    earlier torn commit, the handler erased that journal, and the next
+    recover_interrupted_save() reported "nothing needed repair" on a root whose
+    live files were still inconsistent.
+    """
+    import persistence
+
+    root = tmp_path / "branding"
+    _run_child(root, "never", "#111111", tmp_path)
+    _run_child(root, "after_config_replaced", "#222222", tmp_path)
+
+    journal_path = root / persistence._COMMIT_JOURNAL
+    journal = json.loads(journal_path.read_bytes())
+    staging = root / ".staging" / journal["transaction_id"]
+    for name in _NAMES:
+        (staging / name).unlink(missing_ok=True)
+        (staging / ".rollback" / name).unlink(missing_ok=True)
+
+    with pytest.raises(persistence.RecoveryError):
+        persistence.save_confirmed_branding(
+            _draft("Third", "#333333"), branding_root=root, client_name="Third"
+        )
+
+    assert json.loads(journal_path.read_bytes()) == journal
+    with pytest.raises(persistence.RecoveryError):
+        persistence.recover_interrupted_save(root)
+
+
 def test_recovery_is_a_noop_on_a_clean_or_absent_root(tmp_path) -> None:
     import persistence
 

@@ -275,6 +275,39 @@ def _recover_interrupted_commit(root: Path) -> dict[str, Any] | None:
     }
 
 
+def _discard_own_journal(root: Path, transaction_id: str) -> bool:
+    """Retire the commit journal only when it names ``transaction_id``.
+
+    A failed save settles its own transaction, so its journal must go. It must
+    never touch a journal it did not publish: the pre-commit recovery call
+    raises RecoveryError exactly when an EARLIER commit left a state that can
+    be neither completed nor undone, and that journal is the only pointer to
+    the staged and snapshot copies an operator needs to repair the root.
+
+    Returns True when a journal belonging to this transaction may still be on
+    disk, so the caller keeps the staging directory that journal names.
+    """
+    journal_path = root / _COMMIT_JOURNAL
+    try:
+        with _writer_lock(root):
+            if not journal_path.exists():
+                return False
+            try:
+                owner = json.loads(journal_path.read_bytes()).get("transaction_id")
+            except (OSError, ValueError):
+                # Ownership is unknowable, so assume the journal is this
+                # transaction's and keep both it and the staging it names.
+                # Recovery reports an unreadable journal loudly; discarding
+                # either side here would make that report unactionable.
+                return True
+            if owner != transaction_id:
+                return False
+            journal_path.unlink(missing_ok=True)
+            return False
+    except OSError:
+        return True
+
+
 #: A staging directory older than this belongs to a process that is gone. Saves
 #: are interactive and complete in well under a second, so the margin is vast.
 STAGING_ORPHAN_GRACE_SECONDS = 6 * 60 * 60
@@ -554,8 +587,12 @@ def save_confirmed_branding(
                 ) from exc
         # Live state matches the snapshot again, so the transaction is settled
         # and its journal must not outlive it.
-        (root / _COMMIT_JOURNAL).unlink(missing_ok=True)
-        journal_published = False
+        journal_published = _discard_own_journal(root, transaction_id)
+        if isinstance(exc, RecoveryError):
+            # Raised by the pre-commit repair for a torn state this process did
+            # not create and cannot resolve. Surface it unwrapped so callers can
+            # tell "your save failed" from "this root needs an operator".
+            raise
         raise PersistenceError(f"{current_point}: {exc}") from exc
     finally:
         # Discarding staging while a journal still points at it would strand the
