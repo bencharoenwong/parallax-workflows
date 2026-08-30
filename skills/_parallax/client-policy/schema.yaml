@@ -1,0 +1,223 @@
+# Parallax Client Policy — Canonical Schema
+#
+# Single source of truth for the optional client-policy YAML consumed at the
+# consumer layer. JIT-loaded by skills/_parallax/client-policy/policy-loader.md.
+#
+# NOT part of the house view. The house view is firm-level and carries no client
+# policy; this artifact is client-level and carries no tilts. They meet only at
+# consume time, inside adaptation.py.
+#
+# Supplied by the RM at invocation, inline or as a file path. There is no default
+# on-disk location and no platform fetch; absence means fallback tier `no_policy`
+# and today's unchanged behavior.
+#
+# Field names mirror common wealth-platform mandate-document conventions so that
+# later conformance to an external mandate standard is a rename, not a redesign.
+
+metadata:
+  schema_version: 1                    # int. Consumers gate optional-field reads on this.
+  policy_id: <uuid v4>                 # generated at first ingest of this artifact
+  policy_name: "Balanced Growth 60/40" # human-readable; shown in the policy status line
+  client_ref: "acct-7fd2"              # PSEUDONYMOUS reference ONLY. Never a client name or
+                                       # account number — house-view loader.md §6.3 no-PII.
+  supplied_by: "rm@firm.example"
+  supplied_at: "2026-08-29T10:00:00Z"  # ISO 8601, when the RM supplied it
+  as_of_date: "2026-06-30"             # ISO date; the policy statement's own date
+  review_due: "2026-12-31"             # ISO date or null. today > review_due emits a
+                                       # `stale_policy` Data Quality row. NEVER a hard block.
+  calibration_status: heuristic_phase0 # enum: heuristic_phase0 | empirical_phase1.
+                                       # Absence means heuristic_phase0. Mirrors house-view
+                                       # semantics; every rendered result discloses it.
+
+mandate:
+  base_currency: "USD"                 # ISO 4217. Carried for provenance; Phase 1 does no
+                                       # FX conversion — all weights are already fractions.
+  strategic_allocation:                # top-level asset classes, fractions of TOTAL, 0..1.
+    equity: 0.60                       # Phase 1 consumes `equity` only. Other keys are
+                                       # carried, validated for range, and otherwise ignored.
+  allocation_bands:                    # per top-level class; {min, max} fractions 0..1
+    equity: {min: 0.50, max: 0.70}
+  tactical_overlay:
+    enabled: true                      # false disables S2 sizing entirely — S2 emits no rows,
+                                       # no budget line. S1 drift is unchanged and still renders.
+                                       # TAA Alignment renders exactly one line in that case:
+                                       # "tactical overlay disabled by mandate."
+    max_total_tilt: 0.10               # Sum of |active| budget, SLEEVE basis. null = no cap.
+    max_tracking_error: null           # Validated and carried. NOT evaluated in Phase 1 —
+                                       # there is no covariance input. Presence emits a
+                                       # `te_budget_not_evaluated` Data Quality row. No proxy.
+  prohibited_products: []              # instrument identifiers (RIC or ISIN strings).
+                                       # HARD. Same precedence tier as house-view excludes.
+  sub_allocations:
+    # Sub-asset-class granularity within the equity sleeve. Shape is forward-looking; the
+    # dimension/basis/code_list split isolates the code-list choice so it can be pinned
+    # later without touching consumers.
+    dimensions:
+      region:
+        basis: sleeve                  # sleeve | total. REQUIRED. Never assumed. `total`
+                                       # weights are divided by strategic_allocation.equity
+                                       # at load; the conversion is disclosed.
+        code_list: parallax_region_v1  # names the key set these segment keys must come from.
+                                       # v1 == the house-view schema region key set verbatim
+                                       # (broad buckets and specific country keys). Isolating
+                                       # the choice here lets the list be re-pinned later
+                                       # without touching consumers.
+        strategic_allocation:          # fractions on the declared basis
+          us: 0.55
+          europe: 0.25
+          japan: 0.10
+          em_ex_china: 0.10
+        allocation_bands:              # SPARSE on purpose. A segment may have no band, or a
+          us: {min: 0.45, max: 0.65}   # one-sided band. Both are legal and drive the
+          europe: {min: 0.18}          # fallback ladder, not a validation error.
+      sector:
+        basis: sleeve
+        code_list: gics_sector_v1      # == the house-view schema 11-sector key set verbatim
+        strategic_allocation: {}
+        allocation_bands: {}
+
+adaptation:
+  # ADAPTATION-LAYER EXTENSION. Not part of any external mandate-document
+  # convention. Sizing configuration for this system only. The house view never
+  # carries k; k is a firm-level default with a per-mandate override here.
+  k_preset: balanced                   # conservative 0.25 | balanced 0.50 | aggressive 0.75
+  k: null                              # explicit numeric override, 0 < k <= 1.0.
+                                       # Wins over k_preset when set. Every rendered result
+                                       # discloses the resolved k and its source.
+
+governance:
+  human_review_recorded: []            # RM band-override records. Overrides are PERMITTED
+                                       # but RECORDED, never silent. Each entry:
+                                       # {ts, by, segment, override, rationale}
+
+# ---------------------------------------------------------------------------
+# Constraints (binding — not enforced by the YAML shape alone).
+# ---------------------------------------------------------------------------
+# 1. Factors, styles, and themes never appear in a client policy. They are
+#    tactical-only, permanently. They never enter band math.
+# 2. Region and sector keys must come from the named `code_list`. An
+#    unrecognized key is a validation *warning*, emits an `unknown_segment_key`
+#    Data Quality row, and that segment is dropped from band math. It is not a
+#    hard failure.
+# 3. `code_list` itself is required per dimension. An unrecognized or absent
+#    `code_list` is a BLOCKING error that rejects the whole policy — the
+#    segment-key check in constraint 2 is never silently disabled by a typo'd
+#    or missing code list.
+# 4. `basis` is required per dimension. A missing `basis` is a validation error
+#    and that dimension falls back to multiplier semantics. It never crashes
+#    and never silently assumes `sleeve`.
+# 5. Bands are hard in computation. An RM override is permitted, but must be
+#    written into `governance.human_review_recorded` and surfaced in the
+#    rendered output.
+
+# ===========================================================================
+# policy_hash computation
+# ===========================================================================
+# canonical_yaml_body = the `mandate` and `adaptation` sections only,
+#   serialized with sorted keys and stripped of comments + empty fields.
+# policy_hash = sha256(canonical_yaml_body, encoding=utf-8).hexdigest()
+#
+# The hash deliberately excludes metadata/governance/comments so that:
+# - Re-supplying the same mandate with a new `supplied_at` preserves the hash.
+# - The audit row correlates policy CONTENT, not delivery events.
+#
+# ---------------------------------------------------------------------------
+# Pinned canonicalization algorithm.
+# ---------------------------------------------------------------------------
+# Any implementation (Python, Node, Go, server-side function) that follows
+# these rules exactly produces byte-identical canonical output, and therefore
+# identical sha256 digests.
+#
+# Rule 1 — Scope.
+#   Take ONLY these two top-level keys from the policy YAML document:
+#     - `mandate` (map)
+#     - `adaptation` (map)
+#   Ignore everything else (metadata, governance, comments). Rationale:
+#   re-supplying the same mandate with a new `supplied_at` preserves the hash,
+#   so the audit row correlates policy content, not delivery events.
+#
+# Rule 2 — Strip empty/zero recursively.
+#   A value is "empty" iff — AFTER its children have themselves been stripped
+#   AND it is NOT a boolean — it is any of: None / null, 0 (int or float), ""
+#   (empty string), [] (empty sequence), or {} (empty map).
+#   - Walk mandate AND adaptation depth-first; strip empties bottom-up.
+#   - "0" means the numeric zero — int 0, float 0.0 — NOT the string "0" and
+#     NOT False. Booleans are explicitly excluded from the empty set to
+#     accommodate future bool-valued fields; implementations MUST guard
+#     `isinstance(x, bool)` before comparing to 0 because in some languages
+#     (Python, JavaScript) `False == 0` is true.
+#   - A dict that becomes empty AFTER recursion IS stripped from its parent.
+#     A list element that becomes empty AFTER recursion IS stripped from the
+#     list. This means: ALWAYS recurse first, THEN decide whether to drop.
+#
+# Rule 3 — Serialize.
+#   Use PyYAML's `yaml.safe_dump` with:
+#     sort_keys=True, default_flow_style=False, allow_unicode=True,
+#     width=1_000_000 (suppress line wrapping), indent=2.
+#   This matches the output of every PyYAML 5.x / 6.x release that ships
+#   `safe_dump`. Node `js-yaml` and Go `gopkg.in/yaml.v3` configured with
+#   equivalent settings (sorted keys, block style, no flow, no wrapping, UTF-8,
+#   2-space indent) produce identical bytes on the test fixture below.
+#
+# Rule 4 — Encode + hash.
+#   canonical_body_bytes = canonical_yaml_string.encode("utf-8")
+#   policy_hash           = hashlib.sha256(canonical_body_bytes).hexdigest()
+#
+# Reference Python implementation (must pass the fixture in Rule 5):
+#
+#   import hashlib, yaml
+#   def _is_empty(v):
+#       if isinstance(v, bool):           # Guard: False == 0 in Python.
+#           return False
+#       if v is None:
+#           return True
+#       if isinstance(v, (int, float)) and v == 0:
+#           return True
+#       return v == "" or v == [] or v == {}
+#   def _strip_empty(obj):
+#       if isinstance(obj, dict):
+#           out = {}
+#           for k, v in obj.items():
+#               v = _strip_empty(v)       # Recurse first.
+#               if _is_empty(v):          # Then decide.
+#                   continue
+#               out[k] = v
+#           return out
+#       if isinstance(obj, list):
+#           result = []
+#           for x in obj:
+#               y = _strip_empty(x)       # Recurse first.
+#               if _is_empty(y):          # Then decide.
+#                   continue
+#               result.append(y)
+#           return result
+#       return obj
+#   def compute_policy_hash(policy: dict) -> str:
+#       body = {
+#           "mandate":    _strip_empty(policy.get("mandate", {})),
+#           "adaptation": _strip_empty(policy.get("adaptation", {})),
+#       }
+#       canonical = yaml.safe_dump(
+#           body, sort_keys=True, default_flow_style=False,
+#           allow_unicode=True, width=1_000_000, indent=2,
+#       )
+#       return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+#
+# Rule 5 — Test fixture (any implementation MUST match this byte-for-byte).
+#   Fixture lives in `tests/fixtures/policy_hash_fixture.yaml`, carrying
+#   `expected_policy_hash`; asserted by `tests/test_adaptation.py`.
+#
+#   Expected policy_hash (sha256 hex): 64bb76bcaac010eeef80367d7fddec6fdaa8de58053c3dfabef58f15cbfac311
+#
+# If a future change requires the canonicalization to evolve (e.g., to include
+# new top-level keys), bump `schema_version` and emit a migration note — never
+# silently alter the byte output.
+#
+# ---------------------------------------------------------------------------
+# P-3 footnote (verbatim).
+# ---------------------------------------------------------------------------
+# The strip-empty rule removes numeric zeros. A band written `{min: 0.0, max:
+# 0.7}` therefore hashes identically to a band with no `min`, even though the
+# two behave differently in band math. `policy_hash` is an audit correlation
+# identifier, not a semantic equivalence check. Do not build policy-equality
+# logic on it.

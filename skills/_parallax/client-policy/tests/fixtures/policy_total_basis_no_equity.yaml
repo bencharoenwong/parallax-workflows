@@ -1,0 +1,50 @@
+# Sibling of policy_total_basis.yaml with `strategic_allocation.equity` REMOVED.
+# Drives invariant 6's no-crash path: `basis: total` without a usable equity weight
+# is a dimension-scoped PolicyError, the weights are left unconverted, and the
+# region dimension drops to `multiplier_fallback`. The helper never raises and
+# never assumes `sleeve`.
+
+metadata:
+  schema_version: 1
+  policy_id: "0c7f2e18-59b4-4a6d-8e30-4a1c5f9b7e23"
+  policy_name: "Total Basis, No Equity Weight"
+  client_ref: "acct-7fd2"
+  supplied_by: "rm@firm.example"
+  supplied_at: "2026-08-29T10:00:00Z"
+  as_of_date: "2026-06-30"
+  review_due: "2026-12-31"
+  calibration_status: heuristic_phase0
+
+mandate:
+  base_currency: "USD"
+  strategic_allocation: {}
+  allocation_bands: {}
+  tactical_overlay:
+    enabled: true
+    max_total_tilt: 0.10
+    max_tracking_error: null
+  prohibited_products: []
+  sub_allocations:
+    dimensions:
+      region:
+        basis: total
+        code_list: parallax_region_v1
+        strategic_allocation:
+          us: 0.33
+          europe: 0.15
+          japan: 0.06
+          em_ex_china: 0.06
+        allocation_bands:
+          us: {min: 0.27, max: 0.39}
+      sector:
+        basis: sleeve
+        code_list: gics_sector_v1
+        strategic_allocation: {}
+        allocation_bands: {}
+
+adaptation:
+  k_preset: balanced
+  k: null
+
+governance:
+  human_review_recorded: []
