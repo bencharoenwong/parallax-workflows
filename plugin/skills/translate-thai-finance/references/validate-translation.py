@@ -18,7 +18,7 @@ def validate(filepath: str) -> tuple[list[str], list[str]]:
     warnings: list[str] = []
 
     try:
-        with open(filepath) as f:
+        with open(filepath, encoding="utf-8") as f:
             data = json.load(f)
     except FileNotFoundError:
         errors.append(f"[FATAL] File not found: {filepath}")
@@ -140,6 +140,11 @@ def apply_waivers(errors: list[str], waivers: list[str]) -> tuple[list[str], lis
 
 
 def main():
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8")
+
     filepath, waivers = parse_args(sys.argv)
     if filepath is None:
         print("Usage: python3 validate-translation.py <translated_json_file> [--waive <error-substring> ...]")

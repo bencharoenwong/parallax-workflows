@@ -22,8 +22,28 @@
 # would collide inside that root's single process). This is asserted below and
 # fails LOUDLY rather than silently under-running.
 #
+# `--list-roots` prints the discovered roots and exits without running them, so
+# a gate test can hold .github/workflows/evals.yml to the SAME discovery this
+# script uses. The workflow hand-lists its steps for step-name visibility, and a
+# comment cannot enforce that the two agree; this flag makes the check possible
+# against the real discoverer instead of a second copy of the find pipeline.
+#
 # Portable to bash 3.2 (macOS default — no mapfile / associative arrays).
 set -uo pipefail
+
+list_only=0
+if [ "$#" -gt 0 ]; then
+  case "$1" in
+    --list-roots)
+      list_only=1
+      shift
+      ;;
+  esac
+fi
+if [ "$#" -gt 0 ]; then
+  echo "run-gate-tests: unexpected argument '$1' (expected --list-roots or none)" >&2
+  exit 2
+fi
 
 gate_mode="${PARALLAX_GATE_MODE:-offline}"
 case "$gate_mode" in
@@ -67,6 +87,11 @@ roots=$(
 if [ -z "$roots" ]; then
   echo "run-gate-tests: no test roots discovered under skills/ or evals/" >&2
   exit 1
+fi
+
+if [ "$list_only" -eq 1 ]; then
+  printf '%s\n' "$roots"
+  exit 0
 fi
 
 fail=0
