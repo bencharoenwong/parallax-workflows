@@ -1229,9 +1229,12 @@ def run_pipeline(policy: dict | None, exposures: dict | None,
 
         if all(r.desired_active is None for r in taa):
             # Ladder row 2: nothing to scale, so the budget line degrades to a
-            # sum-of-absolute-drift diagnostic against max_total_tilt.
-            budget = _budget(sum(abs(r.current_active) for r in taa),
-                             max_total_tilt, False, 1.0)
+            # sum-of-absolute-drift diagnostic against max_total_tilt. A
+            # forced-fallback dimension's current_active is not basis-comparable
+            # (basis_unconfirmed_drift above), so it is excluded from this sum.
+            budget = _budget(
+                sum(abs(r.current_active) for r in taa if r.dimension not in forced_fallback),
+                max_total_tilt, False, 1.0)
         else:
             taa, scale, cap_applied = apply_budget_cap(taa, max_total_tilt)
             budget = _budget(

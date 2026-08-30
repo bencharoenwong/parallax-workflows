@@ -101,7 +101,7 @@ Binding behavior contract, applied per dimension:
 
 "Covered" means the dimension exists under `sub_allocations.dimensions` with a non-empty `strategic_allocation`. An uncovered dimension is absent from `drift` and `taa` and appears as an `uncovered_dimension` Data Quality row.
 
-**Ladder row 2 semantics** (`multiplier_fallback`, no room exists): `current_active = current - policy` is still reported. `desired_active` is `None`. Alignment is by `sign(current_active)` against `sign(tilt)`, using the same order as the room-based classifier with the room branches skipped. The budget line becomes a diagnostic comparing `Σ|current − policy|` against `max_total_tilt` when one is given; no cap is applied because there is nothing to scale.
+**Ladder row 2 semantics** (`multiplier_fallback`, no room exists): `current_active = current - policy` is still reported. `desired_active` is `None`. Alignment is by `sign(current_active)` against `sign(tilt)`, using the same order as the room-based classifier with the room branches skipped — except for a segment in a forced-fallback dimension (§2), where the sign is not trustworthy either and alignment is `not_evaluable` (or `no_view` at `tilt == 0`) instead. The budget line becomes a diagnostic comparing `Σ|current − policy|` against `max_total_tilt` when one is given, summed over segments **outside** any forced-fallback dimension only — a forced-fallback dimension's `current_active` is not basis-comparable (`basis_unconfirmed_drift`, §7.4) and is excluded from this sum, not blended into it; no cap is applied because there is nothing to scale.
 
 ---
 

@@ -380,6 +380,31 @@ def test_tier_weights_only_marks_every_row_multiplier_fallback():
     assert result.budget["scale"] == 1.0
 
 
+def test_forced_fallback_dimension_excluded_from_ladder_row_2_budget_sum():
+    # F4 repro: `sector` loses its `basis` (forced_fallback, current_active not
+    # basis-comparable) while `region` keeps a resolved basis but declares no
+    # bands anywhere (the ordinary weights_only-style case, current_active IS
+    # sleeve-comparable). Both dimensions land on multiplier_fallback rows with
+    # desired_active=None, so the all-None budget branch fires; it must sum
+    # only the region rows, not blend in the basis-incompatible sector rows.
+    policy = copy.deepcopy(load_policy("policy_weights_only.yaml"))
+    del policy["mandate"]["sub_allocations"]["dimensions"]["sector"]["basis"]
+    result = adaptation.run_pipeline(policy, sample_exposures(), sample_tilts())
+    assert result.fallback_tier == "partial_dimensions"
+    assert result.taa != []
+    assert all(r.desired_active is None for r in result.taa)
+    sector_rows = [r for r in result.taa if r.dimension == "sector"]
+    region_rows = [r for r in result.taa if r.dimension == "region"]
+    assert sector_rows and region_rows
+    assert all(r.alignment in ("not_evaluable", "no_view") for r in sector_rows)
+    assert any(r.alignment in ("aligned", "opposed") for r in region_rows)
+    region_only = sum(abs(r.current_active) for r in region_rows)
+    everything = sum(abs(r.current_active) for r in result.taa)
+    assert everything > region_only  # sector rows do carry nonzero drift
+    assert result.budget["sum_abs_desired"] == pytest.approx(region_only)
+    assert any(row.kind == "basis_unconfirmed_drift" for row in result.data_quality)
+
+
 def test_tier_full_marks_every_row_policy():
     result = adaptation.run_pipeline(full_policy(), sample_exposures(), sample_tilts())
     assert result.fallback_tier == "full"
