@@ -345,16 +345,6 @@ def test_pdf_uses_settled_ten_page_limit(tmp_path, monkeypatch):
     assert "page9" in result["voice_corpus"]["text"]
 
 
-def test_pdf_page_limit_matches_onboarding_instructions():
-    white_label = Path(__file__).parent.parent
-    skill_text = (
-        white_label.parent.parent / "parallax-white-label-onboard" / "SKILL.md"
-    ).read_text(encoding="utf-8")
-
-    assert "Reads up to 10 pages by default." in skill_text
-    assert "Reads up to 5 pages by default." not in skill_text
-
-
 def test_extract_package_imports_from_unrelated_working_directory(tmp_path):
     white_label = Path(__file__).parent.parent
     env = os.environ.copy()

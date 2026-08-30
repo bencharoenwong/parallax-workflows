@@ -440,6 +440,44 @@ def test_retrying_an_unresolvable_root_keeps_its_recovery_evidence(tmp_path) -> 
         persistence.recover_interrupted_save(root)
 
 
+def test_recording_a_disposition_settles_an_interrupted_commit_first(tmp_path) -> None:
+    """A non-activating disposition must not strand a landed save.
+
+    audit.jsonl is a transaction file. record_extraction_attempt appended to it
+    without settling an outstanding commit first, so a save that had fully
+    landed stopped matching its journal's forward digests while the .rollback
+    copies still matched the backward ones. The next recovery therefore chose
+    ROLLBACK, reverting config.yaml and DESIGN.md to the pre-crash brand and
+    discarding the operator's entry — with the hash chain left internally
+    consistent, so nothing recorded that either had existed.
+    """
+    import persistence
+
+    root = tmp_path / "branding"
+    _run_child(root, "never", "#111111", tmp_path)
+    _run_child(root, "after_audit_replaced", "#222222", tmp_path)
+    assert (root / persistence._COMMIT_JOURNAL).exists()
+    landed = _digests(root)
+
+    persistence.record_extraction_attempt(
+        _draft("Third", "#333333"), disposition="re_extracted", branding_root=root
+    )
+
+    assert persistence.recover_interrupted_save(root) is None
+    config = yaml.safe_load((root / "config.yaml").read_text())
+    assert config["branding"]["colors"]["primary"] == "#222222"
+    assert _digests(root)["config.yaml"] == landed["config.yaml"]
+    assert _digests(root)["DESIGN.md"] == landed["DESIGN.md"]
+
+    dispositions = [
+        json.loads(line)["disposition"]
+        for line in (root / "audit.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    assert dispositions[-1] == "re_extracted"
+    assert _chain_is_intact(root)
+
+
 def test_recovery_is_a_noop_on_a_clean_or_absent_root(tmp_path) -> None:
     import persistence
 

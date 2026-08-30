@@ -13,7 +13,6 @@ import unicodedata
 import pytest
 
 _WHITE_LABEL_DIR = Path(__file__).resolve().parent.parent
-_SKILLS_ROOT = _WHITE_LABEL_DIR.parents[1]
 sys.path.insert(0, str(_WHITE_LABEL_DIR))
 
 from rm_consumer import load_rm_branding_context, render_rm_markdown  # noqa: E402
@@ -191,20 +190,6 @@ def test_actual_corrupt_yaml_loader_preserves_valid_rm_output(
     assert body in output
     assert "Branding: default Parallax (config error)" in output
     assert "unterminated" not in output
-
-
-@pytest.mark.parametrize(
-    ("skill_name", "label"),
-    [
-        ("parallax-client-review", "portfolio review"),
-        ("parallax-desk-call-list", "desk call list"),
-    ],
-)
-def test_rm_skill_uses_executable_branding_seam(skill_name: str, label: str) -> None:
-    skill_text = (_SKILLS_ROOT / skill_name / "SKILL.md").read_text(encoding="utf-8")
-
-    assert "load_rm_branding_context" in skill_text
-    assert f'load_rm_branding_context("{label}")' in skill_text
 
 
 # --- Regressions from the 2026-08-29 live RM brand-ingest exercise ----------

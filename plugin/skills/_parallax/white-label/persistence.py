@@ -286,24 +286,27 @@ def _discard_own_journal(root: Path, transaction_id: str) -> bool:
 
     Returns True when a journal belonging to this transaction may still be on
     disk, so the caller keeps the staging directory that journal names.
+
+    Caller must already hold the writer lock. Retiring the journal is one half
+    of settling a failed commit and restoring the snapshot is the other, so
+    both run under the single lock acquisition that guarded the commit itself.
     """
     journal_path = root / _COMMIT_JOURNAL
     try:
-        with _writer_lock(root):
-            if not journal_path.exists():
-                return False
-            try:
-                owner = json.loads(journal_path.read_bytes()).get("transaction_id")
-            except (OSError, ValueError):
-                # Ownership is unknowable, so assume the journal is this
-                # transaction's and keep both it and the staging it names.
-                # Recovery reports an unreadable journal loudly; discarding
-                # either side here would make that report unactionable.
-                return True
-            if owner != transaction_id:
-                return False
-            journal_path.unlink(missing_ok=True)
+        if not journal_path.exists():
             return False
+        try:
+            owner = json.loads(journal_path.read_bytes()).get("transaction_id")
+        except (OSError, ValueError):
+            # Ownership is unknowable, so assume the journal is this
+            # transaction's and keep both it and the staging it names.
+            # Recovery reports an unreadable journal loudly; discarding
+            # either side here would make that report unactionable.
+            return True
+        if owner != transaction_id:
+            return False
+        journal_path.unlink(missing_ok=True)
+        return False
     except OSError:
         return True
 
@@ -464,134 +467,154 @@ def save_confirmed_branding(
         _inject(fault_injector, current_point)
 
         with _writer_lock(root):
-            # Repair any transaction a previous process died inside before
-            # reading originals, otherwise this save would snapshot torn state
-            # and make it permanent.
-            _recover_interrupted_commit(root)
-            _sweep_orphan_staging(root, keep=transaction_id)
+            try:
+                # Repair any transaction a previous process died inside before
+                # reading originals, otherwise this save would snapshot torn state
+                # and make it permanent.
+                _recover_interrupted_commit(root)
+                _sweep_orphan_staging(root, keep=transaction_id)
 
-            for name in _TRANSACTION_FILES:
-                live = root / name
-                originals[name] = live.read_bytes() if live.exists() else None
+                for name in _TRANSACTION_FILES:
+                    live = root / name
+                    originals[name] = live.read_bytes() if live.exists() else None
 
-            # Preserve the superseded canonical config for traceability. As in
-            # the documented workflow, archive failure is non-blocking.
-            if originals["config.yaml"] is not None:
-                try:
-                    # mkdir(parents=True, mode=...) applies the mode ONLY to the
-                    # final component; intermediate parents are created with the
-                    # process umask (0o755 by default). Create and chmod the
-                    # .archive parent explicitly so superseded client configs are
-                    # never listed through a world-readable directory.
-                    archive_parent = root / ".archive"
-                    archive_parent.mkdir(exist_ok=True, mode=0o700)
-                    os.chmod(archive_parent, 0o700)
-                    archive = archive_parent / (
-                        datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-                        + f"-{transaction_id[:8]}"
-                    )
-                    archive.mkdir(mode=0o700)
-                    os.chmod(archive, 0o700)
-                    _write_staged(archive / "config.yaml", originals["config.yaml"])
-                    archive_created = archive
-                except OSError:
-                    pass
+                # Preserve the superseded canonical config for traceability. As in
+                # the documented workflow, archive failure is non-blocking.
+                if originals["config.yaml"] is not None:
+                    try:
+                        # mkdir(parents=True, mode=...) applies the mode ONLY to the
+                        # final component; intermediate parents are created with the
+                        # process umask (0o755 by default). Create and chmod the
+                        # .archive parent explicitly so superseded client configs are
+                        # never listed through a world-readable directory.
+                        archive_parent = root / ".archive"
+                        archive_parent.mkdir(exist_ok=True, mode=0o700)
+                        os.chmod(archive_parent, 0o700)
+                        archive = archive_parent / (
+                            datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+                            + f"-{transaction_id[:8]}"
+                        )
+                        archive.mkdir(mode=0o700)
+                        os.chmod(archive, 0o700)
+                        _write_staged(archive / "config.yaml", originals["config.yaml"])
+                        archive_created = archive
+                    except OSError:
+                        pass
 
-            audit_before = originals["audit.jsonl"] or b""
-            entry = {
-                "schema_version": 1,
-                "ts": _now(),
-                "skill": "parallax-white-label-onboard",
-                "action": "save",
-                "applied": True,
-                "source": source,
-                "config_hash": config_hash,
-                "client_name": actual_client_name,
-                "prev_entry_hash": _prior_entry_hash(audit_before),
-                "validation_status": _validation_status(validation),
-                "disposition": disposition,
-                "draft_yaml_hash": _draft_hash(draft),
-                "design_md_hash": design_hash,
-                "lint_status": lint_status,
-            }
-            audit_bytes = _append_audit_line(audit_before, entry)
-            _write_staged(staging / "audit.jsonl", audit_bytes)
-            current_point = "after_audit_staged"
-            _inject(fault_injector, current_point)
-
-            # Snapshot the pre-commit state next to the staged replacements so
-            # recovery can undo the transaction without this process running.
-            rollback_dir = staging / ".rollback"
-            rollback_dir.mkdir(mode=0o700)
-            os.chmod(rollback_dir, 0o700)
-            staged_bytes = {
-                "config.yaml": config_bytes,
-                "DESIGN.md": design_bytes,
-                "audit.jsonl": audit_bytes,
-            }
-            for name, original in originals.items():
-                if original is not None:
-                    _write_staged(rollback_dir / name, original)
-
-            _publish_journal(
-                root,
-                staging,
-                {
-                    "transaction_id": transaction_id,
+                audit_before = originals["audit.jsonl"] or b""
+                entry = {
+                    "schema_version": 1,
                     "ts": _now(),
-                    "files": {
-                        name: {
-                            "new_sha256": _sha256(staged_bytes[name]),
-                            "original_sha256": (
-                                None if originals[name] is None
-                                else _sha256(originals[name])
-                            ),
-                        }
-                        for name in _TRANSACTION_FILES
+                    "skill": "parallax-white-label-onboard",
+                    "action": "save",
+                    "applied": True,
+                    "source": source,
+                    "config_hash": config_hash,
+                    "client_name": actual_client_name,
+                    "prev_entry_hash": _prior_entry_hash(audit_before),
+                    "validation_status": _validation_status(validation),
+                    "disposition": disposition,
+                    "draft_yaml_hash": _draft_hash(draft),
+                    "design_md_hash": design_hash,
+                    "lint_status": lint_status,
+                }
+                audit_bytes = _append_audit_line(audit_before, entry)
+                _write_staged(staging / "audit.jsonl", audit_bytes)
+                current_point = "after_audit_staged"
+                _inject(fault_injector, current_point)
+
+                # Snapshot the pre-commit state next to the staged replacements so
+                # recovery can undo the transaction without this process running.
+                rollback_dir = staging / ".rollback"
+                rollback_dir.mkdir(mode=0o700)
+                os.chmod(rollback_dir, 0o700)
+                staged_bytes = {
+                    "config.yaml": config_bytes,
+                    "DESIGN.md": design_bytes,
+                    "audit.jsonl": audit_bytes,
+                }
+                for name, original in originals.items():
+                    if original is not None:
+                        _write_staged(rollback_dir / name, original)
+
+                _publish_journal(
+                    root,
+                    staging,
+                    {
+                        "transaction_id": transaction_id,
+                        "ts": _now(),
+                        "files": {
+                            name: {
+                                "new_sha256": _sha256(staged_bytes[name]),
+                                "original_sha256": (
+                                    None if originals[name] is None
+                                    else _sha256(originals[name])
+                                ),
+                            }
+                            for name in _TRANSACTION_FILES
+                        },
                     },
-                },
-            )
-            journal_published = True
-            current_point = "after_journal_published"
-            _inject(fault_injector, current_point)
+                )
+                journal_published = True
+                current_point = "after_journal_published"
+                _inject(fault_injector, current_point)
 
-            replacements_started = True
-            for name, point in (
-                ("config.yaml", "after_config_replaced"),
-                ("DESIGN.md", "after_design_replaced"),
-                ("audit.jsonl", "after_audit_replaced"),
-            ):
-                os.replace(staging / name, root / name)
-                os.chmod(root / name, 0o600)
-                current_point = point
-                _inject(fault_injector, point)
+                replacements_started = True
+                for name, point in (
+                    ("config.yaml", "after_config_replaced"),
+                    ("DESIGN.md", "after_design_replaced"),
+                    ("audit.jsonl", "after_audit_replaced"),
+                ):
+                    os.replace(staging / name, root / name)
+                    os.chmod(root / name, 0o600)
+                    current_point = point
+                    _inject(fault_injector, point)
 
-            # Every file now carries the new content. Retiring the journal is
-            # what marks the transaction complete; a crash before this point
-            # leaves a journal that recovery drives forward.
-            (root / _COMMIT_JOURNAL).unlink(missing_ok=True)
-            journal_published = False
+                # Every file now carries the new content. Retiring the journal is
+                # what marks the transaction complete; a crash before this point
+                # leaves a journal that recovery drives forward.
+                (root / _COMMIT_JOURNAL).unlink(missing_ok=True)
+                journal_published = False
+            except Exception as commit_exc:
+                # Settling a failed commit must happen under the SAME lock
+                # acquisition that guarded it. Restoring the snapshot from the
+                # released-lock path let a waiting saver acquire the lock and
+                # run recovery while these files were still being rewritten,
+                # so recovery chose a direction from a state that changed
+                # underneath it and could publish the mixed result the journal
+                # exists to prevent.
+                if archive_created is not None:
+                    shutil.rmtree(archive_created, ignore_errors=True)
+                    archive_created = None
+                if replacements_started:
+                    try:
+                        _restore(root, originals, transaction_id)
+                    except Exception as rollback_exc:
+                        # The transaction is UNSETTLED: live state is torn and
+                        # this process cannot repair it. Leave the journal AND
+                        # the staging copies it points at, so the next save or
+                        # an explicit recover_interrupted_save() can still
+                        # finish the job.
+                        raise PersistenceError(
+                            f"{current_point}: save failed and rollback "
+                            f"failed: {rollback_exc}"
+                        ) from commit_exc
+                # Live state matches the snapshot again, so the transaction is
+                # settled and its journal must not outlive it.
+                journal_published = _discard_own_journal(root, transaction_id)
+                if isinstance(commit_exc, PersistenceError):
+                    # RecoveryError from the pre-commit repair names a torn
+                    # state this process did not create and cannot resolve.
+                    # Surface it unwrapped so callers can tell "your save
+                    # failed" from "this root needs an operator".
+                    raise
+                raise PersistenceError(f"{current_point}: {commit_exc}") from commit_exc
     except Exception as exc:
+        # Only the staging phase and the lock acquisition itself reach here;
+        # neither has touched a live file or published a journal.
         if archive_created is not None:
             shutil.rmtree(archive_created, ignore_errors=True)
-        if replacements_started:
-            try:
-                _restore(root, originals, transaction_id)
-            except Exception as rollback_exc:
-                # The transaction is UNSETTLED: live state is torn and this
-                # process cannot repair it. Leave the journal AND the staging
-                # copies it points at, so the next save or an explicit
-                # recover_interrupted_save() can still finish the job.
-                raise PersistenceError(
-                    f"{current_point}: save failed and rollback failed: {rollback_exc}"
-                ) from exc
-        # Live state matches the snapshot again, so the transaction is settled
-        # and its journal must not outlive it.
-        journal_published = _discard_own_journal(root, transaction_id)
-        if isinstance(exc, RecoveryError):
-            # Raised by the pre-commit repair for a torn state this process did
-            # not create and cannot resolve. Surface it unwrapped so callers can
-            # tell "your save failed" from "this root needs an operator".
+        if isinstance(exc, PersistenceError):
             raise
         raise PersistenceError(f"{current_point}: {exc}") from exc
     finally:
@@ -625,6 +648,12 @@ def record_extraction_attempt(
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(root, 0o700)
     with _writer_lock(root):
+        # audit.jsonl is a transaction file, so appending to it while a commit
+        # journal is outstanding invalidates the digests recovery reads to
+        # choose its direction: a landed save would look half-applied and get
+        # rolled back, taking this entry with it. Settle any interrupted
+        # commit first, exactly as every other write path does.
+        _recover_interrupted_commit(root)
         audit_path = root / "audit.jsonl"
         before = audit_path.read_bytes() if audit_path.exists() else b""
         source = draft.get("source", {}) or {}
