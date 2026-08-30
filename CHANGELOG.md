@@ -4,6 +4,17 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-08-30
+
+### Fixed
+- **`.github/workflows/evals.yml` installed only `pytest` and `pyyaml`, so the six test roots wired into CI on 2026-08-18 aborted collection on missing `pynacl`/`rfc8785`, and a failed step ends the job — the five steps after it never ran.** CI showed one red step while four roots were broken and the rest untested; `main` had been red since. The install step now also pulls `skills/_parallax/house-view/requirements.txt`, `skills/_parallax/white-label/requirements-test.txt`, and `jsonschema` (which `loader.py` treats as optional and silently skips config-schema validation without). `pillow` is now named directly rather than left to arrive transitively through `python-pptx`. Verified in a clean virtualenv: all steps pass, 1679 tests.
+- **Every post-install step now carries `if: ${{ !cancelled() && steps.deps.outcome == 'success' }}`**, so one failing test step no longer skips every step after it. A failed install still short-circuits the rest of the job; an ordinary test failure does not.
+- **Three test roots that `run-gate-tests.sh` already ran locally were missing from `evals.yml`** — `parallax-credit-lens`, `translate-chinese-finance`, and `translate-thai-finance` — and are now wired in as named steps.
+- **The Chinese and Thai translation validators and their tests now read and write JSON with an explicit `utf-8` encoding**, and the CLI reconfigures stdout/stderr to `utf-8` on entry, instead of relying on the process locale to resolve there.
+
+### Added
+- **`skills/_parallax/scripts/test_ci_root_parity.py` holds `evals.yml` to the same test-file set `run-gate-tests.sh` discovers locally**, so a new test root that the local gate picks up automatically but the hand-listed workflow does not — the exact gap behind the two entries above — now fails a test instead of shipping silently green on both sides. It parses each step's `run` line into real pytest sub-commands and their positional arguments (skipping comments, option values, and non-pytest commands), and refuses to guess when a step narrows collection with `--ignore`, `--ignore-glob`, `--deselect`, `--collect-only`, `--co`, or `--pyargs` rather than risk crediting CI with a file it does not actually collect. `run-gate-tests.sh` gained a `--list-roots` flag so the gate can check against the real discoverer instead of a second copy of its `find` pipeline.
+
 ## 2026-08-20
 
 ### Fixed

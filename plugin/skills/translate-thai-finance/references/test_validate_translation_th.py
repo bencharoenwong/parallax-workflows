@@ -23,7 +23,8 @@ def write_payload(tmp_path, text, market="Thailand"):
                 },
             },
             ensure_ascii=False,
-        )
+        ),
+        encoding="utf-8",
     )
     return path
 
@@ -66,12 +67,14 @@ def test_waive_downgrades_error_and_exit_code(tmp_path):
     failed = subprocess.run(
         [sys.executable, str(MODULE_PATH), str(path)],
         text=True,
+        encoding="utf-8",
         capture_output=True,
         check=False,
     )
     waived = subprocess.run(
         [sys.executable, str(MODULE_PATH), str(path), "--waive", "Doubled (no-space)"],
         text=True,
+        encoding="utf-8",
         capture_output=True,
         check=False,
     )
