@@ -237,7 +237,8 @@ class DataQualityRow:
     """One disclosure about coverage, conversion, staleness, an unevaluated budget, an
     unresolvable tilt inheritance, a rejected exposures payload, an unclassifiable hard
     constraint, or exposure weight sitting outside the policy."""
-    kind: str          # uncovered_dimension|unmapped_holding|basis_converted|stale_policy|
+    kind: str          # uncovered_dimension|unmapped_holding|basis_converted|
+                       # basis_unconfirmed_drift|stale_policy|
                        # te_budget_not_evaluated|missing_bands|unknown_segment_key|
                        # ambiguous_broad_tilt|invalid_exposures|
                        # hard_constraint_not_checkable|off_policy_exposure
