@@ -219,9 +219,12 @@ def merge_drafts(drafts: List[Dict[str, Any]]) -> Dict[str, Any]:
         merged["spacing"] = best_data
 
     # Clean up empty dicts
-    if not merged["typography"]: del merged["typography"]
-    if not merged["rounded"]: del merged["rounded"]
-    if not merged["spacing"]: del merged["spacing"]
+    if not merged["typography"]:
+        del merged["typography"]
+    if not merged["rounded"]:
+        del merged["rounded"]
+    if not merged["spacing"]:
+        del merged["spacing"]
 
     combined_text_parts: List[str] = []
     available_word_count = sum(

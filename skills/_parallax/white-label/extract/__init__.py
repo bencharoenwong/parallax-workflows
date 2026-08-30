@@ -10,6 +10,7 @@ Module map:
   - web_pdf   — URL and PDF extraction (LogoExtractor, FontExtractor)
   - wizard    — wizard-mode stub
   - merge     — cross-source validation and draft merging
+  - folder    — folder inventory, classification, and multi-file extraction
 """
 
 from .colors import (

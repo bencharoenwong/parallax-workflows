@@ -49,8 +49,9 @@ def _parse_pptx_master_typography(zf) -> tuple[Dict[str, Dict[str, Any]], Dict[s
         return {}, {}
     ns = {"p": "http://schemas.openxmlformats.org/presentationml/2006/main", "a": _OOXML_A_NS}
     txStyles = root.find(".//p:txStyles", ns)
-    if txStyles is None: return {}, {}
-    
+    if txStyles is None:
+        return {}, {}
+
     typography = {}
     confidences = {}
     
@@ -62,9 +63,11 @@ def _parse_pptx_master_typography(zf) -> tuple[Dict[str, Dict[str, Any]], Dict[s
     LOW_CONFIDENCE_LEVELS = {"h4", "h5", "body-md", "body-sm"}
 
     def parse_pr(pr_elem, level_name):
-        if pr_elem is None: return
+        if pr_elem is None:
+            return
         defRPr = pr_elem.find(".//a:defRPr", ns)
-        if defRPr is None: return
+        if defRPr is None:
+            return
         sz = defRPr.get("sz")
         b = defRPr.get("b")
         lnSpc = pr_elem.find(".//a:lnSpc/a:spcPct", ns)
@@ -88,7 +91,8 @@ def _parse_pptx_master_typography(zf) -> tuple[Dict[str, Dict[str, Any]], Dict[s
         style["fontWeight"] = 700 if b_truthy else 400
         if lnSpc is not None and lnSpc.get("val"):
             style["lineHeight"] = f"{int(lnSpc.get('val'))/100000:g}"
-            if conf < 0.7: conf = 0.7
+            if conf < 0.7:
+                conf = 0.7
 
         typography[level_name] = style
         confidences[f"typography.{level_name}"] = conf
@@ -126,11 +130,14 @@ def _parse_docx_style_typography(zf) -> tuple[Dict[str, Dict[str, Any]], Dict[st
     }
     for style in root.findall("w:style", ns):
         name_elem = style.find("w:name", ns)
-        if name_elem is None: continue
+        if name_elem is None:
+            continue
         val = name_elem.get(f"{{{ns['w']}}}val")
-        if not val: continue
+        if not val:
+            continue
         name_val = val.lower()
-        if name_val not in name_map: continue
+        if name_val not in name_map:
+            continue
         level_name = name_map[name_val]
         
         rPr = style.find("w:rPr", ns)
@@ -166,8 +173,9 @@ def _parse_docx_style_typography(zf) -> tuple[Dict[str, Dict[str, Any]], Dict[st
             style_dict["fontWeight"] = 400
         if lnSpc:
             style_dict["lineHeight"] = f"{int(lnSpc)/240:g}"
-            if conf < 0.7: conf = 0.7
-            
+            if conf < 0.7:
+                conf = 0.7
+
         typography[level_name] = style_dict
         confidences[f"typography.{level_name}"] = conf
     return typography, confidences
@@ -401,7 +409,6 @@ def extract_from_docx(docx_path: str) -> Dict[str, Any]:
         theme: Dict[str, Any] = {"colors": {}, "fonts": {}}
         typography: Dict[str, Any] = {}
         typo_conf: Dict[str, float] = {}
-        rounded: Dict[str, str] = {}
         # Single open — theme parse and typography parse share the archive.
         with zipfile.ZipFile(docx_path, "r") as zf:
             _validate_ooxml_archive(zf)
