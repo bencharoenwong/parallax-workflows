@@ -46,9 +46,20 @@ TEST_GLOBS = ("test_*.py", "*_test.py")
 # repo path, which is exactly what must not be mistaken for a collected root.
 VALUE_OPTIONS = frozenset({
     "-m", "-k", "-p", "-o", "-c", "-W", "-n", "-r",
-    "--rootdir", "--ignore", "--deselect", "--confcutdir",
+    "--rootdir", "--ignore", "--ignore-glob", "--deselect", "--confcutdir",
 })
 COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|"})
+
+# Options that subtract from, or reinterpret, the set of files a positional
+# argument collects. `-m` and `-k` are absent on purpose: they select within a
+# file, so the file is still collected and file-level coverage still holds.
+# These, by contrast, would let a positional keep crediting a file that pytest
+# never runs -- the over-approximation this module's contract forbids. The
+# parser does not model them, so it refuses the invocation instead of guessing.
+UNMODELED_OPTIONS = frozenset({
+    "--ignore", "--ignore-glob", "--deselect", "--collect-only", "--co",
+    "--pyargs",
+})
 
 
 def _discovered_roots() -> list[Path]:
@@ -81,6 +92,11 @@ def _pytest_argv(command: list[str]) -> list[str] | None:
     if head.startswith("python") and command[1:3] == ["-m", "pytest"]:
         return command[3:]
     return None
+
+
+def _unmodeled_options(argv: list[str]) -> list[str]:
+    return [token for token in argv
+            if token.split("=", 1)[0] in UNMODELED_OPTIONS]
 
 
 def _positional_args(argv: list[str]) -> list[str]:
@@ -122,6 +138,15 @@ def _ci_pytest_paths(workflow_text: str | None = None) -> list[Path]:
                     argv = _pytest_argv(command)
                     if argv is None:
                         continue
+                    unmodeled = _unmodeled_options(argv)
+                    if unmodeled:
+                        pytest.fail(
+                            f"step {step.get('name')!r} narrows pytest "
+                            f"collection with {' '.join(unmodeled)}, which this "
+                            "gate does not model. Its positional paths would "
+                            "credit files pytest never collects. Teach "
+                            "_ci_pytest_paths to subtract them before using "
+                            "this option here.")
                     for arg in _positional_args(argv):
                         if arg.startswith(("skills/", "evals/")):
                             paths.append(REPO_ROOT / arg.rstrip("/"))
@@ -210,8 +235,37 @@ def test_a_comment_naming_a_test_path_is_not_coverage():
 def test_option_values_are_not_collected_paths():
     text = _workflow(
         'python -m pytest skills/parallax-foo/tests -q -m "not npx" '
-        "--ignore=skills/parallax-bar -p no:cacheprovider "
-        "-k skills/parallax-baz")
+        "-p no:cacheprovider -k skills/parallax-baz "
+        "--rootdir skills/parallax-bar")
+
+    assert _ci_pytest_paths(text) == [REPO_ROOT / "skills/parallax-foo/tests"]
+
+
+@pytest.mark.parametrize("option", [
+    "--ignore=skills/parallax-foo/tests/test_skipped.py",
+    "--ignore skills/parallax-foo/tests/test_skipped.py",
+    "--ignore-glob=*_slow.py",
+    "--deselect skills/parallax-foo/tests/test_skipped.py",
+    "--collect-only",
+    "--co",
+    "--pyargs",
+])
+def test_collection_narrowing_options_are_refused(option):
+    """A positional credits every test file beneath it. An option that removes
+    files from that set, or reinterprets the positional as a module name, makes
+    the credit wrong -- the gate would report a file as covered that CI never
+    runs. Refuse the invocation rather than over-credit it."""
+    text = _workflow(f"python -m pytest skills/parallax-foo/tests -q {option}")
+
+    with pytest.raises(pytest.fail.Exception, match="does not model"):
+        _ci_pytest_paths(text)
+
+
+def test_within_file_selection_is_still_accepted():
+    """-m and -k deselect tests inside a file without removing the file from
+    collection, so file-level coverage still holds and the real workflow's
+    `-m \"not npx\"` step must keep working."""
+    text = _workflow('python -m pytest skills/parallax-foo/tests -q -m "not npx"')
 
     assert _ci_pytest_paths(text) == [REPO_ROOT / "skills/parallax-foo/tests"]
 
