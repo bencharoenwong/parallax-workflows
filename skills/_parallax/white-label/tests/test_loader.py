@@ -15,9 +15,9 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+import yaml
 
 _HOME_LIKE = Path.home() if Path.home().is_absolute() else Path("/home/analyst")
-import yaml
 
 
 # ---------------------------------------------------------------------------
