@@ -10,6 +10,7 @@ Module map:
   - web_pdf   — URL and PDF extraction (LogoExtractor, FontExtractor)
   - wizard    — wizard-mode stub
   - merge     — cross-source validation and draft merging
+  - folder    — folder inventory, classification, and multi-file extraction
 """
 
 from .colors import (
@@ -38,8 +39,15 @@ from .web_pdf import (
 )
 from .wizard import extract_from_wizard
 from .merge import (
+    UnresolvedMismatchError,
     cross_validate_visual,
     merge_drafts,
+    merge_resolved_drafts,
+)
+from .folder import (
+    AmbiguousClassificationError,
+    extract_from_folder,
+    inventory_folder,
 )
 
 __all__ = [
@@ -70,4 +78,10 @@ __all__ = [
     # merge
     "cross_validate_visual",
     "merge_drafts",
+    "merge_resolved_drafts",
+    "UnresolvedMismatchError",
+    # folder
+    "AmbiguousClassificationError",
+    "inventory_folder",
+    "extract_from_folder",
 ]

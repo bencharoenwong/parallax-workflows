@@ -16,6 +16,7 @@ description: "Configure white-label client branding for Parallax report output. 
 
 - JIT-load _parallax/white-label/schema.yaml before extraction — it is the single source of truth for config.yaml shape
 - JIT-load _parallax/white-label/extract/ (the extract package) and _parallax/white-label/validator.py before running Steps 1 and 2
+- JIT-load `_parallax/white-label/persistence.py` before the confirmation gate. Route the final disposition through `persist_disposition()`; do not reproduce the config/DESIGN.md/audit write sequence inline.
 - URL input — use `extract_from_url()` from `_parallax/white-label/extract/` so public-destination
   validation, redirect checks, and bounded reads cannot be bypassed; do not fetch the URL with
   defuddle, WebFetch, or another network path
@@ -151,7 +152,7 @@ Assemble the `draft` dict from wizard answers. Skip any field the user leaves bl
 
 **URL mode:** `draft = extract_from_url(url)`. If `draft` contains `"error"`, surface it: `"Extraction returned partial results due to: <error>. Review and edit before confirming."`
 
-**PDF mode:** `draft = extract_from_pdf(pdf_path)`. Reads up to 5 pages by default. If the brand guide appears to be a dedicated multi-page document and extraction confidence is low (<0.6 average), offer to read more pages or switch to wizard mode.
+**PDF mode:** `draft = extract_from_pdf(pdf_path)`. Reads up to 10 pages by default. If the brand guide appears to be a dedicated multi-page document and extraction confidence is low (<0.6 average), offer to read more pages or switch to wizard mode.
 
 **PPTX mode:** `draft = extract_from_pptx(pptx_path)`. Reads `ppt/theme/theme1.xml` directly, so colors and fonts come from the canonical OOXML theme declarations (confidence 0.9). Body text from every text frame is aggregated into `draft["voice_corpus"]` for the voice extraction step. The OOXML slot mapping is fixed: `accent1`→primary, `accent2`→secondary, `accent3`→accent, `dk1`→text, `lt1`→background. If the deck uses a heavily customized theme that overrides these slots inline, theme XML may understate the actual on-slide colors — flag this and offer wizard override.
 
@@ -248,12 +249,22 @@ Compute `avg_conf` and `lowest_field` from `draft["confidence_scores"]` for the 
 
 Decision points to preserve:
 - **DESIGN.md preview + lint are informational** — generated via `emit_design_md(...)` (split on `---`, indent YAML) and `DesignMdValidator.lint(...)`; they never auto-block the save.
-- **Mismatch resolution (multi-source):** if mismatches are present, the user MUST pick a winner per field via `AskUserQuestion` (candidate values shown with source attribution). Apply the choice to `draft` before save. Do NOT auto-pick by confidence or recency — the PM/CIO is canonical on which brand version is current.
-- **Edit / Re-extract / Abort** each have their own disposition and audit handling: `edited` archives the pre-edit draft and hashes the pre-edit draft; `re_extracted` returns to Step 0; `rejected` writes no files; `confirmed` proceeds to Step 4.
+- **Mismatch resolution (multi-source):** if mismatches are present, the user MUST pick a winner per field via `AskUserQuestion` (candidate values shown with source attribution). Collect `{field: source_reference}` choices and call `merge_resolved_drafts(drafts, resolutions)` before save. `drafts` is the per-source draft list: multi-source mode builds it directly; folder mode reads it from `draft["multi_source"]["component_drafts"]`, which `extract_from_folder` attaches whenever it records a mismatch. The helper refuses an unresolved or unknown source choice. Do NOT auto-pick by confidence or recency — the PM/CIO is canonical on which brand version is current.
+- **Edit / Re-extract / Abort** each have their own disposition and audit handling: `edited` archives the pre-edit draft and hashes the pre-edit draft (pass `pre_edit_draft=`, and `edit_notes=` for the optional one-liner); `re_extracted` returns to Step 0; `rejected` writes no files; `confirmed` proceeds to Step 4.
 
 > Full draft display template, color-swatch fallback, and the per-option procedures (Edit-fields 7-step / Re-extract / Abort / Confirm): see `references/confirmation-gate.md`.
 
 ### Step 4 — Save
+
+**Callable transaction boundary (required).** After Step 4b has prepared any
+local logo paths in the draft, call `persist_disposition(draft, disposition=...,
+branding_root=...)` from `_parallax/white-label/persistence.py`. It builds
+`config.yaml` and `DESIGN.md` from the same draft, serializes concurrent writers,
+stages the compatible hash-chained audit entry, and rolls all three live files
+back if any replacement fails. For `rejected` and `re_extracted`, call the same
+function before returning; it appends an `extraction_attempt` entry and cannot
+activate the draft. The subsections below define inputs and artifact contracts;
+they are not separate write operations.
 
 #### 4a. Pre-write validation
 
@@ -278,33 +289,19 @@ Compute `config_hash = sha256(yaml.safe_dump(config["branding"], sort_keys=True)
 
 > Full code (builder call + v2 yaml shape + v1 legacy fallback): see `references/workflow-code.md` § Step 4c — Construct config.yaml.
 
-#### 4d. Archive existing config (if present)
+#### 4d–4f. Persist the disposition (single transaction boundary)
 
-Copy any existing `config.yaml` to `~/.parallax/client-branding/.archive/<YYYYMMDDTHHMMSSZ>/config.yaml` before overwriting. Archive failures are non-blocking — log and continue.
+Call `persist_disposition(draft, disposition=..., client_name=..., validation_summary=..., lint_status=...)`, adding `pre_edit_draft=` (required) and optional `edit_notes=` when the disposition is `edited`. One call archives any existing `config.yaml`, writes `config.yaml` and `DESIGN.md`, and appends the hash-chained audit entry — the three files are one transaction under a writer lock, so a failure restores the previous active state instead of leaving them describing different brands. Do not write them separately.
 
-> Full code: see `references/workflow-code.md` § Step 4d — Archive existing config.
-
-#### 4e. Write files (atomic-swap pattern)
-
-Write `config.yaml` to a staging directory, then `shutil.move` to the live path. Enforce `0600` on config.yaml and `0700` on assets/. On write failure: report cleanly and DO NOT proceed to Step 4e' or Step 4f — the previous active config remains unchanged.
-
-> Full code: see `references/workflow-code.md` § Step 4e — Staging write + atomic-swap.
-
-#### 4e'. Write DESIGN.md (Google Labs spec)
-
-Emit `DESIGN.md` from the draft via `emit_design_md(draft, client_name=..., extracted_at=..., source_refs=[...])`, write to staging, atomic-move to `~/.parallax/client-branding/DESIGN.md`, chmod `0600`. Compute `design_md_hash` (sha256) for the audit entry. `emit_design_md` raises `ValueError` on invalid hex tokens — treat as write failure, do not proceed to Step 4f.
-
-> Full code: see `references/workflow-code.md` § Step 4e' — Write DESIGN.md.
-
-#### 4f. Append hash-chained audit entry
-
-**Audit-entry schema bump (intentional chain discontinuity).** With the DESIGN.md emit at Step 4e', save entries now include `design_md_hash` and `lint_status`. The chain hash is `sha256(prior-line-bytes)`, so the first new-shape entry after a v1 audit log will appear as a chain break to any downstream verifier comparing entry shape across the bump. This is intentional: keep the prior chain readable for forensics but treat entries before this point as belonging to the v1 audit schema. If a verifier exists, gate it on `entry.get("design_md_hash") is not None` to detect schema-2 entries; absent that field, treat the entry as v1.
-
-Read the last line of `audit.jsonl`, sha256 it to get `prev_entry_hash`, then append a new entry with `action: "save"`, `applied: true`, the config_hash, client_name, validation_status, disposition, draft_yaml_hash, design_md_hash, and lint_status. Chmod `audit.jsonl` to `0600`.
+`confirmed` and `edited` activate and return `{"applied": True, "config_hash": ..., "design_md_hash": ..., "client_name": ..., "archive_dir": ...}`. An `edited` save hashes the pre-edit draft into the audit entry and archives it as `pre_edit.yaml` under `archive_dir`; omitting `pre_edit_draft` raises `ValueError`. `re_extracted` and `rejected` write no active artifact and return `{"applied": False, "disposition": ...}`.
 
 **Every extraction attempt that does not result in a save also appends an audit entry** (`action: "extraction_attempt"`, `applied: false`) with `disposition`: `confirmed` / `edited` / `re_extracted` / `rejected`. This includes aborted sessions.
 
-> Full code: see `references/workflow-code.md` § Step 4f — Append hash-chained audit entry.
+On failure the call raises `PersistenceError`; report it cleanly and treat the save as not applied. `RecoveryError` means an earlier interrupted save left a state this process cannot repair — surface it rather than retrying.
+
+**Audit-entry schema bump (intentional chain discontinuity).** Save entries include `design_md_hash` and `lint_status`. The chain hash is `sha256(prior-line-bytes)`, so the first new-shape entry after a v1 audit log will appear as a chain break to any downstream verifier comparing entry shape across the bump. This is intentional: keep the prior chain readable for forensics but treat entries before this point as belonging to the v1 audit schema. If a verifier exists, gate it on `entry.get("design_md_hash") is not None` to detect schema-2 entries; absent that field, treat the entry as v1.
+
+> Full code: see `references/workflow-code.md` § Step 4d–4f — Persist the disposition.
 
 ### Step 5 — Confirmation summary
 

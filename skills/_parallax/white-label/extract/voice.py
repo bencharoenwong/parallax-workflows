@@ -13,11 +13,11 @@ def _voice_corpus_from_text(text: str, max_words: int = 3000) -> Dict[str, Any]:
     SKILL knows whether the sample is large enough.
     """
     cleaned = re.sub(r"\s+", " ", text).strip()
-    words = cleaned.split(" ")
-    n_words = len([w for w in words if w])
-    truncated = " ".join(words[:max_words]) if n_words > max_words else cleaned
+    words = cleaned.split() if cleaned else []
+    retained_words = words[:max_words]
+    retained_text = " ".join(retained_words)
     return {
-        "text": truncated,
-        "word_count": n_words,
-        "truncated": n_words > max_words,
+        "text": retained_text,
+        "word_count": len(retained_words),
+        "truncated": len(words) > max_words,
     }

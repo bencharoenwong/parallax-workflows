@@ -41,7 +41,7 @@ Return shape (always 14 top-level keys, identical on success and error paths)
 from __future__ import annotations
 
 import logging
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any
 
 import yaml
@@ -771,7 +771,14 @@ def build_config_from_draft(
         config["voice"] = {"enabled": False}
 
     if "multi_source" in draft:
-        config["multi_source"] = draft["multi_source"]
+        # component_drafts is a confirmation-gate affordance carrying each
+        # source's full draft, voice corpus included. It is what the operator
+        # resolves mismatches from, never part of the activated config.
+        config["multi_source"] = {
+            key: value
+            for key, value in draft["multi_source"].items()
+            if key != "component_drafts"
+        }
     if "render" in draft:
         config["render"] = draft["render"]
 
@@ -954,10 +961,28 @@ def safe_source_reference(branding: dict[str, Any]) -> str:
     ref = (branding.get("source") or {}).get("reference", "")
     if not isinstance(ref, str) or not ref:
         return ""
+    ref = ref.strip()
+    if not ref:
+        return ""
     if ref.startswith(("http://", "https://")):
         from urllib.parse import urlparse
         parsed = urlparse(ref)
         return f"{parsed.scheme}://{parsed.hostname}" if parsed.hostname else ""
-    if ref.startswith(("/", "~")):
-        return Path(ref).name
+    # Multi-source references are joined with "; ". Redact each component
+    # independently, otherwise Path(ref).name collapses the whole list to the
+    # last basename and silently drops the other components' provenance.
+    if "; " in ref:
+        parts = [part for part in (p.strip() for p in ref.split("; ")) if part]
+        seen: list[str] = []
+        for part in parts:
+            safe = safe_source_reference({"source": {"reference": part}})
+            if safe and safe not in seen:
+                seen.append(safe)
+        return "; ".join(seen)
+    # Any path-like reference collapses to its basename. Matching only on a
+    # leading "/" or "~" left RELATIVE paths ("client-collateral/acme-deck.pptx")
+    # to pass through with their directory component intact, putting a raw
+    # source path into an end-client deliverable.
+    if "/" in ref or "\\" in ref:
+        return PurePath(ref.replace("\\", "/")).name
     return ref

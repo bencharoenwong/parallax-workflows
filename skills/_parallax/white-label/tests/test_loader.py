@@ -15,9 +15,9 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+import yaml
 
 _HOME_LIKE = Path.home() if Path.home().is_absolute() else Path("/home/analyst")
-import yaml
 
 
 # ---------------------------------------------------------------------------
@@ -802,3 +802,48 @@ def test_build_config_from_draft_emits_typography_placeholder(
     cfg = loader_module.build_config_from_draft(draft, schema_version=2)
 
     assert cfg["branding"]["typography"] == {"body-md": {"fontFamily": "sans-serif"}}
+
+
+# --- Regressions from the 2026-08-29 live RM brand-ingest exercise ----------
+
+
+@pytest.mark.parametrize(
+    ("reference", "expected"),
+    [
+        # Relative paths previously passed through with their directory intact.
+        ("client-collateral/acme-confidential-deck.pptx", "acme-confidential-deck.pptx"),
+        ("./private/clients/acme/brand.pdf", "brand.pdf"),
+        ("../../operator-notes/acme.docx", "acme.docx"),
+        ("clients\\acme\\brand-guide.pptx", "brand-guide.pptx"),
+        # Absolute paths and URLs keep their existing redaction.
+        ("/private/operator/clients/acme/brand.pdf", "brand.pdf"),
+        ("https://assets.example.test/brand/deck.pdf?token=secret", "https://assets.example.test"),
+        # A bare token with no separator is not a path and passes through.
+        ("wizard-intake", "wizard-intake"),
+    ],
+)
+def test_safe_source_reference_redacts_relative_paths(
+    loader_module, reference: str, expected: str
+) -> None:
+    branding = {"source": {"reference": reference}}
+
+    assert loader_module.safe_source_reference(branding) == expected
+
+
+def test_safe_source_reference_redacts_every_multi_source_component(
+    loader_module,
+) -> None:
+    """Path(ref).name collapsed a joined list to the LAST basename alone."""
+    reference = "; ".join(
+        [
+            "/private/clients/acme/deck.pptx",
+            "client-collateral/acme-secret.pdf",
+            "/private/clients/acme/letter.docx",
+        ]
+    )
+
+    result = loader_module.safe_source_reference({"source": {"reference": reference}})
+
+    assert result == "deck.pptx; acme-secret.pdf; letter.docx"
+    assert "/private/clients" not in result
+    assert "client-collateral/" not in result
