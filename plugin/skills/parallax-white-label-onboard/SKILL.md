@@ -66,6 +66,21 @@ Configure client branding for Parallax equity research report output.
 
 Files are written `0600`; `assets/` is `0700`; the directory is `0700` on creation.
 
+## Required prerequisite: config validation
+
+`jsonschema` validates `config.yaml` against the canonical schema on every load:
+
+```
+python3 -m pip install -r skills/_parallax/white-label/requirements.txt
+```
+
+Without it the loader does not crash and does not silently pass the config. It
+returns `error="schema_unavailable"`, logs a warning naming the remedy, and
+downstream reports render the branding marked "best-effort, schema unavailable".
+That is a deliberate degradation, not a pass: a malformed or hand-edited config
+is used **unchecked** until the package is installed. Install it for any real
+deployment.
+
 ## Optional prerequisites
 
 The DESIGN.md emit path is in-process and pure Python. The optional **DESIGN.md linter** wraps `npx @google/design.md` (Google Labs CLI, published to npm). When Node 18+ is on PATH, the validator runs the linter at save time and surfaces findings in the confirmation gate. When Node is absent, the validator returns `status: "skipped"` and the save proceeds — nothing breaks; the operator just doesn't get inline lint feedback.

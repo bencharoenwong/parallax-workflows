@@ -41,10 +41,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           # pyyaml: test_marketing_schema.py under skills/_parallax/scripts/.
-          # jsonschema: loader.py treats it as optional and SKIPS config schema
-          # validation when absent, so without it three loader tests that assert
-          # a malformed config is rejected fail — and the runtime silently stops
-          # validating client configs at all.
+          # jsonschema: validates client branding configs in loader.py. Absent,
+          # the loader degrades loudly (error="schema_unavailable" plus a
+          # warning) rather than silently passing an unchecked config, but the
+          # loader tests that assert a malformed config is REJECTED need the
+          # real validator. Also declared in the white-label requirements.txt
+          # installed below; named here too so the reason is visible at the
+          # point of install.
           # pillow: validator.py treats it as optional and returns a pass with
           # unknown dimensions when absent, so the logo dimension gate stops
           # running and its three tests skip. It already resolved here as a
@@ -55,6 +58,10 @@ jobs:
           # pynacl + rfc8785: manifest_verify.py raises SystemExit on import
           # without them, which aborts collection for three house-view roots.
           python -m pip install -r skills/_parallax/house-view/requirements.txt
+          # white-label runtime deps (jsonschema, pyyaml) — installing from the
+          # requirements file rather than by name keeps CI and an operator
+          # install from drifting apart.
+          python -m pip install -r skills/_parallax/white-label/requirements.txt
           # python-pptx + python-docx: build the .pptx/.docx fixtures the OOXML
           # extractor tests feed. Without them 18 tests error at fixture setup.
           python -m pip install -r skills/_parallax/white-label/requirements-test.txt
