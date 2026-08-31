@@ -194,6 +194,9 @@ PARALLAX_INCLUDE = [
     "house-view/gap_detect.py",
     "house-view/gap_suggest.py",
     "house-view/auto-on-load-judge-pattern.md",
+    "client-policy/schema.yaml",
+    "client-policy/policy-loader.md",
+    "client-policy/adaptation.py",
     "AI-profiles/output-template.md",
 ]
 

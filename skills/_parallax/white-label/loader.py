@@ -41,7 +41,7 @@ Return shape (always 14 top-level keys, identical on success and error paths)
 from __future__ import annotations
 
 import logging
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any
 
 import yaml
@@ -52,6 +52,15 @@ try:
 except ImportError:
     _jsonschema = None
     _HAS_JSONSCHEMA = False
+
+
+class _ValidatorUnavailable(RuntimeError):
+    """jsonschema is not installed, so the config could not be validated.
+
+    Internal control flow only. The loader converts this into the existing
+    ``schema_unavailable`` degradation, which is the same contract already used
+    when schema.yaml itself is missing — an unperformed check, not a passed one.
+    """
 
 # ---------------------------------------------------------------------------
 # Module constants
@@ -317,10 +326,15 @@ def _validate_schema(data: dict[str, Any], schema: dict[str, Any]) -> str | None
     Validate *data* against *schema* using jsonschema.
 
     Returns None on success, human-readable error string on failure.
-    Returns None (skip) if jsonschema is not installed.
+
+    Raises ``_ValidatorUnavailable`` when jsonschema is not installed. It
+    previously returned None there, which is the SAME value a clean validation
+    returns, so an unvalidatable config became indistinguishable from a valid
+    one: the loader reported ``error=None`` and ``is_white_label_active()``
+    answered True for a config that had never been checked.
     """
     if not _HAS_JSONSCHEMA:
-        return None
+        raise _ValidatorUnavailable
     try:
         _jsonschema.validate(instance=data, schema=schema)
         return None
@@ -771,7 +785,14 @@ def build_config_from_draft(
         config["voice"] = {"enabled": False}
 
     if "multi_source" in draft:
-        config["multi_source"] = draft["multi_source"]
+        # component_drafts is a confirmation-gate affordance carrying each
+        # source's full draft, voice corpus included. It is what the operator
+        # resolves mismatches from, never part of the activated config.
+        config["multi_source"] = {
+            key: value
+            for key, value in draft["multi_source"].items()
+            if key != "component_drafts"
+        }
     if "render" in draft:
         config["render"] = draft["render"]
 
@@ -810,7 +831,11 @@ def load_client_branding() -> dict[str, Any]:
         2. Corrupted YAML        -> short-circuit, error starts with "yaml_parse_error"
         3. Schema validation     -> short-circuit, error starts with "schema_invalid"
         4. Missing logo files    -> partial degradation, error contains "logo_missing"
-           Schema unavailable    -> best-effort data, error="schema_unavailable"
+           Schema unavailable    -> best-effort data, error="schema_unavailable".
+              Two causes: schema.yaml is missing, or the jsonschema library is
+              not installed. Both mean the config was NOT validated, which is
+              reported as a degradation rather than as a clean load — an
+              unchecked config must never be indistinguishable from a valid one.
 
     Never raises — all failure paths return the canonical empty/partial result.
     """
@@ -832,12 +857,26 @@ def load_client_branding() -> dict[str, Any]:
         return _empty_result(parse_error)
 
     # --- Schema unavailable branch: best-effort return, skip validation ---
+    # Two causes reach this branch and both mean "the config was not checked":
+    # schema.yaml is missing, or the jsonschema library is not installed. The
+    # second raises _ValidatorUnavailable out of _validate_schema below and
+    # lands here via `unvalidatable`.
     active_schema = _get_schema()
-    if active_schema is None:
+    unvalidatable = active_schema is None
+    if unvalidatable:
         logger.warning(
             "White-label schema file not found at %s — skipping validation",
             _SCHEMA_PATH,
         )
+    if not unvalidatable and not _HAS_JSONSCHEMA:
+        logger.warning(
+            "jsonschema is not installed — white-label config at %s cannot be "
+            "validated and is being used unchecked. Install jsonschema to "
+            "restore validation.",
+            config_path,
+        )
+        unvalidatable = True
+    if unvalidatable:
         branding = data.get("branding", {})
         logos_raw = branding.get("logos", {})
         resolved_logos, logo_warnings = _resolve_logo_paths(logos_raw)
@@ -859,7 +898,18 @@ def load_client_branding() -> dict[str, Any]:
     if _hybrid_branding_check is not None:
         logger.warning("White-label config has hybrid v1+v2 shape: %s", _hybrid_branding_check)
         return _empty_result(f"schema_invalid: hybrid_v1_v2: {_hybrid_branding_check}")
-    schema_error = _validate_schema(data, active_schema)
+    try:
+        schema_error = _validate_schema(data, active_schema)
+    except _ValidatorUnavailable:
+        # Defensive: the _HAS_JSONSCHEMA pre-check above already routes this
+        # case to the schema_unavailable branch. Kept so the documented
+        # "never raises" contract cannot be broken by a future caller that
+        # reaches _validate_schema by another path.
+        logger.warning(
+            "jsonschema is not installed — white-label config at %s used unchecked",
+            config_path,
+        )
+        return _empty_result("schema_unavailable")
     if schema_error is not None:
         logger.warning("White-label config schema violation: %s", schema_error)
         return _empty_result(schema_error)
@@ -954,10 +1004,28 @@ def safe_source_reference(branding: dict[str, Any]) -> str:
     ref = (branding.get("source") or {}).get("reference", "")
     if not isinstance(ref, str) or not ref:
         return ""
+    ref = ref.strip()
+    if not ref:
+        return ""
     if ref.startswith(("http://", "https://")):
         from urllib.parse import urlparse
         parsed = urlparse(ref)
         return f"{parsed.scheme}://{parsed.hostname}" if parsed.hostname else ""
-    if ref.startswith(("/", "~")):
-        return Path(ref).name
+    # Multi-source references are joined with "; ". Redact each component
+    # independently, otherwise Path(ref).name collapses the whole list to the
+    # last basename and silently drops the other components' provenance.
+    if "; " in ref:
+        parts = [part for part in (p.strip() for p in ref.split("; ")) if part]
+        seen: list[str] = []
+        for part in parts:
+            safe = safe_source_reference({"source": {"reference": part}})
+            if safe and safe not in seen:
+                seen.append(safe)
+        return "; ".join(seen)
+    # Any path-like reference collapses to its basename. Matching only on a
+    # leading "/" or "~" left RELATIVE paths ("client-collateral/acme-deck.pptx")
+    # to pass through with their directory component intact, putting a raw
+    # source path into an end-client deliverable.
+    if "/" in ref or "\\" in ref:
+        return PurePath(ref.replace("\\", "/")).name
     return ref

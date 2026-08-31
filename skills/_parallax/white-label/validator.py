@@ -10,7 +10,6 @@ All validators follow WCAG 2.0 accessibility standards for text contrast.
 """
 from __future__ import annotations
 
-import math
 import re
 from pathlib import Path
 from typing import Any
@@ -485,67 +484,61 @@ class DesignMdValidator:
         import tempfile
         from pathlib import Path
 
-        with tempfile.NamedTemporaryFile(suffix=".md", delete=False, mode="w", encoding="utf-8") as tf:
-            tf.write(design_md_text)
-            temp_path = tf.name
-
-        try:
-            # `-y` flag: auto-accept npx's "Ok to proceed?" prompt on first-call
-            # install (when @google/design.md isn't cached yet). Without it, npx
-            # hangs waiting for stdin confirmation and we'd hit the timeout
-            # instead of getting useful output.
-            res = subprocess.run(
-                ["npx", "-y", "@google/design.md", "lint", temp_path, "--format", "json"],
-                capture_output=True,
-                text=True,
-                timeout=DesignMdValidator.NPX_TIMEOUT_SECONDS
-            )
-            raw_exit_code = res.returncode
+        # Keep the lint input inside its own directory. TemporaryDirectory's
+        # recursive cleanup does not depend on Path.unlink, so a caller-side
+        # unlink failure cannot leak the DESIGN.md payload after timeout.
+        with tempfile.TemporaryDirectory(prefix="parallax-design-md-") as temp_dir:
+            temp_path = str(Path(temp_dir) / "DESIGN.md")
+            Path(temp_path).write_text(design_md_text, encoding="utf-8")
             try:
-                parsed = json.loads(res.stdout)
-                findings = parsed.get("findings", [])
-                # status based on findings
-                if raw_exit_code == 0 and not findings:
-                    status = "pass"
-                elif raw_exit_code != 0:
-                    status = "fail"
-                else:
-                    status = "warn" if findings else "pass"
-                    
-                return {
-                    "status": status,
-                    "available": True,
-                    "findings": findings,
-                    "raw_exit_code": raw_exit_code,
-                    "note": None
-                }
-            except json.JSONDecodeError:
+                # `-y` auto-accepts npx's first-call install prompt. Without it,
+                # npx waits for stdin and reaches the timeout without findings.
+                res = subprocess.run(
+                    ["npx", "-y", "@google/design.md", "lint", temp_path, "--format", "json"],
+                    capture_output=True,
+                    text=True,
+                    timeout=DesignMdValidator.NPX_TIMEOUT_SECONDS
+                )
+                raw_exit_code = res.returncode
+                try:
+                    parsed = json.loads(res.stdout)
+                    findings = parsed.get("findings", [])
+                    # status based on findings
+                    if raw_exit_code == 0 and not findings:
+                        status = "pass"
+                    elif raw_exit_code != 0:
+                        status = "fail"
+                    else:
+                        status = "warn" if findings else "pass"
+
+                    return {
+                        "status": status,
+                        "available": True,
+                        "findings": findings,
+                        "raw_exit_code": raw_exit_code,
+                        "note": None
+                    }
+                except json.JSONDecodeError:
+                    return {
+                        "status": "skipped",
+                        "available": True,
+                        "findings": [],
+                        "raw_exit_code": raw_exit_code,
+                        "note": f"Failed to parse npx JSON output. stdout: {res.stdout[:100]}"
+                    }
+            except subprocess.TimeoutExpired:
                 return {
                     "status": "skipped",
                     "available": True,
                     "findings": [],
-                    "raw_exit_code": raw_exit_code,
-                    "note": f"Failed to parse npx JSON output. stdout: {res.stdout[:100]}"
+                    "raw_exit_code": -1,
+                    "note": f"npx lint timed out after {DesignMdValidator.NPX_TIMEOUT_SECONDS}s"
                 }
-        except subprocess.TimeoutExpired:
-            return {
-                "status": "skipped",
-                "available": True,
-                "findings": [],
-                "raw_exit_code": -1,
-                "note": f"npx lint timed out after {DesignMdValidator.NPX_TIMEOUT_SECONDS}s"
-            }
-        except Exception as e:
-            return {
-                "status": "skipped",
-                "available": True,
-                "findings": [],
-                "raw_exit_code": -1,
-                "note": f"npx lint failed to run: {e}"
-            }
-        finally:
-            try:
-                Path(temp_path).unlink()
-            except Exception:
-                pass
-
+            except Exception as e:
+                return {
+                    "status": "skipped",
+                    "available": True,
+                    "findings": [],
+                    "raw_exit_code": -1,
+                    "note": f"npx lint failed to run: {e}"
+                }

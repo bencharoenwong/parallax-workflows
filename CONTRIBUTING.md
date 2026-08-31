@@ -24,7 +24,10 @@ Thanks for the interest. A few notes on what fits and what doesn't.
    the no-mistakes gate runs — is one command:
    ```bash
    python -m venv .venv && source .venv/bin/activate
-   pip install -r skills/_parallax/house-view/requirements.txt pytest
+   pip install -r skills/_parallax/house-view/requirements.txt \
+               -r skills/_parallax/white-label/requirements.txt \
+               -r skills/_parallax/white-label/requirements-test.txt \
+               pytest pillow
    bash skills/_parallax/scripts/run-gate-tests.sh   # all roots, ~1,600 tests
    ```
    It runs one `pytest` process per top-level test root, because three skills ship

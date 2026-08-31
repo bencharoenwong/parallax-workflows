@@ -15,9 +15,9 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+import yaml
 
 _HOME_LIKE = Path.home() if Path.home().is_absolute() else Path("/home/analyst")
-import yaml
 
 
 # ---------------------------------------------------------------------------
@@ -802,3 +802,149 @@ def test_build_config_from_draft_emits_typography_placeholder(
     cfg = loader_module.build_config_from_draft(draft, schema_version=2)
 
     assert cfg["branding"]["typography"] == {"body-md": {"fontFamily": "sans-serif"}}
+
+
+# --- Regressions from the 2026-08-29 live RM brand-ingest exercise ----------
+
+
+@pytest.mark.parametrize(
+    ("reference", "expected"),
+    [
+        # Relative paths previously passed through with their directory intact.
+        ("client-collateral/acme-confidential-deck.pptx", "acme-confidential-deck.pptx"),
+        ("./private/clients/acme/brand.pdf", "brand.pdf"),
+        ("../../operator-notes/acme.docx", "acme.docx"),
+        ("clients\\acme\\brand-guide.pptx", "brand-guide.pptx"),
+        # Absolute paths and URLs keep their existing redaction.
+        ("/private/operator/clients/acme/brand.pdf", "brand.pdf"),
+        ("https://assets.example.test/brand/deck.pdf?token=secret", "https://assets.example.test"),
+        # A bare token with no separator is not a path and passes through.
+        ("wizard-intake", "wizard-intake"),
+    ],
+)
+def test_safe_source_reference_redacts_relative_paths(
+    loader_module, reference: str, expected: str
+) -> None:
+    branding = {"source": {"reference": reference}}
+
+    assert loader_module.safe_source_reference(branding) == expected
+
+
+def test_safe_source_reference_redacts_every_multi_source_component(
+    loader_module,
+) -> None:
+    """Path(ref).name collapsed a joined list to the LAST basename alone."""
+    reference = "; ".join(
+        [
+            "/private/clients/acme/deck.pptx",
+            "client-collateral/acme-secret.pdf",
+            "/private/clients/acme/letter.docx",
+        ]
+    )
+
+    result = loader_module.safe_source_reference({"source": {"reference": reference}})
+
+    assert result == "deck.pptx; acme-secret.pdf; letter.docx"
+    assert "/private/clients" not in result
+    assert "client-collateral/" not in result
+
+
+# ---------------------------------------------------------------------------
+# jsonschema absent — an unchecked config must not look like a valid one
+# ---------------------------------------------------------------------------
+
+
+def test_missing_jsonschema_reports_schema_unavailable_not_clean(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    loader_module: ModuleType,
+) -> None:
+    """Without jsonschema the loader must degrade, never report a clean load.
+
+    _validate_schema returned None when the library was absent, which is the
+    same value a PASSING validation returns. A malformed config therefore came
+    back with error=None and is_white_label_active() True, so unvalidated
+    branding rendered on client deliverables as though it had been checked.
+    """
+    bad = _valid_config()
+    bad["metadata"]["schema_version"] = "not-an-integer"  # type: ignore[assignment]
+    config_path = _write_config(tmp_path, bad)
+    monkeypatch.setattr(loader_module, "_CONFIG_PATH", config_path)
+    monkeypatch.setattr(loader_module, "_SCHEMA", loader_module._JSONSCHEMA)
+    monkeypatch.setattr(loader_module, "_HAS_JSONSCHEMA", False)
+
+    result = loader_module.load_client_branding()
+
+    assert result["error"] is not None, "an unchecked config must not read as clean"
+    assert "schema_unavailable" in result["error"]
+    assert "schema_invalid" not in result["error"], "it was not checked, so it is not invalid"
+
+
+def test_missing_jsonschema_still_returns_best_effort_branding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    loader_module: ModuleType,
+) -> None:
+    """Degrading must not blank the branding on every report.
+
+    schema_unavailable is deliberately an ACTIVE state: the operator sees the
+    caveat, the client report still renders. Blanking every deliverable because
+    a dependency is absent would be a worse failure than the one being fixed.
+    """
+    config_path = _write_config(tmp_path, _valid_config())
+    monkeypatch.setattr(loader_module, "_CONFIG_PATH", config_path)
+    monkeypatch.setattr(loader_module, "_SCHEMA", loader_module._JSONSCHEMA)
+    monkeypatch.setattr(loader_module, "_HAS_JSONSCHEMA", False)
+
+    result = loader_module.load_client_branding()
+
+    assert result["error"] == "schema_unavailable"
+    assert loader_module.is_white_label_active(result) is True
+    assert result["colors"]["primary"] == "#1A2B3C"
+    assert result["client_name"] == "Acme Capital"
+
+
+def test_missing_jsonschema_warns_with_a_remedy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    loader_module: ModuleType,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The operator must be told what is wrong and how to fix it."""
+    config_path = _write_config(tmp_path, _valid_config())
+    monkeypatch.setattr(loader_module, "_CONFIG_PATH", config_path)
+    monkeypatch.setattr(loader_module, "_SCHEMA", loader_module._JSONSCHEMA)
+    monkeypatch.setattr(loader_module, "_HAS_JSONSCHEMA", False)
+
+    with caplog.at_level("WARNING", logger="parallax.white_label.loader"):
+        loader_module.load_client_branding()
+
+    assert "jsonschema" in caplog.text
+    assert "install" in caplog.text.lower()
+
+
+def test_validate_schema_signals_rather_than_returning_none(
+    loader_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The helper must not use None for both 'valid' and 'could not check'."""
+    monkeypatch.setattr(loader_module, "_HAS_JSONSCHEMA", False)
+
+    with pytest.raises(loader_module._ValidatorUnavailable):
+        loader_module._validate_schema({}, loader_module._JSONSCHEMA)
+
+
+def test_loader_never_raises_when_jsonschema_is_absent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    loader_module: ModuleType,
+) -> None:
+    """The documented 'never raises' contract survives the new signal."""
+    config_path = _write_config(tmp_path, _valid_config())
+    monkeypatch.setattr(loader_module, "_CONFIG_PATH", config_path)
+    monkeypatch.setattr(loader_module, "_HAS_JSONSCHEMA", False)
+
+    for schema in (None, loader_module._JSONSCHEMA):
+        monkeypatch.setattr(loader_module, "_SCHEMA", schema)
+        result = loader_module.load_client_branding()  # must not raise
+        assert "schema_unavailable" in (result["error"] or "")

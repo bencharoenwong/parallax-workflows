@@ -40,6 +40,8 @@ white_label_active = is_white_label_active(branding)
 client_name = branding.get("client_name", "")
 ```
 
+RM markdown consumers use the executable wrapper in `rm_consumer.py` instead. Call `load_rm_branding_context(<deliverable label>)`, then place its `header_lines` and `about_lines` in the locations defined by §5 and §7. The wrapper calls `load_visual_branding()` internally. It centralizes source redaction, voice isolation, and default-brand fallback for client-review and desk-call-list.
+
 `white_label_active` is the rendering flag. The predicate is centralized in `loader.py` — do NOT re-implement it inline (the `schema_unavailable` branch is easy to miss; see §4 and §8). `client_name` is safe to read with `.get(..., "")` because legacy configs predating the field return `""` rather than `KeyError`.
 
 **Do not load the YAML directly.** A second `yaml.safe_load` against the same config file bypasses the loader's error handling, schema validation, and logo resolution, and creates a race window between the loader's existence check and the second read.
@@ -67,7 +69,7 @@ If a future visual key (e.g. `branding["icons"]`) is added, the allowlist must b
 | `"logo_missing: <path>"` | Logo file referenced but absent on disk | Palette + fonts usable; cover-page / header logo skipped. About This Report reads `Branding: white-label (source: <ref>) (logo unavailable, omitted)`. |
 | `"schema_invalid: <details>"` | Schema validation failed | Fall back to defaults. About This Report reads `Branding: default Parallax (config invalid: <details>)`. |
 | `"yaml_parse_error: <details>"` | YAML corrupt | Fall back to defaults. About This Report reads `Branding: default Parallax (config unreadable)`. |
-| `"schema_unavailable"` | Loader's own schema file missing | Best-effort branding apply; About This Report reads `Branding: white-label (best-effort, schema unavailable)`. |
+| `"schema_unavailable"` | Loader's own schema file missing, or the `jsonschema` package is not installed | Best-effort branding apply; About This Report reads `Branding: white-label (best-effort, schema unavailable)`. |
 
 The `is_white_label_active()` helper in §2 collapses these to a binary: clean, `logo_missing`, or `schema_unavailable` → render the brand (palette/fonts usable, with best-effort caveat for `schema_unavailable`); anything else → default Parallax.
 

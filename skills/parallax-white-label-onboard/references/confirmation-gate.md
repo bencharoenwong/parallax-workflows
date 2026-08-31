@@ -72,7 +72,7 @@ For color swatches (the `████` blocks), use Unicode block characters fil
 
 ## Mismatch resolution
 
-If multi-source mismatches are present, the user MUST pick a winner per mismatched field before saving. Use `AskUserQuestion` per mismatched field, listing each candidate value as a choice (with source attribution). Apply the chosen value to `draft` before proceeding to save. Do NOT attempt to auto-pick by confidence or recency — the PM/CIO is the canonical source of truth on which version of their brand is current.
+If multi-source mismatches are present, the user MUST pick a winner per mismatched field before saving. Use `AskUserQuestion` per mismatched field, listing each candidate value as a choice (with source attribution). Collect the choices as `{field: source_reference}` and call `merge_resolved_drafts(drafts, resolutions)`. `drafts` is the per-source draft list: multi-source mode builds it directly; folder mode reads it from `draft["multi_source"]["component_drafts"]`, which `extract_from_folder` attaches whenever it records a mismatch. The helper refuses an unresolved mismatch or an unknown source. Do NOT attempt to auto-pick by confidence or recency — the PM/CIO is the canonical source of truth on which version of their brand is current.
 
 ## The four options
 
