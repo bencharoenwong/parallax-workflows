@@ -1,0 +1,22 @@
+# Runtime dependencies for the white-label branding loader.
+#
+# jsonschema is what validates ~/.parallax/client-branding/config.yaml against
+# the canonical schema before any skill renders client branding. The loader
+# degrades rather than crashes without it — error="schema_unavailable", a
+# logged warning, and branding marked best-effort in the report footer — but
+# that degradation means an operator-edited or hand-migrated config is used
+# UNCHECKED. Install it for any real deployment.
+#
+#   python3 -m pip install -r skills/_parallax/white-label/requirements.txt
+#
+# Unpinned: the loader uses only jsonschema.validate plus ValidationError and
+# SchemaError, a surface that has been stable across 4.x. Pin it here if a
+# regulated deployment needs reproducible validation behavior.
+#
+# pyyaml is the loader's other hard requirement and is already assumed present
+# across this repo's skills; it is listed so this file stands alone.
+#
+# Test-only extras (python-pptx, python-docx) live in requirements-test.txt.
+
+jsonschema>=4,<5
+pyyaml>=6
