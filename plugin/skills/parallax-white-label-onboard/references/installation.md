@@ -5,10 +5,8 @@
 - **Python**: 3.9 or later
 - **Node.js 18+ (optional):** Required for inline DESIGN.md lint feedback at the confirmation gate. Without Node, `DesignMdValidator.lint` returns `status: "skipped"` and no lint findings are shown — the save still completes normally. To enable lint feedback, install Node 18+ (e.g., `brew install node@20`) and warm the npm cache by running one full onboarding. Operators on Node-less machines will not see lint results but will not encounter errors.
 - **Dependencies** (auto-installed via Claude Code):
-  - `pyyaml` — YAML config parsing
-  - `jsonschema` — Schema validation
-  - `pillow` (PIL) — Image dimension checking
-  - `matplotlib` — Font detection via FontManager
+  - Required (see `skills/_parallax/white-label/requirements.txt`): `pyyaml` (YAML config parsing), `jsonschema` (schema validation — without it the loader degrades to `error: "schema_unavailable"` and uses the config unchecked, see that file's header comment)
+  - Optional, validator-only (no requirements file; each degrades gracefully if missing): `pillow` (PIL) — image dimension checking; `matplotlib` — font detection via FontManager
   - Python standard-library `urllib` — URL extraction requires no third-party fetcher
 
 ## Installation
@@ -49,10 +47,17 @@ The `chmod 700` restriction ensures only the current user can read/write brandin
 
 ### Python Packages
 
-Install the third-party dependencies:
+Install the loader's required dependencies from the authoritative requirements file:
 
 ```bash
-pip install pyyaml jsonschema pillow matplotlib
+python3 -m pip install -r skills/_parallax/white-label/requirements.txt
+```
+
+Optionally, install the validator's dependencies for image dimension checking and font detection
+(both degrade gracefully if absent — see Prerequisites above):
+
+```bash
+pip install pillow matplotlib
 ```
 
 URL extraction accepts only public HTTP(S) destinations, applies the same check to redirects and
@@ -190,10 +195,10 @@ python -c "import yaml; yaml.safe_load(open('~/.parallax/client-branding/config.
 
 ### "ModuleNotFoundError: No module named 'jsonschema'"
 
-Install missing dependencies:
+Install the required dependencies (see Dependencies above):
 
 ```bash
-pip install jsonschema pyyaml pillow matplotlib
+python3 -m pip install -r skills/_parallax/white-label/requirements.txt
 ```
 
 ### "Font detection returned 0 fonts"
