@@ -29,7 +29,11 @@ locally, where reading it is not publishing it.
 
 RANGE. ``origin/main..HEAD``, falling back to ``main..HEAD``. If neither base
 ref resolves the scan FAILS CLOSED (exit 2) rather than reporting a clean scan
-of nothing -- a silent pass is how a weakened gate ships.
+of nothing -- a silent pass is how a weakened gate ships. Extra revision
+arguments narrow the walk: the pre-push hook passes ``^origin/main`` so commits
+already published on the default branch are not re-scanned when a branch has
+merged it in -- they are public with or without this push, and one old message
+tripping a since-added rule must not block a push that publishes nothing new.
 
 Exit 0 clean, 1 on any hit, 2 when the range cannot be determined.
 Run: python3 skills/_parallax/scripts/scan_commit_messages.py
@@ -90,14 +94,23 @@ def resolve_range(repo: Path | None = None,
 
 
 def read_commits(repo: Path | None = None,
-                 rev_range: str | None = None) -> list[tuple[str, str]]:
+                 rev_range: str | list[str] | None = None) -> list[tuple[str, str]]:
     """Returns [(sha, message)]. NUL-separated records, because a commit message
-    can contain anything a newline-separated format would be confused by."""
+    can contain anything a newline-separated format would be confused by.
+
+    ``rev_range`` may be a single range string or a list of revision selectors
+    handed to ``git log`` as-is (e.g. ``["A..B", "^origin/main"]``), because a
+    single range expression cannot exclude a second ref."""
     root = REPO_ROOT if repo is None else repo
-    span = resolve_range(root) if rev_range is None else rev_range
-    result = _git(root, "log", "-z", "--format=%H%n%B", span)
+    if rev_range is None:
+        revs = [resolve_range(root)]
+    elif isinstance(rev_range, str):
+        revs = [rev_range]
+    else:
+        revs = list(rev_range)
+    result = _git(root, "log", "-z", "--format=%H%n%B", *revs)
     if result.returncode != 0:
-        raise ScanError(f"git log failed for range {span!r}")
+        raise ScanError(f"git log failed for range {' '.join(revs)!r}")
     commits = []
     for record in result.stdout.split("\0"):
         if not record.strip():
@@ -122,7 +135,7 @@ def rule_hits(message: str, terms: list[str] | None = None) -> list[str]:
 
 
 def scan(repo: Path | None = None,
-         rev_range: str | None = None,
+         rev_range: str | list[str] | None = None,
          terms: list[str] | None = None) -> list[tuple[str, str]]:
     """Returns sorted [(sha, rule_id)]."""
     scoped = st.scoped_terms() if terms is None else terms
@@ -134,20 +147,25 @@ def scan(repo: Path | None = None,
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Scan the outgoing range. An explicit range may be passed as argv[0].
+    """Scan the outgoing range. Explicit revision selectors may be passed.
 
     The pre-push hook passes the range git actually reports on stdin. Without
     that the default `origin/main..HEAD` silently scans the WRONG commits when
     the pushed branch is not the checked-out one: `git push origin feature`
     from `main` scanned an empty range and reported clean while the push
     published unscanned commits. An explicit range closes that.
+
+    Every argument is handed to `git log` as a revision selector, so the hook
+    can also pass `^origin/main`: a branch that merged main carries main's
+    published history in its push range, and re-scanning it blocked pushes
+    that published nothing new.
     """
     # Never read sys.argv here: called as a library (tests, other tooling)
     # that would pick up the HOST process's arguments — under pytest it made
     # main() try to use `-q` as a rev-range. The __main__ block passes argv.
     args = list(argv or [])
     try:
-        rev_range = args[0] if args else resolve_range()
+        rev_range: str | list[str] = args if args else resolve_range()
         findings = scan(rev_range=rev_range)
     except ScanError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
@@ -156,18 +174,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1
 
+    rev_desc = " ".join(rev_range) if isinstance(rev_range, list) else rev_range
     if findings:
         for sha, rule in findings:
             print(f"  MESSAGE HIT [{rule}]: {sha[:12]}", file=sys.stderr)
         shas = {sha for sha, _ in findings}
-        print(f"FAIL: {len(shas)} outgoing commit message(s) in {rev_range} match "
+        print(f"FAIL: {len(shas)} outgoing commit message(s) in {rev_desc} match "
               "restricted vocabulary. Read the message locally (git show -s <sha>) "
               "— it is not reproduced here. Rewrite the message before pushing; "
               "a pushed message cannot be unpublished.", file=sys.stderr)
         return 1
 
     count = len(read_commits(rev_range=rev_range))
-    print(f"  ✓ {count} outgoing commit message(s) in {rev_range} scanned — clean")
+    print(f"  ✓ {count} outgoing commit message(s) in {rev_desc} scanned — clean")
     return 0
 
 

@@ -73,38 +73,6 @@ esac
 
 MARKER="parallax:commit-message-scan"
 
-# Match the marker only as an installed layer, never as a passing mention in a
-# comment someone wrote. The first version's bare grep let a TODO note make the
-# installer report "already installed" while nothing was installed — which also
-# blocked it from ever repairing a broken install.
-already_installed() {
-    [ -f "$1" ] && grep -q "^# --- ${MARKER} (BLOCKING)" "$1" 2>/dev/null
-}
-
-if already_installed "$HOOK"; then
-    echo "  ✓ already installed in $HOOK"
-    exit 0
-fi
-
-if [ -L "$HOOK" ]; then
-    printf '\033[31mFATAL:\033[0m %s is a symlink.\n' "$HOOK" >&2
-    printf 'Editing it would either detach this clone from its managed source or mutate\n' >&2
-    printf 'the shared target. Install the layer in the source hook instead.\n' >&2
-    exit 3
-fi
-
-if [ -f "$HOOK" ]; then
-    FIRST_LINE="$(head -1 "$HOOK")"
-    case "$FIRST_LINE" in
-        '#!'*sh*) ;;   # sh, bash, zsh, dash
-        *)
-            printf '\033[31mFATAL:\033[0m %s is not a shell hook (first line: %s)\n' "$HOOK" "$FIRST_LINE" >&2
-            printf 'Appending shell into it would corrupt it. Add the layer by hand.\n' >&2
-            exit 3
-            ;;
-    esac
-fi
-
 read -r -d '' LAYER <<'LAYER_EOF' || true
 # --- parallax:commit-message-scan (BLOCKING) ---------------------------------
 # Prepended deliberately: first executable statement, so it cannot be stranded
@@ -135,6 +103,18 @@ if [ -f "$_PARALLAX_SCAN" ]; then
         exit 2
     fi
     cat > "$_PARALLAX_STDIN"
+    # Commits already reachable from the PUBLISHED default branch are public
+    # with or without this push. Without the exclusion below, merging main
+    # into a branch put main's whole history back into "$_r_sha..$_l_sha",
+    # and one old public message tripping a since-added rule blocked a push
+    # that published nothing new. Remote-tracking refs only: a LOCAL main may
+    # hold unpushed commits that still need scanning.
+    _PARALLAX_PUBLIC=""
+    for _pub in origin/main origin/master; do
+        if git rev-parse --verify --quiet "$_pub" >/dev/null 2>&1; then
+            _PARALLAX_PUBLIC="$_pub"; break
+        fi
+    done
     _PARALLAX_SCAN_RC=0
     _PARALLAX_SAW_REF=0
     while read -r _l_ref _l_sha _r_ref _r_sha; do
@@ -166,7 +146,11 @@ if [ -f "$_PARALLAX_SCAN" ]; then
                 fi ;;
             *) _PARALLAX_RANGE="$_r_sha..$_l_sha" ;;
         esac
-        python3 "$_PARALLAX_SCAN" "$_PARALLAX_RANGE" || _PARALLAX_SCAN_RC=$?
+        if [ -n "$_PARALLAX_PUBLIC" ]; then
+            python3 "$_PARALLAX_SCAN" "$_PARALLAX_RANGE" "^$_PARALLAX_PUBLIC" || _PARALLAX_SCAN_RC=$?
+        else
+            python3 "$_PARALLAX_SCAN" "$_PARALLAX_RANGE" || _PARALLAX_SCAN_RC=$?
+        fi
     done < "$_PARALLAX_STDIN"
     # Record whether git supplied ANY ref lines before the file goes away.
     # The emptiness test has to happen here: `rm -f` below unlinks it, and the
@@ -204,6 +188,53 @@ fi
 # --- end parallax:commit-message-scan ----------------------------------------
 LAYER_EOF
 
+# Match the marker only as an installed layer, never as a passing mention in a
+# comment someone wrote. The first version's bare grep let a TODO note make the
+# installer report "already installed" while nothing was installed — which also
+# blocked it from ever repairing a broken install.
+already_installed() {
+    [ -f "$1" ] && grep -q "^# --- ${MARKER} (BLOCKING)" "$1" 2>/dev/null
+}
+
+# The installed copy of the layer -- marker line through end marker -- for
+# comparison against the current LAYER text.
+installed_layer() {
+    sed -n "/^# --- ${MARKER} (BLOCKING)/,/^# --- end ${MARKER} /p" "$1"
+}
+
+_PARALLAX_REFRESH=0
+if already_installed "$HOOK"; then
+    if [ "$(installed_layer "$HOOK")" = "$(printf '%s' "$LAYER")" ]; then
+        echo "  ✓ already installed in $HOOK"
+        exit 0
+    fi
+    # An OLDER layer is installed. Without this path a fixed layer never
+    # reaches a clone that installed before the fix: the marker grep reported
+    # "already installed" forever. Fall through the same refusal checks a
+    # fresh install runs; the old region is stripped just before assembly.
+    _PARALLAX_REFRESH=1
+fi
+
+if [ -L "$HOOK" ]; then
+    printf '\033[31mFATAL:\033[0m %s is a symlink.\n' "$HOOK" >&2
+    printf 'Editing it would either detach this clone from its managed source or mutate\n' >&2
+    printf 'the shared target. Install the layer in the source hook instead.\n' >&2
+    exit 3
+fi
+
+if [ -f "$HOOK" ]; then
+    FIRST_LINE="$(head -1 "$HOOK")"
+    case "$FIRST_LINE" in
+        '#!'*sh*) ;;   # sh, bash, zsh, dash
+        *)
+            printf '\033[31mFATAL:\033[0m %s is not a shell hook (first line: %s)\n' "$HOOK" "$FIRST_LINE" >&2
+            printf 'Appending shell into it would corrupt it. Add the layer by hand.\n' >&2
+            exit 3
+            ;;
+    esac
+fi
+
+
 if ! mkdir -p "$HOOKS_DIR" 2>/dev/null; then
     # A linked worktree's .git is a FILE, so a relative hooks path joined to the
     # worktree root cannot be created. The no-mistakes gate runs in exactly such
@@ -213,10 +244,21 @@ if ! mkdir -p "$HOOKS_DIR" 2>/dev/null; then
     exit 2
 fi
 
-if [ -f "$HOOK" ]; then
+if [ "$_PARALLAX_REFRESH" = 1 ]; then
     BACKUP="$HOOK.bak.$(date +%Y%m%d%H%M%S)"
     cp "$HOOK" "$BACKUP" || exit 2
     echo "  backed up existing hook -> $BACKUP"
+    sed "/^# --- ${MARKER} (BLOCKING)/,/^# --- end ${MARKER} /d" "$HOOK" > "$HOOK.strip" || exit 2
+    mv "$HOOK.strip" "$HOOK" || exit 2
+    echo "  refreshing outdated layer in $HOOK"
+fi
+
+if [ -f "$HOOK" ]; then
+    if [ -z "${BACKUP:-}" ]; then
+        BACKUP="$HOOK.bak.$(date +%Y%m%d%H%M%S)"
+        cp "$HOOK" "$BACKUP" || exit 2
+        echo "  backed up existing hook -> $BACKUP"
+    fi
     SHEBANG="$(head -1 "$HOOK")"
     {
         printf '%s\n\n' "$SHEBANG"
