@@ -100,14 +100,21 @@ jobs:
         run: python -m pytest skills/parallax-house-view-attribution/ -q
       # Same reasoning as the attribution step above, extended to the other
       # roots run-gate-tests.sh already discovers locally but this hand-listed
-      # file did not: each of the six named steps below is its own pytest
-      # process for the same conftest-collision reason. house-view/tests and
-      # white-label/tests both nest under skills/_parallax/ alongside the
+      # file did not: each named step below is its own pytest process for the
+      # same conftest-collision reason. house-view/tests, client-policy/tests,
+      # and white-label/tests all nest under skills/_parallax/ alongside the
       # scripts/ and test_render_gate.py roots above, but each is named
       # explicitly so a missing root stays visible in the step list.
+      #
+      # Do not put a step count in this comment. It has drifted twice already
+      # (see ship-check review on PR #107) because nothing enforces it against
+      # the steps actually listed below.
       - name: House-view core gates
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/_parallax/house-view/tests -q
+      - name: Client-policy gates
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: python -m pytest skills/_parallax/client-policy/tests -q
       # -m "not npx" matches run-gate-tests.sh's offline default: one test in
       # this root shells out to `npx -y`, which can download and execute a
       # package. That is opt-in network behavior, not something CI should run.
