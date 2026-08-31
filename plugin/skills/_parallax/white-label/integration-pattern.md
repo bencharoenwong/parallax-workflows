@@ -69,7 +69,7 @@ If a future visual key (e.g. `branding["icons"]`) is added, the allowlist must b
 | `"logo_missing: <path>"` | Logo file referenced but absent on disk | Palette + fonts usable; cover-page / header logo skipped. About This Report reads `Branding: white-label (source: <ref>) (logo unavailable, omitted)`. |
 | `"schema_invalid: <details>"` | Schema validation failed | Fall back to defaults. About This Report reads `Branding: default Parallax (config invalid: <details>)`. |
 | `"yaml_parse_error: <details>"` | YAML corrupt | Fall back to defaults. About This Report reads `Branding: default Parallax (config unreadable)`. |
-| `"schema_unavailable"` | Loader's own schema file missing | Best-effort branding apply; About This Report reads `Branding: white-label (best-effort, schema unavailable)`. |
+| `"schema_unavailable"` | Loader's own schema file missing, or the `jsonschema` package is not installed | Best-effort branding apply; About This Report reads `Branding: white-label (best-effort, schema unavailable)`. |
 
 The `is_white_label_active()` helper in §2 collapses these to a binary: clean, `logo_missing`, or `schema_unavailable` → render the brand (palette/fonts usable, with best-effort caveat for `schema_unavailable`); anything else → default Parallax.
 
