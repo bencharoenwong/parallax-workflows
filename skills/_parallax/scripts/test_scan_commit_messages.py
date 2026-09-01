@@ -330,3 +330,45 @@ def test_main_honours_an_explicit_range_argument(tmp_path, monkeypatch):
 
     assert scm.main() == 1, "default range should see the flagged commit"
     assert scm.main([f"{base}..{base}"]) == 0, "explicit empty range was ignored"
+
+
+def test_a_second_selector_excludes_published_commits_from_the_range(
+        tmp_path, monkeypatch):
+    """A branch that merged main carries main's published history in its push
+    range (`<remote sha>..<tip>`). The hook passes `^origin/main` as a second
+    selector so those commits — public with or without this push — are not
+    re-scanned. Without it, one old public message tripping a since-added rule
+    blocked a push that published nothing new.
+    """
+    root = _repo(tmp_path / "r")
+    _commit(root, "chore: base")
+    _branch_off_main(root)
+    pushed = _commit(root, "chore: feature work, already on the remote")
+    _run(root, "checkout", "-q", "main")
+    _commit(root, "chore: sanitize the captures")
+    _run(root, "update-ref", "refs/remotes/origin/main", "HEAD")
+    _run(root, "checkout", "-q", "feature")
+    _run(root, "merge", "-q", "--no-edit", "main")
+    tip = _run(root, "rev-parse", "HEAD").stdout.strip()
+    monkeypatch.setattr(scm, "REPO_ROOT", root)
+
+    assert scm.main([f"{pushed}..{tip}"]) == 1, \
+        "sanity: without the exclusion the published commit is re-scanned"
+    assert scm.main([f"{pushed}..{tip}", "^origin/main"]) == 0
+
+
+def test_an_option_like_selector_fails_closed_instead_of_under_scanning(
+        tmp_path, monkeypatch):
+    """An argument starting with `-` is parsed by `git log` as an OPTION, not a
+    selector: `--max-count=1` silently narrows the walk and reports a clean
+    scan of the wrong range — the silent pass this scanner exists to prevent.
+    It must fail closed (exit 2), same as an undeterminable range."""
+    root = _repo(tmp_path / "r")
+    base = _commit(root, "chore: base")
+    _branch_off_main(root)
+    _commit(root, "chore: scrub the fixture")
+    tip = _commit(root, "chore: an ordinary tip commit")
+    monkeypatch.setattr(scm, "REPO_ROOT", root)
+
+    assert scm.main([f"{base}..{tip}"]) == 1, "sanity: the range has a hit"
+    assert scm.main(["--max-count=1", f"{base}..{tip}"]) == 2

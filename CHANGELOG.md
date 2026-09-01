@@ -4,6 +4,12 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-08-31
+
+### Fixed
+- **Merging `main` into a branch put `main`'s already-published commits back into the pre-push message scan's range, so one old public message matching a since-added rule blocked a push that published nothing new.** The hook layer now also passes `^origin/main` (or `^origin/master`) to `scan_commit_messages.py` when a matching remote-tracking ref resolves, excluding history that is public with or without this push; `scan_commit_messages.py` now accepts a list of revision selectors (a single range string cannot exclude a second ref) and rejects any selector starting with `-` so a hand-run option-like argument fails closed instead of silently under-scanning.
+- **Re-running `install_git_hooks.sh` over a clone that installed an older layer reported "already installed" forever**, so a fixed layer never reached it. The installer now compares the installed layer's text to the current one and, on a mismatch, strips and replaces it — refusing instead of stripping when the installed copy has no end marker to bound the strip (which would otherwise delete every gate below it), and always taking a backup first regardless of a `BACKUP` variable inherited from the caller's environment.
+
 ## 2026-08-30
 
 ### Fixed

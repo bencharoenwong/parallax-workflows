@@ -501,3 +501,101 @@ def test_the_hook_blocks_on_every_nonzero_scanner_exit_not_just_a_hit(
         assert "BLOCKED" in r.stderr
     else:
         assert r.returncode == 0, f"blocked a clean scan: {r.stderr}"
+
+
+def test_the_layer_excludes_commits_reachable_from_origin_main(clone: Path) -> None:
+    """Merging main into a branch puts main's published history back into the
+    pushed range; the layer must pass `^origin/main` so already-public commits
+    are not re-scanned. Driven with a stub that fails unless the exclusion
+    selector is present, so a hook without it blocks and a hook with it passes."""
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text(
+        "import sys\n"
+        "sys.exit(0 if '^origin/main' in sys.argv[1:] else 1)\n"
+    )
+    _run(["git", "update-ref", "refs/remotes/origin/main", "HEAD"], clone)
+    _write_hook(clone, "#!/usr/bin/env bash\nexit 0\n")
+    assert _install(clone).returncode == 0
+
+    hook = clone / ".git/hooks/pre-push"
+    ref_line = ("refs/heads/feature aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa "
+                "refs/heads/feature bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
+    r = subprocess.run(["bash", str(hook), "origin", "http://example.invalid"],
+                       cwd=clone, input=ref_line, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+
+
+def test_no_exclusion_selector_without_a_remote_tracking_ref(clone: Path) -> None:
+    """With no origin/<default> ref the layer must NOT pass a selector for a
+    ref that does not resolve — `git log` would fail on it and the scan would
+    block every push with exit 2."""
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text(
+        "import sys\n"
+        "sys.exit(1 if any(a.startswith('^') for a in sys.argv[1:]) else 0)\n"
+    )
+    _write_hook(clone, "#!/usr/bin/env bash\nexit 0\n")
+    assert _install(clone).returncode == 0
+
+    hook = clone / ".git/hooks/pre-push"
+    ref_line = ("refs/heads/feature aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa "
+                "refs/heads/feature bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
+    r = subprocess.run(["bash", str(hook), "origin", "http://example.invalid"],
+                       cwd=clone, input=ref_line, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+
+
+def test_an_outdated_installed_layer_is_refreshed(clone: Path) -> None:
+    """The marker grep alone reported "already installed" forever, so a fixed
+    layer never reached a clone that installed before the fix. A reinstall
+    over a layer whose text differs from the current one must replace it."""
+    _write_hook(clone, "#!/usr/bin/env bash\nexit 0\n")
+    assert _install(clone).returncode == 0
+
+    hook = clone / ".git/hooks/pre-push"
+    body = hook.read_text()
+    aged = body.replace("Scan what is ACTUALLY being pushed",
+                        "OLDER LAYER TEXT: scan what is being pushed")
+    assert aged != body, "aging edit missed the layer text"
+    hook.write_text(aged)
+
+    r = _install(clone)
+    assert r.returncode == 0, r.stderr
+    assert "already installed" not in r.stdout
+    refreshed = hook.read_text()
+    assert "OLDER LAYER TEXT" not in refreshed, "outdated layer survived"
+    assert refreshed.count(MARKER) == 1, "layer duplicated instead of replaced"
+    assert _hook_blocks(clone), "refreshed hook no longer blocks"
+
+
+def test_refresh_refuses_a_layer_whose_end_marker_is_gone(clone: Path) -> None:
+    """With the end marker hand-deleted, the installed-layer extraction runs to
+    EOF, so the refresh comparison always mismatches — and the strip sed then
+    deletes from the start marker to EOF, silently removing every other gate
+    below the layer. The installer must refuse instead of stripping."""
+    _write_hook(clone, "#!/usr/bin/env bash\necho downstream-gate\nexit 0\n")
+    assert _install(clone).returncode == 0
+    hook = clone / ".git/hooks/pre-push"
+    body = hook.read_text()
+    corrupted = "\n".join(
+        line for line in body.splitlines()
+        if not line.startswith("# --- end parallax:commit-message-scan")) + "\n"
+    assert corrupted != body, "corruption edit missed the end marker"
+    hook.write_text(corrupted)
+
+    r = _install(clone)
+    assert r.returncode != 0, "refreshed a layer it cannot bound"
+    assert "echo downstream-gate" in hook.read_text(), (
+        "stripped everything below the start marker")
+
+
+def test_a_backup_is_taken_even_when_the_environment_exports_backup(
+        clone: Path) -> None:
+    """The backup-once guard tests `[ -z "${BACKUP:-}" ]`. Unless the script
+    initialises BACKUP itself, a caller's exported BACKUP satisfies the guard,
+    so a fresh install over an existing hook silently skips the backup — and
+    the syntax-failure restore path would copy that arbitrary env-named file
+    over the hook."""
+    _write_hook(clone, "#!/usr/bin/env bash\nexit 0\n")
+    r = _install(clone, env={"BACKUP": "/nonexistent/inherited-backup"})
+    assert r.returncode == 0, r.stderr
+    backups = list((clone / ".git/hooks").glob("pre-push.bak.*"))
+    assert backups, "env-inherited BACKUP suppressed the backup"
