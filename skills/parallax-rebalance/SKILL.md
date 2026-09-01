@@ -25,7 +25,7 @@ description: "Portfolio rebalancing with health flags and macro context: analyze
 - Output must include specific candidate weight changes, framed per conventions §12 (analysis, not instructions), not just vague suggestions
 - For portfolios with 10+ holdings, prioritize score trend scans for top/bottom 5 by weight to manage latency
 - When `policy=` is supplied, JIT-load `_parallax/client-policy/policy-loader.md` and run Batch C2. The S3 solver (`_parallax/client-policy/reconcile.py`) needs scipy and **fails closed** without it — `solver_unavailable` renders UNVERIFIED per conventions §4.0, never a partial trade list. Deterministic math lives in the helper; never reproduce the LP in prose.
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format. Audience mode resolution (§13.1) is a separate seam call, not a dict read of `branding["render"]`: this skill does not use the RM seam (`rm_consumer.py::load_rm_branding_context`) for branding, but it DOES call that module's `resolve_audience()` function directly, via the one Bash `python3 -c` step documented under Pre-Render — never re-derive the §13.1 precedence in prose.
 
 Generate prioritized trade recommendations using health flags, macro context, and Parallax scores.
 
@@ -36,12 +36,15 @@ Generate prioritized trade recommendations using health flags, macro context, an
 /parallax-rebalance [holdings] target="reduce concentration, improve quality score"
 /parallax-rebalance [holdings] constraints="max 25% per position, no energy sector"
 /parallax-rebalance [holdings] policy=path/to/client-policy.yaml
+/parallax-rebalance [holdings] audience=client_safe
 ```
 
 `policy=` accepts the same client-policy artifact `parallax-client-review`
 consumes (inline YAML/JSON or a file path; schema in
 `_parallax/client-policy/schema.yaml`). When supplied, Batch C2 runs the S3
 reconciliation optimizer and its targets replace the multiplier-derived ones.
+
+Optional `audience=` argument: `client_safe | internal_analyst`; precedence follows `parallax-conventions.md` §13.1.
 
 ## Workflow
 
@@ -204,6 +207,23 @@ If `PARALLAX_LOADER_V2=1`, follow `loader.md` §3b: aggregate per-holding `get_p
 
 Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
 
+Resolve the §13.1 audience mode in the same step, via one Bash call into the
+same seam function `parallax-client-review` uses — never a prose read of
+`branding["render"]`:
+
+```
+python3 -c "import sys; sys.path.insert(0, '<skill-dir>/../_parallax/white-label'); \
+  from loader import load_visual_branding; from rm_consumer import resolve_audience; \
+  import json; b = load_visual_branding(); mode, notice = resolve_audience(b, <flag or None>); \
+  print(json.dumps({'mode': mode, 'notice': notice}))"
+```
+
+Substitute the parsed `audience=` flag (or `None` if none was supplied) for
+`<flag or None>`. Record the returned `mode` for the Output Format branches
+below, and if `notice` is non-null, append it verbatim to About This Report.
+`resolve_audience` is a pure function — this is a real Bash tool call, never
+prose arithmetic reproducing its precedence logic.
+
 ### Render — deterministic gate (LAST step, mandatory)
 
 Compose the complete report per **Output Format** below, then run it through the shared render gate in **one Bash step** before replying. Use a private `mktemp` file (never a fixed/predictable path — `/tmp` symlink hazard). The shared gate is `_parallax/render_gate.py`, a sibling of the directory you loaded this SKILL.md from; pass this skill's key (use the loaded directory's absolute path as `<skill-dir>`):
@@ -228,20 +248,23 @@ The Bash result may show a `[render-gate] WARN:` line above the report. That lin
 
 - **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (preamble). Per loader.md §5.1 the preamble goes at the very top — it precedes the Branding Header.
 - **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** rebalance`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to About This Report.
-- **Current Portfolio Assessment** (factor scores, concentration issues, redundancy — label the redundancy figures **coverage-limited** with the diverging sectors and absent holdings when `coverage_check.py` returned that verdict (After Batch A item 4); if view active, current alignment vs view-tilted target)
+- **Current Portfolio Assessment** (factor scores, concentration issues, redundancy — label the redundancy figures **coverage-limited** with the diverging sectors and absent holdings when `coverage_check.py` returned that verdict (After Batch A item 4); if view active, current alignment vs view-tilted target; factor names render with the §13.3 plain-language gloss by reference under `audience=client_safe`)
 - **Health Status** (Healthy/Monitor/Attention badge with flag summary)
-- **Verdict sensitivity**: the 1-2 nearest-boundary flags and their arithmetic flip condition for moving Health Status to the adjacent tier, per `parallax-portfolio-checkup/references/health-flags.md` "Verdict sensitivity" (renders `parallax-conventions.md` §11 by reference).
+- **Verdict sensitivity**: the 1-2 nearest-boundary flags and their arithmetic flip condition for moving Health Status to the adjacent tier, per `parallax-portfolio-checkup/references/health-flags.md` "Verdict sensitivity" (renders `parallax-conventions.md` §11 by reference; internal_analyst mode only — omitted under `audience=client_safe` per conventions §13.2; the Health Status verdict itself renders in both modes).
 - **Health Flags** (table: each triggered flag per holding with priority level; View Misalignment / View Excluded shown as their own flag types)
 - **Macro Context** (relevant market outlook, sector tilt implications for rebalancing)
 - **Score Momentum** (table: each holding's score trend — improving/stable/declining)
 - **Ground-truth Integrity** (only render if any mismatch detected — table: `input_ticker`, `returned_name`, `expected_name`, match status per holding. ⚠ MISMATCH rows are re-scored individually and flagged — scores not trusted from `quick_portfolio_scores` — per loader.md §5 rule 3.)
+- The policy section family (Policy Reconciliation and, when parsed, Mandate Constraints Applied) carries mandate-compliance content and §4.0 gate states; it renders in place, unchanged, in both audience modes — §13.2's relocation rule does not apply to it.
 - **Policy Reconciliation** (only if `policy=` was supplied) — the S3 result: status; on `optimal` the binding constraints, resolved turnover penalty with its source, basis, `calibration_status` disclosure, and the two-sided total turnover with its uncalibrated-penalty note; on `infeasible` the smallest-violations table with an explicit "no targets rendered — constraints not silently relaxed" line; on `conflict` the named conflicts awaiting human decision; on any other status the UNVERIFIED statement with the reason. Also list any `tilts.excludes` entries not matched to a held symbol as "excluded, not held" (Batch C2 step 1). List every profile-derived holding used as a coefficient, with its same-scale verification outcome (verified same-scale-by-construction, or excluded from the solve on disagreement/single-source) per the Batch C2 coefficient bullet. Follows conventions §4.0: this section never converts an unknown into a pass.
 - **Mandate Constraints Applied** (only if `constraints=` or `target=` was provided) — echoes each parsed constraint/target and its effect (weight cap, exclusion, priority bias, quality-score ranking); any unparsed `constraints=` clause renders "constraint not recognized — not applied"; any unrecognized `target=` phrase is echoed with a statement of how the standard recommendations already address it.
-- **Trade Recommendations** (table: Priority | Action | Symbol | Current Weight | Target Weight | Rationale — every recommendation cites a specific flag or finding; if view active, "Rationale" includes view-tilt direction; any recommendation on a ⚠ MISMATCH holding must note scores were re-derived via `get_peer_snapshot` directly). Render a one-line informational preface above this table per conventions §12.2; framed per conventions §12 (candidate actions, not instructions) and supports `action_labels=plain` per §12.3 for retail-suitable rendering.
+- **Trade Recommendations** (table: Priority | Action | Symbol | Current Weight | Target Weight | Rationale — every recommendation cites a specific flag or finding; if view active, "Rationale" includes view-tilt direction; any recommendation on a ⚠ MISMATCH holding must note scores were re-derived via `get_peer_snapshot` directly). Render a one-line informational preface above this table per conventions §12.2; framed per conventions §12 (candidate actions, not instructions) and supports `action_labels=plain` per §12.3 for retail-suitable rendering. Under `audience=client_safe`, `action_labels=plain` is implied per conventions §13.2 — the Action labels always render neutral status descriptions, and any accompanying magnitude renders as distance-to-threshold arithmetic per §12.3, not a suggested trade size.
 - **Replacement Candidates** (if trimming, scored alternatives; filtered against tilts.excludes + tilts.excludes_freeform if view active; all candidates ground-truth-validated per loader.md §5 rule 3; divergence-assertion result for replacement universe per loader.md §5 rule 4)
-- **Before/After Comparison** (factor scores: current vs. proposed; if view active, alignment-to-view metric included)
+- **Before/After Comparison** (factor scores: current vs. proposed; if view active, alignment-to-view metric included; factor names render with the §13.3 plain-language gloss by reference under `audience=client_safe`)
 - **Implementation Notes** (suggested execution order, liquidity considerations)
-- **About This Report** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second About This Report line.
+- **About This Report** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second About This Report line. Under `audience=client_safe`, append the §13.4 mode line `Audience mode: client-safe`; if `resolve_audience` returned a notice, append it too — place both once, in that order, never duplicated.
+
+Apply audience render mode per `parallax-conventions.md` §13; default `internal_analyst`. This wiring covers verdict-sensitivity omission, action-label mode, factor gloss, and the §13.4 footer line; body-prose cutoff arithmetic and ops apparatus are not yet swept for this skill.
 
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 

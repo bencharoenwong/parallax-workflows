@@ -15,7 +15,13 @@ import pytest
 _WHITE_LABEL_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_WHITE_LABEL_DIR))
 
-from rm_consumer import load_rm_branding_context, render_rm_markdown  # noqa: E402
+from rm_consumer import (  # noqa: E402
+    DEFAULT_AUDIENCE,
+    RMBrandingContext,
+    load_rm_branding_context,
+    render_rm_markdown,
+    resolve_audience,
+)
 
 
 class _VoiceTrap(Mapping[str, Any]):
@@ -417,3 +423,201 @@ def test_non_mapping_branding_degrades() -> None:
         )
         assert ctx.header_lines == ()
         assert "default Parallax" in " ".join(ctx.about_lines)
+
+
+# --- §13 audience render mode (resolve_audience) ----------------------------
+
+
+def _CLIENT_SAFE_LINE() -> str:
+    return "Audience mode: client-safe"
+
+
+def test_resolve_audience_defaults_when_flag_and_config_absent() -> None:
+    mode, notice = resolve_audience({}, None)
+    assert mode == DEFAULT_AUDIENCE == "internal_analyst"
+    assert notice is None
+
+
+def test_resolve_audience_config_client_safe_sets_mode() -> None:
+    branding = _rm_branding(render={"audience_default": "client_safe"})
+    mode, notice = resolve_audience(branding, None)
+    assert mode == "client_safe"
+    assert notice is None
+
+
+@pytest.mark.parametrize(
+    ("config_value", "flag_value", "expected"),
+    [
+        ("client_safe", "internal_analyst", "internal_analyst"),
+        ("internal_analyst", "client_safe", "client_safe"),
+    ],
+)
+def test_invocation_flag_overrides_config_in_both_directions(
+    config_value: str, flag_value: str, expected: str
+) -> None:
+    branding = _rm_branding(render={"audience_default": config_value})
+    mode, notice = resolve_audience(branding, flag_value)
+    assert mode == expected
+    assert notice is None
+
+
+def test_unrecognized_invocation_flag_falls_back_with_notice() -> None:
+    branding = _rm_branding(render={"audience_default": "client_safe"})
+    mode, notice = resolve_audience(branding, "retail_and_shareable")
+    assert mode == DEFAULT_AUDIENCE
+    assert notice == "Audience mode: unrecognized value; rendered as internal_analyst"
+
+
+def test_unrecognized_config_value_falls_back_with_notice() -> None:
+    branding = _rm_branding(render={"audience_default": "retail_and_shareable"})
+    mode, notice = resolve_audience(branding, None)
+    assert mode == DEFAULT_AUDIENCE
+    assert notice == "Audience mode: unrecognized value; rendered as internal_analyst"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"render": ["client_safe"]},
+        {"render": "client_safe"},
+        {"render": {"audience_default": 3}},
+        {"render": {"audience_default": ["client_safe"]}},
+    ],
+)
+def test_malformed_render_shape_falls_back_with_malformed_notice(
+    overrides: dict[str, Any],
+) -> None:
+    """R6: a present-but-wrong-shaped `render` or `audience_default` is a distinct,
+    non-silent failure mode from an absent one — both degrade to the default, but
+    only the malformed shape gets a notice."""
+    branding = _rm_branding(**overrides)
+    mode, notice = resolve_audience(branding, None)
+    assert mode == DEFAULT_AUDIENCE
+    assert notice == "Audience mode: malformed configuration; rendered as internal_analyst"
+
+
+@pytest.mark.parametrize(
+    "branding",
+    [
+        {},
+        {"render": None},
+        {"render": {}},
+        {"render": {"audience_default": None}},
+    ],
+)
+def test_absent_render_or_audience_default_falls_back_silently(
+    branding: dict[str, Any],
+) -> None:
+    mode, notice = resolve_audience(branding, None)
+    assert mode == DEFAULT_AUDIENCE
+    assert notice is None
+
+
+def test_resolve_audience_non_mapping_branding_degrades_to_flag_or_default() -> None:
+    for junk in (None, "config.yaml", 42, ["a"]):
+        mode, notice = resolve_audience(junk, None)
+        assert mode == DEFAULT_AUDIENCE
+        assert notice is None
+        mode, notice = resolve_audience(junk, "client_safe")
+        assert mode == "client_safe"
+        assert notice is None
+
+
+@pytest.mark.parametrize(
+    "hostile",
+    [
+        "client_safe\x1b[2K\x1b[1;1HFAKE HEADER\x07",
+        "DROP TABLE clients; --",
+        "](javascript:alert(1))",
+    ],
+)
+def test_audience_notice_never_echoes_the_untrusted_value(hostile: str) -> None:
+    """The notice is a fixed, value-free string regardless of what triggered it —
+    it must never interpolate the raw flag or config value into client-visible
+    text."""
+    mode, notice = resolve_audience({}, hostile)
+    assert mode == DEFAULT_AUDIENCE
+    assert notice == "Audience mode: unrecognized value; rendered as internal_analyst"
+    assert hostile not in notice
+
+    branding = _rm_branding(render={"audience_default": hostile})
+    mode, notice = resolve_audience(branding, None)
+    assert mode == DEFAULT_AUDIENCE
+    assert notice == "Audience mode: unrecognized value; rendered as internal_analyst"
+    assert hostile not in notice
+
+
+def test_contentless_branding_still_resolves_audience_from_flag() -> None:
+    """Active-but-empty branding must not short-circuit audience resolution."""
+    ctx = load_rm_branding_context(
+        "portfolio review",
+        branding_loader=lambda: {},
+        audience="client_safe",
+    )
+    assert ctx.resolved_audience == "client_safe"
+    assert _CLIENT_SAFE_LINE() in ctx.about_lines
+
+
+def test_loader_failure_still_resolves_audience_from_flag() -> None:
+    def fail_loader() -> Mapping[str, Any]:
+        raise OSError("/private/operator/config.yaml")
+
+    ctx = load_rm_branding_context(
+        "portfolio review", branding_loader=fail_loader, audience="client_safe"
+    )
+    assert ctx.resolved_audience == "client_safe"
+    assert _CLIENT_SAFE_LINE() in ctx.about_lines
+    assert "/private/operator" not in " ".join(ctx.about_lines)
+
+
+def test_non_mapping_branding_resolves_audience_from_flag() -> None:
+    ctx = load_rm_branding_context(
+        "portfolio review", branding_loader=lambda: ["a"], audience="client_safe"
+    )
+    assert ctx.resolved_audience == "client_safe"
+    assert _CLIENT_SAFE_LINE() in ctx.about_lines
+    assert ctx.header_lines == ()
+
+
+def test_client_safe_mode_line_placed_after_branding_and_logo_lines() -> None:
+    """§13.4 ordering: Branding line, any Logo on file: line, notice, mode line —
+    the render-gate anchor keys on titles + Branding Header only, so the mode
+    line must never precede or displace those lines."""
+    branding = _rm_branding(
+        logos={"primary": "/private/operator/logo.png"},
+        render={"audience_default": "client_safe"},
+    )
+    ctx = load_rm_branding_context("portfolio review", branding_loader=lambda: branding)
+
+    assert ctx.about_lines[0].startswith("Branding:")
+    assert ctx.about_lines[1] == "Logo on file: logo.png"
+    assert ctx.about_lines[-1] == _CLIENT_SAFE_LINE()
+    # Header lines (the render-gate's Branding Header anchor) are unaffected by
+    # audience mode.
+    assert ctx.header_lines == ("**Meridian** portfolio review",)
+
+
+def test_render_rm_markdown_carries_audience_flag_through() -> None:
+    branding = _rm_branding()
+    output = render_rm_markdown(
+        "Body.", "portfolio review", branding_loader=lambda: branding, audience="client_safe"
+    )
+    assert _CLIENT_SAFE_LINE() in output
+    assert output.count(_CLIENT_SAFE_LINE()) == 1
+
+
+def test_audience_default_mode_renders_no_mode_line() -> None:
+    branding = _rm_branding()
+    ctx = load_rm_branding_context("portfolio review", branding_loader=lambda: branding)
+    assert ctx.resolved_audience == DEFAULT_AUDIENCE
+    assert _CLIENT_SAFE_LINE() not in ctx.about_lines
+
+
+def test_rm_branding_context_positional_two_field_construction_still_works() -> None:
+    """Backward compat: resolved_audience is appended LAST with a default, so
+    every caller written before §13 wiring keeps constructing with two
+    positional args."""
+    ctx = RMBrandingContext(("a",), ("b",))
+    assert ctx.header_lines == ("a",)
+    assert ctx.about_lines == ("b",)
+    assert ctx.resolved_audience == DEFAULT_AUDIENCE
