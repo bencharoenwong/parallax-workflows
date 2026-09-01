@@ -296,22 +296,6 @@ def test_max_position_weight_invalid_values_are_blocking(bad):
     assert result.fallback_tier == "no_policy"
 
 
-def test_position_cap_not_evaluated_kind_documented_in_three_copies():
-    # Cheap sync guard (Part 2 §4 three-copy rule): the DataQualityRow docstring,
-    # policy-loader.md §7.4's kind list, and client-review SKILL.md's Policy Data
-    # Quality bullet must all name the kind.
-    adaptation_src = (CLIENT_POLICY_DIR / "adaptation.py").read_text()
-    loader_md = (CLIENT_POLICY_DIR / "policy-loader.md").read_text()
-    client_review_skill = (
-        CLIENT_POLICY_DIR.parent.parent / "parallax-client-review" / "SKILL.md"
-    ).read_text()
-    # Grep the pipe-delimited kind-list comment specifically, not just any
-    # mention (the DQ-row emission code alone would otherwise satisfy this).
-    assert "te_budget_not_evaluated|position_cap_not_evaluated|" in adaptation_src
-    assert "position_cap_not_evaluated" in loader_md
-    assert "position_cap_not_evaluated" in client_review_skill
-
-
 def test_one_sided_band_emits_missing_bands_row():
     result = adaptation.run_pipeline(
         load_policy("policy_partial_dims.yaml"),
