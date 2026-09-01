@@ -24,6 +24,15 @@ from rm_consumer import (  # noqa: E402
 )
 
 
+#: integration-pattern.md §7 unconditional currency line, hardcoded on purpose:
+#: importing rm_consumer's constant here would make the wording assertion
+#: tautological. This literal is the byte-for-byte contract.
+_CURRENCY_LINE_LITERAL = (
+    "Currency: figures as reported by source data; "
+    "no base-currency conversion applied."
+)
+
+
 class _VoiceTrap(Mapping[str, Any]):
     """Mapping that fails if an RM visual consumer requests voice data."""
 
@@ -100,6 +109,7 @@ def test_rm_visual_consumers_never_access_voice(label: str) -> None:
     assert context.header_lines == ("**Example Advisory** " + label,)
     assert context.about_lines == (
         "Branding: white-label (source: https://assets.example.test)",
+        _CURRENCY_LINE_LITERAL,
     )
 
 
@@ -590,7 +600,8 @@ def test_client_safe_mode_line_placed_after_branding_and_logo_lines() -> None:
     ctx = load_rm_branding_context("portfolio review", branding_loader=lambda: branding)
 
     assert ctx.about_lines[0].startswith("Branding:")
-    assert ctx.about_lines[1] == "Logo on file: logo.png"
+    assert ctx.about_lines[1] == _CURRENCY_LINE_LITERAL
+    assert ctx.about_lines[2] == "Logo on file: logo.png"
     assert ctx.about_lines[-1] == _CLIENT_SAFE_LINE()
     # Header lines (the render-gate's Branding Header anchor) are unaffected by
     # audience mode.
@@ -611,6 +622,106 @@ def test_audience_default_mode_renders_no_mode_line() -> None:
     ctx = load_rm_branding_context("portfolio review", branding_loader=lambda: branding)
     assert ctx.resolved_audience == DEFAULT_AUDIENCE
     assert _CLIENT_SAFE_LINE() not in ctx.about_lines
+
+
+# --- §7 unconditional currency line ------------------------------------------
+
+
+def test_currency_line_present_on_clean_active_load() -> None:
+    ctx = load_rm_branding_context(
+        "portfolio review", branding_loader=lambda: _rm_branding()
+    )
+    assert ctx.about_lines[0].startswith("Branding: white-label")
+    assert ctx.about_lines[1] == _CURRENCY_LINE_LITERAL
+
+
+@pytest.mark.parametrize(
+    "branding_loader",
+    [
+        pytest.param(lambda: {}, id="contentless-active"),
+        pytest.param(lambda: ["a"], id="non-mapping"),
+        pytest.param(
+            lambda: _rm_branding(client_name="", colors={}, error="config_not_found"),
+            id="config-not-found",
+        ),
+        pytest.param(
+            lambda: _rm_branding(
+                client_name="", colors={}, error="yaml_parse_error: synthetic"
+            ),
+            id="config-error",
+        ),
+    ],
+)
+def test_currency_line_present_on_every_degraded_path(
+    branding_loader: Any,
+) -> None:
+    """§7: the currency line is independent of `white_label_active` and of the
+    Branding-line condition — every path renders it, second, after Branding."""
+    ctx = load_rm_branding_context("desk call list", branding_loader=branding_loader)
+    assert ctx.about_lines[0].startswith("Branding:")
+    assert ctx.about_lines[1] == _CURRENCY_LINE_LITERAL
+    assert ctx.about_lines.count(_CURRENCY_LINE_LITERAL) == 1
+
+
+def test_currency_line_present_when_loader_raises() -> None:
+    def fail_loader() -> Mapping[str, Any]:
+        raise OSError("/private/operator/config.yaml")
+
+    ctx = load_rm_branding_context("portfolio review", branding_loader=fail_loader)
+    assert ctx.about_lines == (
+        "Branding: default Parallax (config error)",
+        _CURRENCY_LINE_LITERAL,
+    )
+
+
+def test_currency_line_full_order_with_logo_and_mode_line() -> None:
+    """Full §7 + §13.4 order: Branding, currency, Logo on file, mode line —
+    the currency line sits second, before the logo line. A recognized
+    invocation flag wins silently, so no notice line can co-occur with the
+    mode line (a recognized flag returns before the config is read)."""
+    branding = _rm_branding(
+        logos={"primary": "/private/operator/logo.png"},
+        render={"audience_default": "retail_and_shareable"},
+    )
+    ctx = load_rm_branding_context(
+        "portfolio review",
+        branding_loader=lambda: branding,
+        audience="client_safe",
+    )
+    assert ctx.about_lines == (
+        "Branding: white-label (source: deck.pptx)",
+        _CURRENCY_LINE_LITERAL,
+        "Logo on file: logo.png",
+        "Audience mode: client-safe",
+    )
+
+
+def test_currency_line_full_order_with_logo_and_audience_notice() -> None:
+    """§7 order on the notice branch: Branding, currency, Logo on file,
+    resolve_audience notice — active branding with an abs-local logo plus an
+    unrecognized config `audience_default` and no invocation flag. The
+    currency line still sits second, before the logo line and the notice."""
+    branding = _rm_branding(
+        logos={"primary": "/private/operator/logo.png"},
+        render={"audience_default": "retail_and_shareable"},
+    )
+    ctx = load_rm_branding_context(
+        "portfolio review", branding_loader=lambda: branding
+    )
+    assert ctx.about_lines == (
+        "Branding: white-label (source: deck.pptx)",
+        _CURRENCY_LINE_LITERAL,
+        "Logo on file: logo.png",
+        "Audience mode: unrecognized value; rendered as internal_analyst",
+    )
+
+
+def test_render_rm_markdown_carries_currency_line_once() -> None:
+    output = render_rm_markdown(
+        "Body.", "portfolio review", branding_loader=lambda: _rm_branding()
+    )
+    assert output.count(_CURRENCY_LINE_LITERAL) == 1
+    assert output.index("Branding:") < output.index(_CURRENCY_LINE_LITERAL)
 
 
 def test_rm_branding_context_positional_two_field_construction_still_works() -> None:

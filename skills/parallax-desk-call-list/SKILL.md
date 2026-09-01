@@ -20,7 +20,7 @@ description: "Desk-level morning call list for relationship managers covering mu
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.1 tool loading, §0.2 typed integer params, §3 parallel execution, §3.1 annotation/rank separation, §9.1/§9.2 disclosures, §10 render gate, §11 verdict sensitivity, §12 information framing, and §13 audience mode.
 - JIT-load `_parallax/coverage-matrix.md` before Batch A. `export_price_series` is equity-only and FREE, and its `success:false` response classifies ETFs; ETFs then price via `etf_daily_price`. This skill does not call `etf_profile`.
 - JIT-load `_parallax/house-view/loader.md` §1-§2, §5, and §6. The house view annotates movers but never changes rank order or membership.
-- JIT-load `_parallax/white-label/integration-pattern.md` before Pre-Render. Call `load_rm_branding_context("desk call list")` from `_parallax/white-label/rm_consumer.py`. This visual-only seam blocks voice access and redacts source references.
+- JIT-load `_parallax/white-label/integration-pattern.md` before Pre-Render. Call `load_rm_branding_context("desk call list", audience=<flag or None>)` from `_parallax/white-label/rm_consumer.py`, passing the parsed `audience=` invocation flag (or `None` if absent). This visual-only seam blocks voice access and redacts source references.
 - JIT-load `references/desk-book-format.md` before loading/validating any desk book.
 - JIT-load `references/ranking-and-bounding.md` before thresholding, ranking, or rendering bounded sections.
 - JIT-load `references/talk-tracks.md` before drafting per-client talk tracks.
@@ -112,7 +112,7 @@ Zero tool calls. Use `desk_call_list_logic.py` to compute triggered exposure, si
 
 ### Pre-Render - Load White-Label Branding
 
-Load `_parallax/white-label/integration-pattern.md` §2. Import `load_rm_branding_context` from `_parallax/white-label/rm_consumer.py`. Call `load_rm_branding_context("desk call list")` once. Place its `header_lines` below any House View Preamble. Place its `about_lines` in About This Report. Do not inspect the branding mapping directly. The helper preserves the call list and selects default Parallax if branding is corrupt. The branding is for the desk's firm: one report, one brand.
+Load `_parallax/white-label/integration-pattern.md` §2. Import `load_rm_branding_context` from `_parallax/white-label/rm_consumer.py`. Call `load_rm_branding_context("desk call list", audience=<flag or None>)` once, passing the parsed `audience=` invocation flag (or `None` if absent) so the seam resolves §13.1 precedence over both the flag and the branding config. Place its `header_lines` below any House View Preamble. Place its `about_lines` in About This Report. Read `resolved_audience` off the returned context for the Output Format audience branches below (e.g. item 12's `client_safe` omission); do not re-resolve the mode yourself and do not inspect the branding mapping directly. The helper preserves the call list and selects default Parallax if branding is corrupt. The branding is for the desk's firm: one report, one brand.
 
 ### Render - deterministic gate
 
@@ -143,9 +143,9 @@ The Bash result may show a `[render-gate] WARN:` line above the report. That lin
 9. Client Detail: top `detail_cap` clients. Load `references/talk-tracks.md`; include why-listed arithmetic, positions table, talk track, and likely questions.
 10. Also Affected (summary only): ranks after `detail_cap`; group by driving symbol when triggered clients exceed 25.
 11. Symbol Movers Reference: symbol, name, move %, four-week score change, news headline, number of clients holding, desk-wide weighted exposure, and house-view tag.
-12. Verdict Sensitivity per `_parallax/parallax-conventions.md §11`; omit under `client_safe`.
+12. Verdict Sensitivity per `_parallax/parallax-conventions.md §11`; omit when the seam's `resolved_audience` is `client_safe`.
 13. Next steps: point to `/parallax-client-review`, `/parallax-should-i-buy`, or `/parallax-watchlist-monitor` as appropriate. Do not auto-invoke them.
-14. About This Report: branding line per `_parallax/white-label/integration-pattern.md §7`, currency line, desk-book provenance, redaction state, audience mode if client-safe, skipped local-logo basename if relevant, and a cost note that the equity price scan is FREE (`export_price_series`) while `etf_daily_price` costs 1 token per ETF priced.
+14. About This Report: first the seam's `about_lines` verbatim — they already carry the `_parallax/white-label/integration-pattern.md §7` branding line, the unconditional currency line, any skipped local-logo basename, and the audience mode/notice lines; do not re-add any of them — then desk-book provenance, redaction state, and a cost note that the equity price scan is FREE (`export_price_series`) while `etf_daily_price` costs 1 token per ETF priced.
 15. AI-interaction disclosure per `_parallax/parallax-conventions.md §9.2`.
 16. Disclaimer: view-aware per `_parallax/house-view/loader.md §5` if active; otherwise render the standard disclaimer from `_parallax/parallax-conventions.md §9.1`.
 

@@ -208,6 +208,16 @@ def resolve_audience(
     return DEFAULT_AUDIENCE, _UNRECOGNIZED_AUDIENCE_NOTICE
 
 
+#: Unconditional second About This Report line per integration-pattern.md §7
+#: ("Currency basis"). Independent of `white_label_active` and of which
+#: Branding-line row rendered — every path emits it, immediately after the
+#: Branding line.
+_CURRENCY_LINE = (
+    "Currency: figures as reported by source data; "
+    "no base-currency conversion applied."
+)
+
+
 class RMBrandingContext(NamedTuple):
     """Rendered white-label fragments for an RM markdown report.
 
@@ -255,15 +265,18 @@ def _context(
     resolved_audience: str,
     notice: str | None,
 ) -> RMBrandingContext:
-    """Tail helper: append the resolve_audience notice, then the §13.4 line.
+    """Tail helper: insert the §7 currency line, then append the
+    resolve_audience notice and the §13.4 mode line.
 
     Every return point in `load_rm_branding_context` funnels through here so
-    the notice and the client-safe mode line land in the same relative order
-    — after the Branding line and any `Logo on file:` line — no matter which
-    branch produced `about_lines`, matching integration-pattern.md §7 row
-    order.
+    the lines land in the same relative order no matter which branch produced
+    `about_lines`, matching integration-pattern.md §7 row order: Branding
+    line, unconditional currency line, any `Logo on file:` line, any notice,
+    then the client-safe mode line. Every branch passes a Branding-first
+    tuple, so inserting at index 1 places the currency line second.
     """
     lines = list(about_lines)
+    lines.insert(1, _CURRENCY_LINE)
     if notice:
         lines.append(notice)
     if resolved_audience == "client_safe":
@@ -280,9 +293,12 @@ def load_rm_branding_context(
     """Load and render the visual-only branding overlay for one RM report.
 
     Loader failures degrade to default branding. Raw errors and source
-    references never enter returned text. Also resolves the §13.1 audience
-    mode via `resolve_audience` and folds its notice plus the §13.4 mode line
-    into `about_lines` — the caller never assembles that line itself.
+    references never enter returned text. `about_lines` always carries the
+    unconditional §7 currency line immediately after the Branding line — on
+    every path, including default-Parallax and error fallbacks. Also resolves
+    the §13.1 audience mode via `resolve_audience` and folds its notice plus
+    the §13.4 mode line into `about_lines` — the caller never assembles any
+    of those lines itself.
     """
     try:
         branding = branding_loader()
