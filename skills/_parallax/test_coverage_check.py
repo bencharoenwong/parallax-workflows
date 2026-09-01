@@ -16,6 +16,9 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from coverage_check import (  # noqa: E402
+    ABSENT_HOLDINGS_BASIS_NOT_COMPUTABLE,
+    ABSENT_HOLDINGS_BASIS_PER_HOLDING,
+    ABSENT_HOLDINGS_BASIS_SECTOR_INFERENCE,
     COVERAGE_TOTAL_MIN,
     MAX_DIVERGENCE_PP,
     VERDICT_CONSISTENT,
@@ -113,7 +116,9 @@ def test_non_numeric_weight_is_dropped_not_guessed():
 
 
 # --------------------------------------------------------------------------
-# absent_holdings -- only computed when holdings is supplied
+# absent_holdings -- only computed when holdings is supplied. The basis
+# depends on whether the redundancy payload carries per-holding data at all
+# -- see the module docstring's "absent_holdings / absent_holdings_basis".
 # --------------------------------------------------------------------------
 
 
@@ -122,23 +127,86 @@ def test_absent_holdings_empty_when_holdings_not_supplied():
     redundancy = {"Technology": 1.0}
     result = check_coverage(portfolio, redundancy, holdings=None)
     assert result.absent_holdings == []
+    assert result.absent_holdings_basis == ABSENT_HOLDINGS_BASIS_NOT_COMPUTABLE
 
 
-def test_absent_holdings_names_symbol_missing_from_redundancy_payload():
+def test_absent_holdings_names_symbol_missing_from_per_holding_redundancy_payload():
+    # "pairs" carries a nested list -- per-holding data present, so
+    # membership is checked directly against it.
     portfolio = {"Technology": 1.0}
     redundancy = {"Technology": 1.0, "pairs": [["AAPL.O", "MSFT.O"]]}
     holdings = ["AAPL.O", "MSFT.O", "XOM.N"]
     result = check_coverage(portfolio, redundancy, holdings=holdings)
     assert result.absent_holdings == ["XOM.N"]
+    assert result.absent_holdings_basis == ABSENT_HOLDINGS_BASIS_PER_HOLDING
     assert result.verdict == VERDICT_COVERAGE_LIMITED
 
 
-def test_absent_holdings_accepts_symbol_object_shape():
+def test_absent_holdings_accepts_symbol_object_shape_with_per_holding_data():
     portfolio = {"Technology": 1.0}
     redundancy = {"Technology": 1.0, "covered": ["AAPL.O"]}
     holdings = [{"symbol": "AAPL.O"}, {"symbol": "XOM.N"}]
     result = check_coverage(portfolio, redundancy, holdings=holdings)
     assert result.absent_holdings == ["XOM.N"]
+    assert result.absent_holdings_basis == ABSENT_HOLDINGS_BASIS_PER_HOLDING
+
+
+def test_absent_holdings_not_computable_when_aggregate_only_and_untagged_holdings():
+    # Regression: this is the exact live-run defect. The redundancy payload
+    # is aggregate-only (sector weights, nothing else) and holdings carry no
+    # sector tag -- absence used to be inferred by string-matching symbols
+    # against the payload, which never matches an aggregate sector/weight
+    # dict, so every holding reported absent even though the sector totals
+    # match exactly. It must now report not_computable instead of guessing.
+    portfolio = {"Technology": 1.0}
+    redundancy = {"Technology": 1.0}
+    holdings = ["AAPL.O", "MSFT.O"]
+    result = check_coverage(portfolio, redundancy, holdings=holdings)
+    assert result.absent_holdings == []
+    assert result.absent_holdings_basis == ABSENT_HOLDINGS_BASIS_NOT_COMPUTABLE
+    assert result.verdict == VERDICT_CONSISTENT
+
+
+def test_absent_holdings_sector_inference_excludes_matching_sector():
+    # Regression: aggregate-only payload, one sector's weight matches the
+    # portfolio-analysis weight exactly. That sector's holdings must NOT be
+    # reported absent.
+    portfolio = {"Technology": 0.60, "Energy": 0.40}
+    redundancy = {"Technology": 0.60, "Energy": 0.10}  # Energy under by 30pp
+    holdings = [
+        {"symbol": "AAPL.O", "sector": "Technology"},
+        {"symbol": "MSFT.O", "sector": "Technology"},
+        {"symbol": "XOM.N", "sector": "Energy"},
+    ]
+    result = check_coverage(portfolio, redundancy, holdings=holdings)
+    assert result.absent_holdings_basis == ABSENT_HOLDINGS_BASIS_SECTOR_INFERENCE
+    assert result.absent_holdings == ["XOM.N"]
+    assert "AAPL.O" not in result.absent_holdings
+    assert "MSFT.O" not in result.absent_holdings
+    assert result.verdict == VERDICT_COVERAGE_LIMITED
+
+
+def test_absent_holdings_sector_inference_ignores_untagged_holdings():
+    portfolio = {"Technology": 0.60, "Energy": 0.40}
+    redundancy = {"Technology": 0.60, "Energy": 0.10}
+    holdings = [
+        "AAPL.O",  # no sector tag -- never a candidate
+        {"symbol": "XOM.N", "sector": "Energy"},
+    ]
+    result = check_coverage(portfolio, redundancy, holdings=holdings)
+    assert result.absent_holdings_basis == ABSENT_HOLDINGS_BASIS_SECTOR_INFERENCE
+    assert result.absent_holdings == ["XOM.N"]
+
+
+def test_absent_holdings_sector_inference_ignores_overrepresented_sector():
+    # Redundancy weight ABOVE portfolio weight is not "absent" evidence --
+    # only "materially below" triggers a candidate.
+    portfolio = {"Technology": 0.40, "Energy": 0.60}
+    redundancy = {"Technology": 0.70, "Energy": 0.30}  # Technology over by 30pp
+    holdings = [{"symbol": "AAPL.O", "sector": "Technology"}]
+    result = check_coverage(portfolio, redundancy, holdings=holdings)
+    assert result.absent_holdings == []
+    assert result.absent_holdings_basis == ABSENT_HOLDINGS_BASIS_SECTOR_INFERENCE
 
 
 # --------------------------------------------------------------------------
@@ -177,7 +245,25 @@ def test_cli_accepts_file_path(tmp_path):
     assert payload["verdict"] == VERDICT_COVERAGE_LIMITED
 
 
-def test_cli_holdings_round_trip(tmp_path):
+def test_cli_holdings_round_trip_per_holding_basis(tmp_path):
+    # "covered" carries per-holding data, so AAPL.O (absent from it) is
+    # reported via the per_holding basis.
+    proc = _run_cli([
+        "--portfolio-sectors", json.dumps({"Technology": 1.0}),
+        "--redundancy-sectors", json.dumps({"Technology": 1.0, "covered": ["MSFT.O"]}),
+        "--holdings", json.dumps(["AAPL.O"]),
+    ])
+    assert proc.returncode == 0
+    payload = json.loads(proc.stdout)
+    assert payload["absent_holdings"] == ["AAPL.O"]
+    assert payload["absent_holdings_basis"] == ABSENT_HOLDINGS_BASIS_PER_HOLDING
+    assert payload["verdict"] == VERDICT_COVERAGE_LIMITED
+
+
+def test_cli_holdings_round_trip_aggregate_only_is_not_computable(tmp_path):
+    # Regression: an aggregate-only redundancy payload (sector weights only,
+    # matching the portfolio exactly) with untagged holdings must not report
+    # every holding absent -- it reports not_computable instead.
     proc = _run_cli([
         "--portfolio-sectors", json.dumps({"Technology": 1.0}),
         "--redundancy-sectors", json.dumps({"Technology": 1.0}),
@@ -185,8 +271,9 @@ def test_cli_holdings_round_trip(tmp_path):
     ])
     assert proc.returncode == 0
     payload = json.loads(proc.stdout)
-    assert payload["absent_holdings"] == ["AAPL.O"]
-    assert payload["verdict"] == VERDICT_COVERAGE_LIMITED
+    assert payload["absent_holdings"] == []
+    assert payload["absent_holdings_basis"] == ABSENT_HOLDINGS_BASIS_NOT_COMPUTABLE
+    assert payload["verdict"] == VERDICT_CONSISTENT
 
 
 def test_cli_exits_2_on_empty_portfolio_sectors():
