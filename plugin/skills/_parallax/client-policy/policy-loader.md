@@ -2,6 +2,8 @@
 
 JIT-loaded by any `parallax-*` skill that accepts an optional client-policy input (`policy=`). Defines: how a policy is supplied, how it is validated, how S0-S2 adaptation math is delegated to `adaptation.py`, how conflicts are surfaced, and how the resulting sections render.
 
+**S3 (rebalance only).** `_parallax/client-policy/reconcile.py` solves the holdings-level reconciliation LP — policy-constrained target weights and a trade list. Only `parallax-rebalance` invokes it (Batch C2 there owns payload assembly and status routing); diagnostic consumers stop at S0–S2. It needs scipy (`_parallax/client-policy/requirements.txt`) and fails closed without it: `solver_unavailable`, no targets, UNVERIFIED rendering per conventions §4.0 — never a partial or silently degraded trade list.
+
 **Schema reference:** `_parallax/client-policy/schema.yaml` (canonical YAML structure).
 
 Not part of the house view. The house view is firm-level and carries no client policy; this artifact is client-level and carries no tilts. They meet only at consume time, inside `_parallax/client-policy/adaptation.py`.

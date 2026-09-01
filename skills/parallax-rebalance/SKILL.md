@@ -24,6 +24,7 @@ description: "Portfolio rebalancing with health flags and macro context: analyze
 - build_stock_universe can find replacement candidates for positions being trimmed
 - Output must include specific candidate weight changes, framed per conventions §12 (analysis, not instructions), not just vague suggestions
 - For portfolios with 10+ holdings, prioritize score trend scans for top/bottom 5 by weight to manage latency
+- When `policy=` is supplied, JIT-load `_parallax/client-policy/policy-loader.md` and run Batch C2. The S3 solver (`_parallax/client-policy/reconcile.py`) needs scipy and **fails closed** without it — `solver_unavailable` renders UNVERIFIED per conventions §4.0, never a partial trade list. Deterministic math lives in the helper; never reproduce the LP in prose.
 - JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
 
 Generate prioritized trade recommendations using health flags, macro context, and Parallax scores.
@@ -34,7 +35,13 @@ Generate prioritized trade recommendations using health flags, macro context, an
 /parallax-rebalance [{"symbol":"AAPL.O","weight":0.30},{"symbol":"MSFT.O","weight":0.25},{"symbol":"XOM.N","weight":0.20},{"symbol":"JNJ.N","weight":0.25}]
 /parallax-rebalance [holdings] target="reduce concentration, improve quality score"
 /parallax-rebalance [holdings] constraints="max 25% per position, no energy sector"
+/parallax-rebalance [holdings] policy=path/to/client-policy.yaml
 ```
+
+`policy=` accepts the same client-policy artifact `parallax-client-review`
+consumes (inline YAML/JSON or a file path; schema in
+`_parallax/client-policy/schema.yaml`). When supplied, Batch C2 runs the S3
+reconciliation optimizer and its targets replace the multiplier-derived ones.
 
 ## Workflow
 
@@ -87,7 +94,7 @@ The parameter column states the semantic intent. Construct every payload from th
    - `target=`: match against recognized phrases — "reduce concentration" (prioritize Reweight/Trim of concentration-flagged holdings in step 5) and "improve quality score" (rank Replacement Candidates by quality sub-score in step 6). Any other phrase is unrecognized.
    - **Fail-loud rule:** any `constraints=` clause that matches neither recognized pattern is never silently dropped — it renders "constraint not recognized — not applied" in the Mandate Constraints Applied output block. Any unrecognized `target=` phrase is echoed verbatim there with a statement of how the standard recommendations already address it.
 2. Evaluate the 5 health flags **per holding** — binding flag conditions in `../parallax-client-review/references/recommendation-matrix.md` (same taxonomy and threshold values as `parallax-portfolio-checkup/references/health-flags.md`, whose canonical portfolio-level weighted-average definitions apply to portfolio-checkup, not here): Low Score (holding total score ≤5.0), Concentration (holding weight >15%, or holding among the top-3 when their combined weight >45%), Redundancy (holding is part of a redundant pair), Value Trap (holding value score ≤3.0), Macro Misalignment (holding's sector has a negative tactical outlook). Per-holding flag counts drive priority assignment.
-3. **House-view alignment check** (if view active): for each holding, compute view-tilted target weight using loader.md §3 multipliers; flag holdings >25% off target as "View Misalignment." For holdings on `tilts.excludes`, flag as "View Excluded — must trim."
+3. **House-view alignment check** (if view active): for each holding, compute view-tilted target weight using loader.md §3 multipliers; flag holdings >25% off target as "View Misalignment." For holdings on `tilts.excludes`, flag as "View Excluded — must trim." The multiplier-derived target is benchmark-free — it tilts current weights, not a policy. When a client policy is supplied, Batch C2's optimizer targets (computed against the policy benchmark) supersede it in Trade Recommendations; the multiplier target then serves only this flag check.
 4. Assign priority per recommendation-matrix.md (count View Misalignment / View Excluded as flags):
    - **High** (3+ flags or View Excluded): Strong trim/exit candidate
    - **Medium** (2 flags): Investigate + potential trim
@@ -102,6 +109,60 @@ The parameter column states the semantic intent. Construct every payload from th
    - **Divergence assertion** (per loader.md §5 rule 4 — required universally): REQUIRED for V1 paths. If the query named N≥2 sectors/themes, compute `max_sector_share/total` in returned candidates. If > 0.6, emit fail-loud warning. If `PARALLAX_LOADER_V2=1`, use to verify merge quality.
    - **Ground-truth check per candidate** (per loader.md §5 rule 3): call `get_peer_snapshot` AND `get_company_info` in parallel. Drop any candidate where `returned_name ≠ expected_name` after normalizing both per conventions §2 step 2 from the replacement pool (flag ⚠ MISMATCH, do not rank).
    - Filter remaining trusted candidates against `tilts.excludes`, `tilts.excludes_freeform`, and any sector/name exclusion parsed from `constraints=`. If an "improve quality score" target bias was parsed, rank remaining candidates by quality sub-score.
+
+### Batch C2 — Policy reconciliation (S3; only when `policy=` was supplied)
+
+JIT-load `_parallax/client-policy/policy-loader.md`. Run the S0–S2 adaptation
+first (`adaptation.py`, same contract as `parallax-client-review`), then the
+S3 optimizer — a real Bash tool call, never prose arithmetic:
+
+1. **Assemble the payload** (JSON file via a private `mktemp` path):
+   - `basis`: the basis the adaptation result normalized to (`sleeve`); every
+     weight and band edge in the payload must share it. Declared explicitly,
+     never assumed.
+   - `holdings[*].symbol` / `weight`: the current holdings in that basis.
+   - `holdings[*].coefficient`: the tilt-weighted composite score — the
+     holding's aggregated composite score (loader.md §3b) × its region tilt
+     multiplier × its sector tilt multiplier (loader.md §3; each 1.0 with no
+     active view). Every non-excluded holding needs one; a holding whose score
+     is unavailable must be either excluded from the solve or given an
+     explicit disclosed treatment — the solver rejects a missing coefficient
+     rather than guessing.
+   - `excludes`: the subset of `tilts.excludes` that matches a held symbol,
+     plus held symbols matching a parsed "no <sector>" exclusion. The solver
+     hard-rejects an excludes entry that matches no holding, so intersect
+     BEFORE assembling the payload; a `tilts.excludes` entry naming a symbol
+     the client does not hold is vacuously satisfied — list it in the Policy
+     Reconciliation section as "excluded, not held" rather than passing it.
+   - `position_cap`: the parsed "max N% per position" cap, when present.
+   - `bands`: one entry per adaptation segment carrying band edges —
+     `{dimension, key, symbols: [members by the holding→region/sector
+     mapping], min, max}`.
+   - `turnover_penalty`: omit (the module's disclosed default) unless the
+     mandate states one.
+2. **Solve**: `python3 "<skill-dir>/../_parallax/client-policy/reconcile.py"
+   --input "$PAYLOAD"` and parse the JSON result.
+3. **Route by `status` — the trade list is gate-shaped (conventions §4.0)**:
+   - `optimal`: the result's `target_weights`/`trades` become the Target
+     Weights in Trade Recommendations. Carry `binding`, `turnover_penalty` +
+     `penalty_source`, `basis`, and `calibration_status` into the Policy
+     Reconciliation section. If `basis` is `sleeve` and the report renders
+     total-portfolio weights, convert visibly (state the equity sleeve weight
+     used) — a sleeve delta read as a total delta is a wrong trade size.
+   - `infeasible`: render the `violations` table (the exact smallest
+     relaxations) and NO optimizer targets — no target weights, no trade
+     list, not even labeled "suggested". Never silently relax. Trade
+     Recommendations fall back to the flag-based path, labeled "not
+     policy-reconciled — constraints jointly infeasible, see Policy
+     Reconciliation".
+   - `conflict`: render each named conflict (e.g. an exclude against a user
+     minimum) for human decision — precedence collisions are never
+     auto-resolved (design guardrail 5). Same fallback labeling as
+     `infeasible`.
+   - `solver_unavailable` / `invalid_input` / `solver_error`: the
+     reconciliation verdict is **UNVERIFIED** — state the reason from the
+     result, render no optimizer targets, and label the flag-based fallback
+     "not policy-checked". Never substitute model judgement for the solve.
 
 ### Batch D — Validation
 
@@ -142,6 +203,7 @@ The Bash result may show a `[render-gate] WARN:` line above the report. That lin
 - **Macro Context** (relevant market outlook, sector tilt implications for rebalancing)
 - **Score Momentum** (table: each holding's score trend — improving/stable/declining)
 - **Ground-truth Integrity** (only render if any mismatch detected — table: `input_ticker`, `returned_name`, `expected_name`, match status per holding. ⚠ MISMATCH rows are re-scored individually and flagged — scores not trusted from `quick_portfolio_scores` — per loader.md §5 rule 3.)
+- **Policy Reconciliation** (only if `policy=` was supplied) — the S3 result: status; on `optimal` the binding constraints, resolved turnover penalty with its source, basis, and `calibration_status` disclosure; on `infeasible` the smallest-violations table with an explicit "no targets rendered — constraints not silently relaxed" line; on `conflict` the named conflicts awaiting human decision; on any other status the UNVERIFIED statement with the reason. Also list any `tilts.excludes` entries not matched to a held symbol as "excluded, not held" (Batch C2 step 1). Follows conventions §4.0: this section never converts an unknown into a pass.
 - **Mandate Constraints Applied** (only if `constraints=` or `target=` was provided) — echoes each parsed constraint/target and its effect (weight cap, exclusion, priority bias, quality-score ranking); any unparsed `constraints=` clause renders "constraint not recognized — not applied"; any unrecognized `target=` phrase is echoed with a statement of how the standard recommendations already address it.
 - **Trade Recommendations** (table: Priority | Action | Symbol | Current Weight | Target Weight | Rationale — every recommendation cites a specific flag or finding; if view active, "Rationale" includes view-tilt direction; any recommendation on a ⚠ MISMATCH holding must note scores were re-derived via `get_peer_snapshot` directly). Render a one-line informational preface above this table per conventions §12.2; framed per conventions §12 (candidate actions, not instructions) and supports `action_labels=plain` per §12.3 for retail-suitable rendering.
 - **Replacement Candidates** (if trimming, scored alternatives; filtered against tilts.excludes + tilts.excludes_freeform if view active; all candidates ground-truth-validated per loader.md §5 rule 3; divergence-assertion result for replacement universe per loader.md §5 rule 4)

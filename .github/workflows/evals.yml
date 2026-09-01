@@ -62,6 +62,11 @@ jobs:
           # requirements file rather than by name keeps CI and an operator
           # install from drifting apart.
           python -m pip install -r skills/_parallax/white-label/requirements.txt
+          # client-policy runtime deps (scipy for the S3 reconciliation LP).
+          # reconcile.py fails closed without scipy — solver_unavailable, no
+          # trade list — but the tests that assert real solves and exact
+          # infeasibility diagnoses need the real backend.
+          python -m pip install -r skills/_parallax/client-policy/requirements.txt
           # python-pptx + python-docx: build the .pptx/.docx fixtures the OOXML
           # extractor tests feed. Without them 18 tests error at fixture setup.
           python -m pip install -r skills/_parallax/white-label/requirements-test.txt
