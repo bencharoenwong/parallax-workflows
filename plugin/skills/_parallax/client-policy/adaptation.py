@@ -239,7 +239,8 @@ class DataQualityRow:
     constraint, or exposure weight sitting outside the policy."""
     kind: str          # uncovered_dimension|unmapped_holding|basis_converted|
                        # basis_unconfirmed_drift|stale_policy|
-                       # te_budget_not_evaluated|missing_bands|unknown_segment_key|
+                       # te_budget_not_evaluated|position_cap_not_evaluated|
+                       # missing_bands|unknown_segment_key|
                        # ambiguous_broad_tilt|invalid_exposures|
                        # hard_constraint_not_checkable|off_policy_exposure
     detail: str
@@ -261,6 +262,11 @@ class AdaptationResult:
     coverage: dict                 # exposures `coverage` passthrough; {} when absent or rejected
     budget: dict                   # {sum_abs_desired, max_total_tilt, cap_applied, scale}
     policy_hash: str
+    max_position_weight: float | None = None  # mandate.max_position_weight passthrough.
+                                    # None when absent, or on any path returning through
+                                    # `_empty_result` (policy-only runs included). Never
+                                    # re-derived; the consumer reads this field and never
+                                    # re-reads the policy YAML directly.
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -487,6 +493,12 @@ def validate_policy(policy: dict) -> list[PolicyError]:
     prohibited = mandate.get("prohibited_products")
     if prohibited is not None and not isinstance(prohibited, list):
         errors.append(PolicyError("mandate.prohibited_products", "must be a sequence"))
+
+    max_position_weight = mandate.get("max_position_weight")
+    if max_position_weight is not None:
+        if not _is_number(max_position_weight) or not (0.0 < float(max_position_weight) <= 1.0):
+            errors.append(PolicyError("mandate.max_position_weight",
+                                      "must be a number in (0, 1] when set"))
 
     sub_allocations = mandate.get("sub_allocations") or {}
     if not isinstance(sub_allocations, dict):
@@ -1075,6 +1087,17 @@ def run_pipeline(policy: dict | None, exposures: dict | None,
                     "NOT evaluated in Phase 1: there is no covariance input and no proxy."),
         ))
 
+    max_position_weight = mandate.get("max_position_weight")
+    resolved_position_cap = float(max_position_weight) if _is_number(max_position_weight) else None
+    if resolved_position_cap is not None:
+        data_quality.append(DataQualityRow(
+            kind="position_cap_not_evaluated",
+            detail=(f"mandate.max_position_weight {resolved_position_cap} is carried and "
+                    "validated but NOT evaluated by S0-S2: these diagnostics operate on "
+                    "segment aggregates, not per-holding weights. It binds only in the "
+                    "holdings-level S3 reconciliation solve."),
+        ))
+
     forced_fallback = {e.dimension for e in errors
                        if e.severity == "dimension" and e.dimension}
     strategic = mandate.get("strategic_allocation") or {}
@@ -1258,6 +1281,7 @@ def run_pipeline(policy: dict | None, exposures: dict | None,
         coverage=coverage,
         budget=budget,
         policy_hash=policy_hash,
+        max_position_weight=resolved_position_cap,
     )
 
 

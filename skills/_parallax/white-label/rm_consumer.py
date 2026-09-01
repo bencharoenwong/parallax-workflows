@@ -142,6 +142,82 @@ def _safe_logo_url(value: str) -> str:
 BrandingLoader = Callable[[], Mapping[str, Any]]
 
 
+#: Audience render modes per `parallax-conventions.md` §13.1. `internal_analyst`
+#: is today's rendering, unchanged; `client_safe` is the forward-to-client
+#: deliverable.
+DEFAULT_AUDIENCE = "internal_analyst"
+_AUDIENCE_MODES = frozenset({"internal_analyst", "client_safe"})
+
+#: Notice lines appended to About This Report when resolution falls back to
+#: the default. Neither echoes the raw config or flag value that triggered
+#: the fallback — untrusted config must not reach the client-visible footer.
+_UNRECOGNIZED_AUDIENCE_NOTICE = (
+    "Audience mode: unrecognized value; rendered as internal_analyst"
+)
+_MALFORMED_AUDIENCE_NOTICE = (
+    "Audience mode: malformed configuration; rendered as internal_analyst"
+)
+
+
+def resolve_audience(
+    branding: Any, audience: str | None = None
+) -> tuple[str, str | None]:
+    """Resolve the §13.1 audience precedence. Returns ``(mode, notice)``.
+
+    Pure function, no I/O — importable and callable without side effects, so
+    both the RM seam (client-review, via `load_rm_branding_context`) and a
+    direct Bash `python3 -c` call (rebalance, which does not use the RM seam)
+    share exactly one implementation of the precedence order:
+
+    1. A recognized per-invocation ``audience`` flag wins silently.
+    2. An unrecognized non-empty flag falls back to `DEFAULT_AUDIENCE` with a
+       notice.
+    3. A flag of ``None`` (or empty) reads ``branding["render"]["audience_default"]``
+       defensively. `branding` may not be a ``Mapping``, `render` may be
+       missing, ``None``, or not itself a ``Mapping``, and `audience_default`
+       may be missing, ``None``, or not a ``str`` — every one of those degrades
+       to `DEFAULT_AUDIENCE`.
+    4. A recognized config value wins silently.
+    5. An unrecognized non-empty config value falls back with a notice.
+    6. `render` or `audience_default` genuinely ABSENT (missing or explicit
+       ``None``, including a non-Mapping `branding`) falls back to
+       `DEFAULT_AUDIENCE` **silently** — absence is not a config error.
+    7. `render` present but not a ``Mapping``, or `audience_default` present
+       but not a ``str``, is MALFORMED — distinct from absent — and falls
+       back with a notice.
+    """
+    if audience:
+        if audience in _AUDIENCE_MODES:
+            return audience, None
+        return DEFAULT_AUDIENCE, _UNRECOGNIZED_AUDIENCE_NOTICE
+
+    render = branding.get("render") if isinstance(branding, Mapping) else None
+    if render is None:
+        return DEFAULT_AUDIENCE, None  # absent config: silent
+    if not isinstance(render, Mapping):
+        return DEFAULT_AUDIENCE, _MALFORMED_AUDIENCE_NOTICE  # malformed shape
+
+    config_value = render.get("audience_default")
+    if config_value is None:
+        return DEFAULT_AUDIENCE, None  # absent config: silent
+    if not isinstance(config_value, str):
+        return DEFAULT_AUDIENCE, _MALFORMED_AUDIENCE_NOTICE  # malformed shape
+
+    if config_value in _AUDIENCE_MODES:
+        return config_value, None
+    return DEFAULT_AUDIENCE, _UNRECOGNIZED_AUDIENCE_NOTICE
+
+
+#: Unconditional second About This Report line per integration-pattern.md §7
+#: ("Currency basis"). Independent of `white_label_active` and of which
+#: Branding-line row rendered — every path emits it, immediately after the
+#: Branding line.
+_CURRENCY_LINE = (
+    "Currency: figures as reported by source data; "
+    "no base-currency conversion applied."
+)
+
+
 class RMBrandingContext(NamedTuple):
     """Rendered white-label fragments for an RM markdown report.
 
@@ -154,10 +230,15 @@ class RMBrandingContext(NamedTuple):
     and raises ``AttributeError: 'NoneType' object has no attribute '__dict__'``
     on Python 3.11. ``NamedTuple`` has the same frozen, field-named semantics
     and loads cleanly either way.
+
+    ``resolved_audience`` is appended LAST, with a default, so existing
+    2-arg positional construction (``RMBrandingContext(header, about)``)
+    keeps working for every caller written before §13 wiring.
     """
 
     header_lines: tuple[str, ...]
     about_lines: tuple[str, ...]
+    resolved_audience: str = DEFAULT_AUDIENCE
 
 
 def _has_renderable_branding(branding: Mapping[str, Any]) -> bool:
@@ -178,28 +259,59 @@ def _has_renderable_branding(branding: Mapping[str, Any]) -> bool:
     return False
 
 
+def _context(
+    header_lines: tuple[str, ...],
+    about_lines: tuple[str, ...],
+    resolved_audience: str,
+    notice: str | None,
+) -> RMBrandingContext:
+    """Tail helper: insert the §7 currency line, then append the
+    resolve_audience notice and the §13.4 mode line.
+
+    Every return point in `load_rm_branding_context` funnels through here so
+    the lines land in the same relative order no matter which branch produced
+    `about_lines`, matching integration-pattern.md §7 row order: Branding
+    line, unconditional currency line, any `Logo on file:` line, any notice,
+    then the client-safe mode line. Every branch passes a Branding-first
+    tuple, so inserting at index 1 places the currency line second.
+    """
+    lines = list(about_lines)
+    lines.insert(1, _CURRENCY_LINE)
+    if notice:
+        lines.append(notice)
+    if resolved_audience == "client_safe":
+        lines.append("Audience mode: client-safe")
+    return RMBrandingContext(tuple(header_lines), tuple(lines), resolved_audience)
+
+
 def load_rm_branding_context(
     deliverable_label: str,
     *,
     branding_loader: BrandingLoader = load_visual_branding,
+    audience: str | None = None,
 ) -> RMBrandingContext:
     """Load and render the visual-only branding overlay for one RM report.
 
     Loader failures degrade to default branding. Raw errors and source
-    references never enter returned text.
+    references never enter returned text. `about_lines` always carries the
+    unconditional §7 currency line immediately after the Branding line — on
+    every path, including default-Parallax and error fallbacks. Also resolves
+    the §13.1 audience mode via `resolve_audience` and folds its notice plus
+    the §13.4 mode line into `about_lines` — the caller never assembles any
+    of those lines itself.
     """
     try:
         branding = branding_loader()
     except Exception:
-        return RMBrandingContext(
-            header_lines=(),
-            about_lines=("Branding: default Parallax (config error)",),
+        resolved, notice = resolve_audience(None, audience)
+        return _context(
+            (), ("Branding: default Parallax (config error)",), resolved, notice
         )
 
     if not isinstance(branding, Mapping):
-        return RMBrandingContext(
-            header_lines=(),
-            about_lines=("Branding: default Parallax (config error)",),
+        resolved, notice = resolve_audience(None, audience)
+        return _context(
+            (), ("Branding: default Parallax (config error)",), resolved, notice
         )
 
     error = str(branding.get("error") or "")
@@ -207,10 +319,12 @@ def load_rm_branding_context(
     if active and not _has_renderable_branding(branding):
         # Active state with nothing to render: fall back rather than print an
         # unsupported white-label claim over a default-Parallax report.
-        return RMBrandingContext(
-            header_lines=(),
-            about_lines=("Branding: default Parallax (branding empty)",),
+        resolved, notice = resolve_audience(branding, audience)
+        return _context(
+            (), ("Branding: default Parallax (branding empty)",), resolved, notice
         )
+
+    resolved, notice = resolve_audience(branding, audience)
     header_lines: list[str] = []
     about_lines: list[str] = []
 
@@ -248,7 +362,7 @@ def load_rm_branding_context(
     else:
         about_lines.append("Branding: default Parallax (config error)")
 
-    return RMBrandingContext(tuple(header_lines), tuple(about_lines))
+    return _context(tuple(header_lines), tuple(about_lines), resolved, notice)
 
 
 def render_rm_markdown(
@@ -256,6 +370,7 @@ def render_rm_markdown(
     deliverable_label: str,
     *,
     branding_loader: BrandingLoader = load_visual_branding,
+    audience: str | None = None,
 ) -> str:
     """Compose a complete minimal RM markdown report around a valid body.
 
@@ -266,6 +381,7 @@ def render_rm_markdown(
     context = load_rm_branding_context(
         deliverable_label,
         branding_loader=branding_loader,
+        audience=audience,
     )
     blocks = [*context.header_lines, body, "## About This Report", *context.about_lines]
     return "\n\n".join(block for block in blocks if block)

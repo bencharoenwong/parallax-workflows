@@ -126,6 +126,13 @@ class ReconcileResult:
     target_weights: dict | None    # {symbol: weight}; None unless optimal
     trades: list[Trade] | None     # None unless optimal
     objective: dict | None         # {score_term, turnover_term, total}; None unless optimal
+    total_turnover: float | None   # sum |delta| across every holding, two-sided;
+                                   # None unless optimal. Not derivable from
+                                   # objective["turnover_term"] by dividing out the
+                                   # penalty — turnover_penalty=0 is a legal payload
+                                   # value (see tests) and would make that division
+                                   # undefined, so this is new information, not a
+                                   # convenience alias.
     binding: list[BindingConstraint]
     violations: list[Violation]    # non-empty only when infeasible
     solver: dict                   # {backend, available, message}
@@ -147,7 +154,7 @@ def _result(status: str, *, basis: str | None = None,
             errors: list[InputError] | None = None,
             conflicts: list[Conflict] | None = None,
             target_weights: dict | None = None, trades: list[Trade] | None = None,
-            objective: dict | None = None,
+            objective: dict | None = None, total_turnover: float | None = None,
             binding: list[BindingConstraint] | None = None,
             violations: list[Violation] | None = None,
             solver_available: bool = True, solver_message: str = "") -> ReconcileResult:
@@ -157,6 +164,7 @@ def _result(status: str, *, basis: str | None = None,
         calibration_status=CALIBRATION_STATUS,
         errors=errors or [], conflicts=conflicts or [],
         target_weights=target_weights, trades=trades, objective=objective,
+        total_turnover=total_turnover,
         binding=binding or [], violations=violations or [],
         solver={"backend": SOLVER_BACKEND, "available": solver_available,
                 "message": solver_message},
@@ -526,6 +534,7 @@ def reconcile(payload: Any) -> ReconcileResult:
         objective={"score_term": round(score_term, 9),
                    "turnover_term": round(penalty * turnover, 9),
                    "total": round(score_term - penalty * turnover, 9)},
+        total_turnover=round(turnover, 9),
         binding=_binding(payload, bounds, weights))
 
 

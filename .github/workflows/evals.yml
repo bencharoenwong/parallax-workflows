@@ -85,6 +85,13 @@ jobs:
       - name: Render-gate anchor and SKILL.md wiring gates
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/_parallax/test_render_gate.py -q
+      # coverage_check.py sits beside render_gate.py for the same reason (no
+      # tests/ subdirectory under skills/_parallax/ itself); named as its own
+      # step so a broken root stays visible in the step list, same convention
+      # as every other root below.
+      - name: Redundancy coverage-check gates
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: python -m pytest skills/_parallax/test_coverage_check.py -q
       # A separate process per top-level test root, not a second path appended
       # to the line above: three skills ship a `tests/conftest.py` and pytest
       # names every one `tests.conftest`, so collecting two roots in one process

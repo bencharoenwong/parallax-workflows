@@ -48,6 +48,12 @@ mandate:
                                        # `te_budget_not_evaluated` Data Quality row. No proxy.
   prohibited_products: []              # instrument identifiers (RIC or ISIN strings).
                                        # HARD. Same precedence tier as house-view excludes.
+  max_position_weight: null            # OPTIONAL. Fraction in (0, 1] on the SLEEVE basis —
+                                       # the largest weight any single holding may carry.
+                                       # null = no mandate cap. HARD. Enforced by the S3
+                                       # reconciliation solve only — S0-S2 diagnostics carry
+                                       # and validate it and emit a
+                                       # `position_cap_not_evaluated` Data Quality row.
   sub_allocations:
     # Sub-asset-class granularity within the equity sleeve. Shape is forward-looking; the
     # dimension/basis/code_list split isolates the code-list choice so it can be pinned
@@ -109,6 +115,9 @@ governance:
 # 5. Bands are hard in computation. An RM override is permitted, but must be
 #    written into `governance.human_review_recorded` and surfaced in the
 #    rendered output.
+# 6. `max_position_weight` is sleeve-basis. A cap below a segment floor carried
+#    by a single holding makes the mandate jointly infeasible by construction —
+#    the solver reports `infeasible` with the smallest violation.
 
 # ===========================================================================
 # policy_hash computation
