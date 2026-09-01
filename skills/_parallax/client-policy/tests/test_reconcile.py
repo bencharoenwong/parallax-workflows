@@ -132,6 +132,82 @@ def test_objective_terms_reconcile():
 
 
 # --------------------------------------------------------------------------
+# total_turnover: two-sided disclosure, present-as-null off the optimal path
+# --------------------------------------------------------------------------
+
+def test_total_turnover_is_reported_on_optimal():
+    """Base fixture's unique optimum (AAA .5->.6, BBB .3->.1, CCC .2->.3) has
+    a two-sided turnover of exactly 0.4: |.1| + |-.2| + |.1|."""
+    r = reconcile.reconcile(_payload())
+    assert r.status == "optimal"
+    assert abs(r.total_turnover - 0.4) < TOL
+
+
+def test_total_turnover_equals_sum_of_absolute_trade_deltas():
+    r = reconcile.reconcile(_payload(turnover_penalty=0.5))
+    assert r.status == "optimal"
+    expected = sum(abs(t.delta) for t in r.trades)
+    assert abs(r.total_turnover - expected) < TOL
+
+
+def test_total_turnover_is_reported_when_penalty_is_zero():
+    """turnover_penalty=0.0 is the base fixture's own value, and makes
+    objective['turnover_term'] identically 0 — total_turnover is not
+    derivable from it by dividing out the penalty, so it must still be
+    reported and be strictly positive here (the base optimum trades)."""
+    r = reconcile.reconcile(_payload())
+    assert r.status == "optimal"
+    assert r.objective["turnover_term"] == 0.0
+    assert r.total_turnover > 0.0
+
+
+def test_total_turnover_is_zero_when_nothing_trades():
+    r = reconcile.reconcile(_payload(turnover_penalty=100.0, bands=[]))
+    assert r.status == "optimal"
+    assert all(t.action == "hold" for t in r.trades)
+    assert abs(r.total_turnover - 0.0) < TOL
+
+
+def test_total_turnover_absent_on_non_optimal_statuses(monkeypatch):
+    """Parametrized (manually — no pytest.mark.parametrize import in this
+    module) over the four statuses that never reach the optimal return:
+    infeasible, conflict (exclude-vs-user-min shape), invalid_input (dropped
+    coefficient), and solver_unavailable (monkeypatch idiom)."""
+    infeasible = _payload(excludes=["CCC.X"])
+    conflict = _payload(excludes=["AAA.X"])
+    conflict["holdings"][0]["min"] = 0.1
+    invalid_input = _payload()
+    del invalid_input["holdings"][1]["coefficient"]
+    for expected_status, payload in (
+        ("infeasible", infeasible),
+        ("conflict", conflict),
+        ("invalid_input", invalid_input),
+    ):
+        r = reconcile.reconcile(payload)
+        assert r.status == expected_status
+        assert r.total_turnover is None
+        assert r.target_weights is None
+
+    monkeypatch.setitem(sys.modules, "scipy", None)
+    monkeypatch.setitem(sys.modules, "scipy.optimize", None)
+    r = reconcile.reconcile(_payload())
+    assert r.status == "solver_unavailable"
+    assert r.total_turnover is None
+    assert r.target_weights is None
+
+
+def test_total_turnover_round_trips_through_the_cli(tmp_path):
+    f = tmp_path / "payload.json"
+    f.write_text(json.dumps(_payload()), encoding="utf-8")
+    proc = subprocess.run([sys.executable, str(MODULE), "--input", str(f)],
+                          capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    out = json.loads(proc.stdout)
+    assert out["status"] == "optimal"
+    assert abs(out["total_turnover"] - 0.4) < TOL
+
+
+# --------------------------------------------------------------------------
 # Infeasibility: report smallest violations, never silently relax
 # --------------------------------------------------------------------------
 

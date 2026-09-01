@@ -157,10 +157,30 @@ S3 optimizer — a real Bash tool call, never prose arithmetic:
 3. **Route by `status` — the trade list is gate-shaped (conventions §4.0)**:
    - `optimal`: the result's `target_weights`/`trades` become the Target
      Weights in Trade Recommendations. Carry `binding`, `turnover_penalty` +
-     `penalty_source`, `basis`, and `calibration_status` into the Policy
-     Reconciliation section. If `basis` is `sleeve` and the report renders
-     total-portfolio weights, convert visibly (state the equity sleeve weight
-     used) — a sleeve delta read as a total delta is a wrong trade size.
+     `penalty_source`, `basis`, `calibration_status`, and `total_turnover`
+     into the Policy Reconciliation section. Render `total_turnover`
+     prominently: it is **two-sided** turnover — the sum of the absolute
+     weight changes across every holding, so a one-way trade of 20 points
+     contributes 40. State the two-sided basis on the same line, or the
+     figure reads as twice the trading it represents. State with it that the
+     turnover penalty is `heuristic_phase0` and uncalibrated, so the figure is
+     a disclosure and not a threshold verdict — do not render an advisory
+     turnover limit, a "high/low" judgement, or any comparison against a
+     target. If `basis` is `sleeve` and the report renders total-portfolio
+     weights, convert visibly (state the equity sleeve weight used) — a
+     sleeve delta read as a total delta is a wrong trade size, and the same
+     visible conversion applies to `total_turnover` when rendered in
+     total-portfolio terms.
+   - **Single-name floor disclosure.** For every payload band with a `min`
+     above 0 whose `symbols` list holds exactly one member, render one line
+     in Policy Reconciliation naming the segment, the floor, and the single
+     holding that carries it: a segment floor met by one position forces
+     that position to at least the floor, whatever its score. Add "and the
+     floor is binding in this solve" when `binding` also carries
+     `band:<dimension>:<key>:min` for that band. A symbol that is the sole
+     member of two floored bands gets two lines, each naming its own
+     segment, floor, and binding state. Derived from the payload the skill
+     assembled and the result it received; no solver change.
    - `infeasible`: render the `violations` table (the exact smallest
      relaxations) and NO optimizer targets — no target weights, no trade
      list, not even labeled "suggested". Never silently relax. Trade
@@ -215,7 +235,7 @@ The Bash result may show a `[render-gate] WARN:` line above the report. That lin
 - **Macro Context** (relevant market outlook, sector tilt implications for rebalancing)
 - **Score Momentum** (table: each holding's score trend — improving/stable/declining)
 - **Ground-truth Integrity** (only render if any mismatch detected — table: `input_ticker`, `returned_name`, `expected_name`, match status per holding. ⚠ MISMATCH rows are re-scored individually and flagged — scores not trusted from `quick_portfolio_scores` — per loader.md §5 rule 3.)
-- **Policy Reconciliation** (only if `policy=` was supplied) — the S3 result: status; on `optimal` the binding constraints, resolved turnover penalty with its source, basis, and `calibration_status` disclosure; on `infeasible` the smallest-violations table with an explicit "no targets rendered — constraints not silently relaxed" line; on `conflict` the named conflicts awaiting human decision; on any other status the UNVERIFIED statement with the reason. Also list any `tilts.excludes` entries not matched to a held symbol as "excluded, not held" (Batch C2 step 1). List every profile-derived holding used as a coefficient, with its same-scale verification outcome (verified same-scale-by-construction, or excluded from the solve on disagreement/single-source) per the Batch C2 coefficient bullet. Follows conventions §4.0: this section never converts an unknown into a pass.
+- **Policy Reconciliation** (only if `policy=` was supplied) — the S3 result: status; on `optimal` the binding constraints, resolved turnover penalty with its source, basis, `calibration_status` disclosure, and the two-sided total turnover with its uncalibrated-penalty note; on `infeasible` the smallest-violations table with an explicit "no targets rendered — constraints not silently relaxed" line; on `conflict` the named conflicts awaiting human decision; on any other status the UNVERIFIED statement with the reason. Also list any `tilts.excludes` entries not matched to a held symbol as "excluded, not held" (Batch C2 step 1). List every profile-derived holding used as a coefficient, with its same-scale verification outcome (verified same-scale-by-construction, or excluded from the solve on disagreement/single-source) per the Batch C2 coefficient bullet. Follows conventions §4.0: this section never converts an unknown into a pass.
 - **Mandate Constraints Applied** (only if `constraints=` or `target=` was provided) — echoes each parsed constraint/target and its effect (weight cap, exclusion, priority bias, quality-score ranking); any unparsed `constraints=` clause renders "constraint not recognized — not applied"; any unrecognized `target=` phrase is echoed with a statement of how the standard recommendations already address it.
 - **Trade Recommendations** (table: Priority | Action | Symbol | Current Weight | Target Weight | Rationale — every recommendation cites a specific flag or finding; if view active, "Rationale" includes view-tilt direction; any recommendation on a ⚠ MISMATCH holding must note scores were re-derived via `get_peer_snapshot` directly). Render a one-line informational preface above this table per conventions §12.2; framed per conventions §12 (candidate actions, not instructions) and supports `action_labels=plain` per §12.3 for retail-suitable rendering.
 - **Replacement Candidates** (if trimming, scored alternatives; filtered against tilts.excludes + tilts.excludes_freeform if view active; all candidates ground-truth-validated per loader.md §5 rule 3; divergence-assertion result for replacement universe per loader.md §5 rule 4)
