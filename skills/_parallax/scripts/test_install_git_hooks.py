@@ -564,3 +564,38 @@ def test_an_outdated_installed_layer_is_refreshed(clone: Path) -> None:
     assert "OLDER LAYER TEXT" not in refreshed, "outdated layer survived"
     assert refreshed.count(MARKER) == 1, "layer duplicated instead of replaced"
     assert _hook_blocks(clone), "refreshed hook no longer blocks"
+
+
+def test_refresh_refuses_a_layer_whose_end_marker_is_gone(clone: Path) -> None:
+    """With the end marker hand-deleted, the installed-layer extraction runs to
+    EOF, so the refresh comparison always mismatches — and the strip sed then
+    deletes from the start marker to EOF, silently removing every other gate
+    below the layer. The installer must refuse instead of stripping."""
+    _write_hook(clone, "#!/usr/bin/env bash\necho downstream-gate\nexit 0\n")
+    assert _install(clone).returncode == 0
+    hook = clone / ".git/hooks/pre-push"
+    body = hook.read_text()
+    corrupted = "\n".join(
+        line for line in body.splitlines()
+        if not line.startswith("# --- end parallax:commit-message-scan")) + "\n"
+    assert corrupted != body, "corruption edit missed the end marker"
+    hook.write_text(corrupted)
+
+    r = _install(clone)
+    assert r.returncode != 0, "refreshed a layer it cannot bound"
+    assert "echo downstream-gate" in hook.read_text(), (
+        "stripped everything below the start marker")
+
+
+def test_a_backup_is_taken_even_when_the_environment_exports_backup(
+        clone: Path) -> None:
+    """The backup-once guard tests `[ -z "${BACKUP:-}" ]`. Unless the script
+    initialises BACKUP itself, a caller's exported BACKUP satisfies the guard,
+    so a fresh install over an existing hook silently skips the backup — and
+    the syntax-failure restore path would copy that arbitrary env-named file
+    over the hook."""
+    _write_hook(clone, "#!/usr/bin/env bash\nexit 0\n")
+    r = _install(clone, env={"BACKUP": "/nonexistent/inherited-backup"})
+    assert r.returncode == 0, r.stderr
+    backups = list((clone / ".git/hooks").glob("pre-push.bak.*"))
+    assert backups, "env-inherited BACKUP suppressed the backup"

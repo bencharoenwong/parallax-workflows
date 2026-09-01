@@ -355,3 +355,20 @@ def test_a_second_selector_excludes_published_commits_from_the_range(
     assert scm.main([f"{pushed}..{tip}"]) == 1, \
         "sanity: without the exclusion the published commit is re-scanned"
     assert scm.main([f"{pushed}..{tip}", "^origin/main"]) == 0
+
+
+def test_an_option_like_selector_fails_closed_instead_of_under_scanning(
+        tmp_path, monkeypatch):
+    """An argument starting with `-` is parsed by `git log` as an OPTION, not a
+    selector: `--max-count=1` silently narrows the walk and reports a clean
+    scan of the wrong range — the silent pass this scanner exists to prevent.
+    It must fail closed (exit 2), same as an undeterminable range."""
+    root = _repo(tmp_path / "r")
+    base = _commit(root, "chore: base")
+    _branch_off_main(root)
+    _commit(root, "chore: scrub the fixture")
+    tip = _commit(root, "chore: an ordinary tip commit")
+    monkeypatch.setattr(scm, "REPO_ROOT", root)
+
+    assert scm.main([f"{base}..{tip}"]) == 1, "sanity: the range has a hit"
+    assert scm.main(["--max-count=1", f"{base}..{tip}"]) == 2

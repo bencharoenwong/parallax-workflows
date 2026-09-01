@@ -203,6 +203,7 @@ installed_layer() {
 }
 
 _PARALLAX_REFRESH=0
+BACKUP=""
 if already_installed "$HOOK"; then
     if [ "$(installed_layer "$HOOK")" = "$(printf '%s' "$LAYER")" ]; then
         echo "  ✓ already installed in $HOOK"
@@ -245,6 +246,12 @@ if ! mkdir -p "$HOOKS_DIR" 2>/dev/null; then
 fi
 
 if [ "$_PARALLAX_REFRESH" = 1 ]; then
+    if ! installed_layer "$HOOK" | tail -1 | grep -q "^# --- end ${MARKER} "; then
+        printf '\033[31mFATAL:\033[0m the installed layer in %s has no end marker.\n' "$HOOK" >&2
+        printf 'Stripping it would delete everything after the start marker, including any\n' >&2
+        printf 'other gates below it. Repair or remove the layer by hand, then re-run.\n' >&2
+        exit 3
+    fi
     BACKUP="$HOOK.bak.$(date +%Y%m%d%H%M%S)"
     cp "$HOOK" "$BACKUP" || exit 2
     echo "  backed up existing hook -> $BACKUP"

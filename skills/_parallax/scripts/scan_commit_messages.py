@@ -108,6 +108,12 @@ def read_commits(repo: Path | None = None,
         revs = [rev_range]
     else:
         revs = list(rev_range)
+    for rev in revs:
+        if rev.startswith("-"):
+            raise ScanError(
+                f"revision selector {rev!r} looks like a git-log option; "
+                "refusing to pass it through — a mis-parsed selector narrows "
+                "the walk and reports a clean scan of the wrong range")
     result = _git(root, "log", "-z", "--format=%H%n%B", *revs)
     if result.returncode != 0:
         raise ScanError(f"git log failed for range {' '.join(revs)!r}")
