@@ -212,6 +212,13 @@ def test_unknown_symbol_in_band_is_rejected():
     assert any("ZZZ.X" in e.reason for e in r.errors)
 
 
+def test_unknown_symbol_in_excludes_is_rejected():
+    p = _payload(excludes=["tobacco"])
+    r = reconcile.reconcile(p)
+    assert r.status == "invalid_input"
+    assert any("tobacco" in e.reason for e in r.errors)
+
+
 def test_weights_not_summing_to_one_are_rejected_not_rescaled():
     p = _payload()
     p["holdings"][0]["weight"] = 0.9

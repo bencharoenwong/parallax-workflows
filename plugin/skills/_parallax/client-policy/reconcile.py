@@ -238,6 +238,14 @@ def validate_payload(payload: Any) -> list[InputError]:
                                  "must be a finite number >= 0"))
 
     known = set(symbols)
+    if holdings:
+        # A typo or unresolved sector/region/theme name here would silently
+        # constrain nothing — mirrors the band-symbol check below.
+        unknown_excludes = [s for s in excludes if s not in known]
+        if unknown_excludes:
+            errors.append(InputError("excludes",
+                                     f"not in holdings: {unknown_excludes}"))
+
     bands = payload.get("bands", [])
     if not isinstance(bands, list):
         errors.append(InputError("bands", "must be an array"))
