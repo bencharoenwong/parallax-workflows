@@ -186,6 +186,7 @@ PARALLAX_INCLUDE = [
     "skill-structure-conventions.md",
     "jit-load-compliance-audit.md",
     "render_gate.py",
+    "coverage_check.py",
     "white-label",
     "house-view/loader.md",
     "house-view/schema.yaml",
