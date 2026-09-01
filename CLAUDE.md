@@ -55,7 +55,7 @@ skills/
 
 ## Prerequisites
 
-The Parallax MCP server must be connected as `claude_ai_Parallax`. If tools return "not found", the server is not configured.
+The Parallax MCP server must be connected and discoverable in the current runtime. Do not require a fixed server alias or synthesize tool names from one: use live capability discovery, then call the exact names and input schemas it exposes. If no Parallax capability is discovered, report the connector as unavailable in this session; a stale configured alias is not proof of health.
 
 ## Gated push (no-mistakes)
 

@@ -20,7 +20,7 @@ description: "Portfolio rebalancing with health flags and macro context: analyze
 - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
 - JIT-load ../parallax-client-review/references/recommendation-matrix.md for priority classification. If missing, use inline fallback: High=3+ flags (trim/exit), Medium=2 flags (investigate/trim), Low=1 flag (monitor/hold)
 - Health flags feed directly into trade action determination — High priority = strong trim/exit
-- analyze_portfolio is called twice with distinct field subsets (performance+risk, then concentration+attribution); see Batch A table for the required `portfolio=` + `fields=` shape. The parameters `holdings` and `lens` do not exist in the deployed schema. WARNING: responses often exceed 180K chars (daily time series). If output is truncated, too large, or MCP raises a schema validation error, fall back to `check_portfolio_redundancy` (concentration) + `quick_portfolio_scores` (factor tilt).
+- Call `analyze_portfolio` at most once. Build its request from the discovered live schema and request only compact current-state/concentration blocks; never request rolling, drawdown, return-period, benchmark-price, or other daily time-series blocks in the normal rebalance path. If the capability is absent, the request cannot be mapped unambiguously, the response is oversized/truncated, or schema/field validation fails, do not retry it with a guessed shape — use discovered concentration/scoring fallbacks.
 - build_stock_universe can find replacement candidates for positions being trimmed
 - Output must include specific candidate weight changes, framed per conventions §12 (analysis, not instructions), not just vague suggestions
 - For portfolios with 10+ holdings, prioritize score trend scans for top/bottom 5 by weight to manage latency
@@ -38,7 +38,7 @@ Generate prioritized trade recommendations using health flags, macro context, an
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, fallback patterns, and macro reasoning. JIT-load `_parallax/house-view/loader.md` for active-view validation and tilt application. JIT-load `../parallax-client-review/references/recommendation-matrix.md` for the priority system.
+Execute with the exact Parallax callables and input schemas exposed by live capability discovery in the current runtime. Logical tool names below describe intent; they are not a fixed MCP namespace or permission to use a stale request shape. JIT-load `_parallax/parallax-conventions.md` for discovery, execution mode, fallback patterns, and macro reasoning. JIT-load `_parallax/house-view/loader.md` for active-view validation and tilt application. JIT-load `../parallax-client-review/references/recommendation-matrix.md` for the priority system.
 
 ### Pre-flight: house-view drift check
 
@@ -49,33 +49,36 @@ proceeding to this skill's main workflow.
 Skip this pre-flight if invoked with `--skip-drift-check` or if no active
 house view exists.
 
-### Batch 0 — Tool Loading & Active House View
+### Batch 0 — Live Capability Discovery & Active House View
 
-Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
+Use the host's live discovery surface per conventions §0.1 (`ToolSearch` with `"+Parallax"` in Claude Code). Build a session-local map from each logical capability used below to the exact callable name and live input schema returned now. Live discovery overrides every namespace, parameter, and schema example in this file. Do not synthesize missing callables from a remembered server alias.
+
+Classify failures before any retry: a transient transport/cancellation/empty-success may retry only the affected call once; tool-not-found, schema-validation, or response `invalid_fields` failures do not permit a same-payload or guessed-shape retry. Use a discovered fallback and record the affected coverage instead.
 
 Per `loader.md` §1-§2: read view if present, validate hash and expiry. If view present, capture tilt vector + excludes. The view's tilts define **direction of rebalance** — current weights that diverge from view-tilted weights become rebalance candidates beyond the standard health-flag triggers. If validation fails or no view present, run rebalance using only health flags + macro context.
 
 ### Batch A — Current state (parallel, best-effort)
 
+The parameter column states the semantic intent. Construct every payload from that callable's discovered live schema, using only advertised keys and types. If the schema cannot represent the intent unambiguously, treat that logical capability as unavailable and follow its fallback without probing guessed variants.
+
 | Tool | Parameters | Notes |
 |---|---|---|
-| `analyze_portfolio` | `portfolio=[{date: <today ISO>, symbol: <ric>, weight: <w>}]`, `fields=["performance_metrics","rolling_metrics","drawdown_analysis","portfolio_summary","time_period_returns"]` | Returns/risk metrics. Build portfolio array from provided holdings; use today's date as as-of date. **Timeout fallback:** skip if exceeds 30s; fall back to `check_portfolio_redundancy` + `quick_portfolio_scores`. If MCP schema validation fails, use fallback immediately. |
-| `analyze_portfolio` | `portfolio=[{date: <today ISO>, symbol: <ric>, weight: <w>}]`, `fields=["concentration_metrics","sector_allocation","company_contribution"]` | Concentration and attribution. Two separate field-subset calls to manage response size. **Timeout fallback:** skip if exceeds 30s. |
+| `analyze_portfolio` | Map the supplied symbol/weight holdings into the live schema. If `fields` is advertised, request the compact intersection of `portfolio_summary`, `concentration_metrics`, `sector_allocation`, and `company_contribution`; omit time-series blocks. | **Exactly one call maximum.** Use today's ISO date only if the live schema requires a date. Skip after 30s, oversized/truncated output, schema validation, or any non-empty `result._meta.invalid_fields`; do not retry this capability. Use discovered `check_portfolio_redundancy` for overlap/concentration and per-holding score aggregation for factor context. |
 | `get_peer_snapshot` | per holding | **Primary scoring source** for `PARALLAX_LOADER_V2=1`. **Timeout handling:** fire in parallel; if N≥2 calls timeout, mark those holdings as "scores unavailable" and continue with health-flags-only scoring. Collect successful scores only. Aggregate client-side per `loader.md` §3b. **For 10+ holdings:** prioritize top/bottom 5 by weight; timeout on remaining holdings is acceptable — fall back to health flags for those positions. |
 | `get_company_info` | per holding | **Ground-truth check oracle** per loader.md §5 rule 3 — records `expected_name` for mismatch check against `get_peer_snapshot.target_company`. **Timeout handling:** if timeout, mark holding as "name verification unavailable" and flag ⚠ UNVERIFIED. |
 | `get_score_analysis` | per holding | Score trend (improving/stable/declining) for the Score Momentum table and the Exit classification. Input is symbol + weeks only — no Batch A dependency, so it fires here in parallel. **For 10+ holdings:** prioritize top/bottom 5 by weight. **Timeout handling:** mark the holding's trend "unavailable" and continue. |
-| `check_portfolio_redundancy` | `holdings` | Overlap detection. **Timeout fallback:** if exceeds 20s, flag "redundancy check skipped" and continue. |
+| `check_portfolio_redundancy` | Map the normalized holdings into the live schema. | Overlap detection and the compact fallback when `analyze_portfolio` is unavailable. **Timeout fallback:** if exceeds 20s, flag "redundancy check skipped" and continue. |
 | `list_macro_countries` | — | Check market coverage. **Timeout fallback:** skip if exceeds 5s. |
-| `quick_portfolio_scores`| `holdings` | **Legacy/V1 path only**. Do NOT use if `PARALLAX_LOADER_V2=1` and view active. **Timeout fallback:** if exceeds 10s, degrade to health-flags-only scoring. |
+| `quick_portfolio_scores`| Map the normalized holdings into the live schema. | **Discovered Legacy/V1 fallback only.** Do NOT use if `PARALLAX_LOADER_V2=1` and view active. **Timeout fallback:** if exceeds 10s, degrade to health-flags-only scoring. |
 
 **After Batch A** (best-effort completion):
 1. Cross-check returned names against `get_company_info` results per loader.md §5 rule 3. For `PARALLAX_LOADER_V2=1`, any mismatch in `get_peer_snapshot` is flagged ⚠ MISMATCH and excluded from aggregate calculations. Unverified holdings (name check timeout) are flagged ⚠ UNVERIFIED.
 2. For holdings with no scores (timeouts), scoring is determined by health flags only — these holdings cannot be ranked by factor scores and must be evaluated by "High/Medium/Low priority" categories based on flags alone.
-3. Summary output: "Batch A completed: N/M holdings scored (M-N timeouts on peer snapshots). Rebalance will proceed with health-flag-driven recommendations for scoring-unavailable holdings."
+3. Summary output: "Batch A completed: N/M holdings scored (M-N unavailable or timed out). Portfolio snapshot: available/fallback/unavailable. Rebalance will proceed with health-flag-driven recommendations for scoring-unavailable holdings." Keep this execution receipt inside the rendered report only where the Output Format calls for the information; never leak it as pre-report scaffold.
 
 ### Batch B — Macro (after Batch A)
 
-1. Call `macro_analyst` with component="tactical" for each unique covered market (cap 3) — fire all calls in one parallel batch. (Score trends moved into Batch A: `get_score_analysis` has no Batch A dependency, so it no longer waits behind the slow `analyze_portfolio` legs.)
+1. Call the discovered `macro_analyst` capability for each unique covered market (cap 3), using the live schema's tactical-component value when advertised — fire all calls in one parallel batch. (Score trends moved into Batch A: `get_score_analysis` has no Batch A dependency, so it no longer waits behind the portfolio snapshot.)
 
 ### Batch C — Health flags + trade decisions
 
