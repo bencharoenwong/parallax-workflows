@@ -197,6 +197,8 @@ PARALLAX_INCLUDE = [
     "client-policy/schema.yaml",
     "client-policy/policy-loader.md",
     "client-policy/adaptation.py",
+    "client-policy/reconcile.py",
+    "client-policy/requirements.txt",
     "AI-profiles/output-template.md",
 ]
 
