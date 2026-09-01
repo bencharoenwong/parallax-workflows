@@ -14,8 +14,10 @@ tells an RM what to buy and sell. Three consequences, none negotiable:
   * scipy absent  -> status="solver_unavailable", no weights, no trades. The
     caller renders an UNVERIFIED-class error, never a partial or empty trade
     list. Mirrors the white-label jsonschema precedent (PR #108).
-  * a non-excluded holding without a finite objective coefficient ->
-    status="invalid_input" naming the symbols. A silent 0.0 coefficient would
+  * a non-excluded holding without a finite objective coefficient, or an
+    `excludes`/band `symbols` entry that doesn't match a holding symbol ->
+    status="invalid_input" naming the offending entries. A silent 0.0
+    coefficient, or a typo'd exclude that silently constrains nothing, would
     change the optimization without anyone knowing.
   * infeasible constraints -> status="infeasible" with the SMALLEST violations
     (an exact second LP: uniform L1 slacks on every relaxable constraint,
