@@ -258,6 +258,60 @@ def test_te_budget_present_emits_not_evaluated_row():
     assert [r for r in absent.data_quality if r.kind == "te_budget_not_evaluated"] == []
 
 
+def test_max_position_weight_absent_is_valid_and_passes_through_none():
+    policy = load_policy("policy_full.yaml")
+    assert not any(e.path == "mandate.max_position_weight"
+                   for e in adaptation.validate_policy(policy))
+    result = adaptation.run_pipeline(
+        policy, load_json("exposures_sample.json"), load_json("view_tilts_sample.json")
+    )
+    assert result.max_position_weight is None
+    assert [r for r in result.data_quality if r.kind == "position_cap_not_evaluated"] == []
+
+
+def test_max_position_weight_valid_value_passes_through_with_one_row():
+    policy = load_policy("policy_full.yaml")
+    policy["mandate"]["max_position_weight"] = 0.25
+    assert adaptation.validate_policy(policy) == []
+    result = adaptation.run_pipeline(
+        policy, load_json("exposures_sample.json"), load_json("view_tilts_sample.json")
+    )
+    assert result.max_position_weight == pytest.approx(0.25)
+    rows = [r for r in result.data_quality if r.kind == "position_cap_not_evaluated"]
+    assert len(rows) == 1
+    assert "0.25" in rows[0].detail
+
+
+@pytest.mark.parametrize("bad", [0.0, -0.1, 1.5, "0.25", True])
+def test_max_position_weight_invalid_values_are_blocking(bad):
+    policy = load_policy("policy_full.yaml")
+    policy["mandate"]["max_position_weight"] = bad
+    errors = adaptation.validate_policy(policy)
+    hits = [e for e in errors if e.path == "mandate.max_position_weight"]
+    assert len(hits) == 1
+    assert hits[0].severity == "blocking"
+    result = adaptation.run_pipeline(
+        policy, load_json("exposures_sample.json"), load_json("view_tilts_sample.json")
+    )
+    assert result.fallback_tier == "no_policy"
+
+
+def test_position_cap_not_evaluated_kind_documented_in_three_copies():
+    # Cheap sync guard (Part 2 §4 three-copy rule): the DataQualityRow docstring,
+    # policy-loader.md §7.4's kind list, and client-review SKILL.md's Policy Data
+    # Quality bullet must all name the kind.
+    adaptation_src = (CLIENT_POLICY_DIR / "adaptation.py").read_text()
+    loader_md = (CLIENT_POLICY_DIR / "policy-loader.md").read_text()
+    client_review_skill = (
+        CLIENT_POLICY_DIR.parent.parent / "parallax-client-review" / "SKILL.md"
+    ).read_text()
+    # Grep the pipe-delimited kind-list comment specifically, not just any
+    # mention (the DQ-row emission code alone would otherwise satisfy this).
+    assert "te_budget_not_evaluated|position_cap_not_evaluated|" in adaptation_src
+    assert "position_cap_not_evaluated" in loader_md
+    assert "position_cap_not_evaluated" in client_review_skill
+
+
 def test_one_sided_band_emits_missing_bands_row():
     result = adaptation.run_pipeline(
         load_policy("policy_partial_dims.yaml"),

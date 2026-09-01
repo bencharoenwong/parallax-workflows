@@ -149,7 +149,14 @@ S3 optimizer — a real Bash tool call, never prose arithmetic:
      BEFORE assembling the payload; a `tilts.excludes` entry naming a symbol
      the client does not hold is vacuously satisfied — list it in the Policy
      Reconciliation section as "excluded, not held" rather than passing it.
-   - `position_cap`: the parsed "max N% per position" cap, when present.
+   - `position_cap`: the most restrictive of the parsed "max N% per position"
+     cap and the adaptation result's `max_position_weight` — `min()` of the
+     two, never the looser. Both are sleeve-basis fractions; convert before
+     comparing if the parsed cap was stated on a different basis. Name which
+     bound applied in Mandate Constraints Applied. A mandate cap below a
+     segment floor carried by a single holding is jointly infeasible by
+     construction — the solver returns `infeasible` with the smallest
+     violation and the step-3 routing below applies unchanged.
    - `bands`: one entry per adaptation segment carrying band edges —
      `{dimension, key, symbols: [members by the holding→region/sector
      mapping], min, max}`.
@@ -189,7 +196,10 @@ S3 optimizer — a real Bash tool call, never prose arithmetic:
      list, not even labeled "suggested". Never silently relax. Trade
      Recommendations fall back to the flag-based path, labeled "not
      policy-reconciled — constraints jointly infeasible, see Policy
-     Reconciliation".
+     Reconciliation". When the smallest-violation table names a bound on a
+     holding that is the sole member of a floored band, state that the
+     mandate is internally contradictory (cap against floor) — distinct from
+     ordinary infeasibility.
    - `conflict`: render each named conflict (e.g. an exclude against a user
      minimum) for human decision — precedence collisions are never
      auto-resolved (design guardrail 5). Same fallback labeling as
@@ -255,9 +265,9 @@ The Bash result may show a `[render-gate] WARN:` line above the report. That lin
 - **Macro Context** (relevant market outlook, sector tilt implications for rebalancing)
 - **Score Momentum** (table: each holding's score trend — improving/stable/declining)
 - **Ground-truth Integrity** (only render if any mismatch detected — table: `input_ticker`, `returned_name`, `expected_name`, match status per holding. ⚠ MISMATCH rows are re-scored individually and flagged — scores not trusted from `quick_portfolio_scores` — per loader.md §5 rule 3.)
-- The policy section family (Policy Reconciliation and, when parsed, Mandate Constraints Applied) carries mandate-compliance content and §4.0 gate states; it renders in place, unchanged, in both audience modes — §13.2's relocation rule does not apply to it.
+- The policy section family (Policy Reconciliation and, when constraints/target/mandate `max_position_weight` triggers it, Mandate Constraints Applied) carries mandate-compliance content and §4.0 gate states; it renders in place, unchanged, in both audience modes — §13.2's relocation rule does not apply to it.
 - **Policy Reconciliation** (only if `policy=` was supplied) — the S3 result: status; on `optimal` the binding constraints, resolved turnover penalty with its source, basis, `calibration_status` disclosure, and the two-sided total turnover with its uncalibrated-penalty note; on `infeasible` the smallest-violations table with an explicit "no targets rendered — constraints not silently relaxed" line; on `conflict` the named conflicts awaiting human decision; on any other status the UNVERIFIED statement with the reason. Also list any `tilts.excludes` entries not matched to a held symbol as "excluded, not held" (Batch C2 step 1). List every profile-derived holding used as a coefficient, with its same-scale verification outcome (verified same-scale-by-construction, or excluded from the solve on disagreement/single-source) per the Batch C2 coefficient bullet. Follows conventions §4.0: this section never converts an unknown into a pass.
-- **Mandate Constraints Applied** (only if `constraints=` or `target=` was provided) — echoes each parsed constraint/target and its effect (weight cap, exclusion, priority bias, quality-score ranking); any unparsed `constraints=` clause renders "constraint not recognized — not applied"; any unrecognized `target=` phrase is echoed with a statement of how the standard recommendations already address it.
+- **Mandate Constraints Applied** (only if `constraints=` or `target=` was provided, or a mandate `max_position_weight` is present) — echoes each parsed constraint/target and its effect (weight cap, exclusion, priority bias, quality-score ranking); any unparsed `constraints=` clause renders "constraint not recognized — not applied"; any unrecognized `target=` phrase is echoed with a statement of how the standard recommendations already address it. When a mandate `max_position_weight` is present, state it, state the parsed per-position cap if any, and state which of the two bound (Batch C2 step 1 `position_cap` bullet).
 - **Trade Recommendations** (table: Priority | Action | Symbol | Current Weight | Target Weight | Rationale — every recommendation cites a specific flag or finding; if view active, "Rationale" includes view-tilt direction; any recommendation on a ⚠ MISMATCH holding must note scores were re-derived via `get_peer_snapshot` directly). Render a one-line informational preface above this table per conventions §12.2; framed per conventions §12 (candidate actions, not instructions) and supports `action_labels=plain` per §12.3 for retail-suitable rendering. Under `audience=client_safe`, `action_labels=plain` is implied per conventions §13.2 — the Action labels always render neutral status descriptions, and any accompanying magnitude renders as distance-to-threshold arithmetic per §12.3, not a suggested trade size.
 - **Replacement Candidates** (if trimming, scored alternatives; filtered against tilts.excludes + tilts.excludes_freeform if view active; all candidates ground-truth-validated per loader.md §5 rule 3; divergence-assertion result for replacement universe per loader.md §5 rule 4)
 - **Before/After Comparison** (factor scores: current vs. proposed; if view active, alignment-to-view metric included; factor names render with the §13.3 plain-language gloss by reference under `audience=client_safe`)

@@ -599,6 +599,23 @@ def test_policy_hash_strips_zeros_bool_guard_holds():
     assert adaptation._strip_empty({"a": {"b": {}}, "c": False}) == {"c": False}
 
 
+def test_policy_hash_unchanged_by_null_max_position_weight():
+    # `mandate.max_position_weight: null` is a fresh field on this fixture, so
+    # this regression pins the digest against the schema.yaml-documented digest
+    # that predates the field's addition.
+    doc, expected = _hash_fixture()
+    edited = copy.deepcopy(doc)
+    edited["mandate"]["max_position_weight"] = None
+    assert adaptation.compute_policy_hash(edited) == expected
+
+
+def test_policy_hash_changes_with_set_max_position_weight():
+    doc, expected = _hash_fixture()
+    edited = copy.deepcopy(doc)
+    edited["mandate"]["max_position_weight"] = 0.25
+    assert adaptation.compute_policy_hash(edited) != expected
+
+
 # ==========================================================================
 # Invariant 11 — CLI (subprocess, so argv parsing and exit codes are real)
 # ==========================================================================
