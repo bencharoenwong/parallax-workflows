@@ -128,8 +128,12 @@ S3 optimizer — a real Bash tool call, never prose arithmetic:
      is unavailable must be either excluded from the solve or given an
      explicit disclosed treatment — the solver rejects a missing coefficient
      rather than guessing.
-   - `excludes`: `tilts.excludes` plus symbols matching a parsed "no <sector>"
-     exclusion.
+   - `excludes`: the subset of `tilts.excludes` that matches a held symbol,
+     plus held symbols matching a parsed "no <sector>" exclusion. The solver
+     hard-rejects an excludes entry that matches no holding, so intersect
+     BEFORE assembling the payload; a `tilts.excludes` entry naming a symbol
+     the client does not hold is vacuously satisfied — list it in the Policy
+     Reconciliation section as "excluded, not held" rather than passing it.
    - `position_cap`: the parsed "max N% per position" cap, when present.
    - `bands`: one entry per adaptation segment carrying band edges —
      `{dimension, key, symbols: [members by the holding→region/sector
