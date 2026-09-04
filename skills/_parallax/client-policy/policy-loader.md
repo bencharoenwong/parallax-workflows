@@ -14,7 +14,7 @@ Not part of the house view. The house view is firm-level and carries no client p
 
 The RM supplies the policy inline (YAML or JSON) or as a file path via `policy=` at invocation. There is no default on-disk location, no on-disk resolution, and no platform fetch. Absence means fallback tier `no_policy` and today's unchanged behavior — no policy sections render.
 
-Inline input is written to a private `mktemp` file before invoking the helper, using the `mktemp "${TMPDIR:-/tmp}/..."` form already used by the render-gate step of `parallax-client-review/SKILL.md` (the step headed "Render — deterministic gate", whose draft file is written as `DRAFT="$(mktemp "${TMPDIR:-/tmp}/clientrev.XXXXXX")"`). Never a fixed or predictable path — `/tmp` symlink hazard.
+Inline input is written to a private `mktemp` file before invoking the helper, using the `mktemp "${TMPDIR:-/tmp}/..."` form already used by the render-gate step of `parallax-client-review/SKILL.md` (the step headed "Render — deterministic gate" — or its spine form "Step 6 — Render (deterministic gate, mandatory)" — whose draft file is written as `DRAFT="$(mktemp "${TMPDIR:-/tmp}/clientrev.XXXXXX")"`). Never a fixed or predictable path — `/tmp` symlink hazard.
 
 ---
 

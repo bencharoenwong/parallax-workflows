@@ -4,6 +4,25 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-09-04: Skills name host primitives, not host tools; one step spine; authority headers on shared files
+
+**Why.** The skills must run on harnesses other than Claude Code. A survey of all 38 `parallax-*` SKILL.md files on 2026-09-04 found 34 host-locked (a Claude Code discovery call in 11 phrasings, a connector namespace literal in 28, host tool names for questions, file writes and fetches), five names for the first workflow step, four names for the output contract, five names for failure handling and none in 12, exit criteria in 3, and the same shared rules copied into 5–22 files instead of referenced. An agent must read six shared files plus a 200-line SKILL.md to learn which rules apply to the skill in front of it, and cannot tell from prose whether a shared table binds or merely records an observation. The design test for every change here: it must reduce that read set or make a trust decision mechanical.
+
+**Impact.**
+- **`parallax-conventions.md` §14 defines nine host primitives** (`discover-tools`, `call-tool`, `ask-operator`, `run-shell`, `invoke-skill`, `load-reference`, `write-artifact`, `read-config`, `fetch-url`), a per-host binding table (Claude Code, Codex CLI, claude.ai) and a fail-open rule per primitive that keeps the §4.0 split: gates fail closed, display sections degrade. The table never prints a connector namespace; discovery returns it. `write-artifact` exists so document-derived text never reaches a shell heredoc, and it is never a substitute for a chain-owning append. §0.0 and §0.1 now point at §14 instead of naming one host's tool.
+- **§15 is the canonical home for translator routing and failure**, which five skills carried as copies with no shared source. §10.3 states the render gate's relation to a following translate step.
+- **`skill-structure-conventions.md` gains four sections:** Host portability (forward-only; legacy files migrate one family per PR), Canonical step spine (Steps 0–7 with fixed names; config-producing skills substitute Confirm/Persist), Authority header (`contract | registry | observation` + verified date on every shared `.md`), and Failure modes / Done when (two closing sections under fixed names).
+- `house-view/loader.md` §8 no longer tells consumers to put gotchas in frontmatter (banned since the 2026-06-07 spec-compliance entry). `house-view/README.md` and `MCP_FIELD_INVENTORY.md` no longer cite a binary and a refresh script that never existed.
+- README and CONTRIBUTING point at the new sections. No SKILL.md changed in this batch.
+
+**Alternatives.**
+- `[DROP]` **A harness-agnostic workflow intermediate representation** (the option the 2026-05-18 council rejected). Still rejected: nine primitive names and one binding table are a vocabulary, not a new language, and cost nothing at runtime.
+- `[DROP]` **Rewrite the SKILL.md files in the same batch.** Rejected: CONTRIBUTING forbids mechanical refactors, four tests assert prose in specific skills, and the 2026-05-25 trigger-completeness entry set the precedent of forward-only rules with a scheduled sweep. The sweep is that schedule.
+- `[DROP]` **Keep `ToolSearch` as the documented discovery step and add a footnote per host.** Rejected: it leaves 33 files naming one host's tool as the instruction, which is the defect.
+- **Supersedes** the 2026-04-22 `[DROP] Portability layer first — rejected on timing, not merit`. The timing condition named there (prove the house-view chain is load-bearing first, via the diff harness) was never run to a verdict: the harness shipped as a spec with its `--live` mode unimplemented. That deferral is superseded on a different basis — the owner instruction of 2026-09-04 requires multi-harness support directly, and a second concrete runtime target now exists. The 2026-05-18 council's other condition, a sanitization audit gating which skills ship to a non-Claude runtime, is unchanged: `skills/PERIMETER.md` remains the allowlist and only `codex-safe` rows install elsewhere.
+
+**Flip conditions.** (a) A host appears whose discovery, question or shell model does not fit the nine primitives → extend §14, do not add host names to skills. (b) The sweep finds a primitive that no skill uses → remove it. (c) A cross-host parity run shows a *verify*-marked binding is wrong → correct the row before any skill relies on it.
+
 ## 2026-08-31: Exclude already-published commits from the pre-push message scan; refresh outdated installed hook layers
 
 **Why.** The pre-push layer scans the range `git` reports for the push (`<remote sha>..<local sha>`). Merging `main` into a feature branch puts the whole of `main`'s history that the local branch doesn't yet share with the specific remote branch back into that range, so a since-added restricted-term rule that matched an old, already-public commit message on `main` blocked a push that published nothing new — the commit was already public regardless of this push. Separately, the installer's `already_installed()` check only ever grepped for the marker line, so a clone that installed the layer before a fix shipped reported "already installed" forever and never picked up the fix; a fixed layer effectively never reached it.
@@ -666,6 +685,7 @@ Audit context: 4-pass review trail (Plan v1 → feature-dev:code-architect → P
 
 ## Index
 
+- [2026-09-04 — Host primitives, step spine, authority headers](#2026-09-04-skills-name-host-primitives-not-host-tools-one-step-spine-authority-headers-on-shared-files)
 - [2026-05-06 (later) — white-label-onboard restructure: extract.py package split first, SKILL.md split conditional](#2026-05-06-later-white-label-onboard-restructure-extractpy-package-split-first-skillmd-split-conditional)
 - [2026-05-06 — Extend white-label-onboard with PPTX/DOCX + voice; reject new client-brand-ingest skill](#2026-05-06-extend-white-label-onboard-with-pptxdocx--voice-reject-new-client-brand-ingest-skill)
 - [2026-04-27 — Ingest stays pure; augmentation moves to consumer-skill JIT](#2026-04-27-house-view-ingest-stays-pure-data-augmentation-moves-to-consumer-skill-jit)
