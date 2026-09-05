@@ -4,6 +4,11 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-09-05 (sweep: should-i-buy)
+
+### Changed
+- **`parallax-should-i-buy/SKILL.md` is the first skill on the canonical step spine** (Steps 0–7 per `skill-structure-conventions.md`), names host primitives instead of host tools (the Claude Code binding sits in a `host-note` block), renders the translator, disclosure, disclaimer and white-label blocks by reference (§15, §9.2, §9.1, integration-pattern §2/§5/§7) instead of carrying copies, and closes with `## Failure modes` and `## Done when`. Output Format is unchanged (the graders are locked against it). Description now routes symmetrically to deep-dive, peer-comparison and score-explainer. 198 → 160 lines. Removed from the host-primitive lint's legacy allowlist (33 remain).
+
 ## 2026-09-05 (hygiene)
 
 ### Fixed

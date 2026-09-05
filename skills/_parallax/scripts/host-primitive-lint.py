@@ -89,7 +89,6 @@ LEGACY_ALLOWLIST: frozenset[str] = frozenset({
     "parallax-rebalance",
     "parallax-scenario-analysis",
     "parallax-score-explainer",
-    "parallax-should-i-buy",
     "parallax-stress-house-view",
     "parallax-stress-test-thesis",
     "parallax-thematic-screen",

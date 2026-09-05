@@ -152,7 +152,7 @@ Proprietary pillar/factor vocabulary guard: trigger phrases ship verbatim to whi
 
 ## Host portability
 
-Added 2026-09-04. These skills run on Claude Code, Codex CLI and claude.ai. A SKILL.md names the **host primitives** defined in `parallax-conventions.md` §14 (`discover-tools`, `call-tool`, `ask-operator`, `run-shell`, `invoke-skill`, `load-reference`, `write-artifact`, `read-config`, `fetch-url`) and never a host tool. The forbidden host identifiers are listed once, in `parallax-conventions.md` §14.1; outside a `<!-- host-note -->` … `<!-- /host-note -->` block a SKILL.md must not contain any of them. A host note may show the Claude Code binding as an example; the primitive name is the instruction.
+Added 2026-09-04. These skills run on Claude Code, Codex CLI and claude.ai. A SKILL.md names the **host primitives** defined in `parallax-conventions.md` §14 (`discover-tools`, `call-tool`, `ask-operator`, `run-shell`, `invoke-skill`, `load-reference`, `write-artifact`, `read-config`, `fetch-url`) and never a host tool. The forbidden host identifiers are listed once, in `parallax-conventions.md` §14.1; outside a `<!-- host-note -->` … `<!-- /host-note -->` block a SKILL.md must not contain any of them. A host note may show the Claude Code binding as an example; the primitive name is the instruction. The `/parallax-<name>` slash form in the description, `## When not to use`, and Usage examples is the operator's command syntax and is not a host-lock; the rule bites only when a workflow step chains to a sibling by slash syntax alone instead of naming `invoke-skill`.
 
 **Scope is forward-only.** Skills that existed before 2026-09-04 are host-locked and are migrated one family per PR (the structure sweep). New skills comply before merge.
 
@@ -176,6 +176,8 @@ Added 2026-09-04. Every data-producing skill uses the same phase names, in this 
 | 7 | `### Step 7 — Translate (conditional)` | only when a language argument was supplied | conventions §15 |
 
 Config-producing skills (house-view load/make, white-label onboard) replace Steps 5–7 with `### Step 5 — Confirm` (operator gate, `ask-operator`) and `### Step 6 — Persist` (transactional write through the helper). Sub-steps use letters (`Step 2a`), never a second numbering scheme. The two house-view pre-flights are both Step 0 sub-bullets: the loader path (loader.md §1–§2) for every consumer; the drift check (`auto-on-load-judge-pattern.md`) additionally for skills that build or reweight a portfolio.
+
+Three migration shapes share this vocabulary: the report consumer (`parallax-should-i-buy` is the reference), the config producer (Confirm/Persist above), and the multi-mode skill (basket vs. single-ticker, or a mode flag that changes the batch shape): a multi-mode skill keeps one spine and states the mode branch inside the affected step (`Step 2 — Fetch: basket mode fires …; single-ticker mode fires …`), never a second numbering.
 
 The existing `### Render — deterministic gate (LAST step, mandatory)` label is the pre-spine form of Step 6; `test_render_gate.py` accepts either while the sweep runs. Forward-only, same scope statement as "Host portability".
 

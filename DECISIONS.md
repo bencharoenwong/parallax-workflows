@@ -4,6 +4,16 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-09-05 (sweep): should-i-buy is the template for the SKILL.md sweep
+
+**Why.** The 2026-09-04 rules are forward-only, so the 34 legacy skills migrate one family per PR. The first migration has to be the skill everything else copies: should-i-buy is the most-used, the render-gate reference, and the one whose Output Format the graders are locked against — which makes it the sharpest test of "restructure the workflow, leave the contract alone."
+
+**Impact.** Steps 0–7 under the spine names; primitives not host tools; every shared block by reference; `## Failure modes` and `## Done when`; symmetric routing in the description; 160 lines. The four prose-asserting tests and the eval graders pass unchanged. Owner gate before merge: one fresh-session end-to-end run per CONTRIBUTING step 3.
+
+**Alternatives.** `[DROP]` **Start with a small skill (peer-comparison, 108 lines).** Rejected: it exercises none of the hard parts (translation, house-view flags, render gate, grader lock), so it would not prove the template.
+
+**Flip conditions.** A fresh-session run shows the model skipping a by-reference load that the old inline copy made unmissable → restore that one block inline and record it in the JIT-load audit, do not abandon by-reference.
+
 ## 2026-09-05 (later): One token-cost table, tests in both directions
 
 **Why.** Three tables carried the price list (`token-costs.md`, `evals/graders/token_model.py`, `AI-profiles/README.md`) and a fourth copy sits in `parallax-ai-consensus/SKILL.md`. The existing test checked doc→code only, so a name priced in code but missing from the doc (`check_api_health`) never surfaced.

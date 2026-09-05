@@ -12,10 +12,10 @@ spec = importlib.util.spec_from_file_location("host_primitive_lint", SCRIPT)
 lint = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(lint)
 
-# The host-locked set on 2026-09-05. This literal and the script's
+# The host-locked set still on the allowlist (34 on 2026-09-05; shrinks with each sweep PR). This literal and the script's
 # LEGACY_ALLOWLIST are compared with EQUALITY: shrinking one without the other,
 # or re-adding a swept skill, fails here and is a deliberate two-file edit.
-LEGACY_34 = frozenset({
+LEGACY_PINNED = frozenset({
     "parallax-ai-buffett", "parallax-ai-consensus", "parallax-ai-greenblatt",
     "parallax-ai-klarman", "parallax-ai-ptj", "parallax-ai-soros",
     "parallax-cio-letter-prep", "parallax-client-review",
@@ -28,7 +28,7 @@ LEGACY_34 = frozenset({
     "parallax-peer-comparison", "parallax-portfolio-builder",
     "parallax-portfolio-checkup", "parallax-rebalance",
     "parallax-scenario-analysis", "parallax-score-explainer",
-    "parallax-should-i-buy", "parallax-stress-house-view",
+    "parallax-stress-house-view",
     "parallax-stress-test-thesis", "parallax-thematic-screen",
     "parallax-watchlist-monitor", "parallax-white-label-onboard",
 })
@@ -143,7 +143,7 @@ def test_line_numbers_survive_stripping():
 
 
 def test_stale_allowlist_entry_fails(tmp_path):
-    name = sorted(LEGACY_34)[0]
+    name = sorted(LEGACY_PINNED)[0]
     root = _tree(tmp_path, {name: "# Clean\n\nNo host identifiers at all.\n"})
     rc, out = _run(root)
     assert rc == 1
@@ -151,14 +151,14 @@ def test_stale_allowlist_entry_fails(tmp_path):
 
 
 def test_allowlisted_file_with_hits_passes(tmp_path):
-    name = sorted(LEGACY_34)[0]
+    name = sorted(LEGACY_PINNED)[0]
     root = _tree(tmp_path, {name: "# Legacy\n\nCall ToolSearch.\n"})
     rc, _ = _run(root)
     assert rc == 0
 
 
 def test_allowlist_equals_pinned_literal():
-    assert lint.LEGACY_ALLOWLIST == LEGACY_34
+    assert lint.LEGACY_ALLOWLIST == LEGACY_PINNED
 
 
 def test_every_allowlisted_name_is_a_real_skill_dir():

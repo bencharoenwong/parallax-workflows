@@ -1,6 +1,6 @@
 ---
 name: parallax-should-i-buy
-description: "Quick stock evaluation: company overview, Parallax factor scores, financial health, score trends, macro context, dividends, news, and analyst outlook. Plain language output. Accepts plain ticker (AAPL) or RIC (AAPL.O). NOT for portfolio analysis (use /parallax-morning-brief), not for full due diligence (use /parallax-due-diligence), not for backtesting (use /backtest)."
+description: "Quick stock evaluation: company overview, Parallax factor scores, financial health, score trends, macro context, dividends, news, and analyst outlook. Plain language output. Accepts plain ticker (AAPL) or RIC (AAPL.O). NOT for portfolio analysis (use /parallax-morning-brief), not for full due diligence (use /parallax-due-diligence), not for a position deep dive with AI assessment (use /parallax-deep-dive), not for peer-set comparison (use /parallax-peer-comparison), not for methodology-only questions (use /parallax-score-explainer), not for backtesting (use /backtest)."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -11,32 +11,20 @@ description: "Quick stock evaluation: company overview, Parallax factor scores, 
 
 - Portfolio-level analysis → use /parallax-morning-brief
 - Full research report → use /parallax-due-diligence
-- Running backtests → use /backtest
+- Position deep dive with AI assessment → use /parallax-deep-dive
 - Peer comparison deep dive → use /parallax-peer-comparison
+- Methodology-only explanation → use /parallax-score-explainer
+- Running backtests → use /backtest
 
 ## Gotchas
 
-- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
-- JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §7.1/§7.2/§7.3 (single-stock conflict surfacing — blanket note + peer-suggest token + score-tension banner), §6 (audit). Do NOT apply tilts — single-stock skills surface conflicts only; peer suggestions are flagged but never filtered.
-- When rendering §7.1/§7.2/§7.3 flags, JIT-load _parallax/house-view/render_helpers.md and route every token through `render_view_conflict()`. Do not hand-construct the string.
-- LANGUAGE PILOT — if a second positional arg is supplied AND is not `en`, Step 5 (Translate output) is MANDATORY — do not skip. Route `zh-CN`/`zh-TW`/`zh-HK` to `/translate-chinese-finance`, `th` to `/translate-thai-finance`. The variant must be passed as a delimited routing block ABOVE the prose body — NOT as a prose sentence the translator could echo. Use exactly this shape (the marker line and the dashed separator are required so the translator skips the block):
-ROUTING DIRECTIVE — DO NOT TRANSLATE OR ECHO THIS BLOCK:
-        target_variant: zh-HK            # one of: zh-CN | zh-TW | zh-HK | (omit for Thai)
-        register: institutional | retail # optional; absent → institutional
-        source_language: en
-        begin_content_below_separator: true
-      ---
-
-      <rendered prose body starts here>
-
-    Without this exact shape, zh-HK in particular will trigger the Chinese translator's "ask for HK listings" branch and break the automated chain.
-- Disclaimer boundary check after translation: track which disclaimer was rendered in the English output (view-aware per loader.md §5 if a house view is active, otherwise the standard wording). If the translator dropped the disclaimer, FIRST attempt a single-section re-translation pass on just the disclaimer text (using the same routing-directive shape) so the appended disclaimer matches the output language. Only fall back to appending the original English disclaimer if the second translator pass also fails or returns empty.
-- When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
-- get_stock_outlook supports 4 aspects — analyst_targets, recommendations, risk_return, dividends
-- explain_methodology is free/instant — use it for any notably high or low score
-- For non-US tickers, consult the exchange suffix table in shared conventions
-- Always include the disclaimer at the end
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
+- Expected Parallax spend: ~29 tokens (`_parallax/token-costs.md`), which already includes the two macro markets; each market is 5 of the 29.
+- JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §2 identity cross-check, §3 parallel execution, §4 fallbacks, §14 host primitives, §15 translation.
+- JIT-load `_parallax/house-view/loader.md` FIRST; if an active view is present follow §2 (validation), §7.1/§7.2/§7.3 (single-stock conflict surfacing), §6 (audit). Do NOT apply tilts — single-stock skills surface conflicts only; peer suggestions are flagged, never filtered. Route every §7 token through `render_view_conflict()` per `_parallax/house-view/render_helpers.md`; never hand-construct the string.
+- Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report) — load happens in Step 0, rendering in Step 5.
+- `get_stock_outlook` has 4 aspects — analyst_targets, recommendations, risk_return, dividends; coverage rule per conventions §4 "Stock outlook coverage".
+- `explain_methodology` is free — use it for any factor score ≥ 8 or ≤ 3.
+- A language argument other than `en` makes Step 7 mandatory (conventions §15); the routing block shape and the disclaimer boundary check live there.
 
 Quick, plain-language stock evaluation using Parallax MCP tools.
 
@@ -56,57 +44,58 @@ Accepts plain tickers (auto-converts to RIC) or RIC format directly. Optional se
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, fallback patterns, and HK ambiguity protocol. JIT-load `_parallax/house-view/loader.md` for active-view validation and single-stock conflict surfacing.
+Every host interaction below is a host primitive from `parallax-conventions.md` §14; the per-host binding is in §14.2 and the fail-open rule per primitive in §14.3. Parallax callables are whatever `discover-tools` returns this session — never a remembered namespace (§0.1).
 
-### Step 0 — Tool Loading & Active House View
+### Step 0 — Pre-flight
 
-Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
+1. Resolve every `_parallax/...` path named in this file to the canonical copy (conventions §0.0 item 1).
+2. `discover-tools`: bind every logical tool named anywhere in this workflow (Steps 1–4: `get_company_info`, the Batch A and Batch B tools, `explain_methodology`) to the exact callable and schema the connector exposes now (conventions §0.0–§0.1).
+   <!-- host-note -->
+   Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
+   <!-- /host-note -->
+3. Parse args: symbol; optional language (`en` default); optional `register=`; optional `audience=` (conventions §13.1 precedence).
+4. `load-reference` `_parallax/house-view/loader.md`; run §1–§2. If a view is present, capture the tilt vector and excludes for §7.1/§7.2/§7.3 surfacing in Step 5. Do NOT apply tilts.
+5. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`. The loader returns exactly seven keys (`load_visual_branding()`); `branding["voice"]` raises `KeyError` by design.
 
-Per `loader.md` §1-§2 + §7.1/§7.2/§7.3. If view present, capture tilt vector + excludes. Do NOT apply tilts to scoring. During output rendering (see Output Format below), surface: (a) the blanket House View Note immediately after The Scores (§7.1), (b) an inline peer-suggest token at the Risk vs Peers section if Parallax's peer-suggest sits on a view-UW sector or the excludes list (§7.2), (c) an inline tension banner at The Scores if `total_score ≥ 7` AND the stock's sector is UW in the view (§7.3). Flag, do not filter — peer suggestions stay in the table.
+### Step 1 — Resolve inputs
 
-### Step 1 — Resolve Ticker
+`call-tool` `get_company_info` with the plain ticker or RIC. If empty, retry with exchange suffixes per conventions §1. For `.HK` and numeric codes, apply the §1 ambiguity cross-check. On the fund/OEIC pattern, apply the §1 fallback and stop.
 
-Use `get_company_info` with the plain ticker or RIC. If empty, retry with exchange suffixes per shared conventions. For `.HK`/numeric codes, apply the HK ambiguity cross-check.
+### Step 2 — Fetch (parallel batches)
 
-### Step 2 — Fire data calls in parallel
-
-Once RIC is confirmed, call **all of the following simultaneously**:
+**Batch A** — once the RIC is confirmed, `call-tool` all of the following together:
 
 | Tool | Parameters | Notes |
 |---|---|---|
 | `get_peer_snapshot` | `symbol` | Factor scores + peer ranking |
 | `get_financials` | `symbol`, `statement="summary"` | Revenue/income narrative |
 | `get_score_analysis` | `symbol` | 52-week factor trend (server default) |
-| `get_technical_analysis` | `symbol` | Trend direction, momentum, support/resistance — feeds the Technicals lens. Async ~2-5s, may time out (see Technicals fallback in Output Format) |
+| `get_technical_analysis` | `symbol` | Trend direction, momentum, support/resistance — feeds the Technicals lens. Async, may time out (fallback in Output Format) |
 | `get_stock_outlook` | `symbol`, `aspect="analyst_targets"` | Price targets |
 | `get_stock_outlook` | `symbol`, `aspect="recommendations"` | Buy/hold/sell |
 | `get_stock_outlook` | `symbol`, `aspect="risk_return"` | Risk/return vs peers |
-| `get_stock_outlook` | `symbol`, `aspect="dividends"`, `limit` as int 8 (non-default; default is 20 — see conventions §0.2) | Dividend history |
-| `get_news_synthesis` | `symbol` | Async — don't block output |
+| `get_stock_outlook` | `symbol`, `aspect="dividends"`, `limit` as int 8 (non-default; default is 20 — conventions §0.2) | Dividend history |
+| `get_news_synthesis` | `symbol` | Async — never blocks output (§5) |
 
-### Step 3 — Macro context
+**Batch B** — after Step 1 (needs company info for market reasoning): `list_macro_countries`; identify relevant markets (home market + key revenue geographies) per conventions §6, cap at 2; `macro_analyst` with `component="tactical"` per relevant covered market. If no covered market is relevant, the macro section is skipped.
 
-After Step 1 resolves (need company info for market reasoning):
+### Step 3 — Verify
 
-1. Call `list_macro_countries` to check coverage.
-2. Identify relevant markets (home market + key revenue geographies). Cap at 2 markets.
-3. Call `macro_analyst` with component="tactical" for each relevant covered market.
+- Identity cross-check per conventions §2: `get_peer_snapshot.target_company` against `get_company_info.name` after normalization; `get_score_analysis` `data[0].symbol` against the requested RIC. On divergence, warn and treat `get_company_info` as the source of truth; never present mismatched scores as the intended security.
+- Outlook coverage per conventions §4 "Stock outlook coverage": 0–1 of the four aspects returned → the Dividends and Analyst View sections carry the §4 "materially incomplete" flag.
+- Every failed or empty call: retry classification per §0.1, then the §4 display-section rule. This skill renders no gate (no pass/fail verdict on the name), so §4.0 does not apply.
 
-If no covered markets are relevant, skip macro section.
+### Step 4 — Compute
 
-### Step 4 — Interpret and explain
+No deterministic helper: this skill renders Parallax's own figures and never derives new numbers. The only computed conditions are the house-view flags — §7.3 tension (`total_score ≥ 7` AND the stock's sector tilt ≤ −1) and §7.2 peer-suggest conflict — evaluated exactly as `loader.md` states. `call-tool` `explain_methodology` for any factor score ≥ 8 or ≤ 3.
 
-- Call `explain_methodology` for any notably high (≥8) or low (≤3) factor score.
-- Synthesize all data into plain-language output.
-- Apply graceful fallback patterns from shared conventions for any missing data.
+### Step 5 — Compose
 
-### Pre-Render — Load white-label branding
+Fill **Output Format** below, in order. Branding Header and About This Report per integration-pattern.md §5/§7; house-view flags via `render_view_conflict()`; audience mode per conventions §13; AI-interaction disclosure per `parallax-conventions.md §9.2`; disclaimer per loader.md §5 when a view is active, otherwise `parallax-conventions.md §9.1`. Apply the §4 fallbacks for any missing section rather than omitting it silently.
 
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+### Step 6 — Render (deterministic gate, mandatory)
 
-### Render — deterministic gate (LAST step, mandatory)
-
-Compose the complete English report per **Output Format** below, then run it through the **shared** render gate in **one Bash step** before replying or translating. Use a private `mktemp` file. The shared gate is `_parallax/render_gate.py`, a sibling of the directory you loaded this SKILL.md from; pass this skill's key with `--skill should-i-buy` (use the loaded directory's absolute path as `<skill-dir>`):
+`run-shell` the shared gate per conventions §10.3, with this skill's key (`<skill-dir>` is the absolute path of the directory this SKILL.md was loaded from; `_parallax/` is its sibling):
 
 ```
 DRAFT="$(mktemp "${TMPDIR:-/tmp}/shouldibuy.XXXXXX")"
@@ -116,9 +105,11 @@ REPORT
 python3 "<skill-dir>/../_parallax/render_gate.py" --skill should-i-buy < "$DRAFT"; rm -f "$DRAFT"
 ```
 
-**Your entire final English message is exactly that command's stdout** — nothing before it, nothing after it. If Step 5 translation runs, it consumes this gated stdout; translated output is not re-gated.
+The entire final English message is exactly that command's stdout, or the sole input to Step 7. The stderr `[render-gate] WARN:` line is diagnostics: never include it, never translate it; it means the opening drifted from the Output Format start — fix and re-run. If `run-shell` is absent on this host, apply conventions §14.3 (render-gate row).
 
-The Bash result may show a `[render-gate] WARN:` line above the report. That line is stderr diagnostics, not stdout. Never include it in the reply and never pass it to Step 5 translation. It means the drafted opening drifted from the documented Output Format start; fix the opening and re-run the gate.
+### Step 7 — Translate (conditional)
+
+Only when the language argument is not `en`. Translate per `parallax-conventions.md` §15: routing block shape (§15.2), failure footers (§15.3), disclaimer boundary check (§15.4). Skill-specific inputs: the body is the gated Step 6 stdout in Output Format order (The Company through the disclaimer, including the audit line); pass `register: retail` only when `register=retail` was supplied; the translator consumes rendered prose, never raw tool JSON.
 
 ## Output Format
 
@@ -151,48 +142,22 @@ Append audit log entry per loader.md §6.
 
 If active view: use the view-aware disclaimer per loader.md §5. Otherwise: render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 
-### Step 5 — Translate output (conditional, terminal)
 
-This step runs ONLY when the user supplied a second positional arg AND that arg is not `en`.
+## Failure modes
 
-**Imperative directive — do not skip.** Capture two things from the rendered English output before invoking the translator. Capture the gated output of the Render step, not the pre-gate draft; translated output is not re-gated:
+- Ticker unresolved after conventions §1 (two suffix attempts): stop and ask for the RIC; fund/OEIC pattern → the §1 fallback message, no raw error.
+- `get_technical_analysis` timeout: Technicals lens renders from the Momentum factor proxy with the documented prefix; the lens never disappears.
+- 0–1 `get_stock_outlook` aspects: Dividends and Analyst View flagged materially incomplete (conventions §4).
+- News or macro pending: placeholder per conventions §5 / §6; output is not blocked.
+- House-view banner states `malformed` / `expired` / `critical`: the banner renders verbatim (conventions §0.3 item 4).
+- Host lacks a primitive: conventions §14.3, per primitive.
 
-1. The full body — every section in the Output Format above, in order: The Company, The Scores, House View Note (if rendered), Financial Health, Macro Context, Dividends, Risk vs Peers, Recent News, Analyst View, Bottom Line, audit log entry, Disclaimer. Both the audit log entry (per loader.md §6) and the Disclaimer (per loader.md §5 if view active, otherwise the standard wording at the bottom of this file) are in scope.
-2. Which disclaimer variant was rendered (view-aware vs. standard). Used by the boundary check below.
+## Done when
 
-**Variant routing (mechanism is explicit — the translator skill has no parameter slot, only prose; we use a delimited routing block so the translator does not echo it).** Invoke the appropriate translator skill with the input shaped as follows:
-
-```
-ROUTING DIRECTIVE — DO NOT TRANSLATE OR ECHO THIS BLOCK:
-  target_variant: <variant>
-  register: retail
-  source_language: en
-  begin_content_below_separator: true
----
-
-<rendered prose body>
-```
-
-Variant routing table:
-
-- `zh-CN` → `/translate-chinese-finance`, `target_variant: zh-CN`
-- `zh-TW` → `/translate-chinese-finance`, `target_variant: zh-TW`
-- `zh-HK` → `/translate-chinese-finance`, `target_variant: zh-HK` — the routing block is REQUIRED for HK because otherwise the Chinese translator pauses to ask the user (per its `SKILL.md` Greater-China default rules) and breaks the automated chain.
-- `th` → `/translate-thai-finance` — `target_variant` line may be omitted (Thai has no branching), but the routing block (with the marker line and `---` separator) is still REQUIRED so the translator does not echo any leading meta into output.
-
-Pass `register: retail` iff `register=retail` was supplied; otherwise omit the `register:` line so the translator defaults to institutional register.
-
-The translator skill consumes the rendered prose, NOT the raw MCP tool responses. Do not pass `get_company_info` JSON or `get_score_analysis` payloads through the translator — they are structural data, not narrative.
-
-Translator-failure handling:
-- If the translator fails or returns an empty/partial result, output the original English with a one-line warning footer: `> Translation to <lang> failed; output shown in English. Re-run if the issue is transient.`
-- If the language arg is unrecognized (anything other than the five values listed in Usage), output the original English with: `> Language '<arg>' not supported; output shown in English. Supported: en, zh-CN, zh-TW, zh-HK, th.`
-- Translator output replaces the English output in the chat; do not show both.
-
-**Disclaimer boundary check.** Translators are instructed to preserve disclaimer wording per `_parallax/parallax-conventions.md` §9, but compliance is not guaranteed. After translation completes, if the disclaimer is missing from the translated output:
-
-1. **First try a single-section re-translation pass.** Invoke the same translator skill with the same routing block (variant unchanged), passing only the original English disclaimer text as the body. Append the result to the translated output. This keeps the entire output in the target language for the common case (translator merely dropped the disclaimer).
-
-2. **If the re-translation pass fails or returns empty**, fall back to appending the original English disclaimer text — but use the disclaimer that was actually rendered in the English output (view-aware per loader.md §5 if the session has an active house view, otherwise the standard wording). Do NOT re-append the standard disclaimer unconditionally — that would substitute the wrong text in any view-active session.
-
-3. **Audit, do not surface.** When the boundary check fires (either step 1 or step 2), record the event in the existing audit log entry's `notes` field per loader.md §6.2 (e.g., `notes: "disclaimer boundary check fired — re-translated"` or `notes: "disclaimer boundary check fired — english fallback"`). Do NOT add a custom key to the audit entry — loader.md §6.3 forbids skill-specific custom keys; `notes` is the schema-compliant landing spot for free-text traces. Do NOT add a user-visible footer — the appended content is correct either way and a technical English note in an otherwise translated document defeats the purpose of the re-translation pass.
+- Every Output Format section rendered or marked unavailable with its reason, except Macro Context, which is skipped when no covered market is relevant (Step 2 Batch B). First line is `## The Company` or the Branding Header / House View Preamble.
+- When a view is active, the `view_status` banner string appears verbatim in the output (conventions §0.3 item 4).
+- The render gate ran and the reply is its stdout (or the §14.3 note is present in About This Report).
+- `parallax-conventions.md §9.2` disclosure and the §9.1 or view-aware disclaimer are present.
+- Audit log entry appended per loader.md §6 (every consume event, including the no-view case with its `applied_reason`).
+- Expected spend stated (Gotchas) and not exceeded without a stated reason.
+- Translation (if requested) completed per §15, or the §15.3 footer explains why not.
