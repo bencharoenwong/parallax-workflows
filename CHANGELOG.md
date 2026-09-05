@@ -4,6 +4,15 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-09-05 (hygiene)
+
+### Fixed
+- **Three token-cost tables disagreed on membership.** `skills/_parallax/token-costs.md` is now the single source: it gains `check_api_health` (priced 0 in code, absent from the doc), an "Unpriced" table mirroring `KNOWN_UNPRICED`, and the nine `parallax-ai-*` workflow rows that lived only in `AI-profiles/README.md` (now a pointer). `evals/graders/test_token_model.py` gains the code→doc direction, the unpriced set, and an exact rows-and-values check on the AI table, so a typo'd figure or a dropped mode row fails.
+- `scripts/contract_schemas.py` and `scripts/gen_mock_fixtures.py` quoted a sentence that `response-schemas.md` never contained; both now cite what exists.
+
+### Removed
+- `skills/_parallax/AI-profiles/.gitkeep` (directory is populated), `examples/jit-policies.md` (unreferenced), `skills/_parallax/house-view/tests/smoke_test_e2e.py` (matched no collection pattern; never ran).
+
 ## 2026-09-05 (lints)
 
 ### Added

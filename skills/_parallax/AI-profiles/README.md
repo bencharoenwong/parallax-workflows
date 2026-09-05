@@ -32,17 +32,7 @@ A profile can ship ONLY if:
 
 ## v1 token cost summary
 
-| Skill | Typical cost per invocation |
-|---|---|
-| `parallax-ai-buffett` | ~4 tokens |
-| `parallax-ai-greenblatt` (ticker-check) | ~10-15 tokens |
-| `parallax-ai-greenblatt` (universe mode) | ~10-30 tokens |
-| `parallax-ai-klarman` | ~5-7 tokens |
-| `parallax-ai-soros` (single-ticker) | ~25-30 tokens |
-| `parallax-ai-soros` (basket mode) | ~30-40 tokens |
-| `parallax-ai-ptj` (single-ticker) | ~14-16 tokens |
-| `parallax-ai-consensus` (single ticker) | ~60-70 tokens |
-| `parallax-ai-consensus` (basket of 5) | ~180-240 tokens |
+One source: `_parallax/token-costs.md` → "AI investor profile workflows". This file no longer carries a copy (the two tables had drifted apart).
 
 ## In-scope v2 candidates (not implemented in v1)
 

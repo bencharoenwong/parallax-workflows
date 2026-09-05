@@ -4,6 +4,14 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-09-05 (later): One token-cost table, tests in both directions
+
+**Why.** Three tables carried the price list (`token-costs.md`, `evals/graders/token_model.py`, `AI-profiles/README.md`) and a fourth copy sits in `parallax-ai-consensus/SKILL.md`. The existing test checked doc→code only, so a name priced in code but missing from the doc (`check_api_health`) never surfaced.
+
+**Impact.** `token-costs.md` is the source; the AI-profiles README points at it; `test_token_model.py` checks code→doc, the unpriced set, and the AI rows with values. The consensus SKILL.md copy is left for the Phase 3 ai-* sweep.
+
+**Alternatives.** `[DROP]` **A structured `token-costs.yaml` generating both the markdown and the code tables.** Not adopted now: the markdown carries prose caveats a generator cannot own, and the parser count is still small. Revisit if a fifth per-heading parser appears.
+
 ## 2026-09-05: Two lints make the 2026-09-04 rules mechanical; shared files carry authority headers
 
 **Why.** The 2026-09-04 entry added rules with no enforcement seam. A rule with no lint is a hope: the trigger-completeness rule of 2026-05-25 has had "enforcement seam: none" for three months. Both new rules are cheap to check by grep and expensive to police by review.
