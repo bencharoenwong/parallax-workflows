@@ -1,6 +1,6 @@
 ---
 name: parallax-score-explainer
-description: "Explain Parallax scores, factors, and methodology in plain language. Why does a stock score this way? What would change it? Uses methodology docs and score data. NOT for stock analysis (use /parallax-should-i-buy), not for deep dives (use /parallax-deep-dive)."
+description: "Explain Parallax scores, factors, and methodology in plain language. Why does a stock score this way? What would change it? Uses methodology docs and score data. NOT for stock analysis (use /parallax-should-i-buy), not for deep dives (use /parallax-deep-dive), not for portfolio diagnostics (use /parallax-portfolio-checkup)."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -15,13 +15,12 @@ description: "Explain Parallax scores, factors, and methodology in plain languag
 
 ## Gotchas
 
-- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
-- explain_methodology takes a topic string — be specific (e.g., "quality score", "momentum factor")
-- get_docs and list_docs access the full methodology documentation
-- get_score_analysis shows trajectory — useful for explaining "why did this change"
-- Output must be accessible to non-technical clients and compliance teams
-- LANGUAGE HAND-OFF — if `lang=` is present and ≠ `en`, the terminal Translate step is mandatory. Route `zh-CN`/`zh-TW`/`zh-HK` → `/translate-chinese-finance`, `th` → `/translate-thai-finance`, using the delimited routing-directive block (never a prose sentence the translator could echo). Unsupported values → English output with the standard warning footer.
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
+- Expected Parallax spend: 0–2 tokens (`_parallax/token-costs.md`): methodology-only questions are free; score data adds 1–2. `get_stock_report` (10, paid) only when a comprehensive explanation is explicitly needed.
+- JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §4 fallbacks, §11 (this skill's "What Would Change It" line is the grandfathered form), §13 audience mode, §14 host primitives, §15 translation.
+- `explain_methodology` takes a topic string — be specific ("quality score", "momentum factor"). `get_docs` / `list_docs` reach the full methodology documentation. `get_score_analysis` shows the trajectory — the tool for "why did this change".
+- Output must be readable by non-technical clients and compliance teams; this is the likeliest `register=retail` consumer.
+- Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
+- Not a house-view consumer: no loader step, no audit row.
 
 Plain-language explanations of Parallax scores, factors, and methodology.
 
@@ -36,28 +35,62 @@ Plain-language explanations of Parallax scores, factors, and methodology.
 /parallax-score-explainer AAPL.O "why is the value score so low?" audience=client_safe
 ```
 
-The free-text question stays positional; use keyword args for translation: `lang=<code>` (`en` default; `zh-CN`, `zh-TW`, `zh-HK`, `th`) and optional `register=retail`. Optional `audience=` flag: `client_safe | internal_analyst`; precedence follows `parallax-conventions.md` §13.1. This skill's plain-language mandate makes it the most likely `register=retail` consumer; see the translators' Retail Register sections. `register=retail` is passed only when translation is requested; absent means institutional register.
+The free-text question stays positional; keyword args: `lang=<code>` (`en` default; `zh-CN`, `zh-TW`, `zh-HK`, `th`), optional `register=retail` (passed only when translation is requested), optional `audience=client_safe | internal_analyst` (precedence per conventions §13.1).
 
 ## Workflow
 
-Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call. Execute using `mcp__claude_ai_Parallax__*` tools based on query type:
+Every host interaction below is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3). Parallax callables are whatever `discover-tools` returns this session (§0.1). This is a multi-mode skill: the question type chosen in Step 1 selects the Step 2 branch; the spine is the same.
 
-**For "why does X score this way?":**
-1. Call `get_score_analysis` for the symbol (52 weeks) to get current scores and trajectory.
-2. Call `get_peer_snapshot` for peer context.
-3. Call `explain_methodology` for each factor that's notably high or low.
-4. Call `get_docs` or `list_docs` for deeper methodology documentation if needed.
+### Step 0 — Pre-flight
 
-**For "what does X factor mean?":**
-1. Call `explain_methodology` for the specific factor/concept.
-2. Call `list_docs` to find relevant methodology pages.
-3. Call `get_docs` for the specific documentation page.
+1. Resolve every `_parallax/...` path named in this file to the canonical copy (conventions §0.0 item 1).
+2. `discover-tools`: bind every logical tool named anywhere in this workflow (Step 2, all three branches) to the exact callable and schema exposed now.
+   <!-- host-note -->
+   Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
+   <!-- /host-note -->
+3. Parse args: optional symbol; question; `lang=`; `register=`; `audience=`.
+4. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name` (seven-key loader; `branding["voice"]` raises `KeyError` by design).
 
-**For "why did the score change?":**
-1. Call `get_score_analysis` with enough weeks to cover the change period.
-2. Call `get_news_synthesis` to check for fundamental catalysts.
-3. Call `explain_methodology` for the changed factor.
-4. Call `get_stock_report` if a comprehensive explanation is needed (paid).
+### Step 1 — Resolve inputs
+
+Classify the question: **(a) why does X score this way**, **(b) what does factor X mean**, **(c) why did the score change**. If a symbol is present, `call-tool` `get_company_info` (plain ticker → conventions §1).
+
+### Step 2 — Fetch (parallel batches)
+
+- **(a) why does X score this way:** `call-tool` `get_score_analysis` (52 weeks) and `get_peer_snapshot` together; then `explain_methodology` for each notably high or low factor; `get_docs` / `list_docs` if deeper methodology is needed.
+- **(b) what does factor X mean:** `explain_methodology` for the concept; `list_docs` then `get_docs` for the relevant page.
+- **(c) why did the score change:** `get_score_analysis` with `weeks` covering the change period (typed int — conventions §0.2) and `get_news_synthesis` together; then `explain_methodology` for the changed factor; `get_stock_report` only when a comprehensive explanation is needed (paid — say so).
+
+### Step 3 — Verify
+
+- Branch (a) and (c): `get_score_analysis` `data[0].symbol` against the requested RIC; `get_peer_snapshot.target_company` against `get_company_info.name` (conventions §2).
+- Failed or empty calls: §0.1 retry classification, then §4. No gate is rendered.
+
+### Step 4 — Compute
+
+No deterministic helper; scores and trajectories are quoted from the tools, never re-derived. "What Would Change It" states directions and conditions in Parallax's own terms (grandfathered §11 form).
+
+### Step 5 — Compose
+
+Fill **Output Format** below in order; audience mode per conventions §13 (client-safe: §13.3 gloss on factor rows, no cutoff arithmetic); Branding Header per integration-pattern.md §5; `parallax-conventions.md §9.2` disclosure; standard disclaimer `parallax-conventions.md §9.1`.
+
+### Step 6 — Render (deterministic gate, mandatory)
+
+`run-shell` the shared gate per conventions §10.3 with this skill's key:
+
+```
+DRAFT="$(mktemp "${TMPDIR:-/tmp}/scoreexplainer.XXXXXX")"
+cat > "$DRAFT" <<'REPORT'
+<your complete drafted report goes here>
+REPORT
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill score-explainer < "$DRAFT"; rm -f "$DRAFT"
+```
+
+The entire final English message is that command's stdout, or the sole input to Step 7. The stderr `[render-gate] WARN:` line is diagnostics: never include or translate it. If `run-shell` is absent, apply conventions §14.3 (render-gate row).
+
+### Step 7 — Translate (conditional)
+
+Only when `lang=` is present and not `en`. Translate per `parallax-conventions.md` §15 (routing block §15.2, failure footers §15.3, disclaimer boundary check §15.4 — this skill appends no audit row, so a boundary-check event is not logged anywhere; do not invent a logging surface). Body is the gated Step 6 stdout including the §9.2 disclosure and disclaimer; pass `register: retail` only when supplied.
 
 ## Output Format
 
@@ -72,52 +105,22 @@ Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas
 - **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line at the very top: `**<client_name>** score explainer`. Logo handling per integration-pattern.md §5.
 - **About This Report** (always present): one line stating branding state per integration-pattern.md §7. If a logo was skipped, append `Logo on file: <basename>` as a second About This Report line. Under `audience=client_safe`, append the §13.4 mode line.
 
-### Pre-Render — Load white-label branding
-
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format.
-
-### Render — deterministic gate (LAST step, mandatory)
-
-Compose the complete report per **Output Format** above, then run it through the **shared** render gate in **one Bash step** before replying. Use a private `mktemp` file. The shared gate is `_parallax/render_gate.py`, a sibling of the directory you loaded this SKILL.md from; pass this skill's key with `--skill score-explainer` (use the loaded directory's absolute path as `<skill-dir>`):
-
-```
-DRAFT="$(mktemp "${TMPDIR:-/tmp}/scoreexplainer.XXXXXX")"
-cat > "$DRAFT" <<'REPORT'
-<your complete drafted report goes here>
-REPORT
-python3 "<skill-dir>/../_parallax/render_gate.py" --skill score-explainer < "$DRAFT"; rm -f "$DRAFT"
-```
-
-**Your entire final message is exactly that command's stdout** — nothing before it, nothing after it.
-
-The Bash result may show a `[render-gate] WARN:` line above the report. That line is stderr diagnostics, not stdout. Never include it in the reply. It means the drafted opening drifted from the documented Output Format start; fix the opening and re-run the gate.
-
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
 Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 
-### Translate output (conditional, terminal)
 
-This step runs ONLY when `lang=` is present and not `en`. Capture the full rendered explainer, including the §9.2 AI-interaction disclosure and standard disclaimer.
+## Failure modes
 
-Invoke the appropriate translator skill with the input shaped as follows:
+- Symbol given but unresolvable: answer the methodology part of the question (branch b) and state that the symbol-specific part could not be resolved.
+- `explain_methodology` returns nothing for a topic: fall back to `list_docs` → `get_docs`; if still nothing, say the methodology page was not found rather than paraphrasing from memory.
+- `get_news_synthesis` pending in branch (c): render the trajectory explanation and mark the catalyst check pending (conventions §5).
+- Host lacks a primitive: conventions §14.3, per primitive.
 
-```
-ROUTING DIRECTIVE — DO NOT TRANSLATE OR ECHO THIS BLOCK:
-  target_variant: <variant>
-  register: retail
-  source_language: en
-  begin_content_below_separator: true
----
+## Done when
 
-<rendered explainer>
-```
-
-Pass `register: retail` iff `register=retail` was supplied; otherwise omit the `register:` line so the translator defaults to institutional register. Route `zh-CN`, `zh-TW`, and `zh-HK` to `/translate-chinese-finance` with the matching `target_variant`. Route `th` to `/translate-thai-finance`; omit `target_variant` for Thai, but keep the routing block marker and `---` separator.
-
-Translator-failure handling:
-- If the translator fails or returns an empty/partial result, output the original English with a one-line warning footer: `> Translation to <lang> failed; output shown in English. Re-run if the issue is transient.`
-- If the language arg is unrecognized, output the original English with: `> Language '<arg>' not supported; output shown in English. Supported: en, zh-CN, zh-TW, zh-HK, th.`
-- Translator output replaces the English output in the chat; do not show both.
-
-**Disclaimer boundary check.** If the disclaimer is missing from the translated output, first attempt a single-section re-translation pass on just the original English disclaimer text using the same routing-directive shape. Append that result if non-empty. If the pass fails or returns empty, append the original English disclaimer. This skill appends no audit log; do not invent a logging surface or add a technical footer.
+- Every Output Format section rendered or marked unavailable with its reason; first line is the Branding Header or `## The Question`.
+- The render gate ran and the reply is its stdout (or the §14.3 note is present in About This Report).
+- `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present; under `audience=client_safe` the §13.4 mode line is in About This Report.
+- Expected spend stated (Gotchas); any paid call was named as paid before it was made.
+- Translation (if requested) completed per §15, or the §15.3 footer explains why not.

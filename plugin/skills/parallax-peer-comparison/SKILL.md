@@ -1,6 +1,6 @@
 ---
 name: parallax-peer-comparison
-description: "Research analyst peer comparison: peer snapshot, exported data, score trend analysis, and relative price performance via Parallax MCP tools. Symbol in RIC format. NOT for single stock analysis (use /parallax-deep-dive), not for portfolio analysis (use /parallax-morning-brief)."
+description: "Research analyst peer comparison: peer snapshot, exported data, score trend analysis, and relative price performance via Parallax MCP tools. Symbol in RIC format. NOT for single stock analysis (use /parallax-deep-dive), not for a quick single-name check (use /parallax-should-i-buy), not for full due diligence (use /parallax-due-diligence), not for portfolio analysis (use /parallax-morning-brief)."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -10,20 +10,17 @@ description: "Research analyst peer comparison: peer snapshot, exported data, sc
 ## When not to use
 
 - Single stock deep dive → use /parallax-deep-dive
+- Quick single-name check → use /parallax-should-i-buy
 - Portfolio analysis → use /parallax-morning-brief
 - Full due diligence → use /parallax-due-diligence
 
 ## Gotchas
 
-- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
-- Identifies top 2 peers automatically from get_peer_snapshot
-- Peer symbols from get_peer_snapshot may lack RIC suffixes. Before passing to Batch B tools, resolve each peer symbol to RIC format using the exchange suffix table in parallax-conventions.md (e.g., GM → GM.N, F → F.N). Single-letter symbols will fail without the suffix.
-- Makes 3 calls each for score trends and price series (primary + 2 peers)
-- export_peer_comparison and export_price_series return structured JSON
-- JIT-load `_parallax/house-view/loader.md` if an active CIO view is present. Peer-comparison is single-stock per `loader.md` §7 (read-only consumers): tilts are NOT applied to factor scoring or peer ranking. Render the FULL §7 surface: (a) §7.3 Score-vs-View Tension Banner inline between the Factor Comparison Matrix and Score Trajectory when primary stock total ≥ 7 AND its sector tilt ≤ -1; (b) §7.2 Peer-suggest conflict token under the Factor Comparison Matrix for any peer in a view-UW sector (tilt ≤ -1) or on the excludes list — flag, do not filter; the peer stays in the matrix; (c) §7.1 House View Note after Score Trajectory via `render_view_conflict(kind="blanket", ...)`; (d) §6 audit log entry per loader.md §6.1.
-- When rendering §7.1/§7.2/§7.3 tokens, JIT-load `_parallax/house-view/render_helpers.md` and route every token through `render_view_conflict()`.
-- When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
+- Expected Parallax spend: ~8 tokens (`_parallax/token-costs.md`): peer snapshot + export + 3 score histories + 3 `etf_profile` probes.
+- JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution (peer symbols from `get_peer_snapshot` may lack suffixes; `F` fails without `.N`), §2 identity cross-check, §3 parallel execution, §4 fallbacks, §14 host primitives.
+- JIT-load `_parallax/coverage-matrix.md`: `export_price_series` is equity-only; ETFs that surface as peers must go through `etf_daily_price`. The Step 2 asset-class pre-classification is mandatory for every price leg.
+- JIT-load `_parallax/house-view/loader.md` if a view is present; single-stock consumer per §7 — tilts are NOT applied to scoring or peer ranking. Render the full §7 surface (§7.3 tension banner, §7.2 peer-suggest tokens under the matrix — flag, never filter — §7.1 note after Score Trajectory) via `render_view_conflict()` per `_parallax/house-view/render_helpers.md`; audit per §6.1.
+- Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
 
 Structured peer comparison analysis for research analysts.
 
@@ -36,58 +33,59 @@ Structured peer comparison analysis for research analysts.
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, and fallback patterns.
+Every host interaction below is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3). Parallax callables are whatever `discover-tools` returns this session (§0.1).
 
-### Pre-Workflow — Load Active House View
+### Step 0 — Pre-flight
 
-Per `_parallax/house-view/loader.md` §1 and §2: load and validate any active house view BEFORE running the workflow. If view present, capture the load preamble for rendering at the top of Output Format per §5.1, and capture the sector tilt vector + excludes — these feed §7.2 + §7.3 + §7.1 surfacing during Output Format composition. Tilts are NOT applied to scores or peer ranking; the §7 surface is read-only conflict signals. If no active view (or validation failure): run the workflow normally with the standard disclaimer.
+1. Resolve every `_parallax/...` path named in this file to the canonical copy (conventions §0.0 item 1).
+2. `discover-tools`: bind every logical tool named anywhere in this workflow (Steps 1–2) to the exact callable and schema exposed now.
+   <!-- host-note -->
+   Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
+   <!-- /host-note -->
+3. Parse args: symbol; optional `weeks=N`.
+4. `load-reference` `_parallax/house-view/loader.md`; run §1–§2. If a view is present, capture the load preamble, sector tilt vector and excludes for the §7 surface in Step 5. Tilts are NOT applied.
+5. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name` (seven-key loader; `branding["voice"]` raises `KeyError` by design).
 
-### Batch 0 — Tool Loading
+### Step 1 — Resolve inputs
 
-Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
+`call-tool` `get_company_info` with the RIC (plain ticker → conventions §1). Then `call-tool` `get_peer_snapshot` and identify the peer group and the top 2 most relevant peers; `call-tool` `export_peer_comparison` with `format="json"`. Resolve each peer symbol to RIC form per conventions §1 before any further call.
 
-### Batch A — Peer identification
+### Step 2 — Fetch (parallel batches)
 
-1. Call `get_peer_snapshot`. Identify the peer group and top 2 most relevant peers.
-2. Call `export_peer_comparison` with `format="json"`.
+**Batch A — asset-class pre-classification (mandatory for every price leg).** For each of the 3 legs (primary + 2 peers) `call-tool` `etf_profile(<plain_ticker>)` together. `{"error": "No profile data found", ...}` → equity → route through `export_price_series`; a non-error profile → ETF → route through `etf_daily_price`. Per `_parallax/coverage-matrix.md`; 3 calls at 1 token each.
 
-### RIC Resolution — Resolve peer symbols before Batch B
+**Batch B — trends + price series.** `call-tool` all 6 together:
+- `get_score_analysis` for primary + 2 peers (3 calls); pass `weeks` as int N when the operator supplied `weeks=N` (non-default — conventions §0.2), else server default 52.
+- Each **equity** leg → `export_price_series(symbol=<ric>, days=<N>, format="json")`, default `days=100`.
+- Each **ETF** leg → `etf_daily_price(symbol=<plain_ticker>, start_date=<today − days>, end_date=<today>)`.
 
-Peer symbols from `get_peer_snapshot` may lack exchange suffixes (e.g., `GM` instead of `GM.N`). Before proceeding, resolve each peer symbol to RIC format using the exchange suffix table in `parallax-conventions.md`. Single-letter tickers like `F` will trigger "Symbol too short" errors without the suffix.
+### Step 3 — Verify
 
-### Batch B — Trends + price series (parallel, after Batch A identifies peers)
+- Identity cross-check per conventions §2: `get_peer_snapshot.target_company` vs `get_company_info.name`; each `get_score_analysis` `data[0].symbol` vs the RIC sent.
+- **Halt-and-surface rule:** a leg empty from BOTH price endpoints is excluded from Relative Price Performance with the explicit note `⚠ Could not retrieve price history for <symbol>; relative price chart shows the remaining legs only.` Never drop a leg silently.
+- Other failed or empty calls: §0.1 retry classification, then §4. No gate is rendered, so §4.0 does not apply.
 
-#### B.0 — Asset-class pre-classification (parallel, MANDATORY for price legs)
+### Step 4 — Compute
 
-`export_price_series` is the **equity-only** price endpoint; sector/country ETFs (which `get_peer_snapshot` can occasionally surface as peers) silently return empty from it and would otherwise be dropped from the relative-price-performance comparison. Before Batch B, classify each leg (primary + top 2 peers):
+No deterministic helper; relative returns are read from the exported series, never re-derived. Computed conditions are the house-view flags: §7.3 (`primary.total ≥ 7` AND `view.tilts.sectors[primary.sector] ≤ −1`) and §7.2 (a peer whose sector tilt ≤ −1 or whose ticker is in `view.tilts.excludes`), evaluated exactly as `loader.md` states.
 
-- For each of the 3 legs, call `etf_profile(<plain_ticker>)` in parallel.
-- `{"error": "No profile data found", ...}` → equity, route through `export_price_series`.
-- Non-error response → ETF, route through `etf_daily_price`.
+### Step 5 — Compose
 
-This adds 3 calls at 1 token each (per `_parallax/token-costs.md`).
+Fill **Output Format** below in order: House View Preamble per loader.md §5.1; Branding Header per integration-pattern.md §5; §7.2 tokens under the matrix (one per conflicting peer, stacked), §7.3 banner between the matrix and Score Trajectory, §7.1 note after Score Trajectory — all via `render_view_conflict()`; `parallax-conventions.md §9.2` disclosure; disclaimer per loader.md §5 rule 5 when a view is active, otherwise `parallax-conventions.md §9.1`; audit entry per loader.md §6.1.
 
-#### B.1 — Trends + price series (parallel)
+### Step 6 — Render (deterministic gate, mandatory)
 
-Fire all 6 calls simultaneously:
-- `get_score_analysis` for primary + top 2 peers (3 calls). If the user supplied `weeks=N` in the invocation, pass it as `weeks` as int N (non-default — see conventions §0.2); otherwise rely on the server default of 52.
-- For each leg classified as **equity** in B.0 → `export_price_series(symbol=<ric>, days=<N>, format="json")`. Default `days=100`.
-- For each leg classified as **ETF** in B.0 → `etf_daily_price(symbol=<plain_ticker>, start_date=<today − days>, end_date=<today>)`.
+`run-shell` the shared gate per conventions §10.3 with this skill's key:
 
-**Halt-and-surface rule:** if a leg returns empty from BOTH endpoints, exclude it from the price-performance section and render an explicit note: "⚠ Could not retrieve price history for `<symbol>`; relative price chart shows the remaining legs only." Never silently drop a leg without disclosure.
+```
+DRAFT="$(mktemp "${TMPDIR:-/tmp}/peercomp.XXXXXX")"
+cat > "$DRAFT" <<'REPORT'
+<your complete drafted report goes here>
+REPORT
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill peer-comparison < "$DRAFT"; rm -f "$DRAFT"
+```
 
-### Post-Workflow — House View consumer obligations
-
-If a view was loaded in Pre-Workflow:
-
-1. **§7.3 tension check** (primary stock): if `primary.total >= 7.0 AND view.tilts.sectors[primary.sector] <= -1`, compose the tension banner via `render_view_conflict(kind="score_tension", ...)`. Render between the Factor Comparison Matrix and Score Trajectory in Output Format.
-2. **§7.2 peer-suggest tokens** (each peer): for every peer in the Factor Comparison Matrix whose sector has `view.tilts.sectors[peer.sector] <= -1`, or whose ticker appears in `view.tilts.excludes`, compose an inline token via `render_view_conflict(kind="peer_suggest", ...)`. Render under the Factor Comparison Matrix. **Flag, do not filter** — the peer stays in the matrix; multiple tokens stack vertically.
-3. **§7.1 House View Note** (blanket summary): compose via `render_view_conflict(kind="blanket", ...)` and render after Score Trajectory, before Relative Price Performance.
-4. Append the §6 audit log entry per loader.md §6.1.
-
-### Pre-Render — Load white-label branding
-
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+The entire final message is that command's stdout. The stderr `[render-gate] WARN:` line is diagnostics: never include it. If `run-shell` is absent, apply conventions §14.3 (render-gate row). This skill has no Step 7.
 
 ## Output Format
 
@@ -106,3 +104,21 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
 If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise: render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
+
+
+## Failure modes
+
+- Peer symbol unresolvable after conventions §1: that peer is dropped from the comparison with an explicit note naming it; the primary still renders.
+- A price leg empty from both endpoints: excluded with the halt-and-surface note above.
+- `etf_profile` probe fails for a leg: classify as equity, try `export_price_series`, and if that is empty apply the halt-and-surface note; never guess the asset class.
+- House-view banner states `malformed` / `expired` / `critical`: the banner renders verbatim (conventions §0.3 item 4).
+- Host lacks a primitive: conventions §14.3, per primitive.
+
+## Done when
+
+- Every Output Format section rendered or marked unavailable with its reason; first line is the House View Preamble, the Branding Header, or `## Peer Group`.
+- Every leg in Relative Price Performance came from the endpoint matching its asset class; missing legs are named.
+- When a view is active: the `view_status` banner appears verbatim; §7.2 tokens, §7.3 banner and §7.1 note are in their documented positions.
+- The render gate ran and the reply is its stdout (or the §14.3 note is present in About This Report).
+- `parallax-conventions.md §9.2` disclosure and the §9.1 or view-aware disclaimer are present; audit entry appended per loader.md §6.
+- Expected spend stated (Gotchas).

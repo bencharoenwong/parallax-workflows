@@ -175,6 +175,10 @@ FIRST_SECTION = {
     "should-i-buy": "## The Company",
     "score-explainer": "## The Question",
     "desk-call-list": "# Desk Call List",
+    "deep-dive": "## Company Overview",
+    "due-diligence": "## Company Overview",
+    "peer-comparison": "## Peer Group",
+    "earnings-quality": "## Risk Summary",
 }
 
 
@@ -200,6 +204,10 @@ def test_title_form_anchors_each_skill():
         "portfolio-builder": "# Portfolio Builder — US Tech",
         "should-i-buy": "# Should I Buy — AAPL.O",
         "score-explainer": "# Score Explainer — why is the value score low",
+        "deep-dive": "# Position Deep Dive — AAPL.O",
+        "due-diligence": "# Full Due Diligence — AAPL.O",
+        "peer-comparison": "# Peer Comparison — AAPL.O",
+        "earnings-quality": "# Earnings Quality Analysis — AAPL.O",
     }
     for skill, title in titles.items():
         out = gate(SCAFFOLD + title + "\nbody\n", skill)

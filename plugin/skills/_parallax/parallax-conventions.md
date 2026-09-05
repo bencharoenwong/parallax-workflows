@@ -369,7 +369,7 @@ Every workflow output that contains AI-generated narrative, synthesis, or recomm
 
 ## 10. Render Gate
 
-Portfolio-family skills (`client-review`, `morning-brief`, `portfolio-builder`, `portfolio-checkup`, `rebalance`, `explain-portfolio`, `watchlist-monitor`), the desk-level skill `desk-call-list`, and the single-stock report skills (`should-i-buy`, `score-explainer`) MUST pass their drafted report through the shared deterministic render gate as their **MANDATORY last step**. `SKILL_ANCHORS` in `render_gate.py` is the authoritative registry of gated skills; `test_render_gate.py` enforces it against each SKILL.md in both directions. When adding a gated skill, update this list alongside the registry — the test checks the registry and the SKILL.md files, not this prose.
+Portfolio-family skills (`client-review`, `morning-brief`, `portfolio-builder`, `portfolio-checkup`, `rebalance`, `explain-portfolio`, `watchlist-monitor`), the desk-level skill `desk-call-list`, and the single-stock report skills (`should-i-buy`, `score-explainer`, `deep-dive`, `due-diligence`, `peer-comparison`, `earnings-quality`) MUST pass their drafted report through the shared deterministic render gate as their **MANDATORY last step**. `SKILL_ANCHORS` in `render_gate.py` is the authoritative registry of gated skills; `test_render_gate.py` enforces it against each SKILL.md in both directions. When adding a gated skill, update this list alongside the registry — the test checks the registry and the SKILL.md files, not this prose.
 
 ### 10.1 Why it exists
 

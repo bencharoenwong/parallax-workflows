@@ -4,6 +4,12 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-09-05 (sweep: single-stock family)
+
+### Changed
+- **Five more single-stock skills on the canonical step spine:** `parallax-deep-dive`, `parallax-due-diligence`, `parallax-peer-comparison`, `parallax-earnings-quality`, `parallax-score-explainer`. Same treatment as should-i-buy: Steps 0–7, host primitives with the Claude Code binding in a `host-note` block, shared blocks by reference, `## Failure modes` and `## Done when`, symmetric NOT-for routing. Output Formats unchanged. The four that were ungated (deep-dive, due-diligence, peer-comparison, earnings-quality) now run the shared render gate; `SKILL_ANCHORS` and the gate tests carry their anchors. `parallax-due-diligence` now names `ask-operator` before the paid `get_stock_report` call. Host-primitive legacy allowlist: 33 → 28.
+- **should-i-buy template corrected after a gpt-5.6-sol review:** Step 0 binds every callable used anywhere in the workflow (not only Steps 2–3) and resolves canonical paths first; the audit-row and banner checks in `## Done when` are unconditional per loader.md §6 and conventions §0.3; the spend line no longer double-counts macro. `skill-structure-conventions.md` states that the `/parallax-*` form in descriptions, When-not-to-use and Usage is operator command syntax, not a host lock, and names the three migration shapes (report consumer, config producer, multi-mode).
+
 ## 2026-09-05 (sweep: should-i-buy)
 
 ### Changed

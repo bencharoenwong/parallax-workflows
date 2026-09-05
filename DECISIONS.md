@@ -10,6 +10,8 @@ Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[
 
 **Impact.** Steps 0–7 under the spine names; primitives not host tools; every shared block by reference; `## Failure modes` and `## Done when`; symmetric routing in the description; 160 lines. The four prose-asserting tests and the eval graders pass unchanged. Owner gate before merge: one fresh-session end-to-end run per CONTRIBUTING step 3.
 
+**Amendment (same day, after a gpt-5.6-sol review of the template).** Step 0 must bind every callable used anywhere in the workflow; a spine that binds only the batch steps leaves `get_company_info` and `explain_methodology` undiscovered for a cold agent. `## Done when` lines must not be conditional where the contract is unconditional (loader.md §6 appends a row for every consume event). The slash form in descriptions and Usage is operator syntax, not a host lock. The template then propagated to deep-dive, due-diligence, peer-comparison, earnings-quality and score-explainer, with render-gate anchors added for the four that had none.
+
 **Alternatives.** `[DROP]` **Start with a small skill (peer-comparison, 108 lines).** Rejected: it exercises none of the hard parts (translation, house-view flags, render gate, grader lock), so it would not prove the template.
 
 **Flip conditions.** A fresh-session run shows the model skipping a by-reference load that the old inline copy made unmissable → restore that one block inline and record it in the JIT-load audit, do not abandon by-reference.

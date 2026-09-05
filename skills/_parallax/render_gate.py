@@ -110,6 +110,22 @@ SKILL_ANCHORS: dict[str, list[str]] = {
         r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:the company|should i buy|stock (?:review|evaluation))\b",
         _branding("stock review"),
     ],
+    "deep-dive": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:company overview|position deep dive|deep dive)\b",
+        _branding("deep dive"),
+    ],
+    "due-diligence": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:scope note|company overview|full due diligence|due diligence)\b",
+        _branding("research report"),
+    ],
+    "peer-comparison": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:peer group|peer comparison)\b",
+        _branding("peer comparison"),
+    ],
+    "earnings-quality": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:risk summary|earnings quality)\b",
+        _branding("earnings quality review"),
+    ],
     "score-explainer": [
         r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:the question|score explainer)\b",
         _branding("score explainer"),
