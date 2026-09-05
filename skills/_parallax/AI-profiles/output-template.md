@@ -1,5 +1,9 @@
 # Parallax AI Investor Profile — Output Template
 
+<!-- authority: contract -->
+<!-- verified: 2026-09-05 -->
+<!-- overrides: none -->
+
 This file is JIT-loaded by every `skills/parallax-ai-<name>/SKILL.md` dispatcher. It defines the REQUIRED structure of any profile's output. No profile may deviate from this structure. No profile may remove or soften the disclaimer language.
 
 Scope note: This profile family is skill-prose orchestration for interactive assistant sessions only; it has no structured/API output contract (see `parallax-conventions.md` §7, multi-stock table). Do not represent profile output as an embeddable API surface.

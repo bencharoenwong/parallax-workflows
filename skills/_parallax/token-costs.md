@@ -1,5 +1,9 @@
 # Token Cost Reference
 
+<!-- authority: observation -->
+<!-- verified: 2026-07-28 -->
+<!-- overrides: live schema and live responses win -->
+
 Parallax uses token-based pricing. All tools consume the same number of tokens whether accessed via API, MCP, or the web platform.
 
 ## Tool Token Costs

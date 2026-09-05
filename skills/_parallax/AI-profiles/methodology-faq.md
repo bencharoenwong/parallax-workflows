@@ -1,5 +1,9 @@
 # AI Investor Profiles — Methodology FAQ
 
+<!-- authority: contract -->
+<!-- verified: 2026-09-05 -->
+<!-- overrides: none -->
+
 Compliance-facing FAQ on the named-investor framing used by the `parallax-ai-*` skill family. Sourced only from repo-public rationale — no internal review notes or non-public source material.
 
 ## Is this profile actually [Investor]'s view?

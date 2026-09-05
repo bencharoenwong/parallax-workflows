@@ -1,5 +1,9 @@
 # Parallax MCP Coverage Matrix
 
+<!-- authority: observation -->
+<!-- verified: 2026-07-20 -->
+<!-- overrides: live schema and live responses win -->
+
 **Purpose.** Document which Parallax MCP tool covers which asset class. Skills must consult this before adding a new MCP call. Mismatched tool/asset-class pairs (e.g., `export_price_series(SPY)`) silently fail-empty and would cause silent data drops in downstream computation.
 
 **Last empirical sweep:** 2026-05-02. Re-verify quarterly or after Parallax MCP releases.

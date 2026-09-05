@@ -1,5 +1,9 @@
 # House View Stress Test — Feature Design
 
+<!-- authority: observation -->
+<!-- verified: 2026-05-24 -->
+<!-- overrides: live schema and live responses win -->
+
 Method: autoplan-style review structure, adapted to a CIO setting. Pulled from
 `https://github.com/garrytan/gstack/blob/main/autoplan/SKILL.md` and trimmed of
 tooling that doesn't apply here (codex CLI, brain-sync, telemetry, plan files).

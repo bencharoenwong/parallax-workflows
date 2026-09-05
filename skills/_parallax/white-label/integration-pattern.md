@@ -1,5 +1,9 @@
 # White-Label Branding Integration Pattern
 
+<!-- authority: contract -->
+<!-- verified: 2026-09-05 -->
+<!-- overrides: none -->
+
 Shared reference for Parallax skills that render visual content (markdown reports, .docx letters) and need to swap the default Parallax-CG palette for a client's brand when configured.
 
 JIT-loaded by consumer skills via the sentinel comment `<!-- white-label: integration-pattern.md -->` placed at the top of each consuming `SKILL.md` and a `Load .../integration-pattern.md` directive at the call site (the `### Pre-Render — Load white-label branding` step). The pairing is asserted by `tests/test_integration_pattern_referenced.py`.

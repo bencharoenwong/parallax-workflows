@@ -4,6 +4,13 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-09-05 (lints)
+
+### Added
+- **`skills/_parallax/scripts/host-primitive-lint.py`** — fails the build and CI when a `SKILL.md` names a host tool (`ToolSearch`, `AskUserQuestion`, `WebFetch`, a connector namespace literal, the `Write` or `Skill` tool) outside a `<!-- host-note -->` block, per `parallax-conventions.md` §14. Forward-only: the 34 skills that were host-locked on 2026-09-05 sit on an allowlist that can only shrink (an allowlisted skill with no host identifiers fails as stale; the test pins the list with an equality check).
+- **`skills/_parallax/scripts/authority-header-lint.py`** — every shared `_parallax/*.md` (21 files) now opens with `authority: contract | registry | observation`, a `verified` date, and an `overrides` line, so a reader can decide mechanically whether a table binds or merely records an observation. The test pins the scoped file set.
+- **`skills/_parallax/README.md`** — the shared-layer map: the six layers, the interpreter versions in play, every `PARALLAX_*` environment switch with its owner, the one-conftest-per-root and manual-CI-roots facts, and the gate order.
+
 ## 2026-09-05
 
 ### Fixed

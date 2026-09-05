@@ -1,5 +1,9 @@
 # Parallax AI Investor Profile — Consensus Config
 
+<!-- authority: contract -->
+<!-- verified: 2026-09-05 -->
+<!-- overrides: none -->
+
 Consumed by `skills/parallax-ai-consensus/SKILL.md` (Phase 3). Defines the super-majority threshold and minimum-applicable-count floor for the cross-profile consensus calculation.
 
 ## Default configuration
