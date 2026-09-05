@@ -179,6 +179,7 @@ FIRST_SECTION = {
     "due-diligence": "## Company Overview",
     "peer-comparison": "## Peer Group",
     "earnings-quality": "## Risk Summary",
+    "credit-lens": "## Credit Risk Assessment: Acme Corp (ACME.O) | Traffic-Light: 🟢",
 }
 
 
@@ -208,6 +209,7 @@ def test_title_form_anchors_each_skill():
         "due-diligence": "# Full Due Diligence — AAPL.O",
         "peer-comparison": "# Peer Comparison — AAPL.O",
         "earnings-quality": "# Earnings Quality Analysis — AAPL.O",
+        "credit-lens": "# Credit Lens — AAPL.O",
     }
     for skill, title in titles.items():
         out = gate(SCAFFOLD + title + "\nbody\n", skill)

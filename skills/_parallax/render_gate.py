@@ -126,6 +126,10 @@ SKILL_ANCHORS: dict[str, list[str]] = {
         r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:risk summary|earnings quality)\b",
         _branding("earnings quality review"),
     ],
+    "credit-lens": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:credit risk assessment|credit lens)\b",
+        _branding("credit lens"),
+    ],
     "score-explainer": [
         r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:the question|score explainer)\b",
         _branding("score explainer"),

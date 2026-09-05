@@ -2543,3 +2543,40 @@ class TestPaddedRowsStateWhatIsTrue:
         )
         with pytest.raises(ValueError, match="no metric_key"):
             dashboard_rows(bad)
+
+
+
+# ---------------------------------------------------------------------------
+# SKILL.md "Published cutoffs" table mirrors the module constants
+# ---------------------------------------------------------------------------
+
+
+def test_skill_md_published_cutoffs_match_module():
+    """SKILL.md documents the bands for conventions §11 sensitivity lines; the
+    module applies them. Edit the module first, then the table — this pins them."""
+    import re as _re
+    from credit_lens_logic import ABSOLUTE_THRESHOLDS, _altman_zone_flag, flag_quality_change, Flag
+
+    text = (_SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+    table = text.split("**Published cutoffs**", 1)[1].split("Peer-relative rule", 1)[0]
+
+    def row(label: str) -> str:
+        m = _re.search(rf"^\| {_re.escape(label)}[^|]*\|([^|]*)\|([^|]*)\|", table, _re.M)
+        assert m, f"no row for {label}"
+        return m.group(1) + "|" + m.group(2)
+
+    for label, key in (("Debt/EBITDA", "debt_ebitda"), ("Interest Coverage", "interest_coverage"),
+                       ("Current Ratio", "current_ratio")):
+        amber, red, _ = ABSOLUTE_THRESHOLDS[key]
+        cells = row(label)
+        assert f"{amber:.1f}x" in cells and f"{red:.1f}x" in cells, (label, cells)
+
+    alt = row("Altman Z")
+    assert "1.81" in alt and "2.99" in alt
+    assert _altman_zone_flag(3.0) is Flag.GREEN and _altman_zone_flag(2.99) is Flag.AMBER
+    assert _altman_zone_flag(1.81) is Flag.AMBER and _altman_zone_flag(1.80) is Flag.RED
+
+    q = row("Quality score change")
+    assert "0.5" in q and "1.5" in q
+    assert flag_quality_change(-0.5) is Flag.AMBER and flag_quality_change(-1.5) is Flag.RED
+    assert flag_quality_change(-0.4) is Flag.GREEN

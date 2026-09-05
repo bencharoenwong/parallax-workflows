@@ -70,7 +70,6 @@ LEGACY_ALLOWLIST: frozenset[str] = frozenset({
     "parallax-cio-letter-prep",
     "parallax-client-review",
     "parallax-country-deep-dive",
-    "parallax-credit-lens",
     "parallax-desk-call-list",
     "parallax-explain-portfolio",
     "parallax-halal-screen",

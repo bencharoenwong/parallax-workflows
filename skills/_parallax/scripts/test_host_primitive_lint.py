@@ -19,7 +19,7 @@ LEGACY_PINNED = frozenset({
     "parallax-ai-buffett", "parallax-ai-consensus", "parallax-ai-greenblatt",
     "parallax-ai-klarman", "parallax-ai-ptj", "parallax-ai-soros",
     "parallax-cio-letter-prep", "parallax-client-review",
-    "parallax-country-deep-dive", "parallax-credit-lens", "parallax-desk-call-list", "parallax-explain-portfolio",
+    "parallax-country-deep-dive", "parallax-desk-call-list", "parallax-explain-portfolio",
     "parallax-halal-screen", "parallax-house-view-attribution",
     "parallax-load-house-view", "parallax-macro-outlook",
     "parallax-make-house-view", "parallax-morning-brief", "parallax-pair-finder",

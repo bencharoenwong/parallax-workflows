@@ -61,40 +61,56 @@ To run full private-label, collect from the client and load into the onboard con
 
 This is not legal advice. The client's compliance function and Thai counsel should confirm investor classification and the current notification text before any external distribution.
 
+## When not to use
+
+- Setting up or editing the client brand config → use /parallax-white-label-onboard
+- Interactive single-stock analysis / buy decision → use /parallax-should-i-buy or /parallax-deep-dive
+- Full DIY research workflow (Palepu, financials) → use /parallax-due-diligence
+- Portfolio-level review → use /parallax-client-review
+
 ## Workflow
 
-### 1. Resolve the ticker to a RIC
-If given a plain ticker or company name, call `search_stocks` to get the RIC (e.g. `AAPL.O`, `V.N`). Single-letter US tickers must be in RIC form or the report call fails with "Symbol too short".
+Every host interaction below is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3); this skill loads no other shared file by design. The output is a file, not a chat report, so the shared render gate does not apply; the deterministic renderer is the gate.
 
-### 2. Get the report JSON (reuse before re-fetching)
-The renderer reads a `get_stock_report` JSON response from a file; it never calls the MCP itself. Resolve the source in this order, cheapest first:
-1. **Already-downloaded report.** If the user supplies a path to a saved `get_stock_report` response (the client kept it, or Chicago Global supplied it), pass that file straight to the renderer and skip the fetch entirely - no paid call. Note: this must be the JSON response, not a rendered PDF.
-2. **Same-day cache.** Check `~/.parallax/stock-report-cache/<RIC>-<YYYY-MM-DD>.json`; if present and `--force` was not passed, reuse it.
-3. **Fresh fetch.** Otherwise call `get_stock_report(symbol=<RIC>)` (paid, about 1-2 min) and save the full raw response to the cache path above.
+### Step 0 — Pre-flight
 
-```
-mkdir -p ~/.parallax/stock-report-cache
-# (save the get_stock_report response JSON to ~/.parallax/stock-report-cache/<RIC>-<date>.json)
-```
+1. `discover-tools`: bind `search_stocks` and `get_stock_report` to the exact callables exposed now.
+   <!-- host-note -->
+   Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
+   <!-- /host-note -->
+2. Parse args: ticker, RIC, or a path to a saved report JSON; `--force`; `--full-white-label`; `--powered-by`.
+3. `read-config` `~/.parallax/client-branding/config.yaml`: confirm it exists and `metadata.client_name` names the intended client. Absent or wrong client → collect the brand guidelines (logo and colour palette at minimum; fonts optional) and run `/parallax-white-label-onboard` first; without a config the render falls back to the default Parallax palette and is not white-labeled.
 
-### 3. Confirm or collect the client's branding
-Confirm `~/.parallax/client-branding/config.yaml` exists and names the intended client (`metadata.client_name`). If it is absent or for the wrong client, collect the branding before rendering: ask the client for their brand guidelines, covering at least their logo and their colour palette (colorways); fonts are helpful but optional. Then run `/parallax-white-label-onboard` to capture them into the config. Without a config the render falls back to the default Parallax palette and is not white-labeled.
+### Step 1 — Resolve inputs
 
-### 4. Confirm the output mode with the client
-Two independent choices. Ask the client both:
+A plain ticker or company name → `call-tool` `search_stocks` for the RIC (`AAPL.O`, `V.N`). Single-letter US tickers must be in RIC form or the report call fails with "Symbol too short".
 
-**Whose disclosures?**
-- **Chicago Global / MAS** (default): the bundled regulatory disclosures, kept verbatim. Nothing more to collect.
-- **The client's own**: the client is the regulated face of the report. Collect their regulatory details at run time (see below) and render those instead. Uses `--full-white-label`.
+### Step 2 — Fetch (parallel batches)
 
-**Keep the "Powered by Parallax" credit?**
-- Shown by default. With the client's own disclosures it is hidden, unless the client opts to keep it, in which case add `--powered-by` (their own disclosures plus a Parallax attribution credit).
+The renderer reads a `get_stock_report` JSON file; it never calls the MCP itself. Resolve the source cheapest first:
+1. **Supplied file** — a saved `get_stock_report` response passed on the command line: no fetch, no paid call (it must be the JSON response, not a rendered PDF).
+2. **Same-day cache** — `~/.parallax/stock-report-cache/<RIC>-<YYYY-MM-DD>.json` when present and `--force` was not passed.
+3. **Fresh fetch** — `call-tool` `get_stock_report(symbol=<RIC>)` (paid, about 1–2 min) and `write-artifact` the full raw response to the cache path above (`mkdir -p ~/.parallax/stock-report-cache` first).
 
-This yields three usable variants: co-brand (CG/MAS plus credit); client identity with credit (`--full-white-label --powered-by`); full private-label (`--full-white-label`, no credit).
+### Step 3 — Verify
 
-**Collecting the client's own regulatory details.** When the client wants their own disclosures, ask them for what their regulator requires, at minimum: the legal entity name, the registration or license number, the regulator's name, and the conflict-of-interest / disclaimer wording their compliance approves. Assemble these into the brand config under `voice.disclaimers[]` (each entry `{jurisdiction, text, placement}`). Do not invent or finalise regulatory wording: draft from what the client gives you, but the client confirms the final text, and the renderer reproduces it verbatim. The renderer refuses `--full-white-label` if `voice.disclaimers[]` is empty.
+- The JSON carries the sections the renderer reads (`references/field-map.md`); a truncated or non-JSON file stops here.
+- For `--full-white-label`: `voice.disclaimers[]` in the brand config is non-empty; the renderer refuses otherwise, so do not attempt the render.
 
-### 5. Render
+### Step 4 — Compute
+
+None. The renderer is deterministic Python; the model never authors or edits the HTML.
+
+### Step 5 — Confirm
+
+`ask-operator` two independent choices (see Compliance above): **whose disclosures** (Chicago Global / MAS by default, or the client's own via `--full-white-label`) and **keep the "Powered by Parallax" credit** (shown by default; with the client's own disclosures only with `--powered-by`). Three usable variants result: co-brand; client identity with credit; full private-label.
+
+When the client wants their own disclosures, collect what their regulator requires — legal entity name, registration or license number, regulator's name, the conflict-of-interest / disclaimer wording their compliance approves — and load them into the brand config's `voice.disclaimers[]` (`{jurisdiction, text, placement}`). Draft from what the client gives you; the client confirms the final text; the renderer reproduces it verbatim. If `ask-operator` is unavailable on this host, apply conventions §14.3: render the two questions and stop; never default to `--full-white-label`.
+
+### Step 6 — Render
+
+`run-shell`:
+
 ```
 python3 <skill-dir>/render_stock_report.py \
   ~/.parallax/stock-report-cache/<RIC>-<date>.json \
@@ -102,17 +118,8 @@ python3 <skill-dir>/render_stock_report.py \
   --out "Stock Report - <RIC> - <ClientName>.html" \
   --pdf
 ```
-`--pdf` renders the PDF next to the HTML via headless Chrome. Output naming convention: `Stock Report - <RIC> - <ClientName>.pdf`.
 
-### 6. Review before delivery
-Open the PDF and confirm:
-- client logo on the cover and the brand palette applied to headings, rules, table headers, and score chips;
-- positive/negative/warning still in the fixed semantic colors (green/red/amber), NOT recolored to the brand;
-- the six factor scores, the peer table, all three financial statements, and the ratios table rendered;
-- the Chicago Global / MAS disclosures present verbatim and the "Powered by Parallax" credit in the cover header;
-- no leakage of internal source paths or pre-signed URLs.
-
-Then deliver. During early rollout, do not send externally without Chicago Global sign-off on the compliance posture.
+Add `--full-white-label` and/or `--powered-by` per Step 5. `--pdf` renders the PDF next to the HTML via headless Chrome; without Chrome the HTML is still written and the PDF is rendered separately. Output naming: `Stock Report - <RIC> - <ClientName>.pdf`.
 
 ## Brand token map (inlined in the renderer)
 
@@ -129,6 +136,25 @@ Then deliver. During early rollout, do not send externally without Chicago Globa
 
 Fixed semantic colors, never branded: positive `#1a7f4b`, negative `#b3261e`, warning `#b8860b`.
 
+## Failure modes
+
+- No brand config: the render is not white-labeled; say so and offer `/parallax-white-label-onboard` before delivering.
+- `--full-white-label` with empty `voice.disclaimers[]`: the renderer refuses; collect the disclosures per Step 5, never improvise them.
+- `get_stock_report` fails or times out: no render; report the failure and whether a cached copy exists.
+- Chrome absent: HTML only; state that the PDF was not produced.
+- Host lacks `run-shell` or `write-artifact`: the skill cannot run on this host (conventions §14.3); say so, do not hand-write HTML.
+
+## Done when (review before delivery)
+
+Open the PDF and confirm every line; then deliver:
+- client logo on the cover and the brand palette applied to headings, rules, table headers, and score chips;
+- positive/negative/warning still in the fixed semantic colors (green/red/amber), NOT recolored to the brand;
+- the six factor scores, the peer table, all three financial statements, and the ratios table rendered;
+- the Chicago Global / MAS disclosures present verbatim and the "Powered by Parallax" credit in the cover header (or, in the chosen private-label variant, the client's confirmed disclosures and the credit state the client chose);
+- no leakage of internal source paths or pre-signed URLs.
+
+During early rollout, do not send externally without Chicago Global sign-off on the compliance posture.
+
 ## Cross-model parity
 
 The renderer is plain deterministic Python, so Claude and Codex produce identical HTML for the same report JSON and config. Run the same steps on either engine. The model never authors the HTML; it only orchestrates and reviews.
@@ -139,13 +165,6 @@ The renderer is plain deterministic Python, so Claude and Codex produce identica
 - `references/sample-acme.synthetic.json` - a de-identified synthetic get_stock_report response (fictional company), used as the test fixture.
 - `references/field-map.md` - verbatim JSON field paths the renderer reads.
 - `tests/test_render_smoke.py` - smoke test (sections present, branding applied, semantic colors fixed, disclosures verbatim).
-
-## When not to use
-
-- Setting up or editing the client brand config → use /parallax-white-label-onboard
-- Interactive single-stock analysis / buy decision → use /parallax-should-i-buy or /parallax-deep-dive
-- Full DIY research workflow (Palepu, financials) → use /parallax-due-diligence
-- Portfolio-level review → use /parallax-client-review
 
 ## Gotchas
 
