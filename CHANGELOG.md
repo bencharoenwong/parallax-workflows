@@ -4,6 +4,11 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-09-05
+
+### Fixed
+- **`main` was red: `parallax-rebalance/SKILL.md` had grown to 282 lines across PR #111 and the eval's `orchestrator_length` check (`orchestrator_max_lines=250`) failed on the merge commit.** The Batch C2 policy-reconciliation block (~95 lines) now lives in `skills/parallax-rebalance/references/policy-reconciliation.md`, JIT-loaded only when `policy=` is supplied; the orchestrator keeps a five-line stub with the gate-shaped routing summary and is 191 lines. The three in-file pointers into the moved block (coefficient rule, step-1 exclusion, `position_cap` rule) now name the reference file explicitly. Plugin bundle regenerated.
+
 ## 2026-08-31
 
 ### Fixed
