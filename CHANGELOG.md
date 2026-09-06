@@ -4,6 +4,11 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-09-06 (sweep: white-label onboard)
+
+### Changed
+- `parallax-white-label-onboard` follows the config-producer spine: `Step 1 — Resolve inputs`, `Step 2 — Fetch` (2a extract, 2b voice, 2c completeness audit), `Step 3 — Verify`, `Step 4 — Compute`, `Step 5 — Confirm`, `Step 6 — Persist` (6a–6d). Host tool names are replaced by §14 primitives with a Claude Code host-note. The five `references/*.md` files, `loader.py` comments, and every cross-citation were renumbered in the same change; procedures are unchanged. Failure modes (persistence fails closed) and Done when added. Host-primitive allowlist shrinks to 4.
+
 ## 2026-09-06 (sweep: house-view producers)
 
 ### Changed

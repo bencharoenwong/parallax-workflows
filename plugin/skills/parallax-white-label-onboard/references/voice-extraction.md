@@ -1,8 +1,8 @@
-# Step 1.5 — Voice Extraction Prompt & Self-Check
+# Step 2b — Voice Extraction Prompt & Self-Check
 
 Drive voice extraction via in-skill prompting (no Python — this is LLM-native work). Read the corpus from `draft["voice_corpus"]["text"]` and prompt yourself with the structure below, then write the resulting fields into `draft["voice"]`.
 
-> Skip / floor logic and the post-extraction draft writes stay in SKILL.md Step 1.5. This file is the prompt template + self-check detail.
+> Skip / floor logic and the post-extraction draft writes stay in SKILL.md Step 2b. This file is the prompt template + self-check detail.
 
 ## Voice extraction prompt structure (Lago 7-section + Rezvani tone matrix)
 

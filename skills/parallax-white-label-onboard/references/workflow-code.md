@@ -6,7 +6,7 @@ JIT-load `_parallax/white-label/extract/` (the extract package), `_parallax/whit
 
 ---
 
-## Step 1 — Folder extraction (after F-3 operator confirmation)
+## Step 2a — Folder extraction (after F-3 operator confirmation)
 
 Folder mode F-4 uses the callable extraction boundary. It applies the confirmed
 classifications, merges branded drafts, drops visuals from voice-only files,
@@ -23,7 +23,7 @@ draft = extract_from_folder(
 
 When two or more branded files disagree, `draft["multi_source"]["mismatches"]`
 records each field and `draft["multi_source"]["component_drafts"]` carries the
-per-source drafts. Pass that list to `merge_resolved_drafts` at the Step 3 gate:
+per-source drafts. Pass that list to `merge_resolved_drafts` at the Step 5 gate:
 
 ```python
 mismatches = draft.get("multi_source", {}).get("mismatches", [])
@@ -44,7 +44,7 @@ raises `AmbiguousClassificationError` before an extractor runs.
 
 ---
 
-## Step 1 — Multi-source extraction (URL + folder + any 2+ sources)
+## Step 2a — Multi-source extraction (URL + folder + any 2+ sources)
 
 ```python
 drafts = []
@@ -70,11 +70,11 @@ draft["multi_source"] = {
 }
 ```
 
-Mismatches are NOT auto-resolved here. They surface in the Step 3 confirmation gate.
+Mismatches are NOT auto-resolved here. They surface in the Step 5 confirmation gate.
 
 ---
 
-## Step 1 — Draft structure after extraction
+## Step 2a — Draft structure after extraction
 
 All extraction modes produce a `draft` dict with this shape:
 
@@ -113,11 +113,11 @@ All extraction modes produce a `draft` dict with this shape:
 }
 ```
 
-Missing fields (empty dict values or absent keys) are acceptable — they will surface as warnings at Step 2 and can be filled at Step 3.
+Missing fields (empty dict values or absent keys) are acceptable — they will surface as warnings at Step 3 and can be filled at Step 5.
 
 ---
 
-## Step 1.75 — Completeness audit checks
+## Step 2c — Completeness audit checks
 
 ```python
 audit = []
@@ -143,7 +143,7 @@ if not voice_enabled and voice_words >= 500:
 
 ---
 
-## Step 2 — Per-validator code blocks
+## Step 3 — Per-validator code blocks
 
 Run all validators in parallel (no inter-dependency). Collect results into a `validation_results` dict.
 
@@ -171,7 +171,7 @@ for role in ["primary", "secondary", "accent", "background", "text"]:
 ```python
 if "path" in draft["logos"].get("primary", {}):
     logo_result = LogoValidator.validate_logo(draft["logos"]["primary"]["path"])
-# For URLs: mark as "pending" — validate after download in Step 4
+# For URLs: mark as "pending" — validate after download in Step 6
 ```
 
 ### Font validation
@@ -202,7 +202,7 @@ lowest_field = min(draft["confidence_scores"], key=draft["confidence_scores"].ge
 
 ---
 
-## Step 4b — Download logos to local assets/
+## Step 6b — Download logos to local assets/
 
 ```python
 import os
@@ -243,7 +243,7 @@ After download, re-run `LogoValidator.validate_logo(dest)` and append results to
 
 ---
 
-## Step 4c — Construct config.yaml via `build_config_from_draft`
+## Step 6c — Construct config.yaml via `build_config_from_draft`
 
 **Use `build_config_from_draft(draft, schema_version=2)` from `loader.py` — do not hand-assemble the config dict.** The builder is the single source of truth for the v2 shape (drops `fonts.*`, emits `colors.tertiary` and flat `colors.neutral`, wires `components.body-text`). It also handles the `voice` section and the `multi_source` provenance block — no post-build mutation needed.
 
@@ -255,7 +255,7 @@ config = build_config_from_draft(
     client_name=draft.get("client_name", ""),
     extracted_by=draft.get("extracted_by", ""),
     notes=draft.get("notes", ""),
-    validation_summary=validation_results,   # from Step 2; updated with post-download logo checks
+    validation_summary=validation_results,   # from Step 3; updated with post-download logo checks
     schema_version=2,
 )
 ```
@@ -305,7 +305,7 @@ Compute `config_hash = sha256(yaml.safe_dump(config["branding"], sort_keys=True)
 
 ---
 
-## Step 4d–4f — Persist the disposition (single transaction boundary)
+## Step 6d — Persist the disposition (single transaction boundary)
 
 Every confirmation-gate outcome goes through one call. `persist_disposition`
 routes an activating disposition to `save_confirmed_branding` and a

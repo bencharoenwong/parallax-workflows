@@ -65,7 +65,6 @@ LEGACY_ALLOWLIST: frozenset[str] = frozenset({
     "parallax-house-view-attribution",
     "parallax-rebalance",
     "parallax-stress-house-view",
-    "parallax-white-label-onboard",
 })
 
 

@@ -634,7 +634,7 @@ def _build_result(
 
 
 # ---------------------------------------------------------------------------
-# Save-side helper — used by SKILL.md Step 4c at write time, and by tests
+# Save-side helper — used by SKILL.md Step 6c at write time, and by tests
 # to verify save → reload roundtrip integrity.
 # ---------------------------------------------------------------------------
 
@@ -661,7 +661,7 @@ def build_config_from_draft(
     extract_from_url / merge_drafts and assembles the dict that
     yaml.safe_dump should write.
 
-    Used at SKILL.md Step 4c (save time) AND by tests (save → reload roundtrip).
+    Used at SKILL.md Step 6c (save time) AND by tests (save → reload roundtrip).
     """
     src = draft.get("source", {}) or {}
     src_type = src.get("type", "wizard")
