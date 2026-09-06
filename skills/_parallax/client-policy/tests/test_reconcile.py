@@ -262,6 +262,30 @@ def test_all_holdings_excluded_is_a_named_conflict():
     assert any(c.kind == "all_holdings_excluded" for c in r.conflicts)
 
 
+def test_conflict_and_infeasible_carry_disjoint_artifacts():
+    """`conflict` and `infeasible` render DIFFERENT artifacts, so each must
+    populate only its own list. The rebalance orchestrator routes on this:
+    infeasible -> violations table, conflict -> named conflicts, neither -> targets.
+    A conflict that also carried violations (or vice versa) would let a run
+    render the wrong table, or an empty one, with no error raised.
+    """
+    p = _payload(excludes=["AAA.X"])
+    p["holdings"][0]["min"] = 0.1
+    conflict = reconcile.reconcile(p)
+    infeasible = reconcile.reconcile(_payload(excludes=["CCC.X"]))
+
+    assert conflict.status == "conflict"
+    assert conflict.conflicts, "conflict path must name the collision"
+    assert conflict.violations == [], "conflict path must NOT emit a violations table"
+
+    assert infeasible.status == "infeasible"
+    assert infeasible.violations, "infeasible path must emit the smallest violations"
+    assert infeasible.conflicts == [], "infeasible path must NOT emit named conflicts"
+
+    for r in (conflict, infeasible):
+        assert r.target_weights is None and r.trades is None
+
+
 # --------------------------------------------------------------------------
 # Input validation fails closed
 # --------------------------------------------------------------------------
