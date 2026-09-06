@@ -179,7 +179,7 @@ Config-producing skills (house-view load/make, white-label onboard) replace Step
 
 Three migration shapes share this vocabulary: the report consumer (`parallax-should-i-buy` is the reference), the config producer (Confirm/Persist above), and the multi-mode skill (basket vs. single-ticker, or a mode flag that changes the batch shape): a multi-mode skill keeps one spine and states the mode branch inside the affected step (`Step 2 — Fetch: basket mode fires …; single-ticker mode fires …`), never a second numbering.
 
-The existing `### Render — deterministic gate (LAST step, mandatory)` label is the pre-spine form of Step 6; `test_render_gate.py` accepts either while the sweep runs. Forward-only, same scope statement as "Host portability".
+The existing `### Render — deterministic gate (LAST step, mandatory)` label is the pre-spine form of Step 6; `test_render_gate.py` accepts either while the sweep runs. Forward-only, same scope statement as "Host portability". `scripts/test_step_spine.py` enforces the seven headings, their order, and the Step 5/6 labels on every SKILL.md that has a `## Workflow` section; `SPINE_PENDING` is its equality-pinned, shrink-only exception list. A router or an interface spec has no Workflow section and is out of scope by definition.
 
 ## Authority header
 

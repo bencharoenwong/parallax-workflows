@@ -4,6 +4,11 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-09-06 (spine gate)
+
+### Added
+- `skills/_parallax/scripts/test_step_spine.py`: every SKILL.md with a `## Workflow` section must carry the seven spine headings in order with a Compose/Confirm Step 5 and a Render/Persist Step 6; `SPINE_PENDING` (equality-pinned, shrink-only) holds `parallax-rebalance` until its hotfix merges. Concierge (router) and house-view-diff (interface spec) have no Workflow section and are out of scope by definition.
+
 ## 2026-09-06 (sweep: operator reports)
 
 ### Changed

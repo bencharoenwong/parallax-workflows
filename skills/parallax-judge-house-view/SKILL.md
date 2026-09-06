@@ -77,9 +77,9 @@ Invoke `judge.phase_0_load_view()`, which wraps `stress.load_active_view()`. Thi
 
 **Halt conditions:** view directory missing → exit with the standard "no active view" message. Chain broken → propagate the audit_chain error.
 
-### Step 2 — Fetch (parallel batches: Phase 1 MCP fan-out)
+### Step 2 — Fetch (parallel batches)
 
-Same recipe as the maker: 14 markets × 4 components (`macro_indicators`, `tactical`, `sectors`, `news`) + 1 `get_telemetry` call. Concurrency capped at 8. (`fixed_income` is out of scope — no formula consumes it yet.)
+Phase 1 — MCP fan-out. Same recipe as the maker: 14 markets × 4 components (`macro_indicators`, `tactical`, `sectors`, `news`) + 1 `get_telemetry` call. Concurrency capped at 8. (`fixed_income` is out of scope — no formula consumes it yet.)
 
 ### Step 3 — Verify
 
