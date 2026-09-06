@@ -24,6 +24,8 @@ description: "Read-only LLM-as-judge that compares the saved CIO house view agai
 - The judge does NOT use `gate_present.run_gate_loop` — there is no confirmation gate. It's a read-only report.
 - Maker shared modules (`cross_country`, `pillar_compose`, `pillar_formulas`) are imported lazily; if they are not importable (a partial or older deployment without `/parallax-make-house-view`'s modules), the orchestrator surfaces the gap in diagnostics and falls back to PARALLAX_SILENT for cells where the imputed view can't be computed.
 - Server-side `house_view_judge` MCP tool: not planned. The judge is client-side permanently — bank clients run this skill / CLI on their own side, for methodology transparency under model-validation review and zero cross-tenant blast radius. Do NOT resurrect the server-side framing without a new architectural decision.
+- Expected Parallax spend: ~282 tokens at the default market set (~14 markets × 4 components; `_parallax/token-costs.md`). `--dry` skips the Phase 5 LLM step but NOT the macro fan-out — the full cost is still incurred.
+- Every host interaction is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3). `judge.py` names its stages Phase 0–8; this file cites them as identifiers under the spine headings.
 - Auto-on-load triggers (portfolio-builder, rebalance, thematic-screen) suppress the run when `view_age_days < cadence.AUTO_ON_LOAD_MIN_AGE_DAYS` (30 days). Banner only at drift_material.
 
 This skill compares the active CIO house view against fresh Parallax macro signals, classifies drift severity, and recommends per-cell updates with cited rationale. It is **read-only**: the active view is never modified. The output is one append-only audit row, one report bundle, and one reasoning chain.
@@ -51,11 +53,21 @@ This skill compares the active CIO house view against fresh Parallax macro signa
 
 The `--dry` flag skips the LLM Phase 5 recommendation step and returns deterministic drift severity from MCP signals alone. `--mock-mcp <path>` is independent — it replaces the live MCP fan-out with a canned JSON payload keyed by `tool:arg1:arg2:...` summary strings (for tests or CI). Either flag can be used alone or together.
 
-**Cost:** ~282 tokens at the default market set (~14 markets × 4 components; see `_parallax/token-costs.md`). `--dry` skips the Phase 5 LLM step but NOT the Phase 1 macro fan-out — the full ~282-token cost is still incurred.
+## Workflow
 
-## Workflow (Phases 0-8)
+Report-producer shape: the spine headings below; `judge.py`'s Phase 0–8 are cited as identifiers. No confirmation gate and no render-gate script: the bundle is the deterministic output.
 
-### Phase 0 — Load active view
+### Step 0 — Pre-flight
+
+1. Resolve every `_parallax/...` path named in this file to the canonical copy (conventions §0.0 item 1).
+2. `load-reference` `_parallax/house-view/loader.md`, `_parallax/house-view/schema.yaml`, `_parallax/house-view/MCP_FIELD_INVENTORY.md`, `_parallax/parallax-conventions.md`.
+3. `discover-tools`: bind `list_macro_countries`, `macro_analyst`, `get_telemetry` to the exact callables and schemas exposed now (conventions §0.0–§0.1). With `--mock-mcp <path>` the canned payload replaces discovery.
+   <!-- host-note -->
+   Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call; `run-shell` = `Bash`.
+   <!-- /host-note -->
+4. Bind `run-shell` (`judge.py` orchestrator) and `read-config` (`$PARALLAX_HOUSE_VIEW_DIR`, else `~/.parallax/active-house-view/`). Parse flags: `--pillars-only`, `--json`, `--dry`, `--mock-mcp`.
+
+### Step 1 — Resolve inputs (Phase 0 — load active view)
 
 Invoke `judge.phase_0_load_view()`, which wraps `stress.load_active_view()`. This:
 
@@ -65,9 +77,11 @@ Invoke `judge.phase_0_load_view()`, which wraps `stress.load_active_view()`. Thi
 
 **Halt conditions:** view directory missing → exit with the standard "no active view" message. Chain broken → propagate the audit_chain error.
 
-### Phase 1 — MCP fan-out
+### Step 2 — Fetch (parallel batches: Phase 1 MCP fan-out)
 
 Same recipe as the maker: 14 markets × 4 components (`macro_indicators`, `tactical`, `sectors`, `news`) + 1 `get_telemetry` call. Concurrency capped at 8. (`fixed_income` is out of scope — no formula consumes it yet.)
+
+### Step 3 — Verify
 
 **Per-market timeout:** 45s. UNREACHABLE markets are classified via `stress.classify_mcp_meta_state` and weighted to 0 by the maker's aggregator. If unreachable_share > 30% across markets, the maker raises; the judge surfaces this in `diagnostics` and falls back to PARALLAX_SILENT.
 
@@ -75,7 +89,9 @@ Same recipe as the maker: 14 markets × 4 components (`macro_indicators`, `tacti
 
 When `mock_mcp_responses` is provided (via `--mock-mcp <path>` or programmatic injection), it replaces the live MCP fan-out verbatim regardless of `--dry`; otherwise the runtime delegates to the injected `mcp_call_fn`. `--dry` is orthogonal — it only suppresses the Phase 5 LLM recommendation call, not the MCP source.
 
-### Phase 2 — Per-cell diff
+### Step 4 — Compute
+
+#### Step 4a — Per-cell diff (Phase 2)
 
 For each non-zero cell in the active view (enumerated via `stress.enumerate_dimensions`), call `stress.resolve_cell_state(cio_tilt, parallax_view, age_delta, market=..., covered_markets=...)`. States:
 
@@ -88,7 +104,7 @@ For each non-zero cell in the active view (enumerated via `stress.enumerate_dime
 
 `parallax_view` per cell comes from the **imputed view** — `cross_country.aggregate` + `pillar_compose.compute_pillars` applied to the MCP fan-out. If the maker modules aren't installed yet, the orchestrator returns PARALLAX_SILENT for every cell and notes the gap in diagnostics.
 
-### Phase 3 — Severity classification
+#### Step 4b — Severity classification (Phase 3)
 
 Run `drift_classify.classify_severity(resolutions, view_age_days, denominator)`. Tiers:
 
@@ -98,7 +114,7 @@ Run `drift_classify.classify_severity(resolutions, view_age_days, denominator)`.
 
 **Magnitude escalation:** any `|cio_value - parallax_value| >= 3` bumps severity one tier (minor → moderate → material). Capped at `drift_material` (the `drift_breaking` slot is reserved for future tightening).
 
-### Phase 4 — Build recommended deltas
+#### Step 4c — Recommended deltas (Phase 4)
 
 Call `stress.build_recommended_deltas(resolutions, cio_age, parallax_age, include_fresh=True)`.
 
@@ -106,7 +122,7 @@ Call `stress.build_recommended_deltas(resolutions, cio_age, parallax_age, includ
 - DIVERGENT_STALE cells get `kind="informational"` (unchanged)
 - All pass `stress.validate_recommended_deltas` (allowlist already extended).
 
-### Phase 5 — LLM-as-judge recommendations (material+ severity only)
+#### Step 4d — LLM-as-judge recommendations (Phase 5, material+ severity only)
 
 For the cells at `drift_material` (or stricter), the orchestrator:
 
@@ -119,7 +135,7 @@ For the cells at `drift_material` (or stricter), the orchestrator:
 
 **Do not weaken the citation validator.** No bypass flag, no debug knob. Loosening to "semantic match" would re-introduce the hallucination surface the validator exists to close.
 
-### Phase 6 — Render report bundle
+### Step 5 — Compose (Phase 6 — report bundle)
 
 Write to `~/.parallax/judge-reports/<judged_version_id>-<judged_at>/`:
 
@@ -129,9 +145,9 @@ Write to `~/.parallax/judge-reports/<judged_version_id>-<judged_at>/`:
 - `reasoning_chain.yaml` — written by `chain_emit` (Phase 8), lives under `~/.parallax/reasoning-chains/`
 - `audit_entry.json` — copy of the appended audit row for offline auditors
 
-### Phase 7 — Append single audit row
+### Step 6 — Render (Phase 7 audit row, Phase 8 reasoning chain)
 
-Per `loader.md §6.1/§6.2`, append exactly one row with:
+**Audit row.** Per `loader.md §6.1/§6.2`, append exactly one row with:
 
 ```json
 {
@@ -161,9 +177,7 @@ Per `loader.md §6.1/§6.2`, append exactly one row with:
 
 `applied` is ALWAYS `false` for `action="judge"`. The judge never modifies the view. Acceptance happens later, manually, via `/parallax-load-house-view --edit` citing the judge's audit hash in the `basis_statement` (a future `--apply-judge <audit-hash>` flag will automate this).
 
-### Phase 8 — Emit reasoning chain
-
-Call `chain_emit.emit_phase_0_chain` with:
+**Reasoning chain.** Call `chain_emit.emit_phase_0_chain` with:
 
 - `skill_version="parallax-judge-house-view@1.0.0"`
 - `skill="parallax-judge-house-view"`
@@ -171,6 +185,20 @@ Call `chain_emit.emit_phase_0_chain` with:
 - `final_portfolio={"weights": {}}` (judge produces no portfolio; chain spec §3.5 allows empty weights)
 
 The chain artifact lands in `~/.parallax/reasoning-chains/<YYYY-MM>/<run_id>.yaml`. Replayable: the `response_hash` is the determinism anchor.
+
+## Failure modes
+
+- View directory missing: the standard "no active view" message; no row. Chain broken: propagate the `audit_chain` error.
+- `unreachable_share > 30%`: the maker raises; the judge records it in `diagnostics` and every cell falls back to `PARALLAX_SILENT`.
+- Maker modules not importable: `PARALLAX_SILENT` for every cell and the gap noted in diagnostics.
+- Citation check fails on a recommendation: dropped and replaced with the decline placeholder; never bypassed.
+- Host lacks `run-shell`: the orchestrator cannot run; the skill declares itself unavailable on this host (conventions §14.3).
+
+## Done when
+
+- Exactly one `judge` audit row appended, `applied=false`; the bundle directory exists with `report.md`, `report.json`, `mcp_responses.jsonl`, `audit_entry.json`; the reasoning chain emitted with `response_hash`.
+- Every recommendation in the report passed `recommendation.validate_citation` or carries the decline marker.
+- `report.md` ends with the §9.2 banner; `--json` writes the sidecar to stdout.
 
 ## Trigger sources (`cadence.py`)
 

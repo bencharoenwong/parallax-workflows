@@ -61,10 +61,7 @@ HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
 
 # Skill directories that were host-locked on 2026-09-05. Shrinks only.
 LEGACY_ALLOWLIST: frozenset[str] = frozenset({
-    "parallax-cio-letter-prep",
-    "parallax-house-view-attribution",
     "parallax-rebalance",
-    "parallax-stress-house-view",
 })
 
 

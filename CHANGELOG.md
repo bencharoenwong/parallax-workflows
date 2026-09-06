@@ -4,6 +4,11 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-09-06 (sweep: operator reports)
+
+### Changed
+- `parallax-stress-house-view`, `parallax-judge-house-view`, `parallax-house-view-attribution`, and `parallax-cio-letter-prep` follow the canonical step spine with §14 host primitives and a Claude Code host-note. The code-bound phase names (`judge.py` Phase 0–8, the stress design doc's Phase 0–4 and 4-B, attribution's Phase 5) are cited as identifiers under the spine headings; helper calls, report sections, and tests are unchanged. cio-letter-prep drops the vendor namespace from its tool tables, keeps the `fields=[...]` literal and the identity-gate text verbatim, and states that its dependent per-mover fan-out fires inside Step 4 as Batch B. All four gain Failure modes and Done when. Host-primitive allowlist is now `parallax-rebalance` only.
+
 ## 2026-09-06 (sweep: white-label onboard)
 
 ### Changed
