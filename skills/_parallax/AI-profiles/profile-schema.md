@@ -69,7 +69,10 @@ Before any Parallax tool call in the session:
 - JIT-load `_parallax/AI-profiles/output-template.md` (render contract)
 - JIT-load `_parallax/AI-profiles/profiles/<profile_id>.md` (the specific profile)
 
-Before the first Parallax tool call, run the `discover-tools` host primitive (`parallax-conventions.md` §14, bound per host in §14.2) to load the live Parallax tool schemas.
+Before the first Parallax tool call, run the `discover-tools` host primitive (`parallax-conventions.md` §14, bound per host in §14.2) and bind every tool in the profile's `tool_sequence` to the exact callable and schema the connector exposes this session.
+<!-- host-note -->On Claude Code this is `ToolSearch` with query `"+Parallax"`.<!-- /host-note -->
+
+Dispatchers written on the canonical step spine (`skill-structure-conventions.md`) map these steps as: Step 0 = this section's Steps 0–1 pre-flight and parse, Step 1 = ticker/mode resolution, Step 2 = the `tool_sequence` fetch, Step 3 = the §2 Step 2 cross-validation gate, Step 4 = thresholds and verdict, Step 5 = render through the output template, Step 6 = Emit. The section numbers below are the contract; the spine headings are the file layout.
 
 ### Step 1: Parse input
 

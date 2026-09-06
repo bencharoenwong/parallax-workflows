@@ -4,6 +4,11 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-09-06 (sweep: AI-profile family)
+
+### Changed
+- The six AI-profile dispatchers (`parallax-ai-buffett`, `-greenblatt`, `-klarman`, `-soros`, `-ptj`, `-consensus`) now follow the canonical step spine (`Step 0 — Pre-flight` through `Step 6 — Render — Emit`) with host primitives; the pinned emit paragraph, template blocks, and Output additions are unchanged. `parallax-ai-ptj` gains the standard emit paragraph its Step 9 lacked. `parallax-ai-consensus` points at `token-costs.md` instead of carrying its own cost table. `profile-schema.md` §2 uses `discover-tools` and maps its steps onto the spine. Host-primitive allowlist shrinks to 7.
+
 ## 2026-09-06 (sweep: discovery family)
 
 ### Changed

@@ -1,6 +1,6 @@
 ---
 name: parallax-ai-klarman
-description: "Applies Seth Klarman's margin-of-safety framework (per 'Margin of Safety', 1991) to a single stock's current financials via Parallax. Four balance-sheet checks: net cash position, debt vs peers, FCF stability, valuation discount. Includes a distinctive 'no position warranted; cash is valid' output when nothing qualifies. Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized. Accepts plain tickers or RIC format. NOT for portfolio-level health check (use /parallax-portfolio-checkup). For all five profiles simultaneously use /parallax-ai-consensus."
+description: "Applies Seth Klarman's margin-of-safety framework (per 'Margin of Safety', 1991) to a single stock's current financials via Parallax. Four balance-sheet checks: net cash position, debt vs peers, FCF stability, valuation discount. Includes a distinctive 'no position warranted; cash is valid' output when nothing qualifies. Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized. Accepts plain tickers or RIC format. NOT for portfolio-level health check (use /parallax-portfolio-checkup). Other lenses: /parallax-ai-buffett, /parallax-ai-greenblatt, /parallax-ai-soros, /parallax-ai-ptj. For all five profiles simultaneously use /parallax-ai-consensus."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -12,21 +12,19 @@ description: "Applies Seth Klarman's margin-of-safety framework (per 'Margin of 
 - Bottom-up factor scoring → use /parallax-ai-buffett
 - Mechanical formula screen → use /parallax-ai-greenblatt
 - Top-down macro analysis → use /parallax-ai-soros
+- Trend-following + macro overlay → use /parallax-ai-ptj
 - Cross-profile consensus → use /parallax-ai-consensus
 - Full due diligence → use /parallax-due-diligence
 - Running backtests → use /backtest
 
 ## Gotchas
 
-- JIT-load _parallax/parallax-conventions.md, _parallax/AI-profiles/profile-schema.md, _parallax/AI-profiles/output-template.md, _parallax/AI-profiles/profiles/klarman.md — see Step 0 for what each provides
-- Klarman profile is balance-sheet-first — requires get_financials(balance_sheet) AND get_financials(cash_flow) AND get_financials(ratios), 4 periods each
-- 3 statements × 4 periods would be 12 calls, but Parallax returns 4 periods per call → 3 calls + get_peer_snapshot + get_company_info = ~5 tokens
-- Compute net cash from balance sheet (cash - total debt), not from the ratios summary
-- The "no position warranted" output IS valid output — do not treat it as a failure
-- NEVER use first-person impersonation; always "Klarman-style"
-- Disclaimer verbatim per output-template.md, substituting "Seth Klarman" for [Investor]
-- Value threshold is intentionally loose (≥ 4) per Lev-Srivastava 2022 intangibles caveat — do not tighten without re-anchoring
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
+- Expected Parallax spend: ~5–7 tokens (`_parallax/token-costs.md`): three statements + peer snapshot + company info.
+- JIT-load `_parallax/parallax-conventions.md`, `_parallax/AI-profiles/profile-schema.md`, `_parallax/AI-profiles/output-template.md`, `_parallax/AI-profiles/profiles/klarman.md` — Step 0.
+- Balance-sheet-first: `get_financials` balance_sheet AND cash_flow AND ratios, 4 periods each (one call returns 4 periods). Net cash from the balance sheet (cash − total debt), not from the ratios summary.
+- The "no position warranted" output IS valid output — not a failure. Value threshold is intentionally loose (≥ 4) per Lev-Srivastava 2022 — do not tighten without re-anchoring.
+- NEVER use first-person impersonation; always "Klarman-style". Disclaimer verbatim with "Seth Klarman" for [Investor].
+- Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
 
 Applies Seth Klarman's margin-of-safety framework to a single stock's current balance sheet, cash flow, and peer-relative valuation.
 
@@ -40,24 +38,25 @@ Applies Seth Klarman's margin-of-safety framework to a single stock's current ba
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools.
+Every host interaction below is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3). Parallax callables are whatever `discover-tools` returns this session (§0.1). This dispatcher is generic — all differentiation lives in the profile spec; the contract is `_parallax/AI-profiles/profile-schema.md` §2.
 
-### Step 0 — JIT-load dependencies
+### Step 0 — Pre-flight
 
-Before the first Parallax tool call:
+1. Resolve every `_parallax/...` path named in this file to the canonical copy (conventions §0.0 item 1).
+2. `load-reference` `_parallax/parallax-conventions.md`, `_parallax/AI-profiles/profile-schema.md`, `_parallax/AI-profiles/output-template.md`, `_parallax/AI-profiles/profiles/klarman.md`.
+3. `discover-tools`: bind every tool in the profile's `tool_sequence` to the exact callable and schema exposed now.
+   <!-- host-note -->
+   Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
+   <!-- /host-note -->
+4. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`.
 
-1. Load `_parallax/parallax-conventions.md`
-2. Load `_parallax/AI-profiles/profile-schema.md`
-3. Load `_parallax/AI-profiles/output-template.md`
-4. Load `_parallax/AI-profiles/profiles/klarman.md`
+### Step 1 — Resolve inputs
 
-Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas.
+Resolve the RIC per conventions §1 (suffix table).
 
-### Step 1 — Resolve ticker
+### Step 2 — Fetch (parallel batches)
 
-Per shared conventions (RIC suffix table in `parallax-conventions.md §1`).
-
-### Step 2 — Fire data calls in parallel
+`call-tool` together:
 
 | Tool | Parameters | Purpose |
 |---|---|---|
@@ -67,11 +66,11 @@ Per shared conventions (RIC suffix table in `parallax-conventions.md §1`).
 | `get_financials` | `symbol`, `statement=cash_flow` | FCF across 4 periods (default) |
 | `get_financials` | `symbol`, `statement=ratios` | D/E, P/E, peer medians where available (4 periods default) |
 
-**IMPORTANT — MCP parameter serialization:** Do NOT pass numeric parameters like `periods=4` as explicit arguments via the `:periods=4` syntax — the MCP transport serializes them as strings, causing "Expected number, received string" validation errors. The server default is 4 periods; rely on it or pass as a properly-typed integer at the individual tool-call site.
+Rely on the 4-period server default, or pass a typed integer at the call site (conventions §0.2).
 
-### Step 3 — Pre-render cross-validation gate (MANDATORY per spec §6.4)
+### Step 3 — Verify
 
-After `get_peer_snapshot` returns, cross-check its `target_company` field (the response carries no `name` field — each peer's name is `comparison[].company`) against `get_company_info`'s `name`. On mismatch, refuse to render and emit:
+**Cross-validation gate (MANDATORY per spec §6.4).** `get_peer_snapshot.target_company` (no `name` field; peers are `comparison[].company`) against `get_company_info.name`; on mismatch refuse to render and emit:
 
 ```
 Error: Symbol cross-validation failed for <ticker>.
@@ -80,51 +79,14 @@ Error: Symbol cross-validation failed for <ticker>.
 Cannot render Klarman-style profile — possible wrong-company mapping (see parallax-conventions.md §2).
 ```
 
-### Step 4 — Compute the four Klarman checks
+Fewer than 4 periods: compute on what is available (minimum 2) and flag the coverage loss; no peer median: absolute thresholds with the note; all four checks unavailable → `DATA_UNAVAILABLE`, never a false `no_match`.
 
-**Check 1: Net cash position**
-- Net cash = (cash and equivalents) − (total debt), from most recent balance sheet
-- Net cash ratio = net cash / market cap (from get_company_info)
-- **PASS** if net cash ratio ≥ 0 (positive net cash)
-- **PARTIAL** if ≥ −0.2 (small, manageable net debt)
-- **FAIL** if < −0.2 (meaningful net debt)
+### Step 4 — Compute
 
-**Check 2: Debt vs peer median**
-- D/E from the ratios call, most recent period
-- Compare against peer median D/E from the peer snapshot
-- **PASS** if D/E ≤ peer median × 1.1
-- **FAIL** otherwise
-- If peer median D/E is unavailable, flag "Peer comparison unavailable — check computed on absolute D/E < 1.0 as fallback"
+The four checks: **1 Net cash** — (cash − total debt) / market cap: PASS ≥ 0, PARTIAL ≥ −0.2, FAIL < −0.2. **2 Debt vs peers** — D/E ≤ peer median × 1.1 PASS, else FAIL (no peer median → absolute D/E < 1.0 with "Peer comparison unavailable"). **3 FCF stability** — positive FCF periods of 4: PASS ≥ 3, PARTIAL 2, FAIL ≤ 1. **4 Valuation discount** — P/E vs peer median (P/B fallback on negative earnings): PASS ≤ × 0.85, PARTIAL ≤ × 1.0, FAIL above. **Backup** — Parallax Value ≥ 4; below 4 flag "⚠️ Parallax Value sub-score suggests valuation may not be attractive even if peer-relative metrics pass". Verdict with N = PASS count: N ≥ 3 and Value ≥ 4 → `match`; N ≥ 3 and Value < 4 → `partial_match` (flag "strong balance sheet but absolute Parallax Value below backup threshold — intangibles-era calibration caveat applies"); N = 2 → `partial_match`; N ≤ 1 → `no_match`; N = 0 and Value < 4 → append *"No position warranted on this ticker per margin-of-safety principles. Cash is a valid stance."*
 
-**Check 3: FCF stability**
-- Count periods (of 4) where free cash flow was positive
-- **PASS** if ≥ 3 of 4
-- **PARTIAL** if 2 of 4
-- **FAIL** if ≤ 1 of 4
+### Step 5 — Compose (render through the output template)
 
-**Check 4: Valuation discount**
-- P/E vs peer median P/E (fallback: P/B if negative earnings make P/E meaningless)
-- **PASS** if stock P/E ≤ peer median P/E × 0.85 (15%+ discount)
-- **PARTIAL** if stock P/E ≤ peer median × 1.0 (at peer)
-- **FAIL** if stock P/E > peer median × 1.0
-
-**Backup: Parallax Value sub-score**
-- Sanity check, not a primary criterion
-- Threshold: ≥ 4 (loose per Lev-Srivastava 2022 intangibles caveat)
-- If Value < 4, flag in output: "⚠️ Parallax Value sub-score suggests valuation may not be attractive even if peer-relative metrics pass"
-
-### Step 5 — Compute verdict
-
-Let `N` be the count of PASSing balance-sheet checks (0-4).
-
-- **N ≥ 3 AND Value ≥ 4 → `match`**
-- **N ≥ 3 AND Value < 4 → `partial_match`** — balance sheet qualifies but Parallax Value backup fails. Flag in output: "strong balance sheet but absolute Parallax Value below backup threshold — intangibles-era calibration caveat applies."
-- **N = 2 → `partial_match`**
-- **N ≤ 1 → `no_match`**
-
-If **N = 0** AND Value < 4, append the distinctive footer: *"No position warranted on this ticker per margin-of-safety principles. Cash is a valid stance."* (This is the explicit "do nothing" output from the profile body.)
-
-### Step 6 — Render through output template
 
 ```
 Klarman-style profile applied to <ticker>
@@ -157,7 +119,7 @@ Token cost: ~5 tokens
 This output is an AI-inferred interpretation of Seth Klarman's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by Seth Klarman or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.
 ```
 
-### Step 7 — Emit
+### Step 6 — Render — Emit
 
 **Steps 1–6 are silent.** Perform the ticker resolution, cross-validation, scoring, threshold logic, and verdict computation internally — none of that working appears in your reply. Your **entire visible response consists only of the rendered Step 6 template plus every required Output addition below**. The analytical template begins at the Header line `Klarman-style profile applied to <ticker>`. Before it, render only the leading white-label elements required by `integration-pattern.md` §5, in its prescribed order, including a URL logo and the conditional Branding Header when applicable. If no leading white-label element applies, the analytical Header is the absolute first output. The About This Report footer, AI-interaction disclosure, and standard disclaimer remain required parts of the visible response in the positions specified below. Do NOT add `**Step N**` labels, "Cross-validation passed", "All data verified", a "Let me…" preamble, or any other workflow narration.
 
@@ -177,6 +139,15 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 
 Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 
-## Graceful fallback
+## Failure modes
+
 
 If balance-sheet data is unavailable for 4 periods, compute the checks on whatever is available (minimum 2 periods) and flag the coverage loss. If peer-median data is unavailable, skip the debt-vs-peers check and note "Peer comparison unavailable — absolute thresholds applied." If all four checks fail due to missing data, return `DATA_UNAVAILABLE` rather than a false `no_match`.
+
+
+## Done when
+
+- The reply begins at the analytical Header (or the white-label header when active) and contains only the rendered template plus the Output additions; no workflow narration.
+- The cross-validation gate passed, or the exact refusal message was emitted and nothing else rendered.
+- The verdict line, the citation, the methodology footer with tool sequence and token cost, the persona disclaimer verbatim, `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present.
+- Expected spend stated (Gotchas).

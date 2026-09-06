@@ -12,12 +12,10 @@ spec = importlib.util.spec_from_file_location("host_primitive_lint", SCRIPT)
 lint = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(lint)
 
-# The host-locked set still on the allowlist (34 on 2026-09-05; shrinks with each sweep PR). This literal and the script's
+# The host-locked set still on the allowlist (7 on 2026-09-06; shrinks with each sweep PR). This literal and the script's
 # LEGACY_ALLOWLIST are compared with EQUALITY: shrinking one without the other,
 # or re-adding a swept skill, fails here and is a deliberate two-file edit.
 LEGACY_PINNED = frozenset({
-    "parallax-ai-buffett", "parallax-ai-consensus", "parallax-ai-greenblatt",
-    "parallax-ai-klarman", "parallax-ai-ptj", "parallax-ai-soros",
     "parallax-cio-letter-prep", "parallax-house-view-attribution",
     "parallax-load-house-view", "parallax-make-house-view", "parallax-rebalance",
     "parallax-stress-house-view",

@@ -4,6 +4,10 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-09-06 (sweep: AI-profile family): the emit heading keeps its "— Emit" suffix
+
+**Decision:** The dispatchers' render step is `### Step 6 — Render — Emit`, not the bare spine heading. `test_ai_profile_emit_contracts.py` splits each file on "— Emit" and pins the suppression paragraph inside it; renaming would drop the pin. The paragraph itself stays verbatim across the six files. The consensus meta-skill drops its local token-cost table in favour of `token-costs.md` (one table, tests in both directions, per the 2026-09-05 decision).
+
 ## 2026-09-05 (sweep): should-i-buy is the template for the SKILL.md sweep
 
 **Why.** The 2026-09-04 rules are forward-only, so the 34 legacy skills migrate one family per PR. The first migration has to be the skill everything else copies: should-i-buy is the most-used, the render-gate reference, and the one whose Output Format the graders are locked against — which makes it the sharpest test of "restructure the workflow, leave the contract alone."

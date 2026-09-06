@@ -1,6 +1,6 @@
 ---
 name: parallax-ai-greenblatt
-description: "Applies Joel Greenblatt's Magic Formula (per 'The Little Book That Beats the Market', 2006; academic replication Gray & Carlisle 2012) to Parallax data. Two modes: universe mode returns a top-decile ranked basket; ticker-check mode reports whether a single stock falls in the top decile of its peer universe by combined ROC + earnings yield rank. Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized. Accepts no args (universe mode) or a single ticker. NOT for portfolio-level health check (use /parallax-portfolio-checkup). For all five profiles simultaneously use /parallax-ai-consensus."
+description: "Applies Joel Greenblatt's Magic Formula (per 'The Little Book That Beats the Market', 2006; academic replication Gray & Carlisle 2012) to Parallax data. Two modes: universe mode returns a top-decile ranked basket; ticker-check mode reports whether a single stock falls in the top decile of its peer universe by combined ROC + earnings yield rank. Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized. Accepts no args (universe mode) or a single ticker. NOT for portfolio-level health check (use /parallax-portfolio-checkup). Other lenses: /parallax-ai-buffett, /parallax-ai-klarman, /parallax-ai-soros, /parallax-ai-ptj. For all five profiles simultaneously use /parallax-ai-consensus."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -12,20 +12,19 @@ description: "Applies Joel Greenblatt's Magic Formula (per 'The Little Book That
 - Bottom-up factor scoring without the mechanical formula → use /parallax-ai-buffett
 - Balance-sheet-first special situations → use /parallax-ai-klarman
 - Top-down macro analysis → use /parallax-ai-soros
+- Trend-following + macro overlay → use /parallax-ai-ptj
 - Cross-profile consensus → use /parallax-ai-consensus
 - Full due diligence → use /parallax-due-diligence
 - Running backtests → use /backtest
 
 ## Gotchas
 
-- JIT-load _parallax/parallax-conventions.md, _parallax/AI-profiles/profile-schema.md, _parallax/AI-profiles/output-template.md, _parallax/AI-profiles/profiles/greenblatt.md — see Step 0 for what each provides
-- Universe mode is default when no ticker is provided; ticker-check mode activates with a single ticker
-- build_stock_universe is ~5 tokens; budget accordingly
-- Exclude financials and utilities from default universe per Greenblatt's original rule
-- NEVER use first-person impersonation — always "Greenblatt-style" or "Magic Formula"
-- Disclaimer verbatim; substitute "Joel Greenblatt" for [Investor] in the disclaimer block
-- Profile is derived from public book + academic replication only — no get_assessment, no score_total
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
+- Expected Parallax spend: ~10–15 tokens ticker-check, ~10–30 universe mode (`_parallax/token-costs.md`); `build_stock_universe` is 5 of that.
+- JIT-load `_parallax/parallax-conventions.md`, `_parallax/AI-profiles/profile-schema.md`, `_parallax/AI-profiles/output-template.md`, `_parallax/AI-profiles/profiles/greenblatt.md` — Step 0.
+- Universe mode is the default with no ticker; ticker-check mode with exactly one. Exclude financials and utilities from the default universe per Greenblatt's original rule.
+- `build_stock_universe` is async and broad queries time out: queries MUST be sector-scoped (default `"US large-cap consumer staples"`); a broad request runs sector-by-sector and merges.
+- NEVER use first-person impersonation — always "Greenblatt-style" or "Magic Formula". Disclaimer verbatim with "Joel Greenblatt" for [Investor]. Public book + academic replication only — no `get_assessment`, no `score_total`.
+- Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
 
 Applies Joel Greenblatt's Magic Formula (ROC rank + earnings yield rank, combined, top decile) to Parallax data.
 
@@ -39,65 +38,39 @@ Applies Joel Greenblatt's Magic Formula (ROC rank + earnings yield rank, combine
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools.
+Every host interaction below is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3). Parallax callables are whatever `discover-tools` returns this session (§0.1). This dispatcher is generic — all differentiation lives in the profile spec; the contract is `_parallax/AI-profiles/profile-schema.md` §2.
 
-### Step 0 — JIT-load dependencies
+### Step 0 — Pre-flight
 
-Before the first Parallax tool call:
+1. Resolve every `_parallax/...` path named in this file to the canonical copy (conventions §0.0 item 1).
+2. `load-reference` `_parallax/parallax-conventions.md`, `_parallax/AI-profiles/profile-schema.md`, `_parallax/AI-profiles/output-template.md`, `_parallax/AI-profiles/profiles/greenblatt.md`.
+3. `discover-tools`: bind every tool in the profile's `tool_sequence` to the exact callable and schema exposed now.
+   <!-- host-note -->
+   Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
+   <!-- /host-note -->
+4. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`.
 
-1. Load `_parallax/parallax-conventions.md` — RIC resolution, parallel execution, fallback patterns.
-2. Load `_parallax/AI-profiles/profile-schema.md` — dispatcher workflow and cross-validation gate.
-3. Load `_parallax/AI-profiles/output-template.md` — required output structure and disclaimer.
-4. Load `_parallax/AI-profiles/profiles/greenblatt.md` — profile spec.
+### Step 1 — Resolve inputs
 
-Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas.
+Mode: no ticker → **universe mode**; exactly one → **ticker-check mode**; more → reject: "Greenblatt profile takes zero or one ticker. For multi-ticker checks use /parallax-ai-consensus." Ticker-check: resolve the RIC per conventions §1 and `call-tool` `get_company_info` for sector/industry.
 
-### Step 1 — Determine mode
+### Step 2 — Fetch (parallel batches)
 
-- No ticker → **universe mode**
-- Exactly one ticker → **ticker-check mode**
-- Multiple tickers → reject: "Greenblatt profile takes zero or one ticker. For multi-ticker checks use /parallax-ai-consensus."
+1. `call-tool` `build_stock_universe` with a sector-scoped query — universe mode: the default or `--universe "<theme>"`; ticker-check: a peer universe derived from the ticker's sector (e.g. Technology Hardware → `"US large-cap technology hardware"`). Timeout → retry ONCE narrower; second timeout → `INSUFFICIENT_UNIVERSE`, no verdict.
+2. Cap the universe at the top 30 by `composite_score`.
+3. `call-tool` `get_financials(statement=ratios)` for each of the 30 together (ROC via `return_on_invested_capital` when direct ROC is absent; earnings yield = `1 / enterprise_value_ebit`).
+4. Universe mode: `get_peer_snapshot` for the top-3 basket members (pedagogy). Ticker-check: `get_peer_snapshot` on the target.
 
-### Step 2 — Universe mode workflow
+### Step 3 — Verify
 
-**IMPORTANT — query scoping:** `build_stock_universe` is async and broad queries consistently time out in practice (e.g., "US large-cap equities with high ROIC" — confirmed timeout). The default query MUST be sector-scoped or otherwise narrow. Valid defaults:
+Cross-validation gate per `profile-schema.md §2 Step 2`: `target_company` (top level; no `name` field — peers are `comparison[].company`) against `get_company_info.name`; refuse to render on mismatch (ticker-check: the target; universe: each top-3 member). Names whose `get_financials(ratios)` failed are dropped from the ranking and the coverage loss noted in the methodology footer. A universe under 10 names is expanded once, else `INSUFFICIENT_UNIVERSE`.
 
-- `"US large-cap consumer staples"` ← DEFAULT if no theme provided
-- `"US large-cap industrials"`
-- `"US large-cap healthcare"`
-- User-provided theme passed via `--universe "<theme>"`
+### Step 4 — Compute
 
-Do NOT pass broad queries like "US large-cap and mid-cap equities excluding financials and utilities" — they time out. If a user requests a broad screen, execute sector-by-sector and merge the rankings.
+Rank each candidate on ROC and on earnings yield independently; sum the ranks; sort ascending. Universe mode: the top 10% (3 of 30) is the Magic Formula basket. Ticker-check verdict: top 10% → `match`; top 25% → `partial_match`; below → `no_match`.
 
-1. Call `build_stock_universe` with the sector-scoped query. Cost: 5 tokens. If the call times out, retry ONCE with a narrower query (e.g., drop "large-cap and mid-cap" → "large-cap"). If the retry also times out, return `INSUFFICIENT_UNIVERSE` and decline to render a verdict.
-2. **Cap the universe at top 30 names** by `composite_score` from the `build_stock_universe` response (which already ranks candidates internally). This bounds the token cost for Step 3.
-3. For each candidate in the top-30 cap, call `get_financials(statement=ratios)` in parallel batches to pull ROC and earnings yield. Substitute Parallax's `return_on_invested_capital` if direct ROC is not available. Derive earnings yield as `1 / enterprise_value_ebit`. Cost: 1 token per name, so ~30 tokens max.
-4. Rank each candidate on ROC and earnings yield independently. Sum the two ranks. Sort by combined rank ascending.
-5. Take the top 10% as the Magic Formula basket (top 3 names out of 30).
-6. For the top 3 basket members, call `get_peer_snapshot` (1 token each) to surface Parallax factor scores as pedagogy.
+### Step 5 — Compose (render through the output template)
 
-### Step 3 — Ticker-check mode workflow
-
-1. Resolve ticker per shared conventions.
-2. Call `get_company_info` to identify the ticker's sector/industry.
-3. Call `build_stock_universe` with a sector-based peer universe query derived from the ticker's sector (e.g., if AAPL is in "Technology Hardware," query `"US large-cap technology hardware"`). Sector-scoped queries succeed where broad queries time out.
-4. Cap the peer universe at top 30 names by `composite_score`.
-5. Run Step 2 sub-steps 3-4 on the capped peer universe.
-6. Check where the target ticker ranks in the combined distribution.
-
-### Step 4 — Cross-validation gate
-
-For ticker-check mode, after `get_peer_snapshot` on the target ticker, cross-check `target_company` (the top-level field — the response has no `name` field; each peer's name is `comparison[].company`) against `get_company_info`'s `name`. Refuse to render on mismatch per `profile-schema.md §2 Step 2`.
-
-For universe mode, cross-validation is per-name on the top-3 basket members that get `get_peer_snapshot` calls.
-
-### Step 5 — Compute verdict (ticker-check mode only)
-
-- **Top 10% of combined rank → `match`**
-- **Top 25% but below top 10% → `partial_match`**
-- **Below top 25% → `no_match`**
-
-### Step 6 — Render through output template
 
 **Universe mode output:**
 
@@ -153,7 +126,7 @@ Token cost: ~10-15 tokens
 This output is an AI-inferred interpretation of Joel Greenblatt's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by Joel Greenblatt or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.
 ```
 
-### Step 7 — Emit
+### Step 6 — Render — Emit
 
 **Steps 1–6 are silent.** Perform the ticker resolution, cross-validation, scoring, threshold logic, and verdict computation internally — none of that working appears in your reply. Your **entire visible response consists only of the selected Step 6 rendered template plus every required Output addition below**. In universe mode, the analytical template begins at the Header line `Greenblatt-style basket (Magic Formula)`; in ticker-check mode, it begins at `Greenblatt-style profile applied to <ticker>`. Before the analytical Header, render only the leading white-label elements required by `integration-pattern.md` §5, in its prescribed order, including a URL logo and the conditional Branding Header when applicable. If no leading white-label element applies, the mode-specific analytical Header is the absolute first output. The About This Report footer, AI-interaction disclosure, and standard disclaimer remain required parts of the visible response in the positions specified below. In both modes, do NOT add `**Step N**` labels, "Cross-validation passed", "All data verified", a "Let me…" preamble, or any other workflow narration.
 
@@ -173,8 +146,17 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 
 Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 
-## Graceful fallback
+## Failure modes
+
 
 If `build_stock_universe` returns fewer than 10 names, the top-decile calculation is unreliable. Expand the universe query once; if expansion fails, return `INSUFFICIENT_UNIVERSE` and decline to render a verdict. In ticker-check mode, this means the /parallax-ai-consensus meta-skill should treat the profile as `skipped`.
 
 If `get_financials(ratios)` fails for a subset of universe members, drop those names from the ranking and note the coverage loss in the methodology footer.
+
+
+## Done when
+
+- The reply begins at the analytical Header (or the white-label header when active) and contains only the rendered template plus the Output additions; no workflow narration.
+- The cross-validation gate passed, or the exact refusal message was emitted and nothing else rendered.
+- The verdict line, the citation, the methodology footer with tool sequence and token cost, the persona disclaimer verbatim, `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present.
+- Expected spend stated (Gotchas).
