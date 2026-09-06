@@ -38,8 +38,8 @@ The orchestrator is the file the model reads at every invocation. It contains:
 7. **Workflow skeleton** — Steps 0 → N as numbered headings, each with a one-paragraph summary AND an explicit `→ Load references/<file>.md` directive when the step's full content lives in references/
 8. **Render step (deterministic gate)** — mandatory final `mktemp` + `cat` + `python3 _parallax/render_gate.py` Bash block for report skills (see `parallax-conventions.md §10`)
 9. **Operational modes** — `--status`, `--clear`, etc., one row each
-10. **Success criteria** — what "done" looks like
-11. **Failure modes the operator MUST know without loading anything else** — security gates, compliance gates, irreversible-action warnings
+10. **`## Done when`** — what "done" looks like
+11. **`## Failure modes`** — security gates, compliance gates, irreversible-action warnings the operator MUST know without loading anything else
 
 Target: ≤250 lines. The orchestrator should be navigable in one screen-scroll.
 
