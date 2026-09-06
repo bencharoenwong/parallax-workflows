@@ -116,7 +116,7 @@ The parameter column states the semantic intent. Construct every payload from th
 
 ### Batch C2 — Policy reconciliation (S3; only when `policy=` was supplied)
 
-Runs only when `policy=` was supplied. → Load `references/policy-reconciliation.md` and follow it in full: S0–S2 adaptation first (`adaptation.py`), then the S3 solver (`reconcile.py`) as a real Bash tool call, never prose arithmetic. The trade list is gate-shaped (conventions §4.0): `optimal` yields targets; `infeasible` and `conflict` render the violations and NO targets; `solver_unavailable` / `invalid_input` / `solver_error` render the verdict as **UNVERIFIED** and label the flag-based fallback "not policy-checked".
+Runs only when `policy=` was supplied. → Load `references/policy-reconciliation.md` and follow it in full: S0–S2 adaptation first (`adaptation.py`), then the S3 solver (`reconcile.py`) as a real Bash tool call, never prose arithmetic. The trade list is gate-shaped (conventions §4.0): `optimal` yields targets; `infeasible` renders the violations table, `conflict` renders the named conflicts, both render NO targets; `solver_unavailable` / `invalid_input` / `solver_error` render the verdict as **UNVERIFIED** and label the flag-based fallback "not policy-checked".
 
 ### Batch D — Validation
 
