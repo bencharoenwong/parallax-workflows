@@ -1,6 +1,6 @@
 ---
 name: parallax-country-deep-dive
-description: "Country or region equity discovery: which equities screen strongest in a market — macro context, available equity coverage, top-scoring stocks, and investment opportunities via Parallax MCP tools. Anchored on the allocation question. NOT for macro regime reads ('what is the regime in [market]?' — use /parallax-macro-outlook), not for thematic screening (use /parallax-thematic-screen)."
+description: "Country or region equity discovery: which equities screen strongest in a market — macro context, available equity coverage, top-scoring stocks, and investment opportunities via Parallax MCP tools. Anchored on the allocation question. NOT for macro regime reads ('what is the regime in [market]?' — use /parallax-macro-outlook), not for thematic screening (use /parallax-thematic-screen), not for single stock analysis (use /parallax-deep-dive)."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -15,15 +15,11 @@ description: "Country or region equity discovery: which equities screen stronges
 
 ## Gotchas
 
-- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
-- list_macro_countries first to confirm the country is covered
-- build_stock_universe can filter by geography via natural language
-- Not all 40+ markets have full macro coverage — check_macro_health confirms
-- Smaller markets may have fewer scored equities
-- JIT-load `_parallax/house-view/loader.md` UNCONDITIONALLY — §5 rule 3 (ground-truth check), rule 6 (AI disclosure), and §6 (audit log) apply whether or not a view is active. When a view IS present: this is a regional-screen skill, so additionally apply §3 (multipliers — region/sector tilts bias the top-opportunities ranking) and §5 (preamble + view-aware sections). The view does NOT override the country-specific macro narrative (the country's own data is sovereign for the macro sections); it biases the equity-selection ranking only.
-- Boundary with /parallax-macro-outlook: the view-tilted Top Opportunities ranking is THIS skill's design (discovery/allocation surface). macro-outlook's optional equity census is deliberately untilted (regime exhibit). Same tools, different question — do not "harmonize" the two house-view contracts.
-- When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
+- Expected Parallax spend: ~29 tokens (`_parallax/token-costs.md`): one macro summary + universe + 5 snapshots + 5 info checks + 3 score trends.
+- JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.2 named-parameter discipline (`build_stock_universe(query=…)`, `macro_analyst(market=…)` with no `component`), §2 identity cross-check, §3 parallel execution, §4 fallbacks, §12 framing, §14 host primitives.
+- JIT-load `_parallax/house-view/loader.md` UNCONDITIONALLY: §5 rule 3, rule 6 and §6 apply with or without a view. With a view: §3 multipliers bias the Top Opportunities ranking (region/sector tilts) and §5 rendering applies; the country's own macro narrative is sovereign and untouched. Boundary with /parallax-macro-outlook: that skill's census is untilted by design — do not "harmonize" the two contracts.
+- Smaller markets may have fewer scored equities; `check_macro_health` confirms macro coverage.
+- Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report, with the unconditional currency line).
 
 Macro + equity opportunity analysis for a specific country or region.
 
@@ -37,37 +33,59 @@ Macro + equity opportunity analysis for a specific country or region.
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, fallback patterns, and §0.2 (named-parameter discipline — `build_stock_universe` and `macro_analyst` parameters below are named explicitly because LLMs guess these wrong).
+Every host interaction below is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3). Parallax callables are whatever `discover-tools` returns this session (§0.1).
 
-### Pre-Workflow — Load Active House View
+### Step 0 — Pre-flight
 
-Per `_parallax/house-view/loader.md` §1 and §2: load and validate any active house view BEFORE running the workflow. If view present, capture the load preamble for rendering at the top of Output Format per §5.1, and capture the tilt vector. Apply §3 multipliers to the Top Opportunities ranking in Batch B (region/sector tilts shift composite scores; the country macro narrative is unchanged). If no active view (or validation failure): run the workflow normally with the standard disclaimer. Loader.md §5 rule 3 (ground-truth check), rule 6 (AI disclosure), and §6 (audit) still apply on the no-view path.
+1. Resolve every `_parallax/...` path named in this file to the canonical copy (conventions §0.0 item 1).
+2. `discover-tools`: bind every logical tool named anywhere in this workflow (Step 2) to the exact callable and schema exposed now.
+   <!-- host-note -->
+   Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
+   <!-- /host-note -->
+3. Parse args: country or region; `top_n=` (default 5).
+4. `load-reference` `_parallax/house-view/loader.md`; run §1–§2. If a view is present, capture the load preamble and the tilt vector for Step 4.
+5. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`.
 
-### Batch 0 — Tool Loading
+### Step 1 — Resolve inputs
 
-Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
+The market name must match `list_macro_countries` verbatim; a region maps to its covered member markets.
 
-### Batch A — Coverage + macro + universe (parallel)
+### Step 2 — Fetch (parallel batches)
 
-| Tool | Parameters | Notes |
-|---|---|---|
-| `list_macro_countries` | — | Confirm coverage |
-| `check_macro_health` | — | Data freshness |
-| `build_stock_universe` | `query="[country] equities"` | Equity universe (named parameter per conventions §0.2) |
+**Batch A** — `call-tool` together: `list_macro_countries`; `check_macro_health`; `build_stock_universe(query="[country] equities")`.
 
-### Batch B — Macro depth + scoring (after Batch A)
+**Batch B** — after A: `macro_analyst(market="[country]")` summary mode (no `component`; all components inline); for the top N universe results, `get_peer_snapshot` AND `get_company_info` per symbol together; for the top 3, `get_score_analysis` with `weeks` as int 26.
 
-1. Call `macro_analyst` with `market="[country]"` and NO `component` parameter (summary mode — named parameter per conventions §0.2). The summary call returns all components inline (macro_indicators, tactical, fixed_income, currency, sectors, etc.). Do not make separate per-component calls — they return identical content and waste tokens.
-2. For top N universe results (default 5): call `get_peer_snapshot` AND `get_company_info` per symbol (all parallel). `get_company_info` is the **ground-truth oracle** per loader.md §5 rule 3 (required view or no view): cross-check each `get_peer_snapshot.target_company` against the `get_company_info` name-of-record. On mismatch, flag ⚠ MISMATCH and recover per rule 3 (re-derive from the `comparison[]` row whose `symbol` matches the queried symbol, else mark "scores unavailable") — never rank a mismatched score as authoritative.
-3. For top 3: call `get_score_analysis` with 26 weeks (parallel).
-4. If view active, apply §3 multipliers to the verified composite scores from `get_peer_snapshot` per loader.md §3 and re-rank Top Opportunities.
-5. **Always** append the §6 audit log entry per loader.md §6.1 — view or no view (`applied=false` with `applied_reason: "no_view"` when none; include `ground_truth_mismatches` per §6.2 when any row was flagged).
+### Step 3 — Verify
 
-### Pre-Render — Load white-label branding
+- Coverage: an uncovered market is stated under Country Overview; no `macro_analyst` call for it.
+- Identity per loader.md §5 rule 3 / conventions §2: `get_peer_snapshot.target_company` vs `get_company_info.name`; on mismatch flag ⚠ MISMATCH and recover from the `comparison[]` row whose `symbol` matches, else "scores unavailable"; never rank a mismatched score.
 
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+### Step 4 — Compute
+
+No deterministic helper. With a view, apply loader.md §3 multipliers to the verified composite scores and re-rank Top Opportunities; without one, rank by composite.
+
+### Step 5 — Compose
+
+Fill **Output Format** below in order: House View Preamble per loader.md §5.1; Branding Header per integration-pattern.md §5; §12 preface above Top Opportunities; `parallax-conventions.md §9.2` disclosure; disclaimer per loader.md §5 rule 5 when a view is active, otherwise `parallax-conventions.md §9.1`; audit entry per loader.md §6.1 always (`applied=false`, `applied_reason: "no_view"` when none; `ground_truth_mismatches` per §6.2 when any).
+
+### Step 6 — Render (deterministic gate, mandatory)
+
+`run-shell` the shared gate per conventions §10.3 with this skill's key:
+
+```
+DRAFT="$(mktemp "${TMPDIR:-/tmp}/country.XXXXXX")"
+cat > "$DRAFT" <<'REPORT'
+<your complete drafted report goes here>
+REPORT
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill country-deep-dive < "$DRAFT"; rm -f "$DRAFT"
+```
+
+The entire final message is that command's stdout. The stderr `[render-gate] WARN:` line is diagnostics: never include it. Degraded-state notes go inside their section. If `run-shell` is absent, apply conventions §14.3 (render-gate row). No Step 7.
 
 ## Output Format
+
+**Begin the response immediately with the rendered report — no preamble.** The first expected line is `## Country Overview`, or the House View Preamble / Branding Header when active.
 
 - **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (banner from Pre-Workflow + low-confidence warnings). Per loader.md §5.1 the preamble goes at the very top — it precedes the Branding Header.
 - **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** country deep dive`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to About This Report.
@@ -83,3 +101,21 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
 If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise: render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
+
+
+## Failure modes
+
+- Market not covered: Country Overview states it; Economic Indicators is unavailable; the equity sections still render if the universe returned.
+- Universe empty or thin: Equity Coverage states the count; Top Opportunities may be short and says so.
+- ⚠ MISMATCH rows: recovered per rule 3 or shown as "scores unavailable", never ranked as authoritative.
+- House-view banner states `malformed` / `expired` / `critical`: the banner renders verbatim (conventions §0.3 item 4).
+- Host lacks a primitive: conventions §14.3, per primitive.
+
+## Done when
+
+- First line is `## Country Overview` or the House View Preamble / Branding Header; every Output Format section rendered or marked unavailable with its reason.
+- Top Opportunities carries the §12 preface and names-of-record; ⚠ MISMATCH rows are marked; the ranking is tilt-adjusted only when a view is active.
+- When a view is active: the `view_status` banner appears verbatim; the Investment Thesis is framed in view language.
+- Audit entry appended per loader.md §6 (every run, including no-view).
+- The render gate ran and the reply is its stdout (or the §14.3 note is present in About This Report).
+- `parallax-conventions.md §9.2` disclosure and the §9.1 or view-aware disclaimer are present; expected spend stated (Gotchas).

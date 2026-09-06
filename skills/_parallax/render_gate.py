@@ -130,6 +130,34 @@ SKILL_ANCHORS: dict[str, list[str]] = {
         r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:credit risk assessment|credit lens)\b",
         _branding("credit lens"),
     ],
+    "thematic-screen": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:theme|thematic screen|universe built)\b",
+        _branding("thematic screen"),
+    ],
+    "macro-outlook": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:regime status|macro outlook)\b",
+        _branding("macro outlook"),
+    ],
+    "country-deep-dive": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:country overview|country deep dive)\b",
+        _branding("country deep dive"),
+    ],
+    "halal-screen": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:screening criteria|halal|shariah screen)\b",
+        _branding("shariah screen"),
+    ],
+    "scenario-analysis": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:scenario summary|scenario analysis)\b",
+        _branding("scenario analysis"),
+    ],
+    "pair-finder": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:verdict|top pair|pair finder|pair:)",
+        _branding("pair finder"),
+    ],
+    "stress-test-thesis": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:tl;dr|stress-test thesis|thesis restatement)",
+        r"^\s{0,3}~\d+ min read\b",
+    ],
     "score-explainer": [
         r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:the question|score explainer)\b",
         _branding("score explainer"),

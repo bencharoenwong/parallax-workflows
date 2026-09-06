@@ -1,6 +1,6 @@
 ---
 name: parallax-pair-finder
-description: "Long/short equity pair builder: given one leg, suggest top-3 counter-leg candidates from peers; given both legs, report residual factor / sector / macro / dollar / beta exposure. Symbols in RIC format. NOT for single-stock analysis (use /parallax-deep-dive), not for peer comparison tables (use /parallax-peer-comparison), not for portfolio analysis (use /parallax-morning-brief)."
+description: "Long/short equity pair builder: given one leg, suggest top-3 counter-leg candidates from peers; given both legs, report residual factor / sector / macro / dollar / beta exposure. Symbols in RIC format. NOT for single-stock analysis (use /parallax-deep-dive), not for peer comparison tables (use /parallax-peer-comparison), not for portfolio analysis (use /parallax-morning-brief), not for long-only screening (use /parallax-thematic-screen)."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -16,17 +16,15 @@ description: "Long/short equity pair builder: given one leg, suggest top-3 count
 
 ## Gotchas
 
-- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
-- JIT-load references/residual-math.md for factor-net, beta, and hedge-ratio formulas
-- Default selection criterion (mode B): closest peer with worst total score for short candidates; closest peer with best total score for long candidates
-- Suggestion mode (one leg given) uses single export_peer_comparison call to guarantee cross-sectionally comparable factor scores across all candidates
-- Evaluate mode (both legs given) MUST flag score-comparability uncertainty when short_ric is NOT in long's peer set (cross-sector pair)
-- v1 scope cuts: no revenue-geography mix (use domicile/listing-currency only), no share counts (dollar/beta-neutral ratios only), no cross-sector suggestions (within-sector peers only). Evaluate mode accepts cross-sector pairs but flags them.
-- Liquidity disclaimer is MANDATORY in every output: ADV / borrow / float not validated by Parallax — verify externally before sizing.
-- Output gate (HARD HALT): refuse to render hedge ratios if benchmark price series is null or has < 60 observations. Do NOT substitute pair-relative regression beta and emit a caveat — that pattern is BANNED for primary deliverables. Halt with named failure reason and operator-action options.
-- JIT-load `_parallax/house-view/loader.md` if an active CIO view is present. Pair-finder is dual-single-stock per `loader.md` §7 (read-only consumers): tilts are NOT applied to candidate ranking or score subtraction. The view surfaces as: (a) §7.3 score-vs-view tension banner per leg (if leg's total ≥ 7 AND leg's sector tilt ≤ -1 in view), (b) §7.1 House View Note rendered once per pair after the per-pair detail, (c) §6 audit log per pair evaluated. §7.2 peer-suggest token N/A — pair-finder constructs its own candidate set from `export_peer_comparison`, not via `get_peer_snapshot.suggestion`.
-- When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
+- Expected Parallax spend: ~8 tokens single-pair evaluate, ~15 for a 3-candidate suggestion run (`_parallax/token-costs.md`); price series are free.
+- JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §3 parallel execution, §4/§4.0 fallbacks, §14 host primitives. JIT-load `references/residual-math.md` for factor-net, beta and hedge-ratio formulas; `references/modes.md` for the per-mode batch tables.
+- JIT-load `_parallax/coverage-matrix.md`: equities price via `export_price_series`, the benchmark ETF via `etf_daily_price` — separate endpoints; `etf_daily_price` returns `[]` for a multi-symbol call if any symbol is uncovered, so always one call per benchmark.
+- Suggestion mode uses a single `export_peer_comparison` call so factor scores are cross-sectionally comparable; evaluate mode MUST flag score comparability when the short is not in the long's peer set.
+- v1 scope: domicile/listing-currency only (no revenue geography), dollar- and beta-neutral ratios only (no share counts), within-sector suggestions only; evaluate mode accepts cross-sector pairs but flags them.
+- **Output gate (HARD HALT):** no hedge ratios when the benchmark series is null or has < 60 observations; never substitute pair-relative regression beta with a caveat — that pattern is banned for primary deliverables (Step 3).
+- Liquidity disclaimer is mandatory in every output: ADV / borrow / float are not validated by Parallax.
+- JIT-load `_parallax/house-view/loader.md` if a view is present: dual-single-stock consumer per §7 — tilts are NOT applied; §7.3 tension banner per leg, §7.1 note once per pair, §6 audit once per invocation; §7.2 is N/A (the candidate set comes from `export_peer_comparison`).
+- Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
 
 Long/short equity pair construction for fundamental PMs. Given one leg of a thesis, suggest the other leg from peers and report what residual exposure survives the hedge. Given both legs, report the residual.
 
@@ -47,94 +45,39 @@ Three invocation modes:
 /parallax-pair-finder long=NVDA.O short=AMD.O --with-history
 ```
 
-**Flags:**
-- `--candidates=N` (default 3 in suggestion modes; ignored in evaluate mode)
-- `--with-history` (adds 60d→180d realized correlation, pair vol, max drawdown, hit rate)
+**Flags:** `--candidates=N` (default 3, suggestion modes only); `--with-history` (adds 60d→180d realized correlation, pair vol, max drawdown, hit rate); `--benchmark=<ticker>` (explicit benchmark after a HALT); `--no-beta` (dollar-neutral only).
 
-**Default selection criterion (v1):** closest peer with worst total score for short candidates; closest peer with best total score for long candidates. (Same-sector relative-value framing.)
+**Default selection criterion (v1):** closest peer with worst total score for short candidates; closest peer with best total score for long candidates (same-sector relative-value framing).
 
 ## Workflow
 
-JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, and fallback patterns. JIT-load `references/residual-math.md` for factor-net, beta, and hedge-ratio formulas. Call `ToolSearch` with query `"+Parallax"` to load deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
+Every host interaction below is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3). Parallax callables are whatever `discover-tools` returns this session (§0.1). This is a multi-mode skill: Step 1 selects the mode; `references/modes.md` carries each mode's batch tables; the spine is the same.
 
-### Pre-Workflow — Load Active House View
+### Step 0 — Pre-flight
 
-Per `_parallax/house-view/loader.md` §1 and §2: load and validate any active house view BEFORE running mode-specific batches. If view present, capture the load preamble for rendering at the top of Output Format per §5.1 and the sector tilt vector. Tilts are NOT applied to scores or to candidate ranking; the view surfaces as conflict signals per §7 (single-stock pattern, applied per-leg). If no active view (or validation failure): run the workflow normally with the standard disclaimer.
+1. Resolve every `_parallax/...` and `references/...` path named in this file to the canonical copy (conventions §0.0 item 1).
+2. `discover-tools`: bind every logical tool named in `references/modes.md` (both modes) to the exact callable and schema exposed now.
+   <!-- host-note -->
+   Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
+   <!-- /host-note -->
+3. Parse args and detect the mode: `<symbol> long` → Mode 1; `<symbol> short` → Mode 2; `long=<symbol> short=<symbol>` → Mode 3; anything else → ask the operator which mode (`ask-operator`).
+4. `load-reference` `_parallax/house-view/loader.md`; run §1–§2. If a view is present, capture the load preamble and the sector tilt vector for the Step 5 per-leg §7 surfacing.
+5. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`.
+6. `load-reference` `references/residual-math.md` and `references/modes.md`.
 
-Detect mode from invocation:
-- `<symbol> long` → Mode 1 (find short candidate)
-- `<symbol> short` → Mode 2 (find long candidate)
-- `long=<symbol> short=<symbol>` → Mode 3 (evaluate pair)
-- Anything else → ask the user to clarify which mode.
+### Step 1 — Resolve inputs
 
-### Mode 1 / Mode 2 — Suggestion mode (one leg given)
+RICs per conventions §1 (`get_company_info` empty → try `.O`, then `.N`, then ask). Benchmark from the primary leg's `market` via the canonical mapping in `references/modes.md` (other markets: `etf_search(market=…, query="MSCI", recommendation="HOLD")`, highest AUM). 180-day window: `end_date = today`, `start_date = today − 180 days`.
 
-Inputs: primary RIC + side (`long` | `short`). Optional: `--candidates=N` (default 3), `--with-history`.
+### Step 2 — Fetch (parallel batches)
 
-#### Batch A — Identification + peer set + macro coverage (parallel)
+Per `references/modes.md`: **Batch A** identification + peer set + macro coverage (`get_company_info`, `export_peer_comparison` (`format="json"`), `list_macro_countries`); **in-process candidate selection** (suggestion) or **score-comparability resolution** (evaluate, with one `get_peer_snapshot(short)` fallback when the short is outside the long's peer set); **Batch B/C** beta inputs — `export_price_series(days=180, format="json")` per equity leg and `etf_daily_price` for the benchmark ETF, one call per benchmark (asset-class split per coverage-matrix); **macro** `macro_analyst(component="tactical")` per distinct leg market; **`--with-history`**: 365-day series per leg.
 
-Fire all three simultaneously:
+### Step 3 — Verify
 
-| Tool | Parameters | Notes |
-|---|---|---|
-| `get_company_info` | symbol = primary RIC | Validates RIC, returns sector, industry, market cap, market |
-| `export_peer_comparison` | symbol = primary RIC, format = "json" | **Workhorse call.** Returns peer set with cross-sectionally comparable factor scores (value, quality, momentum, defensive, tactical, total), sector, industry, market, market cap, P/E, EV/EBITDA, ROE, YTD return, recommendation. Single-call comparability — DO NOT use independent `get_peer_snapshot` calls in this mode |
-| `list_macro_countries` | (none) | Gates macro coverage for Batch D |
-
-If `export_peer_comparison` fails: retry once. If it still fails, fall back to `get_peer_snapshot(primary)` and note in output that score comparability across candidates is "best-effort" (Plan-agent finding D).
-
-If `get_company_info` returns empty: apply RIC resolution per `_parallax/parallax-conventions.md` §1 (try `.O`, then `.N`, then escalate to user).
-
-#### Step A.5 — In-process candidate selection (no MCP calls)
-
-From the `export_peer_comparison.data` array, exclude the row where `is_target == true` (that's the primary leg). For the remaining peers:
-
-- **`long` side given** → user wants a SHORT candidate. Sort peers ascending by `total` score. Take the bottom N (default 3). These are the lowest-scoring peers — the v1 mode-B candidates.
-- **`short` side given** → user wants a LONG candidate. Sort peers descending by `total` score. Take the top N.
-
-Record each candidate's: ric, company_name, sector, industry, market, all 5 factor scores, total, market cap, recommendation, ytd return.
-
-#### Batch C — Beta computation (parallel, default path — NOT gated by --with-history)
-
-Per spec scope-cut: beta-neutral sizing is in the default path because PMs act on beta-neutral, not dollar-neutral.
-
-**Equities go through `export_price_series`. ETFs (benchmarks) go through `etf_daily_price` — a SEPARATE endpoint.** `export_price_series` does not return ETF data; using it for benchmarks returns empty. Use the right tool for each leg.
-
-**Canonical benchmark mapping by `market` field:**
-
-| Primary leg's `market` | Benchmark ticker (plain, no RIC suffix) | Notes |
-|---|---|---|
-| `United States` | `SPY` | S&P 500. For tech-heavy pairs, can substitute `QQQ` |
-| `Japan` | `EWJ` | iShares MSCI Japan |
-| `United Kingdom` | `EWU` | iShares MSCI UK |
-| `Hong Kong` | `EWH` | iShares MSCI Hong Kong |
-| `Singapore` | `EWS` | iShares MSCI Singapore |
-| `Germany` | `EWG` | iShares MSCI Germany (RIC `EWG.P`) — in Parallax coverage as of 2026-09-06 (`etf_search`, `report_supported: true`); if coverage lapses, the Batch C.5 output gate HALTs rather than substituting a proxy |
-| `Taiwan` | `EWT` | iShares MSCI Taiwan |
-| `Korea` | `EWY` | iShares MSCI South Korea |
-| `Canada` | `EWC` | iShares MSCI Canada |
-| `Australia` | `EWA` | iShares MSCI Australia |
-| (other) | call `etf_search(market="<market>", query="MSCI", recommendation="HOLD")` and pick highest-AUM result | Fallback discovery |
-
-Compute the start/end dates for a 180d window: `end_date = today`, `start_date = today - 180 days` (calendar; ~125 trading days will be returned).
-
-**API quirk to avoid:** `etf_daily_price` accepts a comma-separated multi-symbol input but returns `[]` if ANY of the listed symbols is missing from coverage. ALWAYS use single-symbol calls for benchmarks — one call per benchmark — so a single coverage gap doesn't silently fail the whole batch.
-
-Fire all in parallel:
-
-- `export_price_series(symbol=primary_ric, days=180, format="json")`
-- `export_price_series(symbol=candidate_ric, days=180, format="json")` × N candidates
-- `etf_daily_price(symbol=<benchmark_ticker>, start_date=<start_date>, end_date=<end_date>)` — **NOT `export_price_series`**
-
-Compute beta inline per `references/residual-math.md` §"Beta computation". Beta-neutral hedge ratio = `beta_long / beta_short` (dollars short per dollar long).
-
-**Fallbacks (in order):**
-1. If `etf_daily_price` returns no data for the chosen benchmark → call `etf_search(market="<market>")` to find an alternative; retry with the top result.
-2. If a leg's price series returns < 90 days of data → flag the affected candidate as "insufficient history for beta" and report **only dollar-neutral sizing** for that pair (do NOT halt the whole skill — this is per-leg degradation, surfaced in the row).
-
-#### Batch C.5 — Output gate (HARD HALT — non-negotiable)
-
-After Batch C completes and BEFORE rendering any beta-neutral hedge ratios, run this gate. The "⚠ Benchmark unavailable" caveat-footnote pattern is **forbidden** for primary deliverables. If the benchmark is genuinely unavailable, the skill HALTS — it does not silently substitute pair-relative regression beta and emit a footnote.
+- `export_peer_comparison` failure: retry once, then `get_peer_snapshot(primary)` with comparability marked best-effort.
+- A leg with < 90 days of prices: that pair degrades to dollar-neutral sizing only (per-leg degradation, never a whole-skill halt).
+- Benchmark empty: one `etf_search` discovery retry. Then the **output gate (HARD HALT, gate-shaped per conventions §4.0)** before any beta-neutral ratio renders — refuse, do not degrade:
 
 ```
 HARD GATE — refuse, do not degrade:
@@ -155,87 +98,33 @@ HARD GATE — refuse, do not degrade:
     DO NOT emit hedge ratios under any other label (no "pair-relative regression" substitution).
 ```
 
-Rationale: a hedge ratio computed against the wrong benchmark is a confidence-building lie. PMs reading a footnote do not adjust their downstream sizing decision; they adjust their footnote-tolerance. Refusing to emit primary deliverables when the underlying assumption fails is the only honest harm-reduction.
+Rationale: a hedge ratio computed against the wrong benchmark is a confidence-building lie; a footnote does not change a PM's sizing decision. The pair-relative regression formula in `references/residual-math.md` §3a is reference math only in v1, not a runtime fallback.
 
-The pair-relative regression formula in `references/residual-math.md` §3a is NOT used in v1. It is documented for v2 if a deliberate "pair-relative mode" flag is added; until then, treat the formula as reference math only.
+### Step 4 — Compute
 
-#### Batch D — Macro residual (parallel, after Batch A confirms primary's market)
+Per `references/residual-math.md`: net factor scores (long − short per pillar), sector and domicile residuals, beta per leg over the 180-day window against the benchmark, beta-neutral ratio = `β_long / β_short`, dollar-neutral 1:1; macro residual as the qualitative difference of the legs' tactical stances; realized stats under `--with-history`. Every number comes from the series and the formulas, never from memory.
 
-Both legs are within-sector in suggestion mode → both legs share the same primary `market`. So one `macro_analyst` call covers both:
+### Step 5 — Compose
 
-- `macro_analyst(market=<primary_market>, component="tactical")`
+Fill **Output Format** below in order for the detected mode: House View Preamble per loader.md §5.1; Branding Header per integration-pattern.md §5; per-leg §7.3 banner and one §7.1 note per pair via `render_view_conflict()` when a view is active; the score-comparability flag always; the liquidity caveat always; `parallax-conventions.md §9.2` disclosure; disclaimer per loader.md §5 rule 5 when a view is active, otherwise the bespoke pair-finder disclaimer below; audit entry per loader.md §6.1 once per invocation.
 
-If `list_macro_countries` does not include `<primary_market>`: skip macro and render "macro context unavailable for this market" in output.
+### Step 6 — Render (deterministic gate, mandatory)
 
-#### Batch E — (Optional, with `--with-history`)
+`run-shell` the shared gate per conventions §10.3 with this skill's key:
 
-If `--with-history` flag passed, extend Batch C: re-call `export_price_series` with `days=365` for primary + each candidate (skip benchmark — already have it from Batch C). Compute realized correlation, pair vol, max drawdown of the spread, hit rate per `references/residual-math.md` §"Realized pair stats".
+```
+DRAFT="$(mktemp "${TMPDIR:-/tmp}/pairfinder.XXXXXX")"
+cat > "$DRAFT" <<'REPORT'
+<your complete drafted report goes here>
+REPORT
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill pair-finder < "$DRAFT"; rm -f "$DRAFT"
+```
 
-(If skill latency is a concern, do this as a single 365-day call per leg in Batch C and slice; revisit if a future audit shows it matters.)
-
-### Mode 3 — Evaluate mode (both legs given)
-
-Inputs: `long=<RIC>` + `short=<RIC>`. Optional: `--with-history`.
-
-#### Batch A — Identification + scores (parallel)
-
-Fire all in parallel:
-
-| Tool | Parameters | Notes |
-|---|---|---|
-| `get_company_info` | symbol = `<long_ric>,<short_ric>` (comma-separated) | Single multi-symbol call per MCP schema. Returns sector, industry, market cap, market for both legs |
-| `export_peer_comparison` | symbol = long_ric, format = "json" | Get long's peer set. If short_ric appears in this peer set → both legs scored in same universe (safe to subtract) |
-| `list_macro_countries` | (none) | For Batch C |
-
-#### Step A.5 — Score comparability resolution (in-process)
-
-Inspect the long's peer-comparison `data` array:
-
-- **If `short_ric` IS in the peer set** (`peer.ric == short_ric` for some peer) → use the long's and short's scores directly from the peer-comparison response. Both scores are in the same universe; net subtraction is safe. Set `score_comparability_flag = "same_universe"`.
-- **If `short_ric` is NOT in the peer set** (cross-sector or distant peer) → fire one fallback call: `get_peer_snapshot(short_ric)` to retrieve the short's scores. Set `score_comparability_flag = "cross_universe — best-effort comparable"`. The output MUST surface this flag prominently. Per spec: "Evaluate mode accepts cross-sector pairs but flags them."
-
-#### Batch B — Beta computation (parallel, default path)
-
-Same tool-split as suggestion mode Batch C: equity legs use `export_price_series`, the benchmark ETF uses `etf_daily_price`. 3 calls:
-
-- `export_price_series(long_ric, days=180, format="json")`
-- `export_price_series(short_ric, days=180, format="json")`
-- `etf_daily_price(symbol=<benchmark_ticker>, start_date=<start_date>, end_date=<end_date>)`
-
-Benchmark selection: use the canonical mapping in suggestion mode Batch C. If both legs share a `market`, use that market's benchmark. If markets differ, use the long-leg's market benchmark and flag the cross-market exposure in the residual section.
-
-Fallbacks (same order as suggestion mode):
-1. `etf_daily_price` empty → `etf_search(market=...)` discovery → retry
-2. Leg < 90 days → dollar-neutral only for that pair (per-leg degradation, not whole-skill halt)
-
-#### Batch B.5 — Output gate (HARD HALT — non-negotiable)
-
-Same gate as suggestion-mode Batch C.5. If benchmark is genuinely unavailable after fallback #1 above, HALT with the operator-action message — do NOT substitute pair-relative regression or emit a "⚠ Benchmark unavailable" caveat. Hedge ratios that cannot be properly computed are not emitted in any form. The pair-relative regression formula is reference math only in v1; not a runtime fallback.
-
-#### Batch C — Macro residual (parallel)
-
-- `macro_analyst(market=<long_market>, component="tactical")`
-- `macro_analyst(market=<short_market>, component="tactical")` (only fire if `short_market != long_market`)
-
-The macro residual = long's tactical regime stance MINUS short's tactical regime stance (qualitative — render as "long-leg market regime is X; short-leg market regime is Y; the pair carries a cross-market regime tilt" if different).
-
-#### Batch D — (Optional, with `--with-history`)
-
-Same as suggestion mode Batch E: extend price series to 365d, compute realized correlation, pair vol, max drawdown, hit rate.
-
-### Post-Workflow — House View per-leg conflict surfacing
-
-If a view was loaded in Pre-Workflow, for each leg (primary + each candidate in suggestion mode; long + short in evaluate mode):
-
-1. From the leg's sector (from `get_company_info` or `export_peer_comparison`) and the captured tilt vector, check §7.3 tension condition: `leg.total >= 7.0 AND view.tilts.sectors[leg.sector] <= -1`. If true for either leg, render the §7.3 banner per pair via `render_view_conflict(kind="score_tension", ...)`.
-2. Render the §7.1 House View Note once per pair (after the per-pair detail) via `render_view_conflict(kind="blanket", ...)` if any leg conflicts with view tilts.
-3. Append the §6 audit log entry per loader.md §6.1 once per skill invocation (consolidated for all pairs, not per-pair).
-
-### Pre-Render — Load white-label branding
-
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+The entire final message is that command's stdout (or, on a HALT, exactly the gate message). The stderr `[render-gate] WARN:` line is diagnostics: never include it. If `run-shell` is absent, apply conventions §14.3 (render-gate row; beta math is arithmetic over fetched series and needs no shell). No Step 7.
 
 ## Output Format
+
+**Begin the response immediately with the rendered report — no preamble.** In suggestion mode the first expected line is `#### 1. Verdict` (or the HARD HALT message); in evaluate mode it is the **Pair** line; the House View Preamble / Branding Header precede either when active.
 
 **House View Preamble** (only if view active) — render per loader.md §5 rule 1 at the very top, before the mode-specific output. Per loader.md §5.1.
 
@@ -300,6 +189,25 @@ Single-pair report — no comparison table:
 ### About This Report (always present, bottom of output)
 
 One line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second About This Report line.
+
+
+## Failure modes
+
+- Mode not detectable: ask, do not guess.
+- Benchmark unavailable after discovery: the HARD HALT message with the three operator options; no comparison table, no per-pair detail.
+- Leg with insufficient history: dollar-neutral only for that pair, stated in its row.
+- Cross-universe scores in evaluate mode: the comparability flag renders prominently.
+- Macro market uncovered: "macro context unavailable for this market".
+- House-view banner states `malformed` / `expired` / `critical`: the banner renders verbatim (conventions §0.3 item 4).
+- Host lacks a primitive: conventions §14.3, per primitive.
+
+## Done when
+
+- First line is the House View Preamble, the Branding Header, or the mode's first section (`#### 1. Verdict` in suggestion mode; the Pair line in evaluate mode).
+- No beta-neutral ratio rendered unless the benchmark series passed the gate; every degraded pair says why.
+- Score-comparability flag and liquidity caveat present; when a view is active, the `view_status` banner appears verbatim and the audit entry is appended once.
+- The render gate ran and the reply is its stdout (or the §14.3 note is present in About This Report).
+- `parallax-conventions.md §9.2` disclosure and the §9.1-family disclaimer are present; expected spend stated (Gotchas).
 
 ## Disclaimer
 

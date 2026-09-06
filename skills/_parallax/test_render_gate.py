@@ -180,6 +180,13 @@ FIRST_SECTION = {
     "peer-comparison": "## Peer Group",
     "earnings-quality": "## Risk Summary",
     "credit-lens": "## Credit Risk Assessment: Acme Corp (ACME.O) | Traffic-Light: 🟢",
+    "thematic-screen": "## Theme: AI infrastructure companies",
+    "macro-outlook": "## Regime Status",
+    "country-deep-dive": "## Country Overview",
+    "halal-screen": "## Screening Criteria",
+    "scenario-analysis": "## Scenario Summary",
+    "pair-finder": "#### 1. Verdict",
+    "stress-test-thesis": "## TL;DR",
 }
 
 
@@ -210,6 +217,13 @@ def test_title_form_anchors_each_skill():
         "peer-comparison": "# Peer Comparison — AAPL.O",
         "earnings-quality": "# Earnings Quality Analysis — AAPL.O",
         "credit-lens": "# Credit Lens — AAPL.O",
+        "thematic-screen": "# Thematic Screen — AI infrastructure",
+        "macro-outlook": "# Macro Outlook — United States",
+        "country-deep-dive": "# Country Deep Dive — Japan",
+        "halal-screen": "# Halal / Shariah Screen — AAPL.O",
+        "scenario-analysis": "# Scenario Analysis — tariff shock",
+        "pair-finder": "# Pair Finder — NVDA.O long",
+        "stress-test-thesis": "# Stress-Test Thesis — NVDA",
     }
     for skill, title in titles.items():
         out = gate(SCAFFOLD + title + "\nbody\n", skill)

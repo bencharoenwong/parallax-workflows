@@ -18,12 +18,9 @@ spec.loader.exec_module(lint)
 LEGACY_PINNED = frozenset({
     "parallax-ai-buffett", "parallax-ai-consensus", "parallax-ai-greenblatt",
     "parallax-ai-klarman", "parallax-ai-ptj", "parallax-ai-soros",
-    "parallax-cio-letter-prep", "parallax-country-deep-dive", "parallax-halal-screen", "parallax-house-view-attribution",
-    "parallax-load-house-view", "parallax-macro-outlook",
-    "parallax-make-house-view", "parallax-pair-finder",
-    "parallax-rebalance",
-    "parallax-scenario-analysis", "parallax-stress-house-view",
-    "parallax-stress-test-thesis", "parallax-thematic-screen",
+    "parallax-cio-letter-prep", "parallax-house-view-attribution",
+    "parallax-load-house-view", "parallax-make-house-view", "parallax-rebalance",
+    "parallax-stress-house-view",
     "parallax-white-label-onboard",
 })
 

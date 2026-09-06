@@ -68,18 +68,11 @@ LEGACY_ALLOWLIST: frozenset[str] = frozenset({
     "parallax-ai-ptj",
     "parallax-ai-soros",
     "parallax-cio-letter-prep",
-    "parallax-country-deep-dive",
-    "parallax-halal-screen",
     "parallax-house-view-attribution",
     "parallax-load-house-view",
-    "parallax-macro-outlook",
     "parallax-make-house-view",
-    "parallax-pair-finder",
     "parallax-rebalance",
-    "parallax-scenario-analysis",
     "parallax-stress-house-view",
-    "parallax-stress-test-thesis",
-    "parallax-thematic-screen",
     "parallax-white-label-onboard",
 })
 

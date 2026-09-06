@@ -4,6 +4,11 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-09-06 (sweep: discovery family)
+
+### Changed
+- **Seven discovery skills on the canonical step spine:** `parallax-thematic-screen`, `parallax-macro-outlook`, `parallax-country-deep-dive`, `parallax-halal-screen`, `parallax-scenario-analysis`, `parallax-pair-finder`, `parallax-stress-test-thesis`. Same treatment as the earlier families; every Output Format unchanged; the scenario-analysis identity-gate paragraph, the halal-screen fail-closed gate, the pair-finder HARD HALT block and the thematic-screen drift-check clause kept verbatim. All seven are now render-gated with their own anchors (`SKILL_ANCHORS`, conventions §10). `parallax-pair-finder`'s per-mode batch tables move to `references/modes.md` (310 → 216 lines); `parallax-stress-test-thesis` names `ask-operator` instead of one host's question tool and trims its description under the 1024-char cap. `parallax-concierge` is a router with no host-locked text and stays as is. Legacy allowlist 20 → 13.
+
 ## 2026-09-06 (prompt audit)
 
 ### Changed
