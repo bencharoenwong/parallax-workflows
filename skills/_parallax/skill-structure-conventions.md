@@ -81,7 +81,7 @@ Every reference moved out of the orchestrator must be reachable through an expli
 Two valid forms:
 
 ```markdown
-### Step 3 — Validate assets
+### Step 3 — Verify
 
 Run validators in parallel. → Load references/step-3-validation.md for the
 full validator catalog and per-validator gate logic.
@@ -93,7 +93,7 @@ Or as a bullet in the `## Gotchas` body section:
 ## Gotchas
 
 - JIT-load references/voice-frameworks.md before composing the voice block
-  in Step 1.5 — it carries the Lago 7-section template + Rezvani Tone Matrix
+  in Step 2b — it carries the Lago 7-section template + Rezvani Tone Matrix
   + Genesys 4-phase reference that the prompt is built on.
 ```
 

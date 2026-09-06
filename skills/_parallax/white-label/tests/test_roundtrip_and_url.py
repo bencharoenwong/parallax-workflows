@@ -106,7 +106,7 @@ class TestSaveReloadRoundtrip:
         """Draft with voice section round-trips through yaml without losing fields."""
         draft = extract_from_pptx(sample_pptx)
 
-        # Inject a voice section as Step 1.5 would
+        # Inject a voice section as Step 2b would
         draft["voice"] = {
             "enabled": True,
             "positioning": "Disciplined institutional asset manager.",
@@ -478,7 +478,7 @@ h1 { font-family: 'Inter', sans-serif; color: #5A597A; }
     def test_synthetic_voice_artifact_validates(self):
         """Test 2: A synthetic voice extraction artifact (mirroring what real
         single-letter extraction would produce) should pass VoiceValidator
-        (corpus size + section completeness). Validates that the Step 1.5
+        (corpus size + section completeness). Validates that the Step 2b
         prompt produces output the downstream consumers will accept."""
         from validator import VoiceValidator
 
@@ -764,12 +764,12 @@ class TestAssetDownloadDestinationPolicy:
 
 
 def test_workflow_doc_does_not_teach_an_unchecked_download_path():
-    """The skill's Step 4b is executable instructions, not commentary: a bare
+    """The skill's Step 6b is executable instructions, not commentary: a bare
     ``urlretrieve`` there is a live SSRF path regardless of what the module
     exports."""
     doc = (Path(__file__).parents[3] / "parallax-white-label-onboard"
            / "references" / "workflow-code.md").read_text(encoding="utf-8")
-    assert "urlretrieve(" not in doc, "Step 4b must not call urlretrieve"
+    assert "urlretrieve(" not in doc, "Step 6b must not call urlretrieve"
     assert "download_public_url(" in doc
 
 

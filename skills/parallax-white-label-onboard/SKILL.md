@@ -106,9 +106,9 @@ Config-producer shape (authoring conventions, "Canonical step spine"): Steps 0โ€
 
 1. Resolve every `_parallax/...` path named in this file to the canonical copy (conventions ยง0.0 item 1).
 2. `load-reference` `_parallax/white-label/schema.yaml`, `_parallax/white-label/extract/` (the extract package), `_parallax/white-label/validator.py`, and `_parallax/white-label/persistence.py` before executing any step below.
-3. Bind the primitives this skill uses: `load-reference`, `ask-operator`, `run-shell` (the extract, validator, and persistence helpers run in Python), `write-artifact`, `read-config`. Without `ask-operator` or `run-shell` the skill can display a draft but cannot save; say so before Step 1.
+3. Bind the primitives this skill uses: `load-reference`, `ask-operator`, `run-shell` (the extract, validator, and persistence helpers run in Python; every write goes through `persist_disposition`), `read-config`. Without `ask-operator` or `run-shell` the skill can display a draft but cannot save; say so before Step 1.
    <!-- host-note -->
-   Claude Code: `load-reference` = `Read` (use `pages` for PDFs); `ask-operator` = `AskUserQuestion`; `run-shell` = `Bash`; `write-artifact` = `Write`.
+   Claude Code: `load-reference` = `Read` (use `pages` for PDFs); `ask-operator` = `AskUserQuestion`; `run-shell` = `Bash`.
    <!-- /host-note -->
 4. `read-config`: `~/.parallax/client-branding/` (create `0700` at save time if absent).
 
