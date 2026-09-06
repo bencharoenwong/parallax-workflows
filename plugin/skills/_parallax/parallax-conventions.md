@@ -588,8 +588,8 @@ Invoke the translator (`invoke-skill`, §14) with the rendered prose body, never
 
 ```
 ROUTING DIRECTIVE — DO NOT TRANSLATE OR ECHO THIS BLOCK:
-  target_variant: <variant>        # zh-CN | zh-TW | zh-HK ; omit for Thai
-  register: retail                 # only when register=retail was supplied
+  target_variant: <variant>
+  register: retail
   source_language: en
   begin_content_below_separator: true
 ---
@@ -597,7 +597,9 @@ ROUTING DIRECTIVE — DO NOT TRANSLATE OR ECHO THIS BLOCK:
 <rendered prose body>
 ```
 
-`zh-CN`, `zh-TW`, `zh-HK` → `translate-chinese-finance` with the matching `target_variant` (the block is REQUIRED for `zh-HK`, otherwise that skill pauses to ask about HK listings and breaks the chain). `th` → `translate-thai-finance`; `target_variant` may be omitted but the marker line and `---` separator stay so no leading meta is echoed.
+Include `target_variant` only for the Chinese variants and omit the line for Thai; pass `register: retail` only when `register=retail` was supplied, otherwise omit the `register:` line so the translator defaults to institutional register.
+
+`zh-CN`, `zh-TW`, `zh-HK` → `translate-chinese-finance` with the matching `target_variant` (the block is REQUIRED for `zh-HK`, otherwise that skill pauses to ask about HK listings and breaks the chain). `th` → `translate-thai-finance`; the marker line and `---` separator stay so no leading meta is echoed.
 
 ### §15.3 Failure handling
 
