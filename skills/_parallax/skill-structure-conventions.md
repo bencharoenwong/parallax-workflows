@@ -22,12 +22,12 @@ A SKILL.md should be split into orchestrator + references/ when **any one** of t
 
 | Trigger | Threshold |
 |---|---|
-| Total line count | >500 lines |
+| Total line count | above the skill's eval cap (`orchestrator_max_lines` in `evals/skills/<name>/eval_config.py`, 250 for most skills, 220 for deep-dive); >500 lines for a skill with no eval config |
 | Distance above sibling median | >2× the median across `skills/<name>/SKILL.md` |
 | Step count in workflow | >7 steps with substantial sub-content |
 | Operator complaint | "I can never find X" said about this skill twice |
 
-Below these thresholds, keep the SKILL.md monolithic. Splitting too early fragments the workflow and forces JIT-load round-trips for content the operator needs every time.
+Below these thresholds, keep the SKILL.md monolithic. Splitting too early fragments the workflow and forces JIT-load round-trips for content the operator needs every time. The eval cap is the binding trigger where one exists: the `orchestrator_length` grader fails CI on `main` when the orchestrator exceeds it (2026-09-05, rebalance at 282 lines).
 
 ## What stays in SKILL.md (the orchestrator)
 

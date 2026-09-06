@@ -16,6 +16,10 @@ Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[
 
 **Decision:** The dispatchers' render step is `### Step 6 — Render — Emit`, not the bare spine heading. `test_ai_profile_emit_contracts.py` splits each file on "— Emit" and pins the suppression paragraph inside it; renaming would drop the pin. The paragraph itself stays verbatim across the six files. The consensus meta-skill drops its local token-cost table in favour of `token-costs.md` (one table, tests in both directions, per the 2026-09-05 decision).
 
+## 2026-09-05: The eval cap, not the 500-line guideline, is the split trigger
+
+**Decision:** `parallax-rebalance/SKILL.md` reached 282 lines after PR #111 and the `orchestrator_length` grader (cap 250) failed on `main`. The Batch C2 policy-reconciliation block moved to `references/policy-reconciliation.md`, JIT-loaded only when `policy=` is supplied, leaving a one-line gate-shaped stub. Rationale: the block runs on a minority of invocations, so the JIT round-trip costs less than carrying 95 lines on every run. The structure conventions' "When to split" table now names the eval cap as the binding threshold, because a guideline of 500 lines that CI rejects at 250 is not a guideline anyone can follow.
+
 ## 2026-09-05 (sweep): should-i-buy is the template for the SKILL.md sweep
 
 **Why.** The 2026-09-04 rules are forward-only, so the 34 legacy skills migrate one family per PR. The first migration has to be the skill everything else copies: should-i-buy is the most-used, the render-gate reference, and the one whose Output Format the graders are locked against — which makes it the sharpest test of "restructure the workflow, leave the contract alone."
