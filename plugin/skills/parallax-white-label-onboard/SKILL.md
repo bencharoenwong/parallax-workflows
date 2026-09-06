@@ -296,7 +296,7 @@ For each logo with a URL (not already a local path), download to `~/.parallax/cl
 
 #### 4c. Construct config.yaml
 
-**Use `build_config_from_draft(draft, schema_version=2)` from `loader.py` — do not hand-assemble the config dict.** The builder is the single source of truth for the v2 shape (decisions 3A, 5A: drops `fonts.*`, emits `colors.tertiary` and flat `colors.neutral`, wires `components.body-text`). It also handles the `voice` section and the `multi_source` provenance block — no post-build mutation needed.
+**Use `build_config_from_draft(draft, schema_version=2)` from `loader.py` — do not hand-assemble the config dict.** The builder is the single source of truth for the v2 shape (drops `fonts.*`, emits `colors.tertiary` and flat `colors.neutral`, wires `components.body-text`). It also handles the `voice` section and the `multi_source` provenance block — no post-build mutation needed.
 
 v2 emits: `metadata`, `branding.{colors[primary|secondary|tertiary|neutral], logos, typography[h1..h5|body-md|code], rounded, spacing, components.body-text}`, `validation_summary`, `confidence_scores`. `fonts.*` is NOT in v2 — the loader bridges v1↔v2 at read time so consumers always see `fonts.{header,body,monospace}` derived from `typography.{h1,body-md,code}.fontFamily`.
 
@@ -396,8 +396,8 @@ Edge-case handling (corrupted config, logo-download failure, empty color extract
 - `references/edge-cases.md` — error handling, edge cases, and Success Criteria checklist
 - `references/status-format.md` — `--status` output template
 - `references/integration-contract.md` — visual + voice consumer loading patterns, voice prompt-prepend template
-- `references/overview.md` — architecture, data flow, test inventory (was top-level `README.md`)
-- `references/installation.md` — setup, dependencies, troubleshooting (was top-level `INSTALLATION.md`)
+- `references/overview.md` — architecture, data flow, test inventory
+- `references/installation.md` — setup, dependencies, troubleshooting
 - `references/validation-rules.md` — color/logo/font validation reference
 - `references/supported-fonts.md` — web-safe fonts + fallback chains
 - `_parallax/white-label/integration-pattern.md` — canonical consumer-side contract for visual rendering (§1–§9)

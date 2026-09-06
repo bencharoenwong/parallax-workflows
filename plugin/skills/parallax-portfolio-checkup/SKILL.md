@@ -105,7 +105,7 @@ The entire final message is that command's stdout. The stderr `[render-gate] WAR
 
 ## Output Format
 
-**Begin the response immediately with the rendered report — no preamble.** Do not emit step-completion notes ("Step A.5 complete", "All data gathered", "Composing the checkup"), scratch computation tables, cross-validation status lines, or config-probe results ("white-label: config_not_found") before the report. All intermediate computation stays internal. When no house view and no white-label client are active (the default), the **first line of the output is the Portfolio Health Status header**, in this exact form:
+**Begin the response immediately with the rendered report — no preamble.** When no house view and no white-label client are active (the default), the **first line of the output is the Portfolio Health Status header**, in this exact form:
 
 `## Portfolio Health Status: <🟢|🟡|🔴> **<Healthy|Monitor|Attention>** — <N> of 5 flags raised`
 

@@ -126,7 +126,7 @@ Overall traffic-light determined by: count of RED flags (→ Red), count of AMBE
 
 **State the coverage whenever any leg is UNAVAILABLE.** Dropping those legs is right for the vote but silent in the header, so a 🟢 can rest on two judged metrics out of six and still read as a full clean bill.
 
-**Call `finalize_verdict(report)` rather than assigning `overall_flag` yourself.** It sets the verdict from `report_flags(report)` — every `metric_rows` flag plus `altman_flag` plus `quality_flag` — and `build_header()` counts that same list, so the verdict and the `| Judged: N of M metrics` count cannot describe different metric sets. Assigning the flag by hand reintroduces exactly that divergence, which is how the caveat came to be missing from the run it was written for. Populate `quality_flag` and `altman_flag` on the report; they vote, and a leg you leave at its default counts as unjudged.
+**Call `finalize_verdict(report)` rather than assigning `overall_flag` yourself.** It sets the verdict from `report_flags(report)` — every `metric_rows` flag plus `altman_flag` plus `quality_flag` — and `build_header()` counts that same list, so the verdict and the `| Judged: N of M metrics` count cannot describe different metric sets. Assigning the flag by hand reintroduces exactly that divergence. Populate `quality_flag` and `altman_flag` on the report; they vote, and a leg you leave at its default counts as unjudged.
 
 List which metrics went unjudged, and why, in Key Flags.
 
@@ -151,8 +151,6 @@ This is the normal case, not an edge case: seven of the ten registered keys carr
 ```
 
 Twelve rows: ten registered metrics plus the two module-owned legs. **Category repeats** — it is a grouping label, not the row identity. Five rows read `➖ UNAVAILABLE` on a routine run because those metrics carry no absolute band and `ratios` returns no peer pair for them; that is the normal shape, not a failure.
-
-An earlier version of this example showed four grouped rows, which is the shape that silences the coverage caveat. `dashboard_rows()` now renders the omitted metrics for you, so following this example produces the right row set either way.
 
 **Build the table with `dashboard_rows(report)`, not from `metric_rows` directly.** It returns your metric rows plus the Altman and Quality rows, which it renders from `altman_flag` / `quality_flag`. Those two are legs in their own right: supplying them as rows as well makes each vote twice, and doubling two legs flips real verdicts — three RED metrics against two GREEN is RED, but with both GREEN legs doubled it becomes 3 RED against 4 GREEN and renders GREEN.
 

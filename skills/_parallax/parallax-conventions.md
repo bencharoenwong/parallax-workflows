@@ -10,7 +10,7 @@ Shared patterns for all `parallax-*` skills. JIT-load from any skill that calls 
 
 ## 0. Feature Flags
 
-Gemini CLI uses feature flags to roll out architectural changes. These can be set via environment variables or documented at the session start.
+Feature flags gate architectural changes in these skills. Read each flag via the `read-config` host primitive (§14); absent that primitive, the flag takes its documented default (§14.3).
 
 - **`PARALLAX_LOADER_V2=1`** (Phase 0 rewrite):
   - **Universe Construction**: Replaces single-shot tilt-prepended `build_stock_universe` calls with N parallel per-tilt calls + client-side merge/dedupe. Required for multi-sector/multi-theme views to prevent universe collapse (Q-A).

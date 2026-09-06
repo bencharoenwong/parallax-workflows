@@ -18,10 +18,7 @@ description: "Applies Joel Greenblatt's Magic Formula (per 'The Little Book That
 
 ## Gotchas
 
-- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks
-- JIT-load _parallax/AI-profiles/profile-schema.md for the dispatcher workflow and cross-validation gate
-- JIT-load _parallax/AI-profiles/output-template.md for the required output structure and verbatim disclaimer
-- JIT-load _parallax/AI-profiles/profiles/greenblatt.md for the profile spec
+- JIT-load _parallax/parallax-conventions.md, _parallax/AI-profiles/profile-schema.md, _parallax/AI-profiles/output-template.md, _parallax/AI-profiles/profiles/greenblatt.md — see Step 0 for what each provides
 - Universe mode is default when no ticker is provided; ticker-check mode activates with a single ticker
 - build_stock_universe is ~5 tokens; budget accordingly
 - Exclude financials and utilities from default universe per Greenblatt's original rule

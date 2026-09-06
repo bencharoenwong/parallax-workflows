@@ -18,6 +18,16 @@ Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[
 
 **Flip conditions.** A fresh-session run shows the model skipping a by-reference load that the old inline copy made unmissable → restore that one block inline and record it in the JIT-load audit, do not abandon by-reference.
 
+## 2026-09-06: Prompt audit — narration and volatile specifics are the cruft class here, not emphasis
+
+**Why.** The skills are meant to run on other harnesses and other vendors' models. A dated-pattern audit (six read-only agents, one per family, harness-neutral target) found almost no pressure language — every MUST/NEVER carried a reason — but a consistent second class: incident IDs, "previously"/"now"/"before B1" diffs against document versions the model never saw, hardcoded paths and counts that had rotted, and two pairs of duplicates that disagreed.
+
+**Impact.** All High/Medium hunks applied (36 across 20 files); flag-only items recorded locally. No Output Format, compliance text, gate semantics, tool contract, or exact command changed; every pinned phrase was checked against its test or transform first.
+
+**Alternatives.** `[DROP]` **Apply the flag-only host-lock findings as string swaps to the connector's current namespace.** Rejected: that reproduces the same fossil under a new name; the fix is the §14 primitive migration already scheduled per family.
+
+**Flip conditions.** A fresh-session run shows a removed sentence was load-bearing → restore it in its minimal form beside its reason, not the archaeology.
+
 ## 2026-09-05 (later): One token-cost table, tests in both directions
 
 **Why.** Three tables carried the price list (`token-costs.md`, `evals/graders/token_model.py`, `AI-profiles/README.md`) and a fourth copy sits in `parallax-ai-consensus/SKILL.md`. The existing test checked doc→code only, so a name priced in code but missing from the doc (`check_api_health`) never surfaced.

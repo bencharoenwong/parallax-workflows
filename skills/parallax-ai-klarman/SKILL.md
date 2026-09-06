@@ -18,9 +18,7 @@ description: "Applies Seth Klarman's margin-of-safety framework (per 'Margin of 
 
 ## Gotchas
 
-- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallback patterns
-- JIT-load _parallax/AI-profiles/profile-schema.md and output-template.md
-- JIT-load _parallax/AI-profiles/profiles/klarman.md for the profile spec
+- JIT-load _parallax/parallax-conventions.md, _parallax/AI-profiles/profile-schema.md, _parallax/AI-profiles/output-template.md, _parallax/AI-profiles/profiles/klarman.md — see Step 0 for what each provides
 - Klarman profile is balance-sheet-first — requires get_financials(balance_sheet) AND get_financials(cash_flow) AND get_financials(ratios), 4 periods each
 - 3 statements × 4 periods would be 12 calls, but Parallax returns 4 periods per call → 3 calls + get_peer_snapshot + get_company_info = ~5 tokens
 - Compute net cash from balance sheet (cash - total debt), not from the ratios summary

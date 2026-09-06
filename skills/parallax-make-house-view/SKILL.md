@@ -44,7 +44,7 @@ The synthesized view lives in `~/.parallax/active-house-view/` and is consumed b
 
 ## Workflow
 
-Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call. JIT-load `_parallax/house-view/MCP_FIELD_INVENTORY.md` (per-pillar input availability), `_parallax/house-view/schema.yaml` (view shape + `classification_taxonomy.generator_synthesis`), and `_parallax/house-view/loader.md` (esp. §6 audit format with the new `generate` action).
+Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call. JIT-load `_parallax/house-view/MCP_FIELD_INVENTORY.md` (per-pillar input availability), `_parallax/house-view/schema.yaml` (view shape + `classification_taxonomy.generator_synthesis`), and `_parallax/house-view/loader.md` (esp. §6 audit format for the `generate` action).
 
 ### Step 1 — Resolve covered markets
 
@@ -56,12 +56,12 @@ Fallback: if `list_macro_countries` fails, use the hardcoded `HARDCODED_COVERAGE
 
 Fire in parallel (concurrency cap 8, per-call timeout 45s):
 
-- **Step 2 (batch):** `macro_analyst(market=M, component=C)` for every (M, C) pair where M ∈ covered_markets and C ∈ {`macro_indicators`, `tactical`, `sectors`, `news`}. Budget: 14 × 4 = 56 calls. (`fixed_income` is deferred — no v0 formula consumes it; re-add it in the same change that lands a rates leg in `pillar_formulas.py`.)
+- **Step 2 (batch):** `macro_analyst(market=M, component=C)` for every (M, C) pair where M ∈ covered_markets and C ∈ {`macro_indicators`, `tactical`, `sectors`, `news`}. Budget: 14 × 4 = 56 calls. (`fixed_income` is out of scope — no formula consumes it yet.)
 - **Step 3 (single call, parallel with Step 2):** `get_telemetry(fields=["regime_tag", "divergences", "factor_view.factors", "factor_view.commentary", "signals", "commentary"])`.
 
 Per-market timeout: 45s. A market is `UNREACHABLE` when no component returns a response whose shape can be interpreted — absent, not a mapping, or carrying neither a `success` nor an `error` key. That rule is `_parallax/house-view/mcp_meta.py` (`carries_data`), the same predicate backing `stress.classify_mcp_meta_state`'s UNREACHABLE branch, so the maker and the stress classifier cannot disagree about what counts as a dead market. A market that returns a successful response with content like "Sector ranking data remains unavailable for this reporting period" — or an explicit `success: false` — is treated as **silent for that component**, not UNREACHABLE for the market (per MCP_FIELD_INVENTORY.md §5.4): the server answered, and only an uninterpretable shape fails closed.
 
-If `unreachable_share > 0.30` of the fan-out, HARD ABORT. Aggregation can't recover from that level of degradation. <!-- rationale: notes/2026-05-24-house-view-v2-plan.md §2.2 -->
+If `unreachable_share > 0.30` of the fan-out, HARD ABORT. Aggregation can't recover from that level of degradation.
 
 ### Step 4 — Cross-country aggregation
 
@@ -70,7 +70,7 @@ Call `cross_country.aggregate(per_market_responses, telemetry, weights)`. Output
 - `phi.value` / `phi.coverage_ok` / `phi.markets_with_data`: weighted-median of per-market `valuation_state` prose-extracted values when ≥ 60% of weight responded; else NULL + coverage_warning.
 - `xi.value` etc.: same shape for `market_entropy`.
 - `psi_news_blobs`: concatenated per-country news content for `psychological_wavelength` judgment.
-- `regions.<schema_key>`: single-market region tilts (bypass coverage threshold per BUG-009).
+- `regions.<schema_key>`: single-market region tilts (bypass the coverage threshold — a single-market region has no cross-country weighting to gate on).
 - `sectors.<sector>`: cross-country weighted-median, coverage-gated.
 - `macro_regime`: inferred growth/risk tokens from telemetry.regime_tag.
 - `fan_out_summary`: market counts.
@@ -95,7 +95,7 @@ When `missing_inputs` is non-empty, confidence is capped at 0.35 (strictly below
 
 ### Step 6 — Optional gap-fill finishing pass
 
-OPTIONAL. After Steps 4-5, any residually silent leaves (e.g., sectors where coverage was below threshold but a single anchor market had a strong signal) MAY be folded via `gap_suggest.fold_responses`. Step 4-5 results win on conflict. **Skip in v0 — leave the hook for follow-up integration.**
+OPTIONAL. After Steps 4-5, any residually silent leaves (e.g., sectors where coverage was below threshold but a single anchor market had a strong signal) MAY be folded via `gap_suggest.fold_responses`. Step 4-5 results win on conflict. **Not implemented — skip this step.**
 
 ### Step 7 — Shared confirmation gate
 
@@ -216,7 +216,6 @@ Disambiguation: `--shadow-diff` = synth-vs-active (synthesis runs); `/parallax-j
 
 ## Hard constraints
 
-- DO NOT modify any existing skill (load-house-view, house-view-diff, stress-house-view).
-- DO NOT modify any shared infra (`audit_chain.py`, `manifest_cache.py`, `chain_emit.py`, `view_status.py`, `gate_present.py`, `provenance_classes.py`). Reuse only.
+- Reuse (do not reimplement) shared infra: `audit_chain.py`, `manifest_cache.py`, `chain_emit.py`, `view_status.py`, `gate_present.py`, `provenance_classes.py`.
 - DO NOT dispatch to external models for `psychological_wavelength` — Claude only (data perimeter).
 - The `generate` audit row format is fixed by loader.md §6.2 — adding fields requires a loader.md spec update first.

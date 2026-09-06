@@ -29,7 +29,7 @@ The stress test runs in four phases, as defined in `skills/_parallax/house-view/
 ### Phase 0: Intake and Scoping
 
 1.  **Load Active View**:
-    - Invoke the `stress.load_active_view()` function from `skills/stress-house-view/stress.py`.
+    - Invoke the `stress.load_active_view()` function from `skills/parallax-stress-house-view/stress.py`.
     - This function reads `~/.parallax/active-house-view/view.yaml`, verifies the `audit.jsonl` hash chain, and computes the initial `view_hash`.
     - If no view is active or the audit chain is broken, the skill will exit with a clear message.
 2.  **Enumerate Dimensions**:
@@ -40,8 +40,8 @@ The stress test runs in four phases, as defined in `skills/_parallax/house-view/
 ### Phase 1: Internal Consistency Check (No MCP)
 
 1.  **Evaluate Rules**:
-    - Invoke `stress.evaluate_internal_rules()` from `skills/stress-house-view/stress.py`.
-    - This function runs pure-Python checks against the view YAML using the rules defined in `skills/stress-house-view/internal_rules.yaml`.
+    - Invoke `stress.evaluate_internal_rules()` from `skills/parallax-stress-house-view/stress.py`.
+    - This function runs pure-Python checks against the view YAML using the rules defined in `skills/parallax-stress-house-view/internal_rules.yaml`.
 2.  **Handle Results**:
     - If any `hard_stop` rule is triggered, the process halts. Render the internal consistency report and append a `halted_internal` entry to the audit log using `stress.append_stress_audit()`.
     - If only `taste` rules are triggered or no rules are triggered, announce "Internal consistency checks passed." and proceed to Phase 2.
@@ -86,7 +86,7 @@ The stress test runs in four phases, as defined in `skills/_parallax/house-view/
     - Re-checks the full view identity (`view_hash` plus `view_id`/`version_id`) under the view transaction lock to guard against race conditions — see the `stress.append_stress_audit` docstring.
     - Compute the audit hash short form for the Phase 4-B citation: `audit_hash_short = audit_chain.compute_entry_hash(returned_entry)[:12]`.
 5.  **Render Artifact**:
-    - Invoke `render.render_artifact(view_meta, internal_results, external_results, themes, view_hash, recommended_deltas=..., audit_hash_short=...)` from `skills/stress-house-view/render.py`.
+    - Invoke `render.render_artifact(view_meta, internal_results, external_results, themes, view_hash, recommended_deltas=..., audit_hash_short=...)` from `skills/parallax-stress-house-view/render.py`.
     - Pass `audit_hash_short` from step 3 so the Phase 4-B section renders the specific `stress_test:<hash>` citation the CIO will paste into `basis_statement`.
     - This creates the detailed markdown report in `~/.parallax/active-house-view/stress-tests/`.
 

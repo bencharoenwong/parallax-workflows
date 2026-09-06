@@ -91,12 +91,16 @@ URL/PDF/Wizard → Extract → Normalize → Validate → Confirm Gate → Save 
 ## File Structure
 
 ```
-skills/white-label-onboard/
+skills/parallax-white-label-onboard/
 ├── SKILL.md (orchestration / entry point)
 ├── references/
 │   ├── overview.md (this file — architecture, data flow, test inventory)
 │   ├── installation.md (setup, dependencies, troubleshooting)
 │   ├── workflow-code.md (full Python for Steps 1–4 + regenerate-from-config)
+│   ├── edge-cases.md (error handling, edge cases, Success Criteria checklist)
+│   ├── confirmation-gate.md (Step 3 draft display + Edit/Re-extract/Abort/Confirm)
+│   ├── folder-mode.md (folder inventory/classification F-1..F-4)
+│   ├── voice-extraction.md (Step 1.5 voice prompt template + self-check)
 │   ├── status-format.md (--status output template)
 │   ├── integration-contract.md (visual + voice consumer loading patterns)
 │   ├── validation-rules.md (color/logo/font validation reference)
@@ -108,12 +112,8 @@ skills/white-label-onboard/
     ├── schema.yaml
     ├── integration-pattern.md  (canonical consumer-side contract §1–§9, JIT-loaded by 16 visual consumer skills)
     └── tests/
-        ├── conftest.py
-        ├── test_extract.py
-        ├── test_validator.py
-        ├── test_loader.py
-        ├── test_integration.py
-        └── test_integration_pattern_referenced.py  (drift gate: sentinel ↔ load-directive pairing)
+        └── (see `pytest skills/_parallax/white-label/tests/ --collect-only` for the current suite —
+            not listed here so a second inventory cannot drift from the first)
 ```
 
 ## Configuration
@@ -214,7 +214,7 @@ pytest skills/_parallax/white-label/tests/ -v
 - DESIGN.md tests — emitter output, frontmatter shape, lint validator
 - Document extractor tests — OOXML theme parsing, CSS scale, brand-guide prose
 
-All 152 tests pass with real assertions (no stubs).
+All tests pass with real assertions (no stubs); run `pytest skills/_parallax/white-label/tests/ -v` for the current count.
 
 ## Error Handling
 

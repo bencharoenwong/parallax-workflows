@@ -8,7 +8,7 @@ That makes `finalize_verdict` optional for rendering: it stores the verdict on t
 
 `metric_key` selects the direction and any absolute band. Pass one of the registered keys below for every dashboard row:
 
-**Render one dashboard row per metric — ten rows, not four grouped categories.** The §2 example shows one row per category for brevity; that grouping is not the contract. `build_header()` counts one leg per metric, so grouping ten metrics into four rows makes the judged-count describe a different set than the verdict, and the coverage caveat then fails to fire on exactly the runs that need it. Use the Category column below as the row's group label, not as the row itself.
+**Render one dashboard row per metric — ten rows, not four grouped categories.** `build_header()` counts one leg per metric, so grouping ten metrics into four rows makes the judged-count describe a different set than the verdict, and the coverage caveat then fails to fire on exactly the runs that need it. Use the Category column below as the row's group label, not as the row itself — grouping by category is not the contract.
 
 | Category / Metric | `metric_key` | Direction | Absolute band |
 |---|---|---|---|

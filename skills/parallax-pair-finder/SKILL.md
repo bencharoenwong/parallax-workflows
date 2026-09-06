@@ -109,7 +109,7 @@ Per spec scope-cut: beta-neutral sizing is in the default path because PMs act o
 | `United Kingdom` | `EWU` | iShares MSCI UK |
 | `Hong Kong` | `EWH` | iShares MSCI Hong Kong |
 | `Singapore` | `EWS` | iShares MSCI Singapore |
-| `Germany` | `EWG` | iShares MSCI Germany — **NOT IN PARALLAX COVERAGE as of 2026-05-02**; output gate (Batch C.5) WILL fire. Operator: pass `--benchmark=DAX.GY` if available in another data source, or accept HALT |
+| `Germany` | `EWG` | iShares MSCI Germany (RIC `EWG.P`) — in Parallax coverage as of 2026-09-06 (`etf_search`, `report_supported: true`); if coverage lapses, the Batch C.5 output gate HALTs rather than substituting a proxy |
 | `Taiwan` | `EWT` | iShares MSCI Taiwan |
 | `Korea` | `EWY` | iShares MSCI South Korea |
 | `Canada` | `EWC` | iShares MSCI Canada |

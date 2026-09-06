@@ -4,6 +4,11 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-09-06 (prompt audit)
+
+### Changed
+- **Prompt audit across all 40 skills and the shared layer** (method: the four dated-pattern groups of a harness-neutral prompt audit; every proposed deletion checked against the render-gate, integration, identity, live-capability and house-view end-to-end tests and the bundle transforms). Applied: incident narration and migration-relative phrasing removed (credit-lens, load/make/judge-house-view, white-label-onboard, AI-profiles README, house-view loader); stale paths and counts corrected (`skills/parallax-stress-house-view/…`, white-label-onboard overview/installation, `schema_version: 2`); a stale coverage claim fixed after a live re-probe (pair-finder EWG, coverage-matrix); a contradiction between pair-finder's reference file and its HARD HALT gate resolved; the zh-TW 情境/情景 rule made consistent between the full and condensed translator prompts; five restatements of the same two concierge UX limits reduced to the pinned copies; conventions §0 no longer names one vendor's CLI as the feature-flag mechanism; the auto-on-load drift-check pattern names the `invoke-skill` primitive. Pressure language was essentially absent; no compliance text, gate semantics, tool contracts or exact commands changed.
+
 ## 2026-09-06 (sweep: portfolio family)
 
 ### Changed

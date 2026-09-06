@@ -22,8 +22,8 @@ description: "Read-only LLM-as-judge that compares the saved CIO house view agai
 - JIT-load `_parallax/parallax-conventions.md` for MCP tool conventions and batch patterns.
 - Phase 5 LLM recommendations go through `recommendation.validate_citation` post-call. Recommendations whose rationale does NOT contain a >=30-char verbatim substring of the source snippet are DROPPED and replaced with a "judge declined to recommend (citation check failed)" placeholder. This is the single biggest hallucination control — do NOT bypass it.
 - The judge does NOT use `gate_present.run_gate_loop` — there is no confirmation gate. It's a read-only report.
-- Maker shared modules (`cross_country`, `pillar_compose`, `pillar_formulas`) are imported lazily; if Phase B1 hasn't shipped, the orchestrator surfaces the gap in diagnostics and falls back to PARALLAX_SILENT for cells where the imputed view can't be computed.
-- Server-side `house_view_judge` MCP tool: CANCELLED (2026-05-24). The judge is client-side permanently — bank clients run this skill / CLI on their own side. See v2 plan §3.2 for rationale (transparency for model-validation review, zero cross-tenant blast radius). Do NOT resurrect the server-side framing without a new architectural decision.
+- Maker shared modules (`cross_country`, `pillar_compose`, `pillar_formulas`) are imported lazily; if they are not importable (a partial or older deployment without `/parallax-make-house-view`'s modules), the orchestrator surfaces the gap in diagnostics and falls back to PARALLAX_SILENT for cells where the imputed view can't be computed.
+- Server-side `house_view_judge` MCP tool: not planned. The judge is client-side permanently — bank clients run this skill / CLI on their own side, for methodology transparency under model-validation review and zero cross-tenant blast radius. Do NOT resurrect the server-side framing without a new architectural decision.
 - Auto-on-load triggers (portfolio-builder, rebalance, thematic-screen) suppress the run when `view_age_days < cadence.AUTO_ON_LOAD_MIN_AGE_DAYS` (30 days). Banner only at drift_material.
 
 This skill compares the active CIO house view against fresh Parallax macro signals, classifies drift severity, and recommends per-cell updates with cited rationale. It is **read-only**: the active view is never modified. The output is one append-only audit row, one report bundle, and one reasoning chain.
@@ -53,7 +53,7 @@ The `--dry` flag skips the LLM Phase 5 recommendation step and returns determini
 
 **Cost:** ~282 tokens at the default market set (~14 markets × 4 components; see `_parallax/token-costs.md`). `--dry` skips the Phase 5 LLM step but NOT the Phase 1 macro fan-out — the full ~282-token cost is still incurred.
 
-## Workflow (Phases 0-8 per v2 plan §3.1)
+## Workflow (Phases 0-8)
 
 ### Phase 0 — Load active view
 
@@ -67,7 +67,7 @@ Invoke `judge.phase_0_load_view()`, which wraps `stress.load_active_view()`. Thi
 
 ### Phase 1 — MCP fan-out
 
-Same recipe as the maker: 14 markets × 4 components (`macro_indicators`, `tactical`, `sectors`, `news`) + 1 `get_telemetry` call. Concurrency capped at 8. (`fixed_income` is deferred — no v0 consumer; re-add in lockstep with the maker when a rates leg lands.)
+Same recipe as the maker: 14 markets × 4 components (`macro_indicators`, `tactical`, `sectors`, `news`) + 1 `get_telemetry` call. Concurrency capped at 8. (`fixed_income` is out of scope — no formula consumes it yet.)
 
 **Per-market timeout:** 45s. UNREACHABLE markets are classified via `stress.classify_mcp_meta_state` and weighted to 0 by the maker's aggregator. If unreachable_share > 30% across markets, the maker raises; the judge surfaces this in `diagnostics` and falls back to PARALLAX_SILENT.
 
@@ -100,7 +100,7 @@ Run `drift_classify.classify_severity(resolutions, view_age_days, denominator)`.
 
 ### Phase 4 — Build recommended deltas
 
-Call `stress.build_recommended_deltas(resolutions, cio_age, parallax_age, include_fresh=True)`. Per A1 work:
+Call `stress.build_recommended_deltas(resolutions, cio_age, parallax_age, include_fresh=True)`.
 
 - DIVERGENT_FRESH cells get `kind="informational_fresh"`
 - DIVERGENT_STALE cells get `kind="informational"` (unchanged)
@@ -188,7 +188,7 @@ Primary output is the markdown report at `~/.parallax/judge-reports/<bundle>/rep
 
 ## Not on the roadmap
 
-- **Server-side `house_view_judge` MCP tool** — **CANCELLED, not deferred.** The judge runs client-side only. Bank clients schedule their own cron against `/parallax-judge-house-view --json` on their side. Rationale: methodology transparency for model-validation review (same reason maker is client-side), and zero cross-tenant blast radius from a broken judge run. See v2 plan §3.2.
+- **Server-side `house_view_judge` MCP tool** — not planned. The judge runs client-side only. Bank clients schedule their own cron against `/parallax-judge-house-view --json` on their side. Rationale: methodology transparency for model-validation review (same reason maker is client-side), and zero cross-tenant blast radius from a broken judge run.
 
 ## Deferred (still on roadmap)
 

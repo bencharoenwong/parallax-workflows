@@ -19,10 +19,7 @@ description: "Applies the Buffett-style factor profile (per Frazzini-Kabiller-Pe
 
 ## Gotchas
 
-- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
-- JIT-load _parallax/AI-profiles/profile-schema.md for the dispatcher workflow and cross-validation gate
-- JIT-load _parallax/AI-profiles/output-template.md for the required output structure and disclaimer
-- JIT-load _parallax/AI-profiles/profiles/buffett.md for the profile spec (frontmatter + narrative)
+- JIT-load _parallax/parallax-conventions.md, _parallax/AI-profiles/profile-schema.md, _parallax/AI-profiles/output-template.md, _parallax/AI-profiles/profiles/buffett.md — see Step 0 for what each provides
 - Cross-validation gate (spec §6.4) is NON-BYPASSABLE — refuse to render on name mismatch
 - Disclaimer language is verbatim — do NOT paraphrase "not financial advice," "AI-inferred," or "consult a qualified financial advisor"
 - NEVER use first-person impersonation of Buffett — always frame as "Buffett-style" or "the BKP 2018 factor profile"
@@ -157,7 +154,7 @@ Token cost: 4 tokens
 This output is an AI-inferred interpretation of Warren Buffett's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by Warren Buffett or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.
 ```
 
-Note: the 52-week trend column uses arrows (↑ up, ↓ down, → stable). The scores shown above are from the KO.N anchor test (2026-04-06); actual scores at invocation time come from live Parallax data.
+Note: the 52-week trend column uses arrows (↑ up, ↓ down, → stable). The scores shown above are from the KO.N anchor test (2026-04-06); actual scores at invocation time come from live Parallax data. The Synthesis and Verdict sensitivity sentences illustrate required content and length only — write fresh wording keyed to the actual verdict and scores at invocation time, not a paraphrase of this example.
 
 
 ## Output additions (white-label branding + §9.2 disclosure)

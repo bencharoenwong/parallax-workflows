@@ -38,7 +38,7 @@
 | United Kingdom | `EWU` | ✓ in coverage | NYSE Arca |
 | Hong Kong | `EWH` | ✓ in coverage | NYSE Arca |
 | South Korea | `EWY` | ✓ in coverage | NYSE Arca |
-| **Germany** | **`EWG`** | **✗ NOT IN COVERAGE** | empty response from `etf_daily_price` |
+| Germany | `EWG` | ✓ in coverage (re-probed 2026-09-06 via `etf_search`; was empty on 2026-05-02) | NYSE Arca, ric `EWG.P` |
 | Singapore | `EWS` | unverified | — |
 | Taiwan | `EWT` | unverified | — |
 | Canada | `EWC` | unverified | — |
