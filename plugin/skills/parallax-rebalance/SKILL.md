@@ -74,7 +74,7 @@ The parameter column states the semantic intent. Construct every payload from th
 | Tool | Parameters | Notes |
 |---|---|---|
 | `analyze_portfolio` | Map the supplied symbol/weight holdings into the live schema. If `fields` is advertised, request the compact intersection of `portfolio_summary`, `concentration_metrics`, `sector_allocation`, and `company_contribution`; omit time-series blocks. | **Exactly one call maximum.** Supply a `date` per holding only when the discovered live schema requires one. The date is an as-of date over a price history, not a snapshot key: a deployed connector may need a date early enough that each holding has sufficient prior price history, so today's date can return empty or fail validation. Read the live schema's own description first. When the schema gives no guidance, date every holding at the most recent completed trading day at least 5 calendar days in the past, one date for all holdings, and state the date used in the report — live schema still wins over this default. Skip after 30s, oversized/truncated output, schema validation, or any non-empty `result._meta.invalid_fields`; do not retry this capability. Use discovered `check_portfolio_redundancy` for overlap/concentration and per-holding score aggregation for factor context. |
-| `get_peer_snapshot` | per holding | **Primary scoring source** for `PARALLAX_LOADER_V2=1`. **Timeout handling:** fire in parallel; if N≥2 calls timeout, mark those holdings as "scores unavailable" and continue with health-flags-only scoring. Collect successful scores only. Aggregate client-side per `loader.md` §3b. **For 10+ holdings:** prioritize top/bottom 5 by weight; timeout on remaining holdings is acceptable — fall back to health flags for those positions. **Distinguish a timeout from an empty response:** a timeout leaves the holding unscored and health-flag-driven per the handling above. A successful call that carries no data for the listing is a coverage gap, not a timeout — fall back to `get_company_info` plus `get_score_analysis` for that holding, label every figure derived this way a **profile-derived score**, and name every profile-derived holding in the report. See the Batch C2 coefficient bullet for the same-scale guard required before a profile-derived score enters the solver. |
+| `get_peer_snapshot` | per holding | **Primary scoring source** for `PARALLAX_LOADER_V2=1`. **Timeout handling:** fire in parallel; if N≥2 calls timeout, mark those holdings as "scores unavailable" and continue with health-flags-only scoring. Collect successful scores only. Aggregate client-side per `loader.md` §3b. **For 10+ holdings:** prioritize top/bottom 5 by weight; timeout on remaining holdings is acceptable — fall back to health flags for those positions. **Distinguish a timeout from an empty response:** a timeout leaves the holding unscored and health-flag-driven per the handling above. A successful call that carries no data for the listing is a coverage gap, not a timeout — fall back to `get_company_info` plus `get_score_analysis` for that holding, label every figure derived this way a **profile-derived score**, and name every profile-derived holding in the report. See the `references/policy-reconciliation.md` step 1 coefficient rule for the same-scale guard required before a profile-derived score enters the solver. |
 | `get_company_info` | per holding | **Ground-truth check oracle** per loader.md §5 rule 3 — records `expected_name` for mismatch check against `get_peer_snapshot.target_company`. **Timeout handling:** if timeout, mark holding as "name verification unavailable" and flag ⚠ UNVERIFIED. |
 | `get_score_analysis` | per holding | Score trend (improving/stable/declining) for the Score Momentum table and the Exit classification. Input is symbol + weeks only — no Batch A dependency, so it fires here in parallel. **For 10+ holdings:** prioritize top/bottom 5 by weight. **Timeout handling:** mark the holding's trend "unavailable" and continue. |
 | `check_portfolio_redundancy` | Map the normalized holdings into the live schema. | Overlap detection and the compact fallback when `analyze_portfolio` is unavailable. **Timeout fallback:** if exceeds 20s, flag "redundancy check skipped" and continue. When `analyze_portfolio.sector_allocation` also came back, cross-check the two sector breakdowns per "After Batch A" item 4 before rendering either. |
@@ -116,98 +116,7 @@ The parameter column states the semantic intent. Construct every payload from th
 
 ### Batch C2 — Policy reconciliation (S3; only when `policy=` was supplied)
 
-JIT-load `_parallax/client-policy/policy-loader.md`. Run the S0–S2 adaptation
-first (`adaptation.py`, same contract as `parallax-client-review`), then the
-S3 optimizer — a real Bash tool call, never prose arithmetic:
-
-1. **Assemble the payload** (JSON file via a private `mktemp` path):
-   - `basis`: the basis the adaptation result normalized to (`sleeve`); every
-     weight and band edge in the payload must share it. Declared explicitly,
-     never assumed.
-   - `holdings[*].symbol` / `weight`: the current holdings in that basis.
-   - `holdings[*].coefficient`: the tilt-weighted composite score — the
-     holding's aggregated composite score (loader.md §3b) × its region tilt
-     multiplier × its sector tilt multiplier (loader.md §3; each 1.0 with no
-     active view). Every non-excluded holding needs one; a holding whose score
-     is unavailable must be either excluded from the solve or given an
-     explicit disclosed treatment — the solver rejects a missing coefficient
-     rather than guessing. **The explicit disclosed treatment for a
-     profile-derived score** (Batch A coverage-gap fallback, `get_peer_snapshot`
-     row): before using it as a coefficient here, cross-check it against the
-     holding's latest `get_score_analysis` row. If the two agree — same
-     composite field, same 1–10 scale — the coefficient is same-scale by
-     construction and enters the solve with the profile-derived disclosure. If
-     they disagree, or only one source returned, do NOT solve with a guessed
-     value: exclude the holding from the solve instead, using the
-     excluded-holding disclosure named above (mixed-scale coefficients change
-     the LP optimum itself, so a guessed value is never an acceptable
-     substitute). State the same-scale verification outcome for every
-     profile-derived holding in Policy Reconciliation.
-   - `excludes`: the subset of `tilts.excludes` that matches a held symbol,
-     plus held symbols matching a parsed "no <sector>" exclusion. The solver
-     hard-rejects an excludes entry that matches no holding, so intersect
-     BEFORE assembling the payload; a `tilts.excludes` entry naming a symbol
-     the client does not hold is vacuously satisfied — list it in the Policy
-     Reconciliation section as "excluded, not held" rather than passing it.
-   - `position_cap`: the most restrictive of the parsed "max N% per position"
-     cap and the adaptation result's `max_position_weight` — `min()` of the
-     two, never the looser. Both are sleeve-basis fractions; convert before
-     comparing if the parsed cap was stated on a different basis. Name which
-     bound applied in Mandate Constraints Applied. A mandate cap below a
-     segment floor carried by a single holding is jointly infeasible by
-     construction — the solver returns `infeasible` with the smallest
-     violation and the step-3 routing below applies unchanged.
-   - `bands`: one entry per adaptation segment carrying band edges —
-     `{dimension, key, symbols: [members by the holding→region/sector
-     mapping], min, max}`.
-   - `turnover_penalty`: omit (the module's disclosed default) unless the
-     mandate states one.
-2. **Solve**: `python3 "<skill-dir>/../_parallax/client-policy/reconcile.py"
-   --input "$PAYLOAD"` and parse the JSON result.
-3. **Route by `status` — the trade list is gate-shaped (conventions §4.0)**:
-   - `optimal`: the result's `target_weights`/`trades` become the Target
-     Weights in Trade Recommendations. Carry `binding`, `turnover_penalty` +
-     `penalty_source`, `basis`, `calibration_status`, and `total_turnover`
-     into the Policy Reconciliation section. Render `total_turnover`
-     prominently: it is **two-sided** turnover — the sum of the absolute
-     weight changes across every holding, so a one-way trade of 20 points
-     contributes 40. State the two-sided basis on the same line, or the
-     figure reads as twice the trading it represents. State with it that the
-     turnover penalty is `heuristic_phase0` and uncalibrated, so the figure is
-     a disclosure and not a threshold verdict — do not render an advisory
-     turnover limit, a "high/low" judgement, or any comparison against a
-     target. If `basis` is `sleeve` and the report renders total-portfolio
-     weights, convert visibly (state the equity sleeve weight used) — a
-     sleeve delta read as a total delta is a wrong trade size, and the same
-     visible conversion applies to `total_turnover` when rendered in
-     total-portfolio terms.
-   - **Single-name floor disclosure.** For every payload band with a `min`
-     above 0 whose `symbols` list holds exactly one member, render one line
-     in Policy Reconciliation naming the segment, the floor, and the single
-     holding that carries it: a segment floor met by one position forces
-     that position to at least the floor, whatever its score. Add "and the
-     floor is binding in this solve" when `binding` also carries
-     `band:<dimension>:<key>:min` for that band. A symbol that is the sole
-     member of two floored bands gets two lines, each naming its own
-     segment, floor, and binding state. Derived from the payload the skill
-     assembled and the result it received; no solver change.
-   - `infeasible`: render the `violations` table (the exact smallest
-     relaxations) and NO optimizer targets — no target weights, no trade
-     list, not even labeled "suggested". Never silently relax. Trade
-     Recommendations fall back to the flag-based path, labeled "not
-     policy-reconciled — constraints jointly infeasible, see Policy
-     Reconciliation". When the smallest-violation table names a bound on a
-     holding that is the sole member of a floored band, state that the
-     mandate is internally contradictory (cap against floor) — distinct from
-     ordinary infeasibility.
-   - `conflict`: render each named conflict (e.g. an exclude against a user
-     minimum) for human decision — precedence collisions are never
-     auto-resolved (design guardrail 5). Same fallback labeling as
-     `infeasible`.
-   - `solver_unavailable` / `invalid_input` / `solver_error`: the
-     reconciliation verdict is **UNVERIFIED** — state the reason from the
-     result, render no optimizer targets, and label the flag-based fallback
-     "not policy-checked". Never substitute model judgement for the solve.
+Runs only when `policy=` was supplied. → Load `references/policy-reconciliation.md` and follow it in full: S0–S2 adaptation first (`adaptation.py`), then the S3 solver (`reconcile.py`) as a real Bash tool call, never prose arithmetic. The trade list is gate-shaped (conventions §4.0): `optimal` yields targets; `infeasible` renders the violations table, `conflict` renders the named conflicts, both render NO targets; `solver_unavailable` / `invalid_input` / `solver_error` render the verdict as **UNVERIFIED** and label the flag-based fallback "not policy-checked".
 
 ### Batch D — Validation
 
@@ -266,8 +175,8 @@ The Bash result may show a `[render-gate] WARN:` line above the report. That lin
 - **Score Momentum** (table: each holding's score trend — improving/stable/declining)
 - **Ground-truth Integrity** (only render if any mismatch detected — table: `input_ticker`, `returned_name`, `expected_name`, match status per holding. ⚠ MISMATCH rows are re-scored individually and flagged — scores not trusted from `quick_portfolio_scores` — per loader.md §5 rule 3.)
 - The policy section family (Policy Reconciliation and, when constraints/target/mandate `max_position_weight` triggers it, Mandate Constraints Applied) carries mandate-compliance content and §4.0 gate states; it renders in place, unchanged, in both audience modes — §13.2's relocation rule does not apply to it.
-- **Policy Reconciliation** (only if `policy=` was supplied) — the S3 result: status; on `optimal` the binding constraints, resolved turnover penalty with its source, basis, `calibration_status` disclosure, and the two-sided total turnover with its uncalibrated-penalty note; on `infeasible` the smallest-violations table with an explicit "no targets rendered — constraints not silently relaxed" line; on `conflict` the named conflicts awaiting human decision; on any other status the UNVERIFIED statement with the reason. Also list any `tilts.excludes` entries not matched to a held symbol as "excluded, not held" (Batch C2 step 1). List every profile-derived holding used as a coefficient, with its same-scale verification outcome (verified same-scale-by-construction, or excluded from the solve on disagreement/single-source) per the Batch C2 coefficient bullet. Follows conventions §4.0: this section never converts an unknown into a pass.
-- **Mandate Constraints Applied** (only if `constraints=` or `target=` was provided, or a mandate `max_position_weight` is present) — echoes each parsed constraint/target and its effect (weight cap, exclusion, priority bias, quality-score ranking); any unparsed `constraints=` clause renders "constraint not recognized — not applied"; any unrecognized `target=` phrase is echoed with a statement of how the standard recommendations already address it. When a mandate `max_position_weight` is present, state it, state the parsed per-position cap if any, and state which of the two bound (Batch C2 step 1 `position_cap` bullet).
+- **Policy Reconciliation** (only if `policy=` was supplied) — the S3 result: status; on `optimal` the binding constraints, resolved turnover penalty with its source, basis, `calibration_status` disclosure, and the two-sided total turnover with its uncalibrated-penalty note; on `infeasible` the smallest-violations table with an explicit "no targets rendered — constraints not silently relaxed" line; on `conflict` the named conflicts awaiting human decision; on any other status the UNVERIFIED statement with the reason. Also list any `tilts.excludes` entries not matched to a held symbol as "excluded, not held" (`references/policy-reconciliation.md` step 1). List every profile-derived holding used as a coefficient, with its same-scale verification outcome (verified same-scale-by-construction, or excluded from the solve on disagreement/single-source) per the `references/policy-reconciliation.md` step 1 coefficient rule. Follows conventions §4.0: this section never converts an unknown into a pass.
+- **Mandate Constraints Applied** (only if `constraints=` or `target=` was provided, or a mandate `max_position_weight` is present) — echoes each parsed constraint/target and its effect (weight cap, exclusion, priority bias, quality-score ranking); any unparsed `constraints=` clause renders "constraint not recognized — not applied"; any unrecognized `target=` phrase is echoed with a statement of how the standard recommendations already address it. When a mandate `max_position_weight` is present, state it, state the parsed per-position cap if any, and state which of the two bound (`references/policy-reconciliation.md` step 1 `position_cap` rule).
 - **Trade Recommendations** (table: Priority | Action | Symbol | Current Weight | Target Weight | Rationale — every recommendation cites a specific flag or finding; if view active, "Rationale" includes view-tilt direction; any recommendation on a ⚠ MISMATCH holding must note scores were re-derived via `get_peer_snapshot` directly). Render a one-line informational preface above this table per conventions §12.2; framed per conventions §12 (candidate actions, not instructions) and supports `action_labels=plain` per §12.3 for retail-suitable rendering. Under `audience=client_safe`, `action_labels=plain` is implied per conventions §13.2 — the Action labels always render neutral status descriptions, and any accompanying magnitude renders as distance-to-threshold arithmetic per §12.3, not a suggested trade size.
 - **Replacement Candidates** (if trimming, scored alternatives; filtered against tilts.excludes + tilts.excludes_freeform if view active; all candidates ground-truth-validated per loader.md §5 rule 3; divergence-assertion result for replacement universe per loader.md §5 rule 4. Under `audience=client_safe` the divergence-assertion result is ops apparatus per conventions §13.2: the body keeps only a plain-language caveat when the assertion fired — the candidate list is concentrated in one sector — and the numeric assertion detail relocates to the Methodology appendix (internal); ⚠ MISMATCH ground-truth results are non-suppressible and render unchanged in both modes)
 - **Before/After Comparison** (factor scores: current vs. proposed; if view active, alignment-to-view metric included; factor names render with the §13.3 plain-language gloss by reference under `audience=client_safe`)
