@@ -352,7 +352,7 @@ Threshold rationale (internal): 7.0 is the high-confidence band in the Parallax 
 
 ## 8. Consumer-skill checklist
 
-Skills that consume the view add these lines to their `## Gotchas` body section (frontmatter carries `name` and `description` only, per `_parallax/skill-structure-conventions.md` → "Spec compliance"):
+Skills that consume the view add these lines to their `## Gotchas` body section (frontmatter carries spec keys only, per `_parallax/skill-structure-conventions.md` → "Spec compliance"; house content such as gotchas lives in the body):
 
 ```markdown
 - JIT-load _parallax/house-view/loader.md before applying any portfolio logic

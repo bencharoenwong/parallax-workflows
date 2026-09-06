@@ -148,13 +148,13 @@ Proprietary pillar/factor vocabulary guard: trigger phrases ship verbatim to whi
 
 ## Host portability
 
-Added 2026-09-04. These skills run on Claude Code, Codex CLI and claude.ai. A SKILL.md names the **host primitives** defined in `parallax-conventions.md` §14 (`discover-tools`, `call-tool`, `ask-operator`, `run-shell`, `invoke-skill`, `load-reference`, `write-artifact`, `read-config`, `fetch-url`) and never a host tool. Concretely, outside a `<!-- host-note -->` … `<!-- /host-note -->` block a SKILL.md must not contain `ToolSearch`, `AskUserQuestion`, the `Write` tool by name, `WebFetch`, a `Skill` tool reference, `/name`-style chaining as the only invocation form, or a connector namespace literal. A host note may show the Claude Code binding as an example; the primitive name is the instruction.
+Added 2026-09-04. These skills run on Claude Code, Codex CLI and claude.ai. A SKILL.md names the **host primitives** defined in `parallax-conventions.md` §14 (`discover-tools`, `call-tool`, `ask-operator`, `run-shell`, `invoke-skill`, `load-reference`, `write-artifact`, `read-config`, `fetch-url`) and never a host tool. The forbidden host identifiers are listed once, in `parallax-conventions.md` §14.1; outside a `<!-- host-note -->` … `<!-- /host-note -->` block a SKILL.md must not contain any of them. A host note may show the Claude Code binding as an example; the primitive name is the instruction.
 
 **Scope is forward-only.** Skills that existed before 2026-09-04 are host-locked and are migrated one family per PR (the structure sweep). New skills comply before merge.
 
-**Fail-open is by reference.** A SKILL.md does not invent what to do when a primitive is absent; it cites `parallax-conventions.md` §14.3. A skill whose correctness depends on a primitive that a target host lacks (for example a gate helper behind `run-shell`) states that in `## Failure modes` and, if the loss is total, in its `skills/PERIMETER.md` row.
+**Fail-open is by reference.** A SKILL.md does not invent what to do when a primitive is absent; it cites `parallax-conventions.md` §14.3. A skill whose correctness depends on a primitive that a target host lacks (for example a gate helper behind `run-shell`) states that in `## Failure modes` and, if the loss is total, in its row in the private perimeter registry (not tracked in this public repo).
 
-**Enforcement seam:** a host-primitive lint (planned) greps `skills/*/SKILL.md` for the identifiers above outside host-note blocks, with an allowlist of legacy files that shrinks as the sweep lands.
+**Enforcement seam:** a host-primitive lint (planned) greps `skills/*/SKILL.md` for the identifiers in `parallax-conventions.md` §14.1 outside host-note blocks, with an allowlist of legacy files that shrinks as the sweep lands.
 
 ## Canonical step spine
 

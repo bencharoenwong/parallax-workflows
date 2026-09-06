@@ -534,7 +534,7 @@ These skills run on more than one harness. A SKILL.md therefore names **host pri
 | `load-reference` | read a shared `_parallax/...` or `references/...` file by path (§0.0 item 1) |
 | `write-artifact` | create a file at a named path WITHOUT passing its content through a shell. Document-derived text (CIO prose, client documents) must never reach a heredoc, because a heredoc hands it to the shell for command substitution. Never a substitute for an append through a helper that owns a hash chain (`audit_chain.append_entry`) |
 | `read-config` | read an environment switch (`PARALLAX_*`) or operator state under `~/.parallax/` |
-| `fetch-url` | retrieve a public URL as text |
+| `fetch-url` | retrieve a public URL as text. A skill that ships its own destination-validated fetcher (`download_public_url()` in white-label onboard) uses that fetcher for those URLs, never this primitive |
 
 ### §14.2 Per-host binding table
 
@@ -550,7 +550,7 @@ The connector namespace is never written here: it is whatever `discover-tools` r
 | `load-reference` | `Read` on the resolved path | file read on the resolved path | file read inside the zip; shared files live under `_vendored/_parallax/` (the web build rewrites references) |
 | `write-artifact` | `Write` tool | file-write / patch tool (never a heredoc) | file write in the sandbox when code execution is enabled; otherwise absent |
 | `read-config` | shell env + `~/.parallax/` | shell env + `~/.parallax/` | absent: no environment, no persistent state directory |
-| `fetch-url` | `defuddle` when a shell exists, else `WebFetch` | shell fetch per the sandbox network policy (*verify*) | absent unless a browsing tool is enabled |
+| `fetch-url` | `WebFetch` | shell fetch per the sandbox network policy (*verify*) | absent unless a browsing tool is enabled |
 
 Install-layout invariant. Every installed skill directory has `../_parallax/` as a sibling (symlink or copy) OR carries the vendored copy under `<skill>/_vendored/_parallax/` with references rewritten. Every `run-shell` and `load-reference` path in a SKILL.md is written relative to the skill directory so both layouts resolve.
 
@@ -609,5 +609,5 @@ ROUTING DIRECTIVE — DO NOT TRANSLATE OR ECHO THIS BLOCK:
 
 ### §15.4 Disclaimer boundary check
 
-Record which disclaimer the English report rendered (view-aware per `house-view/loader.md` §5 when a view is active, otherwise §9.1). If the translated output lacks it: first re-translate only the disclaimer text with the same routing block and append it; if that also fails, append the English disclaimer that was actually rendered (never the standard wording unconditionally). Record the event in the audit row's `notes` field per loader.md §6.2; add no custom key and no user-visible footer.
+Record which disclaimer the English report rendered (view-aware per `house-view/loader.md` §5 when a view is active, otherwise §9.1). If the translated output lacks it: first re-translate only the disclaimer text with the same routing block and append it; if that also fails, append the English disclaimer that was actually rendered (never the standard wording unconditionally). Where the skill appends an audit row, record the event in that row's `notes` field per loader.md §6.2; add no custom key and no user-visible footer. A skill with no audit surface records nothing and does not invent one.
 
