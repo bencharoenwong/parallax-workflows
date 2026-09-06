@@ -530,7 +530,7 @@ These skills run on more than one harness. A SKILL.md therefore names **host pri
 | `run-shell` | execute a documented helper command (`render_gate.py`, `adaptation.py`, `view_commit`, …) |
 | `invoke-skill` | hand a payload to a sibling skill (translate, concierge routing, the judge drift check) |
 | `load-reference` | read a shared `_parallax/...` or `references/...` file by path (§0.0 item 1) |
-| `write-artifact` | create a file at a named path WITHOUT passing its content through a shell. Document-derived text (CIO prose, client documents) must never reach a heredoc, because a heredoc hands it to the shell for command substitution. Never a substitute for an append through a helper that owns a hash chain (`audit_chain.append_entry`) |
+| `write-artifact` | create a file at a named path WITHOUT passing its content through a shell. Document-derived text (CIO prose, client documents) must never reach an unquoted heredoc, which the shell subjects to parameter expansion and command substitution. A quoted-delimiter heredoc (`<<'REPORT'`, the form §10.3 mandates for the render gate) performs no expansion and is the sanctioned shell path for that step. Prefer `write-artifact` wherever the host has it. Never a substitute for an append through a helper that owns a hash chain (`audit_chain.append_entry`) |
 | `read-config` | read an environment switch (`PARALLAX_*`) or operator state under `~/.parallax/` |
 | `fetch-url` | retrieve a public URL as text. A skill that ships its own destination-validated fetcher (`download_public_url()` in white-label onboard) uses that fetcher for those URLs, never this primitive |
 

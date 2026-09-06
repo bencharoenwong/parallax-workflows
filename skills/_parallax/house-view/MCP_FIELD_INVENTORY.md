@@ -3,7 +3,7 @@
 **Generated:** 2026-05-24
 **Source:** Phase A0 live MCP smoke calls
 **Reviewed by:** N/A (initial generation)
-**Refresh cadence:** Monthly, by hand. No automated refresh exists: re-run the `macro_analyst` and `get_telemetry` calls listed in §2 against the live connector and update the observed fields below. (An earlier note named a CI smoke test and a validator module; neither was ever built.)
+**Refresh cadence:** Monthly, by hand. No automated refresh exists: re-run the `get_telemetry` request in §3 and the `macro_analyst` call forms in §6 against the live connector and update the observed fields below. (An earlier note named a CI smoke test and a validator module; neither was ever built.)
 
 This artifact documents the **observed** shape of `macro_analyst` and
 `get_telemetry` responses, what component formulas can compute today vs. what
