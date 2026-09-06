@@ -1,6 +1,6 @@
 ---
 name: parallax-watchlist-monitor
-description: "Monitor a watchlist of tickers: flag score changes, news alerts, technical shifts, and analyst updates via Parallax MCP tools. Provide list of symbols. NOT for single stock analysis (use /parallax-deep-dive), not for portfolio diagnostics (use /parallax-morning-brief)."
+description: "Monitor a watchlist of tickers: flag score changes, news alerts, technical shifts, and analyst updates via Parallax MCP tools. Provide list of symbols. NOT for single stock analysis (use /parallax-deep-dive), not for portfolio diagnostics (use /parallax-morning-brief), not for weighted client books ranked by who to call (use /parallax-desk-call-list), not for building a portfolio (use /parallax-portfolio-builder)."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -16,14 +16,11 @@ description: "Monitor a watchlist of tickers: flag score changes, news alerts, t
 
 ## Gotchas
 
-- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallback patterns, and the §0.2 integer-param serialization caveat
-- This is a surveillance skill — optimized for breadth over depth
-- get_score_analysis with 4-8 weeks is sufficient for detecting recent changes — fire all in parallel. `weeks` is non-default here and must be passed as a typed integer at the call site (see conventions §0.2)
-- Only call get_news_synthesis for names with significant score changes (saves API calls)
-- Rank output by magnitude of change — most-changed at top
-- Cost: ~54 tokens at 10 symbols (see `_parallax/token-costs.md`): 1/symbol score scan + ~11 per flagged name (news 5 + technicals 5 + outlook 1)
-- Coverage: listed equities and ETFs only; fund/OEIC symbols surface the conventions §1 not-covered fallback, not a raw error
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
+- Expected Parallax spend: ~54 tokens at 10 symbols (`_parallax/token-costs.md`): 1 per symbol score scan + ~11 per flagged name (news 5 + technicals 5 + outlook 1).
+- JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.2 typed integer params, §1 coverage fallback, §3 parallel execution, §4 fallbacks, §11 sensitivity, §14 host primitives.
+- Surveillance skill: breadth over depth. `weeks` 4–8 is enough to detect recent change and must be a typed integer (conventions §0.2). Only flagged names get the drill-down.
+- Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
+- Not a house-view consumer: no loader step, no audit row.
 
 Surveillance scan across a list of tickers — flag what's changed, what needs attention.
 
@@ -36,11 +33,54 @@ Surveillance scan across a list of tickers — flag what's changed, what needs a
 
 ## Workflow
 
-Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call. Execute using `mcp__claude_ai_Parallax__*` tools:
+Every host interaction below is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3). Parallax callables are whatever `discover-tools` returns this session (§0.1).
 
-1. **Score Scan** — For each symbol, call `get_score_analysis` with `weeks` as int N, where N is the user-supplied value from the invocation (e.g., `weeks=8`) or 8 if none provided. This is non-default (server default is 52) — see conventions §0.2 for the serialization caveat. Compute change in total score over the period.
-2. **Flag Movers** — Identify symbols with significant score changes (>1 point total score change or any factor moving >2 points).
-3. **Flagged Drill-Down (single parallel batch)** — For flagged symbols only, fire in ONE batch (conventions §3): `get_news_synthesis` (catalysts), `get_technical_analysis` (trend changes), and `get_stock_outlook` with `aspect="recommendations"` (consensus shifts). News and technicals are async (30-90s) — never phase them serially; if any call times out, apply the Degraded-state rule (§4 no-retry) rather than re-waiting.
+### Step 0 — Pre-flight
+
+1. Resolve every `_parallax/...` path named in this file to the canonical copy (conventions §0.0 item 1).
+2. `discover-tools`: bind every logical tool named anywhere in this workflow (Step 2) to the exact callable and schema exposed now.
+   <!-- host-note -->
+   Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
+   <!-- /host-note -->
+3. Parse args: symbol list; optional `weeks=N` (default 8).
+4. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`.
+
+### Step 1 — Resolve inputs
+
+Symbols in RIC form (plain tickers → conventions §1); fund/OEIC identifiers get the §1 not-covered message and are dropped with a note.
+
+### Step 2 — Fetch (parallel batches)
+
+**Batch A — score scan.** `call-tool` `get_score_analysis` for every symbol together, `weeks` as int N (non-default; server default 52).
+
+**Batch B — flagged drill-down.** After Step 3 identifies movers, `call-tool` in ONE batch for flagged symbols only: `get_news_synthesis`, `get_technical_analysis`, `get_stock_outlook` with `aspect="recommendations"`. News and technicals are async; never phase them serially; on timeout apply conventions §4 (no re-wait).
+
+### Step 3 — Verify
+
+- Identity: each `get_score_analysis` `data[0].symbol` against the RIC sent (conventions §2).
+- Movers: total score change > 1 point, or any single factor moving > 2 points over the window. A symbol with no score history is reported as `no data`, never as stable.
+
+### Step 4 — Compute
+
+No deterministic helper; score changes are differences of the tool's own figures. Rank by magnitude of change, largest first.
+
+### Step 5 — Compose
+
+Fill **Output Format** below in order; Verdict sensitivity per `parallax-conventions.md` §11 by reference (nearest to the >1 / >2 cutoffs); Branding Header per integration-pattern.md §5; About This Report per §7 as a real `## About This Report` heading; `parallax-conventions.md §9.2` disclosure; standard disclaimer `parallax-conventions.md §9.1`.
+
+### Step 6 — Render (deterministic gate, mandatory)
+
+`run-shell` the shared gate per conventions §10.3 with this skill's key:
+
+```
+DRAFT="$(mktemp "${TMPDIR:-/tmp}/watchlist.XXXXXX")"
+cat > "$DRAFT" <<'REPORT'
+<your complete drafted report goes here>
+REPORT
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill watchlist-monitor < "$DRAFT"; rm -f "$DRAFT"
+```
+
+The entire final message is that command's stdout. The stderr `[render-gate] WARN:` line is diagnostics: never include it. Degraded-state notes go inside their section. If `run-shell` is absent, apply conventions §14.3 (render-gate row). No Step 7.
 
 ## Output Format
 
@@ -63,30 +103,20 @@ Keep it scannable. Lead with what changed.
 - **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line at the very top: `**<client_name>** watchlist scan`. Logo handling per integration-pattern.md §5.
 - **About This Report** (always present): render a `## About This Report` section with the branding-state line above. Place it before the AI disclosure/disclaimer footer. If a logo was skipped, include `Logo on file: <basename>` as a second line.
 
-### Pre-Render — Load white-label branding
-
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format.
-
-### Render — deterministic gate (LAST step, mandatory)
-
-Compose the complete report per **Output Format** above (including the disclosure and disclaimer below), then run it through the shared render gate in **one Bash step** before replying. Use a private `mktemp` file (never a fixed/predictable path — `/tmp` symlink hazard). The shared gate is `_parallax/render_gate.py`, a sibling of the directory you loaded this SKILL.md from; pass this skill's key (use the loaded directory's absolute path as `<skill-dir>`):
-
-```
-DRAFT="$(mktemp "${TMPDIR:-/tmp}/watchlist.XXXXXX")"
-cat > "$DRAFT" <<'REPORT'
-<your complete drafted report goes here>
-REPORT
-python3 "<skill-dir>/../_parallax/render_gate.py" --skill watchlist-monitor < "$DRAFT"; rm -f "$DRAFT"
-```
-
-**Your entire final message is exactly that command's stdout** — nothing before it (no step/batch-completion notes, no scratch computation, no "no active house view" / white-label config-probe narration), nothing after it.
-
-The Bash result may show a `[render-gate] WARN:` line above the report. That line is stderr diagnostics, not stdout. Never include it in the reply. It means the drafted opening drifted from the documented Output Format start; fix the opening and re-run the gate.
-
-**Degraded-state rule:** if an async tool (e.g. `get_assessment`, `get_news_synthesis`) times out or returns no data, render the pending/unavailable note INSIDE the relevant section or the About This Report line — NOT as a preamble above the report — so it is part of the rendered body and survives the gate. (The gate also hoists a leaked degraded note as a backstop.)
-
-`_parallax/render_gate.py` is pure-stdlib and deterministically drops anything before the first rendered block (House View Preamble banner / Branding Header / Ground-truth Integrity / this skill's title or first rendered section), preserving the active-house-view banner in every `view_status` state. Same operator-agnostic-helper pattern as `view_status.py` / `loader.py` (a real Bash tool call, not prose).
-
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
 Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
+
+
+## Failure modes
+
+- A symbol's score scan fails after the §0.1 retry: listed as `no data` in the summary table, excluded from ranking.
+- News or technicals pending for a flagged name: the Alerts entry carries the pending note (conventions §5); the alert itself still renders from the score change.
+- Host lacks a primitive: conventions §14.3, per primitive.
+
+## Done when
+
+- Watchlist Summary lists every input symbol with a score, a change, and an alert flag (or `no data`); first line is the Branding Header or `## Watchlist Summary`.
+- Alerts are ordered by magnitude; each flagged name has news, technicals and consensus or a pending note.
+- The render gate ran and the reply is its stdout (or the §14.3 note is present in About This Report).
+- `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present; expected spend stated (Gotchas).

@@ -46,7 +46,7 @@ A score sitting exactly on its cutoff (distance 0) is reported explicitly per §
 
 ## Mixed-Exchange Fallback
 
-This is **tier 3** of the fallback ladder defined in the SKILL.md Step A.5 — invoked only when V2 (`get_peer_snapshot` per-holding) AND V1 (`quick_portfolio_scores`) both return coverage <50% by weight.
+This is **tier 3** of the fallback ladder defined in the SKILL.md Step 3 — Verify — invoked only when V2 (`get_peer_snapshot` per-holding) AND V1 (`quick_portfolio_scores`) both return coverage <50% by weight.
 
 When triggered:
 

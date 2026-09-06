@@ -1,6 +1,6 @@
 ---
 name: parallax-portfolio-builder
-description: "Build a portfolio from a natural language investment thesis. Constructs universe, scores, checks redundancy, and outputs allocation-ready list via Parallax MCP tools. Supports `--augment-silent` mode to fill active house view gaps from Parallax data for the current portfolio (saved view never mutates). Trigger for that mode: 'fill house view gaps from Parallax data for this portfolio'. NOT for analyzing existing portfolios (use /parallax-client-review), not for screening without allocation (use /parallax-thematic-screen)."
+description: "Build a portfolio from a natural language investment thesis. Constructs universe, scores, checks redundancy, and outputs allocation-ready list via Parallax MCP tools. Supports `--augment-silent` mode to fill active house view gaps from Parallax data for the current portfolio (saved view never mutates). Trigger for that mode: 'fill house view gaps from Parallax data for this portfolio'. NOT for analyzing existing portfolios (use /parallax-client-review), not for screening without allocation (use /parallax-thematic-screen), not for rebalancing an existing portfolio (use /parallax-rebalance), not for single stocks (use /parallax-should-i-buy)."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -16,20 +16,15 @@ description: "Build a portfolio from a natural language investment thesis. Const
 
 ## Gotchas
 
-- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
-- JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §3 (multipliers), §4 (conflict resolution), §5 (output rendering), §6 (audit)
-- When active view is present, use the view-aware disclaimer per loader.md §5; otherwise use the standard disclaimer
-- build_stock_universe returns relevance-ranked results — re-rank by factor scores for quality
-- Run redundancy check BEFORE finalizing allocation to avoid sector concentration
-- analyze_portfolio responses often exceed 180K chars. Use streaming JSON extraction (Step 6) instead of waiting for full response; stream validation results progressively to user as they arrive.
-- Weights should sum to ~1.0 in final output
-- Include both the allocation table AND the factor rationale for each pick
-- The saved house view never carries Parallax-derived overlays. When the active view is silent on a dimension this portfolio decision needs, EITHER (a) treat as neutral [default — non-blocking, RM-fan-out-safe] OR (b) JIT-augment via --augment-silent flag with provenance tagged per holding [auditable]. Never fold augmentation back into the saved view.
-- **View-status banner is REQUIRED first thing in output when active view exists** — never bury after the holdings table. If execution gets compressed, this is the section that must NOT be dropped. RM uses the banner as the primary signal that the view is active and what's being applied.
-- **Phase A Parallelization:** View load and universe build run in parallel (view load is fast; universe build is the latency bottleneck). Both complete before Phase B begins.
+- Expected Parallax spend: ~36 tokens at N=10 (`_parallax/token-costs.md`): universe 5 + 10 snapshots + redundancy + validation 5.
+- JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §2 identity cross-check, §3 parallel execution, §4 fallbacks, §13 audience mode, §14 host primitives.
+- JIT-load `_parallax/house-view/loader.md` FIRST; if a view is present follow §2, §3 (multipliers), §4 (conflict resolution), §5, §6. **The view-status banner is REQUIRED first in output** — never buried after the holdings table; if output gets compressed, keep it and drop other sections first.
+- Drift check: JIT-load `_parallax/house-view/auto-on-load-judge-pattern.md` in Step 0 (this skill builds a portfolio); `--skip-drift-check` bypasses it.
+- The saved view never carries Parallax-derived overlays. A dimension the view is silent on is neutral by default (non-blocking, RM-fan-out-safe) or JIT-augmented with `--augment-silent`, provenance-tagged per holding, never written back.
+- `build_stock_universe` returns relevance-ranked results — re-rank by factor scores. Run the redundancy check before finalizing weights. Weights sum to ~1.0; include the allocation table AND the factor rationale.
+- `analyze_portfolio` responses often exceed 180K chars — use streaming extraction (Step 3) and progressive validation.
 - **Operator verification:** see [examples/testing-posture.md](../../examples/testing-posture.md)
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
-- Optional `audience=` argument: `client_safe | internal_analyst`; precedence follows `parallax-conventions.md` §13.1.
+- Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
 
 Construct a portfolio from a plain-English investment thesis using Parallax MCP tools.
 
@@ -43,69 +38,52 @@ Construct a portfolio from a plain-English investment thesis using Parallax MCP 
 /parallax-portfolio-builder "defensive dividend-focused Asian equities" audience=client_safe
 ```
 
+Optional `audience=` argument: `client_safe | internal_analyst`; precedence follows `parallax-conventions.md` §13.1.
+
 ## Workflow
 
-Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call. Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode and fallback patterns. JIT-load `_parallax/house-view/loader.md` for active-view validation, tilt application, and conflict-resolution rules.
+Every host interaction below is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3). Parallax callables are whatever `discover-tools` returns this session (§0.1). This is a multi-mode skill (`--augment-silent`); the mode branch lives inside Step 2.
 
-### Pre-flight: house-view drift check
+### Step 0 — Pre-flight
 
-JIT-load `_parallax/house-view/auto-on-load-judge-pattern.md` and follow
-its protocol. If the protocol surfaces a banner, render it before
-proceeding to this skill's main workflow.
+1. Resolve every `_parallax/...` path named in this file to the canonical copy (conventions §0.0 item 1).
+2. `discover-tools`: bind every logical tool named anywhere in this workflow (Steps 1–3 and the `--augment-silent` branch) to the exact callable and schema exposed now.
+   <!-- host-note -->
+   Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
+   <!-- /host-note -->
+3. Parse args: thesis; `top_n=` (default 10 scored, 5–8 selected); `--augment-silent`; `--skip-drift-check`; `audience=`.
+4. `load-reference` `_parallax/house-view/loader.md`; run §1–§2 (hash, expiry, extraction-confidence warnings); capture tilt vector + excludes. On §2 failure or timeout run without the view (non-blocking). Then the drift pre-flight: `load-reference` `_parallax/house-view/auto-on-load-judge-pattern.md` and follow it; a surfaced banner renders before the report (`invoke-skill` unavailable → its documented skipped line). Skip this pre-flight if invoked with `--skip-drift-check` or if no active house view exists.
+5. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`.
 
-Skip this pre-flight if invoked with `--skip-drift-check` or if no active
-house view exists.
+### Step 1 — Resolve inputs
 
-### Phase A — Parallel Initialization & Scoring
+Resolve the thesis against the view per loader.md §4; if a view is present, prepend tilt context to the universe query (e.g. "exclude tech, overweight defensive sectors") and note any thesis-vs-view conflict for the Investment Thesis section.
 
-Execute Steps 0–2 in parallel. All three must complete before Phase B begins. Best-effort error handling: if any step fails (timeout, validation error), flag it, continue with fallback, and proceed to Phase B.
+### Step 2 — Fetch (parallel batches)
 
-**Step 0: Load Active House View** (parallel with Step 1 & 2)
-- Per `loader.md` §1-§2: read view if present, validate hash and expiry, capture tilt vector + excludes + extraction-confidence warnings. If validation fails, run without view per loader.md §2 "Failure handling." If no view present, proceed normally.
-- **Fallback on timeout (rare):** log warning, continue with empty view. Non-blocking.
+**Batch A — universe (runs in parallel with the Step 0 view load; both complete before Step 3).** `call-tool` `build_stock_universe`; force-include sectors/themes with tilt +2 if absent. **Divergence assertion** (loader.md §5 rule 4): if the query named N ≥ 2 sectors/themes and `max_sector_share / total > 0.6`, warn "universe collapsed to single sector despite multi-sector request" and re-issue as N parallel per-sector calls merged and deduped by symbol (highest rank wins); refuse to render only if the per-sector re-issue is itself skewed. **Timeout:** retry once with a narrower query; then `universe = []`, `universe_status = "unavailable"` — never call `check_portfolio_redundancy` as a placeholder.
 
-**Step 1: Build Universe** (parallel with Step 0 & 2)
-- Resolve user thesis vs. view per loader.md §4. If view present, prepend tilt context to the query (e.g., "exclude tech, overweight defensive sectors"). Call `build_stock_universe`. Force-include any sectors/themes with view tilt = +2 if absent from initial candidates.
-- **Step 1a: Divergence assertion** (per loader.md §5 rule 4) — if the tilt-prepended query named N≥2 sectors/themes, compute `max_sector_share / total` in returned candidates. If > 0.6, emit fail-loud warning: "universe collapsed to single sector despite multi-sector request." Do NOT proceed with a collapsed universe. **Default action** (per loader.md §5 rule 4 post-2026-04-24): re-issue as N parallel per-sector `build_stock_universe` calls and merge/dedupe by symbol (keep highest-rank hit on collisions). **Fall back to refusing to render** only if the per-sector re-issue is itself skewed (e.g., some requested sectors return zero results). Known upstream limitation on the single-call path.
-- **Fallback on timeout:** retry once with narrower query (e.g., single sector from thesis). If still times out, set `universe = []` and `universe_status = "unavailable"`, continue to Phase B with the empty candidate list, and flag the unavailable state in output under "Universe Built". Do NOT call `check_portfolio_redundancy` as a placeholder — it requires a `holdings` parameter and will fail or return nonsense without one.
-- **Step 1b: JIT augmentation gate (opt-in)** — After universe is built, identify dimensions the THESIS depends on but the active view is silent on. **Default behavior (non-blocking, RM-fan-out-safe):** treat silent dimensions as neutral, render a one-line note in output: `Active view is silent on <dim list>; using neutral. Run with --augment-silent to fill from Parallax data for THIS portfolio.` **Opt-in `--augment-silent`:** JIT-load `_parallax/house-view/gap_detect` + `gap_suggest`. Construct a synthetic "draft view" from the active view but with the THESIS-relevant silent dimensions explicitly enumerated. Call `gap_detect.detect_gaps()` scoped to those dimensions. Call `gap_suggest.plan_calls(gaps, available_markets=mcp__claude_ai_Parallax__list_macro_countries()["markets"])`. Fire the planned MCP calls in parallel. `gap_suggest.fold_responses()` → list of Suggestions. Apply each Suggestion as a tilt **only for THIS portfolio decision** — do NOT write back to `~/.parallax/active-house-view/`. Tag each augmented dimension with `[parallax_jit, <tool>[<args>]@<data_as_of>]` for the output table's "Tilt Source" column.
-- **Step 1b-bis: Augmentation-not-used invitation** — If the user did NOT pass `--augment-silent` AND Step 1b's gap detection found ≥1 thesis-relevant silent dimension, render this single line in output (between the universe-built section and the Selected Holdings table): `ℹ Active view is silent on <comma list of silent dim paths> (relevant to your thesis). Re-run with --augment-silent to fill these from current Parallax data for THIS portfolio (saved view never mutates).` Single line, no AskUserQuestion (RM-fan-out-safe — does not block invocation). Skip if no silent dims found OR if --augment-silent was already passed.
+**Batch A (mode `--augment-silent`).** After the universe: identify dimensions the THESIS depends on but the view is silent on. Default: treat as neutral and render the one-line note `Active view is silent on <dims>; using neutral. Run with --augment-silent to fill from Parallax data for THIS portfolio.` (and the ℹ invitation line between Universe Built and Selected Holdings when ≥ 1 thesis-relevant silent dimension exists). With the flag: `load-reference` `_parallax/house-view/gap_detect` + `gap_suggest`; build a synthetic draft view enumerating the silent dimensions; `gap_detect.detect_gaps()` scoped to them; `gap_suggest.plan_calls(gaps, available_markets=<list_macro_countries()["markets"]>)`; `call-tool` the planned calls together; `gap_suggest.fold_responses()` → Suggestions applied as tilts for THIS portfolio only, each tagged `[parallax_jit, <tool>[<args>]@<data_as_of>]` for the Tilt Source column. Never write back to `~/.parallax/active-house-view/`.
 
-**Step 2: Score Top Picks** (parallel with Step 0 & 1)
-- For top N (default 10), **fire all N `get_peer_snapshot` calls AND all N `get_company_info` calls in a single tool-call turn** — 2N calls dispatching simultaneously. Do NOT iterate one-at-a-time; that is the dominant latency leak in this skill. Both tools are independent per `_parallax/parallax-conventions.md` §3.
-- **Prefer per-holding `get_peer_snapshot` aggregation over batch `quick_portfolio_scores`** for portfolio factor profile — the batch tool has a symbol-mapping bug (see parallax-conventions.md §2) that mis-attributes scores to the wrong company for most non-US tickers. Only use `quick_portfolio_scores` after every returned `company_name` has been cross-validated against `get_company_info`.
-- **Fallback on timeout:** if N > 5, retry with top 5 only and flag in output. If single-call timeouts persist, degrade to quick_portfolio_scores with name validation.
+**Batch B — scoring.** For the top N candidates, `call-tool` all N `get_peer_snapshot` AND all N `get_company_info` in ONE turn (2N calls; a one-at-a-time loop is the dominant latency leak). Per-holding aggregation is the factor-profile source; `quick_portfolio_scores` only after every returned name is cross-validated. **Timeout:** N > 5 → retry with top 5 and flag; persistent → degrade to `quick_portfolio_scores` with name validation.
 
-### Phase B — Sequential Selection, Validation & Optimization
+### Step 3 — Verify
 
-Begin only after Phase A completes. Steps 3–6 have tight dependencies; execute sequentially.
+- **Empty-universe gate (first check):** `universe_status = "unavailable"` → skip Steps 4–5's selection, render Universe Built as unavailable with no Selected Holdings table, append the audit row noting the abort, and call none of `check_portfolio_redundancy` / `analyze_portfolio` / `quick_portfolio_scores`.
+- Cross-validation per conventions §2 / loader.md §5 rule 3: `returned_name` vs `expected_name` after normalization; ⚠ MISMATCH rows keep their place but their scores are not authoritative.
+- Redundancy sanity check: >60% in one sector with `sector_concentration: {}` and "well-diversified" returned means the tool's detection failed — compute concentration client-side and flag the tool bug. Applies to Step 4's call and to the validation fallback alike.
 
-**Empty-universe gate (REQUIRED FIRST CHECK):** If `universe_status = "unavailable"` from Phase A Step 1 (Build Universe), skip Steps 3-6 entirely. Render Output Format with `Universe Built` flagged as "unavailable" and no `Selected Holdings` table. Append an audit log entry per loader.md §6 noting the abort. Do NOT call `check_portfolio_redundancy`, `analyze_portfolio`, or `quick_portfolio_scores` — these tools require holdings input and the universe failure means no holdings exist to validate.
+### Step 4 — Compute
 
-**Step 3: Rank & Select**
-- If view present, re-rank by `composite × multiplier(holding's sector/region/theme)` per loader.md §3 multiplier tables. Apply factor tilt re-weighting per loader.md §3 "Factor tilts." Drop candidates that match `tilts.excludes` (surface block message per loader.md §4 exception). Select top holdings (default 5-8).
+Sequential. **Rank & select:** with a view, re-rank by `composite × multiplier(sector/region/theme)` per loader.md §3 and apply factor-tilt re-weighting; drop `tilts.excludes` (surface the §4 block message); select 5–8. **Redundancy:** `call-tool` `check_portfolio_redundancy` on the equal-weight proposal; apply the Step 3 sanity check. **Weights:** adjust for scores, redundancy, sector balance and tilt multipliers; cap any sector at 2× neutral when the view is +2 (loader.md §3); factor profile = weight-aggregated per-holding snapshots. **Validate:** `call-tool` `analyze_portfolio` on the final allocation with `stream=true`; if streaming is unavailable or times out, fall back to `check_portfolio_redundancy` + `quick_portfolio_scores` (name-validated; ⚠ MISMATCH excluded) and flag every `analyze_portfolio` field the fallback cannot recover — rolling metrics, drawdown, contribution, performance series — as "unavailable in fallback path", never silently omitted.
 
-**Step 4: Redundancy Check**
-- Call `check_portfolio_redundancy` with proposed equal-weight allocation. **Sanity-check the response**: if the portfolio has >60% concentration in a single sector but `sector_concentration: {}` is empty and `"well-diversified"` is returned, the tool's concentration detection has silently failed — compute concentration client-side from per-holding sectors and flag the tool bug in output.
+### Step 5 — Compose
 
-**Step 5: Optimize Weights**
-- Adjust weights based on scores, redundancy flags, sector balance, AND tilt multipliers. Cap any single sector at 2× its neutral exposure when view is +2 (loader.md §3 cap rule). For factor profile verification, aggregate per-holding `get_peer_snapshot` scores weighted by portfolio weight (do NOT rely on `quick_portfolio_scores` unless all company names validated).
+Fill **Output Format** below in order: House View Preamble FIRST when a view is active (short view_id, view_name, `effective_date → valid_through`, `Applying tilts: …`, `JIT-augmented: …` when used); Branding Header per integration-pattern.md §5; the Tilt Source compliance contract on every row × dimension; audience mode per §13 (Tilt Effect / Tilt Source relocate to the Methodology appendix under `client_safe`; ⚠ MISMATCH never relocates); `parallax-conventions.md §9.2` disclosure; disclaimer per loader.md §5 when a view is active, otherwise `parallax-conventions.md §9.1`. Audit entry per loader.md §6 with `augmented_dimensions: [{path, source_tool, source_call_args, data_as_of}]` when augmentation ran, else `silent_dimensions_skipped: [...]` when silent dimensions existed.
 
-**Step 6: Validate** (streaming)
-- Call `analyze_portfolio` on the final allocation with `stream=true` to enable streaming JSON extraction. **Fallback for large responses:** use streaming; if streaming unavailable or times out, fall back to `check_portfolio_redundancy` + `quick_portfolio_scores` for light validation.
-- **Sanity-check `check_portfolio_redundancy` response in this fallback path** (mirrors Step 4): if the portfolio has >60% concentration in a single sector but `sector_concentration: {}` is empty and `"well-diversified"` is returned, the tool's concentration detection has silently failed — compute concentration client-side from per-holding sectors and flag the tool bug in output. The Step 4 sanity-check gate must fire on the fallback path as well, not only on the primary call.
-- **Scope of this fallback:** `check_portfolio_redundancy` + `quick_portfolio_scores` covers redundancy and basic factor coverage only. `analyze_portfolio` fields that are NOT recoverable from the fallback — rolling metrics, drawdown analysis, contribution attribution, performance time series — must be flagged as "unavailable in fallback path" in output. Do not silently omit them; the operator must know what wasn't validated.
-- **Symbol-mapping caveat (mirrors parallax-conventions.md §2):** `quick_portfolio_scores` on this fallback path is subject to the same symbol-mapping bug — non-US ticker scores may be mis-attributed. Cross-validate every `company_name` returned by quick_portfolio_scores against `get_company_info` before treating any score as authoritative. Mismatches flagged ⚠ MISMATCH and excluded from validation output per Step 2 / loader.md §5 rule 3.
-- **When `--augment-silent` was applied:** the audit entry MUST carry `augmented_dimensions: [{path, source_tool, source_call_args, data_as_of}]` so the per-portfolio JIT augmentation provenance is on the audit chain and recoverable for compliance review. When `--augment-silent` was NOT applied but silent dimensions existed, log `silent_dimensions_skipped: [...]` so the auditor can see what wasn't filled.
-- Append audit log entry per loader.md §6.
+### Step 6 — Render (deterministic gate, mandatory)
 
-### Pre-Render — Load white-label branding
-
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
-
-### Render — deterministic gate (LAST step, mandatory)
-
-Compose the complete report per **Output Format** below, then run it through the shared render gate in **one Bash step** before replying. Use a private `mktemp` file (never a fixed/predictable path — `/tmp` symlink hazard). The shared gate is `_parallax/render_gate.py`, a sibling of the directory you loaded this SKILL.md from; pass this skill's key (use the loaded directory's absolute path as `<skill-dir>`):
+`run-shell` the shared gate per conventions §10.3 with this skill's key:
 
 ```
 DRAFT="$(mktemp "${TMPDIR:-/tmp}/builder.XXXXXX")"
@@ -115,13 +93,7 @@ REPORT
 python3 "<skill-dir>/../_parallax/render_gate.py" --skill portfolio-builder < "$DRAFT"; rm -f "$DRAFT"
 ```
 
-**Your entire final message is exactly that command's stdout** — nothing before it (no step/batch-completion notes, no scratch computation, no "no active house view" / white-label config-probe narration), nothing after it.
-
-The Bash result may show a `[render-gate] WARN:` line above the report. That line is stderr diagnostics, not stdout. Never include it in the reply. It means the drafted opening drifted from the documented Output Format start; fix the opening and re-run the gate.
-
-**Degraded-state rule:** if an async tool (e.g. `get_assessment`, `get_news_synthesis`) times out or returns no data, render the pending/unavailable note INSIDE the relevant section or the About This Report line — NOT as a preamble above the report — so it is part of the rendered body and survives the gate. (The gate also hoists a leaked degraded note as a backstop.)
-
-`_parallax/render_gate.py` is pure-stdlib and deterministically drops anything before the first rendered block (House View Preamble banner / Branding Header / Ground-truth Integrity / this skill's title or first rendered section), preserving the active-house-view banner in every `view_status` state. Same operator-agnostic-helper pattern as `view_status.py` / `loader.py` (a real Bash tool call, not prose).
+The entire final message is that command's stdout. The stderr `[render-gate] WARN:` line is diagnostics: never include it. Degraded-state notes go inside their section. If `run-shell` is absent, apply conventions §14.3 (render-gate row). No Step 7.
 
 ## Output Format
 
@@ -140,3 +112,23 @@ The Bash result may show a `[render-gate] WARN:` line above the report. That lin
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
 If active view: use the view-aware disclaimer per loader.md §5. Otherwise: render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
+
+
+## Failure modes
+
+- Universe unavailable after the retry: the empty-universe gate; no holdings table, audit row notes the abort.
+- Universe collapsed to one sector: per-sector re-issue; refuse to render only if that is skewed too.
+- Scoring timeouts: top-5 retry, then `quick_portfolio_scores` with name validation.
+- `analyze_portfolio` too large or timed out: the light validation fallback with every unrecoverable field named.
+- Any Tilt Source cell empty: `⚠ Tilt Source missing for <row> × <dim>; verify before relying on this output` and no compliance-ready claim.
+- House-view banner states `malformed` / `expired` / `critical`: the banner renders verbatim (conventions §0.3 item 4).
+- Host lacks a primitive: conventions §14.3, per primitive (drift check: the judge pattern's skipped line).
+
+## Done when
+
+- When a view is active the House View Preamble is the first line; otherwise the Branding Header or `## Investment Thesis`.
+- Selected Holdings weights sum to ~1.0; every row carries `returned_name`, `expected_name`, and (view active) a non-empty Tilt Source per dimension; ⚠ MISMATCH rows are marked.
+- View-Effect Summary present whenever a view changed the ranking.
+- Audit entry appended per loader.md §6 with the augmentation or silent-dimension fields (every consume event, including the abort case).
+- The render gate ran and the reply is its stdout (or the §14.3 note is present in About This Report).
+- `parallax-conventions.md §9.2` disclosure and the §9.1 or view-aware disclaimer are present; expected spend stated (Gotchas).

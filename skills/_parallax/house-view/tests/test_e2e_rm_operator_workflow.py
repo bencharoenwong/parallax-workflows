@@ -565,11 +565,20 @@ def test_e2e_morning_brief_conditional_suggestion_contract(
     # under or near the Batch-B section, NOT at the top of the skill.
     # Operationalised as: the suggestion's anchor phrase appears AFTER
     # the "### Batch B" header in file order.
-    batch_b_idx = brief_md.find("### Batch B")
-    assert batch_b_idx != -1, "morning-brief must have a '### Batch B' section"
-    suggestion_idx = brief_md.find("Conditional drift suggestion")
+    # The pre-spine skill headed this section "### Batch B"; on the canonical
+    # step spine (skill-structure-conventions.md, 2026-09-06) the alignment
+    # check lives under "### Step 4 — Compute" and the anchor reads
+    # "Conditional drift pointer". Accept either form.
+    batch_b_idx = max(brief_md.find("### Batch B"), brief_md.find("### Step 4 — Compute"))
+    assert batch_b_idx != -1, (
+        "morning-brief must have a '### Batch B' or '### Step 4 — Compute' section"
+    )
+    suggestion_idx = max(
+        brief_md.find("Conditional drift suggestion"),
+        brief_md.find("Conditional drift pointer"),
+    )
     assert suggestion_idx != -1, (
-        "morning-brief must carry a 'Conditional drift suggestion' anchor"
+        "morning-brief must carry a 'Conditional drift suggestion/pointer' anchor"
     )
     assert suggestion_idx > batch_b_idx, (
         f"Conditional drift suggestion (offset {suggestion_idx}) must "

@@ -4,6 +4,11 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-09-06 (sweep: portfolio family)
+
+### Changed
+- **Seven portfolio skills on the canonical step spine:** `parallax-portfolio-checkup`, `parallax-watchlist-monitor`, `parallax-morning-brief`, `parallax-explain-portfolio`, `parallax-portfolio-builder`, `parallax-desk-call-list`, `parallax-client-review`. Same treatment as the single-stock family; every Output Format unchanged (the graders are locked against them); every render-gate anchor unchanged. Translation and render-gate boilerplate now by reference to conventions §15 and §10.3; the client-review policy S1/S2 contract block is kept verbatim inside Step 4. `parallax-rebalance` is deferred until its orchestrator-length hotfix merges. Legacy allowlist 27 → 20.
+
 ## 2026-09-05 (sweep: single-stock family)
 
 ### Changed

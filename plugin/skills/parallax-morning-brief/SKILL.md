@@ -1,6 +1,6 @@
 ---
 name: parallax-morning-brief
-description: "Fund manager morning brief: market regime, macro outlook, portfolio health, and key holding news via Parallax MCP tools. Provide portfolio as [{symbol, weight}] in RIC format. NOT for individual stock analysis (use /parallax-should-i-buy), not for backtesting (use /backtest)."
+description: "Fund manager morning brief: market regime, macro outlook, portfolio health, and key holding news via Parallax MCP tools. Provide portfolio as [{symbol, weight}] in RIC format. NOT for individual stock analysis (use /parallax-should-i-buy), not for client portfolio review (use /parallax-client-review), not for a desk-wide call list across many books (use /parallax-desk-call-list), not for retail health checks (use /parallax-portfolio-checkup), not for backtesting (use /backtest)."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -12,21 +12,19 @@ description: "Fund manager morning brief: market regime, macro outlook, portfoli
 - Single stock analysis → use /parallax-should-i-buy or /parallax-deep-dive
 - Running backtests → use /backtest
 - Client portfolio review → use /parallax-client-review
+- Retail investor health check → use /parallax-portfolio-checkup
 - Multiple client books / desk-wide morning call list → use /parallax-desk-call-list
 - Thematic screening → use /parallax-thematic-screen
 
 ## Gotchas
 
-- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
-- JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §3 (multipliers), §4 (conflict resolution), §5 (output rendering), §6 (audit). Morning brief uses the view to (a) frame the macro snapshot in view-language, (b) flag holdings misaligned with view tilts, (c) prioritize action items toward view rebalance direction.
-- When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
-- get_telemetry and macro_analyst are fast-response (low latency) but not free — macro_analyst costs 5 tokens; get_news_synthesis may take 30-90s per holding
-- macro_analyst parameter is `market` (not `country`); e.g., `macro_analyst(market="United States")`
-- The macro_analyst summary call returns all components inline including tactical — do not make separate per-component calls
-- Health flags (from parallax-portfolio-checkup/references/health-flags.md) apply here too — flag portfolios needing attention
-- Coverage: listed equities and ETFs only; fund/OEIC symbols surface the conventions §1 not-covered fallback, not a raw error
-- LANGUAGE HAND-OFF — if `lang=` is present and ≠ `en`, the terminal Translate step is mandatory. Route `zh-CN`/`zh-TW`/`zh-HK` → `/translate-chinese-finance`, `th` → `/translate-thai-finance`, using the delimited routing-directive block (never a prose sentence the translator could echo). Unsupported values → English output with the standard warning footer.
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
+- Expected Parallax spend: ~50 tokens at 10 holdings (`_parallax/token-costs.md`): telemetry + macro (5) + 2× per-holding fan-out + 3 news (15).
+- JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.2 (`macro_analyst` takes `market`, not `country`), §1 RIC resolution and coverage fallback, §2 identity cross-check, §3 parallel execution, §4/§5 fallbacks, §11 sensitivity, §14 host primitives, §15 translation.
+- JIT-load `_parallax/house-view/loader.md` FIRST; if a view is present follow §2, §3, §4, §5, §6. The brief uses the view to (a) frame the Macro Snapshot in view language, (b) flag holdings misaligned with tilts, (c) prioritize Action Items toward the view's rebalance direction.
+- The `macro_analyst` summary call returns every component inline including tactical — never make per-component calls.
+- Health flags per `parallax-portfolio-checkup/references/health-flags.md` apply here (flag-level only; no Health Status badge).
+- Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report, with the unconditional currency line).
+- A `lang=` value other than `en` makes Step 7 mandatory (conventions §15).
 
 Generate a structured fund manager morning brief by orchestrating Parallax MCP tools.
 
@@ -37,59 +35,57 @@ Generate a structured fund manager morning brief by orchestrating Parallax MCP t
 /parallax-morning-brief [{"symbol":"AAPL.O","weight":0.25},{"symbol":"MSFT.O","weight":0.20}] market=Japan top_n=5 lang=th register=retail
 ```
 
-Optional: append `market=Japan`, `top_n=5`, `lang=<code>` (`en` default; `zh-CN`, `zh-TW`, `zh-HK`, `th`), or `register=retail` after the portfolio JSON. `register=retail` is passed only when translation is requested; absent means institutional register.
+Optional after the portfolio JSON: `market=Japan`, `top_n=5`, `lang=<code>` (`en` default; `zh-CN`, `zh-TW`, `zh-HK`, `th`), `register=retail` (passed only when translation is requested).
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode, RIC resolution, and fallback patterns. JIT-load `_parallax/house-view/loader.md` for active-view validation and integration.
+Every host interaction below is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3). Parallax callables are whatever `discover-tools` returns this session (§0.1).
 
-### Batch 0 — Tool Loading & Active House View
+### Step 0 — Pre-flight
 
-Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
+1. Resolve every `_parallax/...` path named in this file to the canonical copy (conventions §0.0 item 1).
+2. `discover-tools`: bind every logical tool named anywhere in this workflow (Step 2, including the V1 fallback) to the exact callable and schema exposed now.
+   <!-- host-note -->
+   Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
+   <!-- /host-note -->
+3. Parse args: holdings JSON; `market=` (default United States); `top_n=` (default 3); `lang=`; `register=`.
+4. `load-reference` `_parallax/house-view/loader.md`; run §1–§2. If a view is present, capture tilt vector, excludes, prose excerpt (narrative voice) and macro_regime. On §2 failure run without the view.
+5. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`.
 
-Per `loader.md` §1-§2. If view present, capture tilt vector, excludes, prose excerpt for narrative voice, and macro_regime. The brief's "Macro Snapshot" should explicitly reference the view's regime call where relevant ("Tactical macro shows X — consistent / divergent with active view's [regime] stance"). If validation fails or no view present, run brief without view.
+### Step 1 — Resolve inputs
 
-### Batch A — Market context + portfolio scoring (parallel)
+Validate holdings: RIC format (plain tickers → conventions §1), weights ~1.0; fund/OEIC identifiers get the §1 not-covered message and are dropped with a note. Top-N news set = the N largest input weights (needs no tool output).
 
-**Fire ALL rows below in a single tool-call turn.** Every row is independent. For per-holding rows (`get_peer_snapshot`, `get_company_info`), fan out one call per holding **within the same turn** so all N×2 holding-level calls run concurrently with the portfolio-level and macro-level calls. Sequential per-holding loops are the largest latency leak in this skill — do not introduce one.
+### Step 2 — Fetch (parallel batches)
+
+**Batch A** — `call-tool` ALL rows in ONE turn; per-holding rows fan out N-wide inside the same turn so the 30–90 s news calls overlap everything else (a sequential loop is the largest latency leak in this skill):
 
 | Tool | Parameters | Notes |
 |---|---|---|
 | `get_telemetry` | fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences | Market regime |
-| `macro_analyst` | market (default: US), no component | Macro summary (returns all components inline including tactical — do not make separate per-component calls) |
-| `get_peer_snapshot` | per holding — **all N calls fan out in parallel within Batch A** | **Primary scoring source** for `PARALLAX_LOADER_V2=1`. Aggregate scores client-side per `loader.md` §3b. |
-| `get_company_info` | per holding — **all N calls fan out in parallel within Batch A** | **Ground-truth check oracle** per loader.md §5 rule 3 (required universally, view or no view). Records `expected_name` to cross-check against `get_peer_snapshot.target_company`. |
-| `get_news_synthesis` | per top-N holding by input weight (default 3) — **all N calls fan out in parallel within Batch A** | Async, 30-90s each. Top-N derives from the user-supplied weights, not from any Batch A output — fire in the SAME turn as the other rows so the 30-90s wait overlaps everything else. Never loop these sequentially. |
+| `macro_analyst` | `market` (default United States), no component | Macro summary with tactical inline |
+| `get_peer_snapshot` | per holding, all N in parallel | **Primary scoring source** (V2); aggregated client-side per loader.md §3b |
+| `get_company_info` | per holding, all N in parallel | **Ground-truth oracle** (loader.md §5 rule 3; conventions §2); records `expected_name` |
+| `get_news_synthesis` | per top-N holding, all in parallel | Async 30–90 s; never blocks output (§5) |
 | `check_portfolio_redundancy` | `holdings` | Overlap detection |
-| `quick_portfolio_scores` | `holdings` | **Legacy/V1 path only**. Do NOT use if `PARALLAX_LOADER_V2=1` and view active. |
+| `quick_portfolio_scores` | `holdings` | **V1 path only**; not used when `PARALLAX_LOADER_V2=1` and a view is active |
 
-**After Batch A**: per loader.md §5 rule 3, cross-reference returned names against the corresponding `get_company_info` name. For `PARALLAX_LOADER_V2=1`, any mismatch in `get_peer_snapshot` is flagged ⚠ MISMATCH and excluded from aggregate calculations. For V1, any mismatch in `quick_portfolio_scores` is re-scored individually.
+### Step 3 — Verify
 
-### Batch B — Conditional + news (after Batch A)
+- Cross-validation per conventions §2 / loader.md §5 rule 3: `get_peer_snapshot.target_company` vs `get_company_info.name`; V2 mismatches are ⚠ MISMATCH and excluded from aggregates; V1 mismatches are re-scored individually via `get_peer_snapshot`.
+- Failed or empty calls: §0.1 retry classification, then §4. News still pending at compose time: the pending note goes inside that holding's paragraph (§5), never above the report.
 
-1. Evaluate health flags: Low Score (overall ≤5.0), Concentration (>15% single / >45% top-3), Redundancy (≥2 pairs), Value Trap (value ≤3.0), Macro Misalignment (overweight in sectors with negative tactical outlook — the 5th flag per `parallax-portfolio-checkup/references/health-flags.md`).
-2. **House-view alignment** (if view active): flag holdings misaligned with view tilts (>25% off view-tilted target), holdings on `tilts.excludes`, and any active-view conflicts to highlight in Action Items.
+### Step 4 — Compute
 
-**Conditional drift suggestion:** If the Batch B alignment check above
-detected ≥3 holdings whose factor exposure conflicts with the active
-view's tilts, append a single line to the brief's "next actions"
-section: "Consider running /parallax-judge-house-view for a full
-drift analysis (≥3 holdings show view-conflict signals)."
+No deterministic helper. Evaluate the five health flags over trusted holdings per `parallax-portfolio-checkup/references/health-flags.md` (Low Score ≤ 5.0, Concentration >15% / >45% top-3, Redundancy ≥ 2 pairs, Value Trap ≤ 3.0, Macro Misalignment). If a view is active: flag holdings >25% off the view-tilted target, holdings on `tilts.excludes`, and view conflicts for Action Items. **Conditional drift pointer:** if the alignment check above finds ≥3 holdings whose factor exposure conflicts with the view's tilts, append one line to Action Items: "Consider running /parallax-judge-house-view for a full drift analysis (≥3 holdings show view-conflict signals)." Do NOT auto-invoke the judge from morning-brief — the one-liner is a pointer, not an action; this brief already fans out the macro call the judge would repeat.
 
-Do NOT auto-invoke the judge from morning-brief. Morning-brief already
-does its own live macro_analyst fan-out per Batch A — invoking the judge
-would duplicate that work. The one-liner is a pointer, not an action.
+### Step 5 — Compose
 
-3. Holding news is already in flight from Batch A. Insert each result into the Holding News section as it resolves; if any call is still pending or timed out when the report is composed, render the pending note inside that holding's paragraph per conventions §5 and the Degraded-state rule — do not wait.
-4. Append audit log entry per loader.md §6.
+Fill **Output Format** below in order, under 800 words: House View Preamble per loader.md §5.1; Branding Header per integration-pattern.md §5; Verdict sensitivity per §11 by reference (flag-level wording only); `parallax-conventions.md §9.2` disclosure; disclaimer per loader.md §5 rule 5 when a view is active, otherwise `parallax-conventions.md §9.1`; audit entry per loader.md §6.
 
-### Pre-Render — Load white-label branding
+### Step 6 — Render (deterministic gate, mandatory)
 
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
-
-### Render — deterministic gate (LAST step, mandatory)
-
-Compose the complete report per **Output Format** below, then run it through the shared render gate in **one Bash step** before replying. Use a private `mktemp` file (never a fixed/predictable path — `/tmp` symlink hazard). The shared gate is `_parallax/render_gate.py`, a sibling of the directory you loaded this SKILL.md from; pass this skill's key (use the loaded directory's absolute path as `<skill-dir>`):
+`run-shell` the shared gate per conventions §10.3 with this skill's key:
 
 ```
 DRAFT="$(mktemp "${TMPDIR:-/tmp}/mbrief.XXXXXX")"
@@ -99,39 +95,11 @@ REPORT
 python3 "<skill-dir>/../_parallax/render_gate.py" --skill morning-brief < "$DRAFT"; rm -f "$DRAFT"
 ```
 
-**Your entire final message is exactly that command's stdout** — unless `lang=` ≠ `en`, in which case the Translate step below consumes that stdout and the translated result is the entire final message. Never run the render gate on translated text; its anchors are English. Nothing before it (no step/batch-completion notes, no scratch computation, no "no active house view" / white-label config-probe narration), nothing after it.
+The entire final English message is that command's stdout, or the sole input to Step 7. The stderr `[render-gate] WARN:` line is diagnostics: never include or translate it. Degraded-state notes go inside their section. If `run-shell` is absent, apply conventions §14.3 (render-gate row).
 
-The Bash result may show a `[render-gate] WARN:` line above the report. That line is stderr diagnostics, not stdout. Never include it in the reply and never pass it to the Translate step. It means the drafted opening drifted from the documented Output Format start; fix the opening and re-run the gate.
+### Step 7 — Translate (conditional)
 
-**Degraded-state rule:** if an async tool (e.g. `get_assessment`, `get_news_synthesis`) times out or returns no data, render the pending/unavailable note INSIDE the relevant section or the About This Report line — NOT as a preamble above the report — so it is part of the rendered body and survives the gate. (The gate also hoists a leaked degraded note as a backstop.)
-
-`_parallax/render_gate.py` is pure-stdlib and deterministically drops anything before the first rendered block (House View Preamble banner / Branding Header / Ground-truth Integrity / this skill's title or first rendered section), preserving the active-house-view banner in every `view_status` state. Same operator-agnostic-helper pattern as `view_status.py` / `loader.py` (a real Bash tool call, not prose).
-
-### Translate — conditional, after the render gate
-
-This step runs ONLY when `lang=` is present and not `en`. Capture the render gate's stdout as the full body, including all Output Format sections, About This Report, the §9.2 AI-interaction disclosure, and the disclaimer. Record which disclaimer variant rendered (view-aware per `loader.md §5` vs standard `parallax-conventions.md §9.1`) for the boundary check.
-
-Invoke the appropriate translator skill with the input shaped as follows:
-
-```
-ROUTING DIRECTIVE — DO NOT TRANSLATE OR ECHO THIS BLOCK:
-  target_variant: <variant>
-  register: retail
-  source_language: en
-  begin_content_below_separator: true
----
-
-<render gate stdout>
-```
-
-Pass `register: retail` iff `register=retail` was supplied; otherwise omit the `register:` line so the translator defaults to institutional register. Route `zh-CN`, `zh-TW`, and `zh-HK` to `/translate-chinese-finance` with the matching `target_variant`. Route `th` to `/translate-thai-finance`; omit `target_variant` for Thai, but keep the routing block marker and `---` separator.
-
-Translator-failure handling:
-- If the translator fails or returns an empty/partial result, output the original English with a one-line warning footer: `> Translation to <lang> failed; output shown in English. Re-run if the issue is transient.`
-- If the language arg is unrecognized, output the original English with: `> Language '<arg>' not supported; output shown in English. Supported: en, zh-CN, zh-TW, zh-HK, th.`
-- Translator output replaces the English output in the chat; do not show both.
-
-**Disclaimer boundary check.** If the disclaimer is missing from the translated output, first attempt a single-section re-translation pass on just the original English disclaimer text using the same routing-directive shape. Append that result if non-empty. If the pass fails or returns empty, append the English disclaimer variant that was actually rendered. Record the event in the loader.md §6 audit entry's `notes` field (`disclaimer boundary check fired — re-translated` or `disclaimer boundary check fired — english fallback`). Do not add a user-visible footer.
+Only when `lang=` is present and not `en`. Translate per `parallax-conventions.md` §15 (routing block §15.2, failure footers §15.3, disclaimer boundary check §15.4, audit `notes` on a boundary event). Body is the gated Step 6 stdout including About This Report, the §9.2 disclosure and the disclaimer; never run the gate on translated text; pass `register: retail` only when supplied.
 
 ## Output Format
 
@@ -154,3 +122,21 @@ Lead with what matters.
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
 If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise: render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
+
+
+## Failure modes
+
+- `get_telemetry` or `macro_analyst` unavailable: Market Regime & Signals / Macro Snapshot render the §4 unavailable note; the portfolio sections still render.
+- V2 scoring gaps: mismatched or unscored holdings are excluded from the Factor Tilt aggregate and named in Ground-truth Integrity.
+- News pending or timed out: pending note inside the holding's paragraph; the brief is not delayed.
+- House-view banner states `malformed` / `expired` / `critical`: the banner renders verbatim (conventions §0.3 item 4).
+- Host lacks a primitive: conventions §14.3, per primitive.
+
+## Done when
+
+- Every Output Format section rendered or marked unavailable with its reason, under 800 words; first line is the House View Preamble, the Branding Header, or `## Market Regime & Signals`.
+- Factor Tilt is computed over trusted holdings only and says so when any were excluded.
+- When a view is active: the `view_status` banner appears verbatim; Action Items are ordered toward the view; audit entry appended per loader.md §6 (every consume event).
+- The render gate ran and the reply is its stdout (or the §14.3 note is present in About This Report).
+- `parallax-conventions.md §9.2` disclosure and the §9.1 or view-aware disclaimer are present; expected spend stated (Gotchas).
+- Translation (if requested) completed per §15, or the §15.3 footer explains why not.

@@ -17,7 +17,8 @@ description: "Desk-level morning call list for relationship managers covering mu
 
 ## Gotchas
 
-- JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.1 tool loading, §0.2 typed integer params, §3 parallel execution, §3.1 annotation/rank separation, §9.1/§9.2 disclosures, §10 render gate, §11 verdict sensitivity, §12 information framing, and §13 audience mode.
+- Expected Parallax spend: `1 + 3|M_equity| + 5·min(|M_equity|,K) + 1·|M_etf|` (`_parallax/token-costs.md`); the wide equity price scan is FREE.
+- JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.1 discovery, §0.2 typed integer params, §3 parallel execution, §3.1 annotation/rank separation, §9.1/§9.2 disclosures, §10 render gate, §11 verdict sensitivity, §12 information framing, §13 audience mode, and §14 host primitives.
 - JIT-load `_parallax/coverage-matrix.md` before Batch A. `export_price_series` is equity-only and FREE, and its `success:false` response classifies ETFs; ETFs then price via `etf_daily_price`. This skill does not call `etf_profile`.
 - JIT-load `_parallax/house-view/loader.md` §1-§2, §5, and §6. The house view annotates movers but never changes rank order or membership.
 - JIT-load `_parallax/white-label/integration-pattern.md` before Pre-Render. Call `load_rm_branding_context("desk call list", audience=<flag or None>)` from `_parallax/white-label/rm_consumer.py`, passing the parsed `audience=` invocation flag (or `None` if absent). This visual-only seam blocks voice access and redacts source references.
@@ -27,7 +28,6 @@ description: "Desk-level morning call list for relationship managers covering mu
 - `desk_call_list_logic.py` is the pure arithmetic layer. Do not put MCP calls or local file writes in it.
 - Client names and weights never go to Parallax MCP tools; only the deduplicated symbol union leaves the machine.
 - `SCAN_CONCURRENCY = 24` applies only to the wide price scan. If the live probe shows rate limiting, use 8.
-- `export_price_series` is FREE; `etf_daily_price` costs 1 token per ETF priced. This skill no longer calls `etf_profile`. Do not invent numbers.
 - `client_safe` is supported, but this is primarily an internal RM artifact.
 
 Build one ranked, bounded morning call list for a relationship manager covering many client books.
@@ -48,75 +48,44 @@ Defaults:
 
 ## Workflow
 
-Execute using Parallax MCP tools plus local Python helpers.
+Every host interaction below is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3). Parallax callables are whatever `discover-tools` returns this session (§0.1). Local Python helpers run via `run-shell`.
 
-### Batch 0 - Pre-flight, Book, House View
+### Step 0 — Pre-flight
 
-1. Resolve canonical `_parallax/...` paths per `_parallax/parallax-conventions.md §0.0`.
-2. Call `ToolSearch` with query `"+Parallax"` to load deferred Parallax MCP schemas before the first data call.
-3. Load `references/desk-book-format.md`; read inline input or `$PARALLAX_DESK_BOOK_PATH`, else `~/.parallax/desk-book/book.yaml`. Validate via `desk_call_list_logic.py`. Inline input wholly replaces the saved book. Preserve validation warnings for both input paths.
-4. Apply subset filtering only to the saved book, passing the `redact_names` mode into resolution. Keep only global validation warnings and warnings owned by selected clients. Report unmatched names verbatim unless `redact_names=true`; in redacted mode retain and report only the unmatched count, then apply `redact_names()` so client refs and names are removed. If a non-empty subset matches no clients, refuse to scan under the same disclosure rule.
-5. Compute staleness tier and the sorted deduplicated symbol union `U`.
-6. Load active house view per `_parallax/house-view/loader.md` §1-§2. Shell out to `view_status`; do not recompute expiry date math. If absent or invalid, run without view.
+1. Resolve every `_parallax/...` and `references/...` path named in this file to the canonical copy (conventions §0.0 item 1).
+2. `discover-tools`: bind every logical tool named anywhere in this workflow (Step 2) to the exact callable and schema exposed now.
+   <!-- host-note -->
+   Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
+   <!-- /host-note -->
+3. Parse args: `threshold=`, `min_impact=`, `detail_cap=`, `news_cap=`, `subset=`, `redact_names=`, `audience=`, or an inline book array.
+4. `load-reference` `_parallax/house-view/loader.md` §1–§2; `run-shell` `view_status` (never recompute expiry math). Absent or invalid → run without view; the view annotates movers and never changes rank order or membership.
+5. `load-reference` `_parallax/white-label/integration-pattern.md` §2 and call `load_rm_branding_context("desk call list", audience=<flag or None>)` from `_parallax/white-label/rm_consumer.py` once; keep `header_lines`, `about_lines`, `resolved_audience` for Step 5.
 
-If the first Parallax batch after tool loading is empty or cancelled, re-fire the whole batch once before concluding unavailability.
+### Step 1 — Resolve inputs
 
-### Batch A - Asset-Class Classification and Wide Price Scan
+`load-reference` `references/desk-book-format.md`. `read-config`: inline input, else `$PARALLAX_DESK_BOOK_PATH`, else `~/.parallax/desk-book/book.yaml`; inline wholly replaces the saved book. `run-shell` `desk_call_list_logic.py` to validate (keep warnings for both paths). Apply `subset=` to the saved book only, passing `redact_names` into resolution: keep global warnings and those owned by selected clients; report unmatched names verbatim unless redacted (then only the count, and `redact_names()` strips client refs and names); a non-empty subset matching no client → Scan refused (short form below). Compute the staleness tier and the sorted deduplicated symbol union `U`. Client names and weights never leave the machine; only `U` does.
 
-Load `_parallax/coverage-matrix.md`. Classification is fused with the price scan — the FREE `export_price_series` doubles as the equity classifier, so no separate classification probe is needed:
+### Step 2 — Fetch (parallel batches)
 
-1. Cached `asset_class` → route directly: `equity` → `export_price_series`; `etf` → `etf_daily_price`. No probe.
-2. Uncached → call `export_price_series(<ric>)` (FREE, equity-only) as both classifier and equity price source:
-   - `{"success": true, ...}` with a non-empty `prices` list → **equity**; take the move and both close dates from the returned series. Cost 0.
-   - `{"success": false, ...}` / no `prices` → **ETF**; call `etf_daily_price(<plain ticker>)` for the move + per-row date.
-   Keyed on `success == false` (NOT an empty list — the tool returns a `{success:false, error}` object for ETFs). This is a deliberate, documented classifier, not the silent substitution `coverage-lint` guards against: a `success:false` that is actually a dead equity gets one `etf_daily_price` probe that also fails and lands in the unpriced/coverage handling, named in the coverage line.
-3. Only if `export_price_series` is entirely unavailable (outage): resolve bare tickers to RICs per `_parallax/parallax-conventions.md` §1, then the static fallback (suffix-less or `.P` ⇒ ETF; otherwise equity).
+**Batch A — classification fused with the wide price scan.** `load-reference` `_parallax/coverage-matrix.md`. Cached `asset_class` routes directly (`equity` → `export_price_series`; `etf` → `etf_daily_price`). Uncached: `call-tool` `export_price_series(<ric>, days=10 as typed int)` (FREE, equity-only) as both classifier and price source — `success: true` with a non-empty `prices` list → equity, take the move and both close dates; `success: false` / no `prices` → ETF → `etf_daily_price(<plain ticker>, start_date=<today-7d>, end_date=<today>)` for the move and per-row date. Keyed on `success == false`, NOT an empty list; a dead equity gets one `etf_daily_price` probe that also fails and lands in the unpriced/coverage handling, named in the coverage line. Only on a full `export_price_series` outage: resolve bare tickers per conventions §1 and use the static fallback (suffix-less or `.P` ⇒ ETF). Fan out at `SCAN_CONCURRENCY` waves (24; 8 if rate-limited) plus one `get_telemetry` (`fields: regime_tag, signals, commentary.headline, divergences`). `move_pct = (close[-1] / close[-2] - 1) * 100` from two finite closes; fewer than two, or a non-finite value → unpriced, named in coverage, never a trigger.
 
-Then fan out the price scan at `SCAN_CONCURRENCY` waves, plus one telemetry call:
+**Batch B — mover enrichment (after Step 3 sets the mover set).** Waves of ≤ 8 concurrent calls across symbols and tools: `get_company_info` and `get_peer_snapshot` for every mover; `get_score_analysis` (`weeks=4` as typed int) for equity movers; `get_news_synthesis` for the top `news_cap` equity movers by desk-wide weighted exposure (one per symbol, not per client). ETF movers skip score and news (coverage unverified) and render those fields `not available for ETFs`; their price moves still drive ranking.
 
-| Tool | Parameters | Notes |
-|---|---|---|
-| `get_telemetry` | `fields: regime_tag, signals, commentary.headline, divergences` | Desk-wide market context |
-| `export_price_series` equity branch + classifier | `symbol=<ric>`, `days=10` as typed integer | **FREE.** Equity-only; single-symbol calls; the `success:false` response also classifies ETFs |
-| `etf_daily_price` per ETF branch | `symbol=<plain ticker>`, `start_date=<today-7d>`, `end_date=<today>` | ETF-only; single-symbol calls; per-row `date` carries the move's session |
+### Step 3 — Verify
 
-Derive `move_pct = (close[-1] / close[-2] - 1) * 100` from the last two closes, which must both be finite. Record both dates — for the ETF branch these come from `etf_daily_price` rows (which carry the session date, unlike a dateless profile probe). If fewer than two closes return or either close/move is non-finite, mark the symbol unpriced, name it in coverage, and do not treat it as a trigger.
+`load-reference` `references/ranking-and-bounding.md`. Scan integrity first: priced coverage < 80% → SCAN DEGRADED, no call list. Movers = `abs(move_pct) > threshold` (strictly greater). More than 40 movers → auto-raise the threshold to the 40th-largest absolute move rounded up to 0.5 pp, recompute, and state the raise. No movers, or no client clearing `min_impact` → the no-calls short form. Identity: `get_peer_snapshot.target_company` vs `get_company_info.name`; on mismatch render Ground-truth Integrity, exclude that symbol's scores, keep its price move in ranking.
 
-### Batch B - Threshold and Scan Integrity
+### Step 4 — Compute
 
-Load `references/ranking-and-bounding.md`.
+Zero tool calls. `run-shell` `desk_call_list_logic.py` for triggered exposure, signed net impact, direction-agnostic severity, top driver, coverage, rank order, and the bounded detail/summary sections. News and house-view tags are annotations only (conventions §3.1): they never alter rank membership or order.
 
-1. Compute desk scan integrity before the empty-mover path. If priced coverage is below 80%, render SCAN DEGRADED and skip the call list.
-2. Define movers as `abs(move_pct) > threshold`; the boundary is strictly greater.
-3. If more than 40 symbols cross the threshold, auto-raise to the 40th-largest absolute move rounded up to the nearest 0.5 pp, recompute movers, and state the auto-raise.
-4. If no movers, or movers exist but no client clears `min_impact`, render the no-calls short form.
+### Step 5 — Compose
 
-### Batch C - Mover Enrichment
+`load-reference` `references/talk-tracks.md` for the Client Detail entries. Fill **Output Format** below in order: the seam's `header_lines` below any House View Preamble and its `about_lines` verbatim in About This Report; §12 preface above Priority Calls; §11 Verdict Sensitivity omitted when `resolved_audience` is `client_safe`; `parallax-conventions.md §9.2` disclosure; disclaimer per loader.md §5 when a view is active, otherwise `parallax-conventions.md §9.1`; audit per loader.md §6.
 
-For symbols in the mover set only, schedule enrichment in waves of at most 8 concurrent calls across symbols and tools:
+### Step 6 — Render (deterministic gate, mandatory)
 
-| Tool | Parameters | Purpose |
-|---|---|---|
-| `get_company_info` | `symbol` for every mover | Display name and expected-name oracle |
-| `get_peer_snapshot` | `symbol` for every mover | Current factor scores and `target_company` |
-| `get_score_analysis` | `symbol`, `weeks=4` as typed integer for equity movers only | Four-week score trajectory |
-| `get_news_synthesis` | `symbol` for top `news_cap` equity movers by desk-wide weighted exposure | One news synthesis per symbol, not per client |
-
-Cross-check `get_peer_snapshot.target_company` against `get_company_info.name`. On mismatch, render Ground-truth Integrity, exclude that symbol's scores, but keep the price move in client ranking.
-
-For ETF movers, skip `get_score_analysis` and `get_news_synthesis` because ETF coverage is unverified. Render those fields as `not available for ETFs`; never present their absence as an equity-grade enrichment failure. ETF price moves still drive client ranking.
-
-### Batch D - Client Ranking
-
-Zero tool calls. Use `desk_call_list_logic.py` to compute triggered exposure, signed net impact, direction-agnostic severity, top driver, coverage, rank order, and bounded detail/summary sections. News and house-view tags are annotations only and must not alter rank membership or order.
-
-### Pre-Render - Load White-Label Branding
-
-Load `_parallax/white-label/integration-pattern.md` §2. Import `load_rm_branding_context` from `_parallax/white-label/rm_consumer.py`. Call `load_rm_branding_context("desk call list", audience=<flag or None>)` once, passing the parsed `audience=` invocation flag (or `None` if absent) so the seam resolves §13.1 precedence over both the flag and the branding config. Place its `header_lines` below any House View Preamble. Place its `about_lines` in About This Report. Read `resolved_audience` off the returned context for the Output Format audience branches below (e.g. item 12's `client_safe` omission); do not re-resolve the mode yourself and do not inspect the branding mapping directly. The helper preserves the call list and selects default Parallax if branding is corrupt. The branding is for the desk's firm: one report, one brand.
-
-### Render - deterministic gate
-
-Compose the complete report per Output Format, then run it through the shared render gate in one Bash step before replying:
+`run-shell` the shared gate per conventions §10.3 with this skill's key:
 
 ```
 DRAFT="$(mktemp "${TMPDIR:-/tmp}/deskcall.XXXXXX")"
@@ -126,9 +95,7 @@ REPORT
 python3 "<skill-dir>/../_parallax/render_gate.py" --skill desk-call-list < "$DRAFT"; rm -f "$DRAFT"
 ```
 
-The entire final message is exactly that command's stdout. Put degraded notes inside the relevant report section so they survive the gate.
-
-The Bash result may show a `[render-gate] WARN:` line above the report. That line is stderr diagnostics, not stdout. Never include it in the reply. It means the drafted opening drifted from the documented Output Format start; fix the opening and re-run the gate.
+The entire final message is that command's stdout. The stderr `[render-gate] WARN:` line is diagnostics: never include it. Degraded notes go inside their section. If `run-shell` is absent, apply conventions §14.3: the render-gate row, and the gate-shaped-helper row for the ranking (the call list is UNVERIFIED; render the no-calls short form with that reason rather than a hand-ranked list). No Step 7.
 
 ## Output Format
 
@@ -156,3 +123,22 @@ SCAN DEGRADED starts with `**Scan degraded — results not reliable.**` and name
 An empty client or symbol selection starts with `**Scan refused — no clients or symbols selected.**` and never renders a call list or no-calls result. An all-unmatched subset starts with `**Scan refused — subset matched no clients: <names>.**`; under `redact_names=true`, replace the names with `<N> selector(s) matched no client`. Redacted refusal and partial-match output never contains raw selectors, and client refs are omitted everywhere.
 
 Quiet mornings start with `**No calls indicated.**`, then unique symbols scanned, client books scanned, largest move, threshold, and the `min_impact` pp floor. Include House View Preamble, Branding Header, staleness warning, validation warnings, About This Report, AI disclosure, and disclaimer.
+
+
+## Failure modes
+
+- Priced coverage below 80%: SCAN DEGRADED short form; no call list.
+- Empty selection, or a subset matching no client: Scan refused short form (redacted variant under `redact_names=true`).
+- No movers or no client above `min_impact`: No calls indicated short form.
+- Rate limiting on the wide scan: drop `SCAN_CONCURRENCY` to 8.
+- Enrichment failures: the mover keeps its price move and ranking; missing fields render as unavailable (or `not available for ETFs`).
+- Host lacks a primitive: conventions §14.3, per primitive.
+
+## Done when
+
+- The report starts with the House View Preamble, the Branding Header, or `# Desk Call List`, and every applicable Output Format item 1–16 is present in order (or the correct short form is rendered in full).
+- Rank order comes from `desk_call_list_logic.py`; no annotation changed membership or order.
+- Coverage line names every unpriced symbol; any auto-raise is stated.
+- No client name or weight left the machine; redaction state is in About This Report.
+- The render gate ran and the reply is its stdout (or the §14.3 note is present in About This Report).
+- `parallax-conventions.md §9.2` disclosure and the §9.1 or view-aware disclaimer are present; expected spend stated (Gotchas).
