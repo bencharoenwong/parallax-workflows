@@ -1035,7 +1035,7 @@ def test_e2e_maker_re_save_handles_existing_active_view(
     """When the maker saves into a view_dir that already contains an
     active view, the prior view must NOT be silently overwritten without
     audit trace. Either: (a) the prior view is archived to .archive/
-    (per load-house-view Step 4 archive pattern), or (b) the new save's
+    (per load-house-view Step 6 archive pattern), or (b) the new save's
     audit row carries parent_version_id pointing at the prior version.
     Either behavior preserves auditability; both is even better.
     """

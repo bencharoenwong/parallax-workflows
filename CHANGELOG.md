@@ -4,6 +4,11 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-09-06 (sweep: house-view producers)
+
+### Changed
+- `parallax-load-house-view` and `parallax-make-house-view` follow the config-producer spine: Steps 0–4, then `Step 5 — Confirm` (operator gate) and `Step 6 — Persist`. Host tool names are replaced by the §14 primitives (`ask-operator`, `write-artifact`, `load-reference`, `fetch-url`, `run-shell`, `read-config`) with a Claude Code host-note; the `view_commit` staging contract is unchanged. The load skill's gate is now Step 5 (5a snapshot, 5b extraction-attempt row) and its save path Step 6; every docstring and comment that cited the old numbers (`maker.py`, `gate_present.py`, `schema.yaml`, house-view tests) was updated in the same change. Both skills gain Failure modes (persistence fails closed without an explicit operator confirmation) and Done when sections. Host-primitive allowlist shrinks to 5.
+
 ## 2026-09-06 (sweep: AI-profile family)
 
 ### Changed

@@ -141,7 +141,7 @@ def _simulate_load_edit_save(
     prior_version_id: str,
     mutate_fn=None,
 ) -> tuple[str, str, dict[str, Any]]:
-    """Simulate /parallax-load-house-view --edit Step 4 save flow.
+    """Simulate /parallax-load-house-view --edit Step 6 (Persist) save flow.
 
     Reads the active view.yaml, applies ``mutate_fn`` (if given) to the
     view dict, assigns a new version_id, sets parent_version_id to the

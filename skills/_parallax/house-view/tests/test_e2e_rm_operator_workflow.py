@@ -199,7 +199,7 @@ def _simulate_pm_edit_save(
     prior_version_id: str,
     mutate_fn=None,
 ) -> tuple[str, str, dict[str, Any]]:
-    """Simulate /parallax-load-house-view --edit Step 4 save flow.
+    """Simulate /parallax-load-house-view --edit Step 6 (Persist) save flow.
 
     Copy of test_e2e_versioning.py's _simulate_load_edit_save (per the
     repo's conftest-collision convention: helpers are duplicated across

@@ -9,7 +9,7 @@ Implements the 8-step orchestration from v2 plan §2.1:
   5. pillar_compose.compute_pillars(...)        [pure compute]
   6. (OPTIONAL) gap_suggest.fold_responses(...) [residual silent fields]
   7. GateContext → gate_present.run_gate_loop   [shared confirmation]
-  8. Reuse load-house-view Step 4 path          [save + audit + chain]
+  8. Reuse load-house-view Step 6 (Persist) path [save + audit + chain]
 
 This module is the orchestrator code. The skill operator (Claude) is
 responsible for actually issuing parallel MCP calls — the orchestrator
@@ -21,7 +21,7 @@ Design notes:
 - Does NOT modify shared infra (audit_chain, manifest_cache, chain_emit,
   view_status, gate_present, provenance_classes). Reuses only.
 - Save path is `_save_via_load_house_view_path` which mirrors
-  skills/load-house-view/SKILL.md Step 4 verbatim, with action="generate"
+  skills/parallax-load-house-view/SKILL.md Step 6 (Persist) verbatim, with action="generate"
   and provenance class generator_synthesis.
 """
 
@@ -568,7 +568,7 @@ class MakerOrchestrator:
             disposition_options=["confirm", "edit", "regenerate", "abandon"],
         )
 
-    # ---- Step 8: save (reuses load-house-view Step 4 path) ----
+    # ---- Step 6 — Persist: save (reuses load-house-view Step 6 path) ----
 
     def save_view(
         self,

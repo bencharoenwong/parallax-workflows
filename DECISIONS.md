@@ -4,6 +4,10 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-09-06 (sweep: house-view producers): renumber the load-house-view gate and save path to Steps 5 and 6
+
+**Decision:** `skill-structure-conventions.md` (authority: contract) puts Confirm at Step 5 and Persist at Step 6 for config producers. load-house-view's gate moved from Step 3 to Step 5 and its save path from Step 4 to Step 6; every citation outside the file (maker.py, gate_present.py, schema.yaml, five house-view test docstrings) moved in the same commit. None of those citations were assertions. The `view_commit` staging contract, the append-only `audit.jsonl` rule, and the archive-before-clear sequence are byte-for-byte the same text under the new headings. Persistence fails closed on every host: no `ask-operator` answer this session means no write, and §14.3's display-degrade default does not apply to a persist step.
+
 ## 2026-09-06 (sweep: AI-profile family): the emit heading keeps its "— Emit" suffix
 
 **Decision:** The dispatchers' render step is `### Step 6 — Render — Emit`, not the bare spine heading. `test_ai_profile_emit_contracts.py` splits each file on "— Emit" and pins the suppression paragraph inside it; renaming would drop the pin. The paragraph itself stays verbatim across the six files. The consensus meta-skill drops its local token-cost table in favour of `token-costs.md` (one table, tests in both directions, per the 2026-09-05 decision).

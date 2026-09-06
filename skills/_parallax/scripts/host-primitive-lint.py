@@ -63,8 +63,6 @@ HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
 LEGACY_ALLOWLIST: frozenset[str] = frozenset({
     "parallax-cio-letter-prep",
     "parallax-house-view-attribution",
-    "parallax-load-house-view",
-    "parallax-make-house-view",
     "parallax-rebalance",
     "parallax-stress-house-view",
     "parallax-white-label-onboard",
