@@ -111,7 +111,7 @@ with audit entry `action="stress_test", disposition="halted_internal"`).
 
 ## Phase 2 — External Comparison vs Parallax (per market)
 
-**Tool loading.** Call `ToolSearch` with query `"+Parallax"` once before the first MCP call.
+**Tool loading.** Run the `discover-tools` host primitive (`parallax-conventions.md` §14) once before the first MCP call.
 
 **Parallel by market.** For each market with a non-zero `regions` tilt, fire in
 parallel (CIO-confirmed: tilted-markets-only; no always-check majors). If the CIO
