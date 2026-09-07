@@ -21,8 +21,20 @@ def _read(relative_path: str) -> str:
     return (REPO_ROOT / relative_path).read_text(encoding="utf-8")
 
 
-def _batch_a(markdown: str) -> str:
-    return markdown.split("### Batch A", 1)[1].split("**After Batch A**", 1)[0]
+FETCH_START = "### Step 2 — Fetch (parallel batches)"
+FETCH_END = "### Step 3 — Verify"
+
+
+def _fetch_section(markdown: str) -> str:
+    """The Step 2 fetch block, where every call row lives.
+
+    Anchored on the canonical spine headings rather than a batch label, so this
+    guard is mechanically coupled to `test_step_spine.py`: a skill that drops or
+    renames either heading fails there, and this slice cannot silently return an
+    empty string and pass a row count of zero.
+    """
+    assert FETCH_START in markdown and FETCH_END in markdown, "spine headings missing"
+    return markdown.split(FETCH_START, 1)[1].split(FETCH_END, 1)[0]
 
 
 @pytest.mark.parametrize("skill_root", SKILL_ROOTS)
@@ -40,7 +52,7 @@ def test_shared_contract_makes_live_discovery_authoritative(skill_root: str) -> 
 @pytest.mark.parametrize("skill_root", SKILL_ROOTS)
 def test_rebalance_uses_one_compact_portfolio_call(skill_root: str) -> None:
     text = _read(f"{skill_root}/parallax-rebalance/SKILL.md")
-    batch = _batch_a(text)
+    batch = _fetch_section(text)
 
     rows = re.findall(r"^\| `analyze_portfolio` \|", batch, flags=re.MULTILINE)
     assert len(rows) == 1
@@ -70,15 +82,15 @@ def test_repo_instruction_does_not_require_a_fixed_alias() -> None:
 
 
 def test_double_call_regression_would_fail_the_row_guard() -> None:
-    planted = """### Batch A
+    planted = f"""{FETCH_START}
 | Tool | Parameters | Notes |
 |---|---|---|
 | `analyze_portfolio` | risk fields | first call |
 | `analyze_portfolio` | concentration fields | second call |
-**After Batch A**
+{FETCH_END}
 """
 
     rows = re.findall(
-        r"^\| `analyze_portfolio` \|", _batch_a(planted), flags=re.MULTILINE
+        r"^\| `analyze_portfolio` \|", _fetch_section(planted), flags=re.MULTILINE
     )
     assert len(rows) == 2

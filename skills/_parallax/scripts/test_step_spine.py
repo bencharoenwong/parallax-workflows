@@ -19,7 +19,7 @@ import pytest
 SKILLS_DIR = Path(__file__).resolve().parents[2]
 
 # Equality-pinned; edit deliberately when a skill is migrated.
-SPINE_PENDING = frozenset({"parallax-rebalance"})
+SPINE_PENDING: frozenset[str] = frozenset()
 
 SPINE = (
     "### Step 0 — Pre-flight",

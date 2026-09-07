@@ -10,7 +10,9 @@ contain any of the identifiers in `HOST_IDENTIFIERS`.
 
 Forward-only (per `skill-structure-conventions.md` → "Host portability"):
 `LEGACY_ALLOWLIST` names the skill directories that were host-locked when the
-rule landed (2026-09-05). Two rules make the list shrink and never grow:
+rule landed (2026-09-05). It is EMPTY as of 2026-09-07 — the sweep finished and
+every skill now names host primitives. Two rules make the list shrink and never
+grow, and they keep working on an empty list:
 
   * a file NOT on the allowlist with a hit                → HOST-LOCKED, exit 1
   * a file ON the allowlist with zero hits                → STALE ALLOWLIST, exit 1
@@ -59,10 +61,10 @@ HOST_NOTE_SPAN = re.compile(
 )
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
 
-# Skill directories that were host-locked on 2026-09-05. Shrinks only.
-LEGACY_ALLOWLIST: frozenset[str] = frozenset({
-    "parallax-rebalance",
-})
+# Skill directories that were host-locked on 2026-09-05. Shrinks only; now empty —
+# every skill names host primitives and confines host identifiers to host-note blocks.
+# Re-adding a name is a deliberate two-file edit (see test_host_primitive_lint.py).
+LEGACY_ALLOWLIST: frozenset[str] = frozenset()
 
 
 def _blank_span(match: re.Match[str]) -> str:

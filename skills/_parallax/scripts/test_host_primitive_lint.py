@@ -12,12 +12,13 @@ spec = importlib.util.spec_from_file_location("host_primitive_lint", SCRIPT)
 lint = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(lint)
 
-# The host-locked set still on the allowlist (1 on 2026-09-06; shrinks with each sweep PR). This literal and the script's
-# LEGACY_ALLOWLIST are compared with EQUALITY: shrinking one without the other,
-# or re-adding a swept skill, fails here and is a deliberate two-file edit.
-LEGACY_PINNED = frozenset({
-    "parallax-rebalance",
-})
+# The host-locked set still on the allowlist (0 on 2026-09-07 — the sweep is complete).
+# This literal and the script's LEGACY_ALLOWLIST are compared with EQUALITY: shrinking
+# one without the other, or re-adding a swept skill, fails here and is a deliberate
+# two-file edit. The allowlist MECHANISM is still exercised, against a monkeypatched
+# set, so an empty real list never silently retires the guard.
+LEGACY_PINNED: frozenset[str] = frozenset()
+SYNTHETIC = "parallax-synthetic-legacy"
 
 
 def _tree(tmp_path: Path, files: dict[str, str]) -> Path:
@@ -128,19 +129,30 @@ def test_line_numbers_survive_stripping():
     assert hits == [(6, "AskUserQuestion")]
 
 
-def test_stale_allowlist_entry_fails(tmp_path):
-    name = sorted(LEGACY_PINNED)[0]
-    root = _tree(tmp_path, {name: "# Clean\n\nNo host identifiers at all.\n"})
+def test_stale_allowlist_entry_fails(tmp_path, monkeypatch):
+    """An allowlisted skill with NO host identifiers is reported, not silently kept."""
+    monkeypatch.setattr(lint, "LEGACY_ALLOWLIST", frozenset({SYNTHETIC}))
+    root = _tree(tmp_path, {SYNTHETIC: "# Clean\n\nNo host identifiers at all.\n"})
     rc, out = _run(root)
     assert rc == 1
-    assert f"STALE ALLOWLIST: {name}" in out
+    assert f"STALE ALLOWLIST: {SYNTHETIC}" in out
 
 
-def test_allowlisted_file_with_hits_passes(tmp_path):
-    name = sorted(LEGACY_PINNED)[0]
-    root = _tree(tmp_path, {name: "# Legacy\n\nCall ToolSearch.\n"})
+def test_allowlisted_file_with_hits_passes(tmp_path, monkeypatch):
+    """An allowlisted skill WITH host identifiers is tolerated (that is the exemption)."""
+    monkeypatch.setattr(lint, "LEGACY_ALLOWLIST", frozenset({SYNTHETIC}))
+    root = _tree(tmp_path, {SYNTHETIC: "# Legacy\n\nCall ToolSearch.\n"})
     rc, _ = _run(root)
     assert rc == 0
+
+
+def test_same_file_fails_once_off_the_allowlist(tmp_path, monkeypatch):
+    """Attack the guard: the exemption is what makes the previous test pass."""
+    monkeypatch.setattr(lint, "LEGACY_ALLOWLIST", frozenset())
+    root = _tree(tmp_path, {SYNTHETIC: "# Legacy\n\nCall ToolSearch.\n"})
+    rc, out = _run(root)
+    assert rc == 1
+    assert "HOST-LOCKED" in out
 
 
 def test_allowlist_equals_pinned_literal():

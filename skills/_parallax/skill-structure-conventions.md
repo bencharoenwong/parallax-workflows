@@ -1,7 +1,7 @@
 # Skill Structure & Length Conventions
 
 <!-- authority: contract -->
-<!-- verified: 2026-09-05 -->
+<!-- verified: 2026-09-07 -->
 <!-- overrides: none -->
 
 Conventions for how `skills/<name>/SKILL.md` should be organized as the file grows. Established 2026-05-06 per council deliberation (notes/2026-05-06-1023-council-white-label-restructure.md). Pairs with `jit-load-compliance-audit.md` — the audit protocol that gates any structural restructure.
@@ -179,7 +179,7 @@ Config-producing skills (house-view load/make, white-label onboard) replace Step
 
 Three migration shapes share this vocabulary: the report consumer (`parallax-should-i-buy` is the reference), the config producer (Confirm/Persist above), and the multi-mode skill (basket vs. single-ticker, or a mode flag that changes the batch shape): a multi-mode skill keeps one spine and states the mode branch inside the affected step (`Step 2 — Fetch: basket mode fires …; single-ticker mode fires …`), never a second numbering.
 
-The existing `### Render — deterministic gate (LAST step, mandatory)` label is the pre-spine form of Step 6; `test_render_gate.py` accepts either while the sweep runs. Forward-only, same scope statement as "Host portability". `scripts/test_step_spine.py` enforces the seven headings, their order, and the Step 5/6 labels on every SKILL.md that has a `## Workflow` section; `SPINE_PENDING` is its equality-pinned, shrink-only exception list. A router or an interface spec has no Workflow section and is out of scope by definition.
+The `### Render — deterministic gate (LAST step, mandatory)` label is the pre-spine form of Step 6; `test_render_gate.py` still accepts either, so a skill authored against the older label is not broken by this rule. No SKILL.md uses that form as of 2026-09-07. Forward-only, same scope statement as "Host portability". `scripts/test_step_spine.py` enforces the seven headings, their order, and the Step 5/6 labels on every SKILL.md that has a `## Workflow` section; `SPINE_PENDING` is its equality-pinned, shrink-only exception list, and is **empty** — the migration sweep is complete, as is `host-primitive-lint.py`'s `LEGACY_ALLOWLIST`. A router or an interface spec has no Workflow section and is out of scope by definition.
 
 ## Authority header
 

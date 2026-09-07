@@ -4,6 +4,14 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-09-07 (spine sweep complete)
+
+### Changed
+- `parallax-rebalance` migrated onto the canonical step spine — the last Workflow-bearing skill. Batch 0 discovery and the house-view drift check become Step 0 sub-items; mandate-parameter parsing moves to Step 1 (its two internal pointers now name `Batch C item 4` / `item 5` instead of the old step numbers); Batch A and Batch B are Step 2; the After-Batch-A checks are Step 3; Batch C, Batch C2 and Batch D are Step 4; the Pre-Render branding block is Step 5; the render gate is Step 6. The code-bound batch names are kept verbatim as identifiers under the spine headings, so `policy-loader.md`'s "Batch C2 there owns payload assembly" and the Output Format's "After Batch A item 3/4" pointers still resolve. The `ToolSearch` mention moved into a Claude Code host-note; the one workflow-step slash chain became `invoke-skill`. Gains Failure modes and Done when. 213 lines, under the 250-line eval cap.
+- `host-primitive-lint.py`'s `LEGACY_ALLOWLIST` and `test_step_spine.py`'s `SPINE_PENDING` are both **empty**. Every skill now names host primitives and confines host identifiers to host-note blocks.
+- `test_host_primitive_lint.py` exercises the allowlist mechanism against a monkeypatched synthetic entry rather than a real skill name, so an empty list cannot silently retire the guard; a new test deletes the exemption and confirms the same file then fails.
+- `test_live_capability_contract.py`'s one-`analyze_portfolio`-call guard slices on the `Step 2 — Fetch` / `Step 3 — Verify` spine headings instead of the old `### Batch A` label, and asserts both are present, so the slice cannot return an empty string and pass a row count of zero.
+
 ## 2026-09-06 (spine gate)
 
 ### Added
