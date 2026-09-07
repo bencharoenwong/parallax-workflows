@@ -4,6 +4,16 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-09-07 (derived manifest)
+
+### Added
+- `skills/_parallax/manifest.json` + `skills/_parallax/skill_manifest.py`: one source for per-skill distribution metadata, replacing four hand-maintained literals that had to be edited in lockstep. `build_bundle.py` reads `PLUGIN_SKILLS`, `WEB_SKILLS`, `WEB_DESCRIPTIONS` and `RESOLUTION_EXEMPT_DOCS` from it; the white-label §9.2 exempt set reads `nine_two_exempt`. The reader validates the claude.ai 200-char description cap and the `web ⇒ web_description` and `anchors ⇔ anchors_key` invariants, and names the fix when the file is missing.
+- `skills/_parallax/test_skill_manifest.py` (16 tests, own CI step): reconciles the manifest against `render_gate.py`'s `SKILL_ANCHORS` and against the skill directories on disk in both directions, so a new skill without a row fails the gate. Four seeded attacks confirmed each guard bites.
+- `skills/_parallax/scripts/bootstrap_manifest.py`: maintains row coverage and gate anchors. It preserves editorial fields rather than re-deriving them, because `build_bundle.py` now reads those from the manifest and re-deriving would be circular.
+
+### Changed
+- `render_gate.py` keeps its `SKILL_ANCHORS` literal deliberately and gains no file dependency; the equality test supplies the same mechanical trust. Its inaccurate "mirrors each eval-config `_OK_START` exactly" comment is corrected — the two differ in shape and only 6 of 22 keys have an eval counterpart.
+
 ## 2026-09-07 (spine sweep complete)
 
 ### Changed

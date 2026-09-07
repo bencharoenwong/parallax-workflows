@@ -1,17 +1,24 @@
 #!/usr/bin/env python3
-"""Regenerate `_parallax/manifest.json` from the live Python constants.
+"""Maintain `_parallax/manifest.json` — add missing rows, refresh gate anchors.
 
-The manifest is the single source for per-skill distribution metadata. It is
-GENERATED, never hand-edited: the anchor patterns are regexes whose backslashes
-double under JSON escaping, and hand-editing them is how a mirror silently rots.
+The manifest is the AUTHORITY for per-skill distribution metadata. Editorial
+fields (`plugin`, `web`, `web_description`, `nine_two_exempt`, `exempt_docs`) are
+decisions, not derived data: this script preserves whatever the manifest already
+says about them and never overwrites them from a consumer. Overwriting would be
+circular, because `build_bundle.py` reads those fields FROM here.
 
-Run this only when a constant below is still the authority for a field — that is,
-during the flip itself, or when adding a skill before the reader is wired up.
-Afterwards the manifest is the authority and this script is a one-way check:
-re-running it must produce a byte-identical file.
+Two things ARE derived, and `--check` asserts exactly those two:
+
+  * every `skills/*/SKILL.md` directory has a row (and no row names a dead dir);
+  * `anchors` matches `render_gate.py`'s `SKILL_ANCHORS`, which deliberately
+    keeps its literal (see `skill_manifest.py` and DECISIONS.md 2026-09-07).
+    Anchors are regexes whose backslashes double under JSON escaping — that is
+    why they are copied by this script and never typed by hand.
+
+A new skill gets a row with `plugin`/`web` false; set them here by hand, on
+purpose. Editing a description by hand is correct and this script preserves it.
 
 Usage: python3 bootstrap_manifest.py [--check]
-       --check exits 1 if the regenerated manifest differs from the tracked one.
 """
 from __future__ import annotations
 
@@ -24,7 +31,6 @@ from pathlib import Path
 SHARED = Path(__file__).resolve().parent.parent          # skills/_parallax
 SKILLS = SHARED.parent                                    # skills
 MANIFEST = SHARED / "manifest.json"
-VERIFIED = "2026-09-07"
 
 
 def _load(name: str, path: Path):
@@ -35,54 +41,39 @@ def _load(name: str, path: Path):
 
 
 def build() -> dict:
-    bb = _load("bb", SHARED / "scripts" / "build_bundle.py")
-    rg = _load("rg", SHARED / "render_gate.py")
-    ip = _load(
-        "ip", SHARED / "white-label" / "tests" / "test_integration_pattern_referenced.py"
-    )
-
-    plugin = set(bb.PLUGIN_SKILLS)
-    web = set(bb.WEB_SKILLS)
-    anchors = rg.SKILL_ANCHORS
-    exempt = set(ip._NINE_TWO_EXEMPT_SKILLS)
+    """Current manifest, with rows and anchors reconciled against the tree."""
+    current = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    rows: dict = current.get("skills", {})
+    anchors = _load("rg_boot", SHARED / "render_gate.py").SKILL_ANCHORS
 
     dirs = sorted(p.parent.name for p in SKILLS.glob("*/SKILL.md"))
-    skills: dict[str, dict] = {}
+    stray = set(anchors) - {n.removeprefix("parallax-") for n in dirs}
+    if stray:
+        raise SystemExit(f"SKILL_ANCHORS names non-existent skills: {sorted(stray)}")
+
+    out: dict[str, dict] = {}
     for name in dirs:
+        row = dict(rows.get(name, {}))          # preserve editorial fields verbatim
+        row.setdefault("plugin", False)
+        row.setdefault("web", False)
         key = name.removeprefix("parallax-")
-        row: dict = {"plugin": name in plugin, "web": name in web}
-        if name in web:
-            row["web_description"] = bb.WEB_DESCRIPTIONS[name]
-        if key in anchors:
+        if key in anchors:                       # derived: refresh from the gate
             row["anchors_key"] = key
             row["anchors"] = list(anchors[key])
-        if name in exempt:
-            row["nine_two_exempt"] = True
-        skills[name] = row
+        else:
+            row.pop("anchors_key", None)
+            row.pop("anchors", None)
+        # stable field order so the diff of a real change stays readable
+        order = ("plugin", "web", "web_description", "anchors_key", "anchors",
+                 "nine_two_exempt")
+        out[name] = {k: row[k] for k in order if k in row}
 
-    # Every constant entry must have landed on a real skill directory.
-    for label, want in (
-        ("PLUGIN_SKILLS", plugin), ("WEB_SKILLS", web), ("_NINE_TWO_EXEMPT_SKILLS", exempt),
-    ):
-        stray = want - set(dirs)
-        if stray:
-            raise SystemExit(f"{label} names non-existent skill dirs: {sorted(stray)}")
-    stray_anchor = set(anchors) - {n.removeprefix("parallax-") for n in dirs}
-    if stray_anchor:
-        raise SystemExit(f"SKILL_ANCHORS names non-existent skills: {sorted(stray_anchor)}")
-
+    authority = dict(current.get("_authority", {}))
+    authority.update(kind="registry", generated_by="scripts/bootstrap_manifest.py")
     return {
-        "_authority": {
-            "kind": "registry",
-            "verified": VERIFIED,
-            "overrides": (
-                "PLUGIN_SKILLS / WEB_SKILLS / WEB_DESCRIPTIONS / SKILL_ANCHORS / "
-                "_NINE_TWO_EXEMPT_SKILLS literals"
-            ),
-            "generated_by": "scripts/bootstrap_manifest.py — do not hand-edit",
-        },
-        "skills": skills,
-        "exempt_docs": sorted(_load("bb2", SHARED / "scripts" / "build_bundle.py").RESOLUTION_EXEMPT_DOCS),
+        "_authority": authority,
+        "skills": out,
+        "exempt_docs": sorted(current.get("exempt_docs", [])),
     }
 
 
@@ -92,20 +83,23 @@ def render(data: dict) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--check", action="store_true")
+    ap.add_argument("--check", action="store_true",
+                    help="exit 1 if rows or anchors are out of sync (not editorial fields)")
     args = ap.parse_args(argv)
+    if not MANIFEST.exists():
+        print(f"  ✗ {MANIFEST} missing", file=sys.stderr)
+        return 1
     text = render(build())
     if args.check:
-        if not MANIFEST.exists():
-            print(f"  ✗ {MANIFEST} missing", file=sys.stderr)
-            return 1
         if MANIFEST.read_text(encoding="utf-8") != text:
-            print("  ✗ manifest.json is stale — rerun bootstrap_manifest.py", file=sys.stderr)
+            print("  ✗ manifest rows/anchors are stale — rerun bootstrap_manifest.py",
+                  file=sys.stderr)
             return 1
-        print("  ✓ manifest.json matches the live constants", file=sys.stderr)
+        print("  ✓ manifest rows and gate anchors are in sync", file=sys.stderr)
         return 0
     MANIFEST.write_text(text, encoding="utf-8")
-    print(f"  ✓ {MANIFEST.relative_to(SKILLS.parent)} ({len(build()['skills'])} skills)", file=sys.stderr)
+    print(f"  ✓ {MANIFEST.relative_to(SKILLS.parent)} ({len(text.splitlines())} lines)",
+          file=sys.stderr)
     return 0
 
 

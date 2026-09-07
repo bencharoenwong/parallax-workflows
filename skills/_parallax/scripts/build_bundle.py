@@ -29,6 +29,7 @@ Stdlib-only; runs under python >= 3.9.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -41,6 +42,15 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILLS_DIR = SCRIPT_DIR.parents[1]          # skills/
+
+# `_parallax/skill_manifest.py` is the single source for the per-skill registries
+# below. Loaded by path, not by package import: this module is itself loaded via
+# importlib.util in the tests, so it has no reliable package context.
+_manifest_spec = importlib.util.spec_from_file_location(
+    "parallax_skill_manifest", SCRIPT_DIR.parent / "skill_manifest.py"
+)
+skill_manifest = importlib.util.module_from_spec(_manifest_spec)
+_manifest_spec.loader.exec_module(skill_manifest)
 REPO_ROOT = SKILLS_DIR.parent
 PLUGIN_DIR = REPO_ROOT / "plugin"
 MARKETPLACE_FILE = REPO_ROOT / ".claude-plugin" / "marketplace.json"
@@ -63,34 +73,7 @@ PLUGIN_DESCRIPTION_TEMPLATE = (
 
 # General-release skill set (same tiering convention as build-skills.sh:
 # skills outside this list are not built by the no-arg default paths).
-PLUGIN_SKILLS = [
-    "parallax-client-review",
-    "parallax-concierge",
-    "parallax-country-deep-dive",
-    "parallax-credit-lens",
-    "parallax-desk-call-list",
-    "parallax-deep-dive",
-    "parallax-due-diligence",
-    "parallax-earnings-quality",
-    "parallax-explain-portfolio",
-    "parallax-halal-screen",
-    "parallax-macro-outlook",
-    "parallax-morning-brief",
-    "parallax-pair-finder",
-    "parallax-peer-comparison",
-    "parallax-portfolio-builder",
-    "parallax-portfolio-checkup",
-    "parallax-rebalance",
-    "parallax-scenario-analysis",
-    "parallax-score-explainer",
-    "parallax-should-i-buy",
-    "parallax-thematic-screen",
-    "parallax-watchlist-monitor",
-    "parallax-white-label-onboard",
-    "parallax-white-label-stock-report",
-    "translate-chinese-finance",
-    "translate-thai-finance",
-]
+PLUGIN_SKILLS = skill_manifest.plugin_skills()
 
 # PLUGIN_SKILLS entries that are legitimately absent from some checkouts (the
 # parallax-agent tap ships without them). Anything else missing is a typo or an
@@ -101,80 +84,11 @@ KNOWN_OPTIONAL_SKILLS = {
 }
 
 # General-release web shortlist (claude.ai channel).
-WEB_SKILLS = [
-    "parallax-should-i-buy",
-    "parallax-client-review",
-    "parallax-portfolio-checkup",
-    "parallax-score-explainer",
-    "parallax-explain-portfolio",
-    "parallax-watchlist-monitor",
-    "parallax-morning-brief",
-    "parallax-deep-dive",
-    "parallax-due-diligence",
-    "parallax-peer-comparison",
-    "parallax-scenario-analysis",
-    "parallax-rebalance",
-]
+WEB_SKILLS = skill_manifest.web_skills()
 
 # claude.ai caps skill descriptions at 200 chars; source frontmatter runs longer.
 # Every web-built skill MUST have an entry here (build fails otherwise).
-WEB_DESCRIPTIONS = {
-    "parallax-should-i-buy": (
-        "Quick stock evaluation: company overview, Parallax factor scores, financial "
-        "health, trends, macro context, dividends, news, and analyst outlook in plain "
-        "language. Accepts plain tickers or RICs."
-    ),
-    "parallax-client-review": (
-        "RIA/wealth-advisor client portfolio review: analysis, redundancy, health flags, "
-        "macro context, per-holding drill-down, and prioritized recommendations. "
-        "Holdings as [{symbol, weight}]."
-    ),
-    "parallax-portfolio-checkup": (
-        "Individual investor portfolio checkup: health flags, factor scores, redundancy, "
-        "macro context, and plain-language recommendations. Holdings as [{symbol, weight}]."
-    ),
-    "parallax-score-explainer": (
-        "Explain Parallax scores, factors, and methodology in plain language: why a "
-        "stock scores the way it does and what would change it. Not for full stock analysis."
-    ),
-    "parallax-explain-portfolio": (
-        "Portfolio drawdown attribution: decompose 'why am I down X%?' into market/regime, "
-        "factor/thematic, and stock-specific components, with conditional guidance. "
-        "Holdings as [{symbol, weight}]."
-    ),
-    "parallax-watchlist-monitor": (
-        "Monitor a watchlist of tickers: flag score changes, news alerts, technical "
-        "shifts, and analyst updates. Provide a list of symbols."
-    ),
-    "parallax-morning-brief": (
-        "Fund manager morning brief: market regime, macro outlook, portfolio health, and "
-        "key holding news. Portfolio as [{symbol, weight}] in RIC format."
-    ),
-    "parallax-deep-dive": (
-        "Deep dive on a single position: profile, peers, financials, score trends, macro, "
-        "technicals, dividends, news, and AI assessment. Symbol in RIC format. Not for "
-        "quick checks or portfolio-level work."
-    ),
-    "parallax-due-diligence": (
-        "Full research-analyst due diligence: financial statements, Palepu framework, "
-        "technicals, news, score trends, and the full Parallax research report. Symbol "
-        "in RIC format."
-    ),
-    "parallax-peer-comparison": (
-        "Peer comparison for research analysts: peer snapshot, exported data, score "
-        "trends, and relative price performance. Symbol in RIC format."
-    ),
-    "parallax-scenario-analysis": (
-        "Stress a portfolio against a news event or scenario (rates +100bps, USD shock, "
-        "2008 replay): exposure, sector impact, most-exposed holdings, rotation "
-        "candidates. Needs portfolio + scenario."
-    ),
-    "parallax-rebalance": (
-        "Portfolio rebalancing analysis: current state, health flags, macro context, and "
-        "a prioritized information-framed action list with score rationale. Holdings as "
-        "[{symbol, weight}]."
-    ),
-}
+WEB_DESCRIPTIONS = skill_manifest.web_descriptions()
 
 # Shared-tree paths (relative to skills/_parallax/) shipped with distributions.
 # Directories are included recursively (tracked files only).
@@ -187,6 +101,10 @@ PARALLAX_INCLUDE = [
     "jit-load-compliance-audit.md",
     "render_gate.py",
     "coverage_check.py",
+    # The bundled white-label test imports skill_manifest.py, which reads
+    # manifest.json; both must ship or that test tree breaks at import time.
+    "skill_manifest.py",
+    "manifest.json",
     "white-label",
     "house-view/loader.md",
     "house-view/schema.yaml",
@@ -724,10 +642,7 @@ def _resolve_parallax_ref(skills_root: Path, ref: str) -> bool:
 # prose is full of illustrative placeholder paths (`references/X.md`,
 # `references/step-3.md`) that are examples of how to structure a skill, not
 # refs to real files — so they are exempt from resolution_check.
-RESOLUTION_EXEMPT_DOCS = {
-    "_parallax/skill-structure-conventions.md",
-    "_parallax/jit-load-compliance-audit.md",
-}
+RESOLUTION_EXEMPT_DOCS = skill_manifest.exempt_docs()
 
 
 def bundled_skill_docs(skills_root: Path) -> list[Path]:

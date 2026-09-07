@@ -24,6 +24,7 @@ two elements is the drift this test prevents:
 
 from __future__ import annotations
 
+import importlib.util
 import re
 from pathlib import Path
 
@@ -153,13 +154,15 @@ _NINE_ONE_CANONICAL_SENTENCE = (
 # a skill here must be paired with updating the exemption rationale in
 # `parallax-conventions.md §9.2` in the same PR — the test gate and the spec
 # text are co-load-bearing.
-_NINE_TWO_EXEMPT_SKILLS: frozenset[str] = frozenset(
-    {
-        "parallax-white-label-onboard",
-        "parallax-make-house-view",
-        "parallax-load-house-view",
-    }
+_manifest_spec = importlib.util.spec_from_file_location(
+    "parallax_skill_manifest", _SKILLS_ROOT / "_parallax" / "skill_manifest.py"
 )
+_skill_manifest = importlib.util.module_from_spec(_manifest_spec)
+_manifest_spec.loader.exec_module(_skill_manifest)
+
+# Sourced from `_parallax/manifest.json` (`nine_two_exempt`), not a local literal.
+# The dead-entry test below now validates the manifest itself.
+_NINE_TWO_EXEMPT_SKILLS: frozenset[str] = _skill_manifest.nine_two_exempt()
 
 
 @pytest.mark.parametrize(

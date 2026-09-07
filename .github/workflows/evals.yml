@@ -85,6 +85,14 @@ jobs:
       - name: Render-gate anchor and SKILL.md wiring gates
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/_parallax/test_render_gate.py -q
+      # manifest.json + skill_manifest.py sit beside render_gate.py, same reason
+      # as the step above. This suite reconciles the manifest against the render
+      # gate's SKILL_ANCHORS literal and against the skill directories on disk,
+      # so a new skill without a manifest row, or an anchor edited on only one
+      # side, fails here rather than shipping a half-registered skill.
+      - name: Skill-manifest registry gates
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: python -m pytest skills/_parallax/test_skill_manifest.py -q
       # coverage_check.py sits beside render_gate.py for the same reason (no
       # tests/ subdirectory under skills/_parallax/ itself); named as its own
       # step so a broken root stays visible in the step list, same convention
