@@ -1,6 +1,6 @@
 # Residual Math Reference — pair-finder
 
-JIT-loaded by `skills/pair-finder/SKILL.md`. All formulas described here are executed inline by the model; no Python module exists.
+JIT-loaded by `skills/parallax-pair-finder/SKILL.md`. All formulas described here are executed inline by the model; no Python module exists.
 
 ## 1. Factor net (long − short)
 
