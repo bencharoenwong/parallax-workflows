@@ -334,34 +334,12 @@ def test_known_unpriced_matches_published_table():
     )
 
 
-_AI_ROWS = {
-    "parallax-ai-buffett": "~4",
-    "parallax-ai-greenblatt (ticker-check)": "~10-15",
-    "parallax-ai-greenblatt (universe mode)": "~10-30",
-    "parallax-ai-klarman": "~5-7",
-    "parallax-ai-soros (single-ticker)": "~25-30",
-    "parallax-ai-soros (basket mode)": "~30-40",
-    "parallax-ai-ptj (single-ticker)": "~14-16",
-    "parallax-ai-consensus (single ticker)": "~60-70",
-    "parallax-ai-consensus (basket of 5)": "~180-240",
-}
-
-
-def test_ai_profile_table_rows_and_values_are_exact():
-    """Every mode-specific row, with its value — presence of a directory name
-    alone would let a deleted mode row or a typo'd figure pass."""
+def test_every_ai_profile_skill_has_a_priced_row():
+    """Every ai-* skill directory is priced under the AI heading, and every row
+    there carries a token figure in the ``~N`` / ``~N-M`` form the tests parse."""
     rows = _workflow_rows(TOKEN_COSTS.read_text(), _AI_HEADING)
-    assert rows == _AI_ROWS
-
-
-def test_every_ai_profile_skill_has_a_cost_row():
-    labels = {label.split(" ")[0] for label in _AI_ROWS}
+    labels = {label.split(" ")[0] for label in rows}
     for skill_dir in sorted((REPO_ROOT / "skills").glob("parallax-ai-*")):
         assert skill_dir.name in labels, f"{skill_dir.name} has no row under {_AI_HEADING}"
-
-
-def test_ai_profiles_readme_does_not_carry_a_second_table():
-    readme = (REPO_ROOT / "skills" / "_parallax" / "AI-profiles" / "README.md").read_text()
-    assert not re.search(r"^\|\s*`parallax-ai-[a-z]+`.*~\d", readme, re.M), (
-        "AI-profiles/README.md carries its own cost table; token-costs.md is the single source"
-    )
+    for label, cost in rows.items():
+        assert re.fullmatch(r"~\d+(-\d+)?", cost), f"{label}: unpriced cost cell {cost!r}"

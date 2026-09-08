@@ -14,7 +14,7 @@ Parallax uses token-based pricing. All tools consume the same number of tokens w
 | `explain_methodology` | Scoring methodology explanations |
 | `get_docs` / `list_docs` | Documentation access |
 | `search_stocks` / `search_etfs` | Symbol search (fuzzy) |
-| `check_api_health` | Connector health probe. Priced 0 in `evals/graders/token_model.py`; carried here so the code and this table list the same free set. |
+| `check_api_health` | Connector health probe. Free, so a health check never changes a workflow's total. |
 | `export_price_series` | Daily price data export. Its own MCP tool description states "FREE" (verified live 2026-07-20; the whole tool suite marks free tools "FREE" and omits the marker on billable ones). Was previously listed under "1 token each" — reclassified to match the vendor's stated contract. **Reversible:** if operator billing shows this is metered (e.g. free only within plan limits), move it back and revise dependent skill estimates. |
 
 ### 1 token each
@@ -64,7 +64,7 @@ Parallax uses token-based pricing. All tools consume the same number of tokens w
 | `check_job_status` | Async job polling for report endpoints |
 | `submit_feedback` | Feedback submission |
 
-These are deliberately unpriced: this repo does not publish inferred numbers. A workflow total that touches one states what it omits (`KNOWN_UNPRICED` in `evals/graders/token_model.py`). Measure one and it moves to a cost table above.
+These are deliberately unpriced: this repo does not publish inferred numbers. A workflow total that touches one states what it omits. Measure one and it moves to a cost table above.
 
 ---
 
