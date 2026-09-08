@@ -11,7 +11,8 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 - `scripts/contract_schemas.py` and `scripts/gen_mock_fixtures.py` quoted a sentence that `response-schemas.md` never contained; both now cite what exists.
 
 ### Removed
-- `skills/_parallax/AI-profiles/.gitkeep` (directory is populated), `examples/jit-policies.md` (unreferenced), `skills/_parallax/house-view/tests/smoke_test_e2e.py` (matched no collection pattern; never ran).
+- `skills/_parallax/AI-profiles/.gitkeep` (directory is populated), `skills/_parallax/house-view/tests/smoke_test_e2e.py` (matched no collection pattern; never ran).
+- **Not removed:** `examples/jit-policies.md` was on the orphan list as unreferenced, but inbound-reference count is the wrong test for a policy document. It is the only place the JIT staleness thresholds, the no-silent-freshening rule, the refused-stale audit behaviour and the no-cross-portfolio-caching rationale are written down, and it governs the live `--augment-silent` path in `parallax-portfolio-builder`. Kept.
 
 ## 2026-09-05 (lints)
 
