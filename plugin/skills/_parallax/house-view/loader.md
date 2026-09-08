@@ -346,14 +346,13 @@ Threshold rationale (internal): 7.0 is the high-confidence band in the Parallax 
 
 ## 8. Consumer-skill checklist
 
-Skills that consume the view should add to their `gotchas` frontmatter:
+Skills that consume the view add these lines to their `## Gotchas` body section (frontmatter carries spec keys only, per `_parallax/skill-structure-conventions.md` → "Spec compliance"; house content such as gotchas lives in the body):
 
-```yaml
-gotchas:
-  - JIT-load _parallax/house-view/loader.md before applying any portfolio logic
-  - If active view is present, follow loader.md §3 (multiplier mapping), §4 (conflict resolution), §5 (output rendering)
-  - If validation fails per loader.md §2, run without view and emit the appropriate message
-  - Append audit log entry per loader.md §6
+```markdown
+- JIT-load _parallax/house-view/loader.md before applying any portfolio logic
+- If active view is present, follow loader.md §3 (multiplier mapping), §4 (conflict resolution), §5 (output rendering)
+- If validation fails per loader.md §2, run without view and emit the appropriate message
+- Append audit log entry per loader.md §6
 ```
 
 Workflow steps that apply tilts should explicitly cite the loader section (e.g., "apply factor multiplier per loader.md §3"). This keeps the math consistent across skills.

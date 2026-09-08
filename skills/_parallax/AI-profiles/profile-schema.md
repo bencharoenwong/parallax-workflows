@@ -65,7 +65,7 @@ Before any Parallax tool call in the session:
 - JIT-load `_parallax/AI-profiles/output-template.md` (render contract)
 - JIT-load `_parallax/AI-profiles/profiles/<profile_id>.md` (the specific profile)
 
-Before the first Parallax tool call, call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas.
+Before the first Parallax tool call, run the `discover-tools` host primitive (`parallax-conventions.md` §14, bound per host in §14.2) to load the live Parallax tool schemas.
 
 ### Step 1: Parse input
 

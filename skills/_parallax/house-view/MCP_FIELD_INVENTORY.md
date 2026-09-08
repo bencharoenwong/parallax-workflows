@@ -3,7 +3,7 @@
 **Generated:** 2026-05-24
 **Source:** Phase A0 live MCP smoke calls
 **Reviewed by:** N/A (initial generation)
-**Refresh cadence:** Monthly (CI smoke test in `tests/integration/test_mcp_field_inventory.py`)
+**Refresh cadence:** Monthly, by hand. No automated refresh exists: re-run the `get_telemetry` request in §3 and the `macro_analyst` call forms in §6 against the live connector and update the observed fields below. (An earlier note named a CI smoke test and a validator module; neither was ever built.)
 
 This artifact documents the **observed** shape of `macro_analyst` and
 `get_telemetry` responses, what component formulas can compute today vs. what
@@ -11,8 +11,8 @@ requires server-side field additions, and what coverage gaps the maker must
 handle gracefully.
 
 > Component formulas (`pillar_formulas.py` — module name preserved as field
-> identifier) reference this file. If MCP surface changes, regenerate this
-> file via `python -m phase_a0_validate` and update formula confidence caps +
+> identifier) reference this file. If MCP surface changes, refresh this file
+> by hand per the cadence note above and update formula confidence caps +
 > missing_inputs lists accordingly.
 
 ---
@@ -210,9 +210,9 @@ news component or telemetry commentary expose sentiment signals more directly.
 
 ---
 
-## 7. CI smoke test design
+## 7. CI smoke test design (not built)
 
-`tests/integration/test_mcp_field_inventory.py`:
+Design sketch for a future `tests/integration/test_mcp_field_inventory.py`; no such file exists today:
 
 ```python
 def test_mcp_surface_unchanged():

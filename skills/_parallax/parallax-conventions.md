@@ -20,7 +20,7 @@ Gemini CLI uses feature flags to roll out architectural changes. These can be se
 Run this once at the top of any should-i-buy / two-lens / house-view / portfolio workflow, **before the first data call** — not as a mid-run recovery:
 
 1. **Resolve paths.** Resolve every `_parallax/...` conventions and house-view path to the canonical `parallax-workflows` copy (see `_parallax/skill-structure-conventions.md` → "Canonical source & path resolution"). Do not assume the installed skill directory contains them.
-2. **Discover live capabilities.** Use the host's live tool-discovery surface once before the first data call (for example, `ToolSearch` with `"+Parallax"` in Claude Code). Inspect the returned callable names and input schemas, then bind each logical operation used by the workflow to the exact callable exposed in this session.
+2. **Discover live capabilities.** Run the `discover-tools` host primitive (§14) once before the first data call; the per-host binding table in §14 says what that means on the current host. Inspect the returned callable names and input schemas, then bind each logical operation used by the workflow to the exact callable exposed in this session.
 3. **Let the live contract win.** Live capability discovery is authoritative for the callable namespace, tool availability, parameter names, required fields, types, and enums. Names and schemas in this repository are implementation notes, not permission to call an alias or argument shape that the runtime did not advertise.
 4. **Abort or degrade cleanly on a gap.** If a required convention/house-view file cannot be resolved, or a required logical capability is absent from the discovered set, **stop for gates or mark the affected display section unavailable per §4.** Tell the operator exactly what is missing. Do not invent a namespace, guess a parameter variant, silently proceed through a gate, or fabricate data.
 
@@ -32,7 +32,7 @@ Most should-i-buy failures trace to one of two causes this pre-flight removes �
 
 Parallax tool namespaces are runtime-assigned and may differ across Claude Code, Claude.ai, Codex, plugins, or multiple connections in the same host. Before the first Parallax data call:
 
-1. Use the host's live discovery mechanism to find Parallax capabilities and load their current schemas. `ToolSearch` with query `"+Parallax"` is the Claude Code example, not a universal namespace contract.
+1. Use the host's live discovery mechanism (the `discover-tools` primitive, bound per host in §14) to find Parallax capabilities and load their current schemas. The Claude Code binding is one example, not a universal namespace contract.
 2. Build a session-local binding map from each logical tool name used by the skill (for example, `get_company_info`) to the exact callable name returned by discovery.
 3. Read the callable's live input schema immediately before constructing its arguments. Send only advertised parameters, with the advertised types and enum values. If static prose conflicts with discovery, discovery wins.
 4. Never synthesize a callable by attaching a remembered namespace to a logical tool name. A configured server alias, README example, previous transcript, or cached skill instruction does not prove that callable exists in the current session.
@@ -386,7 +386,7 @@ The gate (`_parallax/render_gate.py`) is a pure-stdlib Python script. It determi
 
 ### 10.3 Usage in SKILL.md
 
-Every gated skill carries a `### Render — deterministic gate` heading before its **Output Format** section. The directive specifies the exact Bash one-liner to run:
+Every gated skill carries a `### Render — deterministic gate` heading (spine form: `### Step 6 — Render (deterministic gate, mandatory)`, per the authoring conventions' "Canonical step spine" section; both forms carry the same gate command) before its **Output Format** section. The directive specifies the exact Bash one-liner to run:
 
 ```bash
 DRAFT="$(mktemp "${TMPDIR:-/tmp}/skill.XXXXXX")"
@@ -396,7 +396,7 @@ REPORT
 python3 "<skill-dir>/../_parallax/render_gate.py" --skill <skill-key> < "$DRAFT"; rm -f "$DRAFT"
 ```
 
-The skill's **entire final message** is exactly that command's stdout. `render_gate.py` uses a fail-open design: if no anchor is found, the input is returned unchanged, ensuring the gate never destroys a report it cannot positively locate. The fail-open path also writes one `[render-gate] WARN: no anchor for skill='<key>'; returned unchanged` line to **stderr**; stdout is untouched. That line is diagnostics — never include it in the reply and never feed it to a downstream translate step. It means the drafted opening drifted from the skill's documented Output Format start: fix the opening and re-run the gate.
+The skill's **entire final message** is exactly that command's stdout, or, when a conditional Translate step follows (§15), the sole input to that step; translated output is not re-gated. `render_gate.py` uses a fail-open design: if no anchor is found, the input is returned unchanged, ensuring the gate never destroys a report it cannot positively locate. The fail-open path also writes one `[render-gate] WARN: no anchor for skill='<key>'; returned unchanged` line to **stderr**; stdout is untouched. That line is diagnostics — never include it in the reply and never feed it to a downstream translate step. It means the drafted opening drifted from the skill's documented Output Format start: fix the opening and re-run the gate.
 
 ---
 
@@ -515,3 +515,101 @@ Under `client_safe`, the About This Report footer gains this line:
 Skills MUST render this section by reference, not by inlining its prose, per the same pattern as §12. Example Output Format directive: `Apply audience render mode per parallax-conventions.md §13; default internal_analyst.` Inlining creates drift risk — a future tightening propagates to all consumers automatically only if they reference this section rather than copy it.
 
 Rollout: this batch wires the mode into the report-rendering consumers named in the batch plan; remaining consumers inherit the definition when wired.
+
+---
+
+## 14. Host Primitives (portability contract)
+
+### §14.1 Principle
+
+These skills run on more than one harness. A SKILL.md therefore names **host primitives**, never host tools. Nine primitives cover everything the skills do outside the Parallax connector. The binding table in §14.2 says what each primitive means on each host; the fail-open table in §14.3 says what a skill does when the host lacks one. A SKILL.md that names a host tool (`ToolSearch`, `AskUserQuestion`, `Write`, `WebFetch`, a `Skill` tool, a `/slash` chaining syntax, or a connector namespace literal) outside a `<!-- host-note -->` block is host-locked and non-conforming; the rule is forward-only for skills that predate 2026-09-04, per the authoring conventions' "Host portability" section (the same document as the "Canonical source & path resolution" reference in §0.0).
+
+| Primitive | Meaning |
+|---|---|
+| `discover-tools` | learn the callable names and input schemas of the Parallax connector in THIS session (§0.1) |
+| `call-tool` | call one discovered callable; independent calls may be issued together (§3) |
+| `ask-operator` | block on a human decision at a confirmation gate |
+| `run-shell` | execute a documented helper command (`render_gate.py`, `adaptation.py`, `view_commit`, …) |
+| `invoke-skill` | hand a payload to a sibling skill (translate, concierge routing, the judge drift check) |
+| `load-reference` | read a shared `_parallax/...` or `references/...` file by path (§0.0 item 1) |
+| `write-artifact` | create a file at a named path WITHOUT passing its content through a shell. Document-derived text (CIO prose, client documents) must never reach an unquoted heredoc, which the shell subjects to parameter expansion and command substitution. A quoted-delimiter heredoc (`<<'REPORT'`, the form §10.3 mandates for the render gate) performs no expansion and is the sanctioned shell path for that step. Prefer `write-artifact` wherever the host has it. Never a substitute for an append through a helper that owns a hash chain (`audit_chain.append_entry`) |
+| `read-config` | read an environment switch (`PARALLAX_*`) or operator state under `~/.parallax/` |
+| `fetch-url` | retrieve a public URL as text. A skill that ships its own destination-validated fetcher (`download_public_url()` in white-label onboard) uses that fetcher for those URLs, never this primitive |
+
+### §14.2 Per-host binding table
+
+The connector namespace is never written here: it is whatever `discover-tools` returns in the session (§0.1 item 4). Rows marked *verify* were not exercised end-to-end when this section was written (2026-09-04) and must be confirmed in the first cross-host parity run before a skill relies on them.
+
+| Primitive | Claude Code | Codex CLI | claude.ai (uploaded `.skill`) |
+|---|---|---|---|
+| `discover-tools` | `ToolSearch` with query `"+Parallax"`, then read each returned schema | MCP tools registered in the Codex config are pre-listed in the session tool list; the list is the discovery result. Read each tool's schema from that list | Connector tools are pre-listed when the Parallax connector is enabled; the list is the discovery result |
+| `call-tool` | parallel tool calls in one turn | parallel tool calls in one turn (*verify* batch size) | tool calls in one turn (*verify* parallelism) |
+| `ask-operator` | `AskUserQuestion` | interactive session: ask in prose and wait for the next turn (*verify* whether a structured question tool exists); non-interactive `exec` mode: absent | ask in prose and wait for the next turn |
+| `run-shell` | `Bash` | shell in the sandbox; network per the sandbox policy | code execution when enabled for the workspace; otherwise absent |
+| `invoke-skill` | `Skill` tool or `/name` | skills auto-selected by description; explicit invocation by naming the skill (*verify* syntax) | absent (one uploaded skill per conversation) |
+| `load-reference` | `Read` on the resolved path | file read on the resolved path | file read inside the zip; shared files live under `_vendored/_parallax/` (the web build rewrites references) |
+| `write-artifact` | `Write` tool | file-write / patch tool (never a heredoc) | file write in the sandbox when code execution is enabled; otherwise absent |
+| `read-config` | shell env + `~/.parallax/` | shell env + `~/.parallax/` | absent: no environment, no persistent state directory |
+| `fetch-url` | `WebFetch` | shell fetch per the sandbox network policy (*verify*) | absent unless a browsing tool is enabled |
+
+Install-layout invariant. Every installed skill directory has `../_parallax/` as a sibling (symlink or copy) OR carries the vendored copy under `<skill>/_vendored/_parallax/` with references rewritten. Every `run-shell` and `load-reference` path in a SKILL.md is written relative to the skill directory so both layouts resolve.
+
+### §14.3 Fail-open rules (what to do when the host lacks a primitive)
+
+Gates fail closed (§4.0); display sections degrade (§4). The rows below apply that split per primitive.
+
+| Primitive absent | Rule |
+|---|---|
+| `discover-tools` | If the host pre-lists MCP tools, the list is the discovery result. If there is neither live discovery nor a pre-list, the Parallax connector is unavailable this session: apply §0.0 item 4 (stop for gates; mark display sections unavailable). Never fall back to names documented in this repository. |
+| `call-tool` (sequential-only host) | Issue fast-response calls first and async tools (§4 "Async tools") last, in the documented order. Never drop a call. |
+| `ask-operator` | Render the question and its choices in prose and stop. Within that turn the gate is NOT passed and nothing is persisted. An explicit operator answer in a later turn satisfies the gate; where the skill appends an audit row, record which form the answer took in that row's `notes` field per loader.md §6.2, and add no custom key. |
+| `run-shell` — render gate | Do not generate scaffold at all: begin the message at the documented Output Format start; keep every degraded-state note inline in its own section; add `Render gate: not applied (no shell)` to About This Report. Never delete already-generated text by hand — a hand strip is the drift the gate exists to remove (§10.1). |
+| `run-shell` — gate-shaped helper (verdict, eligibility, trade list) | Every affected name is `UNVERIFIED` per §4.0, or the skill declares itself unavailable on this host up front. Never recompute the verdict in prose. |
+| `run-shell` — display-shaped helper | The section is unavailable per §4 with the stated reason `Computed value unavailable (no shell)`. Never recompute in prose. |
+| `invoke-skill` — translate | Emit the English report with the footer `> Translation to <lang> unavailable on this host; output shown in English.` (§15; distinct from the translator-failed footer). |
+| `invoke-skill` — concierge routing | Route by prose: name the target skill and its usage line. |
+| `invoke-skill` — judge drift check | Emit the existing line from `house-view/auto-on-load-judge-pattern.md` ("not installed; drift check skipped"). The check is never a gate. |
+| `load-reference` | §0.0 item 4. |
+| `write-artifact` | Stop. Every consumer is a persist step behind a confirmation gate; report that the artifact could not be written on this host. |
+| `read-config` | No environment: every `PARALLAX_*` switch takes its documented default; say so in About This Report when the default changes behaviour. No state directory: no active view and no branding, per `house-view/loader.md` §1 and `white-label/integration-pattern.md` §4. |
+| `fetch-url` | Report the source as not fetched and ask for pasted text. Never guess content. |
+
+---
+
+## 15. Translator Routing and Failure
+
+Canonical home for the translate step that `should-i-buy`, `client-review`, `deep-dive`, `morning-brief` and `score-explainer` carry as copies today. New skills render this section by reference: `Translate per parallax-conventions.md §15.` Copies are replaced during the structure sweep.
+
+### §15.1 When it runs
+
+Only when the operator supplied a language argument and it is not `en`. It is the terminal step: it consumes the gated stdout of the render step (§10.3) and its output is not re-gated. Supported values: `en`, `zh-CN`, `zh-TW`, `zh-HK`, `th`. Any other value: emit the English report with `> Language '<arg>' not supported; output shown in English. Supported: en, zh-CN, zh-TW, zh-HK, th.`
+
+### §15.2 Routing block
+
+Invoke the translator (`invoke-skill`, §14) with the rendered prose body, never with raw tool JSON, shaped exactly as:
+
+```
+ROUTING DIRECTIVE — DO NOT TRANSLATE OR ECHO THIS BLOCK:
+  target_variant: <variant>
+  register: retail
+  source_language: en
+  begin_content_below_separator: true
+---
+
+<rendered prose body>
+```
+
+Include `target_variant` only for the Chinese variants and omit the line for Thai; pass `register: retail` only when `register=retail` was supplied, otherwise omit the `register:` line so the translator defaults to institutional register.
+
+`zh-CN`, `zh-TW`, `zh-HK` → `translate-chinese-finance` with the matching `target_variant` (the block is REQUIRED for `zh-HK`, otherwise that skill pauses to ask about HK listings and breaks the chain). `th` → `translate-thai-finance`; the marker line and `---` separator stay so no leading meta is echoed.
+
+### §15.3 Failure handling
+
+- Translator fails or returns empty/partial: emit the English report with `> Translation to <lang> failed; output shown in English. Re-run if the issue is transient.`
+- Host cannot invoke a sibling skill (§14.3): emit the English report with `> Translation to <lang> unavailable on this host; output shown in English.`
+- Translator output replaces the English output; never show both.
+
+### §15.4 Disclaimer boundary check
+
+Record which disclaimer the English report rendered (view-aware per `house-view/loader.md` §5 when a view is active, otherwise §9.1). If the translated output lacks it: first re-translate only the disclaimer text with the same routing block and append it; if that also fails, append the English disclaimer that was actually rendered (never the standard wording unconditionally). Where the skill appends an audit row, record the event in that row's `notes` field per loader.md §6.2; add no custom key and no user-visible footer. A skill with no audit surface records nothing and does not invent one.
+

@@ -9,6 +9,19 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 ### Fixed
 - **`main` was red: `parallax-rebalance/SKILL.md` had grown to 282 lines across PR #111 and the eval's `orchestrator_length` check (`orchestrator_max_lines=250`) failed on the merge commit.** The Batch C2 policy-reconciliation block (~95 lines) now lives in `skills/parallax-rebalance/references/policy-reconciliation.md`, JIT-loaded only when `policy=` is supplied; the orchestrator keeps a one-line stub with the gate-shaped routing summary and is 191 lines. The three in-file pointers into the moved block (coefficient rule, step-1 exclusion, `position_cap` rule) now name the reference file explicitly. Plugin bundle regenerated.
 
+## 2026-09-04
+
+### Added
+- **`skills/_parallax/parallax-conventions.md` §14 defines nine host primitives and a per-host binding table.** A SKILL.md names `discover-tools`, `call-tool`, `ask-operator`, `run-shell`, `invoke-skill`, `load-reference`, `write-artifact`, `read-config` or `fetch-url`, and §14.2 says what each means on Claude Code, Codex CLI and claude.ai; rows not yet exercised cross-host are marked *verify*. §14.3 gives a fail-open rule per primitive that keeps the §4.0 split — gates fail closed, display sections degrade. The table never prints a connector namespace: discovery returns it. `write-artifact` exists so document-derived text never reaches an unquoted shell heredoc, and never replaces a chain-owning append. §0.0 and §0.1 now point at §14 instead of naming one host's tool, as do `AI-profiles/profile-schema.md` and `house-view/stress-test-design.md`.
+- **§15 is the canonical home for translator routing and failure**, which five skills carried as copies with no shared source: when the step runs, the routing-directive block shape per target language, failure and host-absent footers, and the disclaimer boundary check. §10.3 states the render gate's relation to a following translate step. New skills render §15 by reference.
+- **`skills/_parallax/skill-structure-conventions.md` gains four sections.** Host portability (name primitives, never host tools; forward-only, legacy files migrate one family per PR), Canonical step spine (Steps 0–7 under fixed headings, with config-producing skills substituting Confirm/Persist), Authority header (`contract | registry | observation` plus a verified date on every shared `.md`), and Failure modes / Done when (two closing sections under fixed names). README and CONTRIBUTING point at them.
+
+### Fixed
+- **`house-view/loader.md` §8 told consumers to put gotchas in frontmatter**, banned since the 2026-06-07 spec-compliance entry; the checklist now places them in the `## Gotchas` body section.
+- **`house-view/MCP_FIELD_INVENTORY.md` named a monthly CI smoke test and a `phase_a0_validate` refresh module, neither of which was ever built.** The refresh cadence is now stated as by-hand with the calls to re-run, and §7 is labelled a design sketch for a file that does not exist.
+- **`house-view/README.md` documented `chain_prune.py` under a `parallax chain prune` console-script invocation that no entry point provides**; the row now shows `python3 chain_prune.py --before YYYY-MM-DD [--confirm]`, which is what the module's argparse actually accepts.
+- **`client-policy/policy-loader.md` pinned its `mktemp` precedent to a render-step heading that the step spine renames**; it now names both the pre-spine and the Step 6 form so the citation survives the sweep.
+
 ## 2026-08-31
 
 ### Fixed

@@ -38,8 +38,8 @@ The orchestrator is the file the model reads at every invocation. It contains:
 7. **Workflow skeleton** — Steps 0 → N as numbered headings, each with a one-paragraph summary AND an explicit `→ Load references/<file>.md` directive when the step's full content lives in references/
 8. **Render step (deterministic gate)** — mandatory final `mktemp` + `cat` + `python3 _parallax/render_gate.py` Bash block for report skills (see `parallax-conventions.md §10`)
 9. **Operational modes** — `--status`, `--clear`, etc., one row each
-10. **Success criteria** — what "done" looks like
-11. **Failure modes the operator MUST know without loading anything else** — security gates, compliance gates, irreversible-action warnings
+10. **`## Done when`** — what "done" looks like
+11. **`## Failure modes`** — security gates, compliance gates, irreversible-action warnings the operator MUST know without loading anything else
 
 Target: ≤250 lines. The orchestrator should be navigable in one screen-scroll.
 
@@ -146,6 +146,56 @@ When a skill exposes a flag or mode that materially changes its output workflow 
 
 Proprietary pillar/factor vocabulary guard: trigger phrases ship verbatim to white-label deployments via the Codex matcher index. Do not embed proprietary signal names, factor decomposition labels, or pillar vocabulary in trigger strings. Generic finance language only.
 
+## Host portability
+
+Added 2026-09-04. These skills run on Claude Code, Codex CLI and claude.ai. A SKILL.md names the **host primitives** defined in `parallax-conventions.md` §14 (`discover-tools`, `call-tool`, `ask-operator`, `run-shell`, `invoke-skill`, `load-reference`, `write-artifact`, `read-config`, `fetch-url`) and never a host tool. The forbidden host identifiers are listed once, in `parallax-conventions.md` §14.1; outside a `<!-- host-note -->` … `<!-- /host-note -->` block a SKILL.md must not contain any of them. A host note may show the Claude Code binding as an example; the primitive name is the instruction.
+
+**Scope is forward-only.** Skills that existed before 2026-09-04 are host-locked and are migrated one family per PR (the structure sweep). New skills comply before merge.
+
+**Fail-open is by reference.** A SKILL.md does not invent what to do when a primitive is absent; it cites `parallax-conventions.md` §14.3. A skill whose correctness depends on a primitive that a target host lacks (for example a gate helper behind `run-shell`) states that in `## Failure modes` and, if the loss is total, in its row in the private perimeter registry (not tracked in this public repo).
+
+**Enforcement seam:** a host-primitive lint (planned) greps `skills/*/SKILL.md` for the identifiers in `parallax-conventions.md` §14.1 outside host-note blocks, with an allowlist of legacy files that shrinks as the sweep lands.
+
+## Canonical step spine
+
+Added 2026-09-04. Every data-producing skill uses the same phase names, in this order, as its Workflow headings. Content differs per skill; names and order do not. An agent that has run one skill then knows the shape of all of them.
+
+| Phase | Heading | Content | Contract owner |
+|---|---|---|---|
+| 0 | `### Step 0 — Pre-flight` | bind primitives; `discover-tools`; resolve shared paths; load active house view and branding; parse args and modes | conventions §0.0, §0.1, §14; loader.md §1–§2; integration-pattern §2 |
+| 1 | `### Step 1 — Resolve inputs` | symbols to RICs; holdings payload validated; policy/config loaded through its helper | conventions §1; client-policy loader |
+| 2 | `### Step 2 — Fetch (parallel batches)` | Batch A independent; Batch B dependent; async tools never block | conventions §3, §5 |
+| 3 | `### Step 3 — Verify` | identity cross-check; `_meta.invalid_fields`; coverage thresholds; gates fail closed to `UNVERIFIED` | conventions §0.3, §2, §4.0 |
+| 4 | `### Step 4 — Compute` | every deterministic number comes from a helper, never from prose arithmetic | the skill's helpers |
+| 5 | `### Step 5 — Compose` | fill Output Format; disclosure, disclaimer, sensitivity, framing, audience mode by reference | conventions §9, §11, §12, §13 |
+| 6 | `### Step 6 — Render (deterministic gate, mandatory)` | the shared render gate; its stdout is the final message or the sole input to Step 7 | conventions §10 |
+| 7 | `### Step 7 — Translate (conditional)` | only when a language argument was supplied | conventions §15 |
+
+Config-producing skills (house-view load/make, white-label onboard) replace Steps 5–7 with `### Step 5 — Confirm` (operator gate, `ask-operator`) and `### Step 6 — Persist` (transactional write through the helper). Sub-steps use letters (`Step 2a`), never a second numbering scheme. The two house-view pre-flights are both Step 0 sub-bullets: the loader path (loader.md §1–§2) for every consumer; the drift check (`auto-on-load-judge-pattern.md`) additionally for skills that build or reweight a portfolio.
+
+The existing `### Render — deterministic gate (LAST step, mandatory)` label is the pre-spine form of Step 6; `test_render_gate.py` accepts either while the sweep runs. Forward-only, same scope statement as "Host portability".
+
+## Authority header
+
+Added 2026-09-04. Every shared `.md` under `skills/_parallax/` declares what kind of file it is in three HTML-comment lines directly under its H1, so the agent never infers trust from prose:
+
+```
+<!-- authority: contract | registry | observation -->
+<!-- verified: YYYY-MM-DD -->
+<!-- overrides: <what this file yields to, e.g. "live schema wins" or "none"> -->
+```
+
+`contract` binds (conventions, loaders, integration patterns, output template). `registry` is a list that tests reconcile against code (never hand-edit a mirror). `observation` is dated field notes (token costs, coverage matrix, response schemas, the §0.2 parameter table, the MCP field inventory): use for planning, confirm against live before acting, and bump `verified` only when you re-verified. Rollout: headers are added file by file as each file is next touched; a header lint (planned) makes the rule mechanical.
+
+## Failure modes and Done when
+
+Added 2026-09-04. Two body sections close every orchestrator, under exactly these names:
+
+- `## Failure modes` — skill-specific rows only; generic degradation is by reference to `parallax-conventions.md` §4 / §4.0 and §14.3. Name the gates that fail closed and the sections that degrade.
+- `## Done when` — three to five checkable lines: the Output Format sections rendered; the render gate ran (or its §14.3 note is present); the audit row appended where the skill writes one; the §9.2 disclosure and the disclaimer present; the expected Parallax spend stated.
+
+Forward-only, same scope statement as "Host portability". `## Output additions` remains a legitimate marker for a family-wide overlay (the ai-* branding and disclosure block) and is not a substitute for `## Output Format`.
+
 ## Canonical source & path resolution
 
 `parallax-workflows/` is the single source of truth for every `parallax-*` skill and for the shared `_parallax/` conventions, house-view modules, schemas, and white-label loaders. `~/.claude/skills/` consumes them as symlinks into this repo — but symlink coverage is **partial**: `_parallax`, `parallax-should-i-buy`, and most consumer skills are symlinked, while a few (e.g. `parallax-template`, `parallax-deck-prep`) are `~/.claude`-native real directories. Treat that split as a hazard, not a convenience.
@@ -159,6 +209,7 @@ Proprietary pillar/factor vocabulary guard: trigger phrases ship verbatim to whi
 - Council session: `notes/2026-05-06-1023-council-white-label-restructure.md`
 - DECISIONS.md entry: 2026-05-06 (later) — white-label-onboard restructure, Phase 2 conditional
 - Companion file: `jit-load-compliance-audit.md`
+- Host portability, Canonical step spine, Authority header, and Failure modes / Done when sections added 2026-09-04 per the agent-ergonomics design pass (internal design note, local-only).
 - Description / Trigger Completeness rule added 2026-05-25 per tech-debt closeout audit covering AI-soros basket-mode invisibility and portfolio-builder --augment-silent undiscoverability.
 
 ## Spec compliance (agentskills.io)
