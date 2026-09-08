@@ -1,16 +1,18 @@
 """Reader for `_parallax/manifest.json` — the single source for per-skill metadata.
 
 The manifest replaces five hand-maintained literals that had to be edited in
-lockstep: `PLUGIN_SKILLS`, `WEB_SKILLS`, `WEB_DESCRIPTIONS` (build_bundle.py),
-`SKILL_ANCHORS` (render_gate.py) and `_NINE_TWO_EXEMPT_SKILLS` (the white-label
-test). Every consumer calls a function here instead of carrying its own copy.
+lockstep: `PLUGIN_SKILLS`, `WEB_SKILLS`, `WEB_DESCRIPTIONS`, and
+`RESOLUTION_EXEMPT_DOCS` (all build_bundle.py) plus `_NINE_TWO_EXEMPT_SKILLS`
+(the white-label test). Every consumer calls a function here instead of
+carrying its own copy.
 
-`render_gate.py` is the deliberate exception: it keeps its literal and is
-reconciled against this reader by a test. The gate is the last step of every
-skill on every host and has no other file dependency; a missing manifest there
-would fail every operator's final output, whereas a missing manifest at build
-time fails only a developer's terminal. Mechanical trust is the same either way,
-because the equality test fails on any drift. See DECISIONS.md 2026-09-07.
+`render_gate.py`'s `SKILL_ANCHORS` is the deliberate exception: it keeps its
+own literal rather than being replaced, and is reconciled against this reader
+by a test. The gate is the last step of every skill on every host and has no
+other file dependency; a missing manifest there would fail every operator's
+final output, whereas a missing manifest at build time fails only a
+developer's terminal. Mechanical trust is the same either way, because the
+equality test fails on any drift. See DECISIONS.md 2026-09-07.
 
 Pure stdlib. Values are cached after the first read; call `reload()` in a test
 that rewrites the file.
