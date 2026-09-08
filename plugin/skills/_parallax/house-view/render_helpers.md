@@ -1,5 +1,9 @@
 # Render Helpers — House View Conflict Tokens
 
+<!-- authority: contract -->
+<!-- verified: 2026-09-05 -->
+<!-- overrides: none -->
+
 Canonical phrasing for the inline and closing flags defined in `loader.md` §7. Single source of truth so §7.1/§7.2/§7.3 tokens are byte-identical across every consumer skill and across time. Single file = single seam when Phase 0.5b lands provenance and tokens gain a `(source: "…")` suffix.
 
 JIT-loaded alongside `loader.md` by any single-stock consumer that renders §7 flags.

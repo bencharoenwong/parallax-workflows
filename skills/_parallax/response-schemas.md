@@ -1,5 +1,9 @@
 # Parallax Response Schemas — Nested Field Reference
 
+<!-- authority: observation -->
+<!-- verified: 2026-08-11 -->
+<!-- overrides: live schema and live responses win -->
+
 JIT-load when you need to know what's inside an `analyze_portfolio` response field. These are observed schemas from a probe run on 2026-05-07 (5-holding US large-cap, 2024-01-02 → present). Schemas may vary by portfolio composition; treat as guide, not contract. Authoritative source is the upstream OpenAPI spec once nested examples are published.
 
 > **Caveat:** A multi-asset or illiquid portfolio may surface fields not shown here. If you see an unfamiliar field in a response, add it to this file rather than assuming it's an error.

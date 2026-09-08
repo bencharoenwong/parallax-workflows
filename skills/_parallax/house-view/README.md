@@ -1,5 +1,9 @@
 # Parallax House View — Shared Core
 
+<!-- authority: contract -->
+<!-- verified: 2026-09-05 -->
+<!-- overrides: none -->
+
 The shared house-view infrastructure consumed by `parallax-load-house-view` (writer — bank CIO ingestion), `parallax-make-house-view` (writer — MCP-driven synthesis), `parallax-judge-house-view` (read-only consumer — drift monitor), and the portfolio / single-stock skills (readers).
 
 This directory holds the canonical schema, the loader contract, the conflict-rendering helpers, the shared Step 3 confirmation gate, the provenance-class registry, the aggregator weighting table, the MCP capability inventory, the auto-on-load drift-gate protocol, and the Python modules that implement audit chaining, calibration-manifest verification, reasoning-chain emission, and gap detection. Skills JIT-load specific files within this directory; the directory itself is never loaded as a unit.

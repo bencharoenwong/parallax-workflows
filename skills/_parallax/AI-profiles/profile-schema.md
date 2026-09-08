@@ -1,5 +1,9 @@
 # Parallax AI Investor Profile — Schema Contract
 
+<!-- authority: contract -->
+<!-- verified: 2026-09-05 -->
+<!-- overrides: none -->
+
 This file is JIT-loaded by every `skills/parallax-ai-<name>/SKILL.md` dispatcher. It defines:
 1. The YAML frontmatter contract a profile spec must conform to
 2. The dispatcher workflow steps every profile runs at invocation time

@@ -1,5 +1,9 @@
 # MCP Field Inventory — Parallax house-view dependencies
 
+<!-- authority: observation -->
+<!-- verified: 2026-05-24 -->
+<!-- overrides: live schema and live responses win -->
+
 **Generated:** 2026-05-24
 **Source:** Phase A0 live MCP smoke calls
 **Reviewed by:** N/A (initial generation)

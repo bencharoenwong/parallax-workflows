@@ -1,5 +1,9 @@
 # Skill Structure & Length Conventions
 
+<!-- authority: contract -->
+<!-- verified: 2026-09-05 -->
+<!-- overrides: none -->
+
 Conventions for how `skills/<name>/SKILL.md` should be organized as the file grows. Established 2026-05-06 per council deliberation (notes/2026-05-06-1023-council-white-label-restructure.md). Pairs with `jit-load-compliance-audit.md` — the audit protocol that gates any structural restructure.
 
 JIT-load this file before drafting a new skill, before committing any change that adds ≥100 lines to an existing SKILL.md, and during periodic skill-evolve passes.
@@ -185,7 +189,7 @@ Added 2026-09-04. Every shared `.md` under `skills/_parallax/` declares what kin
 <!-- overrides: <what this file yields to, e.g. "live schema wins" or "none"> -->
 ```
 
-`contract` binds (conventions, loaders, integration patterns, output template). `registry` is a list that tests reconcile against code (never hand-edit a mirror). `observation` is dated field notes (token costs, coverage matrix, response schemas, the §0.2 parameter table, the MCP field inventory): use for planning, confirm against live before acting, and bump `verified` only when you re-verified. Rollout: headers are added file by file as each file is next touched; a header lint (planned) makes the rule mechanical.
+`contract` binds (conventions, loaders, integration patterns, output template). `registry` is a list that tests reconcile against code (never hand-edit a mirror). `observation` is dated field notes (token costs, coverage matrix, response schemas, the §0.2 parameter table, the MCP field inventory): use for planning, confirm against live before acting, and bump `verified` only when you re-verified. Every shared file carries the header; `_parallax/scripts/authority-header-lint.py` enforces it in `build-skills.sh` and CI, and its test pins the scoped file set so a new shared file is added to the test in the PR that creates it.
 
 ## Failure modes and Done when
 

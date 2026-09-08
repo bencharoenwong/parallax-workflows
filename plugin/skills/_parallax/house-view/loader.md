@@ -1,5 +1,9 @@
 # Parallax House View — Shared Loader & Resolver
 
+<!-- authority: contract -->
+<!-- verified: 2026-09-05 -->
+<!-- overrides: none -->
+
 JIT-loaded by every `parallax-*` skill that consumes the active house view. Defines: where the view lives, how to validate it, how to apply tilts to MCP tool calls, how to resolve conflicts with explicit user constraints, and how to render conflict banners.
 
 **Schema reference:** `_parallax/house-view/schema.yaml` (canonical YAML structure).

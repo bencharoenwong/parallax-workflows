@@ -4,6 +4,22 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-09-05: Two lints make the 2026-09-04 rules mechanical; shared files carry authority headers
+
+**Why.** The 2026-09-04 entry added rules with no enforcement seam. A rule with no lint is a hope: the trigger-completeness rule of 2026-05-25 has had "enforcement seam: none" for three months. Both new rules are cheap to check by grep and expensive to police by review.
+
+**Impact.**
+- `host-primitive-lint.py` runs in `build-skills.sh` and as a CI step. Legacy allowlist of 34 skills, equality-pinned in its test, shrinks only; an allowlisted skill that no longer needs the exemption fails as stale so the list cannot rot.
+- `authority-header-lint.py` runs in the same two places. All 21 shared markdown files carry the header from this commit; the `verified` date on the five `observation` files is the date of their last live check, not today.
+- `skills/_parallax/README.md` is the new map of the shared layer and the home for facts that lived only in shell and YAML comments (interpreter, environment switches, conftest budget, manual CI roots).
+
+**Alternatives.**
+- `[DROP]` **Roll headers out file by file as touched.** Rejected: a lint that is hard from day one is simpler than a lint with a growing exemption list, and the edit is mechanical.
+- `[DROP]` **Subset check for the allowlist** (`script ⊆ test`). Rejected during review: a shrink in the script without a shrink in the test would pass, so re-adding a swept skill later would also pass. Equality makes every change a visible two-file edit.
+- `[DROP]` **Lint `/parallax-*` slash chaining.** Routing lines "use /parallax-x" are legitimate everywhere; the lint cannot tell a routing hint from a host-locked invocation. Recorded as a Phase 3 candidate for a narrow detector.
+
+**Flip conditions.** (a) The allowlist reaches zero → delete the allowlist mechanism and its test. (b) A shared file legitimately has no H1 (a data record) → add it to the excluded segments, do not weaken the header rule.
+
 ## 2026-09-04: Skills name host primitives, not host tools; one step spine; authority headers on shared files
 
 **Why.** The skills must run on harnesses other than Claude Code. A survey of all 38 `parallax-*` SKILL.md files on 2026-09-04 found 34 host-locked (a Claude Code discovery call in 11 phrasings, a connector namespace literal in 29, host tool names for questions, file writes and fetches), five names for the first workflow step, four names for the output contract, a failure-handling heading in only 11 of 38 files and under six different names, exit criteria in 3, and the same shared rules copied into 5–22 files instead of referenced. An agent must read six shared files plus a 200-line SKILL.md to learn which rules apply to the skill in front of it, and cannot tell from prose whether a shared table binds or merely records an observation. The design test for every change here: it must reduce that read set or make a trust decision mechanical.
@@ -685,6 +701,7 @@ Audit context: 4-pass review trail (Plan v1 → feature-dev:code-architect → P
 
 ## Index
 
+- [2026-09-05 — Lints for host primitives and authority headers](#2026-09-05-two-lints-make-the-2026-09-04-rules-mechanical-shared-files-carry-authority-headers)
 - [2026-09-04 — Host primitives, step spine, authority headers](#2026-09-04-skills-name-host-primitives-not-host-tools-one-step-spine-authority-headers-on-shared-files)
 - [2026-05-06 (later) — white-label-onboard restructure: extract.py package split first, SKILL.md split conditional](#2026-05-06-later-white-label-onboard-restructure-extractpy-package-split-first-skillmd-split-conditional)
 - [2026-05-06 — Extend white-label-onboard with PPTX/DOCX + voice; reject new client-brand-ingest skill](#2026-05-06-extend-white-label-onboard-with-pptxdocx--voice-reject-new-client-brand-ingest-skill)

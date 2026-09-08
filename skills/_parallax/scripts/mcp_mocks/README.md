@@ -1,5 +1,9 @@
 # Shared MCP Mock Fixtures
 
+<!-- authority: registry -->
+<!-- verified: 2026-09-05 -->
+<!-- overrides: the code it mirrors (contract_schemas.py); regenerate, do not hand-edit -->
+
 One JSON file per Parallax MCP endpoint consumed by parallax-* skills. These mocks back the contract tests in `../contract_validator.py` + `../contract_schemas.py` and are imported by per-skill `test_mcp_contracts.py` files.
 
 ## Why these exist

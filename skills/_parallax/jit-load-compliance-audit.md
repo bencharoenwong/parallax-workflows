@@ -1,5 +1,9 @@
 # JIT-Load Compliance Audit Protocol
 
+<!-- authority: contract -->
+<!-- verified: 2026-09-05 -->
+<!-- overrides: none -->
+
 A protocol for runtime-validating that Claude actually loads referenced files when SKILL.md directs it to. Established 2026-05-06 per council deliberation (notes/2026-05-06-1023-council-white-label-restructure.md). Pairs with `skill-structure-conventions.md` — the convention that establishes WHEN to split; this file establishes how to verify the split holds.
 
 JIT-load this file before any SKILL.md restructure, and after any change that adds or modifies a `→ Load references/<file>.md` directive.

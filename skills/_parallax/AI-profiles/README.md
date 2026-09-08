@@ -1,5 +1,9 @@
 # Parallax AI Investor Profiles
 
+<!-- authority: contract -->
+<!-- verified: 2026-09-05 -->
+<!-- overrides: none -->
+
 Shared core for the `parallax-ai-*` skill family. Each profile is a markdown spec under `profiles/` that declares a workflow over Parallax MCP tools, anchored to a published academic paper or book, and consumed by a thin dispatcher skill at `skills/parallax-ai-<name>/SKILL.md`.
 
 ## What a profile is

@@ -183,6 +183,16 @@ jobs:
       - name: Section cross-reference lint
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python skills/_parallax/scripts/section-ref-lint.py skills/
+      # Conventions §14: a SKILL.md names host primitives, never host tools.
+      # Forward-only via LEGACY_ALLOWLIST in the script; the list may only shrink.
+      - name: Host-primitive lint
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: python skills/_parallax/scripts/host-primitive-lint.py skills/
+      # Every shared _parallax/*.md declares contract | registry | observation
+      # plus a verified date, so an agent can decide trust without parsing prose.
+      - name: Authority-header lint
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: python skills/_parallax/scripts/authority-header-lint.py skills/
       - name: Coverage lint (informational)
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: bash skills/_parallax/scripts/coverage-lint.sh || true

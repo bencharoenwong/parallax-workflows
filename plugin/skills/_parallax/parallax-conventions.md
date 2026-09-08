@@ -1,5 +1,9 @@
 # Parallax Skill Conventions
 
+<!-- authority: contract -->
+<!-- verified: 2026-09-05 -->
+<!-- overrides: none -->
+
 Shared patterns for all `parallax-*` skills. JIT-load from any skill that calls Parallax MCP tools.
 
 ---

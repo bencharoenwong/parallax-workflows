@@ -141,6 +141,18 @@ else
     exit 1
   fi
   echo ""
+  echo "Linting host-locked identifiers (conventions §14)…"
+  if ! python3 ./_parallax/scripts/host-primitive-lint.py; then
+    echo "FAIL: a non-legacy SKILL.md names a host tool outside a host-note block, or the legacy allowlist is stale." >&2
+    exit 1
+  fi
+  echo ""
+  echo "Linting authority headers on shared _parallax/*.md…"
+  if ! python3 ./_parallax/scripts/authority-header-lint.py; then
+    echo "FAIL: a shared _parallax/*.md lacks the authority/verified/overrides header." >&2
+    exit 1
+  fi
+  echo ""
   echo "Validating agentskills.io spec compliance…"
   if ! python3 ./_parallax/scripts/spec-validate.py $(all_skill_dirs); then
     echo "FAIL: one or more skills violate the agentskills.io spec." >&2
