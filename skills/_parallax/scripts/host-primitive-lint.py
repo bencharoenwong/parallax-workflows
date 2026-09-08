@@ -50,7 +50,13 @@ HOST_IDENTIFIERS: dict[str, re.Pattern[str]] = {
 }
 
 HOST_NOTE_OPEN = re.compile(r"<!--\s*host-note\s*-->")
-HOST_NOTE_SPAN = re.compile(r"<!--\s*host-note\s*-->.*?<!--\s*/host-note\s*-->", re.S)
+# A span must not swallow a LATER opening tag: with a plain `.*?` an UNCLOSED block
+# merges with the next properly-paired block, hiding every identifier between them
+# and defeating the unclosed check that exists to catch exactly that.
+HOST_NOTE_SPAN = re.compile(
+    r"<!--\s*host-note\s*-->(?:(?!<!--\s*host-note\s*-->).)*?<!--\s*/host-note\s*-->",
+    re.S,
+)
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
 
 # Skill directories that were host-locked on 2026-09-05. Shrinks only.

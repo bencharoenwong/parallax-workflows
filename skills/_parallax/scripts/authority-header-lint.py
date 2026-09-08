@@ -26,7 +26,7 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 KINDS = ("contract", "registry", "observation")
@@ -80,7 +80,7 @@ def check_text(text: str) -> list[str]:
         problems.append(f"authority `{idx['authority'][1]}` is not one of {KINDS}")
     try:
         d = date.fromisoformat(idx["verified"][1])
-        if d > date.today():
+        if d > datetime.now(timezone.utc).date():
             problems.append("verified date is in the future")
     except ValueError:
         problems.append("verified date is not a real calendar date")
