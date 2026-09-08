@@ -169,7 +169,8 @@
       "web": false,
       "anchors_key": "pair-finder",
       "anchors": [
-        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:verdict|top pair|pair finder|pair:)",
+        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:verdict|top pair|pair finder)",
+        "^\\s{0,3}(?:[-*]\\s*)?\\*\\*\\s*pair\\s*(?::\\*\\*|\\*\\*\\s*:)",
         "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+pair finder\\b"
       ]
     },
