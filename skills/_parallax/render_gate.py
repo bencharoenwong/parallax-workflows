@@ -151,7 +151,8 @@ SKILL_ANCHORS: dict[str, list[str]] = {
         _branding("scenario analysis"),
     ],
     "pair-finder": [
-        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:verdict|top pair|pair finder|pair:)",
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:verdict|top pair|pair finder)",
+        r"^\s{0,3}-\s*\*\*pair\*\*\s*:",
         _branding("pair finder"),
     ],
     "stress-test-thesis": [

@@ -202,6 +202,13 @@ def test_each_skill_strips_scaffold_keeps_first_section():
         assert out.lstrip().startswith(hdr), (skill, out[:70])
 
 
+def test_pair_finder_evaluate_mode_anchors_on_pair_line():
+    hdr = "- **Pair**: NVDA.O / AMD.O — semis / semis / US"
+    draft = SCAFFOLD + "No active house view, white-label inactive.\n\n" + hdr + "\nbody\n"
+    out = gate(draft, "pair-finder")
+    assert out.lstrip().startswith(hdr), out[:70]
+
+
 def test_title_form_anchors_each_skill():
     titles = {
         "client-review": "# Client Portfolio Review — Conservative Retiree",

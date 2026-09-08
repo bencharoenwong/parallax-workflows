@@ -568,7 +568,7 @@ class MakerOrchestrator:
             disposition_options=["confirm", "edit", "regenerate", "abandon"],
         )
 
-    # ---- Step 6 — Persist: save (reuses load-house-view Step 6 path) ----
+    # ---- Step 8: save (reuses load-house-view Step 6 — Persist) ----
 
     def save_view(
         self,
