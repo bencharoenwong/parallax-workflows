@@ -4,6 +4,17 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-09-05 (hygiene)
+
+### Fixed
+- **Three token-cost tables disagreed on membership.** `skills/_parallax/token-costs.md` is now the single source: it gains `check_api_health` (priced 0 in code, absent from the doc), an "Unpriced" table mirroring `KNOWN_UNPRICED`, and the nine `parallax-ai-*` workflow rows that lived only in `AI-profiles/README.md` (now a pointer). `evals/graders/test_token_model.py` gains the code→doc direction, the unpriced set, and a check that every `parallax-ai-*` skill has a priced row under the AI heading, so a dropped skill row fails.
+- `scripts/contract_schemas.py` and `scripts/gen_mock_fixtures.py` quoted a sentence that `response-schemas.md` never contained; both now cite what exists.
+- `scripts/authority-header-lint.py` compared the `verified` date against the process's calendar date, so a header stamped with today's local date in a zone ahead of UTC read as "in the future" when the lint ran under UTC in CI. It now compares against the most advanced calendar date anywhere on earth (UTC+14); `test_authority_header_lint.py` pins the rollover.
+
+### Removed
+- `skills/_parallax/AI-profiles/.gitkeep` (directory is populated), `skills/_parallax/house-view/tests/smoke_test_e2e.py` (matched no collection pattern; never ran).
+- **Not removed:** `examples/jit-policies.md` was on the orphan list as unreferenced, but inbound-reference count is the wrong test for a policy document. It is the only place the JIT staleness thresholds, the no-silent-freshening rule, the refused-stale audit behaviour and the no-cross-portfolio-caching rationale are written down, and it governs the live `--augment-silent` path in `parallax-portfolio-builder`. Kept.
+
 ## 2026-09-05 (lints)
 
 ### Added

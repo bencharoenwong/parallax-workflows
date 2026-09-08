@@ -39,8 +39,8 @@ GET_TELEMETRY_SCHEMA = {
 # ``factor_exposures``, ``sector_exposures``, dict-valued ``sector_allocation``
 # and ``sector_contribution``, ``symbol``/``contribution``/``weight`` rows in
 # ``company_contribution``. That divergence was already on record in
-# ``response-schemas.md`` ("treat this file, not the mock, as the current record
-# of the live contract") and in ``DECISIONS.md`` (the mock "is the wrong
+# ``response-schemas.md`` (the observed live shape, dated 2026-05-07/2026-08-11)
+# and in ``DECISIONS.md`` 2026-08-15 (the hand-authored mock "is the wrong
 # artifact"). The mock and this schema now follow the live shape.
 #
 # THREE STRUCTURAL POINTS THAT BIT PEOPLE, restated here because a schema is

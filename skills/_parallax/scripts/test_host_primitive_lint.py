@@ -89,6 +89,48 @@ def test_unclosed_host_note_fails(tmp_path):
     assert "UNCLOSED HOST-NOTE" in out
 
 
+def test_unclosed_block_before_a_paired_block_still_fails(tmp_path):
+    """An UNCLOSED host-note must not be rescued by a later paired block.
+
+    Regression: a plain non-greedy span matched from the first opening tag to the
+    NEAREST closing tag, so an unclosed block merged with the next properly-paired
+    one. That hid every identifier in between AND made `unclosed` read False —
+    defeating the exact check meant to catch it. Found by review 2026-09-08 while
+    59 host-note blocks already existed on downstream branches.
+    """
+    text = (
+        "# X\n"
+        "<!-- host-note -->\n"
+        "never closed\n"
+        "Call `ToolSearch` here\n"
+        "<!-- host-note -->\n"
+        "second block, properly paired\n"
+        "<!-- /host-note -->\n"
+        "Use `WebFetch` here\n"
+    )
+    hits, unclosed = lint.scan_text(text)
+    assert unclosed is True, "unclosed opening tag must be reported"
+    assert (4, "ToolSearch") in hits, "identifier inside the unclosed block must not be swallowed"
+    assert (8, "WebFetch") in hits
+
+    root = _tree(tmp_path, {"parallax-new": text})
+    rc, out = _run(root)
+    assert rc == 1
+    assert "UNCLOSED HOST-NOTE" in out
+
+
+def test_two_paired_blocks_are_both_stripped():
+    """The fix must not over-strip: two well-formed blocks stay exempt."""
+    text = (
+        "# X\n"
+        "<!-- host-note -->\nClaude Code: `ToolSearch`\n<!-- /host-note -->\n"
+        "clean prose\n"
+        "<!-- host-note -->\nClaude Code: `WebFetch`\n<!-- /host-note -->\n"
+    )
+    hits, unclosed = lint.scan_text(text)
+    assert hits == [] and unclosed is False
+
+
 def test_ordinary_html_comment_is_stripped():
     hits, unclosed = lint.scan_text("# X\n<!-- migration note: ToolSearch removed 2026-09 -->\nclean\n")
     assert hits == [] and not unclosed

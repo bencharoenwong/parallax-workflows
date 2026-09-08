@@ -14,6 +14,7 @@ Parallax uses token-based pricing. All tools consume the same number of tokens w
 | `explain_methodology` | Scoring methodology explanations |
 | `get_docs` / `list_docs` | Documentation access |
 | `search_stocks` / `search_etfs` | Symbol search (fuzzy) |
+| `check_api_health` | Connector health probe. Free, so a health check never changes a workflow's total. |
 | `export_price_series` | Daily price data export. Its own MCP tool description states "FREE" (verified live 2026-07-20; the whole tool suite marks free tools "FREE" and omits the marker on billable ones). Was previously listed under "1 token each" — reclassified to match the vendor's stated contract. **Reversible:** if operator billing shows this is metered (e.g. free only within plan limits), move it back and revise dependent skill estimates. |
 
 ### 1 token each
@@ -54,6 +55,16 @@ Parallax uses token-based pricing. All tools consume the same number of tokens w
 |---|---|
 | `get_stock_report` | Full Parallax research report with PDF (async, 1-2 min) |
 | `get_assessment` | AI deep-research synthesis (MCP uses deep model) |
+
+### Unpriced (live endpoints nobody has measured)
+| Tool | Description |
+|---|---|
+| `etf_search` | ETF discovery by market/keyword/score |
+| `etf_holdings` | Underlying holdings of an ETF |
+| `check_job_status` | Async job polling for report endpoints |
+| `submit_feedback` | Feedback submission |
+
+These are deliberately unpriced: this repo does not publish inferred numbers. A workflow total that touches one states what it omits. Measure one and it moves to a cost table above.
 
 ---
 
@@ -100,6 +111,22 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 | Workflow | Tokens (typical) | Key cost drivers |
 |---|---|---|
 
+
+### AI investor profile workflows
+
+Single source for the `parallax-ai-*` family; the AI-profiles framework README points here rather than carrying a copy.
+
+| Workflow | Tokens (typical) | Key cost drivers |
+|---|---|---|
+| `parallax-ai-buffett` | **~4** | company info + peer snapshot + financials + score analysis |
+| `parallax-ai-greenblatt` (ticker-check) | **~10-15** | universe build (5) + peer ratios |
+| `parallax-ai-greenblatt` (universe mode) | **~10-30** | universe build + per-candidate ratios; scales with basket size |
+| `parallax-ai-klarman` | **~5-7** | balance sheet + cash flow + ratios + peer snapshot |
+| `parallax-ai-soros` (single-ticker) | **~25-30** | macro + telemetry + universe |
+| `parallax-ai-soros` (basket mode) | **~30-40** | macro once + per-ticker exposure checks |
+| `parallax-ai-ptj` (single-ticker) | **~14-16** | macro + technical + peer snapshot + outlook + score analysis |
+| `parallax-ai-consensus` (single ticker) | **~60-70** | all five profiles in parallel |
+| `parallax-ai-consensus` (basket of 5) | **~180-240** | per-ticker factor profiles; macro profiles run once |
 
 ### Cost Context
 

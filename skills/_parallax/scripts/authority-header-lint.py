@@ -26,7 +26,7 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 KINDS = ("contract", "registry", "observation")
@@ -80,11 +80,18 @@ def check_text(text: str) -> list[str]:
         problems.append(f"authority `{idx['authority'][1]}` is not one of {KINDS}")
     try:
         d = date.fromisoformat(idx["verified"][1])
-        if d > date.today():
+        if d > latest_local_date():
             problems.append("verified date is in the future")
     except ValueError:
         problems.append("verified date is not a real calendar date")
     return problems
+
+
+def latest_local_date(now: datetime | None = None) -> date:
+    """The most advanced calendar date anywhere on earth (UTC+14). A header stamped
+    with today's local date must never read as future, whatever zone stamped it."""
+    now = now or datetime.now(timezone.utc)
+    return (now + timedelta(hours=14)).date()
 
 
 def main(root: Path | None = None, out=sys.stderr) -> int:

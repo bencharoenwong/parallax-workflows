@@ -271,3 +271,75 @@ def test_foreign_mcp_servers_are_skipped_not_flagged():
     )
     assert est.total == 1
     assert est.unknown_endpoints == ()
+
+
+# --- reverse direction (code -> doc) and the tables the forward tests skip ----
+
+_AI_HEADING = "### AI investor profile workflows"
+_UNPRICED_HEADING = "### Unpriced (live endpoints nobody has measured)"
+_FLAT_HEADINGS = {
+    0: "### 0 tokens (free)",
+    1: "### 1 token each",
+    5: "### 5 tokens each",
+    10: "### 10 tokens each",
+}
+
+
+def _section(doc: str, heading: str) -> str:
+    assert heading in doc, f"heading {heading!r} missing from token-costs.md"
+    return doc.split(heading, 1)[1].split("\n###", 1)[0]
+
+
+def _workflow_rows(doc: str, heading: str) -> dict[str, str]:
+    """{row label incl. mode: bold cost} for a per-workflow table.
+
+    ``_table_names``'s ``[a-z_]+`` class cannot match hyphenated skill names,
+    so this parser keeps the whole first cell (name plus optional mode) as the
+    label and reads the bold cost cell verbatim.
+    """
+    rows: dict[str, str] = {}
+    for line in _section(doc, heading).splitlines():
+        if not line.startswith("| `"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        m = re.match(r"^`([a-z0-9_-]+)`(?:\s+\(([^)]+)\))?$", cells[0])
+        assert m, f"unparseable workflow row: {cells[0]!r}"
+        label = m.group(1) + (f" ({m.group(2)})" if m.group(2) else "")
+        cost = re.match(r"^\*\*(.+?)\*\*$", cells[1])
+        assert cost, f"cost cell is not bold in {label}: {cells[1]!r}"
+        rows[label] = cost.group(1)
+    return rows
+
+
+def test_every_flat_cost_key_is_published():
+    """Reverse of ``test_flat_cost_matches_published_table``: a name priced in
+    code but absent from the doc (``check_api_health`` was one) is drift too."""
+    doc = TOKEN_COSTS.read_text()
+    published = {
+        name: cost
+        for cost, heading in _FLAT_HEADINGS.items()
+        for name in _table_names(doc, heading)
+    }
+    for name, cost in FLAT_COST.items():
+        assert name in published, f"{name} is in FLAT_COST but not in token-costs.md"
+        assert published[name] == cost, f"{name}: code {cost}, doc {published[name]}"
+
+
+def test_known_unpriced_matches_published_table():
+    from token_model import KNOWN_UNPRICED  # noqa: PLC0415
+
+    names = _table_names(TOKEN_COSTS.read_text(), _UNPRICED_HEADING)
+    assert names == set(KNOWN_UNPRICED), (
+        f"doc lists {sorted(names)}, KNOWN_UNPRICED has {sorted(KNOWN_UNPRICED)}"
+    )
+
+
+def test_every_ai_profile_skill_has_a_priced_row():
+    """Every ai-* skill directory is priced under the AI heading, and every row
+    there carries a token figure in the ``~N`` / ``~N-M`` form the tests parse."""
+    rows = _workflow_rows(TOKEN_COSTS.read_text(), _AI_HEADING)
+    labels = {label.split(" ")[0] for label in rows}
+    for skill_dir in sorted((REPO_ROOT / "skills").glob("parallax-ai-*")):
+        assert skill_dir.name in labels, f"{skill_dir.name} has no row under {_AI_HEADING}"
+    for label, cost in rows.items():
+        assert re.fullmatch(r"~\d+(-\d+)?", cost), f"{label}: unpriced cost cell {cost!r}"

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import io
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parent / "authority-header-lint.py"
@@ -57,6 +58,20 @@ def test_unknown_kind_fails():
 def test_non_date_fails():
     assert any("verified" in p for p in lint.check_text(GOOD.replace("2026-09-05", "n/a")))
     assert any("calendar" in p for p in lint.check_text(GOOD.replace("2026-09-05", "2026-13-40")))
+
+
+def test_future_date_fails_but_todays_local_date_passes():
+    far = (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat()
+    assert any("future" in p for p in lint.check_text(GOOD.replace("2026-09-05", far)))
+    for offset in (-12, 0, 14):
+        local_today = (datetime.now(timezone.utc) + timedelta(hours=offset)).date().isoformat()
+        assert lint.check_text(GOOD.replace("2026-09-05", local_today)) == [], offset
+
+
+def test_latest_local_date_rolls_over_at_utc_plus_14():
+    at = datetime(2026, 9, 8, 9, 59, tzinfo=timezone.utc)
+    assert lint.latest_local_date(at).isoformat() == "2026-09-08"
+    assert lint.latest_local_date(at + timedelta(minutes=1)).isoformat() == "2026-09-09"
 
 
 def test_header_too_far_down_fails():
