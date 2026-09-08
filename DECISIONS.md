@@ -8,7 +8,7 @@ Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[
 
 **Why.** Three tables carried the price list (`token-costs.md`, `evals/graders/token_model.py`, `AI-profiles/README.md`) and a fourth copy sits in `parallax-ai-consensus/SKILL.md`. The existing test checked doc→code only, so a name priced in code but missing from the doc (`check_api_health`) never surfaced.
 
-**Impact.** `token-costs.md` is the source; the AI-profiles README points at it; `test_token_model.py` checks code→doc, the unpriced set, and the AI rows with values. The consensus SKILL.md copy is left for the Phase 3 ai-* sweep.
+**Impact.** `token-costs.md` is the source; the AI-profiles README points at it; `test_token_model.py` checks code→doc, the unpriced set, and that every `parallax-ai-*` skill has a priced row under the AI heading. The consensus SKILL.md copy is left for the Phase 3 ai-* sweep.
 
 **Alternatives.** `[DROP]` **A structured `token-costs.yaml` generating both the markdown and the code tables.** Not adopted now: the markdown carries prose caveats a generator cannot own, and the parser count is still small. Revisit if a fifth per-heading parser appears.
 
