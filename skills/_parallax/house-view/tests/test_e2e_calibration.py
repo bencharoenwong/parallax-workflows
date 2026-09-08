@@ -1,7 +1,7 @@
 """End-to-end tests for the calibration_status flip surface.
 
 The contract under test: per loader.md §6.2 generate-row conditional fields
-and load-house-view/SKILL.md Step 4 6b, ``metadata.calibration_status``
+and load-house-view/SKILL.md Step 6 item 6b, ``metadata.calibration_status``
 (and the corresponding audit-row field) must be ``empirical_phase1`` iff
 the active calibration manifest is signed AND its
 ``provenance.methodology_section != "GUESS"`` AND
@@ -14,7 +14,7 @@ collision pattern between make-house-view/ and judge-house-view/).
 KNOWN GAP DOCUMENTED HERE (see DECISIONS.md follow-up):
 The v2 plan §10 retention #3 claims "calibration_status passthrough requires
 zero code change." That is TRUE for the LLM-orchestrated
-``load-house-view`` skill (Step 4 reads ``manifest_cache.load_manifest()``
+``load-house-view`` skill (Step 6 reads ``manifest_cache.load_manifest()``
 in prose at runtime and the LLM decides which string to emit). It is
 FALSE for the programmatic ``make-house-view`` maker path
 (``make-house-view/maker.py`` lines 470 + 655 hardcode ``"heuristic_phase0"``
@@ -118,7 +118,7 @@ def _read_save_audit_row(view_dir: Path) -> dict[str, Any]:
 
 def _build_empirical_phase_manifest() -> dict[str, Any]:
     """Manifest shape mirroring the empirical-phase contract per
-    load-house-view Step 4 6b (non-GUESS methodology + non-null backtest_ref).
+    load-house-view Step 6 item 6b (non-GUESS methodology + non-null backtest_ref).
     Shape matches the production manifest dict per
     test_skill_integration._build_signed_manifest (without re-signing —
     the maker would consult the orchestrator's RETURN, not re-verify).
@@ -189,7 +189,7 @@ def test_e2e_default_save_carries_heuristic_phase0(
     reason=(
         "Documented gap: v2 plan §10 retention #3 claims calibration_status "
         "passthrough requires zero code change. That holds for the LLM-driven "
-        "load-house-view path (Step 4 6b in SKILL.md is prose). It does NOT "
+        "load-house-view path (Step 6 item 6b in SKILL.md is prose). It does NOT "
         "hold for make-house-view/maker.py, which hardcodes "
         "'heuristic_phase0' at lines 470 and 655 and never imports "
         "manifest_cache. Until maker.py is wired to call "
@@ -269,7 +269,7 @@ def test_e2e_manifest_missing_or_invalid_falls_back_to_heuristic(
     (DeadStateNoFallback, ManifestExpired, anything), the maker save
     must still complete and ship ``heuristic_phase0``. NEVER crash.
 
-    Per load-house-view Step 4.1a: "Capture manifest and status (handle
+    Per load-house-view Step 6 item 1a: "Capture manifest and status (handle
     exceptions by falling back to status='PHASE_0_FALLBACK')." The maker
     path currently achieves this by hardcoding heuristic_phase0 (never
     calling the loader at all); patching the loader to raise should

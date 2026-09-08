@@ -4,6 +4,66 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-09-07 (spine sweep complete)
+
+### Changed
+- `parallax-rebalance` migrated onto the canonical step spine — the last Workflow-bearing skill. Batch 0 discovery and the house-view drift check become Step 0 sub-items; mandate-parameter parsing moves to Step 1 (its two internal pointers now name `Batch C item 4` / `item 5` instead of the old step numbers); Batch A and Batch B are Step 2; the After-Batch-A checks are Step 3; Batch C, Batch C2 and Batch D are Step 4; the Pre-Render branding block is Step 5; the render gate is Step 6. The code-bound batch names are kept verbatim as identifiers under the spine headings, so `policy-loader.md`'s "Batch C2 there owns payload assembly" and the Output Format's "After Batch A item 3/4" pointers still resolve. The `ToolSearch` mention moved into a Claude Code host-note; the one workflow-step slash chain became `invoke-skill`. Gains Failure modes and Done when. 213 lines, under the 250-line eval cap.
+- `host-primitive-lint.py`'s `LEGACY_ALLOWLIST` and `test_step_spine.py`'s `SPINE_PENDING` are both **empty**. Every skill now names host primitives and confines host identifiers to host-note blocks.
+- `test_host_primitive_lint.py` exercises the allowlist mechanism against a monkeypatched synthetic entry rather than a real skill name, so an empty list cannot silently retire the guard; a new test deletes the exemption and confirms the same file then fails.
+- `test_live_capability_contract.py`'s one-`analyze_portfolio`-call guard slices on the `Step 2 — Fetch` / `Step 3 — Verify` spine headings instead of the old `### Batch A` label, and asserts both are present, so the slice cannot return an empty string and pass a row count of zero.
+
+## 2026-09-06 (spine gate)
+
+### Added
+- `skills/_parallax/scripts/test_step_spine.py`: every SKILL.md with a `## Workflow` section must carry the seven spine headings in order with a Compose/Confirm Step 5 and a Render/Persist Step 6; `SPINE_PENDING` (equality-pinned, shrink-only) holds `parallax-rebalance` until its hotfix merges. Concierge (router) and house-view-diff (interface spec) have no Workflow section and are out of scope by definition.
+
+## 2026-09-06 (sweep: operator reports)
+
+### Changed
+- `parallax-stress-house-view`, `parallax-judge-house-view`, `parallax-house-view-attribution`, and `parallax-cio-letter-prep` follow the canonical step spine with §14 host primitives and a Claude Code host-note. The code-bound phase names (`judge.py` Phase 0–8, the stress design doc's Phase 0–4 and 4-B, attribution's Phase 5) are cited as identifiers under the spine headings; helper calls, report sections, and tests are unchanged. cio-letter-prep drops the vendor namespace from its tool tables, keeps the `fields=[...]` literal and the identity-gate text verbatim, and states that its dependent per-mover fan-out fires inside Step 4 as Batch B. All four gain Failure modes and Done when. Host-primitive allowlist is now `parallax-rebalance` only.
+
+## 2026-09-06 (sweep: white-label onboard)
+
+### Changed
+- `parallax-white-label-onboard` follows the config-producer spine: `Step 1 — Resolve inputs`, `Step 2 — Fetch` (2a extract, 2b voice, 2c completeness audit), `Step 3 — Verify`, `Step 4 — Compute`, `Step 5 — Confirm`, `Step 6 — Persist` (6a–6d). Host tool names are replaced by §14 primitives with a Claude Code host-note. The five `references/*.md` files, `loader.py` comments, and every cross-citation were renumbered in the same change; procedures are unchanged. Failure modes (persistence fails closed) and Done when added. Host-primitive allowlist shrinks to 4.
+
+## 2026-09-06 (sweep: house-view producers)
+
+### Changed
+- `parallax-load-house-view` and `parallax-make-house-view` follow the config-producer spine: Steps 0–4, then `Step 5 — Confirm` (operator gate) and `Step 6 — Persist`. Host tool names are replaced by the §14 primitives (`ask-operator`, `write-artifact`, `load-reference`, `fetch-url`, `run-shell`, `read-config`) with a Claude Code host-note; the `view_commit` staging contract is unchanged. The load skill's gate is now Step 5 (5a snapshot, 5b extraction-attempt row) and its save path Step 6; every docstring and comment that cited the old numbers (`maker.py`, `gate_present.py`, `schema.yaml`, house-view tests) was updated in the same change. Both skills gain Failure modes (persistence fails closed without an explicit operator confirmation) and Done when sections. Host-primitive allowlist shrinks to 5.
+
+## 2026-09-06 (sweep: AI-profile family)
+
+### Changed
+- The six AI-profile dispatchers (`parallax-ai-buffett`, `-greenblatt`, `-klarman`, `-soros`, `-ptj`, `-consensus`) now follow the canonical step spine (`Step 0 — Pre-flight` through `Step 6 — Render — Emit`) with host primitives; the pinned emit paragraph, template blocks, and Output additions are unchanged. `parallax-ai-ptj` gains the standard emit paragraph its Step 9 lacked. `parallax-ai-consensus` points at `token-costs.md` instead of carrying its own cost table. `profile-schema.md` §2 uses `discover-tools` and maps its steps onto the spine. Host-primitive allowlist shrinks to 7.
+
+## 2026-09-06 (sweep: discovery family)
+
+### Changed
+- **Seven discovery skills on the canonical step spine:** `parallax-thematic-screen`, `parallax-macro-outlook`, `parallax-country-deep-dive`, `parallax-halal-screen`, `parallax-scenario-analysis`, `parallax-pair-finder`, `parallax-stress-test-thesis`. Same treatment as the earlier families; every Output Format unchanged; the scenario-analysis identity-gate paragraph, the halal-screen fail-closed gate, the pair-finder HARD HALT block and the thematic-screen drift-check clause kept verbatim. All seven are now render-gated with their own anchors (`SKILL_ANCHORS`, conventions §10). `parallax-pair-finder`'s per-mode batch tables move to `references/modes.md` (310 → 216 lines); `parallax-stress-test-thesis` names `ask-operator` instead of one host's question tool and trims its description under the 1024-char cap. `parallax-concierge` is a router with no host-locked text and stays as is. Legacy allowlist 20 → 13.
+
+## 2026-09-06 (prompt audit)
+
+### Changed
+- **Prompt audit across all 40 skills and the shared layer** (method: the four dated-pattern groups of a harness-neutral prompt audit; every proposed deletion checked against the render-gate, integration, identity, live-capability and house-view end-to-end tests and the bundle transforms). Applied: incident narration and migration-relative phrasing removed (credit-lens, load/make/judge-house-view, white-label-onboard, AI-profiles README, house-view loader); stale paths and counts corrected (`skills/parallax-stress-house-view/…`, white-label-onboard overview/installation, `schema_version: 2`); a stale coverage claim fixed after a live re-probe (pair-finder EWG, coverage-matrix); a contradiction between pair-finder's reference file and its HARD HALT gate resolved; the zh-TW 情境/情景 rule made consistent between the full and condensed translator prompts; five restatements of the same two concierge UX limits reduced to the pinned copies; conventions §0 no longer names one vendor's CLI as the feature-flag mechanism; the auto-on-load drift-check pattern names the `invoke-skill` primitive. Pressure language was essentially absent; no compliance text, gate semantics, tool contracts or exact commands changed.
+
+## 2026-09-06 (sweep: portfolio family)
+
+### Changed
+- **Seven portfolio skills on the canonical step spine:** `parallax-portfolio-checkup`, `parallax-watchlist-monitor`, `parallax-morning-brief`, `parallax-explain-portfolio`, `parallax-portfolio-builder`, `parallax-desk-call-list`, `parallax-client-review`. Same treatment as the single-stock family; every Output Format unchanged (the graders are locked against them); every render-gate anchor unchanged. Translation and render-gate boilerplate now by reference to conventions §15 and §10.3; the client-review policy S1/S2 contract block is kept verbatim inside Step 4. `parallax-rebalance` is deferred until its orchestrator-length hotfix merges. Legacy allowlist 27 → 20.
+
+## 2026-09-05 (sweep: single-stock family)
+
+### Changed
+- **`parallax-credit-lens` and `parallax-white-label-stock-report` complete the single-stock family.** Credit-lens: the metric-key registry, hand-computation traps and report-assembly rules move to `references/flagging-rules.md` (JIT-loaded at Step 4); the orchestrator keeps one "Published cutoffs" table that `tests/test_credit_lens.py` now pins to the module constants; 275 → 220 lines; render-gated with its own anchor. Stock-report: spine headings over the existing deterministic renderer (Confirm via `ask-operator`, Render via `run-shell`), Compliance and mode-choice sections unchanged. Legacy allowlist 28 → 27.
+- **Five more single-stock skills on the canonical step spine:** `parallax-deep-dive`, `parallax-due-diligence`, `parallax-peer-comparison`, `parallax-earnings-quality`, `parallax-score-explainer`. Same treatment as should-i-buy: Steps 0–7, host primitives with the Claude Code binding in a `host-note` block, shared blocks by reference, `## Failure modes` and `## Done when`, symmetric NOT-for routing. Output Formats unchanged. The four that were ungated (deep-dive, due-diligence, peer-comparison, earnings-quality) now run the shared render gate; `SKILL_ANCHORS` and the gate tests carry their anchors. `parallax-due-diligence` now names `ask-operator` before the paid `get_stock_report` call. Host-primitive legacy allowlist: 33 → 28.
+- **should-i-buy template corrected after a gpt-5.6-sol review:** Step 0 binds every callable used anywhere in the workflow (not only Steps 2–3) and resolves canonical paths first; the audit-row and banner checks in `## Done when` are unconditional per loader.md §6 and conventions §0.3; the spend line no longer double-counts macro. `skill-structure-conventions.md` states that the `/parallax-*` form in descriptions, When-not-to-use and Usage is operator command syntax, not a host lock, and names the three migration shapes (report consumer, config producer, multi-mode).
+
+## 2026-09-05 (sweep: should-i-buy)
+
+### Changed
+- **`parallax-should-i-buy/SKILL.md` is the first skill on the canonical step spine** (Steps 0–7 per `skill-structure-conventions.md`), names host primitives instead of host tools (the Claude Code binding sits in a `host-note` block), renders the translator, disclosure, disclaimer and white-label blocks by reference (§15, §9.2, §9.1, integration-pattern §2/§5/§7) instead of carrying copies, and closes with `## Failure modes` and `## Done when`. Output Format is unchanged (the graders are locked against it). Description now routes symmetrically to deep-dive, peer-comparison and score-explainer. 198 → 160 lines. Removed from the host-primitive lint's legacy allowlist (33 remain).
+
 ## 2026-09-05 (hygiene)
 
 ### Fixed

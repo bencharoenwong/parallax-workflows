@@ -16,7 +16,7 @@ This module deliberately does NOT own:
   `dispose_fn` callback the caller uses to resolve disposition via its own
   AskUserQuestion call. Same pattern used by gap_detect / gap_suggest.
 - Audit-row writes (the caller is responsible for `extraction_attempt`
-  audit entries per loader.md §6.1; see SKILL.md Step 3b).
+  audit entries per loader.md §6.1; see SKILL.md Step 5b).
 - Pre-edit snapshot persistence (the caller writes `pre_edit.yaml` to
   `.archive/...`; this module just returns the pristine draft alongside
   the edited one in `GateResult.pre_edit_snapshot`).
@@ -26,7 +26,7 @@ purely a display + disposition concern, per v2 plan §6.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable
 
 
@@ -89,7 +89,7 @@ class GateResult:
             dict if disposition == "confirm"; None for re_extracted /
             rejected / regenerated / abandoned (caller re-runs or aborts).
         pre_edit_snapshot: Populated ONLY when disposition == "edited"
-            (per SKILL.md Step 3a). Used by the caller to compute the
+            (per SKILL.md Step 5a). Used by the caller to compute the
             extraction_attempt audit row's draft_yaml_hash over the
             pristine pre-edit YAML.
         edit_notes: Optional one-liner from the uploader about what they
@@ -409,7 +409,7 @@ def run_gate_loop(
     context can pass a lambda; callers in a Claude skill context can use
     `build_prompt` + `apply_disposition` directly and skip the loop helper.
 
-    The function never writes audit rows or files — see SKILL.md Step 3b
+    The function never writes audit rows or files — see SKILL.md Step 5b
     and the module docstring.
     """
     if dispose_fn is None:

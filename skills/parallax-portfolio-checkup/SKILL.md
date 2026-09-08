@@ -1,6 +1,6 @@
 ---
 name: parallax-portfolio-checkup
-description: "Individual investor portfolio checkup: health flags, factor scores, redundancy, macro context, and plain-language recommendations via Parallax MCP tools. Holdings as [{symbol, weight}]. NOT for fund manager briefs (use /parallax-morning-brief), not for client reviews (use /parallax-client-review)."
+description: "Individual investor portfolio checkup: health flags, factor scores, redundancy, macro context, and plain-language recommendations via Parallax MCP tools. Holdings as [{symbol, weight}]. NOT for fund manager briefs (use /parallax-morning-brief), not for client reviews (use /parallax-client-review), not for drawdown attribution (use /parallax-explain-portfolio), not for trade recommendations (use /parallax-rebalance), not for single stocks (use /parallax-should-i-buy)."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -11,21 +11,21 @@ description: "Individual investor portfolio checkup: health flags, factor scores
 
 - Fund manager morning brief → use /parallax-morning-brief
 - Client portfolio review (RIA) → use /parallax-client-review
+- "Why am I down?" attribution → use /parallax-explain-portfolio
+- Trade recommendations → use /parallax-rebalance
 - Single stock analysis → use /parallax-should-i-buy
-- Portfolio with significant ETF allocation → equity scope only in v1; ETF holdings will fail V2 scoring and may silently mismap in V1. ETF-aware health-check is on the v2 roadmap; for now use /parallax-explain-portfolio (which handles ETFs via etf_profile pre-classification) for ETF-heavy portfolios.
+- Portfolio with significant ETF allocation → equity scope only in v1; ETF holdings fail V2 scoring and may silently mismap in V1. Use /parallax-explain-portfolio (ETF-aware via `etf_profile` pre-classification) for ETF-heavy portfolios.
 
 ## Gotchas
 
-- JIT-load _parallax/parallax-conventions.md for RIC resolution (§1), symbol cross-validation (§2), parallel execution (§3), and fallback patterns (§4)
-- JIT-load references/health-flags.md for the 5-flag health system, thresholds, and mixed-exchange fallback
-- Holdings must be in RIC format with weights summing to ~1.0
-- Per-holding `get_peer_snapshot` + `get_company_info` cross-validation is the primary scoring path (matches morning-brief V2 pattern). `quick_portfolio_scores` is the V1 fallback — known symbol-mapping bugs for non-US numeric tickers (HK / TW / KR), so retail portfolios with mixed exchanges silently mismap without the cross-validation gate.
-- Mixed-exchange portfolios may have partial scoring coverage — apply split-and-merge fallback
-- Plain language output — no finance jargon. Surface name mismatches in user-friendly terms ("Some holdings could not be verified") rather than technical jargon.
-- JIT-load `_parallax/house-view/loader.md` if an active CIO view is present; this is a portfolio-level skill, so apply §3 (multipliers) to factor scoring of verified holdings, §4 (conflict resolution if user-stated preferences contradict view), §5 (preamble + view-aware sections), §6 (audit log). The view biases the recommendations in **Consider** — view-aligned tilts get implicit support; view-misaligned holdings get a gentle question framing. Health flags themselves are unchanged by the view; the view adds context, not a sixth flag.
-- When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
-- Integration note: the underlying figures come from the structured JSON of the MCP tools listed in the workflow — production integrations call those tools directly; this markdown report is the interactive/chat tier.
+- Expected Parallax spend: ~36 tokens at 10 holdings (`_parallax/token-costs.md`): 2× per-holding fan-out (20) + up to 3 macro markets (15) + redundancy.
+- JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §2 identity cross-check, §3 parallel execution, §4 fallbacks, §11 sensitivity, §13 audience mode, §14 host primitives.
+- JIT-load `references/health-flags.md` for the 5-flag system, thresholds, the mixed-exchange fallback, and the Verdict-sensitivity wording.
+- Per-holding `get_peer_snapshot` + `get_company_info` cross-validation is the primary scoring path; `quick_portfolio_scores` is the V1 fallback with known symbol-mapping bugs for non-US numeric tickers. Never fire it unconditionally.
+- JIT-load `_parallax/house-view/loader.md` if a view is present: portfolio-level consumer — §3 multipliers on verified-holdings factor aggregates, §4 conflict resolution, §5 rendering, §6 audit. The view biases **Consider** (aligned tilts get implicit support; misaligned holdings get gentle question framing); health flags are unchanged by the view.
+- Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
+- Plain language throughout: "Some holdings could not be verified", never MISMATCH jargon in the body.
+- Integration note: production integrations call the tools directly; this markdown report is the interactive/chat tier.
 
 Plain-language portfolio health check with health flags for individual investors.
 
@@ -40,74 +40,58 @@ Optional `audience=` argument: `client_safe | internal_analyst`; precedence foll
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode and fallback patterns. JIT-load `references/health-flags.md` for the health flag system.
+Every host interaction below is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3). Parallax callables are whatever `discover-tools` returns this session (§0.1).
 
-### Pre-Workflow — Load Active House View
+### Step 0 — Pre-flight
 
-Per `_parallax/house-view/loader.md` §1 and §2: load and validate any active house view BEFORE running the workflow. If view present and validated, capture the load preamble (banner from `view_status` helper, low-confidence warnings) for rendering at the top of Output Format per §5.1. Capture the tilt vector + excludes — applied in Step A.5 to verified-holdings factor aggregates per §3. If no active view (or any §2 validation failure): run the workflow normally with the standard disclaimer.
+1. Resolve every `_parallax/...` and `references/...` path named in this file to the canonical copy (conventions §0.0 item 1).
+2. `discover-tools`: bind every logical tool named anywhere in this workflow (Steps 1–2 and the V1 fallback) to the exact callable and schema exposed now.
+   <!-- host-note -->
+   Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
+   <!-- /host-note -->
+3. Parse args: holdings JSON; optional `audience=`.
+4. `load-reference` `_parallax/house-view/loader.md`; run §1–§2. If a view is present, capture the load preamble, tilt vector and excludes for Step 4. On §2 failure run without the view.
+5. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name` (seven-key loader; `branding["voice"]` raises `KeyError` by design).
+6. `load-reference` `references/health-flags.md`.
 
-### Batch 0 — Tool Loading
+### Step 1 — Resolve inputs
 
-Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
+Validate holdings: RIC format (plain tickers → conventions §1), weights summing to ~1.0; fund/OEIC identifiers get the §1 not-covered message and are dropped from scoring with a note.
 
-### Batch A — V2 scoring + redundancy + market coverage (parallel)
+### Step 2 — Fetch (parallel batches)
 
-**Fire ALL rows below in a single tool-call turn.** Every row is independent. For per-holding rows (`get_peer_snapshot`, `get_company_info`), fan out one call per holding **within the same turn** so all N×2 holding-level calls run concurrently with the portfolio-level calls. Sequential per-holding loops are the largest latency leak in this skill — do not introduce one.
+**Batch A** — `call-tool` ALL rows in one turn; the per-holding rows fan out N-wide inside the same turn (a sequential per-holding loop is the largest latency leak in this skill):
 
 | Tool | Parameters | Notes |
 |---|---|---|
-| `get_peer_snapshot` | per holding — **all N calls fan out in parallel within Batch A** | **Primary scoring source** (V2 path). Aggregate factor scores client-side. |
-| `get_company_info` | per holding — **all N calls fan out in parallel within Batch A** | **Ground-truth name oracle** for cross-validation per conventions §2. Records `expected_name` to cross-check against `get_peer_snapshot.target_company`. |
+| `get_peer_snapshot` | per holding, all N in parallel | **Primary scoring source** (V2); aggregated client-side |
+| `get_company_info` | per holding, all N in parallel | **Ground-truth name oracle** (conventions §2); records `expected_name` |
 | `check_portfolio_redundancy` | `holdings` | Overlap detection |
-| `list_macro_countries` | — | Check which markets are covered |
+| `list_macro_countries` | — | Market coverage |
 
-`quick_portfolio_scores` is **NOT** fired in Batch A. It is reserved for the V1 fallback path in Step A.5 below; firing it unconditionally violates conventions §2 (V1 known to silently mismap symbols for non-US numeric tickers) and would consume tokens for output that the V2 path supersedes.
+`quick_portfolio_scores` is NOT in Batch A; it is the Step 3 V1 fallback only.
 
-### Step A.5 — Cross-validation gate + fallback decision (sequential, MUST complete before Batch B)
+**Batch B** — after Step 3 clears the verified set: `macro_analyst` with `component="tactical"` for each unique covered home market derived from the verified holdings' RIC suffixes (cap 3).
 
-This step gates Batch B and Batch C; do not start them until A.5 is complete.
+### Step 3 — Verify
 
-1. **Cross-validation** (per conventions §2): for each holding, compare `get_peer_snapshot.target_company` (top level — the response has no `name` field; peer names are `comparison[].company`) against `get_company_info.name`. Mismatches are flagged ⚠ MISMATCH and **excluded from aggregate factor calculations**; their per-position scores are not displayed.
-2. **Compute V2 coverage**: weight share of holdings that returned non-empty `get_peer_snapshot` AND passed cross-validation.
-3. **Fallback ladder** — apply the first tier whose precondition holds:
-   - **V2 (primary)** — V2 coverage ≥ 50% → use V2-aggregated scores; do NOT fire V1.
-   - **V1 fallback** — V2 coverage < 50% → fire `quick_portfolio_scores` once; cross-validate its returned names against the **already-cached** `get_company_info.name` from Batch A (do NOT re-fire `get_company_info`); mismatched V1 holdings are re-scored individually via `get_peer_snapshot`.
-   - **Mixed-exchange split-and-merge** — V1 coverage also < 50% → split holdings by exchange suffix, score each group, merge per the "Mixed-Exchange Fallback" section of `references/health-flags.md`. This is the last-resort path.
+Gate for Step 4; do not start Batch B or Step 4 before it completes.
+1. Cross-validation per conventions §2: `get_peer_snapshot.target_company` vs `get_company_info.name` after normalization; mismatches are excluded from every aggregate and their per-position scores are not displayed.
+2. V2 coverage = weight share of holdings that returned a non-empty snapshot AND passed cross-validation.
+3. Fallback ladder, first tier whose precondition holds: **V2** (coverage ≥ 50%) → use V2 aggregates, no V1 call; **V1** (coverage < 50%) → `call-tool` `quick_portfolio_scores` once, cross-validate its names against the already-cached `get_company_info` names (never re-fire), re-score mismatched holdings via `get_peer_snapshot`; **split-and-merge** (V1 coverage also < 50%) → per `references/health-flags.md` "Mixed-Exchange Fallback".
+4. `get_company_info` failure after the §0.1 retry: the holding has no oracle → treat as unverified, exclude from aggregates, and name it in the Verification Note as "could not be verified — Parallax company-info lookup failed".
 
-The cross-validation gate runs against whichever path is used, never bypassed.
+### Step 4 — Compute
 
-**`get_company_info` retry / failure handling**: per conventions §4, retry once on first failure. If the second attempt also fails, the holding has no oracle for cross-validation — treat it as **unverified** and exclude it from aggregate factor calculations (same treatment as a ⚠ MISMATCH). Surface the holding in the Verification Note as "could not be verified — Parallax company-info lookup failed" so the user knows it was excluded for a different reason than mismatch.
+Per `references/health-flags.md`, evaluate the 5 flags over the verified set (concentration over the original holdings — it is structural): Low Score (weighted overall ≤ 5.0), Concentration (>15% single / >45% top-3), Redundancy (≥ 2 pairs; low-confidence if coverage < 60%), Value Trap (weighted value ≤ 3.0), Macro Misalignment (overweight in sectors flagged unfavourable in Batch B). Health status: Healthy (0) · Monitor (1–2) · Attention (3+). If a view is active, apply loader.md §3 multipliers (sector × factor) to the verified aggregates before the plain-language mapping; raw per-holding scores stay unchanged.
 
-### Batch B — Macro context (after Step A.5)
+### Step 5 — Compose
 
-Derive home markets from RIC suffixes across **verified, non-mismatched** holdings (the set Step A.5 cleared). Call `macro_analyst` with component="tactical" for each unique covered market (cap at 3).
+Fill **Output Format** below in order: House View Preamble per loader.md §5.1; Branding Header per integration-pattern.md §5; factor gloss per `parallax-conventions.md` §13.3 by reference; Verdict sensitivity per §11 by reference (internal_analyst only); audience mode per §13; `parallax-conventions.md §9.2` disclosure; disclaimer per loader.md §5 rule 5 when a view is active, otherwise `parallax-conventions.md §9.1`; audit entry per loader.md §6.
 
-### Batch C — Health flag evaluation (after Step A.5)
+### Step 6 — Render (deterministic gate, mandatory)
 
-Per `references/health-flags.md`, evaluate all 5 flags using the verified-holdings factor scores produced by Step A.5. All "portfolio aggregate" calculations below are computed over the verified set only — mismatched holdings are excluded.
-
-1. **Low Score** — Portfolio overall (verified-holdings weighted average) ≤ 5.0?
-2. **Concentration** — Any single holding >15%? Top-3 >45%? (computed over original holdings, not just verified — concentration is a structural property)
-3. **Redundancy** — ≥ 2 redundant pairs? (flag as low-confidence if `check_portfolio_redundancy` coverage <60%)
-4. **Value Trap** — Portfolio value score (verified-holdings weighted average) ≤ 3.0?
-5. **Macro Misalignment** — Overweight in sectors flagged unfavourable in Batch B?
-
-Assign health status: **Healthy** (0 flags) · **Monitor** (1-2) · **Attention** (3+)
-
-### Step 4 — Interpret in plain language
-
-Explain scores and flags in plain terms:
-Render the plain-language factor gloss per `parallax-conventions.md` §13.3 (single source — do not inline).
-
-If a view is active, after computing verified-holdings factor aggregates apply loader.md §3 multipliers (sector × factor) before mapping to plain-language interpretation. The plain-language descriptions of factor levels (high VALUE, etc.) describe the tilt-adjusted aggregate; the underlying raw factor scores per holding remain unchanged. Append the §6 audit log entry per loader.md §6.1.
-
-### Pre-Render — Load white-label branding
-
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
-
-### Render — deterministic gate (LAST step, mandatory)
-
-Compose the complete report per **Output Format** below, then run it through the **shared** render gate in **one Bash step** before replying. Use a private `mktemp` file (never a fixed/predictable path like `/tmp/pcheckup_draft.md` — that is a world-writable-`/tmp` symlink hazard). The shared gate is `_parallax/render_gate.py`, a sibling of the directory you loaded this SKILL.md from; pass this skill's key with `--skill portfolio-checkup` (use the loaded directory's absolute path as `<skill-dir>`):
+`run-shell` the shared gate per conventions §10.3 with this skill's key:
 
 ```
 DRAFT="$(mktemp "${TMPDIR:-/tmp}/pcheckup.XXXXXX")"
@@ -117,15 +101,11 @@ REPORT
 python3 "<skill-dir>/../_parallax/render_gate.py" --skill portfolio-checkup < "$DRAFT"; rm -f "$DRAFT"
 ```
 
-**Your entire final message is exactly that command's stdout** — nothing before it (no "composing", no step notes, no scratch computation), nothing after it.
-
-The Bash result may show a `[render-gate] WARN:` line above the report. That line is stderr diagnostics, not stdout. Never include it in the reply. It means the drafted opening drifted from the documented Output Format start; fix the opening and re-run the gate.
-
-`_parallax/render_gate.py` is pure-stdlib and deterministically drops anything before the first rendered block (House View Preamble banner / Branding Header / Ground-truth Integrity / Portfolio Health Status / Portfolio Checkup title). It preserves the active-house-view banner in **every** `view_status` state (active / warning / critical / not-yet-effective / expired) and hoists any async-degraded note rather than dropping it. Same operator-agnostic-helper pattern as `view_status.py` / `loader.py` (a real Bash tool call, not prose).
+The entire final message is that command's stdout. The stderr `[render-gate] WARN:` line is diagnostics: never include it. Degraded-state notes go inside their section, never above the report. If `run-shell` is absent, apply conventions §14.3 (render-gate row). No Step 7.
 
 ## Output Format
 
-**Begin the response immediately with the rendered report — no preamble.** Do not emit step-completion notes ("Step A.5 complete", "All data gathered", "Composing the checkup"), scratch computation tables, cross-validation status lines, or config-probe results ("white-label: config_not_found") before the report. All intermediate computation stays internal. When no house view and no white-label client are active (the default), the **first line of the output is the Portfolio Health Status header**, in this exact form:
+**Begin the response immediately with the rendered report — no preamble.** When no house view and no white-label client are active (the default), the **first line of the output is the Portfolio Health Status header**, in this exact form:
 
 `## Portfolio Health Status: <🟢|🟡|🔴> **<Healthy|Monitor|Attention>** — <N> of 5 flags raised`
 
@@ -149,3 +129,21 @@ Keep tone friendly and educational.
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
 If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise: render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
+
+
+## Failure modes
+
+- V2 coverage below 50%: V1 fallback, then split-and-merge, per Step 3; the path used is stated in the Verification Note.
+- `check_portfolio_redundancy` coverage below 60%: Overlap Alert carries the low-confidence note.
+- Macro unavailable or no covered market: Macro Context skipped (Output Format), the Macro Misalignment flag is not evaluated and the flag count says so.
+- Fewer than 7 holdings: concentration flags are structural (conventions §4); note them without alarm.
+- House-view banner states `malformed` / `expired` / `critical`: the banner renders verbatim (conventions §0.3 item 4).
+- Host lacks a primitive: conventions §14.3, per primitive.
+
+## Done when
+
+- First line is the Portfolio Health Status header (or the House View Preamble / Branding Header); every Output Format section rendered or marked unavailable with its reason.
+- Every excluded holding is named in the Verification Note with its reason; aggregates state the verified weight share they cover.
+- When a view is active: the `view_status` banner appears verbatim; Consider reflects view alignment; audit entry appended per loader.md §6 (every consume event).
+- The render gate ran and the reply is its stdout (or the §14.3 note is present in About This Report).
+- `parallax-conventions.md §9.2` disclosure and the §9.1 or view-aware disclaimer are present; expected spend stated (Gotchas).

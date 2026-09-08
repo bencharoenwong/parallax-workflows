@@ -110,6 +110,55 @@ SKILL_ANCHORS: dict[str, list[str]] = {
         r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:the company|should i buy|stock (?:review|evaluation))\b",
         _branding("stock review"),
     ],
+    "deep-dive": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:company overview|position deep dive|deep dive)\b",
+        _branding("deep dive"),
+    ],
+    "due-diligence": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:scope note|company overview|full due diligence|due diligence)\b",
+        _branding("research report"),
+    ],
+    "peer-comparison": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:peer group|peer comparison)\b",
+        _branding("peer comparison"),
+    ],
+    "earnings-quality": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:risk summary|earnings quality)\b",
+        _branding("earnings quality review"),
+    ],
+    "credit-lens": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:credit risk assessment|credit lens)\b",
+        _branding("credit lens"),
+    ],
+    "thematic-screen": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:theme|thematic screen|universe built)\b",
+        _branding("thematic screen"),
+    ],
+    "macro-outlook": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:regime status|macro outlook)\b",
+        _branding("macro outlook"),
+    ],
+    "country-deep-dive": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:country overview|country deep dive)\b",
+        _branding("country deep dive"),
+    ],
+    "halal-screen": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:screening criteria|halal|shariah screen)\b",
+        _branding("shariah screen"),
+    ],
+    "scenario-analysis": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:scenario summary|scenario analysis)\b",
+        _branding("scenario analysis"),
+    ],
+    "pair-finder": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:verdict|top pair|pair finder)",
+        r"^\s{0,3}(?:[-*]\s*)?\*\*\s*pair\s*(?::\*\*|\*\*\s*:)",
+        _branding("pair finder"),
+    ],
+    "stress-test-thesis": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:tl;dr|stress-test thesis|thesis restatement)",
+        r"^\s{0,3}~\d+ min read\b",
+    ],
     "score-explainer": [
         r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:the question|score explainer)\b",
         _branding("score explainer"),

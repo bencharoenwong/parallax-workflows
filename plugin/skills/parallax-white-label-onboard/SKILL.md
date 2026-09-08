@@ -15,18 +15,18 @@ description: "Configure white-label client branding for Parallax report output. 
 ## Gotchas
 
 - JIT-load _parallax/white-label/schema.yaml before extraction — it is the single source of truth for config.yaml shape
-- JIT-load _parallax/white-label/extract/ (the extract package) and _parallax/white-label/validator.py before running Steps 1 and 2
+- JIT-load _parallax/white-label/extract/ (the extract package) and _parallax/white-label/validator.py before running Steps 2 and 3
 - JIT-load `_parallax/white-label/persistence.py` before the confirmation gate. Route the final disposition through `persist_disposition()`; do not reproduce the config/DESIGN.md/audit write sequence inline.
 - URL input — use `extract_from_url()` from `_parallax/white-label/extract/` so public-destination
   validation, redirect checks, and bounded reads cannot be bypassed; do not fetch the URL with
-  defuddle, WebFetch, or another network path
-- PDF input — use the Read tool with `pages` parameter; read up to first 10 pages unless the brand guide is clearly deeper
+  `fetch-url` or any other network path
+- PDF input — `load-reference` the file with a page range; read up to first 10 pages unless the brand guide is clearly deeper
 - PPTX input — extract.extract_from_pptx() reads OOXML theme XML directly (precise colors/fonts) and aggregates slide text for voice corpus. Requires python-pptx
 - DOCX input — extract.extract_from_docx() same pattern via word/theme/theme1.xml. Requires python-docx
 - Folder input — when given a directory, run all .pptx/.docx/.pdf files inside it through their respective extractors and merge_drafts() the result before validation
-- Voice extraction is LLM-driven (NOT regex) — the extract package only assembles the corpus. SKILL.md Step 1.5 prompts the model to fill the voice schema using the Lago 7-section template
+- Voice extraction is LLM-driven (NOT regex) — the extract package only assembles the corpus. SKILL.md Step 2b prompts the model to fill the voice schema using the Lago 7-section template
 - Voice corpus must be ≥500 words for credible extraction; ≥2000 words is recommended. VoiceValidator.validate_corpus_size enforces this with warn/fail. Below the floor, refuse to populate voice or surface a hard warning
-- Wizard mode is triggered by invoking with no argument — guide intake via AskUserQuestion, one prompt per group
+- Wizard mode is triggered by invoking with no argument — guide intake via `ask-operator`, one prompt per group
 - Confirmation gate is REQUIRED — config must not be written until the user explicitly confirms
 - Validation warnings (warn/fail) never block the save — surface them and let the user decide
 - Logo download: always download to assets/ during save so downstream PDF generation has local files; external URLs in config are a fallback reference only
@@ -36,6 +36,7 @@ description: "Configure white-label client branding for Parallax report output. 
 - config.yaml permissions: 0600. assets/ directory: 0700. Parent directory ~/.parallax/client-branding/: 0700 on creation.
 - Cross-validate extracted company name vs. source — extractor may misidentify which brand it found
 - File paths in schema.yaml use tilde notation (~/.parallax/...); expand to absolute path at runtime
+- Every host interaction is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3). This skill makes no Parallax calls. Persistence fails closed: nothing is written without an explicit `ask-operator` confirmation this session.
 
 Configure client branding for Parallax equity research report output.
 
@@ -99,7 +100,17 @@ Currently integrated: **Tier 1** (`/parallax-cio-letter-prep`, `/parallax-client
 
 ## Workflow
 
-JIT-load `_parallax/white-label/schema.yaml`, `_parallax/white-label/extract/` (the extract package), and `_parallax/white-label/validator.py` before executing any step below.
+Config-producer shape (authoring conventions, "Canonical step spine"): Steps 0–4, then `Step 5 — Confirm` and `Step 6 — Persist`. No Parallax calls; no render gate.
+
+### Step 0 — Pre-flight
+
+1. Resolve every `_parallax/...` path named in this file to the canonical copy (conventions §0.0 item 1).
+2. `load-reference` `_parallax/white-label/schema.yaml`, `_parallax/white-label/extract/` (the extract package), `_parallax/white-label/validator.py`, and `_parallax/white-label/persistence.py` before executing any step below.
+3. Bind the primitives this skill uses: `load-reference`, `ask-operator`, `run-shell` (the extract, validator, and persistence helpers run in Python; every write goes through `persist_disposition`), `read-config`. Without `ask-operator` or `run-shell` the skill can display a draft but cannot save; say so before Step 1.
+   <!-- host-note -->
+   Claude Code: `load-reference` = `Read` (use `pages` for PDFs); `ask-operator` = `AskUserQuestion`; `run-shell` = `Bash`.
+   <!-- /host-note -->
+4. `read-config`: `~/.parallax/client-branding/` (create `0700` at save time if absent).
 
 ```python
 from skills._parallax.white_label.extract import (
@@ -111,7 +122,7 @@ from skills._parallax.white_label.validator import (
 )
 ```
 
-### Step 0 — Detect input mode
+### Step 1 — Resolve inputs (detect input mode)
 
 Examine each invocation argument (the skill accepts one or more):
 
@@ -125,15 +136,15 @@ Examine each invocation argument (the skill accepts one or more):
 | Argument is an existing directory | Folder extraction (run all `.pptx`/`.docx`/`.pdf` inside) |
 | Argument is `--status` | Show status block |
 | Argument is `--clear` | Clear branding |
-| Argument is `--regenerate-design-md` | Regenerate `DESIGN.md` from current `config.yaml` (no extraction; see Operational Modes) |
+| Argument is `--regenerate-design-md` | Regenerate `DESIGN.md` from current `config.yaml` (no extraction; see `## Modes`) |
 
-**Multi-source.** If two or more arguments resolve to extraction modes (any combination of URL, PDF, PPTX, DOCX, folder), run each through its respective extractor and call `extract.merge_drafts(drafts)` + `extract.cross_validate_visual(drafts)` before the validation step. Mismatches are stored in the draft for surfacing at Step 3.
+**Multi-source.** If two or more arguments resolve to extraction modes (any combination of URL, PDF, PPTX, DOCX, folder), run each through its respective extractor and call `extract.merge_drafts(drafts)` + `extract.cross_validate_visual(drafts)` before the validation step. Mismatches are stored in the draft for surfacing at Step 5.
 
-For `--status` and `--clear`, jump directly to the Operational Modes section. For all extraction modes (single or multi-source), proceed to Step 1.
+For `--status` and `--clear`, jump directly to `## Modes`. For all extraction modes (single or multi-source), proceed to Step 2a.
 
 If an argument does not match any row above (e.g., a plain ticker, a relative path with no extension, a file that does not exist), stop and ask: "I couldn't identify the input type for `<arg>`. Please provide a URL, a `.pdf`/`.pptx`/`.docx` path, a folder path, or run without arguments for the entry menu."
 
-**Entry menu (no-argument invocation).** Do NOT jump straight into the manual color-hex wizard. The operator may not know that PPTX/DOCX or folder ingestion exists. First show the routing menu via `AskUserQuestion`:
+**Entry menu (no-argument invocation).** Do NOT jump straight into the manual color-hex wizard. The operator may not know that PPTX/DOCX or folder ingestion exists. First show the routing menu via `ask-operator`:
 
 > How do you want to onboard this client's brand?
 >
@@ -146,16 +157,20 @@ After the operator picks, ask the follow-up:
 
 | Choice | Follow-up question |
 |---|---|
-| Website | "What's the URL?" — accept and re-route through Step 0 with the URL as argument. |
+| Website | "What's the URL?" — accept and re-route through Step 1 with the URL as argument. |
 | Folder | "What's the folder path? (Absolute path; should contain `.pptx`, `.docx`, or `.pdf` files.)" — re-route through Step 0. |
-| Both | Two questions: URL, then folder path. Re-route through Step 0 with both arguments. |
-| Manual wizard | Proceed directly to Step 1 wizard mode. |
+| Both | Two questions: URL, then folder path. Re-route through Step 1 with both arguments. |
+| Manual wizard | Proceed directly to Step 2a wizard mode. |
 
-### Step 1 — Extract brand assets
+### Step 2 — Fetch (parallel batches)
+
+No Parallax calls: the fetch is the extraction of the operator's sources. Folder files may be extracted together; everything else is one source at a time.
+
+#### Step 2a — Extract brand assets
 
 **Wizard mode:**
 
-Use one `AskUserQuestion` per numbered group below. Do not ask all fields in a single wall of text — group them logically. Confidence for all wizard-supplied values is 1.0 (the user is the source).
+Use one `ask-operator` per numbered group below. Do not ask all fields in a single wall of text — group them logically. Confidence for all wizard-supplied values is 1.0 (the user is the source).
 
 1. **Identity:** Client display name, contact name/email (optional, for audit log).
 2. **Colors:** Primary brand color (hex), secondary color (hex), accent color (hex). For each, if the user provides a name like "navy blue" rather than a hex code, ask for the hex code explicitly or offer to pick a nearest standard hex.
@@ -173,19 +188,19 @@ Assemble the `draft` dict from wizard answers. Skip any field the user leaves bl
 
 **DOCX mode:** `draft = extract_from_docx(docx_path)`. Identical pattern via `word/theme/theme1.xml`. Body text from all paragraphs (skipping headers/footers) aggregated into `draft["voice_corpus"]`. Word's defaults are commonly Calibri (header) + Cambria (body); if the document inherits defaults rather than declaring custom fonts, the extracted values reflect the default theme — note this in `notes`.
 
-**Folder mode.** Folder mode is NOT a blind iteration — it inventories, classifies by role (branded marketing / internal memo / compliance / transcript / ambiguous), confirms the classification with the operator, then extracts per classification. Decision points: ambiguous files are surfaced one-per-`AskUserQuestion`; voice-only OOXML keeps voice and discards visual; 2+ branded drafts merge via `merge_drafts + cross_validate_visual`; voice-only folders seed `source.type = "folder-voice-only"`; the corpus is re-truncated at the 3000-word cap.
+**Folder mode.** Folder mode is NOT a blind iteration — it inventories, classifies by role (branded marketing / internal memo / compliance / transcript / ambiguous), confirms the classification with the operator, then extracts per classification. Decision points: ambiguous files are surfaced one-per-`ask-operator`; voice-only OOXML keeps voice and discards visual; 2+ branded drafts merge via `merge_drafts + cross_validate_visual`; voice-only folders seed `source.type = "folder-voice-only"`; the corpus is re-truncated at the 3000-word cap.
 
-> Full folder procedure (Steps F-1 inventory → F-2 classification tables → F-3 operator gate → F-4 extract) and the three named voice frameworks (Lago / Rezvani / Genesys) it grounds on: see `references/folder-mode.md`. F-4 Python: `references/workflow-code.md` § Step 1 — Folder extraction.
+> Full folder procedure (Steps F-1 inventory → F-2 classification tables → F-3 operator gate → F-4 extract) and the three named voice frameworks (Lago / Rezvani / Genesys) it grounds on: see `references/folder-mode.md`. F-4 Python: `references/workflow-code.md` § Step 2a — Folder extraction.
 
-**Multi-source mode (URL + folder, or any 2+ sources):** iterate `args`, dispatch each to its extractor, call `merge_drafts(drafts) + cross_validate_visual(drafts)` and store mismatches/agreements in `draft["multi_source"]`. Mismatches are NOT auto-resolved here — they surface in the Step 3 confirmation gate.
+**Multi-source mode (URL + folder, or any 2+ sources):** iterate `args`, dispatch each to its extractor, call `merge_drafts(drafts) + cross_validate_visual(drafts)` and store mismatches/agreements in `draft["multi_source"]`. Mismatches are NOT auto-resolved here — they surface in the Step 5 confirmation gate.
 
-> Full Python (multi-source dispatch loop) and the full `draft` dict shape: see `references/workflow-code.md` § Step 1 — Multi-source extraction and § Draft structure after extraction.
+> Full Python (multi-source dispatch loop) and the full `draft` dict shape: see `references/workflow-code.md` § Step 2a — Multi-source extraction and § Draft structure after extraction.
 
-Missing fields (empty dict values or absent keys) are acceptable — they will surface as warnings at Step 2 and can be filled at Step 3.
+Missing fields (empty dict values or absent keys) are acceptable — they will surface as warnings at Step 3 and can be filled at Step 5.
 
-### Step 1.5 — Voice extraction (only when corpus is available)
+#### Step 2b — Voice extraction (only when corpus is available)
 
-**Skip this step entirely if `draft["voice_corpus"]["word_count"] < 500`.** Below that floor, voice extraction is unreliable; set `draft["voice"] = {"enabled": False}` and continue to Step 2. Surface the gap to the user: `"Voice section not populated — corpus is only <N> words, below the 500-word minimum. Add more sample documents to enable voice extraction."`
+**Skip this step entirely if `draft["voice_corpus"]["word_count"] < 500`.** Below that floor, voice extraction is unreliable; set `draft["voice"] = {"enabled": False}` and continue to Step 3. Surface the gap to the user: `"Voice section not populated — corpus is only <N> words, below the 500-word minimum. Add more sample documents to enable voice extraction."`
 
 **When corpus is sufficient,** drive voice extraction via in-skill prompting (no Python — this is LLM-native work). Read the corpus from `draft["voice_corpus"]["text"]`, prompt yourself with the Lago 7-section + Rezvani tone-matrix template, then write the resulting fields into `draft["voice"]`.
 
@@ -193,15 +208,15 @@ After extraction, set `draft["voice"]["enabled"] = True`, `draft["voice"]["sourc
 
 > Full voice prompt template, the 3-item anti-boilerplate self-check, and the drafted-vs-sent rationale: see `references/voice-extraction.md`.
 
-### Step 1.75 — Completeness audit & supplement offer
+#### Step 2c — Completeness audit & supplement offer
 
 Before validation, audit the draft for thinness and proactively offer to supplement. The operator may have given just a URL not realizing that adding a sample folder dramatically improves voice extraction; saving a thin config without surfacing the gap is a UX failure.
 
 Audit checks: count brand colors, count fonts, check voice corpus word count, voice enabled flag, logo presence. Each thinness condition (colors_thin / fonts_missing / logo_missing / voice_corpus_thin / voice_corpus_low / voice_disabled_unexpectedly) appends a tuple to the `audit` list with a human-readable description.
 
-> Full Python (audit checks): see `references/workflow-code.md` § Step 1.75 — Completeness audit.
+> Full Python (audit checks): see `references/workflow-code.md` § Step 2c — Completeness audit.
 
-**If any audit item fires AND the operator is in single-source mode**, surface them clearly via `AskUserQuestion` BEFORE the confirmation gate:
+**If any audit item fires AND the operator is in single-source mode**, surface them clearly via `ask-operator` BEFORE the confirmation gate:
 
 > The extraction is thin in these areas:
 >   - <list of audit items, one per line, with the human-readable description>
@@ -213,28 +228,32 @@ Audit checks: count brand colors, count fonts, check voice corpus word count, vo
 > - **Fill the gaps manually in wizard mode** — I'll prompt you for the missing fields only.
 > - **Save what I have** — I'll save the partial config; downstream consumers fall back to defaults for missing fields. The audit notes go into `metadata.notes`.
 
-**If the operator chooses to supplement,** loop back to Step 0 with the additional source(s) and run multi-source extraction. If they choose "save what I have," append the audit list to `draft["metadata"]["notes"]` so the gap is durable in the saved config and the operator can re-run with more sources later.
+**If the operator chooses to supplement,** loop back to Step 1 with the additional source(s) and run multi-source extraction. If they choose "save what I have," append the audit list to `draft["metadata"]["notes"]` so the gap is durable in the saved config and the operator can re-run with more sources later.
 
 **If the operator is already in multi-source mode** (e.g., URL + folder), skip the supplement offer — they've already given the skill its best shot. Surface the audit items in the confirmation-gate "MISSING FIELDS" block instead, so they're visible but don't block.
 
-### Step 2 — Validate assets
+### Step 3 — Verify (validate assets)
 
 Run all validators in parallel (no inter-dependency). Collect results into a `validation_results` dict. Validators:
 
 - **Color contrast (WCAG AA)** — `ColorValidator.validate_text_contrast(text_hex, bg_hex)` → `{"status": "pass"|"warn"|"fail", "ratio": float, "recommendation": str|None}`
 - **Individual hex format** — `ColorValidator.is_valid_hex(hex_val)` per color slot
-- **Logo dimensions/format** — `LogoValidator.validate_logo(path)` for local logos only; URLs marked `"pending"` until Step 4 download
+- **Logo dimensions/format** — `LogoValidator.validate_logo(path)` for local logos only; URLs marked `"pending"` until Step 6 download
 - **Font availability** — `FontValidator.validate_font(font_name)` per font slot
 - **Voice section** — `VoiceValidator.validate_voice(draft.get("voice", {"enabled": False}))` → `{"status": "pass"|"warn"|"fail"|"skipped", "checks": {...}}`. `status: "skipped"` is the default when voice extraction was bypassed (visual-only sources) — informational, never an error. Do NOT block the save on a skipped voice section.
 
-> Full code per validator: see `references/workflow-code.md` § Step 2 — Per-validator code blocks.
+> Full code per validator: see `references/workflow-code.md` § Step 3 — Per-validator code blocks.
 
 **Validation rules:**
 - `fail` on: invalid hex format, logo file >5MB, logo format unsupported
 - `warn` on: WCAG contrast 3.0–4.49, logo dimensions <200×200, font not on system
 - `pass` on: all checks clear
 
-Validation warnings and failures are informational only. They never block the save. Surface them clearly at Step 3 so the user can make an informed choice.
+Validation warnings and failures are informational only. They never block the save. Surface them clearly at Step 5 so the user can make an informed choice.
+
+### Step 4 — Compute
+
+Deterministic outputs the gate displays; no operator interaction here.
 
 **Assemble validation summary table:**
 
@@ -250,11 +269,11 @@ fonts.body         system availability     pass
 fonts.monospace    system availability     pass
 ```
 
-Compute `avg_conf` and `lowest_field` from `draft["confidence_scores"]` for the Step 3 summary header.
+Compute `avg_conf` and `lowest_field` from `draft["confidence_scores"]` for the Step 5 summary header. Generate the DESIGN.md preview via `emit_design_md(...)` (split on `---`, indent YAML) and its lint via `DesignMdValidator.lint(...)`; both are informational.
 
-### Step 3 — Confirmation gate (REQUIRED before save)
+### Step 5 — Confirm (operator gate, REQUIRED before save)
 
-**The gate is mandatory: config must NOT be written until the user explicitly confirms.** Render the draft display block (colors / logos / fonts / voice / multi-source mismatches / validation summary / DESIGN.md frontmatter preview + lint / missing fields), then ask via `AskUserQuestion`:
+**The gate is mandatory: config must NOT be written until the user explicitly confirms.** Render the draft display block (colors / logos / fonts / voice / multi-source mismatches / validation summary / DESIGN.md frontmatter preview + lint / missing fields), then ask via `ask-operator`:
 
 > Confirm this branding configuration?
 > - **Confirm and save** (Recommended if extraction looks right)
@@ -264,14 +283,14 @@ Compute `avg_conf` and `lowest_field` from `draft["confidence_scores"]` for the 
 
 Decision points to preserve:
 - **DESIGN.md preview + lint are informational** — generated via `emit_design_md(...)` (split on `---`, indent YAML) and `DesignMdValidator.lint(...)`; they never auto-block the save.
-- **Mismatch resolution (multi-source):** if mismatches are present, the user MUST pick a winner per field via `AskUserQuestion` (candidate values shown with source attribution). Collect `{field: source_reference}` choices and call `merge_resolved_drafts(drafts, resolutions)` before save. `drafts` is the per-source draft list: multi-source mode builds it directly; folder mode reads it from `draft["multi_source"]["component_drafts"]`, which `extract_from_folder` attaches whenever it records a mismatch. The helper refuses an unresolved or unknown source choice. Do NOT auto-pick by confidence or recency — the PM/CIO is canonical on which brand version is current.
-- **Edit / Re-extract / Abort** each have their own disposition and audit handling: `edited` archives the pre-edit draft and hashes the pre-edit draft (pass `pre_edit_draft=`, and `edit_notes=` for the optional one-liner); `re_extracted` returns to Step 0; `rejected` writes no files; `confirmed` proceeds to Step 4.
+- **Mismatch resolution (multi-source):** if mismatches are present, the user MUST pick a winner per field via `ask-operator` (candidate values shown with source attribution). Collect `{field: source_reference}` choices and call `merge_resolved_drafts(drafts, resolutions)` before save. `drafts` is the per-source draft list: multi-source mode builds it directly; folder mode reads it from `draft["multi_source"]["component_drafts"]`, which `extract_from_folder` attaches whenever it records a mismatch. The helper refuses an unresolved or unknown source choice. Do NOT auto-pick by confidence or recency — the PM/CIO is canonical on which brand version is current.
+- **Edit / Re-extract / Abort** each have their own disposition and audit handling: `edited` archives the pre-edit draft and hashes the pre-edit draft (pass `pre_edit_draft=`, and `edit_notes=` for the optional one-liner); `re_extracted` returns to Step 1; `rejected` writes no files; `confirmed` proceeds to Step 6.
 
 > Full draft display template, color-swatch fallback, and the per-option procedures (Edit-fields 7-step / Re-extract / Abort / Confirm): see `references/confirmation-gate.md`.
 
-### Step 4 — Save
+### Step 6 — Persist
 
-**Callable transaction boundary (required).** After Step 4b has prepared any
+**Callable transaction boundary (required).** After Step 6b has prepared any
 local logo paths in the draft, call `persist_disposition(draft, disposition=...,
 branding_root=...)` from `_parallax/white-label/persistence.py`. It builds
 `config.yaml` and `DESIGN.md` from the same draft, serializes concurrent writers,
@@ -281,30 +300,30 @@ function before returning; it appends an `extraction_attempt` entry and cannot
 activate the draft. The subsections below define inputs and artifact contracts;
 they are not separate write operations.
 
-#### 4a. Pre-write validation
+#### Step 6a — Pre-write validation
 
 Before any I/O:
 - Verify `~/.parallax/client-branding/` is writable (create it with `os.makedirs(..., mode=0o700, exist_ok=True)` if absent).
 - Verify the draft contains at minimum: one color (`branding.colors.primary`), or one logo, or one font. An entirely empty config is a user error — ask to confirm or abort.
-- Validate all hex colors one final time via `ColorValidator.is_valid_hex()`. Reject any that fail (they should have been caught at Step 2, but this is a hard gate).
+- Validate all hex colors one final time via `ColorValidator.is_valid_hex()`. Reject any that fail (they should have been caught at Step 3, but this is a hard gate).
 
-#### 4b. Download logos to local assets/
+#### Step 6b — Download logos to local assets/
 
 For each logo with a URL (not already a local path), download to `~/.parallax/client-branding/assets/` as `logo-primary.<ext>` / `favicon.<ext>`, then set `draft["logos"]["<role>"]["local_path"]`. On download failure: warn and preserve URL only. After successful downloads, re-run `LogoValidator.validate_logo(dest)` and append to the validation summary.
 
-> Full code: see `references/workflow-code.md` § Step 4b — Download logos to local assets/.
+> Full code: see `references/workflow-code.md` § Step 6b — Download logos to local assets/.
 
-#### 4c. Construct config.yaml
+#### Step 6c — Construct config.yaml
 
-**Use `build_config_from_draft(draft, schema_version=2)` from `loader.py` — do not hand-assemble the config dict.** The builder is the single source of truth for the v2 shape (decisions 3A, 5A: drops `fonts.*`, emits `colors.tertiary` and flat `colors.neutral`, wires `components.body-text`). It also handles the `voice` section and the `multi_source` provenance block — no post-build mutation needed.
+**Use `build_config_from_draft(draft, schema_version=2)` from `loader.py` — do not hand-assemble the config dict.** The builder is the single source of truth for the v2 shape (drops `fonts.*`, emits `colors.tertiary` and flat `colors.neutral`, wires `components.body-text`). It also handles the `voice` section and the `multi_source` provenance block — no post-build mutation needed.
 
 v2 emits: `metadata`, `branding.{colors[primary|secondary|tertiary|neutral], logos, typography[h1..h5|body-md|code], rounded, spacing, components.body-text}`, `validation_summary`, `confidence_scores`. `fonts.*` is NOT in v2 — the loader bridges v1↔v2 at read time so consumers always see `fonts.{header,body,monospace}` derived from `typography.{h1,body-md,code}.fontFamily`.
 
 Compute `config_hash = sha256(yaml.safe_dump(config["branding"], sort_keys=True).encode()).hexdigest()`.
 
-> Full code (builder call + v2 yaml shape + v1 legacy fallback): see `references/workflow-code.md` § Step 4c — Construct config.yaml.
+> Full code (builder call + v2 yaml shape + v1 legacy fallback): see `references/workflow-code.md` § Step 6c — Construct config.yaml.
 
-#### 4d–4f. Persist the disposition (single transaction boundary)
+#### Step 6d — Persist the disposition (single transaction boundary)
 
 Call `persist_disposition(draft, disposition=..., client_name=..., validation_summary=..., lint_status=...)`, adding `pre_edit_draft=` (required) and optional `edit_notes=` when the disposition is `edited`. One call archives any existing `config.yaml`, writes `config.yaml` and `DESIGN.md`, and appends the hash-chained audit entry — the three files are one transaction under a writer lock, so a failure restores the previous active state instead of leaving them describing different brands. Do not write them separately.
 
@@ -316,38 +335,9 @@ On failure the call raises `PersistenceError`; report it cleanly and treat the s
 
 **Audit-entry schema bump (intentional chain discontinuity).** Save entries include `design_md_hash` and `lint_status`. The chain hash is `sha256(prior-line-bytes)`, so the first new-shape entry after a v1 audit log will appear as a chain break to any downstream verifier comparing entry shape across the bump. This is intentional: keep the prior chain readable for forensics but treat entries before this point as belonging to the v1 audit schema. If a verifier exists, gate it on `entry.get("design_md_hash") is not None` to detect schema-2 entries; absent that field, treat the entry as v1.
 
-> Full code: see `references/workflow-code.md` § Step 4d–4f — Persist the disposition.
+> Full code: see `references/workflow-code.md` § Step 6d — Persist the disposition.
 
-### Step 5 — Confirmation summary
-
-Output:
-
-```
-Branding saved.
-  client:      <client_name>
-  source:      <type>: <reference>  (or "multi: N sources" when multi-source)
-  colors:      <count of non-empty color slots> configured
-  logos:       <count> downloaded to assets/
-  fonts:       <count of non-empty font slots> configured
-  voice:       <enabled: yes|no — corpus N words from M docs, register: ...>
-  warnings:    <count of warn/fail checks> (see validation above)
-
-Active in:
-  visual:  client-review, due-diligence, deep-dive
-  voice:   any skill that calls cfg["voice"] when enabled
-Fallback: if branding load fails, downstream skills use default Parallax styling/voice.
-
-Audit & inspect:
-  /parallax-white-label-onboard --status    # active branding summary
-  /parallax-white-label-onboard --clear     # remove branding
-
-Try it:
-  /parallax-client-review <ticker>          # generates a branded client report
-```
-
----
-
-## Operational Modes
+## Modes
 
 | Flag | Behavior |
 |---|---|
@@ -379,25 +369,65 @@ Hard errors (printed + return, no partial emit):
 
 Behavior on a v1 config (no `typography.*` block): emitter takes `fonts.header` / `fonts.body` / `fonts.monospace` as the `typography.h1.fontFamily` / `body-md.fontFamily` / `code.fontFamily` defaults (with confidence-neutral 0.5).
 
----
+## Output Format
 
-## Error Handling, Edge Cases & Success Criteria
+### Post-save summary
+
+Output after a successful Step 6:
+
+```
+Branding saved.
+  client:      <client_name>
+  source:      <type>: <reference>  (or "multi: N sources" when multi-source)
+  colors:      <count of non-empty color slots> configured
+  logos:       <count> downloaded to assets/
+  fonts:       <count of non-empty font slots> configured
+  voice:       <enabled: yes|no — corpus N words from M docs, register: ...>
+  warnings:    <count of warn/fail checks> (see validation above)
+
+Active in:
+  visual:  client-review, due-diligence, deep-dive
+  voice:   any skill that calls cfg["voice"] when enabled
+Fallback: if branding load fails, downstream skills use default Parallax styling/voice.
+
+Audit & inspect:
+  /parallax-white-label-onboard --status    # active branding summary
+  /parallax-white-label-onboard --clear     # remove branding
+
+Try it:
+  /parallax-client-review <ticker>          # generates a branded client report
+```
+
+For `--status`: `references/status-format.md`. For other modes, the requested success/failure message.
+
+## Failure modes
+
+- `ask-operator` absent, or no explicit confirmation this session: render the gate in prose and stop; nothing is written (fails closed, conventions §14.3).
+- `run-shell` absent: extraction helpers and `persist_disposition` cannot run; say so at Step 0 and stop before Step 6.
+- `PersistenceError`: report cleanly, treat the save as not applied. `RecoveryError`: surface it; do not retry.
+- Logo download fails: warn, keep the URL reference only, continue.
+- Voice corpus < 500 words: `voice.enabled = False`, surface the gap; never populate voice from a thin corpus.
+- `config.yaml` corrupted: warn and offer to overwrite; never crash.
 
 Edge-case handling (corrupted config, logo-download failure, empty color extraction, font-not-on-system, WCAG fail, unwritable directory, mid-way staging failure, >10-page PDF) and the full Success Criteria checklist (config/assets/audit assertions, voice-extracted vs not, multi-source) are catalogued in `references/edge-cases.md`. Consult it when a failure mode fires or before declaring a run successful.
 
----
+## Done when
+
+- The operator answered the Step 5 gate through `ask-operator`; every extraction attempt, including aborted ones, appended its audit entry through `persist_disposition`.
+- On confirm: `config.yaml` and `DESIGN.md` written `0600` from the same draft, logos downloaded to `assets/` (`0700`), the audit entry appended; the post-save summary rendered.
+- Multi-source mismatches were resolved by the operator, never by confidence or recency.
 
 ## See also
 
-- `references/workflow-code.md` — full Python for Steps 1–4 + regenerate-from-config
+- `references/workflow-code.md` — full Python for Steps 2–6 + regenerate-from-config
 - `references/folder-mode.md` — folder inventory/classification (F-1..F-4) + Lago/Rezvani/Genesys voice frameworks
-- `references/voice-extraction.md` — Step 1.5 voice prompt template, self-check, drafted-vs-sent rationale
-- `references/confirmation-gate.md` — Step 3 draft display template + Edit/Re-extract/Abort/Confirm procedures
+- `references/voice-extraction.md` — Step 2b voice prompt template, self-check, drafted-vs-sent rationale
+- `references/confirmation-gate.md` — Step 5 draft display template + Edit/Re-extract/Abort/Confirm procedures
 - `references/edge-cases.md` — error handling, edge cases, and Success Criteria checklist
 - `references/status-format.md` — `--status` output template
 - `references/integration-contract.md` — visual + voice consumer loading patterns, voice prompt-prepend template
-- `references/overview.md` — architecture, data flow, test inventory (was top-level `README.md`)
-- `references/installation.md` — setup, dependencies, troubleshooting (was top-level `INSTALLATION.md`)
+- `references/overview.md` — architecture, data flow, test inventory
+- `references/installation.md` — setup, dependencies, troubleshooting
 - `references/validation-rules.md` — color/logo/font validation reference
 - `references/supported-fonts.md` — web-safe fonts + fallback chains
 - `_parallax/white-label/integration-pattern.md` — canonical consumer-side contract for visual rendering (§1–§9)

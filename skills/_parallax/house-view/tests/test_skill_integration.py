@@ -92,7 +92,7 @@ def test_full_integration_flow():
         # --- SIMULATE SKILL STEP 4 ---
         view_hash = "abc123canonical"
 
-        # Step 4.1a: Load manifest
+        # Step 6 item 1a: Load manifest
         try:
             manifest = manifest_cache.load_manifest(
                 fresh_manifest=None,
@@ -182,7 +182,7 @@ def test_phase_0_fallback_flow():
         # --- SIMULATE SKILL STEP 4 ---
         view_hash = "abc123fallback"
 
-        # Step 4.1a: Load manifest (will fail to find anything)
+        # Step 6 item 1a: Load manifest (will fail to find anything)
         cache = manifest_cache.ManifestCache(
             cache_dir, TRUSTED_KEYS_PATH, allow_test_keys=True
         )

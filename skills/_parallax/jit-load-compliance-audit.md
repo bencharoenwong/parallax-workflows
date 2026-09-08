@@ -172,7 +172,7 @@ This audit is not exhaustive:
 
 - Single-invocation sampling may miss directives that fire only on rare error paths
 - Model behavior is non-deterministic across runs; one PASS doesn't prove future invocations will also load
-- The audit assumes Claude Code as the runtime; behavior may differ in API-only contexts
+- Level 2 (behavioral compliance) requires inspecting a fresh-session tool-use transcript — straightforward on Claude Code and on Codex CLI's own call log (`parallax-conventions.md` §14.2); it may be unavailable on claude.ai's uploaded-skill runtime. Where it is unavailable, run Level 1 only and record the gap in the audit baseline.
 
 For high-stakes restructures (skills that affect compliance, money, or client-facing output), run the audit at least three times across different operators and session states. Cross-validate.
 

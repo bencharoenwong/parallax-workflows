@@ -39,7 +39,8 @@ description: "Monthly CIO letter prep pack for fund managers: period attribution
 - Duplicate symbol in input portfolio: reject at validation with "Duplicate symbol {sym}" — no auto-dedup.
 - Mid-period delisting (price series ends before period_end): treat as a coverage gap (drop from rankings + surface per the materiality tiers), not a hard ValueError.
 - This skill is private-beta gated; excluded from default `build-skills.sh` builds. Confirm enablement before running for new customers.
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step; that doc carries the loader call (`load_visual_branding`), error-state contract, docx substitution table (§6), and About This Report template (§7). The Pre-Render step in Workflow below points at it; the table at the end of Output Format previously inlined here has been moved to §6.
+- JIT-load `_parallax/white-label/integration-pattern.md` in Step 0; that doc carries the loader call (`load_visual_branding`), error-state contract, docx substitution table (§6), and About This Report template (§7). Step 5 applies it; the substitution table lives in §6.
+- Every host interaction is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3). The `docx` skill chain is `invoke-skill`; `scripts/contribution.py` is `run-shell`.
 - Voice and auto-jurisdiction disclaimers remain explicitly out of scope (see "Not in scope"). This skill uses `load_visual_branding()` rather than `load_client_branding()` — the 7-key wrapper excludes `branding["voice"]` at code level, so accidental access raises `KeyError`. The CIO writes the prose; the standard wording in the **Disclaimer** section stays. Visual branding only.
 
 Generate a structured Word document that a fund-manager CIO can edit and send to LPs as the period letter. The pack covers the period dates, gross return / drawdown / vol, attribution snapshot, top 5 contributors and bottom 5 detractors with evidence-backed drivers, trade-log narrative, macro snapshot, news themes, a conditional forward-outlook (only if a house view is active), coverage gaps, and the standard disclaimer.
@@ -69,34 +70,47 @@ If `prior_portfolio` or `trade_log` is missing, reject with a clear error and an
 
 ## Workflow
 
-JIT-load `_parallax/parallax-conventions.md` for execution-mode, RIC resolution, symbol cross-validation, fallbacks, news async, and macro reasoning. JIT-load `_parallax/house-view/loader.md` ONLY if `house_view` is supplied AND the forward-outlook section will render.
+Report-consumer shape: the spine headings below. The dependent per-mover fan-out needs the Step 4 ranking, so it fires inside Step 4 as Batch B rather than in Step 2.
 
-### Batch 0 — Tool loading + house view check
+### Step 0 — Pre-flight
 
-1. Call `ToolSearch` with query `"+Parallax"` to load deferred MCP tool schemas.
-2. Validate inputs: weights sum to 1.0 (within 1e-3), period ≤ 365 days, trade_log chronologically ordered, weight_delta sums per date balance to zero, no duplicate symbols.
-3. If portfolio has > 40 holdings, truncate to top 40 by current weight and record the truncated tail's combined weight for the excluded-holdings note. Daily contribution math still runs over the FULL set; only per-mover fan-out is truncated.
-4. If `house_view` is supplied, load it per loader.md §1-§2. If validation fails, treat as no view (omit forward-outlook). If no `house_view`, skip the forward-outlook section entirely.
+1. Resolve every `_parallax/...` path named in this file to the canonical copy (conventions §0.0 item 1).
+2. `load-reference` `_parallax/parallax-conventions.md` (execution mode, RIC resolution, symbol cross-validation, fallbacks, news async, macro reasoning). `load-reference` `_parallax/house-view/loader.md` ONLY if `house_view` is supplied AND the forward-outlook section will render.
+3. `discover-tools`: bind every tool named in Steps 2 and 4 (`get_telemetry`, `analyze_portfolio`, `export_price_series`, `get_company_info`, `check_portfolio_redundancy`, `etf_daily_price`, `get_assessment`, `get_score_analysis`, `get_news_synthesis`, `macro_analyst`) to the exact callables and schemas exposed now (conventions §0.0–§0.1).
+   <!-- host-note -->
+   Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call; `run-shell` = `Bash`; `invoke-skill` = the `docx` skill.
+   <!-- /host-note -->
+4. `load-reference` `_parallax/white-label/integration-pattern.md` and apply §2 (Loading the branding) verbatim. The loader call is `load_visual_branding()` (NOT `load_client_branding()`); the wrapper returns the 7-key visual subset and structurally excludes voice. Compute `white_label_active` per §2.
 
-### Batch A — Period analytics fan-out (parallel)
+### Step 1 — Resolve inputs
 
-Fire all rows below in a single tool-call turn. Every row is independent. Cross-validate each holding's identity per the `analyze_portfolio` row of the conventions §2 identity table: compare the per-row `name` in `latest_holdings[]` and `company_contribution[]` against `get_company_info.name` for the same `ric`, normalizing both sides first per §2 step 2 — `Apple Inc` and `Apple Inc.` are the same company and must not flag. Flag any mismatch that survives normalization and exclude mismatched holdings from aggregate factor calculations. A holding with a row in neither `latest_holdings[]` nor `company_contribution[]`, or whose `get_company_info` call fails or returns empty, has no name pair to compare and therefore cannot be identity-checked — record it as UNCHECKED and list it under coverage gaps rather than treating a missing comparison as a pass.
+1. Validate inputs: weights sum to 1.0 (within 1e-3), period ≤ 365 days, trade_log chronologically ordered, weight_delta sums per date balance to zero, no duplicate symbols. Missing `prior_portfolio` or `trade_log`: reject with the accepted-shape example.
+2. If portfolio has > 40 holdings, truncate to top 40 by current weight and record the truncated tail's combined weight for the excluded-holdings note. Daily contribution math still runs over the FULL set; only per-mover fan-out is truncated.
+3. If `house_view` is supplied, load it per loader.md §1-§2. If validation fails, treat as no view (omit forward-outlook). If no `house_view`, skip the forward-outlook section entirely.
+
+### Step 2 — Fetch (parallel batches)
+
+#### Batch A — Period analytics fan-out
+
+`call-tool` all rows below together. Every row is independent.
 
 | Tool | Parameters | Notes |
 |---|---|---|
-| `mcp__claude_ai_Parallax__get_telemetry` | fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences | Market regime context for the period header. |
-| `mcp__claude_ai_Parallax__analyze_portfolio` | Construct the `portfolio` array as one entry at `period_start` carrying `prior_portfolio` weights, plus one entry per distinct trade date in `trade_log` carrying the cumulative-post-trade weights as of that date. The final entry's weights MUST equal `current_portfolio`. `start_date=period_start`, `end_date=period_end`, `benchmark=<input or "ACWI.OQ">`, `fields=["portfolio_summary","performance_metrics","drawdown_analysis","portfolio_scores","concentration_metrics","company_contribution","sector_contribution","sector_allocation","time_period_returns","latest_holdings"]`. For the common single-rebalance case (one trade date `D`), the array has 2 entries: `[{date: period_start, ...prior}, {date: D, ...current}]`. | **Single multi-date call.** Server-side `company_contribution` is canonical; current+prior factor exposures via `latest_holdings` + `sector_allocation` over time. `scripts/contribution.py` runs as the reconciliation audit (Batch B step 1). |
-| `mcp__claude_ai_Parallax__export_price_series` | `symbol=<each holding>`, `days=<min((today - period_start).days + 5, 365)>` | One call per holding (parallel). Returns TR-adjusted closes. Trailing window anchored to period_start (today must be within 365 days of period_start); slice fetched prices to [period_start, period_end] before passing to contribution.py. Fires for the FULL holdings set (input to local audit) — Batch B fan-out is the truncated set, not this. |
-| `mcp__claude_ai_Parallax__get_company_info` | `symbol=<each holding>` — **one call per holding, all fanned out in parallel within this batch** | Ground-truth name oracle for the identity gate above. FREE, instant. Per-holding only — do NOT consolidate into a comma-joined call: comma-joined calls fail-empty on partial coverage, so a single unresolved RIC silently zeroes the whole batch, leaving the identity gate with nothing to compare and passing every holding. Per-holding calls also mean the single-symbol `GET_COMPANY_INFO_SCHEMA` and its mock model the response this skill actually receives. |
-| `mcp__claude_ai_Parallax__check_portfolio_redundancy` | `holdings=current_portfolio` | Surfaced under coverage gaps if low coverage; otherwise informs trade-narrative quality. |
+| `get_telemetry` | fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences | Market regime context for the period header. |
+| `analyze_portfolio` | Construct the `portfolio` array as one entry at `period_start` carrying `prior_portfolio` weights, plus one entry per distinct trade date in `trade_log` carrying the cumulative-post-trade weights as of that date. The final entry's weights MUST equal `current_portfolio`. `start_date=period_start`, `end_date=period_end`, `benchmark=<input or "ACWI.OQ">`, `fields=["portfolio_summary","performance_metrics","drawdown_analysis","portfolio_scores","concentration_metrics","company_contribution","sector_contribution","sector_allocation","time_period_returns","latest_holdings"]`. For the common single-rebalance case (one trade date `D`), the array has 2 entries: `[{date: period_start, ...prior}, {date: D, ...current}]`. | **Single multi-date call.** Server-side `company_contribution` is canonical; current+prior factor exposures via `latest_holdings` + `sector_allocation` over time. `scripts/contribution.py` runs as the reconciliation audit (Step 3). |
+| `export_price_series` | `symbol=<each holding>`, `days=<min((today - period_start).days + 5, 365)>` | One call per holding (parallel). Returns TR-adjusted closes. Trailing window anchored to period_start (today must be within 365 days of period_start); slice fetched prices to [period_start, period_end] before passing to contribution.py. Fires for the FULL holdings set (input to local audit) — Batch B fan-out is the truncated set, not this. |
+| `get_company_info` | `symbol=<each holding>` — **one call per holding, all fanned out in parallel within this batch** | Ground-truth name oracle for the Step 3 identity gate. FREE, instant. Per-holding only — do NOT consolidate into a comma-joined call: comma-joined calls fail-empty on partial coverage, so a single unresolved RIC silently zeroes the whole batch, leaving the identity gate with nothing to compare and passing every holding. Per-holding calls also mean the single-symbol `GET_COMPANY_INFO_SCHEMA` and its mock model the response this skill actually receives. |
+| `check_portfolio_redundancy` | `holdings=current_portfolio` | Surfaced under coverage gaps if low coverage; otherwise informs trade-narrative quality. |
 
 Asset-class scope: this skill assumes equity legs only (single-stock fund-manager portfolios). `export_price_series` is the correct call for every holding. If a holding resolves to ETF, branch via `etf_daily_price` per the equity-branch convention; equity is the default Pre-classification gate.
 
-If `export_price_series` fails for a holding, mark that holding as price-unavailable and apply materiality-tier handling after Batch B's contribution math.
+If `export_price_series` fails for a holding, mark that holding as price-unavailable and apply materiality-tier handling in Step 3.
 
-### Batch B — Top movers + macro fan-out (after Batch A's contribution math)
+### Step 3 — Verify
 
-**Step 1 — Reconciliation audit.** Server-side `analyze_portfolio.company_contribution` provides the canonical LP-facing numbers. Run `scripts/contribution.py` locally as a cross-check:
+**Identity gate.** Cross-validate each holding's identity per the `analyze_portfolio` row of the conventions §2 identity table: compare the per-row `name` in `latest_holdings[]` and `company_contribution[]` against `get_company_info.name` for the same `ric`, normalizing both sides first per §2 step 2 — `Apple Inc` and `Apple Inc.` are the same company and must not flag. Flag any mismatch that survives normalization and exclude mismatched holdings from aggregate factor calculations. A holding with a row in neither `latest_holdings[]` nor `company_contribution[]`, or whose `get_company_info` call fails or returns empty, has no name pair to compare and therefore cannot be identity-checked — record it as UNCHECKED and list it under coverage gaps rather than treating a missing comparison as a pass.
+
+**Reconciliation audit.** Server-side `analyze_portfolio.company_contribution` provides the canonical LP-facing numbers. `run-shell` `scripts/contribution.py` locally as a cross-check:
 
 ```bash
 # Illustrative — template-fill from JSON inputs at runtime, do not copy {...} literally
@@ -124,7 +138,7 @@ The 25-bp tolerance accommodates known rebalance-date convention skew (Parallax 
 
 The script's own 1-bp inner gate (`ReconciliationError` on `|sum(contributions) − portfolio_total_return| > 1bp`) still fires as the inner safety net.
 
-**Step 2 — Materiality tiers** based on holdings excluded from contribution due to missing prices:
+**Materiality tiers** based on holdings excluded from contribution due to missing prices:
 
 | Total excluded weight | Action |
 |---|---|
@@ -132,39 +146,39 @@ The script's own 1-bp inner gate (`ReconciliationError` on `|sum(contributions) 
 | Total > 5% | High-visibility **WARNING banner** at the top of the doc: "WARNING: [X.X%] of the portfolio was excluded from contribution analysis due to missing data. Key performance drivers may be missing from this report." |
 | Any single holding > 10% weight | Reject the attribution section entirely with an error pointing to the missing symbol. |
 
-**Step 3** — Convert each server-side `company_contribution` row to return contribution first: `contrib_bps = contribution_pct × portfolio_summary.total_return × 10000`. Rank on that converted value, not on raw `contribution_pct` — see the basis and sign gotchas above. Select the top 5 contributors (positive `contrib_bps`) and bottom 5 detractors (negative `contrib_bps`). If a side has fewer than 5 same-signed holdings, render only what exists (suppress empty side).
+### Step 4 — Compute
 
-**Step 4** — Fan out per-mover and macro calls in parallel:
+Convert each server-side `company_contribution` row to return contribution first: `contrib_bps = contribution_pct × portfolio_summary.total_return × 10000`. Rank on that converted value, not on raw `contribution_pct` — see the basis and sign gotchas above. Select the top 5 contributors (positive `contrib_bps`) and bottom 5 detractors (negative `contrib_bps`). If a side has fewer than 5 same-signed holdings, render only what exists (suppress empty side).
+
+#### Batch B — Per-mover and macro fan-out (dependent on the ranking)
+
+`call-tool` together:
 
 | Tool | Calls | Notes |
 |---|---|---|
-| `mcp__claude_ai_Parallax__get_assessment` | × ≤ 10 | Async (~30-90s). AI synthesis used for "why" prose. |
-| `mcp__claude_ai_Parallax__get_score_analysis` | × ≤ 10 | Weekly factor score history — input to driver fallback step 2. |
-| `mcp__claude_ai_Parallax__get_news_synthesis` | × ≤ 10 | Async (~30-90s). Primary input to driver fallback step 1. |
-| `mcp__claude_ai_Parallax__macro_analyst` | × ≤ 3 markets | Parameter is `market` (not `country`). Pick relevant markets per conventions §6. Component default — call once per market; the summary call returns all components inline. |
+| `get_assessment` | × ≤ 10 | Async (~30-90s). AI synthesis used for "why" prose. |
+| `get_score_analysis` | × ≤ 10 | Weekly factor score history — input to driver fallback step 2. |
+| `get_news_synthesis` | × ≤ 10 | Async (~30-90s). Primary input to driver fallback step 1. |
+| `macro_analyst` | × ≤ 3 markets | Parameter is `market` (not `country`). Pick relevant markets per conventions §6. Component default — call once per market; the summary call returns all components inline. |
 
 Per conventions §5, the async tools should not block render assembly; if they have not resolved by render time, leave a `[news pending]` placeholder and complete on resolution.
 
-### Pre-Render — Load white-label branding
+### Step 5 — Compose
 
-Load `_parallax/white-label/integration-pattern.md` and apply §2 (Loading the branding) verbatim. The loader call is `load_visual_branding()` (NOT `load_client_branding()`); the wrapper returns the 7-key visual subset and structurally excludes voice. Compute `white_label_active` per §2.
-
-If `white_label_active` is True, the render in Batch C applies the docx substitution table at integration-pattern.md §6. Logo path (when present) is inserted at the cover-page header per §6 (left-aligned, ≤1.5 inch height). Semantic colors (`cg-green-700`, `cg-red-700`, `cg-amber-*`) are NEVER overridden per §1.
+If `white_label_active` is True, the render applies the docx substitution table at integration-pattern.md §6. Logo path (when present) is inserted at the cover-page header per §6 (left-aligned, ≤1.5 inch height). Semantic colors (`cg-green-700`, `cg-red-700`, `cg-amber-*`) are NEVER overridden per §1.
 
 If `white_label_active` is False, the **Default brand palette** table in Output Format below applies; no cover-page logo is inserted. On `logo_missing` (partial-success path per integration-pattern.md §4), palette and fonts still apply; only the cover-page logo is skipped.
 
 About This Report line wording follows integration-pattern.md §7 (docx column). For this skill specifically: on `logo_missing`, the qualifier is `(logo unavailable, omitted from cover)`.
 
-### Batch C — Synthesis (sequential)
-
-Compose the structured pack content with these sections in order. Hand the resulting structured content to the `docx` skill chain to render to Word format.
+**Synthesis (sequential).** Compose the structured pack content with these sections in order. Hand the resulting structured content to the `docx` skill chain to render to Word format.
 
 1. **Period header** — `period_start` to `period_end`, gross return (server-side), max drawdown (`drawdown_analysis.portfolio.max_drawdown`), realized vol (`performance_metrics.portfolio.annualized_volatility`). If `benchmark` was provided, include benchmark return and excess return.
-2. **WARNING banner** (only if Step 2 tier 2 fired — total excluded weight > 5%).
+2. **WARNING banner** (only if the Step 3 materiality tier 2 fired — total excluded weight > 5%).
 3. **Attribution snapshot** — factor and sector deltas from `analyze_portfolio` start-state vs end-state (via `latest_holdings` and `sector_allocation` time series). Two short paragraphs: factor-tilt change, sector-weight change. Reference any redundancy alerts from `check_portfolio_redundancy`.
-4. **Top contributors table** — top 5 by converted return contribution (Batch B Step 3). Row template:
+4. **Top contributors table** — top 5 by converted return contribution (Step 4). Row template:
    `{symbol} | {contrib_bps} bps | Driver: {driver_field}`
-   `{contrib_bps}` is `contribution_pct × portfolio_summary.total_return × 10000`, NOT `contribution_pct × 10000`. The conversion is self-verifying from the blocks Batch A already requests, with no addition to its `fields=` list: for every row, `contribution_pct` must equal that row's `company_contribution[].total_pl` over `portfolio_summary.total_pl`, so multiplying by `total_return × 10000` restates the row's P&L in bps of opening capital. **Check the identity, not a worked number.** Recompute it against whatever `_parallax/scripts/mcp_mocks/analyze_portfolio.json` currently holds: take any `company_contribution[]` row, use that row's own `ric`, and confirm the two sides agree to within rounding. No symbol or figure is quoted here on purpose — that fixture is generated, so every identifier and value in it moves whenever `_parallax/scripts/gen_mock_fixtures.py` or its pinned seed changes, and a hardcoded example goes stale silently while the identity never does. Never hand-edit or paste a response over that fixture: it is `MANAGED`, and the provenance gate accepts only what the generator reproduces byte-exact. The unconverted reading is the converted one divided by `total_return`, so it is wrong by exactly that factor, and over a losing period it also carries the wrong sign.
+   `{contrib_bps}` is `contribution_pct × portfolio_summary.total_return × 10000`, NOT `contribution_pct × 10000`. The conversion is self-verifying from the blocks Step 2 already requests, with no addition to its `fields=` list: for every row, `contribution_pct` must equal that row's `company_contribution[].total_pl` over `portfolio_summary.total_pl`, so multiplying by `total_return × 10000` restates the row's P&L in bps of opening capital. **Check the identity, not a worked number.** Recompute it against whatever `_parallax/scripts/mcp_mocks/analyze_portfolio.json` currently holds: take any `company_contribution[]` row, use that row's own `ric`, and confirm the two sides agree to within rounding. No symbol or figure is quoted here on purpose — that fixture is generated, so every identifier and value in it moves whenever `_parallax/scripts/gen_mock_fixtures.py` or its pinned seed changes, and a hardcoded example goes stale silently while the identity never does. Never hand-edit or paste a response over that fixture: it is `MANAGED`, and the provenance gate accepts only what the generator reproduces byte-exact. The unconverted reading is the converted one divided by `total_return`, so it is wrong by exactly that factor, and over a losing period it also carries the wrong sign.
    Fill `{driver_field}` per the fallback hierarchy:
    1. Notable news event with date (from `get_news_synthesis`) — e.g., `Beat Q1 EPS by 12%, raised guidance (2026-04-22)`.
    2. Significant factor score change (from `get_score_analysis`) — e.g., `MOMENTUM 5.2 → 7.8 over period`.
@@ -176,9 +190,28 @@ Compose the structured pack content with these sections in order. Hand the resul
 7. **Macro snapshot** — one bullet per macro market (≤ 3 bullets). Pull headline from each `macro_analyst` summary; ground in the period's regime call from `get_telemetry`.
 8. **News themes** — cluster news from `get_news_synthesis` calls by `sector × directional move` (positive vs negative). Max 5 buckets. Each bucket cites ≥ 1 ticker by name. Do NOT repeat the per-mover driver text verbatim; this section is sector-themed.
 9. **Forward-outlook** — render ONLY if `house_view` is active and validated. 1 bullet per top-5 holding by current weight, framed in view-language (regime call, tilt direction, conviction notes per loader.md §3-§5). If no active view, OMIT this section entirely.
-10. **Coverage gaps** — list any holdings excluded from contribution due to missing data with their weights. List any holdings excluded from per-position analysis due to the 40-holding soft cap. List any holdings recorded as UNCHECKED by the Batch A identity gate — whether because no `analyze_portfolio` row carried a name for them or because their `get_company_info` call failed or returned empty. List any tools that returned "data unavailable" per conventions §4.
+10. **Coverage gaps** — list any holdings excluded from contribution due to missing data with their weights. List any holdings excluded from per-position analysis due to the 40-holding soft cap. List any holdings recorded as UNCHECKED by the Step 3 identity gate — whether because no `analyze_portfolio` row carried a name for them or because their `get_company_info` call failed or returned empty. List any tools that returned "data unavailable" per conventions §4.
 11. **About This Report** — small footer block (smaller font, italic): generation date, tools used (with versions if available), reconciliation-audit result formatted as `Reconciliation audit: PASS — local total {X} bps vs server {Y} bps; diff {Z} bps; tolerance 25 bps` (or `FAIL` with halt-and-report wording). Skill version + private-beta tag. **Branding line** — per integration-pattern.md §7 docx column. Default-Parallax path: `Branding: default Parallax`. White-label clean load: `Branding: white-label (source: <branding["source"]["reference"]>)`. `logo_missing`: append `(logo unavailable, omitted from cover)`.
 12. **Disclaimer** — per conventions §9.1. If active view: use the view-aware disclaimer per loader.md §5 rule 5; otherwise the standard wording (see Disclaimer section below).
+
+### Step 6 — Render (docx chain)
+
+`invoke-skill` the `docx` skill with the Step 5 structured content per the render chain in Output Format. No render-gate script applies: the `.docx` is the deliverable and the reconciliation audit (Step 3) is the halting gate. Never ship the Markdown intermediate.
+
+## Failure modes
+
+- `prior_portfolio` or `trade_log` missing, duplicate symbol, period > 365 days, or period start > 365 days ago: reject before any Parallax call.
+- Reconciliation audit `|local − server| > 25 bps`, or the script's 1-bp `ReconciliationError`: halt rendering with the diff; never catch-and-discard.
+- `export_price_series` fails for a holding: price-unavailable → materiality tiers (Step 3); any single holding > 10% rejects the attribution section.
+- `get_company_info` fails or returns empty: the holding is UNCHECKED and listed under coverage gaps; never a pass.
+- Async tools pending at render: `[news pending]` placeholder per conventions §5; complete on resolution.
+- `invoke-skill` (docx) unavailable: stop with the structured content on disk and say the `.docx` could not be produced on this host; do not hand over Markdown as the deliverable.
+
+## Done when
+
+- The `.docx` exists and opens; every Step 5 section rendered or omitted per its rule (forward-outlook only with an active view; empty mover side suppressed).
+- About This Report carries the reconciliation line, the branding line, and the private-beta tag; §9.2 disclosure sits immediately above the disclaimer.
+- Coverage gaps list every excluded, truncated, or UNCHECKED holding.
 
 ## Output Format
 
@@ -186,7 +219,7 @@ Word .docx ONLY via the `docx` skill chain. The deliverable is a .docx file the 
 
 **Render chain:**
 
-1. Batch C composes the structured content (period header, tables as row-arrays, prose paragraphs as strings, conditional banner / forward-outlook flags).
+1. Step 5 composes the structured content (period header, tables as row-arrays, prose paragraphs as strings, conditional banner / forward-outlook flags).
 2. Hand the structured content to the `docx` skill: tables become Word tables (branded header row, alternating-row shading), section headers become Word Heading styles (1 / 2), prose becomes Body Text, the WARNING banner (if any) is rendered with a top-of-doc highlight (amber background + dark text).
 3. The single deliverable is `.docx`. An internal Markdown intermediate may be produced during development for diffing or review-tool friendliness, but it is NEVER handed to the CIO and NEVER counted as the skill's output. If you find yourself shipping markdown, you've broken the output contract — re-render to `.docx`.
 
@@ -206,7 +239,7 @@ Word .docx ONLY via the `docx` skill chain. The deliverable is a .docx file the 
 
 The render synthesis applies these tokens to: title (navy-900), body (neutral-900), section headings (navy-900 H1/H2 → navy-700 H3/H4 → navy-400 H5/H6), table headers (navy-900 fill + white text), even rows (neutral-100 shading), contributor "+ bps" (green-700), detractor "− bps" (red-700), footer/disclaimer (neutral-500 + italic + 8-9pt). Funds publishing under their own brand should swap the palette in their config; the default palette is a sensible institutional-finance baseline.
 
-**White-label substitution.** When `white_label_active` (per Pre-Render), the renderer applies the docx substitution table at `_parallax/white-label/integration-pattern.md` §6. That table is the canonical mapping from `cg-*` tokens to `branding["colors"]` / `branding["fonts"]` / `branding["logos"]["primary"]`, and it specifies the never-overridden semantic tokens.
+**White-label substitution.** When `white_label_active` (per Step 0), the renderer applies the docx substitution table at `_parallax/white-label/integration-pattern.md` §6. That table is the canonical mapping from `cg-*` tokens to `branding["colors"]` / `branding["fonts"]` / `branding["logos"]["primary"]`, and it specifies the never-overridden semantic tokens.
 
 Cover-page client name follows integration-pattern.md §6: when `white_label_active` AND `client_name != ""`, the cover-page header gains the client name at H1 in the brand `branding["fonts"]["header"]`. When `client_name == ""` (legacy configs), the client name is omitted but the cover-page logo (if present) still renders.
 
@@ -272,7 +305,7 @@ The skill's design choices, summarized inline so the rationale is self-contained
 | Materiality tiers for excluded holdings | Drop-with-note is insufficient when the dropped holding is a top contributor. Tiers ensure user-visible warnings scale with materiality. |
 | Word .docx output via the `docx` skill chain | Fund managers write LP letters in Word. Native format reduces friction and matches CIO workflow. |
 | White-label visual substitution (palette + fonts + logo); voice and disclaimers stay v2 | Visual branding is independent of prose; replacing the default Parallax-CG palette with the fund's own brand makes the .docx look like the fund's collateral without touching the killed-premise voice-generation territory. Voice and auto-disclaimers remain explicitly out of scope (see "Not in scope") because the CIO writes the prose and reviews the disclaimer; pulling either from a config silently would violate the design's compliance posture. |
-| Server-side `company_contribution` as canonical numbers | Parallax's server-side math is what CIO will defend in LP meetings. Local `contribution.py` is the audit gate. The endpoint returns P&L share rather than return contribution, so the letter converts it once at Batch B Step 3 rather than substituting the local audit's numbers into LP-facing cells. |
+| Server-side `company_contribution` as canonical numbers | Parallax's server-side math is what CIO will defend in LP meetings. Local `contribution.py` is the audit gate. The endpoint returns P&L share rather than return contribution, so the letter converts it once at Step 4 rather than substituting the local audit's numbers into LP-facing cells. |
 | 5+5 contributor/detractor cap with 40-holding soft cap | Async per-mover MCP calls are expensive (~30-90s each). Caps balance cost against narrative depth. |
 | Driver fallback hierarchy (news → factor → sector → default phrase) | Real news is best evidence; default phrases prevent broken row rendering when no signal exists. |
 | Reconciliation gate + 25-bp audit tolerance | Inner 1-bp gate catches math bugs in `contribution.py`; outer 25-bp gate catches local-vs-server divergence beyond known convention skew. |

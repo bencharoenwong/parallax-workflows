@@ -1,6 +1,6 @@
 ---
 name: parallax-ai-consensus
-description: "Runs all installed Parallax AI Investor Profiles (Buffett, Greenblatt, Klarman, Soros, PTJ) against a single ticker or short basket (cap 5). Returns the per-profile verdict matrix, the super-majority consensus signal per consensus-config.md, and a factor-level agreement detail showing which factors/criteria were flagged by multiple profiles. Cross-profile agreement is the strongest-agreement signal. Third-person framing throughout, AI-inferred from public information. NOT financial advice. NOT personalized. NOT for a single investor profile only (use /parallax-ai-buffett etc.). NOT for portfolio-level health check (use /parallax-portfolio-checkup)."
+description: "Runs all installed Parallax AI Investor Profiles (Buffett, Greenblatt, Klarman, Soros, PTJ) against a single ticker or short basket (cap 5). Returns the per-profile verdict matrix, the super-majority consensus signal per consensus-config.md, and a factor-level agreement detail showing which factors/criteria were flagged by multiple profiles. Cross-profile agreement is the strongest-agreement signal. Third-person framing throughout, AI-inferred from public information. NOT financial advice. NOT personalized. NOT for a single investor profile only (use /parallax-ai-buffett, /parallax-ai-greenblatt, /parallax-ai-klarman, /parallax-ai-soros, or /parallax-ai-ptj). NOT for portfolio-level health check (use /parallax-portfolio-checkup)."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -9,7 +9,7 @@ description: "Runs all installed Parallax AI Investor Profiles (Buffett, Greenbl
 
 ## When not to use
 
-- Single profile only → use /parallax-ai-buffett, /parallax-ai-greenblatt, /parallax-ai-klarman, or /parallax-ai-soros
+- Single profile only → use /parallax-ai-buffett, /parallax-ai-greenblatt, /parallax-ai-klarman, /parallax-ai-soros, or /parallax-ai-ptj
 - Broader macro outlook → use /parallax-macro-outlook
 - Portfolio analysis → use /parallax-morning-brief or /parallax-portfolio-checkup
 - Full due diligence → use /parallax-due-diligence
@@ -17,17 +17,13 @@ description: "Runs all installed Parallax AI Investor Profiles (Buffett, Greenbl
 
 ## Gotchas
 
-- JIT-load _parallax/parallax-conventions.md, profile-schema.md, output-template.md, consensus-config.md
-- JIT-load ALL installed profile specs under _parallax/AI-profiles/profiles/ — buffett.md, greenblatt.md, klarman.md, soros.md, ptj.md
-- Do NOT re-implement profile logic — invoke each profile dispatcher's workflow as documented in skills/parallax-ai-<name>/SKILL.md
-- Cap basket input at 5 tickers per call. For single-ticker queries, all 5 profiles are applicable (Soros and PTJ run single-ticker dual/tri-channel modes)
-- Super-majority math uses ceiling rounding per consensus-config.md — required = ceil(0.75 × applicable)
-- Partial matches do NOT count toward the super-majority signal but DO count toward factor-level agreement surfacing
-- Factor-level agreement is the highest-value section — do not skip it
-- Disclaimer verbatim; use umbrella phrasing "Parallax AI Investor Profiles framework" rather than any single investor name
-- If a profile fails (cross-validation, timeout, missing data) mark as `skipped` and continue with remaining profiles
-- INSUFFICIENT_PROFILES if applicable count < 3 (per consensus-config.md minimum_applicable_count)
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
+- Expected Parallax spend: ~60–70 tokens single ticker, ~180–240 for a basket of 5 (`_parallax/token-costs.md`).
+- JIT-load `_parallax/parallax-conventions.md`, `_parallax/AI-profiles/profile-schema.md`, `_parallax/AI-profiles/output-template.md`, `_parallax/AI-profiles/consensus-config.md`, and ALL profile specs under `_parallax/AI-profiles/profiles/` — Step 0.
+- Do NOT re-implement profile logic — run each dispatcher's workflow as documented in `skills/parallax-ai-<name>/SKILL.md`. Cap basket input at 5 tickers.
+- Super-majority uses ceiling rounding per consensus-config.md — `required = ceil(0.75 × applicable)`; partial matches do NOT count toward the signal but DO count toward factor-level agreement. Factor-level agreement is the highest-value section — never skip it.
+- A profile that fails (cross-validation, timeout, missing data) is `skipped`; `INSUFFICIENT_PROFILES` when applicable < 3.
+- Disclaimer verbatim with the umbrella phrasing "Parallax AI Investor Profiles framework".
+- Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
 
 Runs all installed AI Investor Profiles in parallel against a ticker (or short basket), aggregates the verdicts, computes the super-majority consensus signal, and surfaces factor-level agreement detail.
 
@@ -41,82 +37,42 @@ Runs all installed AI Investor Profiles in parallel against a ticker (or short b
 
 ## Workflow
 
-### Step 0 — JIT-load dependencies
+Every host interaction below is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3). Parallax callables are whatever `discover-tools` returns this session (§0.1). This meta-skill runs each profile's dispatcher workflow; it never re-implements profile logic.
 
-1. `_parallax/parallax-conventions.md`
-2. `_parallax/AI-profiles/profile-schema.md`
-3. `_parallax/AI-profiles/output-template.md`
-4. `_parallax/AI-profiles/consensus-config.md`
-5. ALL installed profile specs:
-   - `_parallax/AI-profiles/profiles/buffett.md`
-   - `_parallax/AI-profiles/profiles/greenblatt.md`
-   - `_parallax/AI-profiles/profiles/klarman.md`
-   - `_parallax/AI-profiles/profiles/soros.md`
-6. Each profile's dispatcher (`skills/parallax-ai-<name>/SKILL.md`) for workflow reference.
+### Step 0 — Pre-flight
 
-Call `ToolSearch` with query `"+Parallax"` to load deferred MCP tool schemas before the first Parallax call.
+1. Resolve every `_parallax/...` path named in this file to the canonical copy (conventions §0.0 item 1).
+2. `load-reference` `_parallax/parallax-conventions.md`, `_parallax/AI-profiles/profile-schema.md`, `_parallax/AI-profiles/output-template.md`, `_parallax/AI-profiles/consensus-config.md`, ALL profile specs under `_parallax/AI-profiles/profiles/` (buffett, greenblatt, klarman, soros, ptj), and each dispatcher `skills/parallax-ai-<name>/SKILL.md` for workflow reference.
+3. `discover-tools`: bind every tool in every profile's `tool_sequence` to the exact callable and schema exposed now.
+   <!-- host-note -->
+   Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
+   <!-- /host-note -->
+4. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`.
 
-### Step 1 — Parse input
+### Step 1 — Resolve inputs
 
-- Single ticker → **single-ticker mode**, 5 profiles applicable
-- Comma-separated list of 2-5 tickers → **basket mode**
-- > 5 tickers → reject: "Consensus skill takes at most 5 tickers per call. Please split your request."
-- Optional `--only <profile1>,<profile2>` flag restricts which profiles run (minimum 3 still required for a valid consensus signal)
+Single ticker → **single-ticker mode** (5 profiles applicable); 2–5 comma-separated → **basket mode**; > 5 → reject: "Consensus skill takes at most 5 tickers per call. Please split your request." `--only <profiles>` restricts the set (minimum 3). Resolve RICs per conventions §1; an unresolvable ticker exits with the §1 error and runs no profile.
 
-### Step 2 — Run all applicable profiles in parallel
+### Step 2 — Fetch (parallel batches)
 
-For each installed profile, execute its workflow per its dispatcher:
+Run every applicable profile's dispatcher workflow in parallel where tool sequences do not share dependencies (never sequentialize): Buffett (info + snapshot + summary financials + score analysis, 4 thresholds); Greenblatt (info + sector-scoped universe + ratios for top 30 + rank); Klarman (info + snapshot + balance_sheet + cash_flow + ratios, 4 checks); Soros (macro countries + tactical × N + telemetry + info + universe per theme, dual channel; telemetry may be `UNAVAILABLE`); PTJ (macro countries + tactical × N + info + score analysis + technicals + risk_return outlook + snapshot, tri-channel). Rely on server defaults for `weeks`/`periods` or typed integers (conventions §0.2). Each returns `verdict` (`match` | `partial_match` | `no_match` | `skipped`), `verdict_detail`, `factor_flags` (factor → `FLAGGED` | `NOT_FLAGGED` | `NOT_APPLICABLE`), `fallback_notes`.
 
-- **Buffett** — `get_company_info` + `get_peer_snapshot` + `get_financials(statement=summary)` + `get_score_analysis` + apply 4 factor thresholds. DO NOT pass `weeks=52` explicitly — server default is correct; explicit numeric parameters fail with MCP serialization errors.
-- **Greenblatt** — `get_company_info` + `build_stock_universe` (sector-scoped peer universe) + `get_financials(statement=ratios)` for top-30 peers + rank. Universe query MUST be sector-scoped (broad queries time out).
-- **Klarman** — `get_company_info` + `get_peer_snapshot` + `get_financials(statement=balance_sheet)` + `get_financials(statement=cash_flow)` + `get_financials(statement=ratios)` + 4 balance-sheet checks. DO NOT pass `periods=4` explicitly — server default is correct.
-- **Soros** — `list_macro_countries` + `macro_analyst(component=tactical) × N` + `get_telemetry` + `get_company_info` + `build_stock_universe` per theme + dual-channel exposure check (Channel A has two sub-paths: universe membership OR sector/industry match; `get_telemetry` may return `UNAVAILABLE` in current env).
-- **PTJ** — `list_macro_countries` + `macro_analyst(component=tactical) × N` + `get_company_info` + `get_score_analysis` + `get_technical_analysis` + `get_stock_outlook(aspect=risk_return)` + `get_peer_snapshot` + tri-channel conviction evaluation (Technical setup, Macro regime, Volatility asymmetry).
+### Step 3 — Verify
 
-**Cross-validation gate — use the correct field name per tool:** `get_peer_snapshot` returns the target company as `target_company` (top-level), NOT `name`. Cross-check against `get_company_info`'s `name` field.
-
-Profiles run IN PARALLEL where their tool sequences don't share dependencies. Do NOT sequentialize — the whole point is independent cross-profile execution.
-
-Each profile returns:
-- `verdict`: `match` | `partial_match` | `no_match` | `skipped`
-- `verdict_detail`: e.g., "3 of 4 factor criteria met" | "top 15% of peer universe" | "both channels flagged"
-- `factor_flags`: dict of factor/criterion → `FLAGGED` | `NOT_FLAGGED` | `NOT_APPLICABLE`
-- `fallback_notes`: any graceful fallback that affected the result
-
-### Step 3 — Cross-validation gate (each profile self-checks)
-
-Each profile runs its own pre-render cross-validation per `profile-schema.md §2 Step 2`. If ANY profile refuses to render due to name mismatch, the meta-skill emits:
+Each profile runs its own cross-validation gate per `profile-schema.md §2 Step 2` (`get_peer_snapshot.target_company` vs `get_company_info.name`). A refusing profile is `skipped` and the meta-skill emits:
 
 ```
 Warning: Profile <name> refused to render for <ticker> due to cross-validation failure. This profile is marked as `skipped` for this ticker. Proceeding with remaining applicable profiles.
 ```
 
-If NO profiles render successfully, the meta-skill returns `INSUFFICIENT_PROFILES` and does not compute consensus.
+No profile renders → `INSUFFICIENT_PROFILES`, no consensus.
 
-### Step 4 — Compute consensus per `consensus-config.md`
+### Step 4 — Compute
 
-- `A` = applicable profiles (returned `match` | `partial_match` | `no_match`; excludes `skipped`)
-- `M` = profiles that returned `match` (NOT `partial_match`)
-- `required_matches = ceil(0.75 × A)`
-- `minimum_applicable_count = 3`
+Per `consensus-config.md`: `A` = applicable (non-`skipped`) profiles; `M` = full `match` count; `required_matches = ceil(0.75 × A)`; signal `INSUFFICIENT_PROFILES` if `A < 3`, `YES` if `M ≥ required_matches`, else `NO`. Factor-level agreement: for each unique factor/criterion, count matching + partial profiles where it is `FLAGGED`, sort descending; buckets: **Shared signals** (≥ 2), **Single-profile signals** (1), **Absence signals** (flagged by none — the collective blind spot).
 
-Consensus signal:
-- **`INSUFFICIENT_PROFILES`** if `A < 3`
-- **`YES`** if `A ≥ 3` AND `M ≥ required_matches`
-- **`NO`** if `A ≥ 3` AND `M < required_matches`
+### Step 5 — Compose (render through the output template)
 
-### Step 5 — Compute factor-level agreement
-
-For each unique factor/criterion across all profiles' `factor_flags`:
-- Count profiles (matching + partially-matching) where it is `FLAGGED`
-- Sort by count descending
-
-Surface three buckets:
-- **Shared signals** — flagged by ≥ 2 matching/partial profiles
-- **Single-profile signals** — flagged by 1 profile
-- **Absence signals** — NOT flagged by any matching profile (informative — collective blind spot)
-
-### Step 6 — Render consensus output
 
 ```
 Parallax AI Investor Profiles — Consensus for <ticker>
@@ -173,7 +129,7 @@ This output is an AI-inferred synthesis produced by the Parallax AI Investor Pro
 
 **Basket mode output:** same structure per ticker, with the per-profile matrix, super-majority signal, and factor-level agreement computed per-ticker. Output is organized ticker-by-ticker.
 
-### Step 7 — Emit
+### Step 6 — Render — Emit
 
 **Steps 1–6 are silent.** Perform the profile runs, cross-validation, consensus computation, and factor-level agreement internally — none of that working appears in your reply. Your **entire visible response consists only of the rendered Step 6 template plus every required Output addition below**. The analytical template begins at the Header line `Parallax AI Investor Profiles — Consensus for <ticker>`; in basket mode, that Header begins each ticker block. Before the first analytical Header, render only the leading white-label elements required by `integration-pattern.md` §5, in its prescribed order, including a URL logo and the conditional Branding Header when applicable. If no leading white-label element applies, the analytical Header is the absolute first output. The About This Report footer, AI-interaction disclosure, and standard disclaimer remain required parts of the visible response in the positions specified below. In both modes, do NOT add `**Step N**` labels, "Cross-validation passed", "All data verified", a "Let me…" preamble, or any other workflow narration.
 
@@ -193,26 +149,15 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 
 Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 
-## Graceful fallback
+## Failure modes
+
 
 - 3 of 5 profiles run successfully → consensus proceeds with `A=3` (effectively requiring unanimity per ceiling rule)
 - 2 of 5 profiles run successfully → return `INSUFFICIENT_PROFILES` (do NOT compute a 2-profile signal)
 - Any single profile's tool calls fail after retry → that profile is `skipped` (with fallback note) and consensus continues
 - Input ticker not resolvable → emit standard conventions §1 error and exit, do not run profiles
 
-## Token cost estimate (single ticker)
-
-- Buffett: ~4 tokens
-- Greenblatt ticker-check: ~10-15 tokens (universe build + peer ratios)
-- Klarman: ~5-7 tokens (balance sheet + cash flow + ratios + peer snapshot)
-- Soros single-ticker: ~25-30 tokens (macro + telemetry + universe)
-- PTJ single-ticker: ~14-16 tokens (macro + technical + peer snapshot + outlook + score analysis)
-
-**Total per single-ticker consensus call: ~60-70 tokens.** Most expensive skill in the family, but the value is the cross-profile agreement signal no single profile provides.
-
-For basket mode (5 tickers), Buffett/Klarman/Greenblatt run per-ticker; Soros and PTJ's macro workflows run once and only the per-ticker exposure check repeats. Approximate basket-of-5 cost: ~180-240 tokens.
-
-**Cheap subset — factor-profiles-only.** `--only buffett,klarman,greenblatt` runs the three factor/mechanical profiles for ~20-26 tokens (Buffett ~4 + Klarman ~5-7 + Greenblatt ~10-15), skipping Soros and PTJ's macro fan-out entirely. Arithmetic consequence: `A = 3` → `required_matches = ceil(0.75 × 3) = 3` — all three must match for a `YES` signal. Label this invocation's output as a reduced-ensemble read, not the full five-profile consensus.
+Token costs per profile and for the basket: `_parallax/token-costs.md` → "AI investor profile workflows" (single source). The `--only buffett,klarman,greenblatt` subset is the cheap ensemble (A = 3 → all three must match for `YES`); label its output a reduced-ensemble read.
 
 ## Why this meta-skill exists
 
@@ -224,3 +169,11 @@ The factor-level agreement section is pedagogically load-bearing. It tells users
 - **What dimensions are collectively absent** (the profiles' shared blind spots)
 
 This gives users a framework for building their own views using Parallax data — the stated product goal.
+
+
+## Done when
+
+- The reply begins at the analytical Header (or the white-label header when active) and contains only the rendered template plus the Output additions; no workflow narration.
+- The cross-validation gate passed, or the exact refusal message was emitted and nothing else rendered.
+- The verdict line, the citation, the methodology footer with tool sequence and token cost, the persona disclaimer verbatim, `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present.
+- Expected spend stated (Gotchas).

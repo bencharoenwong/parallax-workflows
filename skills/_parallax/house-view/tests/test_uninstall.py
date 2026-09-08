@@ -325,7 +325,7 @@ def test_disable_both_yields_structural_audit_parity(
     This test verifies audit-chain linkage and structural schema invariants
     using synthetic ingest via ``run_load_house_view_against_fixture`` (which
     calls audit_chain + chain_emit primitives directly). It does NOT detect
-    regressions in /parallax-load-house-view's actual Step 4 save path,
+    regressions in /parallax-load-house-view's actual Step 6 (Persist) save path,
     because the load skill is an LLM-orchestrated workflow with no
     importable Python entry point. The synthetic ingest exercises the same
     primitives the production save path uses, so a regression in those

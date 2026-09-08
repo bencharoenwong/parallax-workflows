@@ -17,7 +17,7 @@ Scope of THIS file:
 * Test 2 — morning-brief's CONDITIONAL drift-suggestion contract
   (a SKILL.md prose contract, not Python code). Verifies the trigger,
   the conditional structure, the suggestion target, the "do not
-  auto-invoke" guard, and the Batch-B placement.
+  auto-invoke" guard, and the Step 4 placement.
 * Test 3 — "first day, no view yet" — graceful degradation across
   all three auto-on-load consumer skills (portfolio-builder, rebalance,
   thematic-screen). Verifies view_status returns ``state='none'``
@@ -199,7 +199,7 @@ def _simulate_pm_edit_save(
     prior_version_id: str,
     mutate_fn=None,
 ) -> tuple[str, str, dict[str, Any]]:
-    """Simulate /parallax-load-house-view --edit Step 4 save flow.
+    """Simulate /parallax-load-house-view --edit Step 6 (Persist) save flow.
 
     Copy of test_e2e_versioning.py's _simulate_load_edit_save (per the
     repo's conftest-collision convention: helpers are duplicated across
@@ -515,12 +515,12 @@ def test_e2e_morning_brief_conditional_suggestion_contract(
     SKILL.md file. This test asserts the contract has the four required
     structural elements (trigger phrase, conditional structure,
     suggestion target, "do NOT auto-invoke" guard) AND the placement
-    invariant (the suggestion lives under/near the Batch-B alignment
+    invariant (the suggestion lives under/near the Step 4 alignment
     section, not at the top of the skill).
 
     The point: catch regressions where someone deletes the conditional,
     inverts it (auto-invoking instead of suggesting), moves it out of
-    Batch B, or rewrites it in a way that masks the alignment-check
+    Step 4, or rewrites it in a way that masks the alignment-check
     dependency.
     """
     brief_md = (REPO / "skills" / "parallax-morning-brief" / "SKILL.md").read_text()
@@ -542,10 +542,9 @@ def test_e2e_morning_brief_conditional_suggestion_contract(
 
     # (2) Conditional structure: an "if/when" clause tied to the
     # alignment check.
-    conditional_markers = ("If the Batch B alignment check", "if the alignment check")
-    assert any(m in brief_md for m in conditional_markers), (
+    assert "if the alignment check" in brief_md, (
         "morning-brief SKILL.md must guard the suggestion with a "
-        "conditional clause tied to the Batch-B alignment check"
+        "conditional clause tied to the Step 4 alignment check"
     )
 
     # (3) Suggestion target: /parallax-judge-house-view.
@@ -561,20 +560,20 @@ def test_e2e_morning_brief_conditional_suggestion_contract(
         "not an action)"
     )
 
-    # Placement invariant: the conditional drift suggestion must appear
-    # under or near the Batch-B section, NOT at the top of the skill.
-    # Operationalised as: the suggestion's anchor phrase appears AFTER
-    # the "### Batch B" header in file order.
-    batch_b_idx = brief_md.find("### Batch B")
-    assert batch_b_idx != -1, "morning-brief must have a '### Batch B' section"
-    suggestion_idx = brief_md.find("Conditional drift suggestion")
-    assert suggestion_idx != -1, (
-        "morning-brief must carry a 'Conditional drift suggestion' anchor"
+    # Placement invariant: the conditional drift pointer must appear
+    # under or near the "### Step 4 — Compute" section, NOT at the top of
+    # the skill. Operationalised as: the pointer's anchor phrase appears
+    # AFTER the "### Step 4 — Compute" header in file order.
+    step4_idx = brief_md.find("### Step 4 — Compute")
+    assert step4_idx != -1, "morning-brief must have a '### Step 4 — Compute' section"
+    pointer_idx = brief_md.find("Conditional drift pointer")
+    assert pointer_idx != -1, (
+        "morning-brief must carry a 'Conditional drift pointer' anchor"
     )
-    assert suggestion_idx > batch_b_idx, (
-        f"Conditional drift suggestion (offset {suggestion_idx}) must "
-        f"appear AFTER the '### Batch B' header (offset {batch_b_idx}) — "
-        "it has been moved out of Batch B"
+    assert pointer_idx > step4_idx, (
+        f"Conditional drift pointer (offset {pointer_idx}) must "
+        f"appear AFTER the '### Step 4 — Compute' header (offset {step4_idx}) — "
+        "it has been moved out of Step 4"
     )
 
 

@@ -1,6 +1,6 @@
 # Batch C2 — Policy reconciliation (S3)
 
-JIT-loaded by `parallax-rebalance/SKILL.md` Batch C2 when `policy=` was supplied. The heading numbers below (step 1 payload, step 2 solve, step 3 routing) are the ones the orchestrator cites.
+JIT-loaded by `parallax-rebalance/SKILL.md` at Step 0 item 7 when `policy=` was supplied; Batch C2 (inside Step 4) runs it. The heading numbers below (step 1 payload, step 2 solve, step 3 routing) are the ones the orchestrator cites.
 
 JIT-load `_parallax/client-policy/policy-loader.md`. Run the S0–S2 adaptation
 first (`adaptation.py`, same contract as `parallax-client-review`), then the

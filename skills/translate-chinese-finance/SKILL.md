@@ -292,7 +292,7 @@ For Traditional output, set `translation_language` to `Chinese (Traditional)` an
 ```
 Translate to {Simplified|Traditional} Chinese following these rules:
 1. RATINGS: Strong Buy=强力买入/強力買入, Buy=买入/買入, Hold=持有, Sell=卖出/賣出, Strong Sell=强力卖出/強力賣出
-2. SCENARIOS (mainland): Bull=乐观情景, Base=基准情景, Bear=悲观情景. (Taiwan: 情境 acceptable instead of 情景.)
+2. SCENARIOS (mainland): Bull=乐观情景, Base=基准情景, Bear=悲观情景. (Taiwan: use 情境, not 情景 — never mix.)
 3. COMPANY NAMES: HK/TW/CN listings → official Chinese name (full first, short later). Western (US/EU) companies → keep English (Apple, NVIDIA, Tesla — never 苹果/辉达/特斯拉).
 4. FINANCIAL ABBREVIATIONS: First use shows ENGLISH (中文); subsequent uses ENGLISH only. Applies to P/E, P/B, ROE, ROA, ROIC, EPS, EBITDA, EV/EBITDA, Sharpe Ratio, Tracking Error, Max Drawdown, Beta, Alpha.
 5. KEEP ENGLISH ALWAYS: ETF, REIT, GDP, CPI, AI, ML, IoT, 5G, EV, SaaS, API, stock codes, indexes, YTD, MTD, QoQ, YoY.

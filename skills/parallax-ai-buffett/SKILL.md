@@ -1,6 +1,6 @@
 ---
 name: parallax-ai-buffett
-description: "Applies the Buffett-style factor profile (per Frazzini-Kabiller-Pedersen 2018, 'Buffett's Alpha', FAJ), reconciled for 21st-century intangibles-heavy valuations per Lev-Srivastava 2022, to a single stock's current Parallax factor scores. Returns a match/partial/no-match verdict based on Quality, Value, Momentum, and Defensive factor criteria. Third-person framing, academic citation, AI-inferred from public information. NOT financial advice. NOT personalized. Accepts plain tickers or RIC format. NOT for portfolio-level health check (use /parallax-portfolio-checkup). For all five profiles simultaneously use /parallax-ai-consensus."
+description: "Applies the Buffett-style factor profile (per Frazzini-Kabiller-Pedersen 2018, 'Buffett's Alpha', FAJ), reconciled for 21st-century intangibles-heavy valuations per Lev-Srivastava 2022, to a single stock's current Parallax factor scores. Returns a match/partial/no-match verdict based on Quality, Value, Momentum, and Defensive factor criteria. Third-person framing, academic citation, AI-inferred from public information. NOT financial advice. NOT personalized. Accepts plain tickers or RIC format. NOT for portfolio-level health check (use /parallax-portfolio-checkup). Other lenses: /parallax-ai-greenblatt, /parallax-ai-klarman, /parallax-ai-soros, /parallax-ai-ptj. For all five profiles simultaneously use /parallax-ai-consensus."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -14,21 +14,19 @@ description: "Applies the Buffett-style factor profile (per Frazzini-Kabiller-Pe
 - Quick stock evaluation without a specific investor lens → use /parallax-should-i-buy
 - Peer comparison → use /parallax-peer-comparison
 - Running backtests → use /backtest
-- Other investor profiles → use /parallax-ai-soros, /parallax-ai-greenblatt, /parallax-ai-klarman
+- Other investor profiles → use /parallax-ai-greenblatt, /parallax-ai-klarman, /parallax-ai-soros, /parallax-ai-ptj
 - Cross-profile consensus → use /parallax-ai-consensus
 
 ## Gotchas
 
-- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, fallbacks, and HK ambiguity protocol
-- JIT-load _parallax/AI-profiles/profile-schema.md for the dispatcher workflow and cross-validation gate
-- JIT-load _parallax/AI-profiles/output-template.md for the required output structure and disclaimer
-- JIT-load _parallax/AI-profiles/profiles/buffett.md for the profile spec (frontmatter + narrative)
-- Cross-validation gate (spec §6.4) is NON-BYPASSABLE — refuse to render on name mismatch
-- Disclaimer language is verbatim — do NOT paraphrase "not financial advice," "AI-inferred," or "consult a qualified financial advisor"
-- NEVER use first-person impersonation of Buffett — always frame as "Buffett-style" or "the BKP 2018 factor profile"
-- Profile is derived from public academic sources only (BKP 2018 + Lev-Srivastava 2022) — no private data, no get_assessment
-- Thresholds are calibrated for 21st-century intangibles-heavy valuations — KO/AXP return match, BRK parent and AAPL return partial (documented)
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
+- Expected Parallax spend: ~4 tokens (`_parallax/token-costs.md`).
+- JIT-load `_parallax/parallax-conventions.md` (§0.0, §0.2 typed integers, §1, §2, §3, §4, §14), `_parallax/AI-profiles/profile-schema.md` (dispatcher contract + cross-validation gate), `_parallax/AI-profiles/output-template.md` (output structure + verbatim disclaimer), `_parallax/AI-profiles/profiles/buffett.md` (profile spec) — Step 0.
+- Cross-validation gate (spec §6.4) is NON-BYPASSABLE — refuse to render on name mismatch.
+- Disclaimer language is verbatim — do NOT paraphrase "not financial advice," "AI-inferred," or "consult a qualified financial advisor".
+- NEVER use first-person impersonation of Buffett — always "Buffett-style" or "the BKP 2018 factor profile".
+- Profile is derived from public academic sources only (BKP 2018 + Lev-Srivastava 2022) — no private data, no `get_assessment`.
+- Thresholds are calibrated for 21st-century intangibles-heavy valuations — KO/AXP return match, BRK parent and AAPL return partial (documented); do not tighten without re-anchoring.
+- Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
 
 Applies the Buffett-style factor profile documented in Frazzini, Kabiller, and Pedersen's 2018 *Financial Analysts Journal* paper "Buffett's Alpha" to a single stock's current Parallax factor scores.
 
@@ -44,26 +42,25 @@ Accepts plain tickers (auto-resolved to RIC via `get_company_info`) or RIC forma
 
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. This dispatcher is generic — all differentiation for the Buffett profile lives in `_parallax/AI-profiles/profiles/buffett.md`.
+Every host interaction below is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3). Parallax callables are whatever `discover-tools` returns this session (§0.1). This dispatcher is generic — all differentiation lives in the profile spec; the contract is `_parallax/AI-profiles/profile-schema.md` §2.
 
-### Step 0 — JIT-load dependencies
+### Step 0 — Pre-flight
 
-Before the first Parallax tool call in the session:
+1. Resolve every `_parallax/...` path named in this file to the canonical copy (conventions §0.0 item 1).
+2. `load-reference` `_parallax/parallax-conventions.md`, `_parallax/AI-profiles/profile-schema.md`, `_parallax/AI-profiles/output-template.md`, `_parallax/AI-profiles/profiles/buffett.md`.
+3. `discover-tools`: bind every tool in the profile's `tool_sequence` to the exact callable and schema exposed now.
+   <!-- host-note -->
+   Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
+   <!-- /host-note -->
+4. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`.
 
-1. Load `_parallax/parallax-conventions.md` — RIC resolution, parallel execution, fallback patterns, HK ambiguity.
-2. Load `_parallax/AI-profiles/profile-schema.md` — dispatcher workflow + cross-validation gate.
-3. Load `_parallax/AI-profiles/output-template.md` — required output structure and disclaimer.
-4. Load `_parallax/AI-profiles/profiles/buffett.md` — Buffett profile spec.
+### Step 1 — Resolve inputs
 
-Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
+`call-tool` `get_company_info` with the input ticker. If empty, retry with exchange suffixes per conventions §1; for `.HK`/numeric codes apply the §2 ambiguity cross-check.
 
-### Step 1 — Resolve ticker
+### Step 2 — Fetch (parallel batches)
 
-Use `get_company_info` with the input ticker. If empty, retry with exchange suffixes per shared conventions. For `.HK`/numeric codes, apply the HK ambiguity cross-check from conventions §2.
-
-### Step 2 — Fire data calls in parallel
-
-Once the RIC is confirmed, call all of the following simultaneously (per conventions §3):
+Once the RIC is confirmed, `call-tool` together (conventions §3):
 
 | Tool | Parameters | Purpose |
 |---|---|---|
@@ -71,13 +68,11 @@ Once the RIC is confirmed, call all of the following simultaneously (per convent
 | `get_financials` | `symbol` (statement defaults to "summary") | Revenue/income narrative for context |
 | `get_score_analysis` | `symbol` (weeks defaults to 52) | 52-week factor trend direction |
 
-**IMPORTANT — MCP parameter serialization:** Do NOT pass numeric parameters like `weeks` or `periods` as explicit arguments via the `:weeks=52` or `:periods=4` syntax — the MCP transport serializes them as strings, causing "Expected number, received string" validation errors. Rely on server defaults (52 weeks, 4 periods) or pass them as properly-typed integer arguments at the individual tool-call site.
+Rely on server defaults for `weeks`/`periods`, or pass a typed integer at the call site (conventions §0.2) — a string-serialized number fails validation.
 
-### Step 3 — Pre-render cross-validation gate (MANDATORY per spec §6.4)
+### Step 3 — Verify
 
-After `get_peer_snapshot` returns, cross-check the `target_company` field returned by `get_peer_snapshot` against the `name` field returned by `get_company_info` for the same symbol. (Note: the peer snapshot response has no `name` field at all — the queried stock is `target_company` at top level, and each peer's name is `comparison[].company`. Per-tool identity fields: `profile-schema.md §2 Step 2`.)
-
-**If names diverge:** refuse to render and emit exactly:
+**Cross-validation gate (MANDATORY per spec §6.4).** Cross-check `get_peer_snapshot.target_company` (top level; the response has no `name` field — each peer's name is `comparison[].company`) against `get_company_info.name`, normalized per conventions §2 step 2. On divergence refuse to render and emit exactly:
 
 ```
 Error: Symbol cross-validation failed for <ticker>.
@@ -86,29 +81,14 @@ Error: Symbol cross-validation failed for <ticker>.
 Cannot render Buffett-style profile — possible wrong-company mapping (see parallax-conventions.md §2).
 ```
 
-Do not proceed to Step 4 on mismatch. This check is non-bypassable.
+Do not proceed on mismatch. Any tool that fails after the §0.1 retry: mark its section "Data unavailable" (§4).
 
-### Step 4 — Apply Buffett thresholds
+### Step 4 — Compute
 
-From the profile spec `buffett.md` frontmatter (tuned 2026-04-06 from anchor test), the thresholds are:
+Thresholds from `buffett.md` frontmatter (tuned 2026-04-06 from the anchor test): Quality ≥ 5; Value ≥ 4; Momentum ≤ 6; Defensive ≥ 7. Compare each `get_peer_snapshot` score, record pass/fail. For any score ≥ 7 or ≤ 3, `call-tool` `explain_methodology` for that factor (the pedagogy hook, spec §7 row 3). Verdict: 4 of 4 → `match`; 1–3 of 4 → `partial_match` (state the count); 0 of 4 → `no_match`. A verdict computed on fewer than 4 available factors is flagged "partial data — N of M factor criteria available" and can never be `match`.
 
-- Quality ≥ 5
-- Value ≥ 4
-- Momentum ≤ 6
-- Defensive ≥ 7
+### Step 5 — Compose (render through the output template)
 
-For each factor, compare the score returned by `get_peer_snapshot` against the threshold. Record pass/fail per factor. Thresholds are reconciled for 21st-century intangibles-heavy valuations per Lev & Srivastava (2022) — do not tighten without re-anchoring against KO/AXP.
-
-For any factor score in the threshold zone (≥7 or ≤3 — notably strong or weak), call `explain_methodology` for that factor to include the Parallax definition in the output. This is the pedagogy hook from spec §7 row 3.
-
-### Step 5 — Compute verdict
-
-Count passed factors (out of 4):
-- **4 of 4 → `match`**
-- **1-3 of 4 → `partial_match`** (specify the count, e.g., "2 of 4")
-- **0 of 4 → `no_match`**
-
-### Step 6 — Render through output template
 
 Format the output per `_parallax/AI-profiles/output-template.md`. The template requires, in order:
 
@@ -121,7 +101,7 @@ Format the output per `_parallax/AI-profiles/output-template.md`. The template r
 7. Methodology footer (workflow derivation, anchor-test date, legal-review date — renders only once completed, tool sequence, token cost)
 8. Standard disclaimer (VERBATIM — substitute `[Investor]` with `Warren Buffett` and nothing else)
 
-### Step 7 — Emit
+### Step 6 — Render — Emit
 
 **Steps 1–6 are silent.** Perform the ticker resolution, cross-validation, scoring, threshold logic, and verdict computation internally — none of that working appears in your reply. Your **entire visible response consists only of the rendered Step 6 template plus every required Output addition below**. The analytical template begins at the Header line `Buffett-style profile applied to <ticker>`. Before it, render only the leading white-label elements required by `integration-pattern.md` §5, in its prescribed order, including a URL logo and the conditional Branding Header when applicable. If no leading white-label element applies, the analytical Header is the absolute first output. The About This Report footer, AI-interaction disclosure, and standard disclaimer remain required parts of the visible response in the positions specified below. Do NOT add `**Step N**` labels, "Cross-validation passed", "All data verified", a "Let me…" preamble, or any other workflow narration.
 
@@ -157,7 +137,7 @@ Token cost: 4 tokens
 This output is an AI-inferred interpretation of Warren Buffett's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by Warren Buffett or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.
 ```
 
-Note: the 52-week trend column uses arrows (↑ up, ↓ down, → stable). The scores shown above are from the KO.N anchor test (2026-04-06); actual scores at invocation time come from live Parallax data.
+Note: the 52-week trend column uses arrows (↑ up, ↓ down, → stable). The scores shown above are from the KO.N anchor test (2026-04-06); actual scores at invocation time come from live Parallax data. The Synthesis and Verdict sensitivity sentences illustrate required content and length only — write fresh wording keyed to the actual verdict and scores at invocation time, not a paraphrase of this example.
 
 
 ## Output additions (white-label branding + §9.2 disclosure)
@@ -175,6 +155,15 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 
 Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 
-## Graceful fallback
+## Failure modes
+
 
 Apply the graceful fallback patterns from `parallax-conventions.md §4`. If any required tool call fails after retry, mark the relevant section as "Data unavailable" and compute the verdict using available factors only. A verdict computed on <4 factors must be flagged as "partial data — N of M factor criteria available" and CANNOT be rendered as `match` even if all available factors pass. Consumers downstream (e.g., the /parallax-ai-consensus meta-skill) should treat such outputs as `partial_match` at best.
+
+
+## Done when
+
+- The reply begins at the analytical Header (or the white-label header when active) and contains only the rendered template plus the Output additions; no workflow narration.
+- The cross-validation gate passed, or the exact refusal message was emitted and nothing else rendered.
+- The verdict line, the citation, the methodology footer with tool sequence and token cost, the persona disclaimer verbatim, `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present.
+- Expected spend stated (Gotchas).

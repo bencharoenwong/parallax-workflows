@@ -51,7 +51,7 @@ from gap_detect import Gap, is_eligible_dimension
 # ("South Korea"), and (b) verifying the market shows up in
 # list_macro_countries() before relying on it in production.
 #
-# OBS-16 follow-up (2026-04-26): the SKILL.md Step 2.5 instructions now
+# OBS-16 follow-up (2026-04-26): the SKILL.md Step 2 `--augment-silent` branch instructions now
 # call list_macro_countries() at plan time and pass available_markets in,
 # so coverage drift (e.g., Thailand coming online 2026-04 between code
 # revisions) is discovered automatically. The static REGION_MARKET_MAP
@@ -251,7 +251,7 @@ def report_skipped_leaves(
 ) -> dict[str, list[str]]:
     """Return per-dimension skipped leaves with the reason they were skipped.
 
-    Used by Step 2.5 zero-state and partial-coverage banners so the IO sees
+    Used by the Step 2 `--augment-silent` zero-state and partial-coverage banners so the IO sees
     HONEST coverage disclosure, not the misleading "checked N → 0 candidates"
     when we silently dropped uncovered regions.
 

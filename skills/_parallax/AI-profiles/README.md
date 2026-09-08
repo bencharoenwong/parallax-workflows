@@ -32,7 +32,7 @@ A profile can ship ONLY if:
 
 ## v1 token cost summary
 
-One source: `_parallax/token-costs.md` → "AI investor profile workflows". This file no longer carries a copy (the two tables had drifted apart).
+One source: `_parallax/token-costs.md` → "AI investor profile workflows" — the only copy; do not add a second table here.
 
 ## In-scope v2 candidates (not implemented in v1)
 

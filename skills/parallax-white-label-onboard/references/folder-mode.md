@@ -50,17 +50,17 @@ Visual assets (2):
 Confirm? Or change classification for any file?
 ```
 
-For ambiguous items (the `?` rows), ask one `AskUserQuestion` per file with the choices: include for visual + voice / include for voice only / skip.
+For ambiguous items (the `?` rows), ask one `ask-operator` per file with the choices: include for visual + voice / include for voice only / skip.
 
 ## Step F-4 — Extract per classification
 
 Iterate `classified_files`, dispatching `.pptx`/`.docx`/`.pdf` to their extractors for branded items, calling extractors then discarding visual fields for voice-only OOXML, and using the Read tool for text-only voice files. Merge OOXML drafts via `merge_drafts(drafts) + cross_validate_visual(drafts)` when there are 2+; for voice-only folders, seed an empty visual draft with `source.type = "folder-voice-only"`. Append voice-only corpus chunks to the merged draft's `voice_corpus` and re-truncate at the 3000-word cap.
 
-> Full Python (F-4 loop + voice-only corpus append + 3000-word truncation): see `workflow-code.md` § Step 1 — Folder extraction.
+> Full Python (F-4 loop + voice-only corpus append + 3000-word truncation): see `workflow-code.md` § Step 2a — Folder extraction.
 
 ## Background frameworks (cited inline so an LLM reading this skill has the grounding)
 
-The voice extraction in Step 1.5 follows three named patterns documented in `DECISIONS.md` 2026-05-06:
+The voice extraction in Step 2b follows three named patterns documented in `DECISIONS.md` 2026-05-06:
 
 - **Lago voice template** (`getlago/inside-lago-voice-skill`): 7 sections — Voice / Core Rules / Anti-Filler / Audience Adaptation / Channel Notes / Drafted-vs-Sent / Company Context. Calibration is via *Drafted vs Sent* example pairs.
 - **Rezvani brand audit** (`alirezarezvani/claude-skills/marketing-skill/brand-guidelines`): 7-dimension audit (colors, fonts, logo, body text, imagery, tone, prohibited uses) and Tone Matrix (voice × context).

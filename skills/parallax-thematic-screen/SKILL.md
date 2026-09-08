@@ -1,6 +1,6 @@
 ---
 name: parallax-thematic-screen
-description: "Thematic stock screen and idea analysis: build a stock universe from a theme, score top picks, layer optional macro context and regime signals, compare peers, and check financials via Parallax MCP tools. Triggers: 'screen for [theme]', 'trade ideas around X', 'thematic ideas for Y', 'stocks in Z theme', 'new ideas in [sector]'. NOT for single stock analysis (use /parallax-should-i-buy), not for portfolio review (use /parallax-client-review)."
+description: "Thematic stock screen and idea analysis: build a stock universe from a theme, score top picks, layer optional macro context and regime signals, compare peers, and check financials via Parallax MCP tools. Triggers: 'screen for [theme]', 'trade ideas around X', 'thematic ideas for Y', 'stocks in Z theme', 'new ideas in [sector]'. NOT for single stock analysis (use /parallax-should-i-buy), not for portfolio review (use /parallax-client-review), not for a country or region screen (use /parallax-country-deep-dive), not for allocation-ready construction (use /parallax-portfolio-builder)."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -12,24 +12,20 @@ description: "Thematic stock screen and idea analysis: build a stock universe fr
 - Single stock analysis → use /parallax-should-i-buy
 - Portfolio review → use /parallax-client-review
 - Peer comparison of known stock → use /parallax-peer-comparison
+- Country or region equity screen → use /parallax-country-deep-dive
+- Allocation-ready portfolio from a thesis → use /parallax-portfolio-builder
 - Regime-first or reflexivity-driven trade ideas (e.g., "trade ideas in current rates regime") → use /parallax-ai-soros
 
 ## Gotchas
 
-- JIT-load _parallax/parallax-conventions.md for RIC resolution, parallel execution, and fallback patterns
-- JIT-load _parallax/house-view/loader.md FIRST. Rules 3 (ground-truth check) and 4 (divergence assertion) in §5 apply UNIVERSALLY (view or no view — data-integrity requirements). Rules 1-2 and 5 apply when a view is active. Multi-sector theme queries can collapse to a single sector — divergence assertion must fire regardless of view. The user-supplied theme is sovereign per §4 — render conflict banner if theme contradicts view tilts.
-- When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer
-- build_stock_universe searches ~65K company descriptions by semantic similarity
-- Default top_n is 5 — adjust for broader or narrower screens
-- get_peer_snapshot called once per top pick (N calls) — fire in parallel
-- get_financials called for top 3 only
-- macro_analyst depends on list_macro_countries — fire as Phase A step 3 batch per conventions (3a → 3b). Cap at 3 markets per screen. Skip step 3 if invoked with `--no-macro` or if no covered markets are relevant to the theme.
-- get_telemetry may return "Admin org not configured" or fail — graceful skip per parallax-conventions.md. If unavailable, omit the Regime Signal sub-line in the Macro Context section (do NOT abort the screen). No `--no-telemetry` flag is exposed: failure is already safe (telemetry-None → no Regime Signal sub-line) and the single-call latency does not justify a separate flag surface.
-- Macro context renders as SOFT annotation. When house view is active, view tilts remain sovereign per loader.md §4 — macro_analyst output supplements but never silently re-ranks. When no view is active, macro context may drive country/sector emphasis in the Output Format only; ranking is still composite-driven.
-- If the user-supplied theme is itself a macro-condition phrase, macro overlay may read as self-confirming. Render a banner suggesting /parallax-macro-outlook for macro-first analysis, then proceed. **Trigger criterion (deterministic, case-insensitive):** theme string contains any of `rates`, `inflation`, `recession`, `tariff`, `tariffs`, `yield curve`, `currency`, `USD`, `dollar`, `credit spread`, `GDP`, `monetary policy`, `fiscal`, `Fed`, `central bank`, `regime`, `cycle`, AND does not also contain a sector/industry word (`tech`, `energy`, `healthcare`, `financials`, `industrials`, `materials`, `utilities`, `staples`, `discretionary`, `REIT`, `biotech`, `software`, etc.). List is a starting heuristic; extend per deployment context.
-- Telemetry semantics: `get_telemetry` returns BASKET-LEVEL regime signals (`regime_tag`, `divergences[]` with basket-level z-scores, `commentary.headline`) — NOT per-ticker confidence. The schema does not expose per-name signal. Render only: (a) `regime_tag`, (b) top 1-3 divergence basket names with sign, (c) `commentary.headline` — in the Macro Context section. Do NOT tag individual Top Picks rows with a "Confidence" annotation derived from telemetry; any per-name tag would be hallucinated from basket-level data. Do NOT propagate raw proprietary framework-component names or factor-decomposition values from telemetry even if exposed.
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
-- Optional `audience=` argument: `client_safe | internal_analyst`; precedence follows `parallax-conventions.md` §13.1.
+- Expected Parallax spend: ~19 tokens default, ~14 with `--no-macro` (`_parallax/token-costs.md`).
+- JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.2 (`macro_analyst` needs the exact market name from `list_macro_countries`), §1 RIC resolution, §2 identity cross-check, §3/§3.1 parallel execution and the Concurrent Annotation Pattern (this skill is its reference implementation), §4 fallbacks, §13 audience mode, §14 host primitives.
+- JIT-load `_parallax/house-view/loader.md` FIRST. §5 rules 3 (ground-truth check) and 4 (divergence assertion) apply universally; rules 1–2 and 5 when a view is active. The user's theme is sovereign per §4 — conflicts render as banners, never as silent re-ranking. Drift check per `_parallax/house-view/auto-on-load-judge-pattern.md` (this skill builds a candidate set).
+- Macro context is a SOFT annotation: with a view, tilts stay sovereign; without one, macro may drive emphasis in the Output Format only. Rank is always composite-driven.
+- Macro-self-confirming theme banner (deterministic, case-insensitive): the theme contains any of `rates`, `inflation`, `recession`, `tariff`, `tariffs`, `yield curve`, `currency`, `USD`, `dollar`, `credit spread`, `GDP`, `monetary policy`, `fiscal`, `Fed`, `central bank`, `regime`, `cycle` AND no sector/industry word (`tech`, `energy`, `healthcare`, `financials`, `industrials`, `materials`, `utilities`, `staples`, `discretionary`, `REIT`, `biotech`, `software`, …) → render the banner suggesting /parallax-macro-outlook, then proceed.
+- `get_telemetry` is BASKET-level (`regime_tag`, `divergences[]`, `commentary.headline`): render only those three in Macro Context; never tag individual Top Picks with a confidence derived from it; never propagate raw framework-component names or factor-decomposition values it may expose. "Admin org not configured" or any failure → `telemetry = None`, no Regime Signal sub-line, never abort.
+- Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
+- Output consumption contract: downstream consumers parse Output Format by section header name, never by position.
 
 Discover investment opportunities by theme using Parallax's semantic universe builder.
 
@@ -44,65 +40,71 @@ Discover investment opportunities by theme using Parallax's semantic universe bu
 /parallax-thematic-screen "AI infrastructure companies" audience=client_safe
 ```
 
+Optional: `top_n=` (default 5), `--no-macro`, `--skip-drift-check`, `audience=client_safe | internal_analyst` (precedence per conventions §13.1).
+
 ## Workflow
 
-Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call. Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode and fallback patterns. JIT-load `_parallax/house-view/loader.md` for active-view validation and conflict resolution.
+Every host interaction below is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3). Parallax callables are whatever `discover-tools` returns this session (§0.1).
 
-### Pre-flight: house-view drift check
+### Step 0 — Pre-flight
 
-JIT-load `_parallax/house-view/auto-on-load-judge-pattern.md` and follow
-its protocol. If the protocol surfaces a banner, render it before
-proceeding to this skill's main workflow.
+1. Resolve every `_parallax/...` path named in this file to the canonical copy (conventions §0.0 item 1).
+2. `discover-tools`: bind every logical tool named anywhere in this workflow (Step 2, all batches) to the exact callable and schema exposed now.
+   <!-- host-note -->
+   Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
+   <!-- /host-note -->
+3. Parse args: theme; `top_n=`; `--no-macro`; `--skip-drift-check`; `audience=`.
+4. `load-reference` `_parallax/house-view/loader.md`; run §1–§2. If a view is present, capture tilt vector + excludes and resolve the theme against it per §4 (theme sovereign; conflict banner, e.g. theme "AI infrastructure" with `tech: -2` → "House view is UW tech; screen run per your explicit theme"). Then the drift pre-flight: `load-reference` `_parallax/house-view/auto-on-load-judge-pattern.md` and follow it; a surfaced banner renders before the report. Skip this pre-flight if invoked with `--skip-drift-check` or if no active house view exists.
+5. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`.
 
-Skip this pre-flight if invoked with `--skip-drift-check` or if no active
-house view exists.
+### Step 1 — Resolve inputs
 
-### Phase A — Setup (parallel, universe 5 + list 1 + telemetry 1 + macro 5×markets (0-3) tokens)
+Apply the macro-self-confirming test to the theme (Gotchas). Infer up to 3 relevant markets from the theme for Batch A step 3b (geo-agnostic themes → United States plus one other relevant covered market).
 
-Fire steps 1, 2, and 4 in parallel (independent). Step 3 is a dependent two-step sub-batch: step 3a (`list_macro_countries`) starts in parallel with steps 1/2/4, and step 3b (`macro_analyst` per market) fires only after step 3a returns.
+### Step 2 — Fetch (parallel batches)
 
-1. **Load Active House View** — Per `loader.md` §1-§2. If view present, capture tilt vector + excludes. Resolve user theme vs view per §4: theme is sovereign, but conflicts surface as banners (e.g., theme="AI infrastructure" + view says `tech: -2` → screen runs as requested with "House view is UW tech; screen run per your explicit theme" banner).
-2. **Build Universe** — Resolve user theme vs. view per loader.md §4. If view present AND `PARALLAX_LOADER_V2=1`, follow `loader.md` §3 "Application (V2)": decompose tilts into parallel per-sector calls, merge, and dedupe. If V1, prepend tilt context to the query and call `build_stock_universe` once. Filter results against `tilts.excludes`.
-   - **Fallback on timeout:** If `build_stock_universe` times out (exceeds 30s), retry once with a narrower query (e.g., single primary sector from theme, or drop secondary modifiers). If second attempt still times out or returns empty, set `universe = []` and `universe_status = "unavailable"`, continue to Phase B with the empty candidate list, and flag the unavailable state in Output Format under "Universe Built". Do NOT call `check_portfolio_redundancy` as a placeholder — it requires portfolio input and will fail or return nonsense. Do not abort the screen.
-3. **Macro Context** (skip if `--no-macro` flag set). Two-step batch (per parallax-conventions.md "Dependent calls"):
-   - **Step 3a:** Call `list_macro_countries` to enumerate covered markets (returns canonical names like "United States", "Japan").
-   - **Step 3b:** Infer up to 3 relevant markets from the theme (e.g., "onshoring beneficiaries" → US + Japan; "China consumer recovery" → China; geo-agnostic themes like "AI infrastructure" → US plus one other major covered market relevant to the theme). **Cross-reference inferred markets against the step 3a result; only use names that match verbatim in the covered list (e.g., "United States" not "US")** — `macro_analyst` requires exact-string match per parallax-conventions.md §0.2 and fails with parameter validation error otherwise. Drop unmatched inferences silently. If no markets remain after matching, set `macro_context = None`. Call `macro_analyst(market=<m>, component="tactical")` for each matched market in parallel. If all return unavailable, set `macro_context = None` and continue. Cap strictly at 3 markets per parallax-conventions.md.
-4. **Telemetry** — Call `get_telemetry` for BASKET-LEVEL regime signal context (`regime_tag`, `divergences[]`, `commentary.headline` — see gotchas for the schema). Per parallax-conventions.md graceful fallback: if it returns "Admin org not configured" or otherwise fails, set `telemetry = None` and continue. Do NOT abort the screen. Telemetry does NOT expose per-name confidence — it's basket-level only, used to enrich the Macro Context section in Output Format, never to tag individual Top Picks rows.
+**Batch A — setup.** `call-tool` steps 1, 2 and 3a together; 3b fires when 3a returns:
+1. **Universe** — with a view and `PARALLAX_LOADER_V2=1`, follow loader.md §3 "Application (V2)": parallel per-sector calls, merge, dedupe; V1: prepend tilt context and call `build_stock_universe` once. Filter against `tilts.excludes`. **Timeout:** retry once with a narrower query; then `universe = []`, `universe_status = "unavailable"`, continue and flag it under Universe Built; never call `check_portfolio_redundancy` as a placeholder.
+2. **Telemetry** — `get_telemetry` (basket-level; failure → `telemetry = None`).
+3. **Macro** (skip with `--no-macro`) — 3a `list_macro_countries`; 3b `macro_analyst(market=<m>, component="tactical")` per inferred market whose name matches the 3a list verbatim ("United States", not "US"); unmatched inferences are dropped silently; none left, or all unavailable → `macro_context = None`. Cap 3.
 
-**After Phase A:** Proceed to Phase B with completed universe (or placeholder if unavailable). Carry forward `macro_context` and `telemetry` for Phase C scoring annotation and Output Format rendering.
+**Batch B — scoring (C1).** For the top N candidates, `call-tool` `get_peer_snapshot` AND `get_company_info` per candidate together. Record `returned_name` (`target_company`) and `expected_name` (`name`).
 
-### Phase B — Inline Validation (no new tool calls)
+**Batch C — after Step 4 establishes rank, in one turn:** **C2** `export_peer_comparison` (`format="json"`) for the highest-scored TRUSTED row; **C3** `get_financials` (`statement="summary"`) for the top 3 trusted picks. C1.5 annotation runs concurrently with these and never gates them.
 
-5. **Divergence assertion** (per loader.md §5 rule 4 — required universally, view or no view) — REQUIRED for V1 paths. If the query named N≥2 sectors/themes, compute `max_sector_share / total` in returned candidates. If > 0.6, emit fail-loud warning: "universe collapsed to single sector despite multi-sector request." If `PARALLAX_LOADER_V2=1`, the divergence assertion is used to verify the merge quality but is less likely to trigger a hard failure.
-6. **Apply freeform excludes** — if view active and `tilts.excludes_freeform` non-empty (per loader.md §3 "Free-form excludes handling"), drop candidates matching any pattern against `get_company_info` name/description/sector.
+### Step 3 — Verify
 
-**After Phase B:** Proceed to Phase C with validated universe.
+- **Divergence assertion** (loader.md §5 rule 4, universal): if the query named N ≥ 2 sectors/themes and `max_sector_share / total > 0.6`, warn "universe collapsed to single sector despite multi-sector request" (V2: use it to verify merge quality).
+- **Freeform excludes** — with a view and non-empty `tilts.excludes_freeform`, drop candidates matching any pattern against `get_company_info` name/description/sector (loader.md §3).
+- **Ground-truth check** (loader.md §5 rule 3, universal): any row where `returned_name ≠ expected_name` after normalization per conventions §2 step 2 is UNTRUSTED — ⚠ MISMATCH, not ranked.
 
-### Phase C — Scoring & Analytics (sequential coordination, ~2×top_n + 4 tokens)
+### Step 4 — Compute
 
-**C1. Ground-truth check + Score Top Picks** (per loader.md §5 rule 3 — required universally) — For the top N results, call `get_peer_snapshot` AND `get_company_info` per candidate in parallel. Record `returned_name` (snapshot `target_company`) and `expected_name` (info `name`). Treat any row where `returned_name ≠ expected_name` after normalizing both per conventions §2 step 2 as UNTRUSTED (do not rank, flag ⚠ MISMATCH). If view active, re-rank trusted rows by `composite × multiplier(holding's sector)` per loader.md §3.
+**C1 rank:** composite-driven; with a view, re-rank trusted rows by `composite × multiplier(sector)` per loader.md §3.
 
-**After C1 completes, fire C1.5, C2, and C3 in parallel** (C1.5 does NOT gate C2 or C3 — rank is established by C1 and is composite-driven, so the highest-scored trusted row for C2 and the top-3 for C3 are known the moment C1 completes):
+**C1.5 — Annotation (Phase C1.5; reference implementation of conventions §3.1, concurrent with C2/C3):** if `macro_context` is present, tag each trusted row `macro_tag ∈ {with-regime, against-regime, orthogonal}` from the row's primary market — read `get_company_info.country`, normalize to the canonical market name from `list_macro_countries`; missing or unmatched → `orthogonal`, never inferred from sector or judgement. Tags annotate the Output Format only: **they MUST NOT change rank order, alter membership, or override the composite score**, and downstream consumers must preserve every annotated row (Macro Tag is never a filter predicate).
 
-**C1.5. Annotation (no re-rank, concurrent with C2/C3):** Reference implementation of the **Concurrent Annotation Pattern** documented in `_parallax/parallax-conventions.md §3.1`. Tags computed in this step annotate the Output Format only. **They MUST NOT change rank order, alter Top Picks membership, or override the composite score from C1.** Rank is composite-driven (per loader.md §3) to preserve auditability — Macro Tag is a read-only annotation on the rank C1 produced.
+### Step 5 — Compose
 
-- If `macro_context` is present from Phase A.3, tag each trusted row with `macro_tag ∈ {with-regime, against-regime, orthogonal}` derived from the trusted row's primary market exposure and the corresponding `macro_analyst` tactical output. **Primary market exposure source (deterministic):** read `get_company_info.country` (already fetched in C1) and normalize to the canonical macro-market name returned by `list_macro_countries` (e.g., "US"/"USA" → "United States"). If `country` is missing, empty, or does not normalize to any market in `macro_context`, set `macro_tag = orthogonal` and continue — never infer market from sector or LLM judgement.
+Fill **Output Format** below in order: House View Preamble per loader.md §5.1; Branding Header per integration-pattern.md §5; theme conflict and macro-self-confirming banners inline; audience mode per §13 (Plain-Language Summary under `client_safe`; §13.3 gloss); `parallax-conventions.md §9.2` disclosure; disclaimer per loader.md §5 rule 5 when a view is active, otherwise `parallax-conventions.md §9.1`; audit entry per loader.md §6 (every consume event).
 
-Skill authors copying this pattern: do not introduce a sort or filter step driven by `macro_tag`. Re-ranking by annotation breaks auditability and is the documented anti-pattern this phase exists to prevent. **Downstream consumers (chained skills, exporters, dashboards) MUST also preserve all annotated rows in the Top Picks output — Macro Tag is a read-only annotation, NEVER a filter predicate.** Row-preservation is a contract that applies to annotated tables; the output consumption contract below governs section-header parsing.
+### Step 6 — Render (deterministic gate, mandatory)
 
-**C2. Compare Peers** — For the highest-scored TRUSTED stock (determined from C1 results, not C1.5), call `export_peer_comparison` with format "json".
+`run-shell` the shared gate per conventions §10.3 with this skill's key:
 
-**C3. Quick Financials** — For the top 3 trusted picks (determined from C1 results, not C1.5), call `get_financials` with statement "summary".
+```
+DRAFT="$(mktemp "${TMPDIR:-/tmp}/thematic.XXXXXX")"
+cat > "$DRAFT" <<'REPORT'
+<your complete drafted report goes here>
+REPORT
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill thematic-screen < "$DRAFT"; rm -f "$DRAFT"
+```
 
-**After C1.5, C2, and C3 complete:** Append audit log entry per loader.md §6.
-
-**Output consumption contract:** downstream consumers (Codex matcher, chained skills, exporters) MUST parse Output Format by section header name, not by positional order. The addition of `Macro Context` between `Theme` and `Universe Built` is non-breaking for any header-name-based parser.
-
-### Pre-Render — Load white-label branding
-
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+The entire final message is that command's stdout. The stderr `[render-gate] WARN:` line is diagnostics: never include it. Degraded-state notes go inside their section. If `run-shell` is absent, apply conventions §14.3 (render-gate row). No Step 7.
 
 ## Output Format
+
+**Begin the response immediately with the rendered report — no preamble.** The first expected line is `## Theme: <theme>`, or the House View Preamble / Branding Header when active.
 
 - **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (preamble). Per loader.md §5.1 the preamble goes at the very top — it precedes the Branding Header.
 - **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** thematic screen`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to About This Report.
@@ -119,3 +121,22 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
 If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise: render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
+
+
+## Failure modes
+
+- Universe unavailable after the retry: Universe Built states it; no Top Picks table; audit row notes the abort.
+- Universe collapsed to one sector: the divergence warning renders; the screen still runs on what returned.
+- Macro or telemetry unavailable: Macro Context degrades or is omitted per the rules above; the screen never aborts on either.
+- ⚠ MISMATCH rows: kept in the table, unranked, scores excluded.
+- House-view banner states `malformed` / `expired` / `critical`: the banner renders verbatim (conventions §0.3 item 4).
+- Host lacks a primitive: conventions §14.3, per primitive (drift check: the judge pattern's skipped line).
+
+## Done when
+
+- First line is `## Theme: <theme>` or the House View Preamble / Branding Header; every Output Format section rendered or marked unavailable with its reason.
+- Top Picks rank is composite-driven; the Macro Tag column (when present) changed no order and no membership; ⚠ MISMATCH rows are marked.
+- The divergence-assertion result appears under Universe Built.
+- When a view is active: the `view_status` banner appears verbatim; audit entry appended per loader.md §6 (every consume event).
+- The render gate ran and the reply is its stdout (or the §14.3 note is present in About This Report).
+- `parallax-conventions.md §9.2` disclosure and the §9.1 or view-aware disclaimer are present; expected spend stated (Gotchas).

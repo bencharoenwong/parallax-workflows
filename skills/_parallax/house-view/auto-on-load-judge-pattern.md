@@ -17,14 +17,17 @@ Fire ONLY when ALL of:
 
 ## How to invoke
 
-1. Call `/parallax-judge-house-view --dry --json` (the `--dry` flag uses
+1. Invoke `parallax-judge-house-view` via the `invoke-skill` host primitive
+   (`parallax-conventions.md` §14) with `--dry --json` (the `--dry` flag uses
    the same MCP fan-out shape but skips the LLM-as-judge recommendation
    step; the `--json` flag returns structured output).
+   <!-- host-note -->On Claude Code this is `/parallax-judge-house-view --dry --json`.<!-- /host-note -->
    **Cost signal:** the `--dry` run still incurs the full macro fan-out
    (~280 tokens, see `_parallax/token-costs.md`); the >30-day age gate
    bounds frequency — never lower that gate without revisiting cost.
-2. If the judge skill is NOT installed (ImportError or skill directory
-   missing): surface a single-line preamble note: "/parallax-judge-house-view
+2. If `invoke-skill` is absent on this host (§14.3), or the judge skill is
+   NOT installed (ImportError or skill directory missing): surface a
+   single-line preamble note: "/parallax-judge-house-view
    not installed; drift check skipped." Do NOT fail or warn — continue
    with the consuming skill's normal flow.
 3. Parse the returned `severity` field.

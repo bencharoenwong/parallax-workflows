@@ -1,6 +1,6 @@
 # Residual Math Reference — pair-finder
 
-JIT-loaded by `skills/pair-finder/SKILL.md`. All formulas described here are executed inline by the model; no Python module exists.
+JIT-loaded by `skills/parallax-pair-finder/SKILL.md`. All formulas described here are executed inline by the model; no Python module exists.
 
 ## 1. Factor net (long − short)
 
@@ -77,7 +77,7 @@ hedge_ratio_pair_relative = cov_LS / var_S
 
 This gives `$X short per $1 long` that minimizes residual spread variance over the 180d window. Mathematically defensible for sector-neutral pairs; semantically different from a market-beta hedge.
 
-**Output requirement:** when this fallback is used, the skill MUST render a "⚠ Benchmark caveat" line above the comparison table or pair-detail block, naming pair-relative regression and noting the interpretive difference vs a market-beta hedge.
+**If a future `--mode=pair-relative` flag is added**, that mode's output MUST render a "⚠ Benchmark caveat" line above the comparison table or pair-detail block, naming pair-relative regression and noting the interpretive difference vs a market-beta hedge. **This does not apply to v1**: v1 has no pair-relative fallback path at runtime — see the HARD HALT gate in SKILL.md Batch C.5 / B.5, which forbids this exact caveat pattern as a substitution today.
 
 ## 4. Hedge ratios
 

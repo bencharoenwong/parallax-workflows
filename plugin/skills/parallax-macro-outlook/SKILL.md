@@ -1,6 +1,6 @@
 ---
 name: parallax-macro-outlook
-description: "Full macro regime analysis with optional equity screening: country coverage, economic outlook, regime signals, factor tilt implications, and top-scoring equities in the target market via Parallax MCP tools. Anchored on the regime question ('what is the regime in [market]?'). NOT for country/region equity discovery ('what should I buy in [country]?' — use /parallax-country-deep-dive), not for portfolio-level morning briefs (use /parallax-morning-brief), not for single stock analysis (use /parallax-deep-dive)."
+description: "Full macro regime analysis with optional equity screening: country coverage, economic outlook, regime signals, factor tilt implications, and top-scoring equities in the target market via Parallax MCP tools. Anchored on the regime question ('what is the regime in [market]?'). NOT for country/region equity discovery ('what should I buy in [country]?' — use /parallax-country-deep-dive), not for portfolio-level morning briefs (use /parallax-morning-brief), not for single stock analysis (use /parallax-deep-dive), not for thematic screening (use /parallax-thematic-screen), not for reacting to a specific event (use /parallax-scenario-analysis)."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -17,16 +17,11 @@ description: "Full macro regime analysis with optional equity screening: country
 
 ## Gotchas
 
-- list_macro_countries shows available coverage — check before querying a country
-- check_macro_health verifies data freshness — run first to avoid stale analysis
-- macro_analyst summary call returns all 9 components inline — do not make separate per-component calls
-- get_telemetry shows how macro regime affects the scoring engine
-- Smaller/EM markets may have fewer scored equities — set expectations
-- JIT-load `_parallax/house-view/loader.md` UNCONDITIONALLY — §5 rule 3 (ground-truth check), rule 6 (AI disclosure), and §6 (audit log) apply whether or not a view is active. macro-outlook answers the regime question, so neither §3 multipliers nor §7 single-stock conflict-surfacing apply: the macro narrative reflects live data, and the optional Batch C equity census is **deliberately untilted** — it is an illustrative exhibit of which equities score well in this regime, not a discovery ranking. A user who wants the view-tilted "what should I buy in [country]" ranking belongs in /parallax-country-deep-dive (that skill applies §3 to its Top Opportunities by design). Apply a **macro-regime-alignment mode** (defined inline below — call it §7.4 by analogy) — render a divergence note when the view's stated macro regime contradicts live `get_telemetry.regime_tag`. No scoring math is altered. Standard surface: §2 (load + validate), §5 (preamble), §6 (audit log).
-- **§7.4 macro-regime-alignment mode (this skill's pattern, not in loader.md):** if the active view's basis_statement or stated macro regime (e.g., "recessionary", "expansion", "stagflation", from `view.macro_regime` if present) materially conflicts with the regime returned by `get_telemetry.regime_tag`, render a "View regime: <X> | Live regime: <Y>" line directly under the House View Preamble at the very top of Output Format. The user is informed of the disagreement; the analytical content still reflects live data (live wins for macro narrative). If no view, or view is silent on macro regime, omit the line.
-- When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer.
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format.
-- Optional `audience=` argument: `client_safe | internal_analyst`; precedence follows `parallax-conventions.md` §13.1.
+- Expected Parallax spend: ~46 tokens with `equities=true`, ~28 without (`_parallax/token-costs.md`); `check_macro_health` is 5 of that.
+- JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.2 (`macro_analyst` takes `market`; summary mode returns all components inline — never per-component calls), §2 identity cross-check, §3 parallel execution, §4 fallbacks, §13 audience mode, §14 host primitives.
+- JIT-load `_parallax/house-view/loader.md` UNCONDITIONALLY: §5 rule 3 (ground-truth), rule 6 (AI disclosure) and §6 (audit) apply with or without a view. This skill answers the regime question, so neither §3 multipliers nor §7 apply: the macro narrative reflects live data and the optional equity census is **deliberately untilted** (tilted discovery is /parallax-country-deep-dive's job). Regime-alignment mode (this skill's own §7.4): when the view's stated regime conflicts with live `get_telemetry.regime_tag`, render `View regime: <X> | Live regime: <Y>` directly under the preamble; live wins for the narrative.
+- Smaller/EM markets may have fewer scored equities — set expectations. ETFs are not in the scoring universe.
+- Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report, with the unconditional currency line).
 
 Deep macro regime analysis with optional equity opportunity screening. Covers any of Parallax's 40+ global markets.
 
@@ -40,51 +35,66 @@ Deep macro regime analysis with optional equity opportunity screening. Covers an
 /parallax-macro-outlook "United States" audience=client_safe
 ```
 
+Optional `audience=` argument: `client_safe | internal_analyst`; precedence follows `parallax-conventions.md` §13.1.
+
 ## Workflow
 
-Execute using `mcp__claude_ai_Parallax__*` tools. JIT-load `_parallax/parallax-conventions.md` for execution mode and fallback patterns.
+Every host interaction below is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3). Parallax callables are whatever `discover-tools` returns this session (§0.1).
 
-### Pre-Workflow — Load Active House View
+### Step 0 — Pre-flight
 
-Per `_parallax/house-view/loader.md` §1 and §2: load and validate any active house view BEFORE running the workflow. If view present, capture the load preamble for rendering at the top of Output Format per §5.1, and capture `view.macro_regime` (or equivalent regime statement from basis_statement) — applied in Post-Workflow §7.4 regime-alignment check. If no active view (or validation failure): run the workflow normally with the standard disclaimer. Loader.md §5 rule 3 (ground-truth check), rule 6 (AI disclosure), and §6 (audit) still apply on the no-view path.
+1. Resolve every `_parallax/...` path named in this file to the canonical copy (conventions §0.0 item 1).
+2. `discover-tools`: bind every logical tool named anywhere in this workflow (Step 2, all batches) to the exact callable and schema exposed now.
+   <!-- host-note -->
+   Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
+   <!-- /host-note -->
+3. Parse args: one or more markets; `equities=`; `component=`; `audience=`.
+4. `load-reference` `_parallax/house-view/loader.md`; run §1–§2. If a view is present, capture the load preamble and `view.macro_regime` (or a regime keyword from `basis_statement`: recessionary, expansion, stagflation, soft landing, hard landing, reflationary, disinflationary) for the Step 4 alignment check.
+5. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`.
 
-### Batch 0 — Tool Loading
+### Step 1 — Resolve inputs
 
-Call `ToolSearch` with query `"+Parallax"` to load the deferred MCP tool schemas before the first `mcp__claude_ai_Parallax__*` call.
+Market names must match `list_macro_countries` verbatim (conventions §0.2); a bellwether RIC per market for the score read (e.g. AAPL.O for United States, 7203.T for Japan).
 
-### Batch A — Coverage + regime (parallel)
+### Step 2 — Fetch (parallel batches)
 
-| Tool | Parameters | Notes |
-|---|---|---|
-| `list_macro_countries` | — | Confirm markets |
-| `check_macro_health` | — | Data freshness |
-| `get_telemetry` | fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences | Market regime |
+**Batch A** — `call-tool` together: `list_macro_countries`; `check_macro_health`; `get_telemetry` (fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences).
 
-### Batch B — Macro depth (after Batch A)
+**Batch B** — after A: `macro_analyst(market=<country>)` in summary mode (all components inline); `get_score_analysis` for the bellwether. Repeat per market when comparing.
 
-1. Call `macro_analyst` for the target country (summary — no component parameter). The summary call returns all 9 components inline (macro_indicators, tactical, fixed_income, currency, sectors, sector_positioning, liquidity, news, factors). Do not make separate per-component calls.
-2. Call `get_score_analysis` for a market bellwether stock (e.g., AAPL.O for US, 7203.T for Japan). ETFs are not in the scoring universe.
-3. If multiple countries: repeat for each and compare.
+**Batch C** (only with `equities=true`) — `build_stock_universe(query="[country] equities")`; for the top 5, `get_peer_snapshot` AND `get_company_info` together; for the top 3, `get_score_analysis` with `weeks` as int 26 (conventions §0.2).
 
-### Batch C — Equity opportunities (optional, after Batch B)
+### Step 3 — Verify
 
-If requested: call `build_stock_universe` with `query="[country] equities"`. For top 5: `get_peer_snapshot` AND `get_company_info` per symbol (all parallel — `get_company_info` is the ground-truth oracle per loader.md §5 rule 3, required view or no view whenever per-holding scores render). Cross-check each `get_peer_snapshot.target_company` against the name-of-record; on mismatch, flag ⚠ MISMATCH and recover per rule 3. For top 3: `get_score_analysis` 26 weeks (parallel). The census stays untilted regardless of view state (see Gotchas — tilted discovery is /parallax-country-deep-dive's job).
+- Coverage: a market absent from `list_macro_countries` is reported as not covered; no `macro_analyst` call for it.
+- Freshness: `check_macro_health` result drives the Data Freshness section; stale data is stated, not hidden.
+- Batch C identity per loader.md §5 rule 3 / conventions §2: `get_peer_snapshot.target_company` vs `get_company_info.name`; ⚠ MISMATCH rows recover per rule 3 or read "scores unavailable".
 
-### Post-Workflow — §7.4 Regime alignment check + §6 audit
+### Step 4 — Compute
 
-If a view was loaded in Pre-Workflow:
+No deterministic helper; the census stays untilted regardless of view state. Regime alignment (§7.4): compare the view's stated regime with `get_telemetry.regime_tag`; on a material divergence prepare the one-line note for the preamble; no regime statement in the view → skip.
 
-1. Extract view's stated macro regime: prefer `view.macro_regime` if present; otherwise scan `basis_statement` for regime keywords ("recessionary", "expansion", "stagflation", "soft landing", "hard landing", "reflationary", "disinflationary"). If no regime statement can be extracted, skip the alignment check (regime alignment is opt-in based on view content).
-2. Compare to `get_telemetry.regime_tag` returned in Batch A.
-3. If regimes materially diverge (e.g., view says "recessionary" but live says "expansion"), prepare a one-line divergence note for Output Format rendering: `View regime: <view_regime> | Live regime: <live_regime> — note the disagreement; analytical content below reflects live data.`
+### Step 5 — Compose
 
-**Always** append the §6 audit log entry per loader.md §6.1 — view or no view (`applied=false` with `applied_reason: "no_view"` when none, `view_id`/`version_id` null per §6.1; include `ground_truth_mismatches` per §6.2 when any Batch C row was flagged).
+Fill **Output Format** below in order: House View Preamble per loader.md §5.1 with the §7.4 note as a sub-line; Branding Header per integration-pattern.md §5; audience mode per §13; §12 informational framing in Regime Implications; `parallax-conventions.md §9.2` disclosure; disclaimer per loader.md §5 rule 5 when a view is active, otherwise `parallax-conventions.md §9.1`; audit entry per loader.md §6.1 always (`applied=false`, `applied_reason: "no_view"` when none; `ground_truth_mismatches` per §6.2 when any).
 
-### Pre-Render — Load white-label branding
+### Step 6 — Render (deterministic gate, mandatory)
 
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+`run-shell` the shared gate per conventions §10.3 with this skill's key:
+
+```
+DRAFT="$(mktemp "${TMPDIR:-/tmp}/macro.XXXXXX")"
+cat > "$DRAFT" <<'REPORT'
+<your complete drafted report goes here>
+REPORT
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill macro-outlook < "$DRAFT"; rm -f "$DRAFT"
+```
+
+The entire final message is that command's stdout. The stderr `[render-gate] WARN:` line is diagnostics: never include it. Degraded-state notes go inside their section. If `run-shell` is absent, apply conventions §14.3 (render-gate row). No Step 7.
 
 ## Output Format
+
+**Begin the response immediately with the rendered report — no preamble.** The first expected line is `## Regime Status`, or the House View Preamble / Branding Header when active.
 
 - **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (banner from Pre-Workflow + low-confidence warnings). If §7.4 regime-alignment check produced a divergence note (Post-Workflow step 3), append it as a sub-line under the preamble. Per loader.md §5.1 the preamble goes at the very top — it precedes the Branding Header.
 - **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** macro outlook`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to About This Report.
@@ -102,3 +112,22 @@ Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
 If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise: render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
+
+
+## Failure modes
+
+- Market not covered: say so under Regime Status and stop the macro depth for that market; other markets still render.
+- `check_macro_health` reports stale data: Data Freshness states the date; the analysis proceeds with the caveat.
+- `get_telemetry` unavailable: Regime Status renders from `macro_analyst` only and says the regime tag was unavailable; the §7.4 check is skipped.
+- Equity census unavailable or thin: Top Equity Opportunities states the coverage limit.
+- House-view banner states `malformed` / `expired` / `critical`: the banner renders verbatim (conventions §0.3 item 4).
+- Host lacks a primitive: conventions §14.3, per primitive.
+
+## Done when
+
+- First line is `## Regime Status` or the House View Preamble / Branding Header; every Output Format section rendered or marked unavailable with its reason.
+- Data Freshness carries the `check_macro_health` date; the census (when requested) is untilted and every ⚠ MISMATCH row is marked.
+- When a view is active: the `view_status` banner appears verbatim and the §7.4 line renders when regimes diverge.
+- Audit entry appended per loader.md §6 (every run, including no-view).
+- The render gate ran and the reply is its stdout (or the §14.3 note is present in About This Report).
+- `parallax-conventions.md §9.2` disclosure and the §9.1 or view-aware disclaimer are present; expected spend stated (Gotchas).

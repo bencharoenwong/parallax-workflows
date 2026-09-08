@@ -6,6 +6,7 @@ Run: python3 -m pytest skills/_parallax/test_render_gate.py -q
 from __future__ import annotations
 
 import re
+import pytest
 import sys
 from pathlib import Path
 
@@ -175,6 +176,18 @@ FIRST_SECTION = {
     "should-i-buy": "## The Company",
     "score-explainer": "## The Question",
     "desk-call-list": "# Desk Call List",
+    "deep-dive": "## Company Overview",
+    "due-diligence": "## Company Overview",
+    "peer-comparison": "## Peer Group",
+    "earnings-quality": "## Risk Summary",
+    "credit-lens": "## Credit Risk Assessment: Acme Corp (ACME.O) | Traffic-Light: 🟢",
+    "thematic-screen": "## Theme: AI infrastructure companies",
+    "macro-outlook": "## Regime Status",
+    "country-deep-dive": "## Country Overview",
+    "halal-screen": "## Screening Criteria",
+    "scenario-analysis": "## Scenario Summary",
+    "pair-finder": "#### 1. Verdict",
+    "stress-test-thesis": "## TL;DR",
 }
 
 
@@ -190,6 +203,22 @@ def test_each_skill_strips_scaffold_keeps_first_section():
         assert out.lstrip().startswith(hdr), (skill, out[:70])
 
 
+@pytest.mark.parametrize(
+    "hdr",
+    [
+        "- **Pair**: NVDA.O / AMD.O — semis / semis / US",
+        "**Pair**: NVDA.O / AMD.O — semis / semis / US",
+        "- **Pair:** NVDA.O / AMD.O — semis / semis / US",
+        "**Pair:** NVDA.O / AMD.O — semis / semis / US",
+        "* **Pair**: NVDA.O / AMD.O — semis / semis / US",
+    ],
+)
+def test_pair_finder_evaluate_mode_anchors_on_pair_line(hdr):
+    draft = SCAFFOLD + "No active house view, white-label inactive.\n\n" + hdr + "\nbody\n"
+    out = gate(draft, "pair-finder")
+    assert out.lstrip().startswith(hdr), out[:70]
+
+
 def test_title_form_anchors_each_skill():
     titles = {
         "client-review": "# Client Portfolio Review — Conservative Retiree",
@@ -200,6 +229,18 @@ def test_title_form_anchors_each_skill():
         "portfolio-builder": "# Portfolio Builder — US Tech",
         "should-i-buy": "# Should I Buy — AAPL.O",
         "score-explainer": "# Score Explainer — why is the value score low",
+        "deep-dive": "# Position Deep Dive — AAPL.O",
+        "due-diligence": "# Full Due Diligence — AAPL.O",
+        "peer-comparison": "# Peer Comparison — AAPL.O",
+        "earnings-quality": "# Earnings Quality Analysis — AAPL.O",
+        "credit-lens": "# Credit Lens — AAPL.O",
+        "thematic-screen": "# Thematic Screen — AI infrastructure",
+        "macro-outlook": "# Macro Outlook — United States",
+        "country-deep-dive": "# Country Deep Dive — Japan",
+        "halal-screen": "# Halal / Shariah Screen — AAPL.O",
+        "scenario-analysis": "# Scenario Analysis — tariff shock",
+        "pair-finder": "# Pair Finder — NVDA.O long",
+        "stress-test-thesis": "# Stress-Test Thesis — NVDA",
     }
     for skill, title in titles.items():
         out = gate(SCAFFOLD + title + "\nbody\n", skill)

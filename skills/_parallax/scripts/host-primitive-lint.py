@@ -10,7 +10,9 @@ contain any of the identifiers in `HOST_IDENTIFIERS`.
 
 Forward-only (per `skill-structure-conventions.md` → "Host portability"):
 `LEGACY_ALLOWLIST` names the skill directories that were host-locked when the
-rule landed (2026-09-05). Two rules make the list shrink and never grow:
+rule landed (2026-09-05). It is EMPTY as of 2026-09-07 — the sweep finished and
+every skill now names host primitives. Two rules make the list shrink and never
+grow, and they keep working on an empty list:
 
   * a file NOT on the allowlist with a hit                → HOST-LOCKED, exit 1
   * a file ON the allowlist with zero hits                → STALE ALLOWLIST, exit 1
@@ -59,43 +61,10 @@ HOST_NOTE_SPAN = re.compile(
 )
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
 
-# Skill directories that were host-locked on 2026-09-05. Shrinks only.
-LEGACY_ALLOWLIST: frozenset[str] = frozenset({
-    "parallax-ai-buffett",
-    "parallax-ai-consensus",
-    "parallax-ai-greenblatt",
-    "parallax-ai-klarman",
-    "parallax-ai-ptj",
-    "parallax-ai-soros",
-    "parallax-cio-letter-prep",
-    "parallax-client-review",
-    "parallax-country-deep-dive",
-    "parallax-credit-lens",
-    "parallax-deep-dive",
-    "parallax-desk-call-list",
-    "parallax-due-diligence",
-    "parallax-earnings-quality",
-    "parallax-explain-portfolio",
-    "parallax-halal-screen",
-    "parallax-house-view-attribution",
-    "parallax-load-house-view",
-    "parallax-macro-outlook",
-    "parallax-make-house-view",
-    "parallax-morning-brief",
-    "parallax-pair-finder",
-    "parallax-peer-comparison",
-    "parallax-portfolio-builder",
-    "parallax-portfolio-checkup",
-    "parallax-rebalance",
-    "parallax-scenario-analysis",
-    "parallax-score-explainer",
-    "parallax-should-i-buy",
-    "parallax-stress-house-view",
-    "parallax-stress-test-thesis",
-    "parallax-thematic-screen",
-    "parallax-watchlist-monitor",
-    "parallax-white-label-onboard",
-})
+# Skill directories that were host-locked on 2026-09-05. Shrinks only; now empty —
+# every skill names host primitives and confines host identifiers to host-note blocks.
+# Re-adding a name is a deliberate two-file edit (see test_host_primitive_lint.py).
+LEGACY_ALLOWLIST: frozenset[str] = frozenset()
 
 
 def _blank_span(match: re.Match[str]) -> str:

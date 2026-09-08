@@ -416,7 +416,7 @@ extraction:
 # ===========================================================================
 # Enumerates the provenance classes that may appear in a per-leaf `derivation`
 # entry inside `provenance.yaml`. Referenced from:
-#   - skills/load-house-view/SKILL.md Step 4 (1b) — write-time class selection
+#   - skills/parallax-load-house-view/SKILL.md Step 6 (1b) — write-time class selection
 #   - skills/load-house-view/references/why-provenance.md — render-time
 #     emission rules for `--why <tilt-path>`
 #   - skills/_parallax/house-view/provenance_classes.py — single source of

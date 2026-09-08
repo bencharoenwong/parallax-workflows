@@ -24,8 +24,8 @@ description: "Portfolio rebalancing with health flags and macro context: analyze
 - build_stock_universe can find replacement candidates for positions being trimmed
 - Output must include specific candidate weight changes, framed per conventions §12 (analysis, not instructions), not just vague suggestions
 - For portfolios with 10+ holdings, prioritize score trend scans for top/bottom 5 by weight to manage latency
-- When `policy=` is supplied, JIT-load `_parallax/client-policy/policy-loader.md` and run Batch C2. The S3 solver (`_parallax/client-policy/reconcile.py`) needs scipy and **fails closed** without it — `solver_unavailable` renders UNVERIFIED per conventions §4.0, never a partial trade list. Deterministic math lives in the helper; never reproduce the LP in prose.
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Pre-Render step. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format. Audience mode resolution (§13.1) is a separate seam call, not a dict read of `branding["render"]`: this skill does not use the RM seam (`rm_consumer.py::load_rm_branding_context`) for branding, but it DOES call that module's `resolve_audience()` function directly, via the one Bash `python3 -c` step documented under Pre-Render — never re-derive the §13.1 precedence in prose.
+- When `policy=` is supplied, JIT-load `_parallax/client-policy/policy-loader.md` and run Batch C2 (Step 4). The S3 solver (`_parallax/client-policy/reconcile.py`) needs scipy and **fails closed** without it — `solver_unavailable` renders UNVERIFIED per conventions §4.0, never a partial trade list. Deterministic math lives in the helper; never reproduce the LP in prose.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Step 5 Pre-Render block. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format. Audience mode resolution (§13.1) is a separate seam call, not a dict read of `branding["render"]`: this skill does not use the RM seam (`rm_consumer.py::load_rm_branding_context`) for branding, but it DOES call that module's `resolve_audience()` function directly, via the one `run-shell` step documented under Step 5 Pre-Render — never re-derive the §13.1 precedence in prose.
 
 Generate prioritized trade recommendations using health flags, macro context, and Parallax scores.
 
@@ -41,35 +41,40 @@ Generate prioritized trade recommendations using health flags, macro context, an
 
 `policy=` accepts the same client-policy artifact `parallax-client-review`
 consumes (inline YAML/JSON or a file path; schema in
-`_parallax/client-policy/schema.yaml`). When supplied, Batch C2 runs the S3
+`_parallax/client-policy/schema.yaml`). When supplied, Batch C2 (Step 4) runs the S3
 reconciliation optimizer and its targets replace the multiplier-derived ones.
 
 Optional `audience=` argument: `client_safe | internal_analyst`; precedence follows `parallax-conventions.md` §13.1.
 
 ## Workflow
 
-Execute with the exact Parallax callables and input schemas exposed by live capability discovery in the current runtime. Logical tool names below describe intent; they are not a fixed MCP namespace or permission to use a stale request shape. JIT-load `_parallax/parallax-conventions.md` for discovery, execution mode, fallback patterns, and macro reasoning. JIT-load `_parallax/house-view/loader.md` for active-view validation and tilt application. JIT-load `../parallax-client-review/references/recommendation-matrix.md` for the priority system.
+Every host interaction below is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3). Parallax callables are whatever `discover-tools` returns this session (§0.1); the logical names below state intent and are never a fixed namespace or permission to reuse a stale request shape. Local helpers (`reconcile.py`, `adaptation.py`, `coverage_check.py`, `rm_consumer.py`, `render_gate.py`) run via `run-shell`. The code-bound batch names (`Batch 0`–`Batch D`, `Batch C2`, `Pre-Render`) are kept as identifiers under the spine headings.
 
-### Pre-flight: house-view drift check
+### Step 0 — Pre-flight
 
-JIT-load `_parallax/house-view/auto-on-load-judge-pattern.md` and follow
-its protocol. If the protocol surfaces a banner, render it before
-proceeding to this skill's main workflow.
+1. Resolve every `_parallax/...` and `references/...` path named in this file to the canonical copy (conventions §0.0 item 1). `load-reference` `_parallax/parallax-conventions.md` for discovery, execution mode, fallback patterns and macro reasoning.
+2. **Batch 0 — live capability discovery.** `discover-tools` per conventions §0.1. Build a session-local map from each logical capability used below (Steps 2 and 4, including the V1 and `analyze_portfolio` fallbacks) to the exact callable name and live input schema returned now. Live discovery overrides every namespace, parameter, and schema example in this file. Do not synthesize missing callables from a remembered server alias.
+   <!-- host-note -->
+   Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
+   <!-- /host-note -->
+3. Classify failures before any retry: a transient transport/cancellation/empty-success may retry only the affected call once; tool-not-found, schema-validation, or response `invalid_fields` failures do not permit a same-payload or guessed-shape retry. Use a discovered fallback and record the affected coverage instead.
+4. **House-view drift check.** `load-reference` `_parallax/house-view/auto-on-load-judge-pattern.md` and follow its protocol. If the protocol surfaces a banner, render it before proceeding to the rest of this workflow. Skip this pre-flight if invoked with `--skip-drift-check` or if no active house view exists.
+5. `load-reference` `_parallax/house-view/loader.md`; run §1–§2 (read the view if present, validate hash and expiry). If a view is present, capture the tilt vector and excludes. The view's tilts define **direction of rebalance** — current weights that diverge from view-tilted weights become rebalance candidates beyond the standard health-flag triggers. If validation fails or no view is present, run using health flags and macro context only.
+6. `load-reference` `../parallax-client-review/references/recommendation-matrix.md` for the priority system.
+7. **Policy load (only with `policy=`).** `load-reference` `_parallax/client-policy/policy-loader.md` and `references/policy-reconciliation.md`; Batch C2 in Step 4 runs them.
 
-Skip this pre-flight if invoked with `--skip-drift-check` or if no active
-house view exists.
+### Step 1 — Resolve inputs
 
-### Batch 0 — Live Capability Discovery & Active House View
+1. Validate holdings: RIC format (plain tickers → conventions §1), weights ~1.0.
+2. **Parse mandate parameters** (if `constraints=` and/or `target=` were passed):
+   - `constraints=`: split on commas; match each clause against two recognized patterns — "max N% per position" (a per-position weight cap, applied to Target Weight in Batch C item 4) and "no <sector>" (a sector/name exclusion, applied to Replacement Candidates in Batch C item 5 exactly like `tilts.excludes`).
+   - `target=`: match against recognized phrases — "reduce concentration" (prioritize Reweight/Trim of concentration-flagged holdings in Batch C item 4) and "improve quality score" (rank Replacement Candidates by quality sub-score in Batch C item 5). Any other phrase is unrecognized.
+   - **Fail-loud rule:** any `constraints=` clause that matches neither recognized pattern is never silently dropped — it renders "constraint not recognized — not applied" in the Mandate Constraints Applied output block. Any unrecognized `target=` phrase is echoed verbatim there with a statement of how the standard recommendations already address it.
+3. Parse `audience=` (`client_safe | internal_analyst`, or none); it is resolved through the seam in Step 5, never read from a dict inline.
 
-Use the host's live discovery surface per conventions §0.1 (`ToolSearch` with `"+Parallax"` in Claude Code). Build a session-local map from each logical capability used below to the exact callable name and live input schema returned now. Live discovery overrides every namespace, parameter, and schema example in this file. Do not synthesize missing callables from a remembered server alias.
+### Step 2 — Fetch (parallel batches)
 
-Classify failures before any retry: a transient transport/cancellation/empty-success may retry only the affected call once; tool-not-found, schema-validation, or response `invalid_fields` failures do not permit a same-payload or guessed-shape retry. Use a discovered fallback and record the affected coverage instead.
-
-Per `loader.md` §1-§2: read view if present, validate hash and expiry. If view present, capture tilt vector + excludes. The view's tilts define **direction of rebalance** — current weights that diverge from view-tilted weights become rebalance candidates beyond the standard health-flag triggers. If validation fails or no view present, run rebalance using only health flags + macro context.
-
-### Batch A — Current state (parallel, best-effort)
-
-The parameter column states the semantic intent. Construct every payload from that callable's discovered live schema, using only advertised keys and types. If the schema cannot represent the intent unambiguously, treat that logical capability as unavailable and follow its fallback without probing guessed variants.
+**Batch A — current state.** `call-tool` every row below in ONE turn, best-effort. The parameter column states the semantic intent. Construct every payload from that callable's discovered live schema, using only advertised keys and types. If the schema cannot represent the intent unambiguously, treat that logical capability as unavailable and follow its fallback without probing guessed variants.
 
 | Tool | Parameters | Notes |
 |---|---|---|
@@ -81,52 +86,46 @@ The parameter column states the semantic intent. Construct every payload from th
 | `list_macro_countries` | — | Check market coverage. **Timeout fallback:** skip if exceeds 5s. |
 | `quick_portfolio_scores`| Map the normalized holdings into the live schema. | **Discovered Legacy/V1 fallback only.** Do NOT use if `PARALLAX_LOADER_V2=1` and view active. **Timeout fallback:** if exceeds 10s, degrade to health-flags-only scoring. A successful call with no data for a listing (distinct from a timeout) is the same coverage-gap case as the `get_peer_snapshot` row above — fall back to `get_company_info` plus `get_score_analysis` for that holding and label it a **profile-derived score**. |
 
+**Batch B — macro (after Batch A).** `call-tool` the discovered `macro_analyst` capability for each unique covered market (cap 3), using the live schema's tactical-component value when advertised — fire all calls in one parallel batch. (Score trends run in Batch A: `get_score_analysis` has no Batch A dependency, so it no longer waits behind the portfolio snapshot.)
+
+### Step 3 — Verify
+
 **After Batch A** (best-effort completion):
 1. Cross-check returned names against `get_company_info` results per loader.md §5 rule 3. For `PARALLAX_LOADER_V2=1`, any mismatch in `get_peer_snapshot` is flagged ⚠ MISMATCH and excluded from aggregate calculations. Unverified holdings (name check timeout) are flagged ⚠ UNVERIFIED.
 2. For holdings with no scores (timeouts), scoring is determined by health flags only — these holdings cannot be ranked by factor scores and must be evaluated by "High/Medium/Low priority" categories based on flags alone.
 3. Summary output: "Batch A completed: N/M holdings scored (M-N unavailable or timed out). Portfolio snapshot: available/fallback/unavailable. Rebalance will proceed with health-flag-driven recommendations for scoring-unavailable holdings." Keep this execution receipt inside the rendered report only where the Output Format calls for the information; never leak it as pre-report scaffold. Under `audience=client_safe`, this receipt is ops apparatus per conventions §13.2 — relocate the receipt line to the Methodology appendix (internal) defined in Output Format, and keep in the body only a plain-language note naming the holdings whose scores were unavailable.
-4. **Redundancy coverage cross-check** (only when both `analyze_portfolio.sector_allocation` and `check_portfolio_redundancy` sector weights came back): write each sector-weights payload to a private mktemp JSON file, then one Bash step — `python3 "<skill-dir>/../_parallax/coverage_check.py" --portfolio-sectors "$PORTFOLIO_SECTORS" --redundancy-sectors "$REDUNDANCY_SECTORS" --holdings "$HOLDINGS"` — and render from its JSON verdict. Tag every `--holdings` entry with its `sector` from the `analyze_portfolio` sector mapping (per-holding backstop as usual): the live redundancy payload is aggregate-only, and without sector tags the helper cannot infer absent holdings and resolves `absent_holdings_basis` to `not_computable`. Cite the operator-agnostic-helper rationale by reference to `_parallax/house-view/loader.md` §2 ("Why the helper, not inline math") — the same argument applies here: the coverage arithmetic must be identical across operator LLMs, so it is never reproduced in prose. On `coverage_limited`, label the redundancy output **coverage-limited** in Current Portfolio Assessment, name the `diverging_sectors` and any `absent_holdings`, and prefer the `analyze_portfolio` sector weights for every rendered concentration figure. `absent_holdings` is basis-qualified via `absent_holdings_basis`: when it is `sector_inference`, note that the absent-holdings list is inferred from diverging sectors (the redundancy payload carried no per-holding data) rather than confirmed directly; when it is `not_computable`, render nothing about absent holdings at all — do not claim absence and do not claim confirmed coverage. On `consistent`, render normally.
+4. **Redundancy coverage cross-check** (only when both `analyze_portfolio.sector_allocation` and `check_portfolio_redundancy` sector weights came back): `write-artifact` each sector-weights payload to a private mktemp JSON file, then one `run-shell` step — `python3 "<skill-dir>/../_parallax/coverage_check.py" --portfolio-sectors "$PORTFOLIO_SECTORS" --redundancy-sectors "$REDUNDANCY_SECTORS" --holdings "$HOLDINGS"` — and render from its JSON verdict. Tag every `--holdings` entry with its `sector` from the `analyze_portfolio` sector mapping (per-holding backstop as usual): the live redundancy payload is aggregate-only, and without sector tags the helper cannot infer absent holdings and resolves `absent_holdings_basis` to `not_computable`. Cite the operator-agnostic-helper rationale by reference to `_parallax/house-view/loader.md` §2 ("Why the helper, not inline math") — the same argument applies here: the coverage arithmetic must be identical across operator LLMs, so it is never reproduced in prose. On `coverage_limited`, label the redundancy output **coverage-limited** in Current Portfolio Assessment, name the `diverging_sectors` and any `absent_holdings`, and prefer the `analyze_portfolio` sector weights for every rendered concentration figure. `absent_holdings` is basis-qualified via `absent_holdings_basis`: when it is `sector_inference`, note that the absent-holdings list is inferred from diverging sectors (the redundancy payload carried no per-holding data) rather than confirmed directly; when it is `not_computable`, render nothing about absent holdings at all — do not claim absence and do not claim confirmed coverage. On `consistent`, render normally.
 
-### Batch B — Macro (after Batch A)
+### Step 4 — Compute
 
-1. Call the discovered `macro_analyst` capability for each unique covered market (cap 3), using the live schema's tactical-component value when advertised — fire all calls in one parallel batch. (Score trends moved into Batch A: `get_score_analysis` has no Batch A dependency, so it no longer waits behind the portfolio snapshot.)
+**Batch C — health flags + trade decisions.**
 
-### Batch C — Health flags + trade decisions
-
-1. **Parse mandate parameters** (if `constraints=` and/or `target=` were passed):
-   - `constraints=`: split on commas; match each clause against two recognized patterns — "max N% per position" (a per-position weight cap, applied to Target Weight in step 5) and "no <sector>" (a sector/name exclusion, applied to Replacement Candidates in step 6 exactly like `tilts.excludes`).
-   - `target=`: match against recognized phrases — "reduce concentration" (prioritize Reweight/Trim of concentration-flagged holdings in step 5) and "improve quality score" (rank Replacement Candidates by quality sub-score in step 6). Any other phrase is unrecognized.
-   - **Fail-loud rule:** any `constraints=` clause that matches neither recognized pattern is never silently dropped — it renders "constraint not recognized — not applied" in the Mandate Constraints Applied output block. Any unrecognized `target=` phrase is echoed verbatim there with a statement of how the standard recommendations already address it.
-2. Evaluate the 5 health flags **per holding** — binding flag conditions in `../parallax-client-review/references/recommendation-matrix.md` (same taxonomy and threshold values as `parallax-portfolio-checkup/references/health-flags.md`, whose canonical portfolio-level weighted-average definitions apply to portfolio-checkup, not here): Low Score (holding total score ≤5.0), Concentration (holding weight >15%, or holding among the top-3 when their combined weight >45%), Redundancy (holding is part of a redundant pair), Value Trap (holding value score ≤3.0), Macro Misalignment (holding's sector has a negative tactical outlook). Per-holding flag counts drive priority assignment.
-3. **House-view alignment check** (if view active): for each holding, compute view-tilted target weight using loader.md §3 multipliers; flag holdings >25% off target as "View Misalignment." For holdings on `tilts.excludes`, flag as "View Excluded — must trim." The multiplier-derived target is benchmark-free — it tilts current weights, not a policy. When a client policy is supplied, Batch C2's optimizer targets (computed against the policy benchmark) supersede it in Trade Recommendations; the multiplier target then serves only this flag check.
-4. Assign priority per recommendation-matrix.md (count View Misalignment / View Excluded as flags):
+1. Evaluate the 5 health flags **per holding** — binding flag conditions in `../parallax-client-review/references/recommendation-matrix.md` (same taxonomy and threshold values as `parallax-portfolio-checkup/references/health-flags.md`, whose canonical portfolio-level weighted-average definitions apply to portfolio-checkup, not here): Low Score (holding total score ≤5.0), Concentration (holding weight >15%, or holding among the top-3 when their combined weight >45%), Redundancy (holding is part of a redundant pair), Value Trap (holding value score ≤3.0), Macro Misalignment (holding's sector has a negative tactical outlook). Per-holding flag counts drive priority assignment.
+2. **House-view alignment check** (if view active): for each holding, compute view-tilted target weight using loader.md §3 multipliers; flag holdings >25% off target as "View Misalignment." For holdings on `tilts.excludes`, flag as "View Excluded — must trim." The multiplier-derived target is benchmark-free — it tilts current weights, not a policy. When a client policy is supplied, Batch C2's optimizer targets (computed against the policy benchmark) supersede it in Trade Recommendations; the multiplier target then serves only this flag check.
+3. Assign priority per recommendation-matrix.md (count View Misalignment / View Excluded as flags):
    - **High** (3+ flags or View Excluded): Strong trim/exit candidate
    - **Medium** (2 flags): Investigate + potential trim
    - **Low** (1 flag): Monitor, hold unless constraints violated
-5. Determine actions combining flags + score trends + macro + view tilts + parsed target bias:
+4. Determine actions combining flags + score trends + macro + view tilts + parsed target bias:
    - **Trim/Exit:** High priority holdings, View Excluded, or declining scores + any flag
    - **Hold:** Stable/improving scores, no flags, view-aligned
    - **Reweight:** Concentration flag only, OR view-tilted toward different weight than current, OR prioritized by a parsed "reduce concentration" target bias
-   - **Investigate:** Medium priority but ambiguous signal (suggest `/parallax-deep-dive`)
+   - **Investigate:** Medium priority but ambiguous signal (suggest `invoke-skill` `parallax-deep-dive`)
    - Apply any parsed per-position weight cap (from `constraints=`) to Target Weight for every recommended position.
-6. For trim candidates: Resolve user thesis vs. view per loader.md §4. If `PARALLAX_LOADER_V2=1` and view active, follow `loader.md` §3 "Application (V2)": decompose replacement theme into parallel per-sector calls, merge, and dedupe. If V1, prepend tilt context and call `build_stock_universe` once.
+5. For trim candidates: Resolve user thesis vs. view per loader.md §4. If `PARALLAX_LOADER_V2=1` and view active, follow `loader.md` §3 "Application (V2)": decompose replacement theme into parallel per-sector calls, merge, and dedupe. If V1, prepend tilt context and `call-tool` `build_stock_universe` once.
    - **Divergence assertion** (per loader.md §5 rule 4 — required universally): REQUIRED for V1 paths. If the query named N≥2 sectors/themes, compute `max_sector_share/total` in returned candidates. If > 0.6, emit fail-loud warning. If `PARALLAX_LOADER_V2=1`, use to verify merge quality.
-   - **Ground-truth check per candidate** (per loader.md §5 rule 3): call `get_peer_snapshot` AND `get_company_info` in parallel. Drop any candidate where `returned_name ≠ expected_name` after normalizing both per conventions §2 step 2 from the replacement pool (flag ⚠ MISMATCH, do not rank).
+   - **Ground-truth check per candidate** (per loader.md §5 rule 3): `call-tool` `get_peer_snapshot` AND `get_company_info` in parallel. Drop any candidate where `returned_name ≠ expected_name` after normalizing both per conventions §2 step 2 from the replacement pool (flag ⚠ MISMATCH, do not rank).
    - Filter remaining trusted candidates against `tilts.excludes`, `tilts.excludes_freeform`, and any sector/name exclusion parsed from `constraints=`. If an "improve quality score" target bias was parsed, rank remaining candidates by quality sub-score.
 
-### Batch C2 — Policy reconciliation (S3; only when `policy=` was supplied)
+**Batch C2 — policy reconciliation (S3; only when `policy=` was supplied).** Follow `references/policy-reconciliation.md` in full: S0–S2 adaptation first (`adaptation.py`), then the S3 solver (`reconcile.py`) as a real `run-shell` call, never prose arithmetic. The trade list is gate-shaped (conventions §4.0): `optimal` yields targets; `infeasible` renders the violations table, `conflict` renders the named conflicts, both render NO targets; `solver_unavailable` / `invalid_input` / `solver_error` render the verdict as **UNVERIFIED** and label the flag-based fallback "not policy-checked".
 
-Runs only when `policy=` was supplied. → Load `references/policy-reconciliation.md` and follow it in full: S0–S2 adaptation first (`adaptation.py`), then the S3 solver (`reconcile.py`) as a real Bash tool call, never prose arithmetic. The trade list is gate-shaped (conventions §4.0): `optimal` yields targets; `infeasible` renders the violations table, `conflict` renders the named conflicts, both render NO targets; `solver_unavailable` / `invalid_input` / `solver_error` render the verdict as **UNVERIFIED** and label the flag-based fallback "not policy-checked".
+**Batch D — validation.** If `PARALLAX_LOADER_V2=1`, follow `loader.md` §3b: aggregate per-holding `get_peer_snapshot` scores for the proposed new allocation. If V1, `call-tool` `quick_portfolio_scores`. If view active, verify the proposed allocation aligns with view tilts within 10% per sector. Append the audit log entry per loader.md §6.
 
-### Batch D — Validation
+### Step 5 — Compose
 
-If `PARALLAX_LOADER_V2=1`, follow `loader.md` §3b: aggregate per-holding `get_peer_snapshot` scores for the proposed new allocation. If V1, call `quick_portfolio_scores`. If view active, verify proposed allocation aligns with view tilts within 10% per sector. Append audit log entry per loader.md §6.
+**Pre-Render — load white-label branding.** `load-reference` `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
 
-### Pre-Render — Load white-label branding
-
-Load `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
-
-Resolve the §13.1 audience mode in the same step, via one Bash call into the
+Resolve the §13.1 audience mode in the same step, via one `run-shell` call into the
 same seam function `parallax-client-review` uses — never a prose read of
 `branding["render"]`:
 
@@ -140,12 +139,14 @@ python3 -c "import sys; sys.path.insert(0, '<skill-dir>/../_parallax/white-label
 Substitute the parsed `audience=` flag (or `None` if none was supplied) for
 `<flag or None>`. Record the returned `mode` for the Output Format branches
 below, and if `notice` is non-null, append it verbatim to About This Report.
-`resolve_audience` is a pure function — this is a real Bash tool call, never
+`resolve_audience` is a pure function — this is a real `run-shell` call, never
 prose arithmetic reproducing its precedence logic.
 
-### Render — deterministic gate (LAST step, mandatory)
+Then fill **Output Format** below in order, applying the §13 audience rules, the `parallax-conventions.md §9.2` disclosure, and the disclaimer that section names.
 
-Compose the complete report per **Output Format** below, then run it through the shared render gate in **one Bash step** before replying. Use a private `mktemp` file (never a fixed/predictable path — `/tmp` symlink hazard). The shared gate is `_parallax/render_gate.py`, a sibling of the directory you loaded this SKILL.md from; pass this skill's key (use the loaded directory's absolute path as `<skill-dir>`):
+### Step 6 — Render (deterministic gate, mandatory)
+
+Compose the complete report per **Output Format** below, then run it through the shared render gate in **one `run-shell` step** before replying. Use a private `mktemp` file (never a fixed/predictable path — `/tmp` symlink hazard). The shared gate is `_parallax/render_gate.py`, a sibling of the directory you loaded this SKILL.md from; pass this skill's key (use the loaded directory's absolute path as `<skill-dir>`):
 
 ```
 DRAFT="$(mktemp "${TMPDIR:-/tmp}/rebal.XXXXXX")"
@@ -157,11 +158,11 @@ python3 "<skill-dir>/../_parallax/render_gate.py" --skill rebalance < "$DRAFT"; 
 
 **Your entire final message is exactly that command's stdout** — nothing before it (no step/batch-completion notes, no scratch computation, no "no active house view" / white-label config-probe narration), nothing after it.
 
-The Bash result may show a `[render-gate] WARN:` line above the report. That line is stderr diagnostics, not stdout. Never include it in the reply. It means the drafted opening drifted from the documented Output Format start; fix the opening and re-run the gate.
+The result may show a `[render-gate] WARN:` line above the report. That line is stderr diagnostics, not stdout. Never include it in the reply. It means the drafted opening drifted from the documented Output Format start; fix the opening and re-run the gate.
 
 **Degraded-state rule:** if an async tool (e.g. `get_assessment`, `get_news_synthesis`) times out or returns no data, render the pending/unavailable note INSIDE the relevant section or the About This Report line — NOT as a preamble above the report — so it is part of the rendered body and survives the gate. (The gate also hoists a leaked degraded note as a backstop.)
 
-`_parallax/render_gate.py` is pure-stdlib and deterministically drops anything before the first rendered block (House View Preamble banner / Branding Header / Ground-truth Integrity / this skill's title or first rendered section), preserving the active-house-view banner in every `view_status` state. Same operator-agnostic-helper pattern as `view_status.py` / `loader.py` (a real Bash tool call, not prose).
+`_parallax/render_gate.py` is pure-stdlib and deterministically drops anything before the first rendered block (House View Preamble banner / Branding Header / Ground-truth Integrity / this skill's title or first rendered section), preserving the active-house-view banner in every `view_status` state. Same operator-agnostic-helper pattern as `view_status.py` / `loader.py` (a real `run-shell` call, not prose).
 
 ## Output Format
 
@@ -189,3 +190,24 @@ Apply audience render mode per `parallax-conventions.md` §13; default `internal
 **AI-interaction disclosure (required regardless of view state):** Render `parallax-conventions.md §9.2` immediately above the disclaimer below.
 
 If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwise: render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
+
+## Failure modes
+
+- `analyze_portfolio` schema error, oversized response, or non-empty `_meta.invalid_fields`: no retry; `check_portfolio_redundancy` plus per-holding score aggregation supply concentration and factor context, and every field they cannot supply is named as unavailable.
+- Scoring coverage gaps: profile-derived scores labelled as such and named in the report; a holding whose scores never arrive is evaluated on health flags alone and cannot be factor-ranked.
+- Identity mismatch: ⚠ MISMATCH holdings are excluded from aggregates and re-scored individually; name-check timeouts render ⚠ UNVERIFIED.
+- Coverage cross-check returns `coverage_limited`: redundancy figures are labelled coverage-limited, and `analyze_portfolio` sector weights are preferred for every concentration figure.
+- S3 solver unavailable or erroring: `solver_unavailable` / `invalid_input` / `solver_error` render UNVERIFIED per conventions §4.0, with the flag-based fallback labelled "not policy-checked"; `infeasible` and `conflict` render their own artifact and NO targets.
+- House-view banner states `malformed` / `expired` / `critical`: the banner renders verbatim (conventions §0.3 item 4).
+- Host lacks a primitive: conventions §14.3, per primitive.
+
+## Done when
+
+- First line is the House View Preamble, the Branding Header, or this skill's first rendered section; every Output Format section is rendered or marked unavailable with its reason.
+- Every rendered policy number came from `adaptation.py` or `reconcile.py`, and every coverage figure from `coverage_check.py`; nothing was recomputed inline.
+- Every recommendation cites a specific flag or finding, and Trade Recommendations carries the §12.2 informational preface.
+- Policy Reconciliation and Mandate Constraints Applied are present iff `policy=`, `constraints=`, `target=`, or a mandate `max_position_weight` triggered them.
+- Under `audience=client_safe`: action labels are neutral, published-cutoff arithmetic is omitted, the Methodology appendix (internal) holds every relocated item, and the §13.4 mode line is present once.
+- When a view is active: the banner appears verbatim and the audit entry is appended per loader.md §6.
+- The render gate ran and the reply is exactly its stdout (or the §14.3 note is present in About This Report).
+- `parallax-conventions.md §9.2` disclosure and the §9.1 or view-aware disclaimer are present.

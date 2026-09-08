@@ -1,7 +1,7 @@
 # Skill Structure & Length Conventions
 
 <!-- authority: contract -->
-<!-- verified: 2026-09-05 -->
+<!-- verified: 2026-09-07 -->
 <!-- overrides: none -->
 
 Conventions for how `skills/<name>/SKILL.md` should be organized as the file grows. Established 2026-05-06 per council deliberation (notes/2026-05-06-1023-council-white-label-restructure.md). Pairs with `jit-load-compliance-audit.md` — the audit protocol that gates any structural restructure.
@@ -22,12 +22,12 @@ A SKILL.md should be split into orchestrator + references/ when **any one** of t
 
 | Trigger | Threshold |
 |---|---|
-| Total line count | >500 lines |
+| Total line count | above the skill's eval cap (`orchestrator_max_lines` in `evals/skills/<name>/eval_config.py`, 250 for most skills, 220 for deep-dive); >500 lines for a skill with no eval config |
 | Distance above sibling median | >2× the median across `skills/<name>/SKILL.md` |
 | Step count in workflow | >7 steps with substantial sub-content |
 | Operator complaint | "I can never find X" said about this skill twice |
 
-Below these thresholds, keep the SKILL.md monolithic. Splitting too early fragments the workflow and forces JIT-load round-trips for content the operator needs every time.
+Below these thresholds, keep the SKILL.md monolithic. Splitting too early fragments the workflow and forces JIT-load round-trips for content the operator needs every time. The eval cap is the binding trigger where one exists: the `orchestrator_length` grader fails CI on `main` when the orchestrator exceeds it (2026-09-05, rebalance at 282 lines).
 
 ## What stays in SKILL.md (the orchestrator)
 
@@ -81,7 +81,7 @@ Every reference moved out of the orchestrator must be reachable through an expli
 Two valid forms:
 
 ```markdown
-### Step 3 — Validate assets
+### Step 3 — Verify
 
 Run validators in parallel. → Load references/step-3-validation.md for the
 full validator catalog and per-validator gate logic.
@@ -93,7 +93,7 @@ Or as a bullet in the `## Gotchas` body section:
 ## Gotchas
 
 - JIT-load references/voice-frameworks.md before composing the voice block
-  in Step 1.5 — it carries the Lago 7-section template + Rezvani Tone Matrix
+  in Step 2b — it carries the Lago 7-section template + Rezvani Tone Matrix
   + Genesys 4-phase reference that the prompt is built on.
 ```
 
@@ -152,9 +152,9 @@ Proprietary pillar/factor vocabulary guard: trigger phrases ship verbatim to whi
 
 ## Host portability
 
-Added 2026-09-04. These skills run on Claude Code, Codex CLI and claude.ai. A SKILL.md names the **host primitives** defined in `parallax-conventions.md` §14 (`discover-tools`, `call-tool`, `ask-operator`, `run-shell`, `invoke-skill`, `load-reference`, `write-artifact`, `read-config`, `fetch-url`) and never a host tool. The forbidden host identifiers are listed once, in `parallax-conventions.md` §14.1; outside a `<!-- host-note -->` … `<!-- /host-note -->` block a SKILL.md must not contain any of them. A host note may show the Claude Code binding as an example; the primitive name is the instruction.
+Added 2026-09-04. These skills run on Claude Code, Codex CLI and claude.ai. A SKILL.md names the **host primitives** defined in `parallax-conventions.md` §14 (`discover-tools`, `call-tool`, `ask-operator`, `run-shell`, `invoke-skill`, `load-reference`, `write-artifact`, `read-config`, `fetch-url`) and never a host tool. The forbidden host identifiers are listed once, in `parallax-conventions.md` §14.1; outside a `<!-- host-note -->` … `<!-- /host-note -->` block a SKILL.md must not contain any of them. A host note may show the Claude Code binding as an example; the primitive name is the instruction. The `/parallax-<name>` slash form in the description, `## When not to use`, and Usage examples is the operator's command syntax and is not a host-lock; the rule bites only when a workflow step chains to a sibling by slash syntax alone instead of naming `invoke-skill`.
 
-**Scope is forward-only.** Skills that existed before 2026-09-04 are host-locked and are migrated one family per PR (the structure sweep). New skills comply before merge.
+**Scope is forward-only.** The migration sweep of pre-2026-09-04 skills completed on 2026-09-07; `host-primitive-lint.py`'s `LEGACY_ALLOWLIST` is empty and shrink-only. New skills comply before merge.
 
 **Fail-open is by reference.** A SKILL.md does not invent what to do when a primitive is absent; it cites `parallax-conventions.md` §14.3. A skill whose correctness depends on a primitive that a target host lacks (for example a gate helper behind `run-shell`) states that in `## Failure modes` and, if the loss is total, in its row in the private perimeter registry (not tracked in this public repo).
 
@@ -177,7 +177,9 @@ Added 2026-09-04. Every data-producing skill uses the same phase names, in this 
 
 Config-producing skills (house-view load/make, white-label onboard) replace Steps 5–7 with `### Step 5 — Confirm` (operator gate, `ask-operator`) and `### Step 6 — Persist` (transactional write through the helper). Sub-steps use letters (`Step 2a`), never a second numbering scheme. The two house-view pre-flights are both Step 0 sub-bullets: the loader path (loader.md §1–§2) for every consumer; the drift check (`auto-on-load-judge-pattern.md`) additionally for skills that build or reweight a portfolio.
 
-The existing `### Render — deterministic gate (LAST step, mandatory)` label is the pre-spine form of Step 6; `test_render_gate.py` accepts either while the sweep runs. Forward-only, same scope statement as "Host portability".
+Three migration shapes share this vocabulary: the report consumer (`parallax-should-i-buy` is the reference), the config producer (Confirm/Persist above), and the multi-mode skill (basket vs. single-ticker, or a mode flag that changes the batch shape): a multi-mode skill keeps one spine and states the mode branch inside the affected step (`Step 2 — Fetch: basket mode fires …; single-ticker mode fires …`), never a second numbering.
+
+The `### Render — deterministic gate (LAST step, mandatory)` label is the pre-spine form of Step 6; `test_render_gate.py` still accepts either, so a skill authored against the older label is not broken by this rule. No SKILL.md uses that form as of 2026-09-07. Forward-only, same scope statement as "Host portability". `scripts/test_step_spine.py` enforces the seven headings, their order, and the Step 5/6 labels on every SKILL.md that has a `## Workflow` section; `SPINE_PENDING` is its equality-pinned, shrink-only exception list, and is **empty** — the migration sweep is complete, as is `host-primitive-lint.py`'s `LEGACY_ALLOWLIST`. A router or an interface spec has no Workflow section and is out of scope by definition.
 
 ## Authority header
 

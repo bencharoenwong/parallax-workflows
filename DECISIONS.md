@@ -4,6 +4,48 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-09-06 (sweep: operator reports): code-bound phase names stay as identifiers, not headings
+
+**Decision:** stress, judge, and attribution keep their `Phase N` vocabulary in prose because `judge.py`, `stress.py`, `render.py`, the saved reports, the design doc, and the tests all use those names as identifiers (`judge.phase_0_load_view`, `emit_phase_0_chain`, the "Phase 4-B" report section). The SKILL.md headings are the spine; a phase is named inside the heading or the first sentence of the step that runs it. Renaming the identifiers would be a code change with no ergonomic gain. For cio-letter-prep the per-mover fan-out depends on the Step 4 ranking, so it sits inside Step 4 as Batch B; the spine's "Batch B dependent" slot in Step 2 covers dependencies on Batch A only. Step 6 for these skills is `Render` without the gate-script parenthetical: none of them is in the conventions §10 gated list, and each says which helper writes the deterministic artifact.
+
+## 2026-09-06 (sweep: house-view producers): renumber the load-house-view gate and save path to Steps 5 and 6
+
+**Decision:** `skill-structure-conventions.md` (authority: contract) puts Confirm at Step 5 and Persist at Step 6 for config producers. load-house-view's gate moved from Step 3 to Step 5 and its save path from Step 4 to Step 6; every citation outside the file (maker.py, gate_present.py, schema.yaml, five house-view test docstrings) moved in the same commit. None of those citations were assertions. The `view_commit` staging contract, the append-only `audit.jsonl` rule, and the archive-before-clear sequence are byte-for-byte the same text under the new headings. Persistence fails closed on every host: no `ask-operator` answer this session means no write, and §14.3's display-degrade default does not apply to a persist step.
+
+## 2026-09-06 (sweep: AI-profile family): the emit heading keeps its "— Emit" suffix
+
+**Decision:** The dispatchers' render step is `### Step 6 — Render — Emit`, not the bare spine heading. `test_ai_profile_emit_contracts.py` splits each file on "— Emit" and pins the suppression paragraph inside it; renaming would drop the pin. The paragraph itself stays verbatim across the six files. The consensus meta-skill drops its local token-cost table in favour of `token-costs.md` (one table, tests in both directions, per the 2026-09-05 decision).
+
+## 2026-09-05: The eval cap, not the 500-line guideline, is the split trigger
+
+**Decision:** `parallax-rebalance/SKILL.md` reached 282 lines after PR #111 and the `orchestrator_length` grader (cap 250) failed on `main`. The Batch C2 policy-reconciliation block moved to `references/policy-reconciliation.md`, JIT-loaded only when `policy=` is supplied, leaving a one-line gate-shaped stub. Rationale: the block runs on a minority of invocations, so the JIT round-trip costs less than carrying 95 lines on every run. The structure conventions' "When to split" table now names the eval cap as the binding threshold, because a guideline of 500 lines that CI rejects at 250 is not a guideline anyone can follow.
+
+## 2026-09-05 (sweep): should-i-buy is the template for the SKILL.md sweep
+
+**Why.** The 2026-09-04 rules are forward-only, so the 34 legacy skills migrate one family per PR. The first migration has to be the skill everything else copies: should-i-buy is the most-used, the render-gate reference, and the one whose Output Format the graders are locked against — which makes it the sharpest test of "restructure the workflow, leave the contract alone."
+
+**Impact.** Steps 0–7 under the spine names; primitives not host tools; every shared block by reference; `## Failure modes` and `## Done when`; symmetric routing in the description; 160 lines. The four prose-asserting tests and the eval graders pass unchanged. Owner gate before merge: one fresh-session end-to-end run per CONTRIBUTING step 3.
+
+**Amendment (same day, after a gpt-5.6-sol review of the template).** Step 0 must bind every callable used anywhere in the workflow; a spine that binds only the batch steps leaves `get_company_info` and `explain_methodology` undiscovered for a cold agent. `## Done when` lines must not be conditional where the contract is unconditional (loader.md §6 appends a row for every consume event). The slash form in descriptions and Usage is operator syntax, not a host lock. The template then propagated to deep-dive, due-diligence, peer-comparison, earnings-quality and score-explainer, with render-gate anchors added for the four that had none.
+
+**Amendment 2026-09-06 (discovery family).** Seven more skills migrated and render-gated. Two shape decisions: halal-screen keeps its three cutoffs in prose with no helper, because conventions §11 requires published cutoffs in the skill's own spec and the arithmetic is three ratios a reader can check; pair-finder keeps its HARD HALT gate in the orchestrator (fragile, keep-list) and moves only the per-mode batch tables to a reference. The concierge router is not a data-producing skill and is left on its own shape.
+
+**Amendment 2026-09-06 (portfolio family).** Seven portfolio skills migrated the same way; two house-view end-to-end tests pinned pre-spine phrases in morning-brief and portfolio-builder (`### Batch B`, the `--skip-drift-check` clause, the auto-invoke guard). The phrases with a live purpose were kept verbatim; the heading anchor test was widened to accept the spine form, because the contract it protects is placement of the drift pointer after the alignment check, not the heading's name. `parallax-rebalance` waits for its length hotfix to merge so the two branches do not edit the same file.
+
+**Alternatives.** `[DROP]` **Start with a small skill (peer-comparison, 108 lines).** Rejected: it exercises none of the hard parts (translation, house-view flags, render gate, grader lock), so it would not prove the template.
+
+**Flip conditions.** A fresh-session run shows the model skipping a by-reference load that the old inline copy made unmissable → restore that one block inline and record it in the JIT-load audit, do not abandon by-reference.
+
+## 2026-09-06: Prompt audit — narration and volatile specifics are the cruft class here, not emphasis
+
+**Why.** The skills are meant to run on other harnesses and other vendors' models. A dated-pattern audit (six read-only agents, one per family, harness-neutral target) found almost no pressure language — every MUST/NEVER carried a reason — but a consistent second class: incident IDs, "previously"/"now"/"before B1" diffs against document versions the model never saw, hardcoded paths and counts that had rotted, and two pairs of duplicates that disagreed.
+
+**Impact.** All High/Medium hunks applied (36 across 20 files); flag-only items recorded locally. No Output Format, compliance text, gate semantics, tool contract, or exact command changed; every pinned phrase was checked against its test or transform first.
+
+**Alternatives.** `[DROP]` **Apply the flag-only host-lock findings as string swaps to the connector's current namespace.** Rejected: that reproduces the same fossil under a new name; the fix is the §14 primitive migration already scheduled per family.
+
+**Flip conditions.** A fresh-session run shows a removed sentence was load-bearing → restore it in its minimal form beside its reason, not the archaeology.
+
 ## 2026-09-05 (later): One token-cost table, tests in both directions
 
 **Why.** Three tables carried the price list (`token-costs.md`, `evals/graders/token_model.py`, `AI-profiles/README.md`) and a fourth copy sits in `parallax-ai-consensus/SKILL.md`. The existing test checked doc→code only, so a name priced in code but missing from the doc (`check_api_health`) never surfaced.

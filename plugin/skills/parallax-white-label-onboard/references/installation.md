@@ -17,7 +17,7 @@ The white-label onboarding skill is part of the `parallax-workflows` repository.
 
 ```bash
 # In any Claude Code session, test the skill:
-ls -la skills/white-label-onboard/
+ls -la skills/parallax-white-label-onboard/
 ls -la skills/_parallax/white-label/
 
 # Expected output: SKILL.md, schema.yaml, loader.py, validator.py, extract/, tests/
@@ -148,7 +148,7 @@ ls -la ~/.parallax/client-branding/assets/
 ```yaml
 # config.yaml contents
 metadata:
-  schema_version: 1
+  schema_version: 2
   client_name: "Your Client Name"
   ...
 
@@ -382,12 +382,10 @@ For issues not covered here:
 
 ## Upgrade & Rollback
 
-The white-label skill uses semantic versioning. Config schema is versioned (currently `schema_version: 1`). 
-
-Future upgrades will:
-1. Increment `schema_version` if breaking changes occur
-2. Provide migration guide in release notes
-3. Support both old and new schema versions during transition period
+The white-label skill uses semantic versioning. Config schema is versioned; `schema_version: 2`
+is current. The loader (`loader.py`) reads both `schema_version: 1` and `schema_version: 2`
+configs on every path, bridging v1's `colors.{accent,background,text}` + `fonts.{header,body,monospace}`
+to v2's `colors.{tertiary,neutral}` + `typography.*` shape at read time.
 
 To rollback to a previous config:
 

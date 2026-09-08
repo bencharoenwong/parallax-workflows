@@ -74,7 +74,7 @@ markets** (see `valuation_state` / `market_entropy` rows below).
 | `sectors` | ✓ US | sector tilts (BUT: may report "data unavailable" — handle gracefully) |
 | `sector_positioning` | ⚪ untested | sector tilts (overlapping with sectors) |
 | `liquidity` | ⚪ untested | `market_entropy` candidate |
-| `news` | ⚪ untested | `psychological_wavelength`, themes |
+| `news` | ✓ shipped — one of the 4 `DEFAULT_COMPONENTS` fanned out by `maker.py`; no formal probe result was ever backfilled here | `psychological_wavelength`, themes |
 | `factors` | ⚪ untested | country-level factor tilts (per the tool doc, distinct from telemetry's factor_view) |
 
 **Untested components should be sampled before B1 starts** — incomplete inventory.
@@ -190,7 +190,7 @@ data layer missing. cross_country aggregator should classify these as
 
 ---
 
-## 6. Still-untested surface (do before B1 implementation)
+## 6. Still-untested surface
 
 Sample-call the following components on US to complete the inventory:
 
@@ -200,7 +200,6 @@ macro_analyst("United States", "fixed_income")
 macro_analyst("United States", "currency")
 macro_analyst("United States", "sector_positioning")
 macro_analyst("United States", "liquidity")
-macro_analyst("United States", "news")
 macro_analyst("United States", "factors")
 
 # Untested telemetry fields:
