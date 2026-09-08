@@ -154,7 +154,7 @@ Proprietary pillar/factor vocabulary guard: trigger phrases ship verbatim to whi
 
 Added 2026-09-04. These skills run on Claude Code, Codex CLI and claude.ai. A SKILL.md names the **host primitives** defined in `parallax-conventions.md` §14 (`discover-tools`, `call-tool`, `ask-operator`, `run-shell`, `invoke-skill`, `load-reference`, `write-artifact`, `read-config`, `fetch-url`) and never a host tool. The forbidden host identifiers are listed once, in `parallax-conventions.md` §14.1; outside a `<!-- host-note -->` … `<!-- /host-note -->` block a SKILL.md must not contain any of them. A host note may show the Claude Code binding as an example; the primitive name is the instruction. The `/parallax-<name>` slash form in the description, `## When not to use`, and Usage examples is the operator's command syntax and is not a host-lock; the rule bites only when a workflow step chains to a sibling by slash syntax alone instead of naming `invoke-skill`.
 
-**Scope is forward-only.** Skills that existed before 2026-09-04 are host-locked and are migrated one family per PR (the structure sweep). New skills comply before merge.
+**Scope is forward-only.** The migration sweep of pre-2026-09-04 skills completed on 2026-09-07; `host-primitive-lint.py`'s `LEGACY_ALLOWLIST` is empty and shrink-only. New skills comply before merge.
 
 **Fail-open is by reference.** A SKILL.md does not invent what to do when a primitive is absent; it cites `parallax-conventions.md` §14.3. A skill whose correctness depends on a primitive that a target host lacks (for example a gate helper behind `run-shell`) states that in `## Failure modes` and, if the loss is total, in its row in the private perimeter registry (not tracked in this public repo).
 

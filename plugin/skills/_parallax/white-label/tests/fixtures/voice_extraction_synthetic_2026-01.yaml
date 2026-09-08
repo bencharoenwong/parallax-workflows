@@ -1,6 +1,6 @@
 # Voice extraction test fixture — SYNTHETIC
 #
-# Purpose: validate that the Step 1.5 voice extraction prompt produces SPECIFIC,
+# Purpose: validate that the Step 2b voice extraction prompt produces SPECIFIC,
 # quote-anchored output (vs generic asset-management boilerplate). The fields,
 # value-types, and confidence semantics mirror what a real corpus extraction
 # would produce.
@@ -106,14 +106,14 @@ source_corpus:
         sample cannot reveal variation.
       - drafted_vs_sent: empty — finished letters do not expose AI-draft pairs.
 
-# ---- VALIDATION CHECKLIST (Step 1.5 self-check) ----
+# ---- VALIDATION CHECKLIST (Step 2b self-check) ----
 #
-# This fixture validates that the Step 1.5 prompt MECHANICS — field structure,
+# This fixture validates that the Step 2b prompt MECHANICS — field structure,
 # anchor-comment style, empty-by-design fields, confidence floor — produce a
 # parser-valid output. Real client-corpus extraction is required to validate
 # semantic quality (specificity, quote-anchoring) against actual prose.
 #
-# CONCLUSION: Step 1.5 prompt mechanics validated against a SYNTHETIC fixture.
+# CONCLUSION: Step 2b prompt mechanics validated against a SYNTHETIC fixture.
 # Output is parser-valid and acknowledges single-source limitations. Prompt is
 # ready for use against real partner corpora when available, with the caveat
 # that single-newsletter input will leave audience_adaptation, channel_notes,

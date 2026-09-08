@@ -580,7 +580,7 @@ Gates fail closed (§4.0); display sections degrade (§4). The rows below apply 
 
 ## 15. Translator Routing and Failure
 
-Canonical home for the translate step that `should-i-buy`, `client-review`, `deep-dive`, `morning-brief` and `score-explainer` carry as copies today. New skills render this section by reference: `Translate per parallax-conventions.md §15.` Copies are replaced during the structure sweep.
+Canonical home for the translate step. Skills that accept a language argument (`should-i-buy`, `client-review`, `deep-dive`, `morning-brief`, `score-explainer`) render this section by reference from their `Step 7 — Translate (conditional)`: `Translate per parallax-conventions.md §15.` Do not copy the section into a SKILL.md.
 
 ### §15.1 When it runs
 

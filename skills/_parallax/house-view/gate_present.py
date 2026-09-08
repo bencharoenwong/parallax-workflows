@@ -26,7 +26,7 @@ purely a display + disposition concern, per v2 plan §6.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable
 
 
