@@ -1,0 +1,301 @@
+{
+  "_authority": {
+    "kind": "registry",
+    "verified": "2026-09-07",
+    "overrides": "the former PLUGIN_SKILLS / WEB_SKILLS / WEB_DESCRIPTIONS / _NINE_TWO_EXEMPT_SKILLS literals; render_gate.py keeps SKILL_ANCHORS and is reconciled by test",
+    "generated_by": "scripts/bootstrap_manifest.py"
+  },
+  "skills": {
+    "parallax-ai-buffett": {
+      "plugin": false,
+      "web": false
+    },
+    "parallax-ai-consensus": {
+      "plugin": false,
+      "web": false
+    },
+    "parallax-ai-greenblatt": {
+      "plugin": false,
+      "web": false
+    },
+    "parallax-ai-klarman": {
+      "plugin": false,
+      "web": false
+    },
+    "parallax-ai-ptj": {
+      "plugin": false,
+      "web": false
+    },
+    "parallax-ai-soros": {
+      "plugin": false,
+      "web": false
+    },
+    "parallax-cio-letter-prep": {
+      "plugin": false,
+      "web": false
+    },
+    "parallax-client-review": {
+      "plugin": true,
+      "web": true,
+      "web_description": "RIA/wealth-advisor client portfolio review: analysis, redundancy, health flags, macro context, per-holding drill-down, and prioritized recommendations. Holdings as [{symbol, weight}].",
+      "anchors_key": "client-review",
+      "anchors": [
+        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:client portfolio review|portfolio review|portfolio summary)\\b",
+        "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+portfolio review\\b"
+      ]
+    },
+    "parallax-concierge": {
+      "plugin": true,
+      "web": false
+    },
+    "parallax-country-deep-dive": {
+      "plugin": true,
+      "web": false,
+      "anchors_key": "country-deep-dive",
+      "anchors": [
+        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:country overview|country deep dive)\\b",
+        "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+country deep dive\\b"
+      ]
+    },
+    "parallax-credit-lens": {
+      "plugin": true,
+      "web": false,
+      "anchors_key": "credit-lens",
+      "anchors": [
+        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:credit risk assessment|credit lens)\\b",
+        "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+credit lens\\b"
+      ]
+    },
+    "parallax-deep-dive": {
+      "plugin": true,
+      "web": true,
+      "web_description": "Deep dive on a single position: profile, peers, financials, score trends, macro, technicals, dividends, news, and AI assessment. Symbol in RIC format. Not for quick checks or portfolio-level work.",
+      "anchors_key": "deep-dive",
+      "anchors": [
+        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:company overview|position deep dive|deep dive)\\b",
+        "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+deep dive\\b"
+      ]
+    },
+    "parallax-desk-call-list": {
+      "plugin": true,
+      "web": false,
+      "anchors_key": "desk-call-list",
+      "anchors": [
+        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:desk call list|priority calls|no calls indicated|scan degraded|scan refused)\\b",
+        "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+desk call list\\b"
+      ]
+    },
+    "parallax-due-diligence": {
+      "plugin": true,
+      "web": true,
+      "web_description": "Full research-analyst due diligence: financial statements, Palepu framework, technicals, news, score trends, and the full Parallax research report. Symbol in RIC format.",
+      "anchors_key": "due-diligence",
+      "anchors": [
+        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:scope note|company overview|full due diligence|due diligence)\\b",
+        "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+research report\\b"
+      ]
+    },
+    "parallax-earnings-quality": {
+      "plugin": true,
+      "web": false,
+      "anchors_key": "earnings-quality",
+      "anchors": [
+        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:risk summary|earnings quality)\\b",
+        "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+earnings quality review\\b"
+      ]
+    },
+    "parallax-explain-portfolio": {
+      "plugin": true,
+      "web": true,
+      "web_description": "Portfolio drawdown attribution: decompose 'why am I down X%?' into market/regime, factor/thematic, and stock-specific components, with conditional guidance. Holdings as [{symbol, weight}].",
+      "anchors_key": "explain-portfolio",
+      "anchors": [
+        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:explain portfolio|(?:portfolio |performance |drawdown )?attribution|what happened|market & regime)\\b",
+        "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+portfolio attribution\\b"
+      ]
+    },
+    "parallax-halal-screen": {
+      "plugin": true,
+      "web": false,
+      "anchors_key": "halal-screen",
+      "anchors": [
+        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:screening criteria|halal|shariah screen)\\b",
+        "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+shariah screen\\b"
+      ]
+    },
+    "parallax-house-view-attribution": {
+      "plugin": false,
+      "web": false
+    },
+    "parallax-house-view-diff": {
+      "plugin": false,
+      "web": false
+    },
+    "parallax-judge-house-view": {
+      "plugin": false,
+      "web": false
+    },
+    "parallax-load-house-view": {
+      "plugin": false,
+      "web": false,
+      "nine_two_exempt": true
+    },
+    "parallax-macro-outlook": {
+      "plugin": true,
+      "web": false,
+      "anchors_key": "macro-outlook",
+      "anchors": [
+        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:regime status|macro outlook)\\b",
+        "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+macro outlook\\b"
+      ]
+    },
+    "parallax-make-house-view": {
+      "plugin": false,
+      "web": false,
+      "nine_two_exempt": true
+    },
+    "parallax-morning-brief": {
+      "plugin": true,
+      "web": true,
+      "web_description": "Fund manager morning brief: market regime, macro outlook, portfolio health, and key holding news. Portfolio as [{symbol, weight}] in RIC format.",
+      "anchors_key": "morning-brief",
+      "anchors": [
+        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:(?:fund manager )?morning brief|market regime)\\b",
+        "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+morning brief\\b"
+      ]
+    },
+    "parallax-pair-finder": {
+      "plugin": true,
+      "web": false,
+      "anchors_key": "pair-finder",
+      "anchors": [
+        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:verdict|top pair|pair finder)",
+        "^\\s{0,3}(?:[-*]\\s*)?\\*\\*\\s*pair\\s*(?::\\*\\*|\\*\\*\\s*:)",
+        "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+pair finder\\b"
+      ]
+    },
+    "parallax-peer-comparison": {
+      "plugin": true,
+      "web": true,
+      "web_description": "Peer comparison for research analysts: peer snapshot, exported data, score trends, and relative price performance. Symbol in RIC format.",
+      "anchors_key": "peer-comparison",
+      "anchors": [
+        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:peer group|peer comparison)\\b",
+        "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+peer comparison\\b"
+      ]
+    },
+    "parallax-portfolio-builder": {
+      "plugin": true,
+      "web": false,
+      "anchors_key": "portfolio-builder",
+      "anchors": [
+        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:portfolio builder|portfolio construction|investment thesis)\\b",
+        "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+portfolio construction\\b"
+      ]
+    },
+    "parallax-portfolio-checkup": {
+      "plugin": true,
+      "web": true,
+      "web_description": "Individual investor portfolio checkup: health flags, factor scores, redundancy, macro context, and plain-language recommendations. Holdings as [{symbol, weight}].",
+      "anchors_key": "portfolio-checkup",
+      "anchors": [
+        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:portfolio health|health status)\\b",
+        "^\\s{0,3}#\\s*(?:your\\s+)?portfolio checkup\\b",
+        "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+portfolio checkup\\b"
+      ]
+    },
+    "parallax-rebalance": {
+      "plugin": true,
+      "web": true,
+      "web_description": "Portfolio rebalancing analysis: current state, health flags, macro context, and a prioritized information-framed action list with score rationale. Holdings as [{symbol, weight}].",
+      "anchors_key": "rebalance",
+      "anchors": [
+        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:portfolio rebalance|rebalance|current portfolio(?: assessment)?)\\b",
+        "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+rebalance\\b"
+      ]
+    },
+    "parallax-scenario-analysis": {
+      "plugin": true,
+      "web": true,
+      "web_description": "Stress a portfolio against a news event or scenario (rates +100bps, USD shock, 2008 replay): exposure, sector impact, most-exposed holdings, rotation candidates. Needs portfolio + scenario.",
+      "anchors_key": "scenario-analysis",
+      "anchors": [
+        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:scenario summary|scenario analysis)\\b",
+        "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+scenario analysis\\b"
+      ]
+    },
+    "parallax-score-explainer": {
+      "plugin": true,
+      "web": true,
+      "web_description": "Explain Parallax scores, factors, and methodology in plain language: why a stock scores the way it does and what would change it. Not for full stock analysis.",
+      "anchors_key": "score-explainer",
+      "anchors": [
+        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:the question|score explainer)\\b",
+        "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+score explainer\\b"
+      ]
+    },
+    "parallax-should-i-buy": {
+      "plugin": true,
+      "web": true,
+      "web_description": "Quick stock evaluation: company overview, Parallax factor scores, financial health, trends, macro context, dividends, news, and analyst outlook in plain language. Accepts plain tickers or RICs.",
+      "anchors_key": "should-i-buy",
+      "anchors": [
+        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:the company|should i buy|stock (?:review|evaluation))\\b",
+        "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+stock review\\b"
+      ]
+    },
+    "parallax-stress-house-view": {
+      "plugin": false,
+      "web": false
+    },
+    "parallax-stress-test-thesis": {
+      "plugin": false,
+      "web": false,
+      "anchors_key": "stress-test-thesis",
+      "anchors": [
+        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:tl;dr|stress-test thesis|thesis restatement)",
+        "^\\s{0,3}~\\d+ min read\\b"
+      ]
+    },
+    "parallax-thematic-screen": {
+      "plugin": true,
+      "web": false,
+      "anchors_key": "thematic-screen",
+      "anchors": [
+        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:theme|thematic screen|universe built)\\b",
+        "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+thematic screen\\b"
+      ]
+    },
+    "parallax-watchlist-monitor": {
+      "plugin": true,
+      "web": true,
+      "web_description": "Monitor a watchlist of tickers: flag score changes, news alerts, technical shifts, and analyst updates. Provide a list of symbols.",
+      "anchors_key": "watchlist-monitor",
+      "anchors": [
+        "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)watchlist (?:monitor|summary|scan)\\b",
+        "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+watchlist scan\\b"
+      ]
+    },
+    "parallax-white-label-onboard": {
+      "plugin": true,
+      "web": false,
+      "nine_two_exempt": true
+    },
+    "parallax-white-label-stock-report": {
+      "plugin": true,
+      "web": false
+    },
+    "translate-chinese-finance": {
+      "plugin": true,
+      "web": false
+    },
+    "translate-thai-finance": {
+      "plugin": true,
+      "web": false
+    }
+  },
+  "exempt_docs": [
+    "_parallax/jit-load-compliance-audit.md",
+    "_parallax/skill-structure-conventions.md"
+  ]
+}

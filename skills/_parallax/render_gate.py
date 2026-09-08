@@ -71,7 +71,13 @@ def _branding(noun: str) -> str:
 # (a bold title like "**Watchlist scan — ...**"). The bold branch requires the keyword
 # right after the marker so a bold SCAFFOLD sentence ("**Batch D ... rebalance works**")
 # does NOT match. The Branding Header is handled separately (_branding, noun-specific).
-# Mirrors each eval-config _OK_START exactly (gate and grader agree on "valid opening").
+# Gate and grader agree on the valid-opening VOCABULARY, but not on shape: an
+# eval config's _OK_START is one compiled pattern, this is a list of two (title
+# plus Branding Header), and only 6 of these 22 skills have an eval config at
+# all. They are not mirrors; do not try to unify them.
+# This dict is reconciled against _parallax/manifest.json by
+# test_skill_manifest.py. The gate keeps the literal on purpose: it is the last
+# step of every skill on every host and must gain no file dependency.
 SKILL_ANCHORS: dict[str, list[str]] = {
     "portfolio-checkup": [
         r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:portfolio health|health status)\b",
