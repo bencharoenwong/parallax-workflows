@@ -4,6 +4,15 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-09-15 (Arabic translation seed)
+
+### Added
+- `translate-arabic-finance` skill (`ar-SA`, Modern Standard Arabic register) as a **seed** pending native review: SKILL.md with an "Open decisions" list, draft dictionaries and terminology tables, and a deterministic `validate-translation.py` with its own test suite (wired into `evals.yml`).
+- `ar-SA` added to `parallax-conventions.md` §15.1/§15.2 and to the `lang=` docs of `parallax-should-i-buy`, `parallax-morning-brief`, `parallax-deep-dive`, `parallax-client-review`, and `parallax-score-explainer`.
+
+### Changed
+- The manifest row is `"plugin": false`, so the skill is held out of the plugin bundle. While it is held, `build_bundle.py plugin` strips `ar-SA` from the bundled language lists and routing table and fails the build on any mention it misses; plugin users get the English fallback.
+
 ## 2026-09-07 (derived manifest)
 
 ### Added
