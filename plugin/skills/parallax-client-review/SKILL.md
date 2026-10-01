@@ -37,7 +37,7 @@ Presentation-ready portfolio review with health flags and prioritized recommenda
 /parallax-client-review [{"symbol":"AAPL.O","weight":0.25},{"symbol":"BRK-B.N","weight":0.20}] audience=client_safe
 ```
 
-Optional after the holdings: `client=`, `lang=<code>` (`en` default; `zh-CN`, `zh-TW`, `zh-HK`, `th`), `register=retail` (translation only), `audience=client_safe | internal_analyst` (§13.1 precedence), `policy=` (file path or inline YAML/JSON: strategic allocation, bands, tactical budget; absent means today's behaviour). **No invocation `k=` flag** — the locked spec allows a firm-level default and a per-mandate override only, both in the policy artifact's `adaptation` block. `benchmark=` is not consumed; a future benchmark-relative revision passes plain ETF tickers through `etf_daily_price`, never `export_price_series`.
+Optional after the holdings: `client=`, `lang=<code>` (`en` default; `zh-CN`, `zh-TW`, `zh-HK`, `th`, `ar-SA`), `register=retail` (translation only), `audience=client_safe | internal_analyst` (§13.1 precedence), `policy=` (file path or inline YAML/JSON: strategic allocation, bands, tactical budget; absent means today's behaviour). **No invocation `k=` flag** — the locked spec allows a firm-level default and a per-mandate override only, both in the policy artifact's `adaptation` block. `benchmark=` is not consumed; a future benchmark-relative revision passes plain ETF tickers through `etf_daily_price`, never `export_price_series`.
 
 ## Workflow
 

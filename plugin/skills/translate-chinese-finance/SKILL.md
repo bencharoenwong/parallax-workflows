@@ -34,7 +34,7 @@ The block is metadata, not content. Read `target_variant` to select the variant 
 
 **NOT for:** General Chinese translation without finance context, transliteration of Western brand names (keep them in English), creative writing in Chinese, proofreading existing Chinese translations, or writing Chinese reports from scratch.
 
-**Language coverage:** Supported targets are zh-CN, zh-TW, zh-HK, and th via the paired Thai translation skill. Arabic is a roadmap item requiring right-to-left layout handling and register calibration; there is no Arabic validation harness yet. Arabic requests fall back to English.
+**Language coverage:** Supported targets are zh-CN, zh-TW, zh-HK, and th via the paired Thai translation skill, and ar-SA via `translate-arabic-finance`. The Arabic skill is a seed scaffold pending native review (see its SKILL.md "Open decisions") — route `ar-SA` requests there rather than falling back to English.
 
 ---
 
