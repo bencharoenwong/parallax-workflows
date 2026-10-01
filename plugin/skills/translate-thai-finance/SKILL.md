@@ -14,7 +14,7 @@ Translate provided content into Thai following institutional finance translation
 
 **NOT for:** General Thai translation without finance context, transliteration of brand names, creative writing in Thai, proofreading existing Thai translations, or writing Thai reports from scratch.
 
-**Language coverage:** Supported targets are zh-CN, zh-TW, zh-HK, and th via the paired Chinese translation skill. Arabic is a roadmap item requiring right-to-left layout handling and register calibration; there is no Arabic validation harness yet. Arabic requests fall back to English.
+**Language coverage:** Supported targets are zh-CN, zh-TW, zh-HK, and th via the paired Chinese translation skill. Arabic requests fall back to English.
 
 **Routing-directive blocks.** When invoked from another skill (e.g., `/parallax-should-i-buy`), the input may begin with a routing block of the form:
 

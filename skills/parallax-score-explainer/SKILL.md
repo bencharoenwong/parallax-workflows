@@ -35,7 +35,7 @@ Plain-language explanations of Parallax scores, factors, and methodology.
 /parallax-score-explainer AAPL.O "why is the value score so low?" audience=client_safe
 ```
 
-The free-text question stays positional; keyword args: `lang=<code>` (`en` default; `zh-CN`, `zh-TW`, `zh-HK`, `th`), optional `register=retail` (passed only when translation is requested), optional `audience=client_safe | internal_analyst` (precedence per conventions §13.1).
+The free-text question stays positional; keyword args: `lang=<code>` (`en` default; `zh-CN`, `zh-TW`, `zh-HK`, `th`, `ar-SA`), optional `register=retail` (passed only when translation is requested), optional `audience=client_safe | internal_analyst` (precedence per conventions §13.1).
 
 ## Workflow
 

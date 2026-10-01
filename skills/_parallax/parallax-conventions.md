@@ -586,7 +586,9 @@ Canonical home for the translate step. Skills that accept a language argument (`
 
 ### §15.1 When it runs
 
-Only when the operator supplied a language argument and it is not `en`. It is the terminal step: it consumes the gated stdout of the render step (§10.3) and its output is not re-gated. Supported values: `en`, `zh-CN`, `zh-TW`, `zh-HK`, `th`. Any other value: emit the English report with `> Language '<arg>' not supported; output shown in English. Supported: en, zh-CN, zh-TW, zh-HK, th.`
+Only when the operator supplied a language argument and it is not `en`. It is the terminal step: it consumes the gated stdout of the render step (§10.3) and its output is not re-gated. Supported values: `en`, `zh-CN`, `zh-TW`, `zh-HK`, `th`, `ar-SA`. Any other value: emit the English report with `> Language '<arg>' not supported; output shown in English. Supported: en, zh-CN, zh-TW, zh-HK, th, ar-SA.`
+
+`ar-SA` routes to `translate-arabic-finance`, a seed skill pending native review (see that skill's SKILL.md "Open decisions"). Do not present `ar-SA` output as production-validated until that review has happened.
 
 ### §15.2 Routing block
 
@@ -605,7 +607,7 @@ ROUTING DIRECTIVE — DO NOT TRANSLATE OR ECHO THIS BLOCK:
 
 Include `target_variant` only for the Chinese variants and omit the line for Thai; pass `register: retail` only when `register=retail` was supplied, otherwise omit the `register:` line so the translator defaults to institutional register.
 
-`zh-CN`, `zh-TW`, `zh-HK` → `translate-chinese-finance` with the matching `target_variant` (the block is REQUIRED for `zh-HK`, otherwise that skill pauses to ask about HK listings and breaks the chain). `th` → `translate-thai-finance`; the marker line and `---` separator stay so no leading meta is echoed.
+`zh-CN`, `zh-TW`, `zh-HK` → `translate-chinese-finance` with the matching `target_variant` (the block is REQUIRED for `zh-HK`, otherwise that skill pauses to ask about HK listings and breaks the chain). `th` → `translate-thai-finance`; `ar-SA` → `translate-arabic-finance` (no `target_variant` line — omit it, same as Thai); the marker line and `---` separator stay so no leading meta is echoed.
 
 ### §15.3 Failure handling
 

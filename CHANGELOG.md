@@ -10,6 +10,15 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 - `skills/_parallax/token-costs.md` and `evals/graders/token_model.py`: `search_etfs` moves from free to 1 credit, and `etf_search` moves from unpriced (`KNOWN_UNPRICED`) to 1 credit, matching the live tool description and backend price table. `search_stocks` stays listed as free by design; the table notes the live service still bills it until the price change deploys. `KNOWN_UNPRICED` now holds `etf_holdings`, `check_job_status` and `submit_feedback`.
 - `parallax-cio-letter-prep` no longer calls `get_company_info` free; it is billed at 1 credit per call, as `token-costs.md` already listed.
 
+## 2026-09-15 (Arabic translation seed)
+
+### Added
+- `translate-arabic-finance` skill (`ar-SA`, Modern Standard Arabic register) as a **seed** pending native review: SKILL.md with an "Open decisions" list, draft dictionaries and terminology tables, and a deterministic `validate-translation.py` with its own test suite (wired into `evals.yml`).
+- `ar-SA` added to `parallax-conventions.md` §15.1/§15.2 and to the `lang=` docs of `parallax-should-i-buy`, `parallax-morning-brief`, `parallax-deep-dive`, `parallax-client-review`, and `parallax-score-explainer`.
+
+### Changed
+- The manifest row is `"plugin": false`, so the skill is held out of the plugin bundle. While it is held, `build_bundle.py plugin` strips `ar-SA` from the bundled language lists and routing table and fails the build on any mention it misses; plugin users get the English fallback.
+
 ## 2026-09-07 (derived manifest)
 
 ### Added

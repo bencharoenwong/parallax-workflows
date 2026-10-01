@@ -285,6 +285,10 @@
       "plugin": true,
       "web": false
     },
+    "translate-arabic-finance": {
+      "plugin": false,
+      "web": false
+    },
     "translate-chinese-finance": {
       "plugin": true,
       "web": false
