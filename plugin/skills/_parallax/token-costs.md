@@ -13,6 +13,7 @@ Parallax uses token-based pricing. All tools consume the same number of tokens w
 |---|---|
 | `explain_methodology` | Scoring methodology explanations |
 | `get_docs` / `list_docs` | Documentation access |
+| `search_stocks` | Stock symbol search (fuzzy). Free by design, so resolving a ticker to its RIC never adds to a workflow's total. **Pending:** as of 2026-10-01 the live service still bills 1 credit per call until the price change deploys; the live tool description wins until it says "FREE". |
 | `check_api_health` | Connector health probe. Free, so a health check never changes a workflow's total. |
 | `export_price_series` | Daily price data export. Its own MCP tool description states "FREE" (verified live 2026-07-20; the whole tool suite marks free tools "FREE" and omits the marker on billable ones). Was previously listed under "1 token each" — reclassified to match the vendor's stated contract. **Reversible:** if operator billing shows this is metered (e.g. free only within plan limits), move it back and revise dependent skill estimates. |
 
@@ -20,7 +21,7 @@ Parallax uses token-based pricing. All tools consume the same number of tokens w
 | Tool | Description |
 |---|---|
 | `get_company_info` | Company profile, sector, market cap |
-| `search_stocks` / `search_etfs` | Symbol search (fuzzy). Billed per call, like any other read: the live tool descriptions state "Cost: 1 credit" and the backend price table matches (checked 2026-10-01; not yet confirmed against an account ledger). Was previously listed as free. |
+| `search_etfs` | ETF symbol search (fuzzy). Billed per call: the live tool description states "Cost: 1 credit" and the backend price table matches (checked 2026-10-01; not yet confirmed against an account ledger). Was previously listed as free. |
 | `etf_search` | ETF discovery by market/keyword/score. Same billed search endpoint as `search_etfs` (checked 2026-10-01). Was previously unpriced. |
 | `get_peer_snapshot` | Factor scores + peer ranking |
 | `export_peer_comparison` | Structured peer data export |
