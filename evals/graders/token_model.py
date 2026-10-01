@@ -21,12 +21,13 @@ FLAT_COST: dict[str, int] = {
     "explain_methodology": 0,
     "get_docs": 0,
     "list_docs": 0,
-    "search_stocks": 0,
-    "search_etfs": 0,
     "export_price_series": 0,
     "check_api_health": 0,
     # 1 token
     "get_company_info": 1,
+    "search_stocks": 1,
+    "search_etfs": 1,
+    "etf_search": 1,
     "list_macro_countries": 1,
     "get_telemetry": 1,
     "get_peer_snapshot": 1,
@@ -58,12 +59,11 @@ PER_HOLDING_COST: dict[str, int] = {
 # Live Parallax endpoints deliberately left unpriced: nobody has measured them,
 # and this repo does not publish inferred numbers. They are NOT a stale-table
 # signal -- that signal is reserved for a name we do not recognise at all, which
-# clears once someone prices it. These four never clear, so folding them into
+# clears once someone prices it. These never clear, so folding them into
 # ``unknown_endpoints`` would permanently degrade any run that touches them
-# (``parallax-pair-finder`` calls etf_search/etf_holdings) for a reason no table
+# (``parallax-pair-finder`` calls etf_holdings) for a reason no table
 # edit can fix. They are reported separately so a total can state what it omits.
 KNOWN_UNPRICED: frozenset[str] = frozenset({
-    "etf_search",
     "etf_holdings",
     "check_job_status",
     "submit_feedback",

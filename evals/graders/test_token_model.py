@@ -177,7 +177,7 @@ def test_known_unpriced_is_not_a_stale_table_signal():
     """A deliberately-unpriced endpoint must not read as an unknown one.
 
     ``unknown_endpoints`` degrades a run because the price table is stale, a
-    condition someone can fix. The KNOWN_UNPRICED four can never be fixed by a
+    condition someone can fix. The KNOWN_UNPRICED entries can never be fixed by a
     table edit, so folding them in would permanently exclude pair-finder-class
     runs from aggregation for a reason nobody can clear.
     """
