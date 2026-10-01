@@ -101,7 +101,7 @@ def test_tool_calls_parallax_counts_unpriced_endpoints_too():
         _stream([_p("etf_holdings"), _p("etf_holdings"), _p("etf_search")]), "r3b"
     )
     assert rec.tool_calls_parallax == {"etf_holdings": 2, "etf_search": 1}
-    assert rec.parallax_tokens == 0
+    assert rec.parallax_tokens == 1, "only etf_search is priced"
 
 
 # --- degrade rules: what must and must not leave AGGREGATABLE -------------
@@ -116,13 +116,13 @@ def test_unknown_endpoint_degrades_as_a_stale_table_signal():
 def test_known_unpriced_endpoint_stays_aggregatable():
     """The carve-out that keeps pair-finder runs usable.
 
-    These four can never be cleared by a table edit, so degrading on them would
+    These can never be cleared by a table edit, so degrading on them would
     exclude an entire workflow from aggregation permanently.
     """
-    rec = from_stream_json(_stream([_p("etf_holdings"), _p("etf_search")]), "r5")
+    rec = from_stream_json(_stream([_p("etf_holdings"), _p("check_job_status")]), "r5")
     assert rec.status == STATUS_OK
     assert rec.aggregatable()
-    assert rec.unpriced_endpoints == ["etf_holdings", "etf_search"]
+    assert rec.unpriced_endpoints == ["check_job_status", "etf_holdings"]
     assert rec.degraded_paths == []
 
 

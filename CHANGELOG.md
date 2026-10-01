@@ -4,6 +4,12 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-10-01 (search tool pricing)
+
+### Changed
+- `skills/_parallax/token-costs.md` and `evals/graders/token_model.py`: `search_etfs` moves from free to 1 credit, and `etf_search` moves from unpriced (`KNOWN_UNPRICED`) to 1 credit, matching the live tool description and backend price table. `search_stocks` stays listed as free by design; the table notes the live service still bills it until the price change deploys. `KNOWN_UNPRICED` now holds `etf_holdings`, `check_job_status` and `submit_feedback`.
+- `parallax-cio-letter-prep` no longer calls `get_company_info` free; it is billed at 1 credit per call, as `token-costs.md` already listed.
+
 ## 2026-09-15 (Arabic translation seed)
 
 ### Added

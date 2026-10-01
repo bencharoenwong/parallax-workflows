@@ -158,9 +158,9 @@ def from_stream_json(
     # Counted over KNOWN_ENDPOINTS, not just the priced tables: a KNOWN_UNPRICED
     # call under a Parallax namespace is definitively Parallax work performed,
     # and ``unpriced_endpoints`` records only its name. Filtering it out here
-    # would leave a pair-finder run -- five etf_holdings, three etf_search --
-    # reporting zero Parallax calls, with nothing in the record stating how much
-    # work it actually did. Cost stays derived from the priced tables alone.
+    # would drop a pair-finder run's etf_holdings calls from the count, with
+    # nothing in the record stating how much work it actually did. Cost stays
+    # derived from the priced tables alone.
     counts: dict[str, int] = {}
     for call in calls:
         if not token_model.is_parallax_mcp(call.name):
