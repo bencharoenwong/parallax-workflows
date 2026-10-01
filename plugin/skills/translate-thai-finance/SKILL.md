@@ -14,7 +14,7 @@ Translate provided content into Thai following institutional finance translation
 
 **NOT for:** General Thai translation without finance context, transliteration of brand names, creative writing in Thai, proofreading existing Thai translations, or writing Thai reports from scratch.
 
-**Language coverage:** Supported targets are zh-CN, zh-TW, zh-HK, and th via the paired Chinese translation skill, and ar-SA via `translate-arabic-finance`. The Arabic skill is a seed scaffold pending native review (see its SKILL.md "Open decisions") — route `ar-SA` requests there rather than falling back to English.
+**Language coverage:** Supported targets are zh-CN, zh-TW, zh-HK, and th via the paired Chinese translation skill. Arabic requests fall back to English.
 
 **Routing-directive blocks.** When invoked from another skill (e.g., `/parallax-should-i-buy`), the input may begin with a routing block of the form:
 

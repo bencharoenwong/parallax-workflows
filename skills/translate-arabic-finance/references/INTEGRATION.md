@@ -12,9 +12,9 @@ Status: skill scaffold ready (SKILL.md + references drafted). Nothing downstream
 
 Status: done as part of this scaffold — see the diff to `parallax-conventions.md`. If this file is later regenerated or hand-reverted, re-check that `ar-SA` is still present.
 
-## 2. Perimeter classification (`skills/PERIMETER.md`)
+## 2. Perimeter classification
 
-Needs a row for `translate-arabic-finance`, same `codex-safe` classification as the other two translators (pure translation utility, no proprietary methodology, no internal schema names). Status: done as part of this scaffold.
+Needs a perimeter classification for `translate-arabic-finance`, same `codex-safe` class as the other two translators (pure translation utility, no proprietary methodology, no internal schema names). This repo has no perimeter registry; the classification is tracked outside it. Status: not performed by this change.
 
 ## 3. Language-coverage notes in the sibling skills
 
@@ -22,7 +22,7 @@ Both `translate-chinese-finance/SKILL.md` and `translate-thai-finance/SKILL.md` 
 
 ## 4. Plugin bundle
 
-`skills/_parallax/manifest.json` is the authority for what ships. `bootstrap_manifest.py` added this skill's row with `"plugin": false` (the designed safe default for a new skill — see that script's docstring). It stays `false` deliberately: shipping an unreviewed translator in the general-release plugin bundle would hand end users draft, unreviewed Arabic finance output without any signal that it needs native review first. Flip it to `true` in `manifest.json` only after the native review in item 5 below clears, then rerun `python3 skills/_parallax/scripts/build_bundle.py plugin` so the generated `plugin/` bundle picks it up. Do not hand-edit `plugin/`.
+`skills/_parallax/manifest.json` is the authority for what ships. `bootstrap_manifest.py` added this skill's row with `"plugin": false` (the designed safe default for a new skill — see that script's docstring). It stays `false` deliberately: shipping an unreviewed translator in the general-release plugin bundle would hand end users draft, unreviewed Arabic finance output without any signal that it needs native review first. Flip it to `true` in `manifest.json` only after the native review in item 5 below clears, then rerun `python3 skills/_parallax/scripts/build_bundle.py plugin` so the generated `plugin/` bundle picks it up. Do not hand-edit `plugin/`. While the row is `false`, `build_bundle.py` strips every `ar-SA` mention from the plugin copies of the §15 conventions, the five `lang=` skill docs, and the Chinese/Thai coverage lines, and fails the build on any mention it did not strip; add new `ar-SA` mentions to its `AR_SA_UNSHIPPED_TRANSFORMS` table.
 
 ## 5. Native review (blocks production use)
 

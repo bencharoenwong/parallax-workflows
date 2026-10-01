@@ -35,7 +35,7 @@ Thorough single-position analysis for fund managers using Parallax MCP tools.
 /parallax-deep-dive MSFT.O "Is the AI capex cycle sustainable?" lang=zh-HK register=retail
 ```
 
-Accepts RIC format. For plain tickers, resolve per conventions §1. The free-text question stays the second positional argument; keyword args: `lang=<code>` (`en` default; `zh-CN`, `zh-TW`, `zh-HK`, `th`, `ar-SA`) and optional `register=retail` (passed only when translation is requested; absent means institutional register).
+Accepts RIC format. For plain tickers, resolve per conventions §1. The free-text question stays the second positional argument; keyword args: `lang=<code>` (`en` default; `zh-CN`, `zh-TW`, `zh-HK`, `th`) and optional `register=retail` (passed only when translation is requested; absent means institutional register).
 
 ## Workflow
 

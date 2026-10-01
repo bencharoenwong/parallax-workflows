@@ -481,6 +481,89 @@ WEB_TRANSFORMS = {
 
 
 # --------------------------------------------------------------------------
+# Unshipped-language strip (plugin build only)
+#
+# A language whose translate skill is held out of the bundle (manifest
+# "plugin": false) must not be advertised by the bundle either: the lang=
+# docs and the §15 routing table would otherwise send plugin users to a skill
+# that is not installed. Applied to staged files after assembly, and only when
+# the translate skill is absent from the bundled set.
+# --------------------------------------------------------------------------
+
+AR_SA_SKILL = "translate-arabic-finance"
+AR_SA_CODE = "ar-SA"
+
+
+def _strip_ar_sa_lang_list(text: str) -> str:
+    return _swap(text, ", `ar-SA`", "", "ar-SA lang= list")
+
+
+def _strip_ar_sa_coverage(text: str) -> str:
+    return _swap(
+        text,
+        ", and ar-SA via `translate-arabic-finance`. The Arabic skill is a seed "
+        "scaffold pending native review (see its SKILL.md \"Open decisions\") — "
+        "route `ar-SA` requests there rather than falling back to English.",
+        ". Arabic requests fall back to English.",
+        "ar-SA translator language coverage")
+
+
+def _strip_ar_sa_conventions(text: str) -> str:
+    text = _swap(text, ", `th`, `ar-SA`. Any", ", `th`. Any",
+                 "conventions §15.1 supported values")
+    text = _swap(text, ", th, ar-SA.`", ", th.`",
+                 "conventions §15.1 unsupported message")
+    text = _swap(
+        text,
+        "\n`ar-SA` routes to `translate-arabic-finance`, a seed skill pending "
+        "native review (see that skill's SKILL.md \"Open decisions\"). Do not "
+        "present `ar-SA` output as production-validated until that review has "
+        "happened.\n",
+        "", "conventions §15.1 ar-SA note")
+    return _swap(
+        text,
+        "; `ar-SA` → `translate-arabic-finance` (no `target_variant` line — "
+        "omit it, same as Thai)",
+        "", "conventions §15.2 ar-SA route")
+
+
+# Keyed by path relative to skills/. Entries whose file is not staged (a
+# checkout without the translate-* skills) are skipped; strip_unshipped_ar_sa
+# then fails the build on any mention these transforms did not remove.
+AR_SA_UNSHIPPED_TRANSFORMS = {
+    "_parallax/parallax-conventions.md": _strip_ar_sa_conventions,
+    "parallax-should-i-buy/SKILL.md":
+        lambda t: _swap(t, ", `th`, `ar-SA`.", ", `th`.", "ar-SA positional list"),
+    "parallax-morning-brief/SKILL.md": _strip_ar_sa_lang_list,
+    "parallax-deep-dive/SKILL.md": _strip_ar_sa_lang_list,
+    "parallax-client-review/SKILL.md": _strip_ar_sa_lang_list,
+    "parallax-score-explainer/SKILL.md": _strip_ar_sa_lang_list,
+    "translate-chinese-finance/SKILL.md": _strip_ar_sa_coverage,
+    "translate-thai-finance/SKILL.md": _strip_ar_sa_coverage,
+}
+
+
+def strip_unshipped_ar_sa(skills_root: Path, skills: list[str]) -> None:
+    """Remove ar-SA from the staged bundle when its translate skill is not
+    bundled, then fail closed on any surviving mention."""
+    if AR_SA_SKILL in skills:
+        return
+    for rel, transform in AR_SA_UNSHIPPED_TRANSFORMS.items():
+        path = skills_root / rel
+        if path.is_file():
+            path.write_text(transform(path.read_text(encoding="utf-8")),
+                            encoding="utf-8")
+    leaks = sorted(
+        str(p.relative_to(skills_root)) for p in skills_root.rglob("*")
+        if p.is_file() and AR_SA_CODE in p.read_text(encoding="utf-8",
+                                                     errors="ignore"))
+    if leaks:
+        raise BuildError(
+            f"{AR_SA_CODE} is advertised but {AR_SA_SKILL} is not bundled: "
+            + ", ".join(leaks))
+
+
+# --------------------------------------------------------------------------
 # Source enumeration and copying (tracked files only)
 # --------------------------------------------------------------------------
 
@@ -751,6 +834,7 @@ def build_plugin() -> None:
         for name in skills:
             assemble_skill(name, skills_root)
         assemble_parallax_shared(skills_root)
+        strip_unshipped_ar_sa(skills_root, skills)
 
         # repo-root examples/ docs referenced from bundled skills ship at
         # <plugin>/examples/ so the ../../examples/ relative form resolves.
