@@ -4,6 +4,18 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-10-01: Price the ETF search endpoints; keep `search_stocks` free
+
+**Why:** `search_etfs` was listed as free and `etf_search` as unpriced. The live `search_etfs` tool description states "Cost: 1 credit", the backend price table matches, and `etf_search` is the same billed search endpoint (all checked 2026-10-01). The standing rule against publishing inferred numbers does not apply: these prices are observed, not inferred. `search_stocks` also bills 1 credit today, but that charge has no deliberate price behind it. It is the first lookup step in most workflows, so it is listed as free by design to remove friction on ticker resolution.
+
+**Impact:** `etf_search` leaves `KNOWN_UNPRICED`, so a `parallax-pair-finder` run now includes its ETF search calls in the derived total; only `etf_holdings` remains omitted for that skill. Until the `search_stocks` price change deploys, a derived total under-counts by 1 credit per `search_stocks` call; `token-costs.md` carries that as a pending note, and the live tool description wins until it says "FREE".
+
+**Supersedes:** the `etf_search` part of the `[DROP]` "Price the four remaining unpriced live endpoints" entry below. The other three endpoints stay unpriced for the reason given there.
+
+**Alternatives:** `[DROP]` Price `search_stocks` at 1 credit to match current billing, then revert once the change deploys. Rejected: a PR followed by a revert records a price the product does not intend to keep.
+
+**Flip conditions:** an account ledger shows `search_etfs` or `etf_search` billed at a different rate, or the `search_stocks` price change is abandoned.
+
 ## 2026-09-07 (Phase 4): the render gate keeps its literal; the manifest is authoritative everywhere else
 
 **Decision:** `_parallax/manifest.json` replaces the `PLUGIN_SKILLS`, `WEB_SKILLS`, `WEB_DESCRIPTIONS` and `_NINE_TWO_EXEMPT_SKILLS` literals, read through `_parallax/skill_manifest.py`. `render_gate.py` is the deliberate exception: it keeps `SKILL_ANCHORS` as a literal and is reconciled to the manifest by an equality test in both directions. Rationale is asymmetric blast radius. The gate is the last step of every skill on every host and today has no file dependency at all; a missing manifest there would fail every operator's rendered output, while the same missing file at build time fails only a developer's terminal. The equality test gives identical mechanical trust — any drift is red — without creating the failure mode. Part E's own success criterion names `PLUGIN_SKILLS`, not `SKILL_ANCHORS`, so this satisfies the phase as written.
