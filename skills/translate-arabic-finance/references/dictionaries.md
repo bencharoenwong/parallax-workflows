@@ -25,7 +25,7 @@ Standard translations for country names, months, and section headers.
 | Japan | اليابان |
 | South Korea | كوريا الجنوبية |
 | Taiwan | تايوان |
-| Singapore | سنغافورة |
+| Singapore | سنغافورة (SAMA statistics spell it سنغافورا; both circulate) |
 | India | الهند |
 | United Kingdom | المملكة المتحدة |
 | UK | المملكة المتحدة |
