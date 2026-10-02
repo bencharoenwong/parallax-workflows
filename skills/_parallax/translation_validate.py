@@ -67,7 +67,10 @@ def _literal_pattern(value: str) -> str:
     if value == "đồng":
         # A VND amount only after a number or magnitude word ("36.400 đồng",
         # "1,86 nghìn tỷ đồng"); "đồng thuận" means consensus, not currency.
-        return r"(?:(?<=\d )|(?<=\d)|(?<=tỷ )|(?<=triệu )|(?<=nghìn ))đồng"
+        # Common "đồng" compounds ("đồng thuận" = agree, "đồng thời" = at the
+        # same time) are excluded even after a number ("cả 5 đồng thuận").
+        return (r"(?:(?<=\d )|(?<=\d)|(?<=tỷ )|(?<=triệu )|(?<=nghìn ))đồng"
+                r"(?!\s+(?:thuận|thời|ý|loạt|bộ|nghĩa|hành|đều|minh|nhất|tình|lòng|nghiệp|dạng|tâm|chí)\b)")
     if value.isascii() and value.replace("$", "").isalpha():
         return rf"(?<![A-Za-z]){escaped}(?![A-Za-z])"
     return escaped

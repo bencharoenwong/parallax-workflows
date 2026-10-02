@@ -1,5 +1,7 @@
 # Translation skills end-to-end receipt — 2026-10-02
 
+> **Superseded in part by the follow-up commits on this branch (after `c6a7ce8`):** Vietnamese is held out of the plugin pending native review (so the plugin-copy claims below no longer apply to Vietnamese); Vietnamese prose now localizes number separators and magnitude words, and the shared validator accepts a separator-swapped number for `vi-VN` only; Arabic conventions were corrected against Saudi sources. The test and check counts below predate those changes.
+
 Scope: Chinese (zh-CN, zh-TW, zh-HK), Thai, Vietnamese (vi-VN), and the Arabic (ar-SA) draft. Other skills were not audited or edited in this follow-up. This receipt records verification before the translation changes were committed; no push was performed.
 
 ## Results

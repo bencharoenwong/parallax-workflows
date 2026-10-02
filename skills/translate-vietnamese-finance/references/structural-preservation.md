@@ -29,7 +29,7 @@ Translate ordinary disclosure prose completely; preserve entity names and regist
 
 ## Numerical notation and entities
 
-Preserve every value, sign, and currency. Hybrid rule: prose uses Vietnamese separators (`1.234,5`, `12,5%`, no space before `%`) and Vietnamese magnitude words (`tỷ`, `nghìn tỷ`, `triệu`, `điểm cơ bản`) without rescaling; table rows (`| ... |`) and data fields keep the source separators and `B`/`M`/`K`/`T`/`bps`. Numeric dates in prose use dd/mm/yyyy. Do not convert currencies.
+Preserve every value, sign, and currency. Hybrid rule: prose uses Vietnamese separators (`1.234,5`, `12,5%`, no space before `%`) and Vietnamese magnitude words (`tỷ`, `nghìn tỷ`, `triệu`, `điểm cơ bản`) without rescaling; table rows (`| ... |`) and data fields keep the source separators and `B`/`M`/`K`/`T`/`bps`. Numeric dates in prose use dd/mm/yyyy. Do not convert currencies. Known gap: a number with one comma group (`1,234`) is ambiguous between English thousands and a Vietnamese decimal; the validator accepts it either way, so a reviewer checks these in prose.
 A listing market does not determine reporting currency. Multi-currency comparisons are valid when the source contains them.
 Keep intentional HTML entities such as `&amp;` and `&lt;` unchanged. Escape only what the output format requires; avoid double encoding. Entity presence alone is not an error.
 

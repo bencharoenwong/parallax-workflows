@@ -83,3 +83,4 @@ Broker five-tier scale (SSI legend, TCB note p.10): Mua / Khả quan / Trung l�
 - Single-source confirmation for M2 ("cung tiền M2"), FX reserves ("dự trữ ngoại hối"), PMI, trade balance ("cán cân thương mại").
 - Factor-investing terms in Vietnamese: volatility ("độ biến động"), drawdown, quality, defensive, factor score. Only English-language sources were found; the skill keeps these in English.
 - Disclaimer boilerplate beyond SSI.
+- Validator limit: a number with one comma group (`1,234`) reads as English thousands or a Vietnamese decimal; the source check accepts it either way, so prose needs human review.

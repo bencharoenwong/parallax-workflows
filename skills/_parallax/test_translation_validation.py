@@ -227,3 +227,21 @@ def test_dong_meaning_consensus_is_not_a_currency(tmp_path):
     source, output = documents(tmp_path, "vi-VN", "Ước tính đồng thuận có thể tăng 5%.",
                                "Consensus estimates may rise 5%.")
     assert common.validate_common(str(output), "vi-VN", str(source))[2] == []
+
+
+@pytest.mark.parametrize("phrase", ["Cả 5 đồng thuận rằng doanh thu có thể tăng 5%.",
+                                    "Năm 2025 đồng thời doanh thu có thể tăng 5%."])
+def test_number_before_dong_compound_is_not_a_currency(tmp_path, phrase):
+    english = ("All 5 agree revenue may rise 5%." if "thuận" in phrase
+               else "In 2025, revenue may also rise 5%.")
+    source, output = documents(tmp_path, "vi-VN", phrase, english)
+    assert not any("Currency" in e for e in common.validate_common(str(output), "vi-VN", str(source))[2])
+
+
+def test_vietnamese_four_digit_comma_ambiguity_is_an_accepted_gap(tmp_path):
+    """Accepted gap, not a feature: "1,234" is English one thousand or a
+    Vietnamese decimal (1.234). The validator cannot tell them apart and
+    accepts it as written; a human reviewer checks these in prose."""
+    source, output = documents(tmp_path, "vi-VN", "Doanh số có thể tăng 1,234 đơn vị.",
+                               "Sales may grow 1,234 units.")
+    assert common.validate_common(str(output), "vi-VN", str(source))[2] == []
