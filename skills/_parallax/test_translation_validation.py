@@ -1,5 +1,6 @@
 """Regression cases for the audited source-fidelity failures."""
 import importlib.util
+from collections import Counter
 import json
 from pathlib import Path
 
@@ -245,3 +246,21 @@ def test_vietnamese_four_digit_comma_ambiguity_is_an_accepted_gap(tmp_path):
     source, output = documents(tmp_path, "vi-VN", "Doanh số có thể tăng 1,234 đơn vị.",
                                "Sales may grow 1,234 units.")
     assert common.validate_common(str(output), "vi-VN", str(source))[2] == []
+
+
+@pytest.mark.parametrize("text", ["chiếm 15% tỷ trọng", "với 20% tỷ lệ sở hữu", "5 tỷ phú",
+                                  "10 triệu chứng", "ถือ 3 พันธบัตร", "5千瓦", "3千克"])
+def test_compound_words_are_not_magnitude_units(text):
+    assert common._units(text) == Counter()
+
+
+@pytest.mark.parametrize("text,unit", [("đạt 5 tỷ đồng", "billion"), ("2 nghìn tỷ", "trillion"),
+                                       ("3 triệu cổ phiếu", "million"), ("รายได้ 3 พันล้าน", "billion"),
+                                       ("收入 5千", "thousand")])
+def test_magnitude_units_still_count(text, unit):
+    assert common._units(text) == Counter({unit: 1})
+
+
+@pytest.mark.parametrize("text", ["5 đồng hồ Rolex", "3 đồng đội"])
+def test_more_dong_compounds_are_not_currency(text):
+    assert common._counts(text, common.CURRENCIES) == Counter()

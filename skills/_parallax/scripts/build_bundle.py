@@ -576,11 +576,14 @@ def strip_unshipped_languages(skills_root: Path, skills: list[str]) -> None:
                                 encoding="utf-8")
         # Shared executable validators can support draft locales without
         # exposing a user-facing route. The gate checks operator-facing
-        # documentation and data.
+        # documentation and data for the language code and the held skill's
+        # name; manifest.json lists every skill by design.
         leaks = sorted(
             str(p.relative_to(skills_root)) for p in skills_root.rglob("*")
             if p.is_file() and p.suffix in (".md", ".html", ".json")
-            and lang.code in p.read_text(encoding="utf-8", errors="ignore"))
+            and p.name != "manifest.json"
+            and any(term in p.read_text(encoding="utf-8", errors="ignore")
+                    for term in (lang.code, lang.skill)))
         if leaks:
             raise BuildError(
                 f"{lang.code} is advertised but {lang.skill} is not bundled: "

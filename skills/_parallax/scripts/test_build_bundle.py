@@ -7,6 +7,8 @@ import sys
 import unicodedata
 from pathlib import Path
 
+import json
+
 import pytest
 
 # Self-test runs from the script's own directory; just import directly.
@@ -433,6 +435,23 @@ def test_language_strip_fails_closed_on_an_unhandled_mention(tmp_path, lang):
     doc.write_text(f"lang={lang.code} is supported\n", encoding="utf-8")
     with pytest.raises(bb.BuildError, match="parallax-new-skill"):
         bb.strip_unshipped_languages(tmp_path, ["parallax-new-skill"])
+
+
+@pytest.mark.parametrize("lang", bb.UNSHIPPED_LANGUAGES, ids=lambda lang: lang.code)
+def test_language_strip_fails_closed_on_a_held_skill_name(tmp_path, lang):
+    doc = tmp_path / "_parallax" / "notes.md"
+    doc.parent.mkdir()
+    doc.write_text(f"Pattern used by `{lang.skill}`.\n", encoding="utf-8")
+    with pytest.raises(bb.BuildError, match="notes.md"):
+        bb.strip_unshipped_languages(tmp_path, [])
+
+
+def test_manifest_may_list_held_skill_names(tmp_path):
+    doc = tmp_path / "_parallax" / "manifest.json"
+    doc.parent.mkdir()
+    doc.write_text(json.dumps({lang.skill: {"plugin": False} for lang in bb.UNSHIPPED_LANGUAGES}),
+                   encoding="utf-8")
+    bb.strip_unshipped_languages(tmp_path, [])
 
 
 def test_language_strips_do_not_depend_on_each_other(tmp_path):

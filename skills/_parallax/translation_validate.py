@@ -59,9 +59,21 @@ UNITS = {
 }
 
 
+# A magnitude word that also starts an ordinary compound: "15% tỷ trọng" is a
+# 15% share, "3 พันธบัตร" is 3 bonds, "5千瓦" is 5 kilowatts.
+_UNIT_COMPOUNDS = {
+    "tỷ": r"(?!\s*(?:lệ|trọng|suất|phú|giá|số)\b)",
+    "triệu": r"(?!\s*chứng\b)",
+    "พัน": r"(?!ธ)",
+    "千": r"(?![瓦克米])",
+}
+
+
 def _literal_pattern(value: str) -> str:
     """ASCII identifiers need boundaries; Han/Thai suffixes attach to numbers."""
     escaped = re.escape(value)
+    if value in _UNIT_COMPOUNDS:
+        return escaped + _UNIT_COMPOUNDS[value]
     if value == "บาท":
         return r"(?<!บท)บาท"  # บทบาท means "role", not a baht amount.
     if value == "đồng":
@@ -70,7 +82,7 @@ def _literal_pattern(value: str) -> str:
         # Common "đồng" compounds ("đồng thuận" = agree, "đồng thời" = at the
         # same time) are excluded even after a number ("cả 5 đồng thuận").
         return (r"(?:(?<=\d )|(?<=\d)|(?<=tỷ )|(?<=triệu )|(?<=nghìn ))đồng"
-                r"(?!\s+(?:thuận|thời|ý|loạt|bộ|nghĩa|hành|đều|minh|nhất|tình|lòng|nghiệp|dạng|tâm|chí)\b)")
+                r"(?!\s+(?:thuận|thời|ý|loạt|bộ|nghĩa|hành|đều|minh|nhất|tình|lòng|nghiệp|dạng|tâm|chí|hồ|đội|phục|bằng|cảm)\b)")
     if value.isascii() and value.replace("$", "").isalpha():
         return rf"(?<![A-Za-z]){escaped}(?![A-Za-z])"
     return escaped

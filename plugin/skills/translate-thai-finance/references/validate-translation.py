@@ -18,7 +18,6 @@ if _common_path is None:
 _spec = importlib.util.spec_from_file_location("translation_common", _common_path)
 _common = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_common)
-apply_waivers = _common.apply_waivers
 
 
 # Known no-space intra-word doublings from SKILL.md §10 "Common AI Errors —

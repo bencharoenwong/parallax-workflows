@@ -14,7 +14,7 @@ JIT-load this file before drafting a new skill, before committing any change tha
 
 `references/` files are JIT-loaded only when SKILL.md directs them. Splitting reference material out of SKILL.md and behind explicit load directives reclaims session context for the work the operator actually came to do.
 
-The pattern is established outside this convention by `translate-chinese-finance` (7 references files), `translate-thai-finance` (5), `translate-arabic-finance` (7), and `_parallax/house-view/` (10+ Python module files plus references). This convention codifies what those skills did organically.
+The pattern is established outside this convention by `translate-chinese-finance` and `translate-thai-finance` (several references files each), and `_parallax/house-view/` (10+ Python module files plus references). This convention codifies what those skills did organically.
 
 ## When to split
 

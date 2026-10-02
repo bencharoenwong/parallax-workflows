@@ -23,7 +23,6 @@ if _common_path is None:
 _spec = importlib.util.spec_from_file_location("translation_common", _common_path)
 _common = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_common)
-apply_waivers = _common.apply_waivers
 
 
 # Arabic core block. Covers Arabic letters, Arabic-Indic digits, and Arabic
