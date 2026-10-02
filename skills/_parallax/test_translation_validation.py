@@ -264,3 +264,27 @@ def test_magnitude_units_still_count(text, unit):
 @pytest.mark.parametrize("text", ["5 đồng hồ Rolex", "3 đồng đội"])
 def test_more_dong_compounds_are_not_currency(text):
     assert common._counts(text, common.CURRENCIES) == Counter()
+
+
+@pytest.mark.parametrize("lang, text, original", [
+    ("th", "เงินบาทอ่อนค่าลง", "The baht weakened."),
+    ("zh", "人民币走弱。", "The renminbi weakened."),
+    ("vi-VN", "Đô la Mỹ suy yếu, có thể 5%.", "The dollar weakened, maybe 5%."),
+])
+def test_english_currency_names_match_target_names(tmp_path, lang, text, original):
+    source, output = documents(tmp_path, lang, text, original)
+    assert common.validate_common(str(output), lang, str(source))[2] == []
+
+
+def test_specific_dollar_name_is_not_us_dollar(tmp_path):
+    source, output = documents(tmp_path, "zh", "港元走弱。", "The Hong Kong dollar weakened.")
+    assert common.validate_common(str(output), "zh", str(source))[2] == []
+    source, output = documents(tmp_path, "zh", "美元走弱。", "The Hong Kong dollar weakened.")
+    errors = common.validate_common(str(output), "zh", str(source))[2]
+    assert any("Currency" in e for e in errors)
+
+
+def test_currency_substitution_still_fails(tmp_path):
+    source, output = documents(tmp_path, "zh", "收入 HKD 5M。", "Revenue USD 5M.")
+    errors = common.validate_common(str(output), "zh", str(source))[2]
+    assert any("Currency" in e for e in errors)

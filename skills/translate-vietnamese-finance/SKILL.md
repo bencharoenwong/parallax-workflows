@@ -9,6 +9,12 @@ Translate existing financial content into formal written Vietnamese for Vietnam-
 
 **Locale:** `vi-VN`. **JSON translation field:** `vietnamese_translation`.
 
+## Open decisions
+
+Pending native finance review; evidence in `references/sources.md`. HOLD label (Nắm giữ vs broker TRUNG LẬP). VND placement in prose. Factor terms (volatility, drawdown, quality, defensive, factor score) stay English until a Vietnamese source exists. A "downside" rating-box noun. The net-profit-attributable-to-parent caption. Weaker-sourced macro terms (M2, FX reserves, PMI, trade balance). A Vietnamese-market disclaimer from Compliance. One-comma-group numbers (`1,234`) need human review. Seed corrections must be replaced with 3–5 native-reviewed samples. A passing validator implies no review.
+
+## Translation rules
+
 Use natural Vietnamese economic terms alongside English finance abbreviations. Keep ticker/RIC identifiers, financial ratios, named factor labels and technical risk identifiers in English. Gloss once per document when useful. Use danh mục, vốn chủ sở hữu, chỉ số tham chiếu and hệ số thanh toán nhanh consistently. Keep ECL distinct from Expected Shortfall (ES). P/FCF must retain dòng tiền tự do, not operating cash flow.
 
 Numbers (hybrid): in prose, swap to Vietnamese separators (`12.5%` → `12,5%`; `1,234.5` → `1.234,5`) and translate magnitude words and abbreviations without rescaling (`2.1 trillion` → `2,1 nghìn tỷ`; `5B` → `5 tỷ`; `bps` → `điểm cơ bản`). Never rescale (`1.86 trillion` is `1,86 nghìn tỷ`, not `1.860 tỷ`). Table rows and data fields keep the source form. Digits, signs, and order of magnitude never change; the validator checks this against the source. Keep source currencies; Vietnamese language does not imply VND. Keep Western issuer names in English. Use verified official Vietnamese names for domestic issuers; preserve the security identifier to distinguish companies with similar names.
