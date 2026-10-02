@@ -11,7 +11,7 @@ Translate existing financial content into formal written Vietnamese for Vietnam-
 
 ## Open decisions
 
-Pending native finance review; evidence in `references/sources.md`. HOLD label (Nắm giữ vs broker TRUNG LẬP). VND placement in prose. Factor terms (volatility, drawdown, quality, defensive, factor score) stay English until a Vietnamese source exists. A "downside" rating-box noun. The net-profit-attributable-to-parent caption. Weaker-sourced macro terms (M2, FX reserves, PMI, trade balance). A Vietnamese-market disclaimer from Compliance. One-comma-group numbers (`1,234`) need human review. Seed corrections must be replaced with 3–5 native-reviewed samples. A passing validator implies no review.
+Pending native finance review; evidence in `references/sources.md`. HOLD label (Nắm giữ vs broker TRUNG LẬP). VND placement in prose. Factor terms (volatility, drawdown, quality, defensive, factor score) stay English until a Vietnamese source exists. A "downside" rating-box noun. The net-profit-attributable-to-parent caption. Weaker-sourced macro terms (M2, FX reserves, PMI, trade balance). A Vietnamese-market disclaimer from Compliance. One-comma-group numbers (`1,234`) need human review. Seed corrections must be replaced with 3–5 native-reviewed samples. No review or pipeline is implied by a passing validator.
 
 ## Translation rules
 

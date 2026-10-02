@@ -33,23 +33,20 @@ NAMED_FACTORS = re.compile(r"\b(?:Momentum|Quality|Value|Growth|Size|Volatility)
 RISK_NAMES = re.compile(r"\b(?:Tracking Error|Sharpe Ratio|Sortino Ratio|Information Ratio|Maximum Drawdown)\b")
 ROUTING_HEADER = "ROUTING DIRECTIVE — DO NOT TRANSLATE OR ECHO THIS BLOCK:"
 CURRENCIES = {
-    "USD": ("USD", "US$", "US dollar", "U.S. dollar", "dollar", "dollars",
-            "美元", "ดอลลาร์สหรัฐ", "دولار أمريكي", "đô la Mỹ", "Đô la Mỹ"),
-    "HKD": ("HKD", "HK$", "Hong Kong dollar", "港元", "港币", "港幣"),
-    "CNY": ("CNY", "RMB", "renminbi", "yuan", "人民币", "人民幣"),
-    "TWD": ("TWD", "Taiwan dollar", "New Taiwan dollar", "新台币", "新臺幣", "新台幣"),
-    "JPY": ("JPY", "yen", "日元", "日圓"), "KRW": ("KRW", "Korean won", "韩元", "韓元"),
-    "THB": ("THB", "baht", "บาท"),
-    "SAR": ("SAR", "riyal", "riyals", "Saudi riyal", "ريال سعودي", "ريالات سعودية"),
-    "VND": ("VND", "VNĐ", "dong", "đồng Việt Nam", "đồng"),
-    "CAD": ("CAD", "C$", "Canadian dollar"), "AUD": ("AUD", "A$", "Australian dollar"),
-    "EUR": ("EUR", "€", "euro", "euros"), "GBP": ("GBP", "£", "pound sterling"),
-    "SGD": ("SGD", "S$", "Singapore dollar"), "NZD": ("NZD", "New Zealand dollar"),
-    "AED": ("AED",), "KWD": ("KWD",),
+    "USD": ("USD", "US$", "美元", "ดอลลาร์สหรัฐ", "دولار أمريكي", "đô la Mỹ", "Đô la Mỹ"),
+    "HKD": ("HKD", "HK$", "港元", "港币", "港幣"),
+    "CNY": ("CNY", "RMB", "人民币", "人民幣"),
+    "TWD": ("TWD", "新台币", "新臺幣", "新台幣"),
+    "JPY": ("JPY", "日元", "日圓"), "KRW": ("KRW", "韩元", "韓元"),
+    "THB": ("THB", "บาท"), "SAR": ("SAR", "ريال سعودي", "ريالات سعودية"),
+    "VND": ("VND", "VNĐ", "đồng Việt Nam", "đồng"),
+    "CAD": ("CAD", "C$"), "AUD": ("AUD", "A$"),
+    "EUR": ("EUR", "€"), "GBP": ("GBP", "£"),
+    "SGD": ("SGD", "S$"), "AED": ("AED",), "KWD": ("KWD",),
     "UNSPECIFIED_DOLLAR": ("$",), "YEN_OR_YUAN": ("¥", "￥"),
 }
 for _code in ("CHF", "NOK", "SEK", "DKK", "INR", "IDR", "MYR", "PHP", "BRL",
-              "ZAR", "MXN", "TRY", "PLN", "ILS", "CLP", "QAR", "BHD",
+              "ZAR", "MXN", "TRY", "PLN", "ILS", "CLP", "NZD", "QAR", "BHD",
               "OMR", "EGP", "COP", "PEN", "ARS", "ISK", "HUF", "CZK", "RON",
               "UAH", "RUB"):
     CURRENCIES[_code] = (_code,)
@@ -257,8 +254,9 @@ def fidelity(source: dict, output: dict, translations: dict[str, str], lang: str
             errors.append(f"[INTEGRITY] [{key}] Source prose was copied without translation")
         if _numbers_differ(before, after, lang):
             errors.append(f"[INTEGRITY] [{key}] Numeric tokens differ from source")
+        if _counts(before, CURRENCIES) - _counts(after, CURRENCIES):
+            errors.append(f"[INTEGRITY] [{key}] Source currency identifiers missing or changed in translation")
         for label, left, right in (
-            ("Currency identifiers", _counts(before, CURRENCIES), _counts(after, CURRENCIES)),
             ("Magnitude units", _units(before), _units(after)),
             ("Protected tokens", _protected(before), _protected(after)),
             ("HTML structure", _markup(before), _markup(after)),

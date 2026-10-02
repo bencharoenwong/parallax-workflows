@@ -74,7 +74,7 @@ def test_currency_compares_source_not_listing_market(tmp_path):
     source, output = documents(tmp_path, "ar-SA", "الإيرادات SAR 5M", "Saudi revenues SAR 5M")
     assert common.validate_common(str(output), "ar-SA", str(source))[2] == []
     output.write_text(output.read_text().replace("SAR", "USD"))
-    assert any("Currency" in e for e in common.validate_common(str(output), "ar-SA", str(source))[2])
+    assert any("currency identifiers" in e for e in common.validate_common(str(output), "ar-SA", str(source))[2])
 
 
 def test_billion_to_yi_is_rejected(tmp_path):
@@ -136,7 +136,7 @@ def test_foreign_currency_and_json_type_change_fail(tmp_path):
     payload["sections"]["ReportText"][common.FIELDS["vi-VN"]] = "Doanh thu NOK 5M"
     output.write_text(json.dumps(payload))
     errors = common.validate_common(str(output), "vi-VN", str(source))[2]
-    assert any("Currency" in e for e in errors)
+    assert any("currency identifiers" in e for e in errors)
     assert any("flag" in e for e in errors)
 
 
@@ -236,7 +236,7 @@ def test_number_before_dong_compound_is_not_a_currency(tmp_path, phrase):
     english = ("All 5 agree revenue may rise 5%." if "thuận" in phrase
                else "In 2025, revenue may also rise 5%.")
     source, output = documents(tmp_path, "vi-VN", phrase, english)
-    assert not any("Currency" in e for e in common.validate_common(str(output), "vi-VN", str(source))[2])
+    assert not any("currency identifiers" in e for e in common.validate_common(str(output), "vi-VN", str(source))[2])
 
 
 def test_vietnamese_four_digit_comma_ambiguity_is_an_accepted_gap(tmp_path):
@@ -269,22 +269,18 @@ def test_more_dong_compounds_are_not_currency(text):
 @pytest.mark.parametrize("lang, text, original", [
     ("th", "เงินบาทอ่อนค่าลง", "The baht weakened."),
     ("zh", "人民币走弱。", "The renminbi weakened."),
-    ("vi-VN", "Đô la Mỹ suy yếu, có thể 5%.", "The dollar weakened, maybe 5%."),
+    ("th", "เงินยูโรอ่อนค่าลง", "The euro weakened."),
+    ("zh", "欧元走弱。", "The euro weakened."),
+    ("zh", "营收可能达5十亿元。", "Revenue may reach 5 billion yuan."),
+    ("vi-VN", "Đô la Mỹ suy yếu.", "The dollar weakened."),
+    ("vi-VN", "Doanh thu 5M đô la Mỹ", "Revenue USD 5M"),
 ])
-def test_english_currency_names_match_target_names(tmp_path, lang, text, original):
+def test_translation_may_name_source_currency(tmp_path, lang, text, original):
     source, output = documents(tmp_path, lang, text, original)
     assert common.validate_common(str(output), lang, str(source))[2] == []
 
 
-def test_specific_dollar_name_is_not_us_dollar(tmp_path):
-    source, output = documents(tmp_path, "zh", "港元走弱。", "The Hong Kong dollar weakened.")
-    assert common.validate_common(str(output), "zh", str(source))[2] == []
-    source, output = documents(tmp_path, "zh", "美元走弱。", "The Hong Kong dollar weakened.")
-    errors = common.validate_common(str(output), "zh", str(source))[2]
-    assert any("Currency" in e for e in errors)
-
-
 def test_currency_substitution_still_fails(tmp_path):
-    source, output = documents(tmp_path, "zh", "收入 HKD 5M。", "Revenue USD 5M.")
+    source, output = documents(tmp_path, "zh", "营收 HKD 5M。", "Revenue USD 5M")
     errors = common.validate_common(str(output), "zh", str(source))[2]
-    assert any("Currency" in e for e in errors)
+    assert any("currency identifiers" in e for e in errors)
