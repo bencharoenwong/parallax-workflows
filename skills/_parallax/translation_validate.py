@@ -48,20 +48,22 @@ CURRENCIES = {
 # English currency names, so a source that spells a currency out is tracked
 # like one that uses a code. Each key also lists its native names in every
 # target language, because the check requires every source currency to
-# survive in the translation. Bare "dollar", "pound", and "won" are left out:
-# they are ambiguous or common English words.
+# survive in the translation. Ambiguous English names ("dollar", "pound",
+# "yuan", "riyal") are left out and "won" counts only after an amount. Any
+# native name that is part of an ordinary word is left out too (元 in 多元化,
+# يوان in ديوان, วอน in อ้อนวอน, yên in yên tâm).
 _NAMED = {
-    "USD": ("US dollar", "US dollars", "U.S. dollar", "U.S. dollars"),
+    "USD": ("US dollar", "US dollars", "U.S. dollar", "U.S. dollars", "دولار"),
     "HKD": ("Hong Kong dollar", "Hong Kong dollars", "ดอลลาร์ฮ่องกง", "دولار هونغ كونغ", "đô la Hồng Kông"),
-    "SGD": ("Singapore dollar", "Singapore dollars", "新加坡元", "新元", "ดอลลาร์สิงคโปร์", "دولار سنغافوري", "đô la Singapore"),
+    "SGD": ("Singapore dollar", "Singapore dollars", "新加坡元", "ดอลลาร์สิงคโปร์", "دولار سنغافوري", "đô la Singapore"),
     "EUR": ("euro", "euros", "Euro", "Euros", "欧元", "歐元", "ยูโร", "يورو"),
-    "GBP": ("pound sterling", "pounds sterling", "British pound", "British pounds", "pounds",
+    "GBP": ("pound sterling", "pounds sterling", "British pound", "British pounds",
             "英镑", "英鎊", "ปอนด์", "جنيه إسترليني", "bảng Anh"),
     "JPY": ("yen", "Japanese yen", "เยน", "ين ياباني", "yên Nhật"),
-    "CNY": ("yuan", "renminbi", "Chinese yuan", "元", "หยวน", "يوان", "nhân dân tệ"),
+    "CNY": ("renminbi", "Chinese yuan", "หยวน", "يوان صيني", "nhân dân tệ"),
     "THB": ("baht", "Thai baht", "泰铢", "泰銖", "بات تايلندي"),
-    "SAR": ("riyal", "riyals", "Saudi riyal", "Saudi riyals", "沙特里亚尔", "ริยาล"),
-    "KRW": ("Korean won", "วอน", "وون كوري", "won Hàn Quốc"),
+    "SAR": ("Saudi riyal", "Saudi riyals", "沙特里亚尔", "里亚尔", "ริยาล"),
+    "KRW": ("Korean won", "won", "วอนเกาหลี", "وون كوري", "won Hàn Quốc"),
     "VND": ("dong", "Vietnamese dong"),
 }
 for _code, _names in _NAMED.items():
@@ -90,9 +92,28 @@ _UNIT_COMPOUNDS = {
 }
 
 
+# A Vietnamese currency word counts only right after an amount: "36.400 đồng",
+# "1,86 nghìn tỷ đồng", "5 triệu won".
+_AFTER_AMOUNT = r"(?:(?<=\d )|(?<=\d)|(?<=tỷ )|(?<=triệu )|(?<=nghìn ))"
+# A currency name that also starts or ends a non-currency compound: 欧元区 and
+# "euro area" are the eurozone, 卡塔尔里亚尔 is the Qatari riyal, and bare
+# دولار must not count as USD when it names another dollar.
+_CURRENCY_COMPOUNDS = {
+    "euro": r"(?<![A-Za-z])euro(?![A-Za-z]|\s+area)",
+    "Euro": r"(?<![A-Za-z])Euro(?![A-Za-z]|\s+[Aa]rea)",
+    "欧元": r"欧元(?![区區])", "歐元": r"歐元(?![区區])",
+    "ยูโร": r"ยูโร(?!โซน)", "يورو": r"(?<!منطقة ال)يورو",
+    "里亚尔": r"(?<![尔曼门朗])里亚尔",
+    "دولار": r"دولار(?!\s+(?:هون|سنغافوري|أسترالي|كندي|تايواني|نيوزيلندي))",
+    "won": _AFTER_AMOUNT + r"won(?![A-Za-z'’])",
+}
+
+
 def _literal_pattern(value: str) -> str:
     """ASCII identifiers need boundaries; Han/Thai suffixes attach to numbers."""
     escaped = re.escape(value)
+    if value in _CURRENCY_COMPOUNDS:
+        return _CURRENCY_COMPOUNDS[value]
     if value in _UNIT_COMPOUNDS:
         return escaped + _UNIT_COMPOUNDS[value]
     if value == "บาท":
@@ -102,7 +123,7 @@ def _literal_pattern(value: str) -> str:
         # "1,86 nghìn tỷ đồng"); "đồng thuận" means consensus, not currency.
         # Common "đồng" compounds ("đồng thuận" = agree, "đồng thời" = at the
         # same time) are excluded even after a number ("cả 5 đồng thuận").
-        return (r"(?:(?<=\d )|(?<=\d)|(?<=tỷ )|(?<=triệu )|(?<=nghìn ))đồng"
+        return (_AFTER_AMOUNT + r"đồng"
                 r"(?!\s+(?:thuận|thời|ý|loạt|bộ|nghĩa|hành|đều|minh|nhất|tình|lòng|nghiệp|dạng|tâm|chí|hồ|đội|phục|bằng|cảm)\b)")
     if value.isascii() and value.replace("$", "").replace(" ", "").replace(".", "").isalpha():
         return rf"(?<![A-Za-z]){escaped}(?![A-Za-z])"

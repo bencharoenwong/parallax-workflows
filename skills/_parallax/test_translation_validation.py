@@ -290,8 +290,8 @@ def test_currency_substitution_still_fails(tmp_path):
 # substitution cannot pass just because the source spelled the currency out.
 @pytest.mark.parametrize("lang, text, original", [
     ("th", "รายได้ 5 ล้านบาท", "Revenue of 5 million euros"),
-    ("zh", "营收5百万港元", "Revenue of 5 million yuan"),
-    ("vi-VN", "Doanh thu 5 triệu đô la Mỹ", "Revenue of 5 million pounds"),
+    ("zh", "营收5百万港元", "Revenue of 5 million Chinese yuan"),
+    ("vi-VN", "Doanh thu 5 triệu đô la Mỹ", "Revenue of 5 million pounds sterling"),
     ("ar-SA", "الإيرادات 5 مليون دولار أمريكي", "Revenue of 5 million Saudi riyals"),
 ])
 def test_named_source_currency_substitution_fails(tmp_path, lang, text, original):
@@ -306,19 +306,26 @@ def test_named_source_currency_substitution_fails(tmp_path, lang, text, original
     ("ar-SA", "الإيرادات 5 مليون يورو", "Revenue of 5 million euros"),
     ("vi-VN", "Doanh thu 5 triệu euro", "Revenue of 5 million euros"),
     ("zh", "营收5百万英镑", "Revenue of 5 million pounds sterling"),
-    ("th", "รายได้ 5 ล้านปอนด์", "Revenue of 5 million pounds"),
-    ("vi-VN", "Doanh thu 5 triệu bảng Anh", "Revenue of 5 million pounds"),
+    ("th", "รายได้ 5 ล้านปอนด์", "Revenue of 5 million British pounds"),
+    ("vi-VN", "Doanh thu 5 triệu bảng Anh", "Revenue of 5 million pounds sterling"),
     ("zh", "营收5百万日元", "Revenue of 5 million yen"),
     ("th", "รายได้ 5 ล้านเยน", "Revenue of 5 million yen"),
-    ("vi-VN", "Doanh thu 5 triệu yên Nhật", "Revenue of 5 million yen"),
-    ("th", "รายได้ 5 ล้านหยวน", "Revenue of 5 million yuan"),
-    ("vi-VN", "Doanh thu 5 triệu nhân dân tệ", "Revenue of 5 million yuan"),
+    ("vi-VN", "Doanh thu 5 triệu yên Nhật", "Revenue of 5 million Japanese yen"),
+    ("th", "รายได้ 5 ล้านหยวน", "Revenue of 5 million renminbi"),
+    ("vi-VN", "Doanh thu 5 triệu nhân dân tệ", "Revenue of 5 million Chinese yuan"),
     ("zh", "营收5百万泰铢", "Revenue of 5 million baht"),
     ("ar-SA", "الإيرادات 5 مليون ريال سعودي", "Revenue of 5 million Saudi riyals"),
     ("zh", "营收5百万港元", "Revenue of 5 million Hong Kong dollars"),
     ("vi-VN", "Doanh thu 5 triệu đô la Mỹ", "Revenue of 5 million US dollars"),
     ("zh", "营收5百万新加坡元", "Revenue of 5 million Singapore dollars"),
-    ("th", "รายได้ 5 ล้านวอน", "Revenue of 5 million Korean won"),
+    ("th", "รายได้ 5 ล้านวอนเกาหลี", "Revenue of 5 million Korean won"),
+    ("vi-VN", "Doanh thu 5 triệu won", "Revenue of 5 million Korean won"),
+    ("ar-SA", "الإيرادات 5 مليون دولار", "Revenue of 5 million US dollars"),
+    ("zh", "营收5百万里亚尔", "Revenue of 5 million Saudi riyals"),
+    ("ar-SA", "الإيرادات 5 مليون يوان صيني", "Revenue of 5 million renminbi"),
+    ("zh", "营收5百万卡塔尔里亚尔", "Revenue of 5 million Qatari riyals"),
+    ("ar-SA", "الإيرادات 5 مليون جنيه مصري", "Revenue of 5 million Egyptian pounds"),
+    ("zh", "欧元区营收增长", "Euro area revenue grew"),
     ("vi-VN", "Doanh thu 5 triệu đồng", "Revenue of 5 million Vietnamese dong"),
 ])
 def test_named_source_currency_rendered_natively_passes(tmp_path, lang, text, original):
@@ -328,6 +335,31 @@ def test_named_source_currency_rendered_natively_passes(tmp_path, lang, text, or
 
 def test_named_currency_aliases_respect_word_boundaries():
     assert common._counts("Hongkong dongle and wonderful euroclear", common.CURRENCIES) == Counter()
+
+
+# Each case swaps the source currency for another while the output still
+# contains a word that shares letters with the source currency's name.
+@pytest.mark.parametrize("lang, text, original", [
+    ("zh", "营收5百万美元，投资组合多元化", "Revenue CNY 5M"),
+    ("zh", "5百万美元，欧元区", "EUR 5M"),
+    ("th", "5 ล้านดอลลาร์สหรัฐ ยูโรโซน", "EUR 5M"),
+    ("ar-SA", "5 مليون دولار أمريكي في منطقة اليورو", "EUR 5M"),
+    ("zh", "营收5百万卡塔尔里亚尔", "Revenue of 5 million Saudi riyals"),
+    ("ar-SA", "الإيرادات 5 مليون دولار كندي", "Revenue of 5 million US dollars"),
+    ("ar-SA", "الإيرادات 5 مليون دولار، الديوان", "Revenue CNY 5M"),
+    ("th", "รายได้ 5 ล้านบาท อ้อนวอน", "Revenue KRW 5M"),
+])
+def test_ordinary_word_does_not_stand_in_for_source_currency(tmp_path, lang, text, original):
+    source, output = documents(tmp_path, lang, text, original)
+    errors = common.validate_common(str(output), lang, str(source))[2]
+    assert any("currency" in e.lower() for e in errors)
+
+
+@pytest.mark.parametrize("text", ["The company won the contract.", "We won't cut guidance.",
+                                  "5 million riyals", "5 million pounds", "5 million yuan",
+                                  "Rủi ro yên tâm"])
+def test_ambiguous_names_are_not_currency(text):
+    assert common._counts(text, common.CURRENCIES) == Counter()
 
 
 def test_long_unbroken_token_is_linear_time(tmp_path):
