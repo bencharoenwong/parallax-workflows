@@ -1,6 +1,6 @@
 ---
 name: translate-vietnamese-finance
-description: Translate supplied finance analysis to Vietnamese (vi-VN) with precise financial terminology and source-preserving numbers.
+description: Translate supplied finance analysis to Vietnamese (vi-VN) with precise financial terminology, Vietnamese number style in prose, and source-preserving values.
 ---
 
 # Vietnamese finance translation
@@ -11,15 +11,15 @@ Translate existing financial content into formal written Vietnamese for Vietnam-
 
 Use natural Vietnamese economic terms alongside English finance abbreviations. Keep ticker/RIC identifiers, financial ratios, named factor labels and technical risk identifiers in English. Gloss once per document when useful. Use danh mục, vốn chủ sở hữu, chỉ số tham chiếu and hệ số thanh toán nhanh consistently. Keep ECL distinct from Expected Shortfall (ES). P/FCF must retain dòng tiền tự do, not operating cash flow.
 
-Preserve source numeric separators even when local publications use decimal commas. Keep source currencies; Vietnamese language does not imply VND. Keep Western issuer names in English. Use verified official Vietnamese names for domestic issuers; preserve the security identifier to distinguish companies with similar names.
+Numbers (hybrid): in prose, swap to Vietnamese separators (`12.5%` → `12,5%`; `1,234.5` → `1.234,5`) and translate magnitude words and abbreviations without rescaling (`2.1 trillion` → `2,1 nghìn tỷ`; `5B` → `5 tỷ`; `bps` → `điểm cơ bản`). Never rescale (`1.86 trillion` is `1,86 nghìn tỷ`, not `1.860 tỷ`). Table rows and data fields keep the source form. Digits, signs, and order of magnitude never change; the validator checks this against the source. Keep source currencies; Vietnamese language does not imply VND. Keep Western issuer names in English. Use verified official Vietnamese names for domestic issuers; preserve the security identifier to distinguish companies with similar names.
 
-Use concise formal prose, without literal English idioms. Preserve source uncertainty such as có thể, dự kiến and nhiều khả năng. Retail uses plain Vietnamese explanations and dual-label ratings. Ratings and scenario translations in the dictionary are product house style. ES and operating-leverage glosses remain provisional; keep the English identifier until native finance review. Supplied HTML can be translated with its structure preserved. Generating a new CIO HTML report requires an external pipeline; otherwise deliver JSON or markdown.
+Use concise formal prose, without literal English idioms. Preserve source uncertainty such as có thể, dự kiến and nhiều khả năng. Ratings render dual-label in every register (`Mua (Buy)`): Vietnamese broker ratings are relative to the market and include tiers Parallax lacks, so the English label prevents a reader mistaking a Parallax rating for a broker rating. Never use the broker tiers KHẢ QUAN or KÉM KHẢ QUAN for a Parallax rating. Match Vietnamese sell-side register (sourced, `references/sources.md`): analyst voice "Chúng tôi", never address the reader; LNTT/LNST for profit lines; "svck" for YoY in prose; "room ngoại" / "room tín dụng" stay loanwords; billion = tỷ, trillion = nghìn tỷ. FTSE Russell, not MSCI, has upgraded Vietnam; the State Bank (NHNN) and the State Securities Commission (UBCKNN) are distinct regulators. Retail uses plain Vietnamese explanations. Scenario translations in the dictionary are product house style. ES and operating-leverage glosses remain provisional; keep the English identifier until native finance review. Supplied HTML can be translated with its structure preserved. Generating a new CIO HTML report requires an external pipeline; otherwise deliver JSON or markdown.
 
 ## Source fidelity
 
 Translate the entire supplied content. Preserve claims, uncertainty, comparisons, section coverage, paragraph breaks, disclosures, and source dates. Translate a hedge when the source hedges. Do not summarize, add advice, or force a table label from keyword matches.
 
-Copy numerical tokens, signs, currency identifiers, and magnitude units exactly. Preserve the currency of each amount; listing market does not determine reporting currency. Keep `B`, `M`, `K`, `T`, and `bps` unchanged. Convert neither units nor numeric separators in this pass. Keep ECL distinct from Expected Shortfall / ES / CVaR; a portfolio report can discuss genuine ECL.
+Preserve every value, sign, and currency identifier; apply the hybrid number rule above. Preserve the currency of each amount; listing market does not determine reporting currency. Keep ECL distinct from Expected Shortfall / ES / CVaR; a portfolio report can discuss genuine ECL.
 
 Preserve tickers/RICs, URLs, placeholders, footnote markers, HTML structure and non-text attributes. Preserve intentional HTML entities. Leave no-translate blocks intact. Keep source data fields; do not silently omit tables or charts.
 
@@ -41,4 +41,4 @@ For Chinese, also pass `--locale` if the output lacks locale metadata. Fix integ
 
 The validator checks structure and protected values, not semantic equivalence. Compare source and translation for meaning, uncertainty, completeness, issuer identity and rating strength. In a host without shell access, perform those checks manually and state automated validation was unavailable.
 
-Use `references/language-style.md` only for the applicable rule or register. Consult the relevant rows of `references/dictionaries.md` and `references/terminology-corrections.md` when a term needs clarification. Do not load every reference or runtime dictionary. For generating CIO HTML, read `references/cio-report-format.md` and verify the external pipeline exists; otherwise deliver JSON or markdown. Do not invent a pipeline.
+Use `references/language-style.md` only for the applicable rule or register. Consult the relevant rows of `references/dictionaries.md` and `references/terminology-corrections.md` when a term needs clarification. Do not load every reference or runtime dictionary. `references/sources.md` records the broker reports and sources behind these rules; load it only when a term's basis is questioned. For generating CIO HTML, read `references/cio-report-format.md` and verify the external pipeline exists; otherwise deliver JSON or markdown. Do not invent a pipeline.

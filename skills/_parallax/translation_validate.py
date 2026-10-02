@@ -39,7 +39,7 @@ CURRENCIES = {
     "TWD": ("TWD", "新台币", "新臺幣", "新台幣"),
     "JPY": ("JPY", "日元", "日圓"), "KRW": ("KRW", "韩元", "韓元"),
     "THB": ("THB", "บาท"), "SAR": ("SAR", "ريال سعودي", "ريالات سعودية"),
-    "VND": ("VND", "VNĐ", "đồng Việt Nam"),
+    "VND": ("VND", "VNĐ", "đồng Việt Nam", "đồng"),
     "CAD": ("CAD", "C$"), "AUD": ("AUD", "A$"),
     "EUR": ("EUR", "€"), "GBP": ("GBP", "£"),
     "SGD": ("SGD", "S$"), "AED": ("AED",), "KWD": ("KWD",),
@@ -64,6 +64,10 @@ def _literal_pattern(value: str) -> str:
     escaped = re.escape(value)
     if value == "บาท":
         return r"(?<!บท)บาท"  # บทบาท means "role", not a baht amount.
+    if value == "đồng":
+        # A VND amount only after a number or magnitude word ("36.400 đồng",
+        # "1,86 nghìn tỷ đồng"); "đồng thuận" means consensus, not currency.
+        return r"(?:(?<=\d )|(?<=\d)|(?<=tỷ )|(?<=triệu )|(?<=nghìn ))đồng"
     if value.isascii() and value.replace("$", "").isalpha():
         return rf"(?<![A-Za-z]){escaped}(?![A-Za-z])"
     return escaped
@@ -198,6 +202,28 @@ def source_sections(data: dict) -> dict[str, str]:
             if isinstance(v, str) and ("sections" in data or k.endswith("Text"))}
 
 
+_SEPARATOR_SWAP = str.maketrans(".,", ",.")
+
+
+def _numbers_differ(before: str, after: str, lang: str) -> bool:
+    """Compare numeric tokens. Vietnamese prose may localize separators
+    (12.5% -> 12,5%; 1,234.5 -> 1.234,5) while tables keep the source form, so
+    for vi-VN a translated token matches its source as written or swapped.
+    Digits, signs, and order of magnitude must still match."""
+    left = Counter(re.findall(NUMBER, before))
+    right = re.findall(NUMBER, after)
+    if lang != "vi-VN":
+        return left != Counter(right)
+    for token in right:
+        for candidate in (token, token.translate(_SEPARATOR_SWAP)):
+            if left[candidate] > 0:
+                left[candidate] -= 1
+                break
+        else:
+            return True
+    return +left != Counter()
+
+
 def fidelity(source: dict, output: dict, translations: dict[str, str], lang: str = "zh") -> list[str]:
     errors = []
     originals = source_sections(source)
@@ -211,8 +237,9 @@ def fidelity(source: dict, output: dict, translations: dict[str, str], lang: str
         before, after = originals[key], translations[key]
         if before.strip() == after.strip() and re.search(r"[A-Za-z]{3,}\s+[A-Za-z]{3,}", before):
             errors.append(f"[INTEGRITY] [{key}] Source prose was copied without translation")
+        if _numbers_differ(before, after, lang):
+            errors.append(f"[INTEGRITY] [{key}] Numeric tokens differ from source")
         for label, left, right in (
-            ("Numeric tokens", Counter(re.findall(NUMBER, before)), Counter(re.findall(NUMBER, after))),
             ("Currency identifiers", _counts(before, CURRENCIES), _counts(after, CURRENCIES)),
             ("Magnitude units", _units(before), _units(after)),
             ("Protected tokens", _protected(before), _protected(after)),

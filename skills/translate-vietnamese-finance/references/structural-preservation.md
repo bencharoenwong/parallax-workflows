@@ -29,7 +29,7 @@ Translate ordinary disclosure prose completely; preserve entity names and regist
 
 ## Numerical notation and entities
 
-Copy every numerical token, sign, currency and magnitude unit exactly. Preserve source decimal/thousands separators and numeric dates. Keep `B`, `M`, `K`, `T`, `bps` and ratio suffixes. Do not convert currency or magnitudes during translation.
+Preserve every value, sign, and currency. Hybrid rule: prose uses Vietnamese separators (`1.234,5`, `12,5%`, no space before `%`) and Vietnamese magnitude words (`tỷ`, `nghìn tỷ`, `triệu`, `điểm cơ bản`) without rescaling; table rows (`| ... |`) and data fields keep the source separators and `B`/`M`/`K`/`T`/`bps`. Numeric dates in prose use dd/mm/yyyy. Do not convert currencies.
 A listing market does not determine reporting currency. Multi-currency comparisons are valid when the source contains them.
 Keep intentional HTML entities such as `&amp;` and `&lt;` unchanged. Escape only what the output format requires; avoid double encoding. Entity presence alone is not an error.
 

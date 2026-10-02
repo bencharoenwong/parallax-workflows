@@ -40,7 +40,7 @@ These translations preserve the product rating ladder; they do not claim a unive
 | Base case | kịch bản cơ sở |
 | Bear case | kịch bản tiêu cực |
 
-Retail ratings use both labels, such as `Mua (Buy)`. A bull or bear market is a market state, not a scenario label.
+Ratings use both labels in every register, such as `Mua (Buy)`. Open decision: brokers print TRUNG LẬP for their neutral tier; this ladder uses Nắm giữ for HOLD pending native review. Never use KHẢ QUAN or KÉM KHẢ QUAN (broker-only tiers). A bull or bear market is a market state, not a scenario label.
 
 ## Primary sources
 
@@ -50,4 +50,22 @@ Retail ratings use both labels, such as `Mua (Buy)`. A bull or bear market is a 
 - [SSC ETF explanation](https://ssc.gov.vn/webcenter/portal/ubck/pages_r/l/chitit?dDocName=APPSSCGOVVN162092918): benchmark index.
 - [Masan earnings release](https://www.masangroup.com/vi/news/press-releases/msn-recorded-16x-yoy-earnings-for-fy2025-achieving-all-time-high-profit/): FCF terminology.
 
-The source list verifies individual terms, not native review of this complete translator.
+The source list verifies individual terms, not native review of this complete translator. Broker-report conventions and further terms: `sources.md`.
+
+## Sourced sell-side terms
+
+| English | Vietnamese |
+|---|---|
+| Target price | giá mục tiêu |
+| Upside | tiềm năng tăng giá |
+| Market cap | vốn hóa thị trường |
+| Foreign ownership limit | room ngoại |
+| Credit quota | room tín dụng |
+| Net profit after tax | lợi nhuận sau thuế (LNST) |
+| NPL ratio / coverage | tỷ lệ nợ xấu / tỷ lệ bao phủ nợ xấu |
+| Credit growth | tăng trưởng tín dụng |
+| Deposit / lending rate | lãi suất huy động / lãi suất cho vay |
+| Foreign net buying / selling | khối ngoại mua ròng / bán ròng |
+| Market upgrade | nâng hạng thị trường |
+| YoY (prose) | svck (so với cùng kỳ) |
+| Basis points (prose) | điểm cơ bản |

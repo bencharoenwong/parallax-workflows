@@ -188,3 +188,42 @@ def test_named_risk_and_factor_substitution_fails(tmp_path, lang):
 def test_capitalized_ordinary_value_is_translatable(tmp_path):
     source, output = documents(tmp_path, "zh", "價值可能增長 5%。", "Value may rise 5%.")
     assert common.validate_common(str(output), "zh", str(source))[2] == []
+
+
+# Vietnamese hybrid number policy: prose localizes separators (1.234,5) and
+# translates magnitude words without rescaling; tables may keep source form.
+
+def test_vietnamese_prose_may_localize_separators(tmp_path):
+    source, output = documents(tmp_path, "vi-VN", "ROE tăng từ 12,5% lên 1.234,5 điểm.",
+                               "ROE rose from 12.5% to 1,234.5 points.")
+    assert common.validate_common(str(output), "vi-VN", str(source))[2] == []
+
+
+def test_vietnamese_table_may_keep_source_separators(tmp_path):
+    source, output = documents(tmp_path, "vi-VN", "| ROE | 12.5% |", "| ROE | 12.5% |")
+    errors = common.validate_common(str(output), "vi-VN", str(source))[2]
+    assert not any("Numeric tokens" in e for e in errors)
+
+
+def test_vietnamese_changed_digits_still_fail_after_separator_swap(tmp_path):
+    source, output = documents(tmp_path, "vi-VN", "ROE tăng lên 15,2%.", "ROE rose to 12.5%.")
+    assert any("Numeric tokens" in e for e in common.validate_common(str(output), "vi-VN", str(source))[2])
+
+
+def test_separator_swap_is_vietnamese_only(tmp_path):
+    source, output = documents(tmp_path, "zh", "收入可能增長 12,5%。", "Revenue may rise 12.5%.")
+    assert any("Numeric tokens" in e for e in common.validate_common(str(output), "zh", str(source))[2])
+
+
+def test_vietnamese_magnitude_translated_not_rescaled(tmp_path):
+    source, output = documents(tmp_path, "vi-VN", "Doanh thu đạt 1,86 nghìn tỷ đồng.",
+                               "Revenue reached VND 1.86 trillion.")
+    assert common.validate_common(str(output), "vi-VN", str(source))[2] == []
+    output.write_text(output.read_text(encoding="utf-8").replace("1,86 nghìn tỷ", "1.860 tỷ"), encoding="utf-8")
+    assert common.validate_common(str(output), "vi-VN", str(source))[2]
+
+
+def test_dong_meaning_consensus_is_not_a_currency(tmp_path):
+    source, output = documents(tmp_path, "vi-VN", "Ước tính đồng thuận có thể tăng 5%.",
+                               "Consensus estimates may rise 5%.")
+    assert common.validate_common(str(output), "vi-VN", str(source))[2] == []
