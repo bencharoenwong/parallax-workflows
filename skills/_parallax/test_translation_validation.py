@@ -352,3 +352,57 @@ def test_units_semantics_unchanged(text, expected):
 
 def test_tickers_still_protected():
     assert common._protected("Buy 0700.HK and BRK-B.N") == Counter({"0700.HK": 1, "BRK-B.N": 1})
+
+
+# Ship-check fix pass: numbers glued to punctuation, copy-check and
+# no-translate scans on long input, and currency-word false positives.
+
+def test_number_after_comma_keeps_its_fraction():
+    import re
+    assert re.findall(common.NUMBER, "Revenue,1.5 billion") == ["1.5"]
+    assert re.findall(common.NUMBER, "a .5% move") == [".5%"]
+
+
+@pytest.mark.parametrize("original,text", [("Revenue,1.5 billion", "收入,1.5"),
+                                           ("Net income,3.2B", "净利润,3.2")])
+def test_dropped_unit_after_punctuation_fails(tmp_path, original, text):
+    source, output = documents(tmp_path, "zh", text, original)
+    errors = common.validate_common(str(output), "zh", str(source))[2]
+    assert any("Magnitude units" in e for e in errors)
+
+
+def test_changed_fraction_after_punctuation_fails(tmp_path):
+    source, output = documents(tmp_path, "zh", "收入,1.9 十亿", "Revenue,1.5 billion")
+    assert any("Numeric tokens" in e for e in common.validate_common(str(output), "zh", str(source))[2])
+
+
+def test_copy_check_is_linear_time(tmp_path):
+    import time
+    text = "a" * 40000
+    source, output = documents(tmp_path, "zh", text, text)
+    start = time.perf_counter()
+    common.validate_common(str(output), "zh", str(source))
+    assert time.perf_counter() - start < 2.0
+
+
+def test_unclosed_no_translate_markers_are_linear_time(tmp_path):
+    import time
+    text = "<!-- DO NOT TRANSLATE -->" * 4000
+    source, output = documents(tmp_path, "zh", "收入 " + text, "Revenue " + text)
+    start = time.perf_counter()
+    common.validate_common(str(output), "zh", str(source))
+    assert time.perf_counter() - start < 2.0
+
+
+def test_no_translate_block_change_still_fails(tmp_path):
+    block = "<!-- DO NOT TRANSLATE -->Keep 5%<!-- END NO TRANSLATE -->"
+    source, output = documents(tmp_path, "zh", "收入可能增長。" + block.replace("Keep", "Kept"),
+                               "Revenue may rise. " + block)
+    assert any("No-translate block" in e for e in common.validate_common(str(output), "zh", str(source))[2])
+
+
+@pytest.mark.parametrize("prose", ["The firm won a large contract.", "Dong Nai province output rose."])
+def test_currency_warning_ignores_won_and_dong(tmp_path, prose):
+    source, output = documents(tmp_path, "vi-VN", "Doanh thu có thể tăng 5%.", prose + " Revenue may rise 5%.")
+    warnings = common.validate_common(str(output), "vi-VN", str(source))[3]
+    assert common.CURRENCY_WORDS_WARNING not in warnings

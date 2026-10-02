@@ -20,7 +20,7 @@ FIELDS = {"th": "thai_translation", "zh": "chinese_translation",
 SCRIPTS = {"th": r"[\u0e01-\u0e5b]", "zh": r"[\u3400-\u9fff]",
            "ar-SA": r"[\u0621-\u064a]",
            "vi-VN": r"[ÀÁÂÃÈÉÊÌÍÒÓÔÕÙÚÝàáâãèéêìíòóôõùúýĂăĐđĨĩŨũƠơƯư\u1ea0-\u1ef9]|(?i:\b(?:doanh thu|kinh doanh)\b)"}
-NUMBER = r"(?<![\d.])[-+−]?(?:\d+(?:[.,]\d+)*|[.,]\d+)(?:%|x)?"
+NUMBER = r"(?<![\d.])[-+−]?(?:\d+(?:[.,]\d+)*|\.\d+)(?:%|x)?"
 PROTECTED = re.compile(
     r"https?://[^\s<>\"\)。，；！？：「」『』（）]+|\b[\w.+-]{1,64}@[\w.-]{1,253}\.[A-Za-z]{2,24}\b|"
     r"\b[A-Z0-9-]{1,24}\.(?:O|N|HK|TW|SS|SZ|KS|AX|TO|L|PA|DE|SI|BK|T|BO|NS|SA|MX|JK|KL|PS|MI|MC|AS|SW|ST|OL|CO|HE)\b|"
@@ -49,7 +49,7 @@ CURRENCIES = {
 # translation: too many names are shared or part of ordinary words. A source
 # that uses one gets a manual-review warning instead.
 CURRENCY_WORDS = re.compile(
-    r"\b(?:dollars?|euros?|pounds?|yen|yuan|renminbi|baht|riyals?|dirhams?|dinars?|won|dong|"
+    r"\b(?:dollars?|euros?|pounds?|yen|yuan|renminbi|baht|riyals?|dirhams?|dinars?|"
     r"rupees?|ringgit|rupiah|pesos?|francs?|krona|krone)\b", re.I)
 CURRENCY_WORDS_WARNING = ("Source names a currency in words; currency fidelity for spelled-out "
                           "currencies is not checked automatically — compare it manually")
@@ -255,6 +255,23 @@ def _numbers_differ(before: str, after: str, lang: str) -> bool:
     return +left != Counter()
 
 
+_NT_START, _NT_END = "<!-- DO NOT TRANSLATE -->", "<!-- END NO TRANSLATE -->"
+
+
+def _no_translate_blocks(text: str) -> list[str]:
+    """Each start marker through the next end marker, found with str.find so
+    many unclosed start markers stay linear (a non-greedy regex rescans)."""
+    blocks, pos = [], 0
+    while (start := text.find(_NT_START, pos)) != -1:
+        end = text.find(_NT_END, start + len(_NT_START))
+        if end == -1:
+            break
+        end += len(_NT_END)
+        blocks.append(text[start:end])
+        pos = end
+    return blocks
+
+
 def fidelity(source: dict, output: dict, translations: dict[str, str], lang: str = "zh") -> list[str]:
     errors = []
     originals = source_sections(source)
@@ -266,7 +283,7 @@ def fidelity(source: dict, output: dict, translations: dict[str, str], lang: str
                       f"extra={sorted(translations.keys() - originals.keys())}")
     for key in originals.keys() & translations.keys():
         before, after = originals[key], translations[key]
-        if before.strip() == after.strip() and re.search(r"[A-Za-z]{3,}\s+[A-Za-z]{3,}", before):
+        if before.strip() == after.strip() and re.search(r"\b[A-Za-z]{3,}\s+[A-Za-z]{3}", before):
             errors.append(f"[INTEGRITY] [{key}] Source prose was copied without translation")
         if _numbers_differ(before, after, lang):
             errors.append(f"[INTEGRITY] [{key}] Numeric tokens differ from source")
@@ -294,7 +311,7 @@ def fidelity(source: dict, output: dict, translations: dict[str, str], lang: str
         if identifiers - retained:
             errors.append(f"[INTEGRITY] [{key}] Named factor or risk identifiers missing from translation")
         # Literal no-translate blocks are protected as a whole, not merely their comments.
-        blocks = re.findall(r"<!-- DO NOT TRANSLATE -->.*?<!-- END NO TRANSLATE -->", before, re.S)
+        blocks = _no_translate_blocks(before)
         if any(block not in after for block in blocks):
             errors.append(f"[INTEGRITY] [{key}] No-translate block changed")
         for concept, pattern in (
