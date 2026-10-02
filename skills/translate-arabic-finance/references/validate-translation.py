@@ -96,7 +96,7 @@ def validate(filepath: str, source_path: str | None = None):
             )
 
         # Missing space: English/number run -> Arabic
-        for m in re.finditer(rf"([A-Za-z]{{2,}})[{_ARABIC_BLOCK}]", text):
+        for m in re.finditer(rf"(?<![A-Za-z])([A-Za-z]{{2,}})[{_ARABIC_BLOCK}]", text):
             warnings.append(
                 f"[{key}] Missing space after '{m.group(1)}' at pos {m.start()} — check bidi isolation too"
             )
