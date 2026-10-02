@@ -328,3 +328,51 @@ def test_named_source_currency_rendered_natively_passes(tmp_path, lang, text, or
 
 def test_named_currency_aliases_respect_word_boundaries():
     assert common._counts("Hongkong dongle and wonderful euroclear", common.CURRENCIES) == Counter()
+
+
+def test_long_unbroken_token_is_linear_time(tmp_path):
+    import time
+    token = "a." * 16000  # dotted run with no "@": the slow case
+    start = time.perf_counter()
+    common._protected(token)
+    assert time.perf_counter() - start < 1.0
+
+
+def test_emails_still_protected():
+    assert common._protected("Contact ir@example.com today") == Counter({"ir@example.com": 1})
+
+
+def test_deeply_nested_json_fails_with_a_fatal_message(tmp_path):
+    path = tmp_path / "output.json"
+    path.write_text("[" * 1_000_000 + "]" * 1_000_000, encoding="utf-8")
+    data, errors = common.read_document(str(path))
+    assert data is None
+    assert any(e.startswith("[FATAL]") for e in errors)
+
+
+@pytest.mark.parametrize("token", ["1," * 16000, "1.1 " * 8000, "5x" * 16000], ids=["commas", "spaced", "x-suffix"])
+def test_magnitude_scan_is_linear_time(token):
+    import time
+    start = time.perf_counter()
+    common._units(token)
+    assert time.perf_counter() - start < 1.0
+
+
+def test_ticker_scan_is_linear_time():
+    import time
+    start = time.perf_counter()
+    common._protected("A-" * 16000)
+    assert time.perf_counter() - start < 1.0
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("Revenue USD 5.2B and 3M", {"billion": 1, "million": 1}),
+    ("5x billion", {"billion": 1}), ("1,5 tỷ", {"billion": 1}),
+    ("营收50亿元", {"hundred_million": 1}), ("12% tỷ trọng", {}),
+])
+def test_units_semantics_unchanged(text, expected):
+    assert common._units(text) == Counter(expected)
+
+
+def test_tickers_still_protected():
+    assert common._protected("Buy 0700.HK and BRK-B.N") == Counter({"0700.HK": 1, "BRK-B.N": 1})

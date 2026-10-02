@@ -22,8 +22,8 @@ SCRIPTS = {"th": r"[\u0e01-\u0e5b]", "zh": r"[\u3400-\u9fff]",
            "vi-VN": r"[ÀÁÂÃÈÉÊÌÍÒÓÔÕÙÚÝàáâãèéêìíòóôõùúýĂăĐđĨĩŨũƠơƯư\u1ea0-\u1ef9]|(?i:\b(?:doanh thu|kinh doanh)\b)"}
 NUMBER = r"(?<![\d.])[-+−]?(?:\d+(?:[.,]\d+)*|[.,]\d+)(?:%|x)?"
 PROTECTED = re.compile(
-    r"https?://[^\s<>\"\)。，；！？：「」『』（）]+|\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b|"
-    r"\b[A-Z0-9-]+\.(?:O|N|HK|TW|SS|SZ|KS|AX|TO|L|PA|DE|SI|BK|T|BO|NS|SA|MX|JK|KL|PS|MI|MC|AS|SW|ST|OL|CO|HE)\b|"
+    r"https?://[^\s<>\"\)。，；！？：「」『』（）]+|\b[\w.+-]{1,64}@[\w.-]{1,253}\.[A-Za-z]{2,24}\b|"
+    r"\b[A-Z0-9-]{1,24}\.(?:O|N|HK|TW|SS|SZ|KS|AX|TO|L|PA|DE|SI|BK|T|BO|NS|SA|MX|JK|KL|PS|MI|MC|AS|SW|ST|OL|CO|HE)\b|"
     r"\{\{[^{}\n]+\}\}|\$\{[^{}\n]+\}|\{[A-Za-z_0-9]+\}|%[sdf]|"
     r"\[\d+\]|[¹²³⁴⁵⁶⁷⁸⁹⁰†‡]"
 )
@@ -126,9 +126,17 @@ def _units(text: str) -> Counter:
     pairs = sorted(((v, k) for k, vs in UNITS.items() for v in vs),
                    key=lambda pair: len(pair[0]), reverse=True)
     units = "|".join(f"({_literal_pattern(v)})" for v, _ in pairs)
-    # Optional currency between a number and its magnitude unit.
-    pattern = re.compile(rf"{NUMBER}\s*(?:(?:[A-Z]{{3}})\s*)?(?:{units})")
-    return Counter(pairs[m.lastindex - 1][1] for m in pattern.finditer(text))
+    # Optional currency between a number and its magnitude unit. Each number
+    # is found once and the unit is tested where it ends; a single combined
+    # regex backtracks through every digit group on long digit runs
+    # (quadratic time on input such as "1,1,1,...").
+    unit_after = re.compile(rf"\s*(?:(?:[A-Z]{{3}})\s*)?(?:{units})")
+    found = Counter()
+    for number in re.finditer(NUMBER, text):
+        m = unit_after.match(text, number.end())
+        if m:
+            found[pairs[m.lastindex - 1][1]] += 1
+    return found
 
 
 class _Markup(HTMLParser):
@@ -194,7 +202,7 @@ def read_document(filepath: str, *, source=False) -> tuple[dict | None, list[str
                     raise ValueError("Routing directive has no separator")
                 text = text[match.end():].lstrip("\r\n")
             data = {"ReportText": text}
-    except (OSError, UnicodeError, ValueError) as exc:
+    except (OSError, UnicodeError, ValueError, RecursionError) as exc:
         return None, [f"[FATAL] Cannot read {filepath}: {exc}"]
     if not isinstance(data, dict):
         return None, ["[FATAL] Document must be an object"]
