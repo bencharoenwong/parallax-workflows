@@ -81,6 +81,7 @@ PLUGIN_SKILLS = skill_manifest.plugin_skills()
 KNOWN_OPTIONAL_SKILLS = {
     "translate-chinese-finance",
     "translate-thai-finance",
+    "translate-vietnamese-finance",
 }
 
 # General-release web shortlist (claude.ai channel).
@@ -93,6 +94,7 @@ WEB_DESCRIPTIONS = skill_manifest.web_descriptions()
 # Shared-tree paths (relative to skills/_parallax/) shipped with distributions.
 # Directories are included recursively (tracked files only).
 PARALLAX_INCLUDE = [
+    "translation_validate.py",
     "parallax-conventions.md",
     "response-schemas.md",
     "coverage-matrix.md",
@@ -499,6 +501,8 @@ def _strip_ar_sa_lang_list(text: str) -> str:
 
 
 def _strip_ar_sa_coverage(text: str) -> str:
+    if "ar-SA" not in text:
+        return text
     return _swap(
         text,
         ", and ar-SA via `translate-arabic-finance`. The Arabic skill is a seed "
@@ -509,9 +513,9 @@ def _strip_ar_sa_coverage(text: str) -> str:
 
 
 def _strip_ar_sa_conventions(text: str) -> str:
-    text = _swap(text, ", `th`, `ar-SA`. Any", ", `th`. Any",
+    text = _swap(text, ", `th`, `vi-VN`, `ar-SA`. Any", ", `th`, `vi-VN`. Any",
                  "conventions §15.1 supported values")
-    text = _swap(text, ", th, ar-SA.`", ", th.`",
+    text = _swap(text, ", th, vi-VN, ar-SA.`", ", th, vi-VN.`",
                  "conventions §15.1 unsupported message")
     text = _swap(
         text,
@@ -533,7 +537,7 @@ def _strip_ar_sa_conventions(text: str) -> str:
 AR_SA_UNSHIPPED_TRANSFORMS = {
     "_parallax/parallax-conventions.md": _strip_ar_sa_conventions,
     "parallax-should-i-buy/SKILL.md":
-        lambda t: _swap(t, ", `th`, `ar-SA`.", ", `th`.", "ar-SA positional list"),
+        lambda t: _swap(t, ", `th`, `vi-VN`, `ar-SA`.", ", `th`, `vi-VN`.", "ar-SA positional list"),
     "parallax-morning-brief/SKILL.md": _strip_ar_sa_lang_list,
     "parallax-deep-dive/SKILL.md": _strip_ar_sa_lang_list,
     "parallax-client-review/SKILL.md": _strip_ar_sa_lang_list,
@@ -553,9 +557,12 @@ def strip_unshipped_ar_sa(skills_root: Path, skills: list[str]) -> None:
         if path.is_file():
             path.write_text(transform(path.read_text(encoding="utf-8")),
                             encoding="utf-8")
+    # Shared executable validators can support draft locales without exposing
+    # a user-facing route. The gate checks operator-facing documentation/data.
     leaks = sorted(
         str(p.relative_to(skills_root)) for p in skills_root.rglob("*")
-        if p.is_file() and AR_SA_CODE in p.read_text(encoding="utf-8",
+        if p.is_file() and p.suffix in (".md", ".html", ".json")
+        and AR_SA_CODE in p.read_text(encoding="utf-8",
                                                      errors="ignore"))
     if leaks:
         raise BuildError(

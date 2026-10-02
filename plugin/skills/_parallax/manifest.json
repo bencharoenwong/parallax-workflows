@@ -296,6 +296,10 @@
     "translate-thai-finance": {
       "plugin": true,
       "web": false
+    },
+    "translate-vietnamese-finance": {
+      "plugin": true,
+      "web": false
     }
   },
   "exempt_docs": [

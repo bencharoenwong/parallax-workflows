@@ -139,9 +139,9 @@ int: 0
 
 | English | Chinese |
 |---|---|
-| standard_billion | 亿 |
-| standard_million | 百万 |
-| standard_thousand | 千 |
+| standard_billion | billion |
+| standard_million | million |
+| standard_thousand | thousand |
 
 ## RATING_TRANSLATIONS
 
@@ -192,15 +192,15 @@ int: 0
 
 | English | Chinese |
 |---|---|
-| Value | 价值 |
-| Quality | 质量 |
-| Momentum | 动量 |
-| Tactical | 战术 |
-| Defensive | 防御 |
-| Growth | 成长 |
-| Overall Score | 综合评分 |
-| Composite Score | 综合评分 |
-| Total Score | 综合评分 |
+| Value | Value |
+| Quality | Quality |
+| Momentum | Momentum |
+| Tactical | Tactical |
+| Defensive | Defensive |
+| Growth | Growth |
+| Overall Score | Overall Score |
+| Composite Score | Composite Score |
+| Total Score | Total Score |
 
 ## SECTION_HEADER_TRANSLATIONS
 
@@ -320,10 +320,10 @@ int: 0
 | EPS | 每股收益 |
 | P/E (TTM) | 市盈率 (TTM) |
 | Price/Book | 市净率 |
-| Price/FCF | 市现率 |
+| Price/FCF | 股价自由现金流比率 |
 | EV/EBITDA | 企业价值倍数 |
 | EV/Revenue | 企业价值/营收 |
-| ROE | 股本回报率 |
+| ROE | 净资产收益率 |
 | ROA | 资产回报率 |
 | ROI | 投资回报率 |
 | Revenue Growth (5Y) | 营收增长 (5年) |
@@ -515,7 +515,7 @@ int: 0
 | Operating Margin (%) | 营业利润率 (%) |
 | Net Margin (%) | 净利率 (%) |
 | EBITDA Margin (%) | EBITDA利润率 (%) |
-| Return on Equity (ROE) (%) | 股本回报率 (%) |
+| Return on Equity (ROE) (%) | 净资产收益率 (%) |
 | Return on Assets (ROA) (%) | 资产回报率 (%) |
 | Return on Invested Capital (ROIC) (%) | 投入资本回报率 (%) |
 | Price-to-Earnings (P/E) (x) | 市盈率 (x) |
@@ -551,7 +551,7 @@ int: 0
 | P/S | 市销率 |
 | EV/EBITDA | 企业价值倍数 |
 | EV/Revenue | 企业价值/营收 |
-| ROE | 股本回报率 |
+| ROE | 净资产收益率 |
 | ROA | 资产回报率 |
 | ROIC | 投入资本回报率 |
 | Gross Margin | 毛利率 |
@@ -681,10 +681,10 @@ int: 0
 
 | English | Chinese |
 |---|---|
-| B | 亿 |
-| M | 百万 |
-| K | 千 |
-| T | 万亿 |
+| B | B |
+| M | M |
+| K | K |
+| T | T |
 
 ## FOOTER_TEXT
 
@@ -706,9 +706,9 @@ CRITICAL — FULL TRANSLATION:
 - Translate EVERY sentence completely. Never summarize, shorten, or cut off mid-sentence.
 
 1. FIRST OCCURRENCE RULE for financial abbreviations:
-   - First use in a paragraph: show ENGLISH abbreviation followed by Chinese in parentheses
-     Example: "P/E (市盈率) of 15.2x", "ROE (股本回报率) reached 12%"
-   - Subsequent uses in the same paragraph or later: ENGLISH only
+   - First use in the document: show ENGLISH abbreviation followed by Chinese in parentheses
+     Example: "P/E (市盈率) of 15.2x", "ROE (净资产收益率) reached 12%"
+   - Subsequent uses in the document: ENGLISH only
      Example: "...the company's P/E of 18.5x reflects..."
    - Applies to: P/E, P/B, P/S, P/FCF, EV/EBITDA, EV/Revenue, ROE, ROA, ROIC, EPS,
      EBITDA, Sharpe Ratio, Information Ratio, Tracking Error, Max Drawdown, Beta, Alpha
@@ -734,25 +734,9 @@ CRITICAL — FULL TRANSLATION:
    - Stock codes (e.g., 0700.HK, AAPL.O), tickers, indexes (S&P 500, MSCI, TOPIX)
    - YTD, MTD, QoQ, YoY
 
-4. NUMBERS, DATES, CURRENCY (CRITICAL — preserve magnitude):
-   - DATE FORMAT:
-     "29 September 2025" → "2025年9月29日" (word format — convert)
-     "Q1 2024" → "2024年第一季度"
-     "06/12/2025" or any DD/MM/YYYY numeric date → KEEP AS-IS, do NOT convert.
-     A deterministic post-processor will handle numeric dates correctly.
-   - Currency codes: keep original (USD, HKD, CNY, RMB).
-   - PERCENTAGES and basic numbers: keep EXACTLY as shown (e.g., "35%", "1.5x", "12,345").
-   - LARGE AMOUNTS — preserve the MAGNITUDE, not just the unit symbol. SAFEST: keep the
-     English form unchanged (e.g., "365.91B CNY" stays "365.91B CNY" or "CNY 365.91B").
-     If you DO render in Chinese, you must do the math correctly:
-       "1 billion CNY"      = "10亿人民币"        (multiply number by 10)
-       "365.91 billion CNY" = "3,659.1亿人民币"   (multiply 365.91 by 10)
-       "100 million CNY"    = "1亿人民币" or "100百万人民币"
-       "500 million CNY"    = "5亿人民币" or "500百万人民币"
-       "1 trillion CNY"     = "1万亿人民币"       (or "10000亿人民币")
-     NEVER just substitute "B" → "亿" without multiplying. "365.91B" is NOT "365.91亿"
-     — that would be 10× too small.
-     If unsure about the conversion, KEEP THE ENGLISH UNIT (B / M / billion / million).
+4. NUMBERS: Copy numerical tokens, signs, currencies and magnitude units exactly.
+   Keep B/M/K/T and bps unchanged. Do not convert to 亿/億 or change separators.
+   Preserve source uncertainty, disclosures and all sections.
 
 5. FINANCIAL TERMS without English abbreviation: translate to full Chinese
    - "Market Cap" → "市值", "Operating Margin" → "营业利润率", "Free Cash Flow" → "自由现金流"
@@ -965,13 +949,5 @@ _(empty)_
 ## HALLUCINATION_CELL_KEYWORDS
 
 ```python
-[
-    ({'负债', '权益'}, '负债与权益'),
-    ({'商誉', '无形资产'}, '无形资产与商誉'),
-    ({'估值'}, '估值'),
-    ({'盈利'}, '盈利能力'),
-    ({'流动性'}, '流动性'),
-    ({'杠杆'}, '杠杆'),
-    ({'效率'}, '效率'),
-]
+[]
 ```

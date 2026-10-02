@@ -2,11 +2,25 @@
 """
 Post-translation quality validator for Chinese financial translations.
 Supports both Simplified (zh-CN) and Traditional (zh-TW) output.
-Usage: python3 validate-translation.py <translated_json_file> [--waive <error-substring> ...]
+Usage: python3 validate-translation.py <output_file> --source <source_file>
+Style only: python3 validate-translation.py <output_file> --style-only
 """
-import json
 import re
-import sys
+
+import importlib.util
+from pathlib import Path
+
+# .skill packages vendor the helper here; repo/plugin installs use _parallax.
+_candidates = (Path(__file__).with_name("translation_common.py"),
+               Path(__file__).resolve().parents[2] / "_parallax" / "translation_validate.py")
+_common_path = next((p for p in _candidates if p.is_file()), None)
+if _common_path is None:
+    raise ImportError("Translation validator helper is missing; rebuild the skill package")
+_spec = importlib.util.spec_from_file_location("translation_common", _common_path)
+_common = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_common)
+apply_waivers = _common.apply_waivers
+
 
 # Traditional-script characters that should not appear in zh-CN output
 TRAD_CHARS = "與為國對發開關這進還過時會經業報場動價務淨證險負資產權潤據從個們來學體點種樣義變應隨處優寫讀強銷維認識計"
@@ -54,13 +68,23 @@ WRONG_TERMS_TW = {
 }
 
 
+WRONG_TERMS_HK = {k: v for k, v in WRONG_TERMS_TW.items()
+                  if k not in ("市盈率", "市淨率", "股本回報率", "資產回報率",
+                               "投資回報率", "每股收益", "股息率")}
+
+
 def detect_locale(metadata: dict, sample_text: str) -> str:
     """Return 'zh-CN', 'zh-TW', or 'unknown' based on metadata or character heuristics."""
-    explicit = (metadata.get("translation_locale") or "").lower()
+    explicit = metadata.get("translation_locale") or ""
+    if not isinstance(explicit, str):
+        return "unknown"
+    explicit = explicit.lower()
     if explicit in ("zh-cn", "zh_cn"):
         return "zh-CN"
-    if explicit in ("zh-tw", "zh_tw", "zh-hk", "zh_hk"):
+    if explicit in ("zh-tw", "zh_tw"):
         return "zh-TW"
+    if explicit in ("zh-hk", "zh_hk"):
+        return "zh-HK"
     # Fallback: count characters
     trad_count = sum(1 for c in sample_text if c in TRAD_CHARS)
     simp_count = sum(1 for c in sample_text if c in SIMP_CHARS)
@@ -71,44 +95,21 @@ def detect_locale(metadata: dict, sample_text: str) -> str:
     return "unknown"
 
 
-def validate(filepath: str) -> tuple[list[str], list[str]]:
-    errors: list[str] = []
-    warnings: list[str] = []
-
-    try:
-        with open(filepath, encoding="utf-8") as f:
-            data = json.load(f)
-    except FileNotFoundError:
-        errors.append(f"[FATAL] File not found: {filepath}")
+def validate(filepath: str, source_path: str | None = None, locale: str | None = None):
+    data, texts, errors, warnings = _common.validate_common(filepath, "zh", source_path)
+    if data is None:
         return errors, warnings
-    except json.JSONDecodeError as exc:
-        errors.append(f"[FATAL] Invalid JSON in {filepath}: {exc}")
-        return errors, warnings
-
-    sections = data.get("sections", data)
     metadata = data.get("metadata", {})
-
-    # Concatenate text for locale detection
-    sample = ""
-    for section in sections.values():
-        if isinstance(section, dict):
-            sample += section.get("chinese_translation", "")
-        elif isinstance(section, str):
-            sample += section
-        if len(sample) > 2000:
-            break
-
-    locale = detect_locale(metadata, sample)
-    wrong_terms = WRONG_TERMS_CN if locale == "zh-CN" else WRONG_TERMS_TW
-
-    for key, section in sections.items():
-        if isinstance(section, dict) and "chinese_translation" in section:
-            text = section["chinese_translation"]
-        elif isinstance(section, str):
-            text = section
-        else:
-            continue
-
+    if not isinstance(metadata, dict):
+        return errors, warnings
+    explicit = metadata.get("translation_locale")
+    if locale and explicit and isinstance(explicit, str) and locale.lower().replace("_", "-") != explicit.lower().replace("_", "-"):
+        errors.append("[INTEGRITY] Requested locale differs from translation metadata")
+    locale = locale or detect_locale(metadata, "".join(texts.values()))
+    if locale == "unknown":
+        errors.append("[INTEGRITY] Specify translation_locale or --locale for Chinese output")
+    wrong_terms = WRONG_TERMS_CN if locale == "zh-CN" else WRONG_TERMS_HK if locale == "zh-HK" else WRONG_TERMS_TW
+    for key, text in texts.items():
         # --- ERRORS ---
 
         # Doubled characters / function words
@@ -129,7 +130,7 @@ def validate(filepath: str) -> tuple[list[str], list[str]]:
                 errors.append(
                     f"[{key}] Traditional chars in zh-CN output: {''.join(uniq)}"
                 )
-        elif locale == "zh-TW":
+        elif locale in ("zh-TW", "zh-HK"):
             stragglers = [c for c in text if c in SIMP_CHARS]
             if stragglers:
                 uniq = list(dict.fromkeys(stragglers))[:5]
@@ -141,38 +142,6 @@ def validate(filepath: str) -> tuple[list[str], list[str]]:
         for wrong, correct in wrong_terms.items():
             if wrong in text:
                 errors.append(f"[{key}] Wrong term '{wrong}' → should be '{correct}'")
-
-        # HTML entity corruption
-        for ent in ["&lt;", "&gt;", "&amp;", "&quot;"]:
-            if ent in text:
-                # only error if NOT inside a code block (heuristic)
-                errors.append(f"[{key}] HTML entity not cleaned: {ent}")
-
-        # Currency mismatch with market
-        market = metadata.get("market", "")
-        if market and market not in ("China", "Mainland China") and (
-            "人民币" in text or "人民幣" in text or "RMB" in text
-        ):
-            warnings.append(
-                f"[{key}] Found 人民币/RMB in non-mainland market report ({market})"
-            )
-        if market and market != "Hong Kong" and "港元" in text:
-            warnings.append(
-                f"[{key}] Found 港元 in non-HK market report ({market})"
-            )
-
-        # Magnitude check: did "B" or "billion" stay as "亿" without the ×10 conversion?
-        # Heuristic: number followed by 亿 where the original (English) used B/billion would
-        # require multiplication. We can't audit fully without source, but flag suspicious
-        # patterns where the same number appears with both "B" and "亿" inconsistently.
-        b_matches = re.findall(r"(\d+(?:\.\d+)?)\s*B\b", text)
-        yi_matches = re.findall(r"(\d+(?:\.\d+)?)\s*亿", text)
-        for b_num in b_matches:
-            if b_num in yi_matches:
-                warnings.append(
-                    f"[{key}] Possible magnitude bug: '{b_num}B' and '{b_num}亿' both present "
-                    f"(should be '{b_num}B' = '{float(b_num)*10}亿')"
-                )
 
         # --- WARNINGS ---
 
@@ -191,73 +160,9 @@ def validate(filepath: str) -> tuple[list[str], list[str]]:
     return errors, warnings
 
 
-def parse_args(argv: list[str]) -> tuple[str | None, list[str]]:
-    filepath = None
-    waivers: list[str] = []
-    i = 1
-    while i < len(argv):
-        arg = argv[i]
-        if arg == "--waive":
-            if i + 1 >= len(argv):
-                print("Usage: python3 validate-translation.py <translated_json_file> [--waive <error-substring> ...]")
-                sys.exit(1)
-            waivers.append(argv[i + 1])
-            i += 2
-            continue
-        if filepath is None:
-            filepath = arg
-            i += 1
-            continue
-        print("Usage: python3 validate-translation.py <translated_json_file> [--waive <error-substring> ...]")
-        sys.exit(1)
-    return filepath, waivers
-
-
-def apply_waivers(errors: list[str], waivers: list[str]) -> tuple[list[str], list[str]]:
-    unwaived: list[str] = []
-    waived: list[str] = []
-    for error in errors:
-        if any(substring in error for substring in waivers):
-            waived.append(error)
-        else:
-            unwaived.append(error)
-    return unwaived, waived
-
 
 def main():
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is not None:
-            reconfigure(encoding="utf-8")
-
-    filepath, waivers = parse_args(sys.argv)
-    if filepath is None:
-        print("Usage: python3 validate-translation.py <translated_json_file> [--waive <error-substring> ...]")
-        sys.exit(1)
-
-    errors, warnings = validate(filepath)
-    errors, waived = apply_waivers(errors, waivers)
-
-    print("=" * 50)
-    print(f"Validation: {filepath}")
-    print("=" * 50)
-    print(f"ERRORS: {len(errors)}")
-    for e in errors:
-        print(f"  {e}")
-    print(f"\nWAIVED (treated as pass): {len(waived)}")
-    for e in waived:
-        print(f"  {e}")
-    print(f"\nWARNINGS: {len(warnings)}")
-    for w in warnings:
-        print(f"  {w}")
-    print("\n" + "=" * 50)
-
-    if errors:
-        print("FAILED — fix errors before finalizing")
-        sys.exit(1)
-    else:
-        print("PASSED")
-        sys.exit(0)
+    _common.run_cli(validate, ("zh-CN", "zh-TW", "zh-HK"))
 
 
 if __name__ == "__main__":

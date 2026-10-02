@@ -8,9 +8,9 @@ Draft find→replace table for Arabic financial translation. Unlike the Thai and
 
 ## Code-Switching Terms (Draft: Arabic phrase to avoid → Correct English)
 
-Gulf finance professionals use these English terms directly. A literal Arabic translation reads as machine-generated.
+English risk identifiers are product house style, not evidence that standard Arabic finance terminology is incorrect. Saudi CMA itself uses نسبة شارب. Use an Arabic gloss when the selected register calls for it; literal phrases that change the concept still require correction.
 
-| Avoid (literal Arabic) | Correct English |
+| English-identifier house style: Arabic gloss | Correct English |
 |--------------------------|-----------------|
 | خطأ التتبع | Tracking Error |
 | مؤشر المخاطرة أو القيمة المعرضة للخطر | VaR |

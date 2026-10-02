@@ -233,7 +233,7 @@ Standard translations for country names, months, section headers, sectors, excha
 | B (billion) | 亿 (×10 from "B") | 億 (×10 from "B") | 10⁸ for 亿 / 10⁹ for B |
 | T (trillion) | 万亿 | 兆 | 10¹² |
 
-**Critical:** `B` (billion = 10⁹) ≠ `亿` (10⁸). When converting, multiply the number by 10. See SKILL.md §4.
+**Critical:** `B` (billion = 10⁹) ≠ `亿` (10⁸). When converting, multiply the number by 10. See the Source fidelity section of SKILL.md.
 
 (Note: Mainland uses 万亿 for 10¹². Taiwan uses 兆. Hong Kong uses both, with 萬億 in Traditional.)
 
@@ -273,8 +273,8 @@ Standard translations for country names, months, section headers, sectors, excha
 | Capital Expenditures | 资本支出 | 資本支出 | |
 | P/E | 市盈率 | 本益比 | TW uses 本益比 |
 | P/B / Price/Book | 市净率 | 股價淨值比 | TW uses 股價淨值比 |
-| Price/FCF | 市现率 | 股價現金流比 | |
-| ROE | 股本回报率 | 股東權益報酬率 | TW spells out fully |
+| Price/FCF | 股价自由现金流比率 | 股價自由現金流比 | |
+| ROE | 净资产收益率 | 股東權益報酬率 | TW spells out fully |
 | ROA | 资产回报率 | 資產報酬率 | |
 | ROI | 投资回报率 | 投資報酬率 | |
 | EPS | 每股收益 | 每股盈餘 | TW uses 盈餘 |
@@ -309,3 +309,5 @@ Standard translations for country names, months, section headers, sectors, excha
 |--------|-------------|---------------|
 | zh-CN | 第{current}页，共{total}页 \| 重要披露信息见报告末尾 | 第{current}页，共{total}页 \| 报告结束 |
 | zh-TW | 第{current}頁，共{total}頁 \| 重要披露資訊見報告末尾 | 第{current}頁，共{total}頁 \| 報告結束 |
+
+Sources: [CSRC ROE explanation](https://www.csrc.gov.cn/ningxia/c105510/c6289419/content.shtml); [S&P methodology](https://www.spglobal.com/spdji/zh/documents/index-policies/methodology-index-math-chinese.pdf) distinguishes operating-cash-flow ratios.

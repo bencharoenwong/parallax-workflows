@@ -584,7 +584,7 @@ Canonical home for the translate step. Skills that accept a language argument (`
 
 ### §15.1 When it runs
 
-Only when the operator supplied a language argument and it is not `en`. It is the terminal step: it consumes the gated stdout of the render step (§10.3) and its output is not re-gated. Supported values: `en`, `zh-CN`, `zh-TW`, `zh-HK`, `th`. Any other value: emit the English report with `> Language '<arg>' not supported; output shown in English. Supported: en, zh-CN, zh-TW, zh-HK, th.`
+Only when the operator supplied a language argument and it is not `en`. It is the terminal step: it consumes the gated stdout of the render step (§10.3) and its output is not re-gated. Supported values: `en`, `zh-CN`, `zh-TW`, `zh-HK`, `th`, `vi-VN`. Any other value: emit the English report with `> Language '<arg>' not supported; output shown in English. Supported: en, zh-CN, zh-TW, zh-HK, th, vi-VN.`
 
 ### §15.2 Routing block
 
@@ -603,9 +603,11 @@ ROUTING DIRECTIVE — DO NOT TRANSLATE OR ECHO THIS BLOCK:
 
 Include `target_variant` only for the Chinese variants and omit the line for Thai; pass `register: retail` only when `register=retail` was supplied, otherwise omit the `register:` line so the translator defaults to institutional register.
 
-`zh-CN`, `zh-TW`, `zh-HK` → `translate-chinese-finance` with the matching `target_variant` (the block is REQUIRED for `zh-HK`, otherwise that skill pauses to ask about HK listings and breaks the chain). `th` → `translate-thai-finance`; the marker line and `---` separator stay so no leading meta is echoed.
+`zh-CN`, `zh-TW`, `zh-HK` → `translate-chinese-finance` with the matching `target_variant` (the block is REQUIRED for `zh-HK`, otherwise that skill pauses to ask about HK listings and breaks the chain). `th` → `translate-thai-finance`; `vi-VN` → `translate-vietnamese-finance`; the marker line and `---` separator stay so no leading meta is echoed.
 
 ### §15.3 Failure handling
+
+The translation skill validates against the original gated prose. Preserve sections, source claims and uncertainty, numerical tokens, currencies, tickers and disclosure text. When shell execution is available, save source and output snapshots and run that translator's source-fidelity validator. This is a separate check from the English render gate. Without shell execution, compare source and translation manually and state that automated validation was unavailable. A style-only pass does not validate source fidelity.
 
 - Translator fails or returns empty/partial: emit the English report with `> Translation to <lang> failed; output shown in English. Re-run if the issue is transient.`
 - Host cannot invoke a sibling skill (§14.3): emit the English report with `> Translation to <lang> unavailable on this host; output shown in English.`

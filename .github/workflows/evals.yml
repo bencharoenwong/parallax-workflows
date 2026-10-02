@@ -186,6 +186,10 @@ jobs:
       # instead, as a blocking hook layer installed by install_git_hooks.sh;
       # CLAUDE.md owns that contract. A clone without the hook falls back to
       # running the scanner by hand before pushing.
+      - name: Vietnamese translation and source-fidelity gates
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: python -m pytest skills/translate-vietnamese-finance/ skills/_parallax/test_translation_validation.py -q
+
       - name: Tracked-term scan (built-in terms only)
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         env:

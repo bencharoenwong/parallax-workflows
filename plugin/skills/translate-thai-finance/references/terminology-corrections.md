@@ -50,9 +50,11 @@ Thai finance professionals use these English terms directly. Any Thai translatio
 
 ---
 
-## ECL vs Expected Shortfall — FACTUAL ERROR TABLE
+## ECL vs Expected Shortfall — Source-dependent corrections
 
-| Wrong (ECL terms in portfolio context) | Correct |
+Apply these replacements only when the English source means Expected Shortfall. Preserve genuine ECL in bank, corporate or portfolio analysis. ECL concerns financial assets and credit commitments under IFRS 9; it is not restricted to bank loans.
+
+| Wrong only when the source actually means Expected Shortfall | Correct |
 |----------------------------------------|---------|
 | Expected Credit Losses | Expected Shortfall |
 | Expected Credit Loss | Expected Shortfall |
@@ -105,7 +107,7 @@ Thai finance professionals use these English terms directly. Any Thai translatio
 | English | Correct Thai | Wrong Forms |
 |---------|-------------|-------------|
 | Recurring revenue | รายได้ประจำ | NOT รายได้ที่เกิดขึ้นซ้ำ |
-| Operating leverage | operating leverage or การประหยัดต่อขนาด | NOT โครงสร้างต้นทุนทางการดำเนินงาน |
+| Operating leverage | operating leverage | NOT โครงสร้างต้นทุนทางการดำเนินงาน |
 | High-growth segments | ภาคธุรกิจที่มีการเติบโตสูง | NOT ส่วนแบ่งการเติบโตสูง |
 | Resilience | ความยืดหยุ่น | NOT ความทนทาน (market context) |
 | Margin expansion | การขยายตัวของอัตรากำไร | NOT การขยายกำไรส่วนเพิ่มขึ้น |

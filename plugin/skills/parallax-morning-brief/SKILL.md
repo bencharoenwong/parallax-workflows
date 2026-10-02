@@ -35,7 +35,7 @@ Generate a structured fund manager morning brief by orchestrating Parallax MCP t
 /parallax-morning-brief [{"symbol":"AAPL.O","weight":0.25},{"symbol":"MSFT.O","weight":0.20}] market=Japan top_n=5 lang=th register=retail
 ```
 
-Optional after the portfolio JSON: `market=Japan`, `top_n=5`, `lang=<code>` (`en` default; `zh-CN`, `zh-TW`, `zh-HK`, `th`), `register=retail` (passed only when translation is requested).
+Optional after the portfolio JSON: `market=Japan`, `top_n=5`, `lang=<code>` (`en` default; `zh-CN`, `zh-TW`, `zh-HK`, `th`, `vi-VN`), `register=retail` (passed only when translation is requested).
 
 ## Workflow
 

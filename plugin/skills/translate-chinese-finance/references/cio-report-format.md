@@ -1,5 +1,7 @@
 # CIO Report Format Reference
 
+**Status: proposed pipeline; wiring is not implemented here. The commands below describe the intended external integration. Run them only when the actual scripts and locale templates exist; otherwise deliver JSON or markdown.**
+
 CIO report-specific pipeline, footer standards, and table conventions for Chinese (Simplified or Traditional) output.
 
 Status: the Chinese pipeline scripts are not yet wired (see `references/INTEGRATION.md`); until they land, Chinese CIO-report translations are delivered as translated JSON/markdown, not pipeline HTML.
@@ -118,4 +120,4 @@ These patterns commonly appear and must be cleaned before finalization:
 - [ ] No truncated text
 - [ ] Data values match across all mentions
 - [ ] Script is uniformly Simplified or Traditional
-- [ ] Currency matches the listing market
+- [ ] Each amount retains its source currency

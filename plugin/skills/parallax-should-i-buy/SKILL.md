@@ -40,7 +40,7 @@ Quick, plain-language stock evaluation using Parallax MCP tools.
 /parallax-should-i-buy AAPL audience=client_safe
 ```
 
-Accepts plain tickers (auto-converts to RIC) or RIC format directly. Optional second positional arg sets the output language — one of `en` (default), `zh-CN`, `zh-TW`, `zh-HK`, `th`. Optional keyword `register=retail` after the positional language passes the retail register to the translator; absent means institutional register. Optional third argument: `audience=client_safe | audience=internal_analyst`; precedence follows `parallax-conventions.md` §13.1. Anything else falls back to `en` with a warning.
+Accepts plain tickers (auto-converts to RIC) or RIC format directly. Optional second positional arg sets the output language — one of `en` (default), `zh-CN`, `zh-TW`, `zh-HK`, `th`, `vi-VN`. Optional keyword `register=retail` after the positional language passes the retail register to the translator; absent means institutional register. Optional third argument: `audience=client_safe | audience=internal_analyst`; precedence follows `parallax-conventions.md` §13.1. Anything else falls back to `en` with a warning.
 
 ## Workflow
 

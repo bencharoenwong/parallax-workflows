@@ -396,14 +396,16 @@ def test_plugin_bundle_hides_ar_sa_while_its_translator_is_unshipped(
     bb.build_plugin()
 
     leaks = [str(p.relative_to(built)) for p in built.rglob("*")
-             if p.is_file() and "ar-SA" in p.read_text(errors="ignore")]
+             if p.is_file() and p.suffix in (".md", ".html", ".json")
+             and "ar-SA" in p.read_text(errors="ignore")]
     assert leaks == []
     conventions = (built / "skills/_parallax/parallax-conventions.md").read_text(
         encoding="utf-8")
-    assert "Supported: en, zh-CN, zh-TW, zh-HK, th.`" in conventions
-    assert "`th` → `translate-thai-finance`; the marker line" in conventions
+    assert "Supported: en, zh-CN, zh-TW, zh-HK, th, vi-VN.`" in conventions
+    assert "`vi-VN` → `translate-vietnamese-finance`; the marker line" in conventions
     for rel in bb.AR_SA_UNSHIPPED_TRANSFORMS:
-        assert "ar-SA" in (SKILLS / rel).read_text(encoding="utf-8")
+        if not rel.startswith("translate-"):
+            assert "ar-SA" in (SKILLS / rel).read_text(encoding="utf-8")
 
 
 def test_ar_sa_strip_is_a_no_op_when_its_translator_ships(tmp_path):

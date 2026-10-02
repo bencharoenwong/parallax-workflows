@@ -35,7 +35,7 @@ def test_detects_doubled_char(tmp_path):
     errors, warnings = validator.validate(str(path))
 
     assert any("Doubled char" in error for error in errors)
-    assert warnings == []
+    assert warnings == ["Source fidelity UNVERIFIED; style checks only"]
 
 
 def test_wrong_term_detection_per_locale(tmp_path):
@@ -61,14 +61,14 @@ def test_waive_downgrades_error_and_exit_code(tmp_path):
     path = write_payload(tmp_path, "市场的的估值稳定。")
 
     failed = subprocess.run(
-        [sys.executable, str(MODULE_PATH), str(path)],
+        [sys.executable, str(MODULE_PATH), str(path), "--style-only"],
         text=True,
         encoding="utf-8",
         capture_output=True,
         check=False,
     )
     waived = subprocess.run(
-        [sys.executable, str(MODULE_PATH), str(path), "--waive", "Doubled char"],
+        [sys.executable, str(MODULE_PATH), str(path), "--style-only", "--waive", "Doubled char"],
         text=True,
         encoding="utf-8",
         capture_output=True,
