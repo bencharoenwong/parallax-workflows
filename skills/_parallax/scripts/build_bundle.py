@@ -492,82 +492,99 @@ WEB_TRANSFORMS = {
 # the translate skill is absent from the bundled set.
 # --------------------------------------------------------------------------
 
-AR_SA_SKILL = "translate-arabic-finance"
-AR_SA_CODE = "ar-SA"
+class UnshippedLanguage:
+    """A translate skill that may be held out of the plugin, and the staged
+    files that mention its language code. Each transform removes only this
+    language's own tokens and note paragraph, so two held languages can share
+    a lang= list without one strip breaking the other's anchor.
+
+    A plain class, not a dataclass: test modules load this file through
+    importlib without registering it in sys.modules, and @dataclass cannot
+    resolve string annotations in that case."""
+
+    def __init__(self, code: str, skill: str, route: str) -> None:
+        self.code = code
+        self.skill = skill
+        self.route = route  # the §15.2 routing-table fragment to remove
+        self.transforms: dict = {}
 
 
-def _strip_ar_sa_lang_list(text: str) -> str:
-    return _swap(text, ", `ar-SA`", "", "ar-SA lang= list")
-
-
-def _strip_ar_sa_coverage(text: str) -> str:
-    if "ar-SA" not in text:
-        return text
-    return _swap(
-        text,
-        ", and ar-SA via `translate-arabic-finance`. The Arabic skill is a seed "
-        "scaffold pending native review (see its SKILL.md \"Open decisions\") — "
-        "route `ar-SA` requests there rather than falling back to English.",
-        ". Arabic requests fall back to English.",
-        "ar-SA translator language coverage")
-
-
-def _strip_ar_sa_conventions(text: str) -> str:
-    text = _swap(text, ", `th`, `vi-VN`, `ar-SA`. Any", ", `th`, `vi-VN`. Any",
-                 "conventions §15.1 supported values")
-    text = _swap(text, ", th, vi-VN, ar-SA.`", ", th, vi-VN.`",
-                 "conventions §15.1 unsupported message")
-    text = _swap(
-        text,
-        "\n`ar-SA` routes to `translate-arabic-finance`, a seed skill pending "
-        "native review (see that skill's SKILL.md \"Open decisions\"). Do not "
-        "present `ar-SA` output as production-validated until that review has "
-        "happened.\n",
-        "", "conventions §15.1 ar-SA note")
-    return _swap(
-        text,
-        "; `ar-SA` → `translate-arabic-finance` (no `target_variant` line — "
-        "omit it, same as Thai)",
-        "", "conventions §15.2 ar-SA route")
-
-
-# Keyed by path relative to skills/. Entries whose file is not staged (a
-# checkout without the translate-* skills) are skipped; strip_unshipped_ar_sa
-# then fails the build on any mention these transforms did not remove.
-AR_SA_UNSHIPPED_TRANSFORMS = {
-    "_parallax/parallax-conventions.md": _strip_ar_sa_conventions,
-    "parallax-should-i-buy/SKILL.md":
-        lambda t: _swap(t, ", `th`, `vi-VN`, `ar-SA`.", ", `th`, `vi-VN`.", "ar-SA positional list"),
-    "parallax-morning-brief/SKILL.md": _strip_ar_sa_lang_list,
-    "parallax-deep-dive/SKILL.md": _strip_ar_sa_lang_list,
-    "parallax-client-review/SKILL.md": _strip_ar_sa_lang_list,
-    "parallax-score-explainer/SKILL.md": _strip_ar_sa_lang_list,
-    "translate-chinese-finance/SKILL.md": _strip_ar_sa_coverage,
-    "translate-thai-finance/SKILL.md": _strip_ar_sa_coverage,
-}
-
-
-def strip_unshipped_ar_sa(skills_root: Path, skills: list[str]) -> None:
-    """Remove ar-SA from the staged bundle when its translate skill is not
-    bundled, then fail closed on any surviving mention."""
-    if AR_SA_SKILL in skills:
-        return
-    for rel, transform in AR_SA_UNSHIPPED_TRANSFORMS.items():
-        path = skills_root / rel
-        if path.is_file():
-            path.write_text(transform(path.read_text(encoding="utf-8")),
-                            encoding="utf-8")
-    # Shared executable validators can support draft locales without exposing
-    # a user-facing route. The gate checks operator-facing documentation/data.
-    leaks = sorted(
-        str(p.relative_to(skills_root)) for p in skills_root.rglob("*")
-        if p.is_file() and p.suffix in (".md", ".html", ".json")
-        and AR_SA_CODE in p.read_text(encoding="utf-8",
-                                                     errors="ignore"))
-    if leaks:
+def _drop_paragraph_line(text: str, prefix: str, label: str) -> str:
+    """Drop a one-line paragraph starting with `prefix`, together with the
+    newline before it, so removing any subset of adjacent one-line paragraphs
+    leaves exactly one blank line behind."""
+    matches = [ln for ln in text.splitlines() if ln.startswith(prefix)]
+    if len(matches) != 1:
         raise BuildError(
-            f"{AR_SA_CODE} is advertised but {AR_SA_SKILL} is not bundled: "
-            + ", ".join(leaks))
+            f"transform anchor {'not found' if not matches else 'not unique'} "
+            f"({label}): paragraph prefix")
+    return _swap(text, "\n" + matches[0] + "\n", "", label, what="paragraph")
+
+
+def _strip_conventions(lang: "UnshippedLanguage", text: str) -> str:
+    code, skill = lang.code, lang.skill
+    text = _swap(text, f", `{code}`", "", f"conventions §15.1 {code} supported value")
+    text = _swap(text, f", {code}", "", f"conventions §15.1 {code} unsupported message")
+    text = _drop_paragraph_line(text, f"`{code}` routes to `{skill}`",
+                                f"conventions §15.1 {code} note")
+    return _swap(text, lang.route, "", f"conventions §15.2 {code} route")
+
+
+_LANG_LIST_DOCS = (
+    "parallax-should-i-buy/SKILL.md",
+    "parallax-morning-brief/SKILL.md",
+    "parallax-deep-dive/SKILL.md",
+    "parallax-client-review/SKILL.md",
+    "parallax-score-explainer/SKILL.md",
+)
+
+
+def _unshipped_language(code: str, skill: str, route: str) -> UnshippedLanguage:
+    lang = UnshippedLanguage(code, skill, route)
+    lang.transforms["_parallax/parallax-conventions.md"] = (
+        lambda t: _strip_conventions(lang, t))
+    for rel in _LANG_LIST_DOCS:
+        lang.transforms[rel] = (
+            lambda t, code=code: _swap(t, f", `{code}`", "", f"{code} lang= list"))
+    return lang
+
+
+# Transforms are keyed by path relative to skills/. Entries whose file is not
+# staged (a checkout without the translate-* skills) are skipped;
+# strip_unshipped_languages then fails the build on any mention they missed.
+UNSHIPPED_LANGUAGES = (
+    _unshipped_language(
+        "vi-VN", "translate-vietnamese-finance",
+        "; `vi-VN` → `translate-vietnamese-finance`"),
+    _unshipped_language(
+        "ar-SA", "translate-arabic-finance",
+        "; `ar-SA` → `translate-arabic-finance` (no `target_variant` line — "
+        "omit it, same as Thai)"),
+)
+
+
+def strip_unshipped_languages(skills_root: Path, skills: list[str]) -> None:
+    """Remove each held language from the staged bundle when its translate
+    skill is not bundled, then fail closed on any surviving mention."""
+    for lang in UNSHIPPED_LANGUAGES:
+        if lang.skill in skills:
+            continue
+        for rel, transform in lang.transforms.items():
+            path = skills_root / rel
+            if path.is_file():
+                path.write_text(transform(path.read_text(encoding="utf-8")),
+                                encoding="utf-8")
+        # Shared executable validators can support draft locales without
+        # exposing a user-facing route. The gate checks operator-facing
+        # documentation and data.
+        leaks = sorted(
+            str(p.relative_to(skills_root)) for p in skills_root.rglob("*")
+            if p.is_file() and p.suffix in (".md", ".html", ".json")
+            and lang.code in p.read_text(encoding="utf-8", errors="ignore"))
+        if leaks:
+            raise BuildError(
+                f"{lang.code} is advertised but {lang.skill} is not bundled: "
+                + ", ".join(leaks))
 
 
 # --------------------------------------------------------------------------
@@ -841,7 +858,7 @@ def build_plugin() -> None:
         for name in skills:
             assemble_skill(name, skills_root)
         assemble_parallax_shared(skills_root)
-        strip_unshipped_ar_sa(skills_root, skills)
+        strip_unshipped_languages(skills_root, skills)
 
         # repo-root examples/ docs referenced from bundled skills ship at
         # <plugin>/examples/ so the ../../examples/ relative form resolves.

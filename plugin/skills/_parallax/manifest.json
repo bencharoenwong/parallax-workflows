@@ -298,7 +298,7 @@
       "web": false
     },
     "translate-vietnamese-finance": {
-      "plugin": true,
+      "plugin": false,
       "web": false
     }
   },

@@ -590,6 +590,8 @@ Only when the operator supplied a language argument and it is not `en`. It is th
 
 `ar-SA` routes to `translate-arabic-finance`, a seed skill pending native review (see that skill's SKILL.md "Open decisions"). Do not present `ar-SA` output as production-validated until that review has happened.
 
+`vi-VN` routes to `translate-vietnamese-finance`, a seed skill pending native review (see that skill's SKILL.md "Open decisions"). Do not present `vi-VN` output as production-validated until that review has happened.
+
 ### §15.2 Routing block
 
 Invoke the translator (`invoke-skill`, §14) with the rendered prose body, never with raw tool JSON, shaped exactly as:
