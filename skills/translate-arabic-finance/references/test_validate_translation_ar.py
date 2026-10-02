@@ -57,12 +57,12 @@ def test_detects_doubled_ascii_word(tmp_path):
     assert any("Doubled word" in error for error in errors)
 
 
-def test_detects_ecl_es_confusion(tmp_path):
+def test_preserves_genuine_ecl_without_source_blind_rejection(tmp_path):
     path = write_payload(tmp_path, "ارتفع Expected Credit هذا الربع")
 
     errors, _ = validator.validate(str(path))
 
-    assert any("ECL/ES confusion" in error for error in errors)
+    assert not any("ECL/ES confusion" in error for error in errors)
 
 
 def test_detects_wrong_term(tmp_path):
@@ -73,34 +73,40 @@ def test_detects_wrong_term(tmp_path):
     assert any("Wrong term" in error for error in errors)
 
 
-def test_detects_sar_in_non_saudi_market(tmp_path):
+def test_allows_sar_in_non_saudi_market_analysis(tmp_path):
     path = write_payload(tmp_path, "الإيرادات SAR 10 مليون", market="United States")
 
     errors, _ = validator.validate(str(path))
 
-    assert any("Found SAR in non-Saudi market" in error for error in errors)
+    assert not any("Found SAR in non-Saudi market" in error for error in errors)
 
 
 def test_detects_mixed_digit_script(tmp_path):
     path = write_payload(tmp_path, "ارتفع السهم 12 نقطة ثم ١٥ نقطة")
 
-    errors, _ = validator.validate(str(path))
+    errors, warnings = validator.validate(str(path))
 
-    assert any("Mixed digit script" in error for error in errors)
+    assert any("Mixed digit script" in warning for warning in warnings)
+    assert not any("Mixed digit script" in error for error in errors)
+
+
+def test_reviewed_arabic_gloss_with_english_identifier_is_allowed(tmp_path):
+    path = write_payload(tmp_path, "ارتفعت Sharpe Ratio (نسبة شارب)")
+    assert validator.validate(str(path))[0] == []
 
 
 def test_waive_downgrades_error_and_exit_code(tmp_path):
     path = write_payload(tmp_path, "السوق السوق يرتفع")
 
     failed = subprocess.run(
-        [sys.executable, str(MODULE_PATH), str(path)],
+        [sys.executable, str(MODULE_PATH), str(path), "--style-only"],
         text=True,
         encoding="utf-8",
         capture_output=True,
         check=False,
     )
     waived = subprocess.run(
-        [sys.executable, str(MODULE_PATH), str(path), "--waive", "Doubled Arabic word"],
+        [sys.executable, str(MODULE_PATH), str(path), "--style-only", "--waive", "Doubled Arabic word"],
         text=True,
         encoding="utf-8",
         capture_output=True,

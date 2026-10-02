@@ -8,15 +8,15 @@ Draft find→replace table for Arabic financial translation. Unlike the Thai and
 
 ## Code-Switching Terms (Draft: Arabic phrase to avoid → Correct English)
 
-Gulf finance professionals use these English terms directly. A literal Arabic translation reads as machine-generated.
+English risk identifiers are product house style, not evidence that standard Arabic finance terminology is incorrect. Saudi CMA itself uses نسبة شارب. Use an Arabic gloss when the selected register calls for it; literal phrases that change the concept still require correction.
 
-| Avoid (literal Arabic) | Correct English |
+| English-identifier house style: Arabic gloss | Correct English |
 |--------------------------|-----------------|
 | خطأ التتبع | Tracking Error |
 | مؤشر المخاطرة أو القيمة المعرضة للخطر | VaR |
 | العائد الاستثنائي (ألفا) | Alpha |
 | بيتا السهم | Beta |
-| نسبة شارب | Sharpe Ratio |
+| نسبة شارب alone (English identifier dropped) | Sharpe Ratio (نسبة شارب) — the Arabic term is attested (Argaam, Derayah); keep the English identifier beside it |
 | الحصة النشطة | Active Share |
 | نسبة الإصابة | Hit Ratio |
 | الحد الأقصى للتراجع | Max Drawdown |
@@ -25,7 +25,7 @@ Gulf finance professionals use these English terms directly. A literal Arabic tr
 ## Structural Consistency (not corrections — pick-one-form reminders)
 
 - Use القطاع consistently for "sector"; do not alternate with الصناعة within one document.
-- Use المؤشر المرجعي for "benchmark"; do not alternate with معيار الأداء.
+- Use المؤشر الاسترشادي for "benchmark" (CMA fund filings); never المؤشر المرجعي, and do not alternate with معيار الأداء.
 - Use المحفظة for "portfolio" after first introducing المحفظة الاستثمارية once, if at all.
 
 ## Common Spelling-Class Errors to Watch For (categories, not confirmed instances)

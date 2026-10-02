@@ -45,34 +45,34 @@ def test_detects_no_space_doubling_literal(tmp_path):
     assert any("Doubled (no-space) word" in error for error in errors)
 
 
-def test_detects_ecl_es_confusion(tmp_path):
+def test_preserves_genuine_ecl_without_source_blind_rejection(tmp_path):
     path = write_payload(tmp_path, "Expected Credit Loss เพิ่มขึ้น")
 
     errors, _ = validator.validate(str(path))
 
-    assert any("ECL/ES confusion" in error for error in errors)
+    assert not any("ECL/ES confusion" in error for error in errors)
 
 
-def test_detects_baht_in_non_thai_market(tmp_path):
+def test_allows_baht_in_non_thai_market_analysis(tmp_path):
     path = write_payload(tmp_path, "รายได้ 10 บาท", market="United States")
 
     errors, _ = validator.validate(str(path))
 
-    assert any("Found บาท in non-Thai market" in error for error in errors)
+    assert not any("Found บาท in non-Thai market" in error for error in errors)
 
 
 def test_waive_downgrades_error_and_exit_code(tmp_path):
     path = write_payload(tmp_path, "ราราคา ปรับตัวลง")
 
     failed = subprocess.run(
-        [sys.executable, str(MODULE_PATH), str(path)],
+        [sys.executable, str(MODULE_PATH), str(path), "--style-only"],
         text=True,
         encoding="utf-8",
         capture_output=True,
         check=False,
     )
     waived = subprocess.run(
-        [sys.executable, str(MODULE_PATH), str(path), "--waive", "Doubled (no-space)"],
+        [sys.executable, str(MODULE_PATH), str(path), "--style-only", "--waive", "Doubled (no-space)"],
         text=True,
         encoding="utf-8",
         capture_output=True,

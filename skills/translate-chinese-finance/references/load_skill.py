@@ -21,8 +21,8 @@ CLI smoke test:
 
 Skill path resolution order:
     1. CHINESE_SKILL_DIR env var (path to a directory containing runtime-config-*.md)
-    2. ~/.claude/skills/translate-chinese-finance/references/
-    3. The directory containing this script (works when bundled in CIO report scripts)
+    2. The skill containing this script (repository, plugin, or standalone package)
+    3. ~/.claude/skills/translate-chinese-finance/ as an installed fallback
 """
 from __future__ import annotations
 
@@ -30,15 +30,15 @@ import argparse
 import ast
 import os
 import re
-import sys
 from pathlib import Path
 
-VALID_LOCALES = ("zh-CN", "zh-TW")
+VALID_LOCALES = ("zh-CN", "zh-TW", "zh-HK")
 
 
 _LOCALE_FILES = {
     "zh-CN": ("skill_simplified.md", "runtime-config-zh-CN.md"),
     "zh-TW": ("skill_traditional.md", "runtime-config-zh-TW.md"),
+    "zh-HK": ("skill_traditional.md", "runtime-config-zh-TW.md"),
 }
 
 
@@ -49,11 +49,10 @@ def _candidate_dirs() -> list[Path]:
     if env:
         cands.append(Path(env))
 
-    skill_root = Path.home() / ".claude" / "skills" / "translate-chinese-finance"
-    cands.extend([skill_root, skill_root / "references"])
-
     here = Path(__file__).resolve().parent
     cands.extend([here.parent, here])  # top of skill, then references/
+    skill_root = Path.home() / ".claude" / "skills" / "translate-chinese-finance"
+    cands.extend([skill_root, skill_root / "references"])
 
     # Dedup while preserving order
     seen, out = set(), []
@@ -161,7 +160,31 @@ def load_raw(locale: str = "zh-CN") -> dict:
     path = _config_path(locale)
     content = path.read_text(encoding="utf-8")
     sections = _split_sections(content)
-    return {name: _parse_section(body) for name, body in sections.items()}
+    raw = {name: _parse_section(body) for name, body in sections.items()}
+    if locale == "zh-HK":
+        # Shared Traditional script, with explicitly scoped Hong Kong vocabulary.
+        substitutions = {"本益比": "市盈率", "股價淨值比": "市賬率",
+                         "股東權益報酬率": "股東權益回報率",
+                         "每股盈餘": "每股盈利", "股息殖利率": "股息率",
+                         "樂觀情境": "樂觀情景", "基準情境": "基準情景",
+                         "悲觀情境": "悲觀情景"}
+
+        def localize(value):
+            if isinstance(value, str):
+                for old, new in substitutions.items():
+                    value = value.replace(old, new)
+                return value
+            if isinstance(value, dict):
+                return {k: localize(v) for k, v in value.items()}
+            if isinstance(value, list):
+                return [localize(v) for v in value]
+            if isinstance(value, tuple):
+                return tuple(localize(v) for v in value)
+            return value
+
+        raw = {k: localize(v) for k, v in raw.items()}
+        raw.update(LANGUAGE_CODE="zh-HK", LANGUAGE_NAME="Chinese (Hong Kong)")
+    return raw
 
 
 # Mapping from CONSTANT_NAME (in runtime config) → snake_case key (in returned dict).
@@ -251,8 +274,24 @@ def get_prompts(locale: str = "zh-CN") -> dict:
     translation = raw.get("TRANSLATION_PROMPT") or ""
     review = raw.get("REVIEW_PROMPT") or ""
 
+    script = "Simplified" if locale == "zh-CN" else "Traditional"
+    condensed = (
+        f"Translate the complete source to {script} Chinese for {locale}. "
+        "Preserve every claim, uncertainty, paragraph, disclosure, number, sign, "
+        "currency, magnitude unit, ticker, URL, placeholder and HTML structure. "
+        "Keep original numerical notation and units; never replace B with 亿/億. "
+        "Keep Western company names and financial abbreviations in English. "
+        "Use verified official Chinese names for CN/HK/TW issuers. "
+        "Gloss financial abbreviations once per document using locale vocabulary. "
+        "Scenarios: 乐观情景/基准情景/悲观情景 for zh-CN; "
+        "樂觀情境/基準情境/悲觀情境 for zh-TW; "
+        "樂觀情景/基準情景/悲觀情景 for zh-HK. "
+        "Use concise institutional prose without adding facts. "
+        "Keep ECL distinct from Expected Shortfall (ES); retain Expected Shortfall on first use of ES beside any Chinese gloss. "
+        "Validate against the source and review meaning before delivery."
+    )
     return {
-        "condensed": translation[:2000] if translation else "",
+        "condensed": condensed,
         "translation": translation,
         "review": review,
         "final_filter": (
@@ -317,6 +356,10 @@ def build_label_dict(locale: str = "zh-CN") -> dict:
     ):
         if isinstance(d.get(key), dict):
             combined.update(d[key])
+    # Gloss maps remain available separately; global replacement preserves IDs.
+    for key in ("financial_ratios_keep_english", "risk_terms_keep_english", "acronyms_keep_english"):
+        for identifier in d[key]:
+            combined[identifier] = identifier
     return combined
 
 

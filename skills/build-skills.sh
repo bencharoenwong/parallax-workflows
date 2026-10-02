@@ -29,7 +29,7 @@ cd "$(dirname "$0")"
 get_excludes() {
   case "$1" in
     translate-chinese-finance)
-      echo "translate-chinese-finance/references/INTEGRATION.md translate-chinese-finance/references/load_skill.py"
+      echo "translate-chinese-finance/references/INTEGRATION.md"
       ;;
     *)
       echo ""
@@ -37,7 +37,7 @@ get_excludes() {
   esac
 }
 
-KNOWN_SKILLS="translate-chinese-finance translate-thai-finance"
+KNOWN_SKILLS="translate-chinese-finance translate-thai-finance translate-vietnamese-finance"
 
 # Private beta — opt-in only, not built by default.
 # Skills here are gated until pilot customers complete one full usage cycle.
@@ -63,8 +63,11 @@ build_one() {
   if is_private_beta "$name"; then
     echo "  WARN: building private-beta skill '$name' — not for general release" >&2
   fi
-  local out="$HOME/Downloads/${name}.skill"
-  rm -f "$out"
+  local out_dir="${SKILL_BUILD_OUT_DIR:-$HOME/Downloads}"
+  mkdir -p "$out_dir"
+  local out="$out_dir/${name}.skill"
+  local staging
+  staging=$(mktemp -d)
 
   local exc_args=()
   local exc
@@ -72,9 +75,16 @@ build_one() {
     exc_args+=(-x "$exc")
   done
 
-  zip -rq "$out" "$name" \
-    -x "*.DS_Store" "*/__pycache__/*" "*/.git/*" \
-    ${exc_args[@]+"${exc_args[@]}"}
+  cp -R "$name" "$staging/$name"
+  if [[ "$name" == translate-*-finance ]]; then
+    cp "_parallax/translation_validate.py" "$staging/$name/references/translation_common.py"
+  fi
+  # Fresh archive: stale files from a previous package must not survive.
+  (cd "$staging" && zip -rq package.skill "$name" \
+    -x "*.DS_Store" "*/__pycache__/*" "*/.git/*" "*/.ruff_cache/*" \
+    ${exc_args[@]+"${exc_args[@]}"})
+  mv "$staging/package.skill" "$out"
+  rm -rf "$staging"
   printf "  ✓ %s → %s (%s)\n" "$name" "$out" "$(du -h "$out" | cut -f1)"
 }
 

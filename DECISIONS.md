@@ -4,6 +4,20 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-10-02: Translation audit base plus sourced Vietnamese and Arabic conventions
+
+**Why:** Two parallel efforts produced overlapping translation changes: a four-language audit with a shared source-fidelity validator, and a research pass over public Vietnamese broker reports and Saudi broker/CMA documents. The audit is the base because it covers all four languages and cuts instruction size; the research is ported on top so the rules match how local institutional research is actually written.
+
+**Impact:** Vietnamese prose reads in local number style while values stay verifiable against the source; Vietnamese and Arabic stay out of the plugin until native review; thirteen Arabic draft rows contradicted by Saudi sources are corrected.
+
+**Alternatives:**
+- [DROP] Copy source number formatting into Vietnamese prose verbatim. Easy to verify, but every Vietnamese broker report uses `1.234,5`, and an English `1,234.5` in Vietnamese prose reads as a different number.
+- [DROP] Fully localize numbers including tables and data. Tables feed downstream consumers; they keep the source form.
+- [DROP] Map Parallax ratings onto local broker scales (Vietnamese KHẢ QUAN tiers; Saudi زيادة المراكز / وزن زائد). Those scales are relative and have tiers Parallax lacks; ratings render dual-label instead.
+- [DROP] Adopt "percent sign before digits" for Arabic: it came from extracted PDF text, where right-to-left runs are often reordered.
+
+**Flip conditions:** native review of 3–5 corrected Parallax samples per language clears the open decisions → flip that language's manifest row to `"plugin": true` and rebuild the bundle.
+
 ## 2026-10-01: Price the ETF search endpoints; keep `search_stocks` free
 
 **Why:** `search_etfs` was listed as free and `etf_search` as unpriced. The live `search_etfs` tool description states "Cost: 1 credit", the backend price table matches, and `etf_search` is the same billed search endpoint (all checked 2026-10-01). The standing rule against publishing inferred numbers does not apply: these prices are observed, not inferred. `search_stocks` also bills 1 credit today, but that charge has no deliberate price behind it. It is the first lookup step in most workflows, so it is listed as free by design to remove friction on ticker resolution.

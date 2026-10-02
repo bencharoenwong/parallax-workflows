@@ -1,5 +1,7 @@
 # CIO Report Format Reference
 
+**Status: external pipeline, not included in this repository. Verify the checkpoint script and templates exist before running the commands below. Otherwise deliver JSON or markdown.**
+
 CIO report-specific pipeline, footer standards, and table conventions.
 
 ---

@@ -25,7 +25,7 @@ Standard translations for country names, months, and section headers.
 | Japan | اليابان |
 | South Korea | كوريا الجنوبية |
 | Taiwan | تايوان |
-| Singapore | سنغافورة |
+| Singapore | سنغافورة (SAMA statistics spell it سنغافورا; both circulate) |
 | India | الهند |
 | United Kingdom | المملكة المتحدة |
 | UK | المملكة المتحدة |
@@ -60,6 +60,8 @@ Note: the Gulf convention above (يناير, فبراير...) differs from the L
 
 ## Scenario Labels
 
+Keep English scenario identifiers in institutional output as product house style. The Arabic forms below are optional explanatory glosses, pending native review.
+
 | English | Arabic (draft) |
 |---------|------------------|
 | Bull / Bull Case | سيناريو متفائل |
@@ -81,9 +83,13 @@ Note: the Gulf convention above (يناير, فبراير...) differs from the L
 
 | English | Arabic |
 |---------|--------|
-| Tadawul (Saudi Exchange) | تداول (السوق المالية السعودية) |
+| Tadawul (Saudi Exchange) | تداول السعودية |
 | Capital Market Authority (CMA) | هيئة السوق المالية |
 | Saudi Central Bank (SAMA) | البنك المركزي السعودي (ساما) |
 | Zakat, Tax and Customs Authority (ZATCA) | هيئة الزكاة والضريبة والجمارك |
 
 These four institution names carry regulatory weight — do not paraphrase or shorten inconsistently once a document has introduced the full form.
+
+| Insurance Authority (IA) | هيئة التأمين |
+
+Sources: [Saudi Exchange](https://www.saudiexchange.sa/wps/portal/tadawulgroup/portfolio/saudi-exchange?locale=ar); [Insurance Authority remit](https://www.ia.gov.sa/en/faqs). SAMA is not the current insurance regulator.

@@ -99,12 +99,14 @@ Standard translations for country names, months, section headers, and strategy n
 | Metric / Indicator | ตัวชี้วัด | NOT เมตริก |
 | Volatility | ความผันผวน | |
 | Return | ผลตอบแทน | |
-| Contribution | ส่วนสนับสนุน | |
+| Contribution | การมีส่วนช่วย | |
 | Concentration | การกระจุกตัว | NOT การแออัด |
 | Diversification | การกระจายความเสี่ยง | |
 | Government bonds | พันธบัตรรัฐบาล | NOT พันธบัตร์ |
 | Debt/Equity | อัตราส่วนหนี้สินต่อทุน | |
 | Current ratio | อัตราส่วนเงินทุนหมุนเวียน | |
-| Quick ratio | อัตราส่วนเร่งด่วน | |
+| Quick ratio | อัตราส่วนสภาพคล่องหมุนเร็ว | |
 | EV/Revenue | EV/รายได้ | |
 | EV/Sales | EV/ยอดขาย | |
+
+Sources: [SET financial glossary](https://media.set.or.th/set/Documents/2022/Mar/SET_Formula_Glossary.pdf) confirms Quick Ratio terminology.

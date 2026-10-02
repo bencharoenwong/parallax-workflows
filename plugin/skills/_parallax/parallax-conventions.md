@@ -607,6 +607,8 @@ Include `target_variant` only for the Chinese variants and omit the line for Tha
 
 ### §15.3 Failure handling
 
+The translation skill validates against the original gated prose. Preserve sections, source claims and uncertainty, numerical tokens, currencies, tickers and disclosure text. When shell execution is available, save source and output snapshots and run that translator's source-fidelity validator. This is a separate check from the English render gate. Without shell execution, compare source and translation manually and state that automated validation was unavailable. A style-only pass does not validate source fidelity.
+
 - Translator fails or returns empty/partial: emit the English report with `> Translation to <lang> failed; output shown in English. Re-run if the issue is transient.`
 - Host cannot invoke a sibling skill (§14.3): emit the English report with `> Translation to <lang> unavailable on this host; output shown in English.`
 - Translator output replaces the English output; never show both.

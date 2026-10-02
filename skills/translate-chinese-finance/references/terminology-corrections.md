@@ -88,7 +88,7 @@ When a Traditional document is partially converted to Simplified but stragglers 
 | 識 | 识 |
 | 計 | 计 |
 
-For Traditional output, run the reverse map.
+For Traditional output, use context-aware conversion. Do not reverse this character map; several Simplified characters have multiple Traditional forms.
 
 ---
 
@@ -143,7 +143,7 @@ For HK/TW/CN-listed companies, the Chinese name IS the official name — keep it
 | 盈利能力能力 | 盈利能力 | |
 | 现金流流量 | 现金流量 or 现金流 | |
 
-**Hallucination check (cell-keyword consensus):** when a translated table cell would contain BOTH `负债` AND `权益`, the canonical label is `负债与权益` (or `负债及股东权益`). When it contains BOTH `商誉` AND `无形资产`, it should be `无形资产与商誉`. Force these canonical forms.
+**Table labels:** translate the original row label. Use `负债与权益` or `无形资产与商誉` only when the source label names those combined categories. Keyword co-occurrence cannot identify a row label; preserve exclusions, comparisons and impairment descriptions.
 
 ---
 

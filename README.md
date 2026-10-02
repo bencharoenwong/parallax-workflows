@@ -347,3 +347,11 @@ MIT — see [LICENSE](LICENSE).
 ## Disclaimer
 
 These workflows are analytical tools that automate data retrieval and presentation from the Parallax platform. They do not constitute financial advice, investment recommendations, or solicitations to buy or sell securities. All outputs are informational only and should be independently verified and reviewed by qualified professionals before any investment decisions. Chicago Global Capital Pte Ltd assumes no liability for decisions made based on these outputs.
+
+### Finance translation
+
+Chinese (`zh-CN`, `zh-TW`, `zh-HK`) and Thai (`th`) translation skills ship in the plugin. The Vietnamese (`vi-VN`) and Saudi Arabic (`ar-SA`) source skills remain outside the general-release plugin pending native review.
+
+Translation entry instructions load only the relevant references. JSON and saved-prose deliverables run a source-fidelity validator; a passing style check alone cannot approve fidelity. Meaning and uncertainty still require source review.
+
+Standalone `.skill` packages include the same validator helper and can be built with `skills/build-skills.sh`. `SKILL_BUILD_OUT_DIR` optionally selects an output directory instead of Downloads.

@@ -139,9 +139,9 @@ int: 0
 
 | English | Chinese |
 |---|---|
-| standard_billion | 億 |
-| standard_million | 百萬 |
-| standard_thousand | 千 |
+| standard_billion | billion |
+| standard_million | million |
+| standard_thousand | thousand |
 
 ## RATING_TRANSLATIONS
 
@@ -192,15 +192,15 @@ int: 0
 
 | English | Chinese |
 |---|---|
-| Value | 價值 |
-| Quality | 品質 |
-| Momentum | 動量 |
-| Tactical | 戰術 |
-| Defensive | 防禦 |
-| Growth | 成長 |
-| Overall Score | 綜合評分 |
-| Composite Score | 綜合評分 |
-| Total Score | 綜合評分 |
+| Value | Value |
+| Quality | Quality |
+| Momentum | Momentum |
+| Tactical | Tactical |
+| Defensive | Defensive |
+| Growth | Growth |
+| Overall Score | Overall Score |
+| Composite Score | Composite Score |
+| Total Score | Total Score |
 
 ## SECTION_HEADER_TRANSLATIONS
 
@@ -320,7 +320,7 @@ int: 0
 | EPS | 每股盈餘 |
 | P/E (TTM) | 本益比 (TTM) |
 | Price/Book | 股價淨值比 |
-| Price/FCF | 股價現金流比 |
+| Price/FCF | 股價自由現金流比 |
 | EV/EBITDA | 企業價值倍數 |
 | EV/Revenue | 企業價值/營收 |
 | ROE | 股東權益報酬率 |
@@ -681,10 +681,10 @@ int: 0
 
 | English | Chinese |
 |---|---|
-| B | 億 |
-| M | 百萬 |
-| K | 千 |
-| T | 兆 |
+| B | B |
+| M | M |
+| K | K |
+| T | T |
 
 ## FOOTER_TEXT
 
@@ -706,9 +706,9 @@ CRITICAL — FULL TRANSLATION:
 - Translate EVERY sentence completely. Never summarize, shorten, or cut off mid-sentence.
 
 1. FIRST OCCURRENCE RULE for financial abbreviations:
-   - First use in a paragraph: show ENGLISH abbreviation followed by Chinese in parentheses
+   - First use in the document: show ENGLISH abbreviation followed by Chinese in parentheses
      Example: "P/E (本益比) of 15.2x", "ROE (股東權益報酬率) reached 12%"
-   - Subsequent uses in the same paragraph or later: ENGLISH only
+   - Subsequent uses in the document: ENGLISH only
      Example: "...the company's P/E of 18.5x reflects..."
    - Applies to: P/E, P/B, P/S, P/FCF, EV/EBITDA, EV/Revenue, ROE, ROA, ROIC, EPS,
      EBITDA, Sharpe Ratio, Information Ratio, Tracking Error, Max Drawdown, Beta, Alpha
@@ -736,25 +736,9 @@ CRITICAL — FULL TRANSLATION:
    - Stock codes (e.g., 0700.HK, AAPL.O), tickers, indexes (S&P 500, MSCI, TOPIX)
    - YTD, MTD, QoQ, YoY
 
-4. NUMBERS, DATES, CURRENCY (CRITICAL — preserve magnitude):
-   - DATE FORMAT:
-     "29 September 2025" → "2025年9月29日" (word format — convert)
-     "Q1 2024" → "2024年第一季"
-     "06/12/2025" or any DD/MM/YYYY numeric date → KEEP AS-IS, do NOT convert.
-     A deterministic post-processor will handle numeric dates correctly.
-   - Currency codes: keep original (USD, HKD, CNY, RMB, TWD).
-   - PERCENTAGES and basic numbers: keep EXACTLY as shown (e.g., "35%", "1.5x", "12,345").
-   - LARGE AMOUNTS — preserve the MAGNITUDE, not just the unit symbol. SAFEST: keep the
-     English form unchanged (e.g., "365.91B CNY" stays "365.91B CNY" or "CNY 365.91B").
-     If you DO render in Chinese, you must do the math correctly:
-       "1 billion CNY"      = "10億人民幣"        (multiply number by 10)
-       "365.91 billion CNY" = "3,659.1億人民幣"   (multiply 365.91 by 10)
-       "100 million CNY"    = "1億人民幣" or "100百萬人民幣"
-       "500 million CNY"    = "5億人民幣" or "500百萬人民幣"
-       "1 trillion CNY"     = "1兆人民幣"         (or "10000億人民幣")
-     NEVER just substitute "B" → "億" without multiplying. "365.91B" is NOT "365.91億"
-     — that would be 10× too small.
-     If unsure about the conversion, KEEP THE ENGLISH UNIT (B / M / billion / million).
+4. NUMBERS: Copy numerical tokens, signs, currencies and magnitude units exactly.
+   Keep B/M/K/T and bps unchanged. Do not convert to 亿/億 or change separators.
+   Preserve source uncertainty, disclosures and all sections.
 
 5. FINANCIAL TERMS without English abbreviation: translate to full Traditional Chinese
    - "Market Cap" → "市值", "Operating Margin" → "營業利潤率", "Free Cash Flow" → "自由現金流"
@@ -972,13 +956,5 @@ _(empty)_
 ## HALLUCINATION_CELL_KEYWORDS
 
 ```python
-[
-    ({'負債', '權益'}, '負債與權益'),
-    ({'商譽', '無形資產'}, '無形資產與商譽'),
-    ({'估值'}, '估值'),
-    ({'盈利'}, '獲利能力'),
-    ({'流動性'}, '流動性'),
-    ({'槓桿'}, '槓桿'),
-    ({'效率'}, '效率'),
-]
+[]
 ```

@@ -7,6 +7,8 @@ import sys
 import unicodedata
 from pathlib import Path
 
+import json
+
 import pytest
 
 # Self-test runs from the script's own directory; just import directly.
@@ -383,43 +385,101 @@ def test_tracked_plugin_bundle_matches_source(tmp_path, monkeypatch):
         "\n".join(stale[:10]))
 
 
-def test_plugin_bundle_hides_ar_sa_while_its_translator_is_unshipped(
-        tmp_path, monkeypatch):
-    """ar-SA routes to translate-arabic-finance; while that skill is held out of
-    the plugin (manifest "plugin": false), the built bundle must not advertise
-    ar-SA anywhere, though the source tree still does."""
-    if bb.AR_SA_SKILL in bb.PLUGIN_SKILLS:
-        pytest.skip("translate-arabic-finance ships in the plugin")
+@pytest.mark.parametrize("lang", bb.UNSHIPPED_LANGUAGES, ids=lambda lang: lang.code)
+def test_plugin_bundle_hides_a_language_while_its_translator_is_unshipped(
+        tmp_path, monkeypatch, lang):
+    """A language routes to its translate skill; while that skill is held out of
+    the plugin (manifest "plugin": false), the built bundle's documentation and
+    data must not advertise the language, though the source tree still does."""
+    if lang.skill in bb.PLUGIN_SKILLS:
+        pytest.skip(f"{lang.skill} ships in the plugin")
     built = tmp_path / "plugin"
     monkeypatch.setattr(bb, "PLUGIN_DIR", built)
     monkeypatch.setattr(bb, "MARKETPLACE_FILE", tmp_path / "marketplace.json")
     bb.build_plugin()
 
     leaks = [str(p.relative_to(built)) for p in built.rglob("*")
-             if p.is_file() and "ar-SA" in p.read_text(errors="ignore")]
+             if p.is_file() and p.suffix in (".md", ".html", ".json")
+             and lang.code in p.read_text(errors="ignore")]
     assert leaks == []
+    for rel in lang.transforms:
+        assert lang.code in (SKILLS / rel).read_text(encoding="utf-8")
+
+
+def test_plugin_conventions_list_only_shipped_languages(tmp_path, monkeypatch):
+    built = tmp_path / "plugin"
+    monkeypatch.setattr(bb, "PLUGIN_DIR", built)
+    monkeypatch.setattr(bb, "MARKETPLACE_FILE", tmp_path / "marketplace.json")
+    bb.build_plugin()
     conventions = (built / "skills/_parallax/parallax-conventions.md").read_text(
         encoding="utf-8")
-    assert "Supported: en, zh-CN, zh-TW, zh-HK, th.`" in conventions
-    assert "`th` → `translate-thai-finance`; the marker line" in conventions
-    for rel in bb.AR_SA_UNSHIPPED_TRANSFORMS:
-        assert "ar-SA" in (SKILLS / rel).read_text(encoding="utf-8")
+    if all(lang.skill not in bb.PLUGIN_SKILLS for lang in bb.UNSHIPPED_LANGUAGES):
+        assert "Supported: en, zh-CN, zh-TW, zh-HK, th.`" in conventions
+        assert "`th` → `translate-thai-finance`; the marker line" in conventions
 
 
-def test_ar_sa_strip_is_a_no_op_when_its_translator_ships(tmp_path):
+@pytest.mark.parametrize("lang", bb.UNSHIPPED_LANGUAGES, ids=lambda lang: lang.code)
+def test_language_strip_is_a_no_op_when_its_translator_ships(tmp_path, lang):
     doc = tmp_path / "parallax-deep-dive" / "SKILL.md"
     doc.parent.mkdir()
-    doc.write_text("lang=<code> (`en`; `th`, `ar-SA`)\n", encoding="utf-8")
-    bb.strip_unshipped_ar_sa(tmp_path, ["parallax-deep-dive", bb.AR_SA_SKILL])
-    assert "`ar-SA`" in doc.read_text(encoding="utf-8")
+    doc.write_text(f"lang=<code> (`en`; `th`, `{lang.code}`)\n", encoding="utf-8")
+    shipped = ["parallax-deep-dive"] + [other.skill for other in bb.UNSHIPPED_LANGUAGES]
+    bb.strip_unshipped_languages(tmp_path, shipped)
+    assert f"`{lang.code}`" in doc.read_text(encoding="utf-8")
 
 
-def test_ar_sa_strip_fails_closed_on_an_unhandled_mention(tmp_path):
+@pytest.mark.parametrize("lang", bb.UNSHIPPED_LANGUAGES, ids=lambda lang: lang.code)
+def test_language_strip_fails_closed_on_an_unhandled_mention(tmp_path, lang):
     doc = tmp_path / "parallax-new-skill" / "SKILL.md"
     doc.parent.mkdir()
-    doc.write_text("lang=ar-SA is supported\n", encoding="utf-8")
+    doc.write_text(f"lang={lang.code} is supported\n", encoding="utf-8")
     with pytest.raises(bb.BuildError, match="parallax-new-skill"):
-        bb.strip_unshipped_ar_sa(tmp_path, ["parallax-new-skill"])
+        bb.strip_unshipped_languages(tmp_path, ["parallax-new-skill"])
+
+
+@pytest.mark.parametrize("lang", bb.UNSHIPPED_LANGUAGES, ids=lambda lang: lang.code)
+def test_language_strip_fails_closed_on_a_held_skill_name(tmp_path, lang):
+    doc = tmp_path / "_parallax" / "notes.md"
+    doc.parent.mkdir()
+    doc.write_text(f"Pattern used by `{lang.skill}`.\n", encoding="utf-8")
+    with pytest.raises(bb.BuildError, match="notes.md"):
+        bb.strip_unshipped_languages(tmp_path, [])
+
+
+def test_manifest_may_list_held_skill_names(tmp_path):
+    doc = tmp_path / "_parallax" / "manifest.json"
+    doc.parent.mkdir()
+    doc.write_text(json.dumps({lang.skill: {"plugin": False} for lang in bb.UNSHIPPED_LANGUAGES}),
+                   encoding="utf-8")
+    bb.strip_unshipped_languages(tmp_path, [])
+
+
+def test_language_strips_do_not_depend_on_each_other(tmp_path):
+    """Two held languages share one lang= list; stripping one must not break the
+    anchor the other relies on, in either combination."""
+    assert {"ar-SA", "vi-VN"} <= {lang.code for lang in bb.UNSHIPPED_LANGUAGES}
+    line = "lang=<code> (`en` default; `zh-CN`, `th`, `vi-VN`, `ar-SA`)\n"
+    doc = tmp_path / "parallax-deep-dive" / "SKILL.md"
+    doc.parent.mkdir()
+
+    doc.write_text(line, encoding="utf-8")
+    bb.strip_unshipped_languages(tmp_path, ["parallax-deep-dive"])
+    assert doc.read_text(encoding="utf-8") == "lang=<code> (`en` default; `zh-CN`, `th`)\n"
+
+    arabic = next(lang.skill for lang in bb.UNSHIPPED_LANGUAGES if lang.code == "ar-SA")
+    doc.write_text(line, encoding="utf-8")
+    bb.strip_unshipped_languages(tmp_path, ["parallax-deep-dive", arabic])
+    assert doc.read_text(encoding="utf-8") == (
+        "lang=<code> (`en` default; `zh-CN`, `th`, `ar-SA`)\n")
+
+
+def test_dropping_note_paragraphs_leaves_one_blank_line_in_any_order():
+    text = "Intro.\n\n`ar-SA` routes to `x`.\n\n`vi-VN` routes to `y`.\n\n### Next\n"
+    for order in (("`ar-SA` routes", "`vi-VN` routes"), ("`vi-VN` routes", "`ar-SA` routes")):
+        out = text
+        for prefix in order:
+            out = bb._drop_paragraph_line(out, prefix, "test")
+        assert out == "Intro.\n\n### Next\n"
 
 
 def test_canary_allowlist_does_not_mask_sibling_identifiers(

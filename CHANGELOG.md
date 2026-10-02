@@ -4,6 +4,18 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-10-02 (translation skills audit; Vietnamese seed)
+
+### Added
+- `translate-vietnamese-finance` (`vi-VN`) as a seed held out of the plugin (`"plugin": false`) pending native review, with sourced sell-side conventions (`references/sources.md`) and validator tests.
+- Shared source-fidelity validator `skills/_parallax/translation_validate.py` used by all four translators: compares section coverage, numbers, currencies, magnitude units, protected tokens, HTML structure, and identifiers against the source.
+
+### Changed
+- Chinese, Thai, Arabic: instructions consolidated into lean entry files with detailed rules in `references/language-style.md`; end-to-end receipt in `docs/analysis/2026-10-02-translation-skills-e2e-receipt.md`.
+- Vietnamese numbers follow a hybrid rule: prose uses Vietnamese separators and magnitude words without rescaling; tables and data keep the source form. The shared check accepts a separator-swapped number for `vi-VN` only.
+- Arabic corrected against Saudi broker research and CMA/SAMA documents (`references/sources.md`): dual-label ratings with محايد for HOLD, Arabic ratio terms with the English identifier beside them, riyal written as number then ريال سعودي, benchmark المؤشر الاسترشادي, dates by document type.
+- `build_bundle.py`: held translators are stripped from the plugin through a language registry, so `ar-SA` and `vi-VN` can share lists in any order.
+
 ## 2026-10-01 (search tool pricing)
 
 ### Changed
