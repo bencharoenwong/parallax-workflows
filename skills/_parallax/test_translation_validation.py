@@ -3,6 +3,7 @@ import importlib.util
 from collections import Counter
 import json
 from pathlib import Path
+import time
 
 import pytest
 
@@ -26,6 +27,13 @@ def documents(tmp_path, lang, text=None, original="Revenue may rise 5%.", extra=
     a.write_text(json.dumps(source, ensure_ascii=False), encoding="utf-8")
     b.write_text(json.dumps(output, ensure_ascii=False), encoding="utf-8")
     return a, b
+
+
+def assert_fast(fn, *args, bound=1.0):
+    """Linear-time guard: the adversarial inputs below take milliseconds."""
+    start = time.perf_counter()
+    fn(*args)
+    assert time.perf_counter() - start < bound
 
 
 @pytest.mark.parametrize("lang", common.FIELDS)
@@ -307,11 +315,8 @@ def test_currency_code_substitution_is_not_hidden_by_ordinary_words(tmp_path):
 
 
 def test_long_unbroken_token_is_linear_time(tmp_path):
-    import time
     token = "a." * 16000  # dotted run with no "@": the slow case
-    start = time.perf_counter()
-    common._protected(token)
-    assert time.perf_counter() - start < 1.0
+    assert_fast(common._protected, token, bound=1.0)
 
 
 def test_emails_still_protected():
@@ -328,17 +333,11 @@ def test_deeply_nested_json_fails_with_a_fatal_message(tmp_path):
 
 @pytest.mark.parametrize("token", ["1," * 16000, "1.1 " * 8000, "5x" * 16000], ids=["commas", "spaced", "x-suffix"])
 def test_magnitude_scan_is_linear_time(token):
-    import time
-    start = time.perf_counter()
-    common._units(token)
-    assert time.perf_counter() - start < 1.0
+    assert_fast(common._units, token, bound=1.0)
 
 
 def test_ticker_scan_is_linear_time():
-    import time
-    start = time.perf_counter()
-    common._protected("A-" * 16000)
-    assert time.perf_counter() - start < 1.0
+    assert_fast(common._protected, "A-" * 16000, bound=1.0)
 
 
 @pytest.mark.parametrize("text,expected", [
@@ -377,21 +376,15 @@ def test_changed_fraction_after_punctuation_fails(tmp_path):
 
 
 def test_copy_check_is_linear_time(tmp_path):
-    import time
     text = "a" * 40000
     source, output = documents(tmp_path, "zh", text, text)
-    start = time.perf_counter()
-    common.validate_common(str(output), "zh", str(source))
-    assert time.perf_counter() - start < 2.0
+    assert_fast(common.validate_common, str(output), "zh", str(source), bound=2.0)
 
 
 def test_unclosed_no_translate_markers_are_linear_time(tmp_path):
-    import time
     text = "<!-- DO NOT TRANSLATE -->" * 4000
     source, output = documents(tmp_path, "zh", "收入 " + text, "Revenue " + text)
-    start = time.perf_counter()
-    common.validate_common(str(output), "zh", str(source))
-    assert time.perf_counter() - start < 2.0
+    assert_fast(common.validate_common, str(output), "zh", str(source), bound=2.0)
 
 
 def test_no_translate_block_change_still_fails(tmp_path):

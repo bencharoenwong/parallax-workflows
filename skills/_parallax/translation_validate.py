@@ -45,9 +45,7 @@ CURRENCIES = {
     "SGD": ("SGD", "S$"), "AED": ("AED",), "KWD": ("KWD",),
     "UNSPECIFIED_DOLLAR": ("$",), "YEN_OR_YUAN": ("¥", "￥"),
 }
-# Currencies spelled out in English words are not matched against the
-# translation: too many names are shared or part of ordinary words. A source
-# that uses one gets a manual-review warning instead.
+# Spelled-out currency names are too ambiguous to match; they only warn.
 CURRENCY_WORDS = re.compile(
     r"\b(?:dollars?|euros?|pounds?|yen|yuan|renminbi|baht|riyals?|dirhams?|dinars?|"
     r"rupees?|ringgit|rupiah|pesos?|francs?|krona|krone)\b", re.I)
