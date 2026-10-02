@@ -284,3 +284,47 @@ def test_currency_substitution_still_fails(tmp_path):
     source, output = documents(tmp_path, "zh", "营收 HKD 5M。", "Revenue USD 5M")
     errors = common.validate_common(str(output), "zh", str(source))[2]
     assert any("currency identifiers" in e for e in errors)
+
+
+# Currencies the English source names in words are tracked too, so a
+# substitution cannot pass just because the source spelled the currency out.
+@pytest.mark.parametrize("lang, text, original", [
+    ("th", "รายได้ 5 ล้านบาท", "Revenue of 5 million euros"),
+    ("zh", "营收5百万港元", "Revenue of 5 million yuan"),
+    ("vi-VN", "Doanh thu 5 triệu đô la Mỹ", "Revenue of 5 million pounds"),
+    ("ar-SA", "الإيرادات 5 مليون دولار أمريكي", "Revenue of 5 million Saudi riyals"),
+])
+def test_named_source_currency_substitution_fails(tmp_path, lang, text, original):
+    source, output = documents(tmp_path, lang, text, original)
+    errors = common.validate_common(str(output), lang, str(source))[2]
+    assert any("currency" in e.lower() for e in errors)
+
+
+@pytest.mark.parametrize("lang, text, original", [
+    ("th", "รายได้ 5 ล้านยูโร", "Revenue of 5 million euros"),
+    ("zh", "营收5百万欧元", "Revenue of 5 million euros"),
+    ("ar-SA", "الإيرادات 5 مليون يورو", "Revenue of 5 million euros"),
+    ("vi-VN", "Doanh thu 5 triệu euro", "Revenue of 5 million euros"),
+    ("zh", "营收5百万英镑", "Revenue of 5 million pounds sterling"),
+    ("th", "รายได้ 5 ล้านปอนด์", "Revenue of 5 million pounds"),
+    ("vi-VN", "Doanh thu 5 triệu bảng Anh", "Revenue of 5 million pounds"),
+    ("zh", "营收5百万日元", "Revenue of 5 million yen"),
+    ("th", "รายได้ 5 ล้านเยน", "Revenue of 5 million yen"),
+    ("vi-VN", "Doanh thu 5 triệu yên Nhật", "Revenue of 5 million yen"),
+    ("th", "รายได้ 5 ล้านหยวน", "Revenue of 5 million yuan"),
+    ("vi-VN", "Doanh thu 5 triệu nhân dân tệ", "Revenue of 5 million yuan"),
+    ("zh", "营收5百万泰铢", "Revenue of 5 million baht"),
+    ("ar-SA", "الإيرادات 5 مليون ريال سعودي", "Revenue of 5 million Saudi riyals"),
+    ("zh", "营收5百万港元", "Revenue of 5 million Hong Kong dollars"),
+    ("vi-VN", "Doanh thu 5 triệu đô la Mỹ", "Revenue of 5 million US dollars"),
+    ("zh", "营收5百万新加坡元", "Revenue of 5 million Singapore dollars"),
+    ("th", "รายได้ 5 ล้านวอน", "Revenue of 5 million Korean won"),
+    ("vi-VN", "Doanh thu 5 triệu đồng", "Revenue of 5 million Vietnamese dong"),
+])
+def test_named_source_currency_rendered_natively_passes(tmp_path, lang, text, original):
+    source, output = documents(tmp_path, lang, text, original)
+    assert common.validate_common(str(output), lang, str(source))[2] == []
+
+
+def test_named_currency_aliases_respect_word_boundaries():
+    assert common._counts("Hongkong dongle and wonderful euroclear", common.CURRENCIES) == Counter()

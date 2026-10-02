@@ -45,6 +45,27 @@ CURRENCIES = {
     "SGD": ("SGD", "S$"), "AED": ("AED",), "KWD": ("KWD",),
     "UNSPECIFIED_DOLLAR": ("$",), "YEN_OR_YUAN": ("¥", "￥"),
 }
+# English currency names, so a source that spells a currency out is tracked
+# like one that uses a code. Each key also lists its native names in every
+# target language, because the check requires every source currency to
+# survive in the translation. Bare "dollar", "pound", and "won" are left out:
+# they are ambiguous or common English words.
+_NAMED = {
+    "USD": ("US dollar", "US dollars", "U.S. dollar", "U.S. dollars"),
+    "HKD": ("Hong Kong dollar", "Hong Kong dollars", "ดอลลาร์ฮ่องกง", "دولار هونغ كونغ", "đô la Hồng Kông"),
+    "SGD": ("Singapore dollar", "Singapore dollars", "新加坡元", "新元", "ดอลลาร์สิงคโปร์", "دولار سنغافوري", "đô la Singapore"),
+    "EUR": ("euro", "euros", "Euro", "Euros", "欧元", "歐元", "ยูโร", "يورو"),
+    "GBP": ("pound sterling", "pounds sterling", "British pound", "British pounds", "pounds",
+            "英镑", "英鎊", "ปอนด์", "جنيه إسترليني", "bảng Anh"),
+    "JPY": ("yen", "Japanese yen", "เยน", "ين ياباني", "yên Nhật"),
+    "CNY": ("yuan", "renminbi", "Chinese yuan", "元", "หยวน", "يوان", "nhân dân tệ"),
+    "THB": ("baht", "Thai baht", "泰铢", "泰銖", "بات تايلندي"),
+    "SAR": ("riyal", "riyals", "Saudi riyal", "Saudi riyals", "沙特里亚尔", "ริยาล"),
+    "KRW": ("Korean won", "วอน", "وون كوري", "won Hàn Quốc"),
+    "VND": ("dong", "Vietnamese dong"),
+}
+for _code, _names in _NAMED.items():
+    CURRENCIES[_code] = CURRENCIES[_code] + _names
 for _code in ("CHF", "NOK", "SEK", "DKK", "INR", "IDR", "MYR", "PHP", "BRL",
               "ZAR", "MXN", "TRY", "PLN", "ILS", "CLP", "NZD", "QAR", "BHD",
               "OMR", "EGP", "COP", "PEN", "ARS", "ISK", "HUF", "CZK", "RON",
@@ -83,7 +104,7 @@ def _literal_pattern(value: str) -> str:
         # same time) are excluded even after a number ("cả 5 đồng thuận").
         return (r"(?:(?<=\d )|(?<=\d)|(?<=tỷ )|(?<=triệu )|(?<=nghìn ))đồng"
                 r"(?!\s+(?:thuận|thời|ý|loạt|bộ|nghĩa|hành|đều|minh|nhất|tình|lòng|nghiệp|dạng|tâm|chí|hồ|đội|phục|bằng|cảm)\b)")
-    if value.isascii() and value.replace("$", "").isalpha():
+    if value.isascii() and value.replace("$", "").replace(" ", "").replace(".", "").isalpha():
         return rf"(?<![A-Za-z]){escaped}(?![A-Za-z])"
     return escaped
 
