@@ -350,7 +350,7 @@ These workflows are analytical tools that automate data retrieval and presentati
 
 ### Finance translation
 
-Chinese (`zh-CN`, `zh-TW`, `zh-HK`), Thai (`th`) and Vietnamese (`vi-VN`) translation skills ship in the plugin. The five report workflows with a language argument accept `lang=vi-VN`. The Saudi Arabic (`ar-SA`) source skill remains outside the general-release plugin pending native review.
+Chinese (`zh-CN`, `zh-TW`, `zh-HK`) and Thai (`th`) translation skills ship in the plugin. The Vietnamese (`vi-VN`) and Saudi Arabic (`ar-SA`) source skills remain outside the general-release plugin pending native review.
 
 Translation entry instructions load only the relevant references. JSON and saved-prose deliverables run a source-fidelity validator; a passing style check alone cannot approve fidelity. Meaning and uncertainty still require source review.
 
