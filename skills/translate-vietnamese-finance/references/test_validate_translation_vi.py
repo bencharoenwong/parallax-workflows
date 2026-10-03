@@ -73,3 +73,13 @@ def test_mixed_nghin_ngan_and_space_before_percent_warn(tmp_path):
     _, warnings = _style(tmp_path, "CASA đạt 186,4 nghìn tỷ đồng; thanh khoản 11,3 ngàn tỷ đồng, tăng 17 %.")
     assert any("nghìn" in w and "ngàn" in w for w in warnings)
     assert any("Space before %" in w for w in warnings)
+
+
+def test_stray_leading_comma_before_number_is_flagged(tmp_path):
+    errors, _ = _style(tmp_path, "Biên lợi nhuận ròng tăng ,5% so với cùng kỳ.")
+    assert any("Leading comma" in e for e in errors)
+
+
+def test_ordinary_list_comma_is_not_flagged(tmp_path):
+    errors, _ = _style(tmp_path, "Doanh thu tăng 5%, lợi nhuận tăng 7%, biên lợi nhuận 12,5%.")
+    assert not any("Leading comma" in e for e in errors)

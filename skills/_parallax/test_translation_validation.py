@@ -538,3 +538,26 @@ def test_standalone_package_loads_its_vendored_validator(tmp_path, skill):
     spec.loader.exec_module(module)
     assert module._common_path == pkg / "references" / "translation_common.py"
     assert not (tmp_path / "_parallax").exists()
+
+
+@pytest.mark.parametrize("skill", ["translate-chinese-finance", "translate-vietnamese-finance"])
+def test_standalone_package_prefers_vendored_copy_over_a_parallax_sibling(tmp_path, skill):
+    """With both a vendored copy and a _parallax tree present, the wrapper must
+    load the vendored copy (the version the package was built with)."""
+    import shutil
+    pkg = tmp_path / skill
+    shutil.copytree(ROOT.parent / skill, pkg, ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copy(ROOT / "translation_validate.py", pkg / "references" / "translation_common.py")
+    decoy = tmp_path / "_parallax"
+    decoy.mkdir()
+    (decoy / "translation_validate.py").write_text("raise ImportError('decoy loaded')\n", encoding="utf-8")
+    spec = importlib.util.spec_from_file_location(f"pref_{skill}", pkg / "references" / "validate-translation.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module._common_path == pkg / "references" / "translation_common.py"
+
+
+@pytest.mark.parametrize("text,unit", [("5 الف", "thousand"), ("5 الملايين", "million"),
+                                       ("7 الآلاف", "thousand"), ("4 ألوف", "thousand")])
+def test_arabic_common_unit_variants(text, unit):
+    assert common._units(text) == Counter({unit: 1})
