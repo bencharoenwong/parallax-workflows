@@ -1,6 +1,6 @@
 # Parallax Workflows
 
-AI-powered equity research workflows for [Parallax](https://chicago.global/parallax), built for [Claude Code](https://claude.ai/code).
+AI-powered equity research workflows for [Parallax](https://parallax.chicago.global), built for [Claude Code](https://claude.ai/code).
 
 **Who this is for:**
 - **Fund managers** — morning briefs, scenario analysis, rebalancing decisions

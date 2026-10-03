@@ -883,7 +883,7 @@ def build_plugin() -> None:
             "description": description,
             "version": PLUGIN_VERSION,
             "author": {"name": "Chicago Global", "url": "https://chicago.global"},
-            "homepage": "https://chicago.global/parallax",
+            "homepage": "https://parallax.chicago.global",
             "repository": "https://github.com/bencharoenwong/parallax-workflows",
             "license": "MIT",
         }, indent=2) + "\n", encoding="utf-8")
