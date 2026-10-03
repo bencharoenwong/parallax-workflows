@@ -358,10 +358,14 @@ def test_tickers_still_protected():
 # Ship-check fix pass: numbers glued to punctuation, copy-check and
 # no-translate scans on long input, and currency-word false positives.
 
-def test_number_after_comma_keeps_its_fraction():
+def number_tokens(text):
     import re
-    assert re.findall(common.NUMBER, "Revenue,1.5 billion") == ["1.5"]
-    assert re.findall(common.NUMBER, "a .5% move") == [".5%"]
+    return [m.group(0) for m in re.finditer(common.NUMBER, text)]
+
+
+def test_number_after_comma_keeps_its_fraction():
+    assert number_tokens("Revenue,1.5 billion") == ["1.5"]
+    assert number_tokens("a .5% move") == [".5%"]
 
 
 @pytest.mark.parametrize("original,text", [("Revenue,1.5 billion", "收入,1.5"),
@@ -378,11 +382,17 @@ def test_changed_fraction_after_punctuation_fails(tmp_path):
 
 
 def test_number_after_symbol_and_comma_keeps_its_fraction():
-    import re
-    assert re.findall(common.NUMBER, "Margins 3.2%,1.5%") == ["3.2%", "1.5%"]
-    assert re.findall(common.NUMBER, "a,b,c,100") == ["100"]
+    assert number_tokens("Margins 3.2%,1.5%") == ["3.2%", "1.5%"]
+    assert number_tokens("a,b,c,100") == ["100"]
     assert common._numbers_differ("Margins 3.2%,1.5%", "利润率 3.2%,1.9%", "zh")
     assert not common._numbers_differ("Margins 3.2%,1.5%", "利润率 3.2%，1.5%", "zh")
+
+
+def test_multi_digit_number_after_symbol_and_comma_is_read_whole():
+    assert number_tokens("Margins 3.2%,12.5%") == ["3.2%", "12.5%"]
+    assert common._numbers_differ("Margins 3.2%,12.5%", "利润率 3.2%,12.9%", "zh")
+    assert not common._numbers_differ("Margins 3.2%,12.5%", "利润率 3.2%，12.5%", "zh")
+    assert common._units("Sales 3%,12.5 million") == Counter({"million": 1})
 
 
 def test_copy_check_is_linear_time(tmp_path):
