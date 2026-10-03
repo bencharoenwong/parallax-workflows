@@ -12,7 +12,7 @@ pattern don't require touching 3 files.
 
 Fire ONLY when ALL of:
 1. An active house view exists (`view_status` returns state other than `none`).
-2. View age > 30 days (`view_status.banner.days_since_effective > 30`).
+2. View age is at least 30 days (`view_status.banner.days_since_effective >= 30`).
 3. The consuming skill has not received `--skip-drift-check` flag.
 
 ## How to invoke

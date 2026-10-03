@@ -470,3 +470,56 @@ def test_any_single_digit_change_is_caught(lang):
         if lang == "vi-VN":
             after = after.replace(".", ",")
         assert common._numbers_differ(before, after, lang), (lang, number, changed)
+
+
+# Deferred-debt pass.
+
+def test_html_structure_change_still_fails(tmp_path):
+    source, output = documents(tmp_path, "zh", "<p>收入可能增長 5%。</p>", "<p><b>Revenue</b> may rise 5%.</p>")
+    assert any("HTML structure" in e for e in common.validate_common(str(output), "zh", str(source))[2])
+
+
+@pytest.mark.parametrize("text,unit", [("5 ملايين", "million"), ("3 مليارات", "billion"), ("7 آلاف", "thousand")])
+def test_arabic_plural_magnitude_units(text, unit):
+    assert common._units(text) == Counter({unit: 1})
+
+
+def test_arabic_plural_million_matches_english_source(tmp_path):
+    source, output = documents(tmp_path, "ar-SA", "قد ترتفع الإيرادات 5 ملايين", "Revenue may rise 5 million")
+    assert not any("Magnitude units" in e for e in common.validate_common(str(output), "ar-SA", str(source))[2])
+
+
+def test_changed_source_metadata_value_fails(tmp_path):
+    source, output = documents(tmp_path, "zh")
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    payload["metadata"] = {"analyst": "desk"}
+    source.write_text(json.dumps(payload), encoding="utf-8")
+    errors = common.validate_common(str(output), "zh", str(source))[2]
+    assert any("Source metadata analyst changed or missing" in e for e in errors)
+
+
+@pytest.mark.parametrize("bad", [["not", "an", "object"], "text"])
+def test_non_object_metadata_or_data_is_fatal(tmp_path, bad):
+    source, output = documents(tmp_path, "zh")
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    payload["data"] = bad
+    output.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    errors = common.validate_common(str(output), "zh", str(source))[2]
+    assert any(e.startswith("[FATAL]") for e in errors)
+
+
+@pytest.mark.parametrize("skill", ["translate-chinese-finance", "translate-thai-finance",
+                                   "translate-arabic-finance", "translate-vietnamese-finance"])
+def test_standalone_package_loads_its_vendored_validator(tmp_path, skill):
+    """Mirrors build-skills.sh: the skill is copied alone and the shared module
+    is vendored beside the wrapper as translation_common.py."""
+    import shutil
+    pkg = tmp_path / skill
+    shutil.copytree(ROOT.parent / skill, pkg, ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copy(ROOT / "translation_validate.py", pkg / "references" / "translation_common.py")
+    wrapper = pkg / "references" / "validate-translation.py"
+    spec = importlib.util.spec_from_file_location(f"standalone_{skill}", wrapper)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module._common_path == pkg / "references" / "translation_common.py"
+    assert not (tmp_path / "_parallax").exists()
