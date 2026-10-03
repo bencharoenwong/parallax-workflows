@@ -523,15 +523,20 @@ def test_non_object_metadata_or_data_is_fatal(tmp_path, bad):
     assert any(e.startswith("[FATAL]") for e in errors)
 
 
-@pytest.mark.parametrize("skill", ["translate-chinese-finance", "translate-thai-finance",
-                                   "translate-arabic-finance", "translate-vietnamese-finance"])
-def test_standalone_package_loads_its_vendored_validator(tmp_path, skill):
+def _vendored_package(tmp_path, skill):
     """Mirrors build-skills.sh: the skill is copied alone and the shared module
     is vendored beside the wrapper as translation_common.py."""
     import shutil
     pkg = tmp_path / skill
     shutil.copytree(ROOT.parent / skill, pkg, ignore=shutil.ignore_patterns("__pycache__"))
     shutil.copy(ROOT / "translation_validate.py", pkg / "references" / "translation_common.py")
+    return pkg
+
+
+@pytest.mark.parametrize("skill", ["translate-chinese-finance", "translate-thai-finance",
+                                   "translate-arabic-finance", "translate-vietnamese-finance"])
+def test_standalone_package_loads_its_vendored_validator(tmp_path, skill):
+    pkg = _vendored_package(tmp_path, skill)
     wrapper = pkg / "references" / "validate-translation.py"
     spec = importlib.util.spec_from_file_location(f"standalone_{skill}", wrapper)
     module = importlib.util.module_from_spec(spec)
@@ -544,10 +549,7 @@ def test_standalone_package_loads_its_vendored_validator(tmp_path, skill):
 def test_standalone_package_prefers_vendored_copy_over_a_parallax_sibling(tmp_path, skill):
     """With both a vendored copy and a _parallax tree present, the wrapper must
     load the vendored copy (the version the package was built with)."""
-    import shutil
-    pkg = tmp_path / skill
-    shutil.copytree(ROOT.parent / skill, pkg, ignore=shutil.ignore_patterns("__pycache__"))
-    shutil.copy(ROOT / "translation_validate.py", pkg / "references" / "translation_common.py")
+    pkg = _vendored_package(tmp_path, skill)
     decoy = tmp_path / "_parallax"
     decoy.mkdir()
     (decoy / "translation_validate.py").write_text("raise ImportError('decoy loaded')\n", encoding="utf-8")
