@@ -377,6 +377,14 @@ def test_changed_fraction_after_punctuation_fails(tmp_path):
     assert any("Numeric tokens" in e for e in common.validate_common(str(output), "zh", str(source))[2])
 
 
+def test_number_after_symbol_and_comma_keeps_its_fraction():
+    import re
+    assert re.findall(common.NUMBER, "Margins 3.2%,1.5%") == ["3.2%", "1.5%"]
+    assert re.findall(common.NUMBER, "a,b,c,100") == ["100"]
+    assert common._numbers_differ("Margins 3.2%,1.5%", "利润率 3.2%,1.9%", "zh")
+    assert not common._numbers_differ("Margins 3.2%,1.5%", "利润率 3.2%，1.5%", "zh")
+
+
 def test_copy_check_is_linear_time(tmp_path):
     text = "a" * 40000
     source, output = documents(tmp_path, "zh", text, text)
