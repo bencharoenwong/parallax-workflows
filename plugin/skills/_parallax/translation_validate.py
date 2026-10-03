@@ -20,7 +20,7 @@ FIELDS = {"th": "thai_translation", "zh": "chinese_translation",
 SCRIPTS = {"th": r"[\u0e01-\u0e5b]", "zh": r"[\u3400-\u9fff]",
            "ar-SA": r"[\u0621-\u064a]",
            "vi-VN": r"[ÀÁÂÃÈÉÊÌÍÒÓÔÕÙÚÝàáâãèéêìíòóôõùúýĂăĐđĨĩŨũƠơƯư\u1ea0-\u1ef9]|(?i:\b(?:doanh thu|kinh doanh)\b)"}
-NUMBER = r"(?<![\d.])[-+−]?(?:\d+(?:[.,]\d+)*|\.\d+)(?:%|x)?"
+NUMBER = r"(?<![\d.])[-+−]?(?:\d+(?:[.,]\d+)*|\.\d+|(?<!\w),\d+)(?:%|x)?"
 PROTECTED = re.compile(
     r"https?://[^\s<>\"\)。，；！？：「」『』（）]+|\b[\w.+-]{1,64}@[\w.-]{1,253}\.[A-Za-z]{2,24}\b|"
     r"\b[A-Z0-9-]{1,24}\.(?:O|N|HK|TW|SS|SZ|KS|AX|TO|L|PA|DE|SI|BK|T|BO|NS|SA|MX|JK|KL|PS|MI|MC|AS|SW|ST|OL|CO|HE)\b|"
@@ -281,7 +281,7 @@ def fidelity(source: dict, output: dict, translations: dict[str, str], lang: str
                       f"extra={sorted(translations.keys() - originals.keys())}")
     for key in originals.keys() & translations.keys():
         before, after = originals[key], translations[key]
-        if before.strip() == after.strip() and re.search(r"\b[A-Za-z]{3,}\s+[A-Za-z]{3}", before):
+        if before.strip() == after.strip() and re.search(r"(?<![A-Za-z])[A-Za-z]{3,}\s+[A-Za-z]{3}", before):
             errors.append(f"[INTEGRITY] [{key}] Source prose was copied without translation")
         if _numbers_differ(before, after, lang):
             errors.append(f"[INTEGRITY] [{key}] Numeric tokens differ from source")
