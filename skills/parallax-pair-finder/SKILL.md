@@ -67,7 +67,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 
 ### Step 1 — Resolve inputs
 
-RICs per conventions §1 (`get_company_info` empty → try `.O`, then `.N`, then ask). Benchmark from the primary leg's `market` via the canonical mapping in `references/modes.md` (other markets: `etf_search(market=…, query="MSCI", recommendation="HOLD")`, highest AUM). 180-day window: `end_date = today`, `start_date = today − 180 days`.
+RICs per conventions §1 (`get_company_info` empty → try `.O`, then `.N`, then ask). Benchmark from the primary leg's `market` via the canonical mapping in `references/modes.md` (other markets: `search_etfs(query="MSCI", market=…)`, shortlist broad "MSCI <country>" name matches, then `etf_profile` each shortlisted symbol and pick highest market cap). 180-day window: `end_date = today`, `start_date = today − 180 days`.
 
 ### Step 2 — Fetch (parallel batches)
 
@@ -77,7 +77,7 @@ Per `references/modes.md`: **Batch A** identification + peer set + macro coverag
 
 - `export_peer_comparison` failure: retry once, then `get_peer_snapshot(primary)` with comparability marked best-effort.
 - A leg with < 90 days of prices: that pair degrades to dollar-neutral sizing only (per-leg degradation, never a whole-skill halt).
-- Benchmark empty: one `etf_search` discovery retry. Then the **output gate (HARD HALT, gate-shaped per conventions §4.0)** before any beta-neutral ratio renders — refuse, do not degrade:
+- Benchmark empty: one `search_etfs(query="MSCI", market=…)` discovery retry; no rows returned counts as still empty. Then the **output gate (HARD HALT, gate-shaped per conventions §4.0)** before any beta-neutral ratio renders — refuse, do not degrade:
 
 ```
 HARD GATE — refuse, do not degrade:
@@ -87,7 +87,7 @@ HARD GATE — refuse, do not degrade:
       ⚠ Cannot produce beta-neutral hedge ratios.
         Benchmark: <benchmark_ticker> for market <primary_market>
         Returned: <N> observations from etf_daily_price (need ≥ 60 for stable beta)
-        Failure path: <which fallback step ran last — initial-fetch / etf_search-discovery>
+        Failure path: <which fallback step ran last — initial-fetch / search_etfs-discovery>
 
       Operator action — pick one:
         (a) Re-run with explicit benchmark: /parallax-pair-finder <symbol> <side> --benchmark=<alt-ticker>

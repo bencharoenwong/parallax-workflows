@@ -49,7 +49,7 @@ Per spec scope-cut: beta-neutral sizing is in the default path because PMs act o
 | `Korea` | `EWY` | iShares MSCI South Korea |
 | `Canada` | `EWC` | iShares MSCI Canada |
 | `Australia` | `EWA` | iShares MSCI Australia |
-| (other) | call `etf_search(market="<market>", query="MSCI", recommendation="HOLD")` and pick highest-AUM result | Fallback discovery |
+| (other) | call `search_etfs(query="MSCI", market="<market>")`, shortlist the broad "MSCI <country>" name matches, then call `etf_profile` on each shortlisted symbol and pick the highest market cap | Fallback discovery. `search_etfs` results carry symbol, name, market, exchange, currency, has_scores, report_supported — no AUM field. `etf_profile` returns name, exchange, price, market cap, factor scores, and recommendation per symbol, so market cap (the available size proxy) replaces AUM as the tie-breaker. If `search_etfs` returns no rows, treat the benchmark as unavailable for that market — do not substitute a proxy. |
 
 Compute the start/end dates for a 180d window: `end_date = today`, `start_date = today - 180 days` (calendar; ~125 trading days will be returned).
 
@@ -64,7 +64,7 @@ Fire all in parallel:
 Compute beta inline per `references/residual-math.md` §"Beta computation". Beta-neutral hedge ratio = `beta_long / beta_short` (dollars short per dollar long).
 
 **Fallbacks (in order):**
-1. If `etf_daily_price` returns no data for the chosen benchmark → call `etf_search(market="<market>")` to find an alternative; retry with the top result.
+1. If `etf_daily_price` returns no data for the chosen benchmark → call `search_etfs(query="MSCI", market="<market>")` to find an alternative, picking per the "(other)" row above; retry with that result. If `search_etfs` also returns no rows, treat the benchmark as unavailable and proceed to the Batch C.5 output gate.
 2. If a leg's price series returns < 90 days of data → flag the affected candidate as "insufficient history for beta" and report **only dollar-neutral sizing** for that pair (do NOT halt the whole skill — this is per-leg degradation, surfaced in the row).
 
 #### Batch C.5 — Output gate (HARD HALT — non-negotiable)
@@ -79,7 +79,7 @@ HARD GATE — refuse, do not degrade:
       ⚠ Cannot produce beta-neutral hedge ratios.
         Benchmark: <benchmark_ticker> for market <primary_market>
         Returned: <N> observations from etf_daily_price (need ≥ 60 for stable beta)
-        Failure path: <which fallback step ran last — initial-fetch / etf_search-discovery>
+        Failure path: <which fallback step ran last — initial-fetch / search_etfs-discovery>
 
       Operator action — pick one:
         (a) Re-run with explicit benchmark: /parallax-pair-finder <symbol> <side> --benchmark=<alt-ticker>
@@ -140,7 +140,7 @@ Same tool-split as suggestion mode Batch C: equity legs use `export_price_series
 Benchmark selection: use the canonical mapping in suggestion mode Batch C. If both legs share a `market`, use that market's benchmark. If markets differ, use the long-leg's market benchmark and flag the cross-market exposure in the residual section.
 
 Fallbacks (same order as suggestion mode):
-1. `etf_daily_price` empty → `etf_search(market=...)` discovery → retry
+1. `etf_daily_price` empty → `search_etfs(query="MSCI", market=...)` discovery per the "(other)" row in suggestion mode Batch C → retry. No rows returned → treat the benchmark as unavailable and proceed to the Batch B.5 output gate.
 2. Leg < 90 days → dollar-neutral only for that pair (per-leg degradation, not whole-skill halt)
 
 #### Batch B.5 — Output gate (HARD HALT — non-negotiable)

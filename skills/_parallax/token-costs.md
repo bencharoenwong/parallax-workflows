@@ -22,7 +22,7 @@ Parallax uses token-based pricing. All tools consume the same number of tokens w
 |---|---|
 | `get_company_info` | Company profile, sector, market cap |
 | `search_etfs` | ETF symbol search (fuzzy). Billed per call: the live tool description states "Cost: 1 credit" and the backend price table matches (checked 2026-10-01; not yet confirmed against an account ledger). Was previously listed as free. |
-| `etf_search` | ETF discovery by market/keyword/score. Same billed search endpoint as `search_etfs` (checked 2026-10-01). Was previously unpriced. |
+| `etf_search` | ETF discovery by market/keyword, query required. Deprecated alias of `search_etfs`, same billed search endpoint (checked 2026-10-01). Was previously unpriced. |
 | `get_peer_snapshot` | Factor scores + peer ranking |
 | `export_peer_comparison` | Structured peer data export |
 | `get_financials` | Financial statements (1 token per statement type: income, balance_sheet, cash_flow, ratios, summary) |
