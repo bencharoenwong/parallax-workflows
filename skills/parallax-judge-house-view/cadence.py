@@ -29,7 +29,7 @@ from __future__ import annotations
 import datetime
 from typing import Literal
 
-# Auto-on-load only fires for views older than this many days. Below this
+# Auto-on-load only fires for views at least this many days old. Below this
 # threshold, the consumer skill skips the judge call entirely (no banner,
 # no audit row) — the view is fresh enough that drift is unlikely and the
 # 45-60s fan-out latency would dominate the consumer skill's own work.

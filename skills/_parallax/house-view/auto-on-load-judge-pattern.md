@@ -23,7 +23,7 @@ Fire ONLY when ALL of:
    step; the `--json` flag returns structured output).
    <!-- host-note -->On Claude Code this is `/parallax-judge-house-view --dry --json`.<!-- /host-note -->
    **Cost signal:** the `--dry` run still incurs the full macro fan-out
-   (~280 tokens, see `_parallax/token-costs.md`); the >30-day age gate
+   (~280 tokens, see `_parallax/token-costs.md`); the 30-day age gate
    bounds frequency — never lower that gate without revisiting cost.
 2. If `invoke-skill` is absent on this host (§14.3), or the judge skill is
    NOT installed (ImportError or skill directory missing): surface a

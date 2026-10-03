@@ -33,7 +33,7 @@ This skill compares the active CIO house view against fresh Parallax macro signa
 ## When to use
 
 - Bank CIO wants to know if the loaded house view has gone stale relative to current Parallax signals.
-- Consumer skill (portfolio-builder, rebalance, thematic-screen) auto-invokes when the active view is older than 30 days (banner only at `drift_material`).
+- Consumer skill (portfolio-builder, rebalance, thematic-screen) auto-invokes when the active view is at least 30 days old (banner only at `drift_material`).
 - Scheduled / cron job (bank-side) runs `/parallax-judge-house-view --json` against a locally-mounted view and pipes the output to a downstream monitor.
 
 ## When NOT to use
