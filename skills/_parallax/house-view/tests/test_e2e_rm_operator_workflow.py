@@ -344,9 +344,9 @@ def test_e2e_full_operator_lifecycle_v1_to_v2_with_drift_remediation(
     assert v1_view_id and v1_version_id
 
     # ---- Days 1-29: RM uses consumer skills (no auto-fire) ----
-    # The pattern says fire ONLY when view_age > 30 days. Verify that
+    # The pattern says fire ONLY when view_age >= 30 days. Verify that
     # at age 0d, view_status is "active" and the pre-flight protocol's
-    # condition (view_age > 30) is False.
+    # condition (view_age >= 30) is False.
     fresh_status = view_status.compute_status(view_dir)
     assert fresh_status.state == "active", (
         f"Fresh view should be active; got {fresh_status.state!r}"
@@ -376,7 +376,7 @@ def test_e2e_full_operator_lifecycle_v1_to_v2_with_drift_remediation(
         f"got {aged_status.state!r}"
     )
     assert aged_status.tilts_apply is True
-    # Pre-flight protocol condition (view_age > 30) is now satisfied.
+    # Pre-flight protocol condition (view_age >= 30) is now satisfied.
     age_days = (
         datetime.date.today()
         - datetime.date.fromisoformat(aged_status.effective_date)
