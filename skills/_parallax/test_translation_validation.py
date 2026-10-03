@@ -360,7 +360,7 @@ def test_tickers_still_protected():
 
 def number_tokens(text):
     import re
-    return [m.group(0) for m in re.finditer(common.NUMBER, text)]
+    return re.findall(common.NUMBER, text)
 
 
 def test_number_after_comma_keeps_its_fraction():
@@ -393,6 +393,12 @@ def test_multi_digit_number_after_symbol_and_comma_is_read_whole():
     assert common._numbers_differ("Margins 3.2%,12.5%", "利润率 3.2%,12.9%", "zh")
     assert not common._numbers_differ("Margins 3.2%,12.5%", "利润率 3.2%，12.5%", "zh")
     assert common._units("Sales 3%,12.5 million") == Counter({"million": 1})
+
+
+def test_integer_after_symbol_and_comma_is_read_whole():
+    assert number_tokens("Margins 3.2%,12%") == ["3.2%", "12%"]
+    assert number_tokens("Growth (5%),8%") == ["5%", "8%"]
+    assert not common._numbers_differ("Margins 3.2%,12%", "利润率 3.2%，12%", "zh")
 
 
 def test_copy_check_is_linear_time(tmp_path):
@@ -460,9 +466,8 @@ def test_dropped_financial_metric_fails(tmp_path):
     assert any("financial identifiers missing" in e for e in errors)
 
 
-def test_vietnamese_leading_comma_decimal_matches_source(tmp_path):
-    assert not common._numbers_differ(".5x", ",5x", "vi-VN")
-    source, output = documents(tmp_path, "vi-VN", "P/E có thể ở mức ,5x.", "P/E may be .5x.")
+def test_vietnamese_keeps_no_leading_zero_decimal_as_written(tmp_path):
+    source, output = documents(tmp_path, "vi-VN", "P/E có thể ở mức .5x.", "P/E may be .5x.")
     assert not any("Numeric tokens" in e for e in common.validate_common(str(output), "vi-VN", str(source))[2])
 
 
