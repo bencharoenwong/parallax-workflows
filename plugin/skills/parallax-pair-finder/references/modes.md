@@ -49,7 +49,11 @@ Per spec scope-cut: beta-neutral sizing is in the default path because PMs act o
 | `Korea` | `EWY` | iShares MSCI South Korea |
 | `Canada` | `EWC` | iShares MSCI Canada |
 | `Australia` | `EWA` | iShares MSCI Australia |
-| (other) | call `search_etfs(query="MSCI", market="<market>")`, shortlist the broad "MSCI <country>" name matches, then call `etf_profile` on each shortlisted symbol and pick the highest market cap | Fallback discovery. `search_etfs` results carry symbol, name, market, exchange, currency, has_scores, report_supported — no AUM field. `etf_profile` returns name, exchange, price, market cap, factor scores, and recommendation per symbol, so market cap (the available size proxy) replaces AUM as the tie-breaker. If `search_etfs` returns no rows, treat the benchmark as unavailable for that market — do not substitute a proxy. |
+| (other) | call `search_etfs(query="MSCI <country name>", market="UNITED STATES")`, keep only **broad country matches** (defined below), profile at most 3 via `etf_profile`, pick the highest market cap | Fallback discovery. `<country name>` is the primary leg's `market` field from `get_company_info`; the `market` filter is case-insensitive, so `UNITED STATES` matches a `market` value of `United States`. US-listed, matching the canonical table's own convention. Locally listed funds are not queried by a second pass by default: `search_etfs` has no price-history field, and a locally listed fund may lack the history `etf_daily_price` needs for a stable beta, so the single US-listed pass is the simpler default. No broad match among the results → benchmark unavailable for that market — do not substitute a proxy. |
+
+**Broad country match:** the fund's `name` contains "MSCI" and the country name, and contains none of: Small-Cap, Mid-Cap, Value, Growth, Min Vol / Minimum Volatility, ESG / SRI / Climate, Hedged / Currency Hedged, Leveraged / 2x / 3x / Bull / Bear / Inverse, Dividend, Momentum, Quality, Factor, or a sector name. No broad match in the result set → benchmark unavailable → proceed to the Batch C.5 output gate; no silent proxy substitution.
+
+**Shortlist and profile bound:** `search_etfs` uses its default limit (20 rows); do not raise it. From the rows returned, keep the ones that pass the broad-match test, in search-result order — that ordered list (symbol + market cap once profiled) is the shortlist. Profile at most 3 of them via `etf_profile`; pick the one with the highest market cap. If none of the profiled candidates returns a market cap, take the first broad match by search order instead of profiling further. Keep the ordered shortlist (symbol, market cap) in memory — Batch C fallback #1 reuses it instead of re-searching. Cost: up to 1 + 3 credits (one `search_etfs` call plus up to three `etf_profile` calls, 1 credit each).
 
 Compute the start/end dates for a 180d window: `end_date = today`, `start_date = today - 180 days` (calendar; ~125 trading days will be returned).
 
@@ -64,7 +68,10 @@ Fire all in parallel:
 Compute beta inline per `references/residual-math.md` §"Beta computation". Beta-neutral hedge ratio = `beta_long / beta_short` (dollars short per dollar long).
 
 **Fallbacks (in order):**
-1. If `etf_daily_price` returns no data for the chosen benchmark → call `search_etfs(query="MSCI", market="<market>")` to find an alternative, picking per the "(other)" row above; retry with that result. If `search_etfs` also returns no rows, treat the benchmark as unavailable and proceed to the Batch C.5 output gate.
+1. If `etf_daily_price` returns no data for the chosen benchmark:
+   - **Canonical-table market** (Step 1 used the fixed ticker, so no shortlist exists yet): run the "(other)" row's US-listed search once — `search_etfs(query="MSCI <country name>", market="UNITED STATES")` — build the broad-match shortlist, profile at most 3, and retry with the top pick.
+   - **"(other)" market** (the shortlist already exists from Step 1): do NOT rerun the identical search. Retry with the next-highest-market-cap candidate already on the shortlist.
+   - If no candidate remains — the canonical-market search above found no broad match, or the "(other)"-market shortlist is exhausted — treat the benchmark as unavailable and proceed to the Batch C.5 output gate.
 2. If a leg's price series returns < 90 days of data → flag the affected candidate as "insufficient history for beta" and report **only dollar-neutral sizing** for that pair (do NOT halt the whole skill — this is per-leg degradation, surfaced in the row).
 
 #### Batch C.5 — Output gate (HARD HALT — non-negotiable)
@@ -79,7 +86,7 @@ HARD GATE — refuse, do not degrade:
       ⚠ Cannot produce beta-neutral hedge ratios.
         Benchmark: <benchmark_ticker> for market <primary_market>
         Returned: <N> observations from etf_daily_price (need ≥ 60 for stable beta)
-        Failure path: <which fallback step ran last — initial-fetch / search_etfs-discovery>
+        Failure path: <which fallback step ran last — initial-fetch / us-listed-search-discovery / shortlist-exhausted>
 
       Operator action — pick one:
         (a) Re-run with explicit benchmark: /parallax-pair-finder <symbol> <side> --benchmark=<alt-ticker>
@@ -139,13 +146,13 @@ Same tool-split as suggestion mode Batch C: equity legs use `export_price_series
 
 Benchmark selection: use the canonical mapping in suggestion mode Batch C. If both legs share a `market`, use that market's benchmark. If markets differ, use the long-leg's market benchmark and flag the cross-market exposure in the residual section.
 
-Fallbacks (same order as suggestion mode):
-1. `etf_daily_price` empty → `search_etfs(query="MSCI", market=...)` discovery per the "(other)" row in suggestion mode Batch C → retry. No rows returned → treat the benchmark as unavailable and proceed to the Batch B.5 output gate.
+Fallbacks (same order and shortlist-reuse rule as suggestion mode Batch C fallback #1):
+1. `etf_daily_price` empty → canonical-table market: run the "(other)" row's US-listed search once (build/profile the shortlist), retry with the top pick. "(other)" market: retry with the next-highest-market-cap candidate already shortlisted in Step 1 — do not rerun the identical search. No candidate remaining → treat the benchmark as unavailable and proceed to the Batch B.5 output gate.
 2. Leg < 90 days → dollar-neutral only for that pair (per-leg degradation, not whole-skill halt)
 
 #### Batch B.5 — Output gate (HARD HALT — non-negotiable)
 
-Same gate as suggestion-mode Batch C.5. If benchmark is genuinely unavailable after fallback #1 above, HALT with the operator-action message — do NOT substitute pair-relative regression or emit a "⚠ Benchmark unavailable" caveat. Hedge ratios that cannot be properly computed are not emitted in any form. The pair-relative regression formula is reference math only in v1; not a runtime fallback.
+Same gate as suggestion-mode Batch C.5. If benchmark is genuinely unavailable after fallback #1 above is exhausted, HALT with the operator-action message — do NOT substitute pair-relative regression or emit a "⚠ Benchmark unavailable" caveat. Hedge ratios that cannot be properly computed are not emitted in any form. The pair-relative regression formula is reference math only in v1; not a runtime fallback.
 
 #### Batch C — Macro residual (parallel)
 

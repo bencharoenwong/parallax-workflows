@@ -58,7 +58,7 @@ Round to 2 decimal places for output.
 
 ## 3a. Pair-relative regression beta (REFERENCE MATH — NOT A v1 FALLBACK)
 
-> **v1 status:** Documented for completeness. **NOT used at runtime.** When `etf_daily_price` and `etf_search` both fail to yield a benchmark, the skill HALTS per the SKILL.md output gate (Batch C.5 / B.5). Hedge ratios computed against a non-market benchmark are not interchangeable with market-beta-neutral hedge ratios; substituting silently produces a confidence-building lie. The user-facing failure is honest: "cannot produce hedge ratios — operator action required."
+> **v1 status:** Documented for completeness. **NOT used at runtime.** When `etf_daily_price` and `search_etfs` both fail to yield a benchmark, the skill HALTS per the SKILL.md output gate (Batch C.5 / B.5). Hedge ratios computed against a non-market benchmark are not interchangeable with market-beta-neutral hedge ratios; substituting silently produces a confidence-building lie. The user-facing failure is honest: "cannot produce hedge ratios — operator action required."
 >
 > A future v2 may add an explicit `--mode=pair-relative` flag that opts into this method when the user knows what they are buying. Until that flag exists, this section is reference math only.
 

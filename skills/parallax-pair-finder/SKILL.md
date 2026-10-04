@@ -16,7 +16,7 @@ description: "Long/short equity pair builder: given one leg, suggest top-3 count
 
 ## Gotchas
 
-- Expected Parallax spend: ~8 tokens single-pair evaluate, ~15 for a 3-candidate suggestion run (`_parallax/token-costs.md`); price series are free.
+- Expected Parallax spend: ~8 tokens single-pair evaluate, ~15 for a 3-candidate suggestion run (`_parallax/token-costs.md`); price series are free. The "(other)" market benchmark fallback (`references/modes.md`) adds up to 1 + 3 credits on top (one `search_etfs` call plus up to three `etf_profile` calls).
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §3 parallel execution, §4/§4.0 fallbacks, §14 host primitives. JIT-load `references/residual-math.md` for factor-net, beta and hedge-ratio formulas; `references/modes.md` for the per-mode batch tables.
 - JIT-load `_parallax/coverage-matrix.md`: equities price via `export_price_series`, the benchmark ETF via `etf_daily_price` — separate endpoints; `etf_daily_price` returns `[]` for a multi-symbol call if any symbol is uncovered, so always one call per benchmark.
 - Suggestion mode uses a single `export_peer_comparison` call so factor scores are cross-sectionally comparable; evaluate mode MUST flag score comparability when the short is not in the long's peer set.
@@ -67,7 +67,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 
 ### Step 1 — Resolve inputs
 
-RICs per conventions §1 (`get_company_info` empty → try `.O`, then `.N`, then ask). Benchmark from the primary leg's `market` via the canonical mapping in `references/modes.md` (other markets: `search_etfs(query="MSCI", market=…)`, shortlist broad "MSCI <country>" name matches, then `etf_profile` each shortlisted symbol and pick highest market cap). 180-day window: `end_date = today`, `start_date = today − 180 days`.
+RICs per conventions §1 (`get_company_info` empty → try `.O`, then `.N`, then ask). Benchmark from the primary leg's `market` via the canonical mapping in `references/modes.md` (other markets: `search_etfs(query="MSCI <country name>", market="UNITED STATES")`, keep only broad country matches per `references/modes.md`'s definition, profile at most 3 via `etf_profile`, pick highest market cap; keep the ordered shortlist for Step 3's fallback). 180-day window: `end_date = today`, `start_date = today − 180 days`.
 
 ### Step 2 — Fetch (parallel batches)
 
@@ -77,7 +77,7 @@ Per `references/modes.md`: **Batch A** identification + peer set + macro coverag
 
 - `export_peer_comparison` failure: retry once, then `get_peer_snapshot(primary)` with comparability marked best-effort.
 - A leg with < 90 days of prices: that pair degrades to dollar-neutral sizing only (per-leg degradation, never a whole-skill halt).
-- Benchmark empty: one `search_etfs(query="MSCI", market=…)` discovery retry; no rows returned counts as still empty. Then the **output gate (HARD HALT, gate-shaped per conventions §4.0)** before any beta-neutral ratio renders — refuse, do not degrade:
+- Benchmark empty: for a canonical-table market, one `search_etfs(query="MSCI <country name>", market="UNITED STATES")` discovery retry (shortlist the broad matches, profile at most 3, pick highest market cap); for an "(other)" market, retry with the next-highest-market-cap candidate already shortlisted in Step 1 — never rerun the identical search. No candidate left counts as still empty. Then the **output gate (HARD HALT, gate-shaped per conventions §4.0)** before any beta-neutral ratio renders — refuse, do not degrade:
 
 ```
 HARD GATE — refuse, do not degrade:
@@ -87,7 +87,7 @@ HARD GATE — refuse, do not degrade:
       ⚠ Cannot produce beta-neutral hedge ratios.
         Benchmark: <benchmark_ticker> for market <primary_market>
         Returned: <N> observations from etf_daily_price (need ≥ 60 for stable beta)
-        Failure path: <which fallback step ran last — initial-fetch / search_etfs-discovery>
+        Failure path: <which fallback step ran last — initial-fetch / us-listed-search-discovery / shortlist-exhausted>
 
       Operator action — pick one:
         (a) Re-run with explicit benchmark: /parallax-pair-finder <symbol> <side> --benchmark=<alt-ticker>
