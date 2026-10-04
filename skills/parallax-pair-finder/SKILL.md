@@ -16,7 +16,7 @@ description: "Long/short equity pair builder: given one leg, suggest top-3 count
 
 ## Gotchas
 
-- Expected Parallax spend: ~8 tokens single-pair evaluate, ~15 for a 3-candidate suggestion run (`_parallax/token-costs.md`); price series are free. The "(other)" market benchmark fallback, and the canonical-market fallback-of-last-resort that fires when the fixed ticker's `etf_daily_price` call returns empty (both in `references/modes.md`), each add up to 1 + 3 credits on top (one `search_etfs` call plus up to three `etf_profile` calls).
+- Expected Parallax spend: ~8 tokens single-pair evaluate, ~15 for a 3-candidate suggestion run (`_parallax/token-costs.md`); price series are free. The "(other)" market benchmark fallback, and the canonical-market fallback-of-last-resort that fires when the fixed ticker's `etf_daily_price` call returns empty or < 60 observations (both in `references/modes.md`), each add up to 7 credits on top in the worst case: one `search_etfs` call, up to three `etf_profile` calls, and up to three retry `etf_daily_price` calls, 1 credit each.
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §3 parallel execution, §4/§4.0 fallbacks, §14 host primitives. JIT-load `references/residual-math.md` for factor-net, beta and hedge-ratio formulas; `references/modes.md` for the per-mode batch tables.
 - JIT-load `_parallax/coverage-matrix.md`: equities price via `export_price_series`, the benchmark ETF via `etf_daily_price` — separate endpoints; `etf_daily_price` returns `[]` for a multi-symbol call if any symbol is uncovered, so always one call per benchmark.
 - Suggestion mode uses a single `export_peer_comparison` call so factor scores are cross-sectionally comparable; evaluate mode MUST flag score comparability when the short is not in the long's peer set.
@@ -67,7 +67,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 
 ### Step 1 — Resolve inputs
 
-RICs per conventions §1 (`get_company_info` empty → try `.O`, then `.N`, then ask). Benchmark from the primary leg's `market` via the canonical mapping in `references/modes.md` (other markets: `search_etfs(query="MSCI <country name>", market="UNITED STATES")`, where `<country name>` is the `market` field value as-is — known alias: `United States` → `USA`, do not invent other aliases — keep only broad matches per `references/modes.md`'s definition, profile at most 3 via `etf_profile`, pick highest market cap; keep the ordered shortlist for Step 3's fallback). 180-day window: `end_date = today`, `start_date = today − 180 days`.
+RICs per conventions §1 (`get_company_info` empty → try `.O`, then `.N`, then ask). Benchmark from the primary leg's `market` via the canonical mapping in `references/modes.md` (other markets: `search_etfs(query="MSCI <country name>", market="UNITED STATES")`, where `<country name>` is the `market` field value as-is — known alias: `United States` → `USA`; this is the only alias; do not invent others — keep only broad matches per `references/modes.md`'s definition, profile at most 3 via `etf_profile`, pick highest market cap; keep the ordered shortlist for Step 3's fallback). 180-day window: `end_date = today`, `start_date = today − 180 days`.
 
 ### Step 2 — Fetch (parallel batches)
 
@@ -77,7 +77,7 @@ Per `references/modes.md`: **Batch A** identification + peer set + macro coverag
 
 - `export_peer_comparison` failure: retry once, then `get_peer_snapshot(primary)` with comparability marked best-effort.
 - A leg with < 90 days of prices: that pair degrades to dollar-neutral sizing only (per-leg degradation, never a whole-skill halt).
-- Benchmark empty: for a canonical-table market, one `search_etfs(query="MSCI <country name>", market="UNITED STATES")` discovery retry (shortlist the broad matches, remove the canonical ticker that just returned empty, profile at most 3 of what remains, pick highest market cap); for an "(other)" market, retry with the next-highest-market-cap candidate already shortlisted in Step 1 — never rerun the identical search. Retry order and cap per `references/modes.md`: profiled candidates by market cap descending, then unprofiled broad matches in search order, 3 retries total. No candidate left counts as still empty. Then the **output gate (HARD HALT, gate-shaped per conventions §4.0)** before any beta-neutral ratio renders — refuse, do not degrade:
+- Benchmark empty or < 60 observations: for a canonical-table market, one `search_etfs(query="MSCI <country name>", market="UNITED STATES")` discovery retry (shortlist the broad matches, remove the canonical ticker that just returned empty, profile at most 3 of what remains, pick highest market cap); for an "(other)" market, retry with the next-highest-market-cap candidate already shortlisted in Step 1 — never rerun the identical search. Retry order and cap per `references/modes.md`: skip any ticker already tried (the initial fetch does not itself count as a retry); profiled candidates by market cap descending, or search order if none has a market cap; then unprofiled broad matches in search order; 3 retries total. No candidate left counts as still empty. Then the **output gate (HARD HALT, gate-shaped per conventions §4.0)** before any beta-neutral ratio renders — refuse, do not degrade:
 
 ```
 HARD GATE — refuse, do not degrade:
@@ -85,8 +85,8 @@ HARD GATE — refuse, do not degrade:
     ABORT skill output. Render exactly:
 
       ⚠ Cannot produce beta-neutral hedge ratios.
-        Benchmark: <benchmark_ticker, or "none" if the Step-1 search found no broad match> for market <primary_market>
-        <Returned: N observations from etf_daily_price (need ≥ 60 for stable beta) — omit this whole line when Benchmark is "none">
+        Benchmark: <the last ticker tried, or "none" if no broad match was found at any step> for market <primary_market>
+        <if Benchmark ≠ "none": "Returned: N observations from etf_daily_price (need ≥ 60 for stable beta)" — else omit this line entirely>
         Failure path: <which fallback step ran last — initial-fetch / us-listed-search-discovery / shortlist-exhausted / no-broad-match>
 
       Operator action — pick one:
@@ -97,6 +97,8 @@ HARD GATE — refuse, do not degrade:
     DO NOT render Batch D, Batch E, the comparison table, or any per-pair detail.
     DO NOT emit hedge ratios under any other label (no "pair-relative regression" substitution).
 ```
+
+Failure path values: `initial-fetch` — the first `etf_daily_price` call, against the canonical or Step-1-discovered ticker, returned empty or < 60 observations before any fallback ran. `us-listed-search-discovery` — the canonical-table market's one-time US-listed `search_etfs` fallback ran and produced a shortlist. `shortlist-exhausted` — every profiled and unprofiled broad-match candidate on the shortlist was retried and none passed. `no-broad-match` — no fund in the search results passed the broad-match test at any step.
 
 Rationale: a hedge ratio computed against the wrong benchmark is a confidence-building lie; a footnote does not change a PM's sizing decision. The pair-relative regression formula in `references/residual-math.md` §3a is reference math only in v1, not a runtime fallback.
 

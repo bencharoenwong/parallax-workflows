@@ -44,7 +44,7 @@
 | Canada | `EWC` | unverified | — |
 | Australia | `EWA` | unverified | — |
 
-For unverified markets, call `search_etfs(query="MSCI <country name>", market="UNITED STATES")` to discover available benchmarks at runtime — US-listed, matching this table's own convention; do NOT assume the iShares MSCI country ETF is in coverage. `query` is required — a call without it is rejected. See `parallax-pair-finder/references/modes.md` for the broad-match filter and the `etf_profile` market-cap tie-break (bounded to 3 profile calls).
+Markets with a fixed ticker in the pair-finder canonical table (`parallax-pair-finder/references/modes.md`) — including the "unverified" rows above — use that ticker first and fall back to search only on failure (empty or < 60 observations). For a market not in that canonical table at all (the "(other)" catch-all), call `search_etfs(query="MSCI <country name>", market="UNITED STATES")` to discover available benchmarks at runtime — US-listed, matching this table's own convention; do NOT assume the iShares MSCI country ETF is in coverage. `query` is required — a call without it is rejected. See `parallax-pair-finder/references/modes.md` for the broad-match filter and the `etf_profile` market-cap tie-break (bounded to 3 profile calls).
 
 ## Known API quirks
 
