@@ -12,8 +12,9 @@ Research pass of 2026-10-02: web search plus direct reading of public Vietnamese
 | ACBS | KDH (real estate) | Update | 08/05/2026 | http://static1.vietstock.vn/edocs/20173/KDH_Cap_nhat_8.pdf | Pages 1–2, image |
 | VNDirect | NLG (real estate) | Update | 01/12/2025 | http://static1.vietstock.vn/edocs/Files/2025/12/04/nlg-khuyen-nghi-kha-quan-voi-gia-muc-tieu-42-200-dong-co-phieu_20251204101924.pdf | Pages 1–2, image |
 | Vietcap | Strategy 2026 (macro) | Strategy deck | 12/2025 | http://static1.vietstock.vn/edocs/18418/VIETCAP_STRATEGY_2026.pdf | Pages 1–10 of 394 |
+| World Bank | Viet Nam Rising: Pathways to a High-Income Future | Flagship macro report | 2025 | https://documents1.worldbank.org/curated/en/099072225231030509/pdf/P178784-38d2bf23-f10f-4423-b91e-681ea06db184.pdf | Cover, front matter, and table of contents, text layer |
 
-Quotes from image-only pages carry higher transcription risk than those from text layers.
+Quotes from image-only pages carry higher transcription risk than those from text layers. The World Bank report above is in English; it is listed for report-identity provenance only and does not source the Vietnamese-language terminology rows below.
 
 ## Findings consistent across all six reports
 
@@ -67,6 +68,11 @@ Broker five-tier scale (SSI legend, TCB note p.10): Mua / Khả quan / Trung l�
 | Overweight / Underweight | Tăng tỷ trọng / Giảm tỷ trọng | https://vietnambiz.vn/tang-ti-trong-overweight-la-gi-su-dung-tang-ti-trong-trong-xep-hang-va-khuyen-nghi-dau-tu-20200420192725676.htm |
 | Portfolio; rebalancing | Danh mục; tái cân bằng danh mục | https://hdcap.vn/kien-thuc/giu-vung-huong-di-tai-chinh-tai-can-bang-danh-muc-dau-tu-de-phat-trien-ben-vung/ |
 | Momentum | Momentum (often kept) / động lượng | https://www.dnse.com.vn/hoc/dau-tu-theo-momentum-la-gi |
+| Total factor productivity (TFP) | Năng suất nhân tố tổng hợp (TFP) | https://vietnambiz.vn/nang-suat-nhan-to-tong-hop-total-factor-productivity-tfp-la-gi-20200527110720452.htm |
+| Global value chain (GVC) | Chuỗi giá trị toàn cầu (GVC) | https://moit.gov.vn/tin-tuc/phat-trien-cong-nghiep/doanh-nghiep-cong-nghiep-ho-tro-viet-dang-tham-gia-ngay-cang-sau-vao-chuoi-gia-tri-toan-cau.html |
+| Power Development Plan 8 (PDP8) | Quy hoạch điện VIII (PDP8) | Decision 500/QĐ-TTg: https://xaydungchinhsach.chinhphu.vn/toan-van-quy-hoach-phat-trien-dien-luc-quoc-gia-11923051616315244.htm; Vietcap Strategy 2026 above |
+| Foreign direct investment linkages | Liên kết doanh nghiệp FDI | https://mekongasean.vn/lien-ket-giua-doanh-nghiep-fdi-va-doanh-nghiep-trong-nuoc-con-yeu-26474.html |
+| Institutional investors | Nhà đầu tư tổ chức | https://baochinhphu.vn/thi-truong-chung-khoan-2026-tang-toc-cai-cach-mo-rong-nguon-von-cho-nen-kinh-te-102260320165723298.htm |
 
 ## Documented risks
 
