@@ -36,6 +36,26 @@ def assert_fast(fn, *args, bound=1.0):
     assert time.perf_counter() - start < bound
 
 
+def assert_linear(call, n, ceiling=10.0):
+    """Load-robust linear-time guard: doubling the input must not quadruple the time.
+
+    call(size) runs the code under test on an input of the given size. Each
+    size keeps its best of three runs, timed in CPU time of this process so
+    other busy processes barely move it. An absolute ceiling remains as a
+    backstop against a hang.
+    """
+    def timed(size):
+        start = time.process_time()
+        call(size)
+        return time.process_time() - start
+
+    rounds = [(timed(n), timed(2 * n)) for _ in range(3)]
+    small = min(t for t, _ in rounds)
+    large = min(t for _, t in rounds)
+    assert large < ceiling
+    assert large / small < 3.0  # linear gives ~2, quadratic ~4
+
+
 @pytest.mark.parametrize("lang", common.FIELDS)
 def test_complete_translation_preserves_data(tmp_path, lang):
     source, output = documents(tmp_path, lang, extra={"charts": [{"x": 1}], "notes": None})
@@ -408,9 +428,12 @@ def test_copy_check_is_linear_time(tmp_path):
 
 
 def test_unclosed_no_translate_markers_are_linear_time(tmp_path):
-    text = "<!-- DO NOT TRANSLATE -->" * 4000
-    source, output = documents(tmp_path, "zh", "收入 " + text, "Revenue " + text)
-    assert_fast(common.validate_common, str(output), "zh", str(source), bound=2.0)
+    def call(size):
+        text = "<!-- DO NOT TRANSLATE -->" * size
+        source, output = documents(tmp_path, "zh", "收入 " + text, "Revenue " + text)
+        common.validate_common(str(output), "zh", str(source))
+
+    assert_linear(call, 4000)
 
 
 def test_no_translate_block_change_still_fails(tmp_path):
