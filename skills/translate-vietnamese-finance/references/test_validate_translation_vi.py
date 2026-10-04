@@ -4,6 +4,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+import pytest
+
 
 MODULE = Path(__file__).with_name("validate-translation.py")
 SPEC = importlib.util.spec_from_file_location("vietnamese_validator", MODULE)
@@ -73,3 +75,19 @@ def test_mixed_nghin_ngan_and_space_before_percent_warn(tmp_path):
     _, warnings = _style(tmp_path, "CASA đạt 186,4 nghìn tỷ đồng; thanh khoản 11,3 ngàn tỷ đồng, tăng 17 %.")
     assert any("nghìn" in w and "ngàn" in w for w in warnings)
     assert any("Space before %" in w for w in warnings)
+
+
+def test_stray_leading_comma_before_number_warns(tmp_path):
+    errors, warnings = _style(tmp_path, "Biên lợi nhuận ròng tăng ,5% so với cùng kỳ.")
+    assert any("stray leading comma" in w and ",5" in w for w in warnings)
+    assert not any("leading comma" in e.lower() for e in errors)
+
+
+@pytest.mark.parametrize("text", [
+    "Biên 3,2%,12% và (5%),8%",
+    "Doanh thu tăng 5%, lợi nhuận tăng 7%, biên lợi nhuận 12,5%.",
+])
+def test_symbol_led_and_spaced_list_commas_are_not_flagged(tmp_path, text):
+    errors, warnings = _style(tmp_path, text)
+    assert not any("leading comma" in e.lower() for e in errors)
+    assert not any("leading comma" in w.lower() for w in warnings)

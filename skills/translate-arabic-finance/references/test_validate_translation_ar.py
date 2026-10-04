@@ -117,3 +117,17 @@ def test_waive_downgrades_error_and_exit_code(tmp_path):
     assert waived.returncode == 0
     assert "WAIVED (treated as pass): 1" in waived.stdout
     assert "Doubled Arabic word" in waived.stdout
+
+
+def test_long_latin_run_scan_is_linear_time(tmp_path):
+    import time
+    path = write_payload(tmp_path, "a" * 20000 + " عربي")
+    start = time.perf_counter()
+    validator.validate(str(path))
+    assert time.perf_counter() - start < 1.0
+
+
+def test_latin_run_before_script_still_warns(tmp_path):
+    path = write_payload(tmp_path, "abcعربي")
+    _, warnings = validator.validate(str(path))
+    assert any("abc" in w for w in warnings)

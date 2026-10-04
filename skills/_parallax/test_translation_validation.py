@@ -3,6 +3,7 @@ import importlib.util
 from collections import Counter
 import json
 from pathlib import Path
+import time
 
 import pytest
 
@@ -28,6 +29,33 @@ def documents(tmp_path, lang, text=None, original="Revenue may rise 5%.", extra=
     return a, b
 
 
+def assert_fast(fn, *args, bound=1.0):
+    """Linear-time guard: the adversarial inputs below take milliseconds."""
+    start = time.perf_counter()
+    fn(*args)
+    assert time.perf_counter() - start < bound
+
+
+def assert_linear(call, n, ceiling=10.0):
+    """Load-robust linear-time guard: doubling the input must not quadruple the time.
+
+    call(size) runs the code under test on an input of the given size. Each
+    size keeps its best of three runs, timed in CPU time of this process so
+    other busy processes barely move it. An absolute ceiling remains as a
+    backstop against a hang.
+    """
+    def timed(size):
+        start = time.process_time()
+        call(size)
+        return time.process_time() - start
+
+    rounds = [(timed(n), timed(2 * n)) for _ in range(3)]
+    small = min(t for t, _ in rounds)
+    large = min(t for _, t in rounds)
+    assert large < ceiling
+    assert large / small < 3.0  # linear gives ~2, quadratic ~4
+
+
 @pytest.mark.parametrize("lang", common.FIELDS)
 def test_complete_translation_preserves_data(tmp_path, lang):
     source, output = documents(tmp_path, lang, extra={"charts": [{"x": 1}], "notes": None})
@@ -48,7 +76,9 @@ def test_empty_or_malformed_output_cannot_pass(tmp_path, lang, payload):
 @pytest.mark.parametrize("lang", common.FIELDS)
 def test_english_only_output_fails(tmp_path, lang):
     source, output = documents(tmp_path, lang, "Revenue may rise 5%.")
-    assert common.validate_common(str(output), lang, str(source))[2]
+    errors = common.validate_common(str(output), lang, str(source))[2]
+    assert any("No target-language text" in e for e in errors)
+    assert any("copied without translation" in e for e in errors)
 
 
 @pytest.mark.parametrize("lang", common.FIELDS)
@@ -284,3 +314,280 @@ def test_currency_substitution_still_fails(tmp_path):
     source, output = documents(tmp_path, "zh", "营收 HKD 5M。", "Revenue USD 5M")
     errors = common.validate_common(str(output), "zh", str(source))[2]
     assert any("currency identifiers" in e for e in errors)
+
+
+def test_spelled_out_source_currency_warns_without_failing(tmp_path):
+    source, output = documents(tmp_path, "th", "รายได้ 5 ล้านบาท", "Revenue of 5 million euros")
+    _, _, errors, warnings = common.validate_common(str(output), "th", str(source))
+    assert errors == []
+    assert warnings == [common.CURRENCY_WORDS_WARNING]
+
+
+def test_currency_code_source_does_not_warn(tmp_path):
+    source, output = documents(tmp_path, "zh", "营收 USD 5M。", "Revenue USD 5M")
+    _, _, errors, warnings = common.validate_common(str(output), "zh", str(source))
+    assert errors == []
+    assert common.CURRENCY_WORDS_WARNING not in warnings
+
+
+def test_currency_code_substitution_is_not_hidden_by_ordinary_words(tmp_path):
+    source, output = documents(tmp_path, "zh", "营收5百万美元，投资组合多元化", "Revenue CNY 5M")
+    errors = common.validate_common(str(output), "zh", str(source))[2]
+    assert any("currency identifiers" in e for e in errors)
+
+
+def test_long_unbroken_token_is_linear_time(tmp_path):
+    token = "a." * 16000  # dotted run with no "@": the slow case
+    assert_fast(common._protected, token, bound=1.0)
+
+
+def test_emails_still_protected():
+    assert common._protected("Contact ir@example.com today") == Counter({"ir@example.com": 1})
+
+
+def test_deeply_nested_json_fails_with_a_fatal_message(tmp_path):
+    path = tmp_path / "output.json"
+    path.write_text("[" * 1_000_000 + "]" * 1_000_000, encoding="utf-8")
+    data, errors = common.read_document(str(path))
+    assert data is None
+    assert any(e.startswith("[FATAL]") for e in errors)
+
+
+@pytest.mark.parametrize("token", ["1," * 16000], ids=["commas"])
+def test_magnitude_scan_is_linear_time(token):
+    assert_fast(common._units, token, bound=1.0)
+
+
+def test_ticker_scan_is_linear_time():
+    assert_fast(common._protected, "A-" * 16000, bound=1.0)
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("Revenue USD 5.2B and 3M", {"billion": 1, "million": 1}),
+    ("5x billion", {"billion": 1}), ("1,5 tỷ", {"billion": 1}),
+    ("营收50亿元", {"hundred_million": 1}), ("12% tỷ trọng", {}),
+])
+def test_units_semantics_unchanged(text, expected):
+    assert common._units(text) == Counter(expected)
+
+
+def test_tickers_still_protected():
+    assert common._protected("Buy 0700.HK and BRK-B.N") == Counter({"0700.HK": 1, "BRK-B.N": 1})
+
+
+# Ship-check fix pass: numbers glued to punctuation, copy-check and
+# no-translate scans on long input, and currency-word false positives.
+
+def number_tokens(text):
+    import re
+    return re.findall(common.NUMBER, text)
+
+
+def test_number_after_comma_keeps_its_fraction():
+    assert number_tokens("Revenue,1.5 billion") == ["1.5"]
+    assert number_tokens("a .5% move") == [".5%"]
+
+
+@pytest.mark.parametrize("original,text", [("Revenue,1.5 billion", "收入,1.5"),
+                                           ("Net income,3.2B", "净利润,3.2")])
+def test_dropped_unit_after_punctuation_fails(tmp_path, original, text):
+    source, output = documents(tmp_path, "zh", text, original)
+    errors = common.validate_common(str(output), "zh", str(source))[2]
+    assert any("Magnitude units" in e for e in errors)
+
+
+def test_changed_fraction_after_punctuation_fails(tmp_path):
+    source, output = documents(tmp_path, "zh", "收入,1.9 十亿", "Revenue,1.5 billion")
+    assert any("Numeric tokens" in e for e in common.validate_common(str(output), "zh", str(source))[2])
+
+
+def test_number_after_symbol_and_comma_keeps_its_fraction():
+    assert number_tokens("Margins 3.2%,1.5%") == ["3.2%", "1.5%"]
+    assert number_tokens("a,b,c,100") == ["100"]
+    assert common._numbers_differ("Margins 3.2%,1.5%", "利润率 3.2%,1.9%", "zh")
+    assert not common._numbers_differ("Margins 3.2%,1.5%", "利润率 3.2%，1.5%", "zh")
+
+
+def test_multi_digit_number_after_symbol_and_comma_is_read_whole():
+    assert number_tokens("Margins 3.2%,12.5%") == ["3.2%", "12.5%"]
+    assert common._numbers_differ("Margins 3.2%,12.5%", "利润率 3.2%,12.9%", "zh")
+    assert not common._numbers_differ("Margins 3.2%,12.5%", "利润率 3.2%，12.5%", "zh")
+    assert common._units("Sales 3%,12.5 million") == Counter({"million": 1})
+
+
+def test_integer_after_symbol_and_comma_is_read_whole():
+    assert number_tokens("Margins 3.2%,12%") == ["3.2%", "12%"]
+    assert number_tokens("Growth (5%),8%") == ["5%", "8%"]
+    assert not common._numbers_differ("Margins 3.2%,12%", "利润率 3.2%，12%", "zh")
+
+
+def test_copy_check_is_linear_time(tmp_path):
+    text = "a" * 40000
+    source, output = documents(tmp_path, "zh", text, text)
+    assert_fast(common.validate_common, str(output), "zh", str(source), bound=2.0)
+
+
+def test_unclosed_no_translate_markers_are_linear_time(tmp_path):
+    def call(size):
+        text = "<!-- DO NOT TRANSLATE -->" * size
+        source, output = documents(tmp_path, "zh", "收入 " + text, "Revenue " + text)
+        common.validate_common(str(output), "zh", str(source))
+
+    assert_linear(call, 4000)
+
+
+def test_no_translate_block_change_still_fails(tmp_path):
+    block = "<!-- DO NOT TRANSLATE -->Keep 5%<!-- END NO TRANSLATE -->"
+    source, output = documents(tmp_path, "zh", "收入可能增長。" + block.replace("Keep", "Kept"),
+                               "Revenue may rise. " + block)
+    assert any("No-translate block" in e for e in common.validate_common(str(output), "zh", str(source))[2])
+
+
+@pytest.mark.parametrize("prose", ["The firm won a large contract.", "Dong Nai province output rose."])
+def test_currency_warning_ignores_won_and_dong(tmp_path, prose):
+    source, output = documents(tmp_path, "vi-VN", "Doanh thu có thể tăng 5%.", prose + " Revenue may rise 5%.")
+    warnings = common.validate_common(str(output), "vi-VN", str(source))[3]
+    assert common.CURRENCY_WORDS_WARNING not in warnings
+
+
+# Test-architect pass: correctness coverage for the copy check, the
+# one-directional currency design, metadata, metrics, and numbers.
+
+@pytest.mark.parametrize("original", ["Revenue may rise sharply this quarter.",
+                                      "9Revenue grew.", "报Revenue grew."])
+def test_copied_english_is_flagged(tmp_path, original):
+    source, output = documents(tmp_path, "zh", original, original)
+    errors = common.validate_common(str(output), "zh", str(source))[2]
+    assert any("copied without translation" in e for e in errors)
+
+
+def test_translated_short_prose_is_not_flagged_as_copy(tmp_path):
+    source, output = documents(tmp_path, "zh", TEXTS["zh"], "Net ROE may rise 5%.")
+    assert not any("copied" in e for e in common.validate_common(str(output), "zh", str(source))[2])
+
+
+def test_currency_added_only_in_translation_is_an_accepted_gap(tmp_path):
+    """Pins the one-directional design: a currency the translation adds is not
+    compared. If this fails, the check became bidirectional; revisit the
+    translation-only currency tests too."""
+    source, output = documents(tmp_path, "zh", "收入可能增長 USD 5%。", "Revenue may rise 5%.")
+    assert not any("currency" in e.lower() for e in common.validate_common(str(output), "zh", str(source))[2])
+
+
+def test_changed_report_date_fails(tmp_path):
+    source, output = documents(tmp_path, "zh")
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    payload["metadata"]["report_date"] = "2099-01-01"
+    output.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    errors = common.validate_common(str(output), "zh", str(source))[2]
+    assert any("date" in e and "changed or missing" in e for e in errors)
+
+
+def test_dropped_financial_metric_fails(tmp_path):
+    source, output = documents(tmp_path, "zh", "收入可能增長 5%。", "ROE may rise 5%.")
+    errors = common.validate_common(str(output), "zh", str(source))[2]
+    assert any("financial identifiers missing" in e for e in errors)
+
+
+def test_vietnamese_keeps_no_leading_zero_decimal_as_written(tmp_path):
+    source, output = documents(tmp_path, "vi-VN", "P/E có thể ở mức .5x.", "P/E may be .5x.")
+    assert not any("Numeric tokens" in e for e in common.validate_common(str(output), "vi-VN", str(source))[2])
+
+
+@pytest.mark.parametrize("lang", common.FIELDS)
+def test_any_single_digit_change_is_caught(lang):
+    import random
+    rng = random.Random(20261003)
+    for _ in range(300):
+        number = f"{rng.randint(1, 9999)}.{rng.randint(0, 99):02d}"
+        before = f"Revenue may rise {number}%."
+        digits = [i for i, ch in enumerate(number) if ch.isdigit()]
+        i = rng.choice(digits)
+        changed = number[:i] + str((int(number[i]) + rng.randint(1, 9)) % 10) + number[i + 1:]
+        after = f"x {changed}%"
+        if lang == "vi-VN":
+            after = after.replace(".", ",")
+        assert common._numbers_differ(before, after, lang), (lang, number, changed)
+
+
+# Deferred-debt pass.
+
+def test_html_structure_change_still_fails(tmp_path):
+    source, output = documents(tmp_path, "zh", "<p>收入可能增長 5%。</p>", "<p><b>Revenue</b> may rise 5%.</p>")
+    assert any("HTML structure" in e for e in common.validate_common(str(output), "zh", str(source))[2])
+
+
+@pytest.mark.parametrize("text,unit", [("5 ملايين", "million"), ("3 مليارات", "billion"), ("7 آلاف", "thousand")])
+def test_arabic_plural_magnitude_units(text, unit):
+    assert common._units(text) == Counter({unit: 1})
+
+
+def test_arabic_plural_million_matches_english_source(tmp_path):
+    source, output = documents(tmp_path, "ar-SA", "قد ترتفع الإيرادات 5 ملايين", "Revenue may rise 5 million")
+    assert not any("Magnitude units" in e for e in common.validate_common(str(output), "ar-SA", str(source))[2])
+
+
+def test_changed_source_metadata_value_fails(tmp_path):
+    source, output = documents(tmp_path, "zh")
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    payload["metadata"] = {"analyst": "desk"}
+    source.write_text(json.dumps(payload), encoding="utf-8")
+    errors = common.validate_common(str(output), "zh", str(source))[2]
+    assert any("Source metadata analyst changed or missing" in e for e in errors)
+
+
+@pytest.mark.parametrize("bad", [["not", "an", "object"], "text"])
+def test_non_object_metadata_or_data_is_fatal(tmp_path, bad):
+    source, output = documents(tmp_path, "zh")
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    payload["data"] = bad
+    output.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    errors = common.validate_common(str(output), "zh", str(source))[2]
+    assert any(e.startswith("[FATAL]") for e in errors)
+
+
+def _vendored_package(tmp_path, skill):
+    """Mirrors build-skills.sh: the skill is copied alone and the shared module
+    is vendored beside the wrapper as translation_common.py."""
+    import shutil
+    pkg = tmp_path / skill
+    shutil.copytree(ROOT.parent / skill, pkg, ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copy(ROOT / "translation_validate.py", pkg / "references" / "translation_common.py")
+    return pkg
+
+
+@pytest.mark.parametrize("skill", ["translate-chinese-finance", "translate-thai-finance",
+                                   "translate-arabic-finance", "translate-vietnamese-finance"])
+def test_standalone_package_loads_its_vendored_validator(tmp_path, skill):
+    pkg = _vendored_package(tmp_path, skill)
+    wrapper = pkg / "references" / "validate-translation.py"
+    spec = importlib.util.spec_from_file_location(f"standalone_{skill}", wrapper)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module._common_path == pkg / "references" / "translation_common.py"
+    assert not (tmp_path / "_parallax").exists()
+
+
+@pytest.mark.parametrize("skill", ["translate-chinese-finance", "translate-vietnamese-finance"])
+def test_standalone_package_prefers_vendored_copy_over_a_parallax_sibling(tmp_path, skill):
+    """With both a vendored copy and a _parallax tree present, the wrapper must
+    load the vendored copy (the version the package was built with)."""
+    pkg = _vendored_package(tmp_path, skill)
+    decoy = tmp_path / "_parallax"
+    decoy.mkdir()
+    (decoy / "translation_validate.py").write_text("raise ImportError('decoy loaded')\n", encoding="utf-8")
+    spec = importlib.util.spec_from_file_location(f"pref_{skill}", pkg / "references" / "validate-translation.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module._common_path == pkg / "references" / "translation_common.py"
+
+
+@pytest.mark.parametrize("text,unit", [("5 الملايين", "million"),
+                                       ("7 الآلاف", "thousand"), ("4 ألوف", "thousand")])
+def test_arabic_common_unit_variants(text, unit):
+    assert common._units(text) == Counter({unit: 1})
+
+
+@pytest.mark.parametrize("text", ["بنهاية 2024 الفائدة", "خلال 2023 الفترة"])
+def test_arabic_definite_nouns_starting_with_alef_fa_are_not_thousand(text):
+    assert common._units(text) == Counter()

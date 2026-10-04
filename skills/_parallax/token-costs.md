@@ -120,7 +120,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 
 > **Cost gotcha:** `/parallax-make-house-view` and `/parallax-judge-house-view` are the costliest workflows in the library at ~$56 each at Standard plan overage rates ($0.20/token). Run them intentionally — not as part of a routine check. For lightweight view assessment without full re-synthesis, prefer `/parallax-stress-house-view`.
 
-> **Auto-trigger surcharge:** the auto-on-load drift check (fired by `/parallax-portfolio-builder`, `/parallax-rebalance`, and `/parallax-thematic-screen` when the loaded view is older than 30 days) invokes `/parallax-judge-house-view --dry`. `--dry` skips the LLM synthesis step but still incurs the full macro fan-out (~280 tokens) — this surcharge lands on the consuming workflow's bill, not a separate line item. Run intentionally; the 30-day age gate is what bounds how often it fires.
+> **Auto-trigger surcharge:** the auto-on-load drift check (fired by `/parallax-portfolio-builder`, `/parallax-rebalance`, and `/parallax-thematic-screen` when the loaded view is at least 30 days old) invokes `/parallax-judge-house-view --dry`. `--dry` skips the LLM synthesis step but still incurs the full macro fan-out (~280 tokens) — this surcharge lands on the consuming workflow's bill, not a separate line item. Run intentionally; the 30-day age gate is what bounds how often it fires.
 
 ### AI investor profile workflows
 

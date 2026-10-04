@@ -6,7 +6,7 @@ The judge runs in three modes:
   gating — always runs the full pipeline.
 - **auto-on-load**: consumer skills (`portfolio-builder`, `rebalance`,
   `thematic-screen` per v2 plan §7) auto-invoke the judge when the
-  active view is older than ``AUTO_ON_LOAD_MIN_AGE_DAYS`` days. The
+  active view is at least ``AUTO_ON_LOAD_MIN_AGE_DAYS`` days old. The
   judge runs in cached / dry-run mode (no fresh MCP fan-out if the
   cache is within ``AUTO_ON_LOAD_CACHE_TTL_SECONDS``).
 - **scheduled**: bank-side cron invokes
@@ -29,7 +29,7 @@ from __future__ import annotations
 import datetime
 from typing import Literal
 
-# Auto-on-load only fires for views older than this many days. Below this
+# Auto-on-load only fires for views at least this many days old. Below this
 # threshold, the consumer skill skips the judge call entirely (no banner,
 # no audit row) — the view is fresh enough that drift is unlikely and the
 # 45-60s fan-out latency would dominate the consumer skill's own work.
