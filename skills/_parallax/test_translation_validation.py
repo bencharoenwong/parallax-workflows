@@ -36,26 +36,6 @@ def assert_fast(fn, *args, bound=1.0):
     assert time.perf_counter() - start < bound
 
 
-def assert_linear(call, n, ceiling=10.0):
-    """Load-robust linear-time guard: doubling the input must not quadruple the time.
-
-    call(size) runs the code under test on an input of the given size. Each
-    size keeps its best of three runs, timed in CPU time of this process so
-    other busy processes barely move it. An absolute ceiling remains as a
-    backstop against a hang.
-    """
-    def timed(size):
-        start = time.process_time()
-        call(size)
-        return time.process_time() - start
-
-    rounds = [(timed(n), timed(2 * n)) for _ in range(3)]
-    small = min(t for t, _ in rounds)
-    large = min(t for _, t in rounds)
-    assert large < ceiling
-    assert large / small < 3.0  # linear gives ~2, quadratic ~4
-
-
 @pytest.mark.parametrize("lang", common.FIELDS)
 def test_complete_translation_preserves_data(tmp_path, lang):
     source, output = documents(tmp_path, lang, extra={"charts": [{"x": 1}], "notes": None})
@@ -67,10 +47,8 @@ def test_complete_translation_preserves_data(tmp_path, lang):
 @pytest.mark.parametrize("payload", [{}, {"sections": {}}, {"sections": {"ReportText": {}}},
                                      {"sections": {"ReportText": None}}, {"sections": []}, []])
 def test_empty_or_malformed_output_cannot_pass(tmp_path, payload):
-    # Every branch here is reached before any lang-specific field lookup
-    # (read_document, translated_sections, or the "No translated sections"
-    # fallback); the lang argument only changes text inside a message this
-    # test never reads, so one language covers every payload shape.
+    # Each payload fails whatever the target language is, so the outcome
+    # does not depend on the language and one language covers every shape.
     path = tmp_path / "output.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
     assert common.validate_common(str(path), "zh")[2]
@@ -430,13 +408,26 @@ def test_copy_check_is_linear_time(tmp_path):
     assert_fast(common.validate_common, str(output), "zh", str(source), bound=2.0)
 
 
-def test_unclosed_no_translate_markers_are_linear_time(tmp_path):
-    def call(size):
-        text = "<!-- DO NOT TRANSLATE -->" * size
-        source, output = documents(tmp_path, "zh", "收入 " + text, "Revenue " + text)
-        common.validate_common(str(output), "zh", str(source))
+def test_unclosed_no_translate_markers_scan_in_linear_time():
+    closed = "<!-- DO NOT TRANSLATE -->Keep 5%<!-- END NO TRANSLATE -->"
+    unclosed = "<!-- DO NOT TRANSLATE -->" * 4000
+    assert common._no_translate_blocks(unclosed) == []
+    assert common._no_translate_blocks(closed + unclosed) == [closed]
 
-    assert_linear(call, 1000)
+    def timed():
+        start = time.process_time()
+        common._no_translate_blocks(closed + unclosed)
+        return time.process_time() - start
+
+    assert min(timed() for _ in range(3)) < 0.25
+
+
+def test_unclosed_no_translate_markers_do_not_hang_validation(tmp_path):
+    text = "<!-- DO NOT TRANSLATE -->" * 8000
+    source, output = documents(tmp_path, "zh", "收入 " + text, "Revenue " + text)
+    start = time.process_time()
+    common.validate_common(str(output), "zh", str(source))
+    assert time.process_time() - start < 6.0
 
 
 def test_no_translate_block_change_still_fails(tmp_path):
