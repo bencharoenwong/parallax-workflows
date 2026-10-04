@@ -75,9 +75,9 @@ Compute beta inline per `references/residual-math.md` §"Beta computation". Beta
 
 **Fallbacks (in order):**
 1. If `etf_daily_price` returns no data, or fewer than 60 observations, for the chosen benchmark:
-   - **Canonical-table market** (Step 1 used the fixed ticker, so no shortlist exists yet): run the "(other)" row's US-listed search once — `search_etfs(query="MSCI <country name>", market="UNITED STATES")` — build the broad-match shortlist, then remove the canonical ticker that just returned empty from that shortlist (a search for the same country name can return the identical fund), profile at most 3 of what remains, and retry with the top pick.
+   - **Canonical-table market** (Step 1 used the fixed ticker, so no shortlist exists yet): run the "(other)" row's US-listed search once — `search_etfs(query="MSCI <country name>", market="UNITED STATES")` — build the broad-match shortlist, then remove the canonical ticker that just failed from that shortlist (a search for the same country name can return the identical fund), profile at most 3 of what remains, and retry with the top pick.
    - **"(other)" market** (the shortlist already exists from Step 1): do NOT rerun the identical search. Retry with the next-highest-market-cap candidate already on the shortlist.
-   - **Retry order and cap:** skip any ticker already tried in this invocation, including the ticker from the initial fetch — the initial fetch itself does not count as a retry. Within the remaining shortlist, retry `etf_daily_price` against the profiled candidates (up to 3) ordered by market cap descending; if none of the profiled candidates has a market cap, use search order instead. Then — if those are exhausted — the remaining, unprofiled broad matches in the order `search_etfs` returned them. Stop after 3 retries total. If none returns ≥ 60 observations, treat the benchmark as unavailable and proceed to the Batch C.5 output gate.
+   - **Retry order and cap:** skip any ticker already tried in this invocation, including the ticker from the initial fetch — the initial fetch itself does not count as a retry. Within the remaining shortlist, retry `etf_daily_price` against the profiled candidates (up to 3) ordered by market cap descending, with any profiled candidate that has no market cap placed after those that do, in search order; if none has a market cap, use search order. Then — if those are exhausted — the remaining, unprofiled broad matches in the order `search_etfs` returned them. Stop after 3 retries total. If none returns ≥ 60 observations, treat the benchmark as unavailable and proceed to the Batch C.5 output gate.
    - If no candidate remains — the canonical-market search above found no broad match, or the "(other)"-market shortlist is exhausted — treat the benchmark as unavailable and proceed to the Batch C.5 output gate.
 2. If a leg's price series returns < 90 days of data → flag the affected candidate as "insufficient history for beta" and report **only dollar-neutral sizing** for that pair (do NOT halt the whole skill — this is per-leg degradation, surfaced in the row).
 
@@ -91,7 +91,7 @@ HARD GATE — refuse, do not degrade:
     ABORT skill output. Render exactly:
 
       ⚠ Cannot produce beta-neutral hedge ratios.
-        Benchmark: <the last ticker tried, or "none" if no broad match was found at any step> for market <primary_market>
+        Benchmark: <the last ticker tried, or "none" if no ticker was ever fetched> for market <primary_market>
         <if Benchmark ≠ "none": "Returned: N observations from etf_daily_price (need ≥ 60 for stable beta)" — else omit this line entirely>
         Failure path: <which fallback step ran last — initial-fetch / us-listed-search-discovery / shortlist-exhausted / no-broad-match>
 
@@ -104,7 +104,7 @@ HARD GATE — refuse, do not degrade:
     DO NOT emit hedge ratios under any other label (no "pair-relative regression" substitution).
 ```
 
-Failure path values: `initial-fetch` — the first `etf_daily_price` call, against the canonical or Step-1-discovered ticker, returned empty or < 60 observations before any fallback ran. `us-listed-search-discovery` — the canonical-table market's one-time US-listed `search_etfs` fallback ran and produced a shortlist. `shortlist-exhausted` — every profiled and unprofiled broad-match candidate on the shortlist was retried and none passed. `no-broad-match` — no fund in the search results passed the broad-match test at any step.
+Failure path values: `initial-fetch` — the first `etf_daily_price` call, against the canonical or Step-1-discovered ticker, returned empty or < 60 observations before any fallback ran. `us-listed-search-discovery` — the canonical-table market's one-time US-listed `search_etfs` fallback ran, but left no untried candidate (including when its only broad match was the ticker already tried) or its retries stopped at the cap. `shortlist-exhausted` — every profiled and unprofiled broad-match candidate on the shortlist was retried and none passed. `no-broad-match` — no fund in the search results passed the broad-match test at any step.
 
 Rationale: a hedge ratio computed against the wrong benchmark is a confidence-building lie. PMs reading a footnote do not adjust their downstream sizing decision; they adjust their footnote-tolerance. Refusing to emit primary deliverables when the underlying assumption fails is the only honest harm-reduction.
 
@@ -156,7 +156,7 @@ Same tool-split as suggestion mode Batch C: equity legs use `export_price_series
 Benchmark selection: use the canonical mapping in suggestion mode Batch C. If both legs share a `market`, use that market's benchmark. If markets differ, use the long-leg's market benchmark and flag the cross-market exposure in the residual section.
 
 Fallbacks (same order and shortlist-reuse rule as suggestion mode Batch C fallback #1):
-1. `etf_daily_price` empty or < 60 observations → canonical-table market: run the "(other)" row's US-listed search once (build/profile the shortlist, after removing the ticker that just returned empty), retry with the top pick. "(other)" market: retry with the next-highest-market-cap candidate already shortlisted in Step 1 — do not rerun the identical search. Retry order and cap as in suggestion mode Batch C fallback #1 (skip any ticker already tried, including the initial fetch which does not itself count as a retry; profiled candidates by market cap descending, or search order if none has a market cap; then unprofiled broad matches in search order, 3 retries total). No candidate remaining → treat the benchmark as unavailable and proceed to the Batch B.5 output gate.
+1. `etf_daily_price` empty or < 60 observations → canonical-table market: run the "(other)" row's US-listed search once (build/profile the shortlist, after removing the ticker that just failed), retry with the top pick. "(other)" market: retry with the next-highest-market-cap candidate already shortlisted in Step 1 — do not rerun the identical search. Retry order and cap as in suggestion mode Batch C fallback #1 (skip any ticker already tried, including the initial fetch which does not itself count as a retry; profiled candidates by market cap descending, or search order if none has a market cap; then unprofiled broad matches in search order, 3 retries total). No candidate remaining → treat the benchmark as unavailable and proceed to the Batch B.5 output gate.
 2. Leg < 90 days → dollar-neutral only for that pair (per-leg degradation, not whole-skill halt)
 
 #### Batch B.5 — Output gate (HARD HALT — non-negotiable)
