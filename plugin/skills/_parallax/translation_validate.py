@@ -27,6 +27,9 @@ PROTECTED = re.compile(
     r"\{\{[^{}\n]+\}\}|\$\{[^{}\n]+\}|\{[A-Za-z_0-9]+\}|%[sdf]|"
     r"\[\d+\]|[¹²³⁴⁵⁶⁷⁸⁹⁰†‡]"
 )
+# Two adjacent Latin words. The lookbehind tries only word starts, so a long
+# letter run is scanned once instead of once per position.
+COPIED_PROSE = re.compile(r"(?<![A-Za-z])[A-Za-z]{3,}\s+[A-Za-z]{3}")
 METRICS = re.compile(r"(?<![A-Za-z])(?:P/FCF|EV/EBITDA|EV/Revenue|P/E|P/B|P/S|"
                      r"ROE|ROA|ROIC|EPS|EBITDA|ECL|CVaR|VaR|ES)(?![A-Za-z])")
 NAMED_FACTORS = re.compile(r"\b(?:Momentum|Quality|Value|Growth|Size|Volatility)\b")
@@ -281,7 +284,7 @@ def fidelity(source: dict, output: dict, translations: dict[str, str], lang: str
                       f"extra={sorted(translations.keys() - originals.keys())}")
     for key in originals.keys() & translations.keys():
         before, after = originals[key], translations[key]
-        if before.strip() == after.strip() and re.search(r"(?<![A-Za-z])[A-Za-z]{3,}\s+[A-Za-z]{3}", before):
+        if before.strip() == after.strip() and COPIED_PROSE.search(before):
             errors.append(f"[INTEGRITY] [{key}] Source prose was copied without translation")
         if _numbers_differ(before, after, lang):
             errors.append(f"[INTEGRITY] [{key}] Numeric tokens differ from source")

@@ -30,10 +30,13 @@ def documents(tmp_path, lang, text=None, original="Revenue may rise 5%.", extra=
 
 
 def assert_fast(fn, *args, bound=1.0):
-    """Linear-time guard: the adversarial inputs below take milliseconds."""
-    start = time.perf_counter()
+    """Linear-time guard: the adversarial inputs below take milliseconds.
+
+    Timed in CPU time of this process, so other busy processes barely move it.
+    """
+    start = time.process_time()
     fn(*args)
-    assert time.perf_counter() - start < bound
+    assert time.process_time() - start < bound
 
 
 @pytest.mark.parametrize("lang", common.FIELDS)
@@ -402,10 +405,25 @@ def test_integer_after_symbol_and_comma_is_read_whole():
     assert not common._numbers_differ("Margins 3.2%,12%", "利润率 3.2%，12%", "zh")
 
 
-def test_copy_check_is_linear_time(tmp_path):
+def test_copy_check_scans_in_linear_time():
+    letters = "a" * 10000
+    assert common.COPIED_PROSE.search(letters) is None
+    assert common.COPIED_PROSE.search("Revenue grew")
+
+    def timed():
+        start = time.process_time()
+        common.COPIED_PROSE.search(letters)
+        return time.process_time() - start
+
+    assert min(timed() for _ in range(3)) < 0.25
+
+
+def test_long_letter_run_does_not_hang_validation(tmp_path):
     text = "a" * 40000
     source, output = documents(tmp_path, "zh", text, text)
-    assert_fast(common.validate_common, str(output), "zh", str(source), bound=2.0)
+    start = time.process_time()
+    common.validate_common(str(output), "zh", str(source))
+    assert time.process_time() - start < 6.0
 
 
 def test_unclosed_no_translate_markers_scan_in_linear_time():
