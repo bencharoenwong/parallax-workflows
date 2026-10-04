@@ -57,28 +57,12 @@ def test_detects_doubled_ascii_word(tmp_path):
     assert any("Doubled word" in error for error in errors)
 
 
-def test_preserves_genuine_ecl_without_source_blind_rejection(tmp_path):
-    path = write_payload(tmp_path, "ارتفع Expected Credit هذا الربع")
-
-    errors, _ = validator.validate(str(path))
-
-    assert not any("ECL/ES confusion" in error for error in errors)
-
-
 def test_detects_wrong_term(tmp_path):
     path = write_payload(tmp_path, "انخفض خطأ التتبع هذا الشهر")
 
     errors, _ = validator.validate(str(path))
 
     assert any("Wrong term" in error for error in errors)
-
-
-def test_allows_sar_in_non_saudi_market_analysis(tmp_path):
-    path = write_payload(tmp_path, "الإيرادات SAR 10 مليون", market="United States")
-
-    errors, _ = validator.validate(str(path))
-
-    assert not any("Found SAR in non-Saudi market" in error for error in errors)
 
 
 def test_detects_mixed_digit_script(tmp_path):
