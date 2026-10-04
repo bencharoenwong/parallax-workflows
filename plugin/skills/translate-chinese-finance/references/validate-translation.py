@@ -151,7 +151,7 @@ def validate(filepath: str, source_path: str | None = None, locale: str | None =
             )
 
         # Missing space: English→Chinese
-        for m in re.finditer(r"([A-Za-z]{2,})[一-鿿]", text):
+        for m in re.finditer(r"(?<![A-Za-z])([A-Za-z]{2,})[一-鿿]", text):
             warnings.append(
                 f"[{key}] Missing space after '{m.group(1)}' at pos {m.start()}"
             )

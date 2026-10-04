@@ -8,7 +8,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 ### Added
 - `translate-vietnamese-finance` (`vi-VN`) as a seed held out of the plugin (`"plugin": false`) pending native review, with sourced sell-side conventions (`references/sources.md`) and validator tests.
-- Shared source-fidelity validator `skills/_parallax/translation_validate.py` used by all four translators: compares section coverage, numbers, currencies, magnitude units, protected tokens, HTML structure, and identifiers against the source.
+- Shared source-fidelity validator `skills/_parallax/translation_validate.py` used by all four translators: compares section coverage, numbers, currency codes and symbols (a source that spells a currency out in words gets a manual-review warning), magnitude units, protected tokens, HTML structure, and identifiers against the source.
 
 ### Changed
 - Chinese, Thai, Arabic: instructions consolidated into lean entry files with detailed rules in `references/language-style.md`; end-to-end receipt in `docs/analysis/2026-10-02-translation-skills-e2e-receipt.md`.

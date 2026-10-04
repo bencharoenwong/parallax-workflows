@@ -78,7 +78,7 @@ def validate(filepath: str, source_path: str | None = None):
             )
 
         # Missing space: English→Thai
-        for m in re.finditer(r"([A-Za-z]{2,})[\u0E00-\u0E7F]", text):
+        for m in re.finditer(r"(?<![A-Za-z])([A-Za-z]{2,})[\u0E00-\u0E7F]", text):
             warnings.append(
                 f"[{key}] Missing space after '{m.group(1)}' at pos {m.start()}"
             )

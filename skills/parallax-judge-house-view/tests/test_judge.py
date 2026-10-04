@@ -592,3 +592,9 @@ def test_view_changed_guards_share_a_catchable_base():
     assert issubclass(judge.ViewChangedDuringJudge, audit_chain.ViewChangedMidRun)
     # Bare `except RuntimeError` predates the shared base; it must still work.
     assert issubclass(audit_chain.ViewChangedMidRun, RuntimeError)
+
+
+@pytest.mark.parametrize("age,expected", [(29, False), (30, True), (31, True), (None, False), (-1, False)])
+def test_auto_on_load_threshold_is_at_or_past_30_days(age, expected):
+    import cadence
+    assert cadence.should_run_auto_on_load(age) is expected
