@@ -49,7 +49,18 @@ Per spec scope-cut: beta-neutral sizing is in the default path because PMs act o
 | `Korea` | `EWY` | iShares MSCI South Korea |
 | `Canada` | `EWC` | iShares MSCI Canada |
 | `Australia` | `EWA` | iShares MSCI Australia |
-| (other) | call `etf_search(market="<market>", query="MSCI", recommendation="HOLD")` and pick highest-AUM result | Fallback discovery |
+| `Malaysia` | `EWM` | iShares MSCI Malaysia (RIC `EWM.P`). Fixed row because Parallax lists the fund under a truncated name, so the "(other)" broad-match rule cannot select it |
+| (other) | call `search_etfs(query="MSCI <country name>", market="UNITED STATES")`, keep only **broad matches** (defined below), profile at most 3 via `etf_profile`, pick the highest market cap | Fallback discovery. `<country name>` is the primary leg's `market` field from `get_company_info`, used as-is — known alias: `United States` → `USA` (MSCI fund names read "MSCI USA", not "MSCI United States"); this is the only alias — do not invent others. The `market` filter is case-insensitive, so `UNITED STATES` matches a `market` value of `United States`. US-listed, matching the canonical table's own convention. Locally listed funds are not queried by a second pass by default: `search_etfs` has no price-history field, and a locally listed fund may lack the history `etf_daily_price` needs for a stable beta, so the single US-listed pass is the simpler default. No broad match among the results → benchmark unavailable for that market — do not substitute a proxy. |
+
+**Broad match (positive rule, case-insensitive):** the fund `name` must contain the word "MSCI". The words before "MSCI" must be exactly one issuer name from this list and nothing else: iShares, Global X, Invesco, Xtrackers, Franklin, SPDR, Schwab, JPMorgan, KraneShares, VanEck, WisdomTree, Direxion, ProShares. Any other word before "MSCI" disqualifies the fund — this includes a qualifier placed before the issuer name or between the issuer and "MSCI" (e.g. "Currency Hedged", "ESG", "ESG Aware", "ESG Optimized"); a multi-word issuer from the list (e.g. "Global X") is still exactly one issuer name, not an extra word. Funds tracking other index families (FTSE, Solactive, etc.) are not broad matches, regardless of issuer. The words after "MSCI" must be only the country name — the same (aliased) term used in the `search_etfs` query, e.g. "USA" for `United States`, optionally allowing the known country-specific prefix word "South" — and only for Korea — optionally followed by one or more suffix words drawn only from: "ETF", "Index Fund", "Capped", "IMI", "25/50", in any combination (e.g. "Capped ETF"). Any word after "MSCI" that is not the country name, its allowed prefix, or one of those suffix words disqualifies the fund. Separately, regardless of position — before or after "MSCI" — the words Ultra, UltraShort, Short, Leveraged, 2x, 3x, Bull, Bear, or Inverse disqualify the fund; this catches an issuer-prefix leverage tag such as "ProShares Ultra MSCI Japan", where the leverage word sits before "MSCI".
+
+Applied to live evidence: "iShares MSCI Japan ETF" passes (Japan + ETF); "iShares MSCI Pacific Ex Japan ETF" fails (Pacific, Ex precede Japan); "ProShares Ultra MSCI Japan" fails (Ultra, before MSCI); "iShares MSCI China" passes; "iShares MSCI China A ETF" fails by default (A is an extra word — see the China A exception below); "iShares MSCI China Multisector Tech ETF" fails (Multisector, Tech); "Global X MSCI Vietnam ETF" passes (two-word issuer "Global X" is exactly one issuer name on the list); "iShares MSCI Thailand ETF", "iShares MSCI Indonesia ETF", and "iShares MSCI Philippines ETF" pass on the same pattern; "iShares MSCI India ETF" passes; "iShares Currency Hedged MSCI Japan ETF" fails ("Currency Hedged" sits before "MSCI" and is not the issuer name); "iShares ESG Optimized MSCI USA ETF" fails ("ESG Optimized" sits before "MSCI"); "iShares ESG Aware MSCI USA ETF" fails ("ESG Aware" sits before "MSCI"); "Invesco MSCI USA ETF" passes (Invesco is on the issuer list); "iShares MSCI South Korea ETF" passes ("South" is the allowed Korea-only prefix); "iShares MSCI Taiwan ETF" passes.
+
+China A exception: the plain "MSCI China" fund (no "A") is the default broad match. The exception triggers when the primary leg's own RIC carries a `.SS` or `.SZ` suffix (Shanghai or Shenzhen listing, mainland A-shares) — in that case "MSCI China A" is the broad match and plain "MSCI China" is not used.
+
+No broad match in the result set → benchmark unavailable → proceed to the Batch C.5 output gate; no silent proxy substitution.
+
+**Shortlist and profile bound:** `search_etfs` uses its default limit (20 rows); do not raise it. From the rows returned, keep the ones that pass the broad-match test, in search-result order — that ordered list (symbol + market cap once profiled) is the shortlist. Profile at most 3 of them via `etf_profile`; pick the one with the highest market cap. If none of the profiled candidates returns a market cap, take the first broad match by search order instead of profiling further. Keep the ordered shortlist (symbol, market cap) in memory — Batch C fallback #1 reuses it instead of re-searching. Cost: up to 7 credits total for the fallback path — one `search_etfs` call, up to three `etf_profile` calls, and up to three retry `etf_daily_price` calls, 1 credit each.
 
 Compute the start/end dates for a 180d window: `end_date = today`, `start_date = today - 180 days` (calendar; ~125 trading days will be returned).
 
@@ -64,7 +75,11 @@ Fire all in parallel:
 Compute beta inline per `references/residual-math.md` §"Beta computation". Beta-neutral hedge ratio = `beta_long / beta_short` (dollars short per dollar long).
 
 **Fallbacks (in order):**
-1. If `etf_daily_price` returns no data for the chosen benchmark → call `etf_search(market="<market>")` to find an alternative; retry with the top result.
+1. If `etf_daily_price` returns no data, or fewer than 60 observations, for the chosen benchmark:
+   - **Canonical-table market** (Step 1 used the fixed ticker, so no shortlist exists yet): run the "(other)" row's US-listed search once — `search_etfs(query="MSCI <country name>", market="UNITED STATES")` — build the broad-match shortlist, then remove the canonical ticker that just failed from that shortlist (a search for the same country name can return the identical fund), profile at most 3 of what remains, and retry with the top pick.
+   - **"(other)" market** (the shortlist already exists from Step 1): do NOT rerun the identical search. Retry with the next-highest-market-cap candidate already on the shortlist.
+   - **Retry order and cap:** skip any ticker already tried in this invocation, including the ticker from the initial fetch — the initial fetch itself does not count as a retry. Within the remaining shortlist, retry `etf_daily_price` against the profiled candidates (up to 3) ordered by market cap descending, with any profiled candidate that has no market cap placed after those that do, in search order; if none has a market cap, use search order. Then — if those are exhausted — the remaining, unprofiled broad matches in the order `search_etfs` returned them. Stop after 3 retries total. If none returns ≥ 60 observations, treat the benchmark as unavailable and proceed to the Batch C.5 output gate.
+   - If no candidate remains — the canonical-market search above found no broad match, or the "(other)"-market shortlist is exhausted — treat the benchmark as unavailable and proceed to the Batch C.5 output gate.
 2. If a leg's price series returns < 90 days of data → flag the affected candidate as "insufficient history for beta" and report **only dollar-neutral sizing** for that pair (do NOT halt the whole skill — this is per-leg degradation, surfaced in the row).
 
 #### Batch C.5 — Output gate (HARD HALT — non-negotiable)
@@ -77,9 +92,9 @@ HARD GATE — refuse, do not degrade:
     ABORT skill output. Render exactly:
 
       ⚠ Cannot produce beta-neutral hedge ratios.
-        Benchmark: <benchmark_ticker> for market <primary_market>
-        Returned: <N> observations from etf_daily_price (need ≥ 60 for stable beta)
-        Failure path: <which fallback step ran last — initial-fetch / etf_search-discovery>
+        Benchmark: <the last ticker tried, or "none" if no ticker was ever fetched> for market <primary_market>
+        <if Benchmark ≠ "none": "Returned: N observations from etf_daily_price (need ≥ 60 for stable beta)" — else omit this line entirely>
+        Failure path: <which fallback step ran last — initial-fetch / us-listed-search-discovery / shortlist-exhausted / no-broad-match>
 
       Operator action — pick one:
         (a) Re-run with explicit benchmark: /parallax-pair-finder <symbol> <side> --benchmark=<alt-ticker>
@@ -89,6 +104,8 @@ HARD GATE — refuse, do not degrade:
     DO NOT render Batch D, Batch E, the comparison table, or any per-pair detail.
     DO NOT emit hedge ratios under any other label (no "pair-relative regression" substitution).
 ```
+
+Failure path values: `initial-fetch` — the first `etf_daily_price` call, against the canonical or Step-1-discovered ticker, returned empty or < 60 observations before any fallback ran. `us-listed-search-discovery` — the canonical-table market's one-time US-listed `search_etfs` fallback ran, but left no untried candidate (including when its only broad match was the ticker already tried) or its retries stopped at the cap. `shortlist-exhausted` — every profiled and unprofiled broad-match candidate on the shortlist was retried and none passed. `no-broad-match` — no fund in the search results passed the broad-match test at any step.
 
 Rationale: a hedge ratio computed against the wrong benchmark is a confidence-building lie. PMs reading a footnote do not adjust their downstream sizing decision; they adjust their footnote-tolerance. Refusing to emit primary deliverables when the underlying assumption fails is the only honest harm-reduction.
 
@@ -139,13 +156,13 @@ Same tool-split as suggestion mode Batch C: equity legs use `export_price_series
 
 Benchmark selection: use the canonical mapping in suggestion mode Batch C. If both legs share a `market`, use that market's benchmark. If markets differ, use the long-leg's market benchmark and flag the cross-market exposure in the residual section.
 
-Fallbacks (same order as suggestion mode):
-1. `etf_daily_price` empty → `etf_search(market=...)` discovery → retry
+Fallbacks (same order and shortlist-reuse rule as suggestion mode Batch C fallback #1):
+1. `etf_daily_price` empty or < 60 observations → canonical-table market: run the "(other)" row's US-listed search once (build/profile the shortlist, after removing the ticker that just failed), retry with the top pick. "(other)" market: retry with the next-highest-market-cap candidate already shortlisted in Step 1 — do not rerun the identical search. Retry order and cap as in suggestion mode Batch C fallback #1 (skip any ticker already tried, including the initial fetch which does not itself count as a retry; profiled candidates by market cap descending, or search order if none has a market cap; then unprofiled broad matches in search order, 3 retries total). No candidate remaining → treat the benchmark as unavailable and proceed to the Batch B.5 output gate.
 2. Leg < 90 days → dollar-neutral only for that pair (per-leg degradation, not whole-skill halt)
 
 #### Batch B.5 — Output gate (HARD HALT — non-negotiable)
 
-Same gate as suggestion-mode Batch C.5. If benchmark is genuinely unavailable after fallback #1 above, HALT with the operator-action message — do NOT substitute pair-relative regression or emit a "⚠ Benchmark unavailable" caveat. Hedge ratios that cannot be properly computed are not emitted in any form. The pair-relative regression formula is reference math only in v1; not a runtime fallback.
+Same gate as suggestion-mode Batch C.5. If benchmark is genuinely unavailable after fallback #1 above is exhausted, HALT with the operator-action message — do NOT substitute pair-relative regression or emit a "⚠ Benchmark unavailable" caveat. Hedge ratios that cannot be properly computed are not emitted in any form. The pair-relative regression formula is reference math only in v1; not a runtime fallback.
 
 #### Batch C — Macro residual (parallel)
 
