@@ -59,7 +59,7 @@ for _code in ("CHF", "NOK", "SEK", "DKK", "INR", "IDR", "MYR", "PHP", "BRL",
 UNITS = {
     "billion": ("billion", "billions", "B", "十亿", "十億", "พันล้าน", "مليار", "tỷ"),
     "million": ("million", "millions", "M", "百万", "百萬", "ล้าน", "مليون", "ملايين", "الملايين", "triệu"),
-    "thousand": ("thousand", "thousands", "K", "千", "พัน", "ألف", "آلاف", "الآلاف", "الف", "ألوف", "nghìn"),
+    "thousand": ("thousand", "thousands", "K", "千", "พัน", "ألف", "آلاف", "الآلاف", "ألوف", "nghìn"),
     "trillion": ("trillion", "trillions", "T", "万亿", "萬億", "兆", "ล้านล้าน", "تريليون", "nghìn tỷ"),
     "hundred_million": ("亿", "億"),
 }

@@ -559,7 +559,12 @@ def test_standalone_package_prefers_vendored_copy_over_a_parallax_sibling(tmp_pa
     assert module._common_path == pkg / "references" / "translation_common.py"
 
 
-@pytest.mark.parametrize("text,unit", [("5 الف", "thousand"), ("5 الملايين", "million"),
+@pytest.mark.parametrize("text,unit", [("5 الملايين", "million"),
                                        ("7 الآلاف", "thousand"), ("4 ألوف", "thousand")])
 def test_arabic_common_unit_variants(text, unit):
     assert common._units(text) == Counter({unit: 1})
+
+
+@pytest.mark.parametrize("text", ["بنهاية 2024 الفائدة", "خلال 2023 الفترة"])
+def test_arabic_definite_nouns_starting_with_alef_fa_are_not_thousand(text):
+    assert common._units(text) == Counter()

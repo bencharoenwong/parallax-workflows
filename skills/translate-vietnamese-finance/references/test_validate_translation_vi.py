@@ -4,6 +4,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+import pytest
+
 
 MODULE = Path(__file__).with_name("validate-translation.py")
 SPEC = importlib.util.spec_from_file_location("vietnamese_validator", MODULE)
@@ -75,11 +77,17 @@ def test_mixed_nghin_ngan_and_space_before_percent_warn(tmp_path):
     assert any("Space before %" in w for w in warnings)
 
 
-def test_stray_leading_comma_before_number_is_flagged(tmp_path):
-    errors, _ = _style(tmp_path, "Biên lợi nhuận ròng tăng ,5% so với cùng kỳ.")
-    assert any("Leading comma" in e for e in errors)
+def test_stray_leading_comma_before_number_warns(tmp_path):
+    errors, warnings = _style(tmp_path, "Biên lợi nhuận ròng tăng ,5% so với cùng kỳ.")
+    assert any("stray leading comma" in w and ",5" in w for w in warnings)
+    assert not any("leading comma" in e.lower() for e in errors)
 
 
-def test_ordinary_list_comma_is_not_flagged(tmp_path):
-    errors, _ = _style(tmp_path, "Doanh thu tăng 5%, lợi nhuận tăng 7%, biên lợi nhuận 12,5%.")
-    assert not any("Leading comma" in e for e in errors)
+@pytest.mark.parametrize("text", [
+    "Biên 3,2%,12% và (5%),8%",
+    "Doanh thu tăng 5%, lợi nhuận tăng 7%, biên lợi nhuận 12,5%.",
+])
+def test_symbol_led_and_spaced_list_commas_are_not_flagged(tmp_path, text):
+    errors, warnings = _style(tmp_path, text)
+    assert not any("leading comma" in e.lower() for e in errors)
+    assert not any("leading comma" in w.lower() for w in warnings)

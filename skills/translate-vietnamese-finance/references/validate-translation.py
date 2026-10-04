@@ -44,10 +44,8 @@ def validate(filepath: str, source_path: str | None = None):
                 errors.append(f"[{key}] English number format in prose: '{m.group()}' — write 1.234,5")
         for m in _EN_PERCENT.finditer(prose):
             errors.append(f"[{key}] English decimal in prose percent: '{m.group()}' — write 15,2%")
-        # A comma straight before a digit with no digit before it (",5%") is a
-        # Vietnamese decimal: in vi-VN it reads as 0,5%. Keep the source form.
-        for m in re.finditer(r"(?<!\w),\d+", prose):
-            errors.append(f"[{key}] Leading comma before a number: '{m.group()}' — write 0,5 or keep the source form exactly")
+        for m in re.finditer(r"(?:(?<=\s)|^),\d+", prose, re.M):
+            warnings.append(f"[{key}] Possible stray leading comma before a number: {m.group()} — keep the source form exactly")
         for m in _EN_MAGNITUDE.finditer(prose):
             errors.append(f"[{key}] Untranslated magnitude in prose: '{m.group()}' — billion = tỷ, trillion = nghìn tỷ, million = triệu")
         for wrong, right in _WRONG_TERMS.items():
