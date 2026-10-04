@@ -63,7 +63,7 @@ cd parallax-workflows
 ./install.sh
 ```
 
-This copies all workflows and shared conventions into `~/.claude/skills/`. Restart Claude Code after installing.
+This copies each workflow into `~/.claude/skills/` and symlinks the shared `_parallax/` conventions there. Restart Claude Code after installing.
 
 To install a single workflow:
 ```bash
@@ -98,8 +98,9 @@ Then upload the zips from `~/Downloads/claude-web-skills/` in claude.ai → Sett
 Every workflow is a `SKILL.md` file — a structured prompt the model orchestrates. To customize:
 
 ```bash
-# Develop against the repo directly. install.sh symlinks each skill, so edits
-# in the repo propagate live without re-installing.
+# Develop against the repo directly. install.sh copies each skill, but if
+# ~/.claude/skills/<name> is already a symlink into this repo it is left in
+# place, so edits in the repo propagate live without re-installing.
 git clone https://github.com/bencharoenwong/parallax-workflows.git
 cd parallax-workflows
 ./install.sh
