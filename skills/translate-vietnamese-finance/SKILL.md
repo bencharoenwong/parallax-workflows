@@ -1,6 +1,6 @@
 ---
 name: translate-vietnamese-finance
-description: Translate supplied finance analysis to Vietnamese (vi-VN) with precise financial terminology, Vietnamese number style in prose, and source-preserving values.
+description: Translate supplied finance analysis to Vietnamese (vi-VN) with precise financial terminology, Vietnamese number style in prose, and source-preserving values. NOT for writing new analysis (run the analysis skill first, then translate its output), not for other target languages (use the matching translate-*-finance skill), not for general non-finance translation.
 ---
 
 # Vietnamese finance translation

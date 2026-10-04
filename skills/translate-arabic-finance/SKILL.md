@@ -1,6 +1,6 @@
 ---
 name: translate-arabic-finance
-description: Translate supplied finance analysis to Saudi institutional Arabic (ar-SA), preserving financial meaning and RTL text.
+description: Translate supplied finance analysis to Saudi institutional Arabic (ar-SA), preserving financial meaning and RTL text. NOT for writing new analysis (run the analysis skill first, then translate its output), not for other target languages (use the matching translate-*-finance skill), not for general non-finance translation.
 ---
 
 # Saudi Arabic finance translation
