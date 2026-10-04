@@ -49,9 +49,15 @@ Per spec scope-cut: beta-neutral sizing is in the default path because PMs act o
 | `Korea` | `EWY` | iShares MSCI South Korea |
 | `Canada` | `EWC` | iShares MSCI Canada |
 | `Australia` | `EWA` | iShares MSCI Australia |
-| (other) | call `search_etfs(query="MSCI <country name>", market="UNITED STATES")`, keep only **broad country matches** (defined below), profile at most 3 via `etf_profile`, pick the highest market cap | Fallback discovery. `<country name>` is the primary leg's `market` field from `get_company_info`; the `market` filter is case-insensitive, so `UNITED STATES` matches a `market` value of `United States`. US-listed, matching the canonical table's own convention. Locally listed funds are not queried by a second pass by default: `search_etfs` has no price-history field, and a locally listed fund may lack the history `etf_daily_price` needs for a stable beta, so the single US-listed pass is the simpler default. No broad match among the results → benchmark unavailable for that market — do not substitute a proxy. |
+| (other) | call `search_etfs(query="MSCI <country name>", market="UNITED STATES")`, keep only **broad matches** (defined below), profile at most 3 via `etf_profile`, pick the highest market cap | Fallback discovery. `<country name>` is the primary leg's `market` field from `get_company_info`, used as-is — known alias: `United States` → `USA` (MSCI fund names read "MSCI USA", not "MSCI United States"); do not invent other aliases. The `market` filter is case-insensitive, so `UNITED STATES` matches a `market` value of `United States`. US-listed, matching the canonical table's own convention. Locally listed funds are not queried by a second pass by default: `search_etfs` has no price-history field, and a locally listed fund may lack the history `etf_daily_price` needs for a stable beta, so the single US-listed pass is the simpler default. No broad match among the results → benchmark unavailable for that market — do not substitute a proxy. |
 
-**Broad country match:** the fund's `name` contains "MSCI" and the country name, and contains none of: Small-Cap, Mid-Cap, Value, Growth, Min Vol / Minimum Volatility, ESG / SRI / Climate, Hedged / Currency Hedged, Leveraged / 2x / 3x / Bull / Bear / Inverse, Dividend, Momentum, Quality, Factor, or a sector name. No broad match in the result set → benchmark unavailable → proceed to the Batch C.5 output gate; no silent proxy substitution.
+**Broad match (positive rule, case-insensitive):** any word before "MSCI" in the fund `name` is the issuer and is ignored (iShares, Global X, Franklin, …) — including a multi-word issuer. The words after "MSCI" must be only the country name — the same (aliased) term used in the `search_etfs` query, e.g. "USA" for `United States`, allowing a known country-specific prefix word such as "South" for Korea — optionally followed by one or more suffix words drawn only from: "ETF", "Index Fund", "Capped", "IMI", "25/50", in any combination (e.g. "Capped ETF"). Any word after "MSCI" that is not the country name, its allowed prefix, or one of those suffix words disqualifies the fund. Separately, regardless of position — before or after "MSCI" — the words Ultra, UltraShort, Short, Leveraged, 2x, 3x, Bull, Bear, or Inverse disqualify the fund; this catches an issuer-prefix leverage tag such as "ProShares Ultra MSCI Japan", where the leverage word sits before "MSCI".
+
+Applied to live evidence: "iShares MSCI Japan ETF" passes (Japan + ETF); "iShares MSCI Pacific Ex Japan ETF" fails (Pacific, Ex precede Japan); "ProShares Ultra MSCI Japan" fails (Ultra, before MSCI); "iShares MSCI China" passes; "iShares MSCI China A ETF" fails by default (A is an extra word — see the China A exception below); "iShares MSCI China Multisector Tech ETF" fails (Multisector, Tech); "Global X MSCI Vietnam ETF" passes (two-word issuer "Global X" ignored); "iShares MSCI Thailand ETF", "iShares MSCI Indonesia ETF", and "iShares MSCI Philippines ETF" pass on the same pattern; "iShares MSCI India ETF" passes.
+
+China A exception: the plain "MSCI China" fund (no "A") is the default broad match. "MSCI China A" is not used unless the primary leg's own trading venue is Shanghai or Shenzhen (mainland A-shares) — in that case "MSCI China A" counts as the broad match.
+
+No broad match in the result set → benchmark unavailable → proceed to the Batch C.5 output gate; no silent proxy substitution.
 
 **Shortlist and profile bound:** `search_etfs` uses its default limit (20 rows); do not raise it. From the rows returned, keep the ones that pass the broad-match test, in search-result order — that ordered list (symbol + market cap once profiled) is the shortlist. Profile at most 3 of them via `etf_profile`; pick the one with the highest market cap. If none of the profiled candidates returns a market cap, take the first broad match by search order instead of profiling further. Keep the ordered shortlist (symbol, market cap) in memory — Batch C fallback #1 reuses it instead of re-searching. Cost: up to 1 + 3 credits (one `search_etfs` call plus up to three `etf_profile` calls, 1 credit each).
 
@@ -69,8 +75,9 @@ Compute beta inline per `references/residual-math.md` §"Beta computation". Beta
 
 **Fallbacks (in order):**
 1. If `etf_daily_price` returns no data for the chosen benchmark:
-   - **Canonical-table market** (Step 1 used the fixed ticker, so no shortlist exists yet): run the "(other)" row's US-listed search once — `search_etfs(query="MSCI <country name>", market="UNITED STATES")` — build the broad-match shortlist, profile at most 3, and retry with the top pick.
+   - **Canonical-table market** (Step 1 used the fixed ticker, so no shortlist exists yet): run the "(other)" row's US-listed search once — `search_etfs(query="MSCI <country name>", market="UNITED STATES")` — build the broad-match shortlist, then remove the canonical ticker that just returned empty from that shortlist (a search for the same country name can return the identical fund), profile at most 3 of what remains, and retry with the top pick.
    - **"(other)" market** (the shortlist already exists from Step 1): do NOT rerun the identical search. Retry with the next-highest-market-cap candidate already on the shortlist.
+   - **Retry order and cap:** within the shortlist, retry `etf_daily_price` against the profiled candidates (up to 3) ordered by market cap descending, then — if those are exhausted — the remaining, unprofiled broad matches in the order `search_etfs` returned them. Stop after 3 retries total. If none returns ≥ 60 observations, treat the benchmark as unavailable and proceed to the Batch C.5 output gate.
    - If no candidate remains — the canonical-market search above found no broad match, or the "(other)"-market shortlist is exhausted — treat the benchmark as unavailable and proceed to the Batch C.5 output gate.
 2. If a leg's price series returns < 90 days of data → flag the affected candidate as "insufficient history for beta" and report **only dollar-neutral sizing** for that pair (do NOT halt the whole skill — this is per-leg degradation, surfaced in the row).
 
@@ -84,9 +91,9 @@ HARD GATE — refuse, do not degrade:
     ABORT skill output. Render exactly:
 
       ⚠ Cannot produce beta-neutral hedge ratios.
-        Benchmark: <benchmark_ticker> for market <primary_market>
-        Returned: <N> observations from etf_daily_price (need ≥ 60 for stable beta)
-        Failure path: <which fallback step ran last — initial-fetch / us-listed-search-discovery / shortlist-exhausted>
+        Benchmark: <benchmark_ticker, or "none" if the Step-1 search found no broad match> for market <primary_market>
+        <Returned: N observations from etf_daily_price (need ≥ 60 for stable beta) — omit this whole line when Benchmark is "none">
+        Failure path: <which fallback step ran last — initial-fetch / us-listed-search-discovery / shortlist-exhausted / no-broad-match>
 
       Operator action — pick one:
         (a) Re-run with explicit benchmark: /parallax-pair-finder <symbol> <side> --benchmark=<alt-ticker>
@@ -147,7 +154,7 @@ Same tool-split as suggestion mode Batch C: equity legs use `export_price_series
 Benchmark selection: use the canonical mapping in suggestion mode Batch C. If both legs share a `market`, use that market's benchmark. If markets differ, use the long-leg's market benchmark and flag the cross-market exposure in the residual section.
 
 Fallbacks (same order and shortlist-reuse rule as suggestion mode Batch C fallback #1):
-1. `etf_daily_price` empty → canonical-table market: run the "(other)" row's US-listed search once (build/profile the shortlist), retry with the top pick. "(other)" market: retry with the next-highest-market-cap candidate already shortlisted in Step 1 — do not rerun the identical search. No candidate remaining → treat the benchmark as unavailable and proceed to the Batch B.5 output gate.
+1. `etf_daily_price` empty → canonical-table market: run the "(other)" row's US-listed search once (build/profile the shortlist, after removing the ticker that just returned empty), retry with the top pick. "(other)" market: retry with the next-highest-market-cap candidate already shortlisted in Step 1 — do not rerun the identical search. Retry order and cap as in suggestion mode Batch C fallback #1 (profiled candidates by market cap descending, then unprofiled broad matches in search order, 3 retries total). No candidate remaining → treat the benchmark as unavailable and proceed to the Batch B.5 output gate.
 2. Leg < 90 days → dollar-neutral only for that pair (per-leg degradation, not whole-skill halt)
 
 #### Batch B.5 — Output gate (HARD HALT — non-negotiable)
