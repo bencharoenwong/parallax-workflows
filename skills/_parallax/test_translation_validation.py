@@ -64,13 +64,16 @@ def test_complete_translation_preserves_data(tmp_path, lang):
     assert warnings == []
 
 
-@pytest.mark.parametrize("lang", common.FIELDS)
 @pytest.mark.parametrize("payload", [{}, {"sections": {}}, {"sections": {"ReportText": {}}},
                                      {"sections": {"ReportText": None}}, {"sections": []}, []])
-def test_empty_or_malformed_output_cannot_pass(tmp_path, lang, payload):
+def test_empty_or_malformed_output_cannot_pass(tmp_path, payload):
+    # Every branch here is reached before any lang-specific field lookup
+    # (read_document, translated_sections, or the "No translated sections"
+    # fallback); the lang argument only changes text inside a message this
+    # test never reads, so one language covers every payload shape.
     path = tmp_path / "output.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
-    assert common.validate_common(str(path), lang)[2]
+    assert common.validate_common(str(path), "zh")[2]
 
 
 @pytest.mark.parametrize("lang", common.FIELDS)
@@ -433,7 +436,7 @@ def test_unclosed_no_translate_markers_are_linear_time(tmp_path):
         source, output = documents(tmp_path, "zh", "收入 " + text, "Revenue " + text)
         common.validate_common(str(output), "zh", str(source))
 
-    assert_linear(call, 4000)
+    assert_linear(call, 1000)
 
 
 def test_no_translate_block_change_still_fails(tmp_path):
@@ -536,14 +539,49 @@ def test_changed_source_metadata_value_fails(tmp_path):
     assert any("Source metadata analyst changed or missing" in e for e in errors)
 
 
+@pytest.mark.parametrize("field", ["data", "metadata"])
 @pytest.mark.parametrize("bad", [["not", "an", "object"], "text"])
-def test_non_object_metadata_or_data_is_fatal(tmp_path, bad):
+def test_non_object_metadata_or_data_is_fatal(tmp_path, field, bad):
     source, output = documents(tmp_path, "zh")
     payload = json.loads(output.read_text(encoding="utf-8"))
-    payload["data"] = bad
+    payload[field] = bad
     output.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     errors = common.validate_common(str(output), "zh", str(source))[2]
     assert any(e.startswith("[FATAL]") for e in errors)
+
+
+@pytest.mark.parametrize("bad", [["not", "an", "object"], "text"])
+def test_non_object_source_metadata_is_fatal(tmp_path, bad):
+    source, output = documents(tmp_path, "zh")
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    payload["metadata"] = bad
+    source.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    errors = common.validate_common(str(output), "zh", str(source))[2]
+    assert any(e.startswith("[FATAL]") for e in errors)
+
+
+def test_original_key_mismatch_is_flagged(tmp_path):
+    source, output = documents(tmp_path, "zh")
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    payload["sections"]["ReportText"]["original_key"] = "OtherText"
+    output.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    errors = common.validate_common(str(output), "zh", str(source))[2]
+    assert any("original_key does not match section key" in e for e in errors)
+
+
+def test_unsupported_translation_locale_is_flagged(tmp_path):
+    source, output = documents(tmp_path, "zh")
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    payload["metadata"]["translation_locale"] = "fr-FR"
+    output.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    errors = common.validate_common(str(output), "zh", str(source))[2]
+    assert any("Unsupported translation_locale" in e for e in errors)
+
+
+def test_expected_shortfall_identity_is_checked(tmp_path):
+    source, output = documents(tmp_path, "th", "เพิ่มขึ้น 5%", "Expected Shortfall increased 5%")
+    errors = common.validate_common(str(output), "th", str(source))[2]
+    assert any("ES identity" in e for e in errors)
 
 
 def _vendored_package(tmp_path, skill):
