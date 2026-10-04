@@ -16,7 +16,7 @@ Research pass of 2026-10-02: web search plus direct reading of public Vietnamese
 
 Quotes from image-only pages carry higher transcription risk than those from text layers. The World Bank report above is in English; it is listed for report-identity provenance only and does not source the Vietnamese-language terminology rows below.
 
-## Findings consistent across all six reports
+## Findings consistent across all six broker reports
 
 - Thousands separator `.`, decimal separator `,` (e.g. `36.400`, `+15,2%`). Matches the accounting-law rule: https://thuvienphapluat.vn/chinh-sach-phap-luat-moi/vn/ho-tro-phap-luat/tu-van-phap-luat/41571/quy-dinh-chu-viet-chu-so-su-dung-trong-ke-toan
 - No space before `%`.
