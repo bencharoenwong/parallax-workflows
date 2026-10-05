@@ -246,6 +246,22 @@ def test_web_resolution_check_skips_author_time_script_refs(tmp_path):
     bb.web_resolution_check(skill)
 
 
+def test_web_resolution_check_skips_the_bare_scripts_dir_ref(tmp_path):
+    skill = tmp_path / "parallax-demo"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "shared `_vendored/_parallax/scripts/`\n", encoding="utf-8")
+    bb.web_resolution_check(skill)
+
+
+def test_resolution_check_skips_the_bare_scripts_dir_ref(tmp_path):
+    (tmp_path / "_parallax").mkdir()
+    (tmp_path / "parallax-demo").mkdir()
+    (tmp_path / "parallax-demo" / "SKILL.md").write_text(
+        "shared `_parallax/scripts/`\n", encoding="utf-8")
+    bb.resolution_check(tmp_path)
+
+
 def test_web_resolution_check_flags_an_excluded_meta_doc_ref(tmp_path):
     skill = tmp_path / "parallax-demo"
     skill.mkdir()
