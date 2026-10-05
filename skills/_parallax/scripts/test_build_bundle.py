@@ -5,6 +5,7 @@ drifted source fails here before it fails a distribution build)."""
 import subprocess
 import sys
 import unicodedata
+import zipfile
 from pathlib import Path
 
 import json
@@ -216,6 +217,13 @@ def test_web_conventions_transform_removes_unvendored_doc_ref():
     assert "self-contained" in out
 
 
+def test_web_loader_transform_removes_unvendored_doc_ref():
+    out = bb.transform_loader_web(
+        (SKILLS / "_parallax/house-view/loader.md").read_text(encoding="utf-8"))
+    assert "skill-structure-conventions.md" not in out
+    assert "house content such as gotchas lives in the body" in out
+
+
 # --------------------------------------------------------------------------
 # Resolution gates
 # --------------------------------------------------------------------------
@@ -225,6 +233,24 @@ def test_web_resolution_check_flags_dangling_vendored_ref(tmp_path):
     skill.mkdir()
     (skill / "SKILL.md").write_text(
         "see `_vendored/_parallax/missing-doc.md` for details\n", encoding="utf-8")
+    with pytest.raises(bb.BuildError):
+        bb.web_resolution_check(skill)
+
+
+def test_web_resolution_check_skips_author_time_script_refs(tmp_path):
+    """Same policy as resolution_check: _parallax/scripts/ is never bundled."""
+    skill = tmp_path / "parallax-demo"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "see `_vendored/_parallax/scripts/contract_validator.py`\n", encoding="utf-8")
+    bb.web_resolution_check(skill)
+
+
+def test_web_resolution_check_flags_an_excluded_meta_doc_ref(tmp_path):
+    skill = tmp_path / "parallax-demo"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "see `_vendored/_parallax/skill-structure-conventions.md`\n", encoding="utf-8")
     with pytest.raises(bb.BuildError):
         bb.web_resolution_check(skill)
 
@@ -600,3 +626,24 @@ def test_no_unbundled_operator_command_is_priced_in_the_public_bundle():
     assert not orphans, (
         f"token-costs in the PUBLIC bundle prices commands the bundle does not "
         f"ship: {orphans}. Add them to `excluded` in transform_token_costs.")
+
+
+def test_collect_deps_ignores_the_ellipsis_placeholder():
+    """Step 0 prose says "Resolve every `_parallax/...` path"; the ellipsis
+    names no file, so it is not a dependency and must not fail the build."""
+    shared, cross = bb.collect_deps("1. Resolve every `_parallax/...` path named here.", strict=True)
+    assert shared == set() and cross == set()
+
+
+def test_collect_deps_still_rejects_a_real_ref_outside_the_set():
+    with pytest.raises(bb.BuildError):
+        bb.collect_deps("Load `_parallax/no-such-shared-file.md` first.", strict=True)
+
+
+def test_web_build_succeeds_for_the_shortlist(tmp_path, monkeypatch):
+    monkeypatch.setattr(bb, "WEB_OUT_DIR", tmp_path)
+    bb.build_web(bb.WEB_SKILLS)
+    assert sorted(p.stem for p in tmp_path.glob("*.skill")) == sorted(bb.WEB_SKILLS)
+    for name in bb.WEB_SKILLS:
+        with zipfile.ZipFile(tmp_path / f"{name}.skill") as zf:
+            assert f"{name}/SKILL.md" in zf.namelist()
