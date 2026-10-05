@@ -510,45 +510,126 @@ def test_the_fixture_models_a_wider_request_than_the_skill_makes(tracked_portfol
 # The documented conversion identity, on the tracked fixture
 # ==========================================================================
 
-def test_contribution_pct_is_a_share_of_total_pl_on_the_tracked_fixture(
+def test_contribution_pct_is_a_return_contribution_on_the_tracked_fixture(
         tracked_portfolio):
     """cio-letter-prep's SKILL.md instructs the reader to recompute this
     identity against whatever the fixture currently holds. Nothing did.
 
-    The divisor is asserted non-zero first, so a flat period surfaces as a
-    stated precondition rather than as a ZeroDivisionError inside the loop.
+    The divisor is asserted non-zero first, so a zero initial_value surfaces as
+    a stated precondition rather than as a ZeroDivisionError inside the loop.
+    Live basis since parallax-api PR #521 (merge ac3994ea, 2026-10-02):
+    ``contribution_pct == total_pl / portfolio_parameters.initial_value``, NOT
+    ``total_pl / total_pl_portfolio`` (the retired P&L-share basis).
     """
-    total_pl = tracked_portfolio["portfolio_summary"]["total_pl"]
-    assert total_pl != 0, (
-        "the fixture's period is flat, so contribution_pct has no defined "
-        "value and this identity cannot be checked against it")
+    initial_value = tracked_portfolio["portfolio_parameters"]["initial_value"]
+    assert initial_value != 0, (
+        "the fixture's initial_value is zero, so contribution_pct has no "
+        "defined value and this identity cannot be checked against it")
     for row in tracked_portfolio["company_contribution"]:
-        assert abs(row["contribution_pct"] - row["total_pl"] / total_pl) < 1e-6
+        assert abs(row["contribution_pct"]
+                   - row["total_pl"] / initial_value) < 1e-6
 
 
-def test_the_fixture_period_is_a_winning_one_so_the_sign_trap_is_unexercised(
+def test_contribution_pct_sign_matches_the_holdings_own_total_pl_either_period(
         tracked_portfolio):
-    """HONESTY PIN naming a gap in the DATA, not in a test.
-
-    The SKILL.md sign rule says that over a LOSING period every losing holding
-    carries a POSITIVE ``contribution_pct`` (negative over negative), so ranking
-    on the raw field inverts the contributors and detractors tables. The tracked
-    fixture's period is a winning one, so no assertion anywhere can exercise
-    that inversion: on this data the losing holding's raw sign is already
-    negative and the wrong code and the right code agree.
-
-    If this pin ever fails, the fixture gained a losing period and the sign rule
-    became testable -- write the test at that point.
+    """Under the current return-contribution basis, initial_value is always
+    positive, so each row's sign is its own holding's total_pl sign --
+    independent of whether the overall portfolio period is winning or losing.
+    This is a real change from the retired P&L-share basis, where a row's raw
+    sign was sign(holding total_pl) x sign(portfolio total_pl): in a losing
+    period a losing holding read POSITIVE (negative over negative). The
+    tracked fixture's period happens to be a winning one, but this property
+    does not depend on that -- it holds regardless of the period's sign, which
+    is exactly why the current basis needs no sign correction (see the sign
+    gotcha in parallax-cio-letter-prep/SKILL.md).
     """
     summary = tracked_portfolio["portfolio_summary"]
-    assert summary["total_pl"] > 0 and summary["total_return"] > 0
     losers = [r for r in tracked_portfolio["company_contribution"]
               if r["total_pl"] < 0]
+    winners = [r for r in tracked_portfolio["company_contribution"]
+               if r["total_pl"] > 0]
     assert losers, "no losing holding at all"
+    assert winners, "no winning holding at all"
     for row in losers:
         assert row["contribution_pct"] < 0, (
-            "a losing holding already carries a negative contribution_pct here, "
-            "which is the winning-period case")
+            "a losing holding must carry a negative contribution_pct under "
+            "the current return-contribution basis")
+    for row in winners:
+        assert row["contribution_pct"] > 0, (
+            "a winning holding must carry a positive contribution_pct under "
+            "the current return-contribution basis")
+    # The portfolio-level sign is incidental to the row-level property above,
+    # not a precondition for it -- asserted only so a future fixture edit that
+    # flips the period doesn't silently stop exercising this test's winners.
+    assert summary["total_pl"] > 0 and summary["total_return"] > 0
+
+
+# --------------------------------------------------------------------------
+# The Step 4 runtime basis guard, exercised directly
+# --------------------------------------------------------------------------
+
+def _basis_guard_contrib_bps(rows: list[dict], total_return: float) -> list[float]:
+    """Pure re-implementation of parallax-cio-letter-prep/SKILL.md Step 4's
+    runtime basis guard (there is no local Python module for it -- the
+    skill's own ``contribution.py`` does a different job, the LOCAL
+    daily-return reconciliation audit, not this endpoint-basis check).
+
+    ``s = sum(contribution_pct)``: close to ``total_return`` -> current
+    return-contribution basis, ``contrib_bps = contribution_pct * 10000``.
+    Close to ``1.0`` -> retired P&L-share basis, convert first. Neither ->
+    basis unknown.
+    """
+    s = sum(r["contribution_pct"] for r in rows)
+    if abs(s - total_return) < 1e-4:
+        return [r["contribution_pct"] * 10000 for r in rows]
+    if abs(s - 1.0) < 1e-4:
+        return [r["contribution_pct"] * total_return * 10000 for r in rows]
+    raise ValueError(f"contribution_pct basis unknown: sum={s}, "
+                      f"total_return={total_return}")
+
+
+def test_basis_guard_resolves_the_same_contrib_bps_on_either_basis(
+        tracked_portfolio):
+    """SKILL.md Step 4's claim under test: converting a row through either
+    guard branch lands on the same ``contrib_bps``. Checked here against the
+    tracked fixture's CURRENT (return-contribution) basis and a PLANTED
+    retired P&L-share version of the identical underlying economics -- never
+    against the fixture's own basis alone, which would leave the other branch
+    of the guard unexercised.
+    """
+    rows = tracked_portfolio["company_contribution"]
+    total_return = tracked_portfolio["portfolio_summary"]["total_return"]
+    assert total_return != 0, (
+        "a flat period makes the share-basis reconstruction below "
+        "(contribution_pct / total_return) a ZeroDivisionError")
+
+    current_basis_bps = _basis_guard_contrib_bps(rows, total_return)
+
+    planted_share_rows = [
+        {**r, "contribution_pct": r["contribution_pct"] / total_return}
+        for r in rows
+    ]
+    assert abs(sum(r["contribution_pct"] for r in planted_share_rows)
+               - 1.0) < 1e-6, (
+        "planted share-basis rows do not sum to 1.0 -- the reconstruction "
+        "from the return basis is wrong, not the guard")
+
+    share_basis_bps = _basis_guard_contrib_bps(planted_share_rows, total_return)
+
+    assert len(current_basis_bps) == len(share_basis_bps) == len(rows)
+    for current, share in zip(current_basis_bps, share_basis_bps):
+        assert abs(current - share) < 1e-6
+
+
+def test_basis_guard_halts_on_an_unrecognised_sum(tracked_portfolio):
+    """Twin exercising the fail-closed branch: a sum matching neither basis
+    must raise rather than silently pick one."""
+    rows = tracked_portfolio["company_contribution"]
+    total_return = tracked_portfolio["portfolio_summary"]["total_return"]
+    garbage_rows = [{**r, "contribution_pct": 0.0} for r in rows[:-1]]
+    garbage_rows.append({**rows[-1], "contribution_pct": 0.5})
+    with pytest.raises(ValueError, match="basis unknown"):
+        _basis_guard_contrib_bps(garbage_rows, total_return)
 
 
 # ==========================================================================

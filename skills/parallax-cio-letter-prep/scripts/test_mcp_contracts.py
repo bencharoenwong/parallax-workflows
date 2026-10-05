@@ -194,8 +194,11 @@ def test_analyze_portfolio_mock_has_realistic_values():
                - summary["final_value"]) < 1e-9
     assert abs(sum(r["total_pl"] for r in data["company_contribution"])
                - summary["total_pl"]) < 1e-9
+    # contribution_pct is a return contribution (total_pl / initial_value),
+    # NOT a P&L share — rows sum to total_return, only to within each row's
+    # own 6-decimal rounding budget, not bit-exact (no force-balance).
     assert abs(sum(r["contribution_pct"] for r in data["company_contribution"])
-               - 1.0) < 1e-9
+               - summary["total_return"]) < 1e-5
 
     # sector_allocation is a LIST of (date x sector) rows, not a dict. Weights
     # within a date sum to 1 only to rounding — they are not force-balanced.

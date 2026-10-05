@@ -73,12 +73,18 @@ are structural consequences of how the numbers are built:
       - final_value == initial_value + total_pl
       - total_price_pl + total_fx_pl == total_pl
       - sector_allocation[].value sums to the portfolio value on every date
-  * sum(company_contribution[].contribution_pct) == 1.0 exactly, via an
-    explicit force-balance search over the last element's final decimal (the
-    ledger infers the server does the same: four exact cancellations in a row
-    are otherwise implausible). The force-balance moves it by at most 1e-6, so
-    contribution_pct == total_pl / total_pl_portfolio still holds inside its
-    own 6-decimal budget.
+  * contribution_pct is a RETURN contribution, not a P&L share:
+    contribution_pct == total_pl / portfolio_parameters.initial_value, rounded
+    to its own 6-decimal budget per row, independently -- no force-balance.
+    sum(company_contribution[].contribution_pct) therefore lands CLOSE to
+    portfolio_summary.total_return (itself total_pl_portfolio / initial_value),
+    not bit-exact to it: each row absorbs its own rounding, so the sum can
+    drift from total_return by a few units in the last decimal. This is the
+    live server's basis (effective 2026-10, parallax-api PR #521); an older
+    build returned a P&L-share basis instead (rows force-balanced to sum to
+    1.0 exactly) -- see the contribution_pct gotcha in
+    `_parallax/parallax-conventions.md` and `parallax-cio-letter-prep/SKILL.md`
+    for the runtime guard that distinguishes the two.
   * sector_contribution rows aggregate their members COLUMN BY COLUMN:
     total_pl sums, contribution_pct sums, and avg_weight is the MEAN. See TRAPS.
   * portfolio_scores[f] == floor(10 * sum(w_latest * score)) over the LATEST
@@ -486,9 +492,10 @@ def build_paths(seed: int) -> dict[str, Any]:
 # --------------------------------------------------------------------------
 
 def _latest_weights(paths: dict[str, Any]) -> list[float]:
-    """Emitted 6-decimal weights. NOT force-balanced per date -- the API does not
-    balance these (only contribution_pct), which is exactly why they can sum
-    above 1 and why top_5_share is not clamped."""
+    """Emitted 6-decimal weights. NOT force-balanced per date -- the API does
+    not balance these, which is exactly why they can sum above 1 and why
+    top_5_share is not clamped. (contribution_pct is not force-balanced
+    either; see _company_contribution.)"""
     total = paths["portfolio_units"][-1]
     return [q(h["value_units"][-1] / total, 6) for h in paths["holdings"]]
 
@@ -530,28 +537,6 @@ def _scores(paths: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
-def _force_balanced_shares(raw: list[float], dp: int = 6) -> list[float]:
-    """Round to ``dp`` decimals so the emitted values sum to EXACTLY 1.
-
-    Done in integer units of ``10**-dp`` rather than by rounding each element
-    and hoping. Every element but the last is rounded normally; the last takes
-    whatever makes the integer units total ``10**dp``. That makes the DECIMAL
-    sum exactly 1.000000 by construction, and since each emitted value is the
-    correctly-rounded float of its own decimal, the float sum lands inside half
-    an ulp of 1.0 and is therefore bit-exact 1.0 -- provided the magnitudes stay
-    moderate, which ``_seed_constraints`` verifies rather than assumes.
-
-    Rounding each element independently sums to 1.0 only by luck. The ledger's
-    four exact cancellations across four captures are the signature of a server
-    doing this same balancing, and the residual it pushes into the last element
-    is at most a couple of units in the final decimal -- inside that field's own
-    rounding budget, so contribution_pct still matches total_pl / total_pl."""
-    scale = 10 ** dp
-    head_units = [round(x * scale) for x in raw[:-1]]
-    tail_units = scale - sum(head_units)
-    return [u / scale for u in head_units + [tail_units]]
-
-
 def _company_contribution(paths: dict[str, Any]) -> tuple[list[dict], float]:
     dates = paths["dates"]
     port = paths["portfolio_units"]
@@ -563,20 +548,26 @@ def _company_contribution(paths: dict[str, Any]) -> tuple[list[dict], float]:
         mean([h["value_units"][i] / port[i] for i in range(len(dates))])
         for h in paths["holdings"]
     ]
-    shares = _force_balanced_shares([pl / total_pl for pl in pls])
 
     rows = []
-    for h, pl, aw_raw, share in zip(paths["holdings"], pls, avg_weights_raw,
-                                    shares):
+    for h, pl, aw_raw in zip(paths["holdings"], pls, avg_weights_raw):
         # avg_allocation is computed from the UNROUNDED avg_weight and rounded
         # to its own 4-decimal budget, so avg_allocation == avg_weight x
         # initial_value holds only to ~1e-6 relative, never exactly. Preserved
         # deliberately: a test asserting equality here would be wrong.
+        #
+        # contribution_pct is a RETURN contribution (total_pl / initial_value),
+        # the live server's basis since parallax-api PR #521 -- NOT a P&L
+        # share of total_pl_portfolio. Each row rounds its own ratio to its
+        # own 6-decimal budget independently; there is no force-balance, so
+        # the rows sum to portfolio_summary.total_return only to within that
+        # per-row rounding budget, not bit-exact (see _seed_constraints, which
+        # verifies the invariant rather than assuming it).
         rows.append({
             "ric": h["ric"],
             "total_pl": pl,
             "avg_weight": q(aw_raw, 6),
-            "contribution_pct": share,
+            "contribution_pct": q(pl / INITIAL_VALUE, 6),
             "avg_allocation": q(aw_raw * INITIAL_VALUE, 4),
             "return_pct": q(pl / (aw_raw * INITIAL_VALUE), 6),
             "name": h["name"],
@@ -602,7 +593,12 @@ def _sector_contribution(paths: dict[str, Any],
             "sector": sector,
             "total_pl": sum(r["total_pl"] for r in group),
             "avg_weight": q(mean([r["avg_weight"] for r in group]), 6),
-            "contribution_pct": sum(r["contribution_pct"] for r in group),
+            # Sums its members (trap 1), then re-quantizes to the field's own
+            # 6-decimal budget -- summing two already-rounded ratios can land
+            # off the lattice (e.g. 0.002325 + 0.013763 in binary), and an
+            # unrounded sum would blow the fixture's significant-figure budget
+            # (fixture_precision.py) despite being a sum, not a machine float.
+            "contribution_pct": q(sum(r["contribution_pct"] for r in group), 6),
         })
     return rows
 
@@ -1189,18 +1185,20 @@ def _seed_constraints(paths: dict[str, Any]) -> list[str]:
     if not winners:
         failures.append("no holding ends with positive P&L")
 
-    # The force-balance is only sound while the shares stay moderate: at large
-    # magnitudes the float representation error of a 6-decimal value exceeds
-    # half an ulp of 1.0 and the sum stops being bit-exact. Verify, never assume.
+    # contribution_pct is total_pl / INITIAL_VALUE per row, rounded
+    # independently -- no force-balance. Verify the sum lands within the
+    # rows' own rounding budget of total_return, never assume it.
     shares = [r["contribution_pct"] for r in company_rows]
-    if sum(shares) != 1.0:
-        failures.append("contribution_pct does not sum to exactly 1.0 in float")
     total_pl = math.fsum(r["total_pl"] for r in company_rows)
-    drift = max(abs(r["contribution_pct"] - r["total_pl"] / total_pl)
+    total_return = total_pl / INITIAL_VALUE
+    if abs(sum(shares) - total_return) > 1e-5:
+        failures.append("contribution_pct does not sum to total_return within "
+                        "its rounding budget")
+    drift = max(abs(r["contribution_pct"] - r["total_pl"] / INITIAL_VALUE)
                 for r in company_rows)
     if drift > 1e-6:
-        failures.append("contribution_pct drifts from total_pl / total_pl by "
-                        "more than its own 6-decimal budget")
+        failures.append("contribution_pct drifts from total_pl / initial_value "
+                        "by more than its own 6-decimal budget")
 
     summary, episodes, series = _drawdown_side(port, paths["dates"])
     if series[-1][0] >= 0:

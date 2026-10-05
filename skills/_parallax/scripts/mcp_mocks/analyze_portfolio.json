@@ -35,7 +35,7 @@
       {
         "avg_allocation": 3491.7923,
         "avg_weight": 0.349179,
-        "contribution_pct": 0.162021,
+        "contribution_pct": 0.002325,
         "name": "Axiom Compute Corp",
         "return_pct": 0.006658,
         "ric": "AXCM.O",
@@ -44,7 +44,7 @@
       {
         "avg_allocation": 2566.8309,
         "avg_weight": 0.256683,
-        "contribution_pct": 0.959059,
+        "contribution_pct": 0.013763,
         "name": "Novalux Systems Inc",
         "return_pct": 0.053617,
         "ric": "NVLX.O",
@@ -53,7 +53,7 @@
       {
         "avg_allocation": 2500.5583,
         "avg_weight": 0.250056,
-        "contribution_pct": 0.335366,
+        "contribution_pct": 0.004812,
         "name": "Meridian Financial Group",
         "return_pct": 0.019246,
         "ric": "MRDN.N",
@@ -62,7 +62,7 @@
       {
         "avg_allocation": 1440.8185,
         "avg_weight": 0.144082,
-        "contribution_pct": -0.456446,
+        "contribution_pct": -0.00655,
         "name": "Petrogen Energy Corp",
         "return_pct": -0.04546,
         "ric": "PTRG.N",
@@ -1089,19 +1089,19 @@
     "sector_contribution": [
       {
         "avg_weight": 0.302931,
-        "contribution_pct": 1.12108,
+        "contribution_pct": 0.016088,
         "sector": "Information Technology",
         "total_pl": 160.875
       },
       {
         "avg_weight": 0.250056,
-        "contribution_pct": 0.335366,
+        "contribution_pct": 0.004812,
         "sector": "Financials",
         "total_pl": 48.125
       },
       {
         "avg_weight": 0.144082,
-        "contribution_pct": -0.456446,
+        "contribution_pct": -0.00655,
         "sector": "Energy",
         "total_pl": -65.5
       }

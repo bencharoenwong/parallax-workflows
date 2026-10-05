@@ -163,12 +163,18 @@ def test_company_pl_sums_to_total_pl(portfolio):
     assert abs(total - portfolio["portfolio_summary"]["total_pl"]) < 1e-9
 
 
-def test_contribution_pct_sums_to_exactly_one(portfolio):
-    """Exact, not approximate. The server force-balances this one, and the
-    fixture does too -- unlike the per-date allocation weights below, which are
-    NOT balanced. Do not generalise from one to the other."""
-    assert sum(r["contribution_pct"]
-               for r in portfolio["company_contribution"]) == 1.0
+def test_contribution_pct_sums_to_total_return_within_rounding(portfolio):
+    """contribution_pct is total_pl / initial_value, rounded per row to its own
+    6-decimal budget -- NOT force-balanced. The sum is therefore only CLOSE to
+    total_return, inside the rows' combined rounding budget, and asserted both
+    ways: inside the budget, and NOT exact, so a future force-balance
+    regression (which would make it exact again) is caught too."""
+    total_return = portfolio["portfolio_summary"]["total_return"]
+    total = sum(r["contribution_pct"] for r in portfolio["company_contribution"])
+    assert abs(total - total_return) < 1e-5
+    assert total != total_return, (
+        "contribution_pct sums to total_return exactly -- the fixture is now "
+        "modelling a force-balanced identity the API does not have")
 
 
 def test_ending_value_minus_pl_recovers_the_initial_allocation(portfolio):
@@ -223,8 +229,11 @@ def test_sector_contribution_sums_pl_and_contribution(portfolio):
     for row in portfolio["sector_contribution"]:
         group = members[row["sector"]]
         assert abs(row["total_pl"] - sum(r["total_pl"] for r in group)) < 1e-9
+        # contribution_pct is re-quantized to its own 6-decimal budget after
+        # summing (see _sector_contribution), so this is close, not bit-exact,
+        # unlike total_pl above which stays on the exact money lattice.
         assert abs(row["contribution_pct"]
-                   - sum(r["contribution_pct"] for r in group)) < 1e-9
+                   - sum(r["contribution_pct"] for r in group)) < 1e-6
 
 
 # --------------------------------------------------------------------------
@@ -253,13 +262,18 @@ def test_return_pct_is_pl_over_avg_allocation_to_six_decimals(portfolio):
 
 
 def test_contribution_pct_matches_the_ratio_within_its_budget(portfolio):
-    total_pl = portfolio["portfolio_summary"]["total_pl"]
+    """contribution_pct is total_pl / initial_value (return contribution), NOT
+    total_pl / total_pl_portfolio (P&L share, the basis the live server
+    retired -- see the gotcha in parallax-cio-letter-prep/SKILL.md)."""
+    initial_value = portfolio["portfolio_parameters"]["initial_value"]
     for row in portfolio["company_contribution"]:
-        assert abs(row["contribution_pct"] - row["total_pl"] / total_pl) < 1e-6
+        assert abs(row["contribution_pct"] - row["total_pl"] / initial_value) < 1e-6
 
 
 def test_per_date_weights_sum_to_one_only_to_rounding(portfolio):
-    """Unlike contribution_pct, these are NOT force-balanced."""
+    """Like contribution_pct, these are NOT force-balanced -- the per-date
+    weights target 1.0 as a fixed constant, while contribution_pct targets
+    total_return, which moves with the price path."""
     by_date: dict[str, float] = {}
     for row in portfolio["sector_allocation"]:
         by_date[row["date"]] = by_date.get(row["date"], 0.0) + row["weight"]
