@@ -998,10 +998,12 @@ CROSS_SKILL_REF = re.compile(
 SKILL_DIR_GATE = "<skill-dir>/../_parallax/"
 _PLACEHOLDER = "\x00SKILLDIR\x00"
 
-# Shared files a vendored module opens or imports by sibling path at run time.
-# The prose names the entry module only; these come along with it. A web build
-# fails if a vendored .py names a sibling that is not shipped (see
-# missing_python_siblings), so a new companion cannot be forgotten silently.
+# Shared files a vendored file needs at run time but the prose does not name.
+# The prose names the entry module or doc only; these come along with it. A web
+# build fails if a vendored .py names a sibling that is not shipped (see
+# missing_python_siblings) or a doc imports an unshipped module from a sys.path
+# directory (see missing_anchor_modules), so a new companion cannot be
+# forgotten silently.
 RUNTIME_COMPANIONS = {
     "house-view/gap_suggest.py": ("house-view/gap_detect.py",),
     "white-label/rm_consumer.py": ("white-label/loader.py",),
