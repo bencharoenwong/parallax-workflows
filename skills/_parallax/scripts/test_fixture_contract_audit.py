@@ -490,8 +490,10 @@ def test_requested_field_check_fails_on_a_planted_stale_block_name(tracked_portf
 
 def test_the_fixture_models_a_wider_request_than_the_skill_makes(tracked_portfolio):
     """HONESTY PIN on a real divergence, asserted as containment rather than
-    equality because closing it would mean editing the fixture or the SKILL.md,
-    and both are out of scope for a test-only change.
+    equality because closing the remaining gap would mean either adding
+    ``data_quality`` to the SKILL.md request or dropping it from the
+    generator's ``FIELDS_REQUESTED`` — a fixture/generator change, not a
+    SKILL.md reconciliation fix, so out of scope here.
 
     ``_meta.fields_requested`` carries one block (``data_quality``) the
     cio-letter-prep instruction does not ask for — ``portfolio_parameters``
