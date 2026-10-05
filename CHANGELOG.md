@@ -4,6 +4,12 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-10-05 (claude.ai web build)
+
+### Fixed
+- `build_bundle.py web` builds all 12 web skills again. A `_parallax/...` placeholder in prose is no longer read as a file reference. The web resolution check skips `_parallax/scripts/` refs, as the plugin check does. The web copy of `house-view/loader.md` drops its citation of an authoring doc that web zips do not ship. Plugin output is unchanged.
+- Both resolution checks normalize a ref before the `_parallax/scripts/` skip, so `_parallax/scripts/../x.md` is still checked. A bare mention of the scripts directory itself is skipped.
+
 ## 2026-10-05 (translate skill descriptions)
 
 ### Changed

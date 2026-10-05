@@ -32,6 +32,7 @@ import argparse
 import importlib.util
 import json
 import os
+import posixpath
 import re
 import shutil
 import subprocess
@@ -477,8 +478,23 @@ TRANSFORMS = {
 }
 
 # Applied on top of TRANSFORMS, web build only (self-contained zips).
+def transform_loader_web(text: str) -> str:
+    """Web-only. loader.md cites skill-structure-conventions.md, an authoring
+    doc excluded from web zips (WEB_VENDOR_EXCLUDE). Drop the pointer and keep
+    the rule it explains. Plugin builds ship that doc and keep the citation."""
+    return _swap(
+        text,
+        "(frontmatter carries spec keys only, per "
+        "`_parallax/skill-structure-conventions.md` → \"Spec compliance\"; "
+        "house content such as gotchas lives in the body)",
+        "(frontmatter carries spec keys only; house content such as gotchas "
+        "lives in the body)",
+        "loader web skill-structure citation")
+
+
 WEB_TRANSFORMS = {
     "_parallax/parallax-conventions.md": transform_conventions_web,
+    "_parallax/house-view/loader.md": transform_loader_web,
 }
 
 
@@ -725,6 +741,12 @@ def web_resolution_check(skill_root: Path) -> None:
     for doc in sorted(skill_root.rglob("*.md")):
         text = doc.read_text(encoding="utf-8")
         for ref in sorted({m.group(0) for m in REF_VENDORED.finditer(text)}):
+            # _parallax/scripts/ is author-time repo tooling (lints, the bundler
+            # itself) — never bundled by design, so a ref to it is not a break.
+            n = posixpath.normpath(ref)
+            if (n == "_vendored/_parallax/scripts"
+                    or n.startswith("_vendored/_parallax/scripts/")):
+                continue
             if not (skill_root / ref).exists():
                 failures.append(f"{doc.relative_to(skill_root)}: {ref}")
     if failures:
@@ -777,7 +799,8 @@ def resolution_check(skills_root: Path) -> None:
         for ref in set(REF_PARALLAX.findall(text)):
             # _parallax/scripts/ is author-time repo tooling (lints, the bundler
             # itself) — never bundled by design, so a ref to it is not a break.
-            if ref.startswith("_parallax/scripts/"):
+            n = posixpath.normpath(ref)
+            if n == "_parallax/scripts" or n.startswith("_parallax/scripts/"):
                 continue
             if not _resolve_parallax_ref(skills_root, ref):
                 failures.append(f"{where}: {ref}")
@@ -962,6 +985,8 @@ def collect_deps(md_text: str, strict: bool = True) -> tuple[set, set]:
     shared = set()
     for ref in REF_PARALLAX.findall(md_text):
         rel = ref.rstrip(".")[len("_parallax/"):].rstrip("/")
+        if not rel:
+            continue  # `_parallax/...` in prose is a placeholder, not a file
         candidates = [rel, rel + ".py", rel + ".md"]
         resolved = next((c for c in candidates
                          if (SKILLS_DIR / "_parallax" / c).is_file()
