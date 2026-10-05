@@ -4,6 +4,19 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-10-05: Arabic marks are normalized for matching; non-Western numerals stay a blocking error
+
+**Why:** Arabic diacritics and tatweel made valid magnitude units and currency names fail to match, and words such as مليونير (millionaire) were counted as units. Arabic-Indic digits were reported as "Numeric tokens differ", which reads as a changed value when only the script changed.
+
+**Impact:** Unit and currency matching runs on NFC text with short vowels, shadda, sukun, dagger alif and tatweel removed. Maddah and hamza marks (U+0653–U+0655) stay because they compose into أ إ آ. The Arabic house style requires Western digits, period decimal and comma thousands (`translate-arabic-finance/references/language-style.md`), so non-Western numerals keep failing as an `[INTEGRITY]` error; only the message changes. The check is one-directional: numerals the source uses are allowed. The Arabic validator's mixed-digit-script warning may fire alongside the new error.
+
+**Alternatives:**
+- [DROP] Accept Arabic-Indic digits once values match. Contradicts the sourced house style.
+- [DROP] Exclude ألفا / ألفًا from the thousand unit. ألفًا is the standard accusative of thousand after a numeral, so excluding it creates false negatives; left to native review.
+- [DROP] Map the full-width comma to a thousands separator. In Chinese, 3，5 can be a list.
+
+**Flip conditions:** native review adopts Arabic-Indic digits for `ar-SA` → allow them for that language and keep the value comparison.
+
 ## 2026-10-02: Translation audit base plus sourced Vietnamese and Arabic conventions
 
 **Why:** Two parallel efforts produced overlapping translation changes: a four-language audit with a shared source-fidelity validator, and a research pass over public Vietnamese broker reports and Saudi broker/CMA documents. The audit is the base because it covers all four languages and cuts instruction size; the research is ported on top so the rules match how local institutional research is actually written.

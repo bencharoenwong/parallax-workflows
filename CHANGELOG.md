@@ -4,6 +4,12 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-10-05 (Arabic text in the translation validator)
+
+### Fixed
+- `skills/_parallax/translation_validate.py`: magnitude units and currency names now match through Arabic short vowels, shadda, sukun, dagger alif and tatweel (مِليون, مليـون). مليونير, ملياردير and ألفية after a number no longer count as units.
+- A translation that writes numerals in another script (Arabic-Indic or full-width digits, Arabic decimal, thousands or percent signs) still fails as an `[INTEGRITY]` error, now with its own message naming the numeral style. Numbers compare by value across scripts, so "Numeric tokens differ" reports only a changed value. Numerals the source itself uses are allowed.
+
 ## 2026-10-02 (translation skills audit; Vietnamese seed)
 
 ### Added

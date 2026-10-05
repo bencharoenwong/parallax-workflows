@@ -91,6 +91,8 @@ _ARABIC_MARKS = dict.fromkeys([*range(0x064B, 0x0653), 0x0670, 0x0640])
 def _plain_arabic(text: str) -> str:
     """Composed (NFC) form without the marks above, as the alias lists are written."""
     return unicodedata.normalize("NFC", text).translate(_ARABIC_MARKS)
+
+
 # Arabic decimal point, thousands separator and percent sign.
 _ARABIC_NUMBER_PUNCT = str.maketrans({"\u066b": ".", "\u066c": ",", "\u066a": "%"})
 
