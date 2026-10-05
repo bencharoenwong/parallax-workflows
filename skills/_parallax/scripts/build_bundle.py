@@ -761,18 +761,21 @@ def web_resolution_check(skill_root: Path) -> None:
             f"{skill_root.name}")
 
 
-_SIBLING_FILE = re.compile(r"""with_name\(\s*["']([\w.-]+)["']\s*\)""")
+_SIBLING_FILE = re.compile(
+    r"""with_name\(\s*["']([\w.-]+)["']\s*\)"""
+    r"""|__file__\s*\)(?:\.resolve\(\s*\))?\.parent\s*/\s*["']([\w.-]+)["']""")
 
 
 def missing_python_siblings(skill_root: Path) -> list[str]:
     """Files a vendored module needs beside it but the package lacks: names
-    opened with Path.with_name("..."), and sibling modules it imports (a
-    module is a sibling when the source tree has it in the same directory)."""
+    opened with Path.with_name("...") or Path(__file__).parent / "...", and
+    sibling modules it imports (a module is a sibling when the source tree has
+    it in the same directory)."""
     vendored = skill_root / "_vendored" / "_parallax"
     missing = set()
     for py in sorted(skill_root.rglob("*.py")):
         text = py.read_text(encoding="utf-8")
-        needed = set(_SIBLING_FILE.findall(text))
+        needed = {a or b for a, b in _SIBLING_FILE.findall(text)}
         if vendored in py.parents:
             src_dir = SKILLS_DIR / "_parallax" / py.parent.relative_to(vendored)
             modules = set()
@@ -1091,25 +1094,24 @@ def build_web(names: list[str]) -> None:
                     # web_resolution_check confirms the directory exists.
                     dir_anchors.add(rel)
                     continue
-                for t in [rel]:
-                    dest = skill_root / "_vendored" / "_parallax" / t
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    key = f"_parallax/{t}"
-                    if key in TRANSFORMS or key in WEB_TRANSFORMS:
-                        body = (SKILLS_DIR / "_parallax" / t).read_text(
-                            encoding="utf-8")
-                        if key in TRANSFORMS:
-                            body = TRANSFORMS[key](body)
-                        if key in WEB_TRANSFORMS:
-                            body = WEB_TRANSFORMS[key](body)
-                        dest.write_text(body, encoding="utf-8")
-                    else:
-                        shutil.copy2(SKILLS_DIR / "_parallax" / t, dest)
-                    if t.endswith(".md"):
-                        s, c = collect_deps(dest.read_text(encoding="utf-8"),
-                                            strict=False)
-                        shared_todo |= s - shared_done
-                        cross_deps |= c
+                dest = skill_root / "_vendored" / "_parallax" / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                key = f"_parallax/{rel}"
+                if key in TRANSFORMS or key in WEB_TRANSFORMS:
+                    body = (SKILLS_DIR / "_parallax" / rel).read_text(
+                        encoding="utf-8")
+                    if key in TRANSFORMS:
+                        body = TRANSFORMS[key](body)
+                    if key in WEB_TRANSFORMS:
+                        body = WEB_TRANSFORMS[key](body)
+                    dest.write_text(body, encoding="utf-8")
+                else:
+                    shutil.copy2(SKILLS_DIR / "_parallax" / rel, dest)
+                if rel.endswith(".md"):
+                    s, c = collect_deps(dest.read_text(encoding="utf-8"),
+                                        strict=False)
+                    shared_todo |= s - shared_done
+                    cross_deps |= c
                 shared_todo |= set(RUNTIME_COMPANIONS.get(rel, ())) - shared_done
             # Cross-skill files can themselves reference other cross-skill
             # files — vendor to a fixpoint. Refs back to the skill being built

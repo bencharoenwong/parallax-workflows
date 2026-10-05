@@ -709,6 +709,31 @@ def test_missing_python_siblings_reports_an_unshipped_companion(tmp_path):
     assert bb.missing_python_siblings(tmp_path / "parallax-demo") == []
 
 
+@pytest.mark.parametrize("ref", [
+    'Path(__file__).parent / "b.yaml"',
+    "Path(__file__).resolve().parent/'b.yaml'",
+    'pathlib.Path( __file__ ).resolve( ).parent  /  "b.yaml"',
+])
+def test_missing_python_siblings_reports_a_file_parent_companion(tmp_path, ref):
+    root = tmp_path / "parallax-demo" / "_vendored" / "_parallax" / "pkg"
+    root.mkdir(parents=True)
+    (root / "a.py").write_text(
+        f"import pathlib\nfrom pathlib import Path\nP = {ref}\n", encoding="utf-8")
+    assert bb.missing_python_siblings(tmp_path / "parallax-demo") == ["_vendored/_parallax/pkg/b.yaml"]
+    (root / "b.yaml").write_text("x: 1\n", encoding="utf-8")
+    assert bb.missing_python_siblings(tmp_path / "parallax-demo") == []
+
+
+def test_web_build_fails_when_loader_schema_companion_is_dropped(tmp_path, monkeypatch):
+    monkeypatch.setattr(bb, "WEB_OUT_DIR", tmp_path)
+    companions = dict(bb.RUNTIME_COMPANIONS)
+    del companions["white-label/loader.py"]
+    monkeypatch.setattr(bb, "RUNTIME_COMPANIONS", companions)
+    with pytest.raises(bb.BuildError, match="schema.yaml"):
+        bb.build_web(["parallax-rebalance"])
+    assert not (tmp_path / "parallax-rebalance.skill").exists()
+
+
 def test_web_rebalance_ships_only_the_white_label_files_it_uses(tmp_path, monkeypatch):
     monkeypatch.setattr(bb, "WEB_OUT_DIR", tmp_path)
     bb.build_web(["parallax-rebalance"])
