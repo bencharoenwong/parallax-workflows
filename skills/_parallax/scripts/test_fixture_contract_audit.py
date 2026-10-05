@@ -493,17 +493,19 @@ def test_the_fixture_models_a_wider_request_than_the_skill_makes(tracked_portfol
     equality because closing it would mean editing the fixture or the SKILL.md,
     and both are out of scope for a test-only change.
 
-    ``_meta.fields_requested`` carries two blocks the cio-letter-prep
-    instruction does not ask for. The fixture therefore models a response
-    slightly richer than the one that skill receives, so a consumer reading a
-    block outside the intersection would be exercised by the tests and absent
-    at run time.
+    ``_meta.fields_requested`` carries one block (``data_quality``) the
+    cio-letter-prep instruction does not ask for — ``portfolio_parameters``
+    moved into the skill's own ``fields=`` list once the skill started reading
+    ``portfolio_parameters.initial_value`` directly instead of deriving it.
+    The fixture therefore models a response slightly richer than the one that
+    skill receives, so a consumer reading a block outside the intersection
+    would be exercised by the tests and absent at run time.
     """
     skill_fields = set(declared_fields(CIO_SKILL.read_text(encoding="utf-8")))
     fixture_fields = set(
         _tracked("analyze_portfolio")["result"]["_meta"]["fields_requested"])
     assert skill_fields < fixture_fields
-    assert fixture_fields - skill_fields == {"portfolio_parameters", "data_quality"}
+    assert fixture_fields - skill_fields == {"data_quality"}
 
 
 # ==========================================================================
