@@ -4,6 +4,18 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-10-05: Translate skill descriptions carry a NOT-for clause and a 200-character cap
+
+**Why:** The translate skills need a negative trigger so they are not picked for writing new analysis or for unsupported languages. claude.ai caps skill descriptions at 200 characters, stricter than the spec's 1024, so the longer first draft of the clause risked a rejected or truncated upload.
+
+**Impact:** All four descriptions end with the same short NOT-for clause and fit in 200 characters. `build-skills.sh` enforces the cap for `translate-*-finance` only, and `--no-lint` cannot skip it.
+
+**Alternatives:**
+- [DROP] Apply the cap to every skill `build-skills.sh` packages. `parallax-cio-letter-prep` (private beta) has a longer description, so its explicit build and any mixed run would stop.
+- [DROP] Move the NOT-for text into a body section. Skill selection reads the description, so the clause belongs there.
+
+**Flip conditions:** claude.ai raises or drops the 200-character cap, or another skill joins the `build-skills.sh` claude.ai path → widen the check's name pattern.
+
 ## 2026-10-05: Arabic marks are normalized for matching; non-Western numerals stay a blocking error
 
 **Why:** Arabic diacritics and tatweel made valid magnitude units and currency names fail to match, and words such as مليونير (millionaire) were counted as units. Arabic-Indic digits were reported as "Numeric tokens differ", which reads as a changed value when only the script changed.

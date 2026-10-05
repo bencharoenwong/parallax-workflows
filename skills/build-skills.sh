@@ -2,7 +2,8 @@
 # Rebuild .skill packages for upload to claude.ai.
 # Usage: ./build-skills.sh [--no-lint] [--normalize] [skill-name ...]
 # No args = build all KNOWN_SKILLS (general-release set).
-#   --no-lint    skip lint/validation (emergencies only)
+#   --no-lint    skip lint/validation (emergencies only); the 200-char
+#                description cap on translate-*-finance still runs
 #   --normalize  rewrite SKILL.md frontmatter to spec-clean form first
 #                (folds ported client-convention fields; see
 #                _parallax/scripts/spec-normalize.py)

@@ -4,6 +4,12 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-10-05 (translate skill descriptions)
+
+### Changed
+- `translate-{arabic,chinese,thai,vietnamese}-finance` descriptions end with "NOT for writing new analysis or other target languages." Each stays at or under 200 characters; the Vietnamese base sentence is shortened to fit.
+- `build-skills.sh` fails before packaging when a `translate-*-finance` description exceeds claude.ai's 200-character cap. `--no-lint` does not skip this check. Other skills, including private-beta ones, build as before. Test: `skills/_parallax/scripts/test_build_skills_description_cap.py`.
+
 ## 2026-10-05 (Arabic text in the translation validator)
 
 ### Fixed
