@@ -32,7 +32,8 @@
     },
     "parallax-cio-letter-prep": {
       "plugin": false,
-      "web": false
+      "web": false,
+      "standalone": "beta"
     },
     "parallax-client-review": {
       "plugin": true,
@@ -287,19 +288,23 @@
     },
     "translate-arabic-finance": {
       "plugin": false,
-      "web": false
+      "web": false,
+      "standalone": "held"
     },
     "translate-chinese-finance": {
       "plugin": true,
-      "web": false
+      "web": false,
+      "standalone": "release"
     },
     "translate-thai-finance": {
       "plugin": true,
-      "web": false
+      "web": false,
+      "standalone": "release"
     },
     "translate-vietnamese-finance": {
       "plugin": false,
-      "web": false
+      "web": false,
+      "standalone": "held"
     }
   },
   "exempt_docs": [

@@ -30,7 +30,9 @@ cd "$(dirname "$0")"
 get_excludes() {
   case "$1" in
     translate-chinese-finance)
-      echo "translate-chinese-finance/references/INTEGRATION.md"
+      # INTEGRATION.md is repo-integration notes; normalize_runtime.py is a
+      # maintenance script that rewrites the skill's own files if run.
+      echo "translate-chinese-finance/references/INTEGRATION.md translate-chinese-finance/references/normalize_runtime.py"
       ;;
     *)
       echo ""
@@ -38,16 +40,17 @@ get_excludes() {
   esac
 }
 
-KNOWN_SKILLS="translate-chinese-finance translate-thai-finance translate-vietnamese-finance"
+# Tiers come from _parallax/manifest.json (`standalone`): release builds by
+# default; beta (pilot customers only) and held (awaiting native-speaker
+# review) build only when named, with a warning.
+KNOWN_SKILLS=$(python3 ./_parallax/skill_manifest.py standalone release)
+PRIVATE_BETA_SKILLS=$(python3 ./_parallax/skill_manifest.py standalone beta)
+HELD_SKILLS=$(python3 ./_parallax/skill_manifest.py standalone held)
 
-# Private beta — opt-in only, not built by default.
-# Skills here are gated until pilot customers complete one full usage cycle.
-PRIVATE_BETA_SKILLS="parallax-cio-letter-prep"
-
-is_private_beta() {
-  local name="$1"
-  local s
-  for s in $PRIVATE_BETA_SKILLS; do
+in_list() {
+  local name="$1" s
+  shift
+  for s in $*; do
     if [[ "$s" == "$name" ]]; then
       return 0
     fi
@@ -61,8 +64,11 @@ build_one() {
     echo "  ✗ $name: directory not found, skipping" >&2
     return 1
   fi
-  if is_private_beta "$name"; then
+  if in_list "$name" $PRIVATE_BETA_SKILLS; then
     echo "  WARN: building private-beta skill '$name' — not for general release" >&2
+  fi
+  if in_list "$name" $HELD_SKILLS; then
+    echo "  WARN: building held skill '$name' — awaiting native review, not for distribution" >&2
   fi
   local out_dir="${SKILL_BUILD_OUT_DIR:-$HOME/Downloads}"
   mkdir -p "$out_dir"
@@ -70,20 +76,37 @@ build_one() {
   local staging
   staging=$(mktemp -d)
 
-  local exc_args=()
-  local exc
-  for exc in $(get_excludes "$name"); do
-    exc_args+=(-x "$exc")
-  done
-
-  cp -R "$name" "$staging/$name"
+  # Tracked files only (as build_bundle.py does), minus tests, test fixtures
+  # and the per-skill excludes; untracked caches and work in progress never
+  # ship. Fixtures are maintainer verification data, and a compressed binary
+  # cannot be term-scanned meaningfully.
+  local excludes
+  excludes=" $(get_excludes "$name") "
+  if ! git ls-files -- "$name" \
+      | grep -Ev '(^|/)(tests/|fixtures/|test_[^/]*[.]py$|conftest[.]py$)' \
+      | while IFS= read -r f; do
+          [[ "$excludes" == *" $f "* ]] && continue
+          mkdir -p "$staging/$(dirname "$f")" && cp "$f" "$staging/$f" || exit 1
+        done; then
+    echo "  ✗ $name: copying tracked files failed" >&2
+    rm -rf "$staging"
+    return 1
+  fi
+  if [[ ! -f "$staging/$name/SKILL.md" ]]; then
+    echo "  ✗ $name: no tracked SKILL.md (commit the skill first)" >&2
+    rm -rf "$staging"
+    return 1
+  fi
   if [[ "$name" == translate-*-finance ]]; then
     cp "_parallax/translation_validate.py" "$staging/$name/references/translation_common.py"
   fi
+  if ! python3 ./_parallax/scripts/build_bundle.py verify "$staging/$name"; then
+    echo "  ✗ $name: package failed verification; nothing written" >&2
+    rm -rf "$staging"
+    return 1
+  fi
   # Fresh archive: stale files from a previous package must not survive.
-  (cd "$staging" && zip -rq package.skill "$name" \
-    -x "*.DS_Store" "*/__pycache__/*" "*/.git/*" "*/.ruff_cache/*" \
-    ${exc_args[@]+"${exc_args[@]}"})
+  (cd "$staging" && zip -rq package.skill "$name")
   mv "$staging/package.skill" "$out"
   rm -rf "$staging"
   printf "  ✓ %s → %s (%s)\n" "$name" "$out" "$(du -h "$out" | cut -f1)"
@@ -215,6 +238,11 @@ fi
 echo ""
 
 echo "Building .skill packages:"
+FAILED=""
 for name in "$@"; do
-  build_one "$name" || true
+  build_one "$name" || FAILED="$FAILED $name"
 done
+if [[ -n "$FAILED" ]]; then
+  echo "FAIL: not built:$FAILED" >&2
+  exit 1
+fi

@@ -23,10 +23,12 @@ pytestmark = pytest.mark.skipif(shutil.which("zip") is None, reason="zip not on 
 
 
 def _run(script, out_dir, *names):
+    env = {**os.environ, "SKILL_BUILD_OUT_DIR": str(out_dir)}
+    if not (Path.home() / ".claude" / "parallax-canary-extra.txt").is_file():
+        env["PARALLAX_ALLOW_PARTIAL_SCAN"] = "1"  # CI: built-in terms only
     return subprocess.run(
         ["bash", str(script), "--no-lint", *names],
-        capture_output=True, text=True,
-        env={**os.environ, "SKILL_BUILD_OUT_DIR": str(out_dir)},
+        capture_output=True, text=True, env=env,
     )
 
 
@@ -44,6 +46,9 @@ def _skill_root(tmp_path, *skills):
     root = tmp_path / "skills"
     root.mkdir()
     shutil.copy(SCRIPT, root / "build-skills.sh")
+    # The script reads the manifest and runs the package checks from _parallax/,
+    # and packages tracked files only.
+    (root / "_parallax").symlink_to(SCRIPT.parent / "_parallax")
     for name, desc_len in skills:
         d = root / name
         d.mkdir()
@@ -51,6 +56,8 @@ def _skill_root(tmp_path, *skills):
             f"---\nname: {name}\ndescription: {'x' * desc_len}\n---\n\nbody\n",
             encoding="utf-8",
         )
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", "skills"], cwd=tmp_path, check=True)
     return root
 
 

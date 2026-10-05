@@ -5,6 +5,8 @@ Subcommands:
   plugin        Assemble the Claude Code plugin bundle (general-release set) at
                 <repo>/plugin/ and write .claude-plugin/marketplace.json.
                 Output is generated — never hand-edit plugin/; rerun this instead.
+  verify dir... Check staged package directories (no development files;
+                term scan). build-skills.sh runs it before zipping.
   web [name...] Build self-contained .skill zips for claude.ai upload at
                 ~/Downloads/claude-web-skills/. Defaults to WEB_SKILLS.
                 Shared-file dependencies are vendored under <skill>/_vendored/
@@ -729,6 +731,22 @@ def canary_scan(root: Path) -> None:
         raise BuildError(f"term scan failed with {len(hits)} hit(s)")
 
 
+def verify_package(root: Path) -> None:
+    """Checks every distributed package must pass before it is written: no
+    development files (tests, test fixtures, caches, dotfiles), then the term
+    scan."""
+    dev = sorted(
+        p.relative_to(root).as_posix() for p in root.rglob("*")
+        if p.is_file() and (
+            p.name.startswith("test_") and p.suffix == ".py"
+            or p.name == "conftest.py"
+            or any(part in ("tests", "fixtures", "__pycache__", ".pytest_cache")
+                   or part.startswith(".") for part in p.relative_to(root).parts)))
+    if dev:
+        raise BuildError(f"development files in package: {dev}")
+    canary_scan(root)
+
+
 REF_VENDORED = re.compile(r"_vendored/[A-Za-z0-9_./-]+\.(?:md|py|yaml|json)")
 
 
@@ -1166,7 +1184,7 @@ def build_web(names: list[str]) -> None:
                        + missing_anchor_modules(skill_root, dir_anchors))
             if missing:
                 raise BuildError(f"{name}: vendored code needs unshipped files: {missing}")
-            canary_scan(staging)
+            verify_package(staging)
 
             out = WEB_OUT_DIR / f"{name}.skill"
             out.unlink(missing_ok=True)
@@ -1187,10 +1205,15 @@ def main(argv: list[str]) -> int:
     sub.add_parser("plugin")
     web = sub.add_parser("web")
     web.add_argument("names", nargs="*", default=None)
+    verify = sub.add_parser("verify", help="check staged package directories")
+    verify.add_argument("dirs", nargs="+", type=Path)
     args = parser.parse_args(argv)
     try:
         if args.cmd == "plugin":
             build_plugin()
+        elif args.cmd == "verify":
+            for d in args.dirs:
+                verify_package(d)
         else:
             build_web(args.names or WEB_SKILLS)
     except BuildError as exc:
