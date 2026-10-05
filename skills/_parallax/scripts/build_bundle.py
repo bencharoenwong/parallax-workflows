@@ -29,6 +29,7 @@ Stdlib-only; runs under python >= 3.9.
 from __future__ import annotations
 
 import argparse
+import ast
 import importlib.util
 import json
 import os
@@ -740,6 +741,9 @@ def web_resolution_check(skill_root: Path) -> None:
     failures = []
     for doc in sorted(skill_root.rglob("*.md")):
         text = doc.read_text(encoding="utf-8")
+        if "<skill-dir>/../" in text:
+            failures.append(f"{doc.relative_to(skill_root)}: <skill-dir>/../ "
+                            "points outside the package")
         for ref in sorted({m.group(0) for m in REF_VENDORED.finditer(text)}):
             # _parallax/scripts/ is author-time repo tooling (lints, the bundler
             # itself) — never bundled by design, so a ref to it is not a break.
@@ -755,6 +759,54 @@ def web_resolution_check(skill_root: Path) -> None:
         raise BuildError(
             f"{len(failures)} unresolved vendored reference(s) in "
             f"{skill_root.name}")
+
+
+_SIBLING_FILE = re.compile(
+    r"""with_name\(\s*["']([\w.-]+)["']\s*\)"""
+    r"""|__file__\s*\)(?:\.resolve\(\s*\))?\.parent\s*/\s*["']([\w.-]+)["']""")
+
+
+def missing_python_siblings(skill_root: Path) -> list[str]:
+    """Files a vendored module needs beside it but the package lacks: names
+    opened with Path.with_name("...") or Path(__file__).parent / "...", and
+    sibling modules it imports (a module is a sibling when the source tree has
+    it in the same directory)."""
+    vendored = skill_root / "_vendored" / "_parallax"
+    missing = set()
+    for py in sorted(skill_root.rglob("*.py")):
+        text = py.read_text(encoding="utf-8")
+        needed = {a or b for a, b in _SIBLING_FILE.findall(text)}
+        if vendored in py.parents:
+            src_dir = SKILLS_DIR / "_parallax" / py.parent.relative_to(vendored)
+            modules = set()
+            for node in ast.walk(ast.parse(text)):
+                if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                    modules.add(node.module.split(".")[0])
+                elif isinstance(node, ast.Import):
+                    modules.update(a.name.split(".")[0] for a in node.names)
+            needed |= {m + ".py" for m in modules if (src_dir / (m + ".py")).is_file()}
+        for n in needed:
+            if not py.with_name(n).exists():
+                missing.add(py.with_name(n).relative_to(skill_root).as_posix())
+    return sorted(missing)
+
+
+_IMPORTED_NAME = re.compile(r"\b(?:from|import)\s+([A-Za-z_]\w*)")
+
+
+def missing_anchor_modules(skill_root: Path, anchors: set) -> list[str]:
+    """Modules that a package's docs import from a directory they put on
+    sys.path (a dir anchor) but that the package lacks. Only names that are
+    modules in that source directory count, so ordinary prose cannot trip it."""
+    text = "\n".join(p.read_text(encoding="utf-8") for p in skill_root.rglob("*.md"))
+    names = set(_IMPORTED_NAME.findall(text))
+    missing = []
+    for rel in sorted(anchors):
+        for n in sorted(names):
+            if ((SKILLS_DIR / "_parallax" / rel / f"{n}.py").is_file()
+                    and not (skill_root / "_vendored" / "_parallax" / rel / f"{n}.py").exists()):
+                missing.append(f"_vendored/_parallax/{rel}/{n}.py")
+    return missing
 
 
 REF_PARALLAX = re.compile(r"_parallax/[A-Za-z0-9_./-]+")
@@ -943,8 +995,22 @@ def build_plugin() -> None:
 
 CROSS_SKILL_REF = re.compile(
     r"(\.\./)?((?:parallax|translate)-[a-z0-9-]+)/(references/[A-Za-z0-9_./-]+)")
-SKILL_DIR_GATE = '"<skill-dir>/../_parallax/'
+SKILL_DIR_GATE = "<skill-dir>/../_parallax/"
 _PLACEHOLDER = "\x00SKILLDIR\x00"
+
+# Shared files a vendored file needs at run time but the prose does not name.
+# The prose names the entry module or doc only; these come along with it. A web
+# build fails if a vendored .py names a sibling that is not shipped (see
+# missing_python_siblings) or a doc imports an unshipped module from a sys.path
+# directory (see missing_anchor_modules), so a new companion cannot be
+# forgotten silently.
+RUNTIME_COMPANIONS = {
+    "house-view/gap_suggest.py": ("house-view/gap_detect.py",),
+    "white-label/rm_consumer.py": ("white-label/loader.py",),
+    "white-label/loader.py": ("white-label/schema.yaml",),
+    # loader.md runs `python -m view_status` from the house-view directory.
+    "house-view/loader.md": ("house-view/view_status.py",),
+}
 
 # Authoring/meta docs — not runtime material; left out of web zips even though
 # the shared docs reference them in prose.
@@ -961,7 +1027,7 @@ def rewrite_refs(text: str, self_name: str = "") -> str:
                       r"\2", text)
     text = re.sub(r"(?<!_vendored/)(\.\./)?((?:parallax|translate)-[a-z0-9-]+/references/)",
                   r"_vendored/\2", text)
-    return text.replace(_PLACEHOLDER, '"<skill-dir>/_vendored/_parallax/')
+    return text.replace(_PLACEHOLDER, "<skill-dir>/_vendored/_parallax/")
 
 
 def allowed_parallax_dirs() -> list[str]:
@@ -1036,7 +1102,7 @@ def build_web(names: list[str]) -> None:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(REPO_ROOT / rel, dest)
             seeds = set(shared_todo)
-            shared_done = set()
+            shared_done, dir_anchors = set(), set()
             while shared_todo:
                 rel = shared_todo.pop()
                 if rel in shared_done:
@@ -1044,32 +1110,31 @@ def build_web(names: list[str]) -> None:
                 if rel in WEB_VENDOR_EXCLUDE and rel not in seeds:
                     continue
                 shared_done.add(rel)
-                src = SKILLS_DIR / "_parallax" / rel
-                targets = ([p[len("skills/_parallax/"):] for p in
-                            tracked_files(f"_parallax/{rel}/")]
-                           if src.is_dir() else [rel])
-                for t in targets:
-                    dest = skill_root / "_vendored" / "_parallax" / t
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    key = f"_parallax/{t}"
-                    if key in TRANSFORMS or key in WEB_TRANSFORMS:
-                        body = (SKILLS_DIR / "_parallax" / t).read_text(
-                            encoding="utf-8")
-                        if key in TRANSFORMS:
-                            body = TRANSFORMS[key](body)
-                        if key in WEB_TRANSFORMS:
-                            body = WEB_TRANSFORMS[key](body)
-                        dest.write_text(body, encoding="utf-8")
-                    else:
-                        shutil.copy2(SKILLS_DIR / "_parallax" / t, dest)
-                    if t.endswith(".md"):
-                        s, c = collect_deps(dest.read_text(encoding="utf-8"),
-                                            strict=False)
-                        shared_todo |= s - shared_done
-                        cross_deps |= c
-                # gap_suggest imports gap_detect at runtime.
-                if rel.endswith("gap_suggest.py"):
-                    shared_todo.add("house-view/gap_detect.py")
+                if (SKILLS_DIR / "_parallax" / rel).is_dir():
+                    # A directory ref (e.g. a sys.path entry) ships nothing by
+                    # itself; the files the skill uses are named separately.
+                    # web_resolution_check confirms the directory exists.
+                    dir_anchors.add(rel)
+                    continue
+                dest = skill_root / "_vendored" / "_parallax" / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                key = f"_parallax/{rel}"
+                if key in TRANSFORMS or key in WEB_TRANSFORMS:
+                    body = (SKILLS_DIR / "_parallax" / rel).read_text(
+                        encoding="utf-8")
+                    if key in TRANSFORMS:
+                        body = TRANSFORMS[key](body)
+                    if key in WEB_TRANSFORMS:
+                        body = WEB_TRANSFORMS[key](body)
+                    dest.write_text(body, encoding="utf-8")
+                else:
+                    shutil.copy2(SKILLS_DIR / "_parallax" / rel, dest)
+                if rel.endswith(".md"):
+                    s, c = collect_deps(dest.read_text(encoding="utf-8"),
+                                        strict=False)
+                    shared_todo |= s - shared_done
+                    cross_deps |= c
+                shared_todo |= set(RUNTIME_COMPANIONS.get(rel, ())) - shared_done
             # Cross-skill files can themselves reference other cross-skill
             # files — vendor to a fixpoint. Refs back to the skill being built
             # resolve to its own references/ (see rewrite_refs), so skip those.
@@ -1093,6 +1158,14 @@ def build_web(names: list[str]) -> None:
             replace_description(skill_root / "SKILL.md", desc)
 
             web_resolution_check(skill_root)
+            for rel in sorted(dir_anchors):
+                if not (skill_root / "_vendored" / "_parallax" / rel).is_dir():
+                    raise BuildError(f"{name}: directory ref _parallax/{rel} names no "
+                                     "vendored file; name the files the skill uses")
+            missing = (missing_python_siblings(skill_root)
+                       + missing_anchor_modules(skill_root, dir_anchors))
+            if missing:
+                raise BuildError(f"{name}: vendored code needs unshipped files: {missing}")
             canary_scan(staging)
 
             out = WEB_OUT_DIR / f"{name}.skill"

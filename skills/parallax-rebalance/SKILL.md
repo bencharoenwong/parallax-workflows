@@ -126,7 +126,8 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 **Pre-Render — load white-label branding.** `load-reference` `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
 
 Resolve the §13.1 audience mode in the same step, via one `run-shell` call into the
-same seam function `parallax-client-review` uses — never a prose read of
+same seam function `parallax-client-review` uses (`_parallax/white-label/rm_consumer.py`,
+which loads `_parallax/white-label/loader.py`) — never a prose read of
 `branding["render"]`:
 
 ```
