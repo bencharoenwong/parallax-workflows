@@ -92,7 +92,7 @@ Zero tool calls. `run-shell` `credit_lens_logic.py` for every number: `flag_metr
 | Altman Z (public-company variant, Altman 1968) | Grey zone 1.81–2.99 | Distress zone < 1.81 (Safe > 2.99) |
 | Quality score change, 52 weeks, 0–10 scale | ≤ −0.5 pts | ≤ −1.5 pts |
 
-Peer-relative rule for every metric: better than `peer_median` → GREEN; between median and the adverse `peer_p75` → AMBER; worse than `peer_p75` → RED. Overall: majority colour wins; ties go to the more conservative colour; UNAVAILABLE legs do not vote.
+Peer-relative rule for every metric: better than `peer_median` → GREEN; between median and the adverse `peer_p75` → AMBER; worse than `peer_p75` → RED. Overall: majority color wins; ties go to the more conservative color; UNAVAILABLE legs do not vote.
 
 ### Step 5 — Compose
 

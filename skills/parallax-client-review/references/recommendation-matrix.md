@@ -20,7 +20,7 @@ Same taxonomy and threshold values as `parallax-portfolio-checkup/references/hea
 | Concentration | Holding weight >15%, OR holding among the top-3 when their combined weight >45% |
 | Redundancy | Holding is part of a redundant pair |
 | Value Trap | Holding value score ≤ 3.0 |
-| Macro Misalignment | Holding's sector flagged unfavourable by `macro_analyst` tactical |
+| Macro Misalignment | Holding's sector flagged unfavorable by `macro_analyst` tactical |
 
 ## Threshold calibration scope
 

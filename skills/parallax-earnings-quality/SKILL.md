@@ -64,7 +64,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 ### Step 3 — Verify
 
 - Identity: `get_score_analysis` `data[0].symbol` against the requested RIC (conventions §2); `get_company_info.name` is the oracle for the narrative.
-- Failed or empty calls: §0.1 retry classification, then §4. The traffic light is a display classification of Parallax's own quality data, not a gate on the name; §4.0 does not apply, but a Risk Summary cannot be rendered without the Palepu result — state `pending` rather than inventing a colour.
+- Failed or empty calls: §0.1 retry classification, then §4. The traffic light is a display classification of Parallax's own quality data, not a gate on the name; §4.0 does not apply, but a Risk Summary cannot be rendered without the Palepu result — state `pending` rather than inventing a color.
 
 ### Step 4 — Compute
 
@@ -107,7 +107,7 @@ Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 
 ## Failure modes
 
-- `get_financial_analysis` pending after the async window: Forensic Findings and the Risk Summary colour render `Analysis pending — service temporarily unavailable`; Quality Score Trend and News Context still render.
+- `get_financial_analysis` pending after the async window: Forensic Findings and the Risk Summary color render `Analysis pending — service temporarily unavailable`; Quality Score Trend and News Context still render.
 - `get_assessment` timeout: AI Assessment renders the §4 async placeholder; Red Flags are still listed from the Palepu and ratio data.
 - Host lacks a primitive: conventions §14.3, per primitive.
 
