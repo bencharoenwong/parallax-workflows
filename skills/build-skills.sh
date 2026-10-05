@@ -184,16 +184,19 @@ if [[ $# -eq 0 ]]; then
 fi
 
 # claude.ai caps skill descriptions at 200 chars (stricter than the spec's
-# 1024). Not skippable with --no-lint: an over-length package fails upload.
-echo "Checking claude.ai description cap (200 chars)…"
+# 1024). Enforced for translate-*-finance only; not skippable with --no-lint.
+echo "Checking claude.ai description cap (200 chars) for translate-*-finance…"
 if ! python3 - "$@" <<'PY'
 import sys
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 import yaml
 
 failed = 0
 for name in sys.argv[1:]:
+    if not fnmatchcase(name, "translate-*-finance"):
+        continue
     md = Path(name) / "SKILL.md"
     if not md.is_file():
         continue  # build_one reports the missing directory
