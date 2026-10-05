@@ -745,3 +745,30 @@ def test_web_rebalance_ships_only_the_white_label_files_it_uses(tmp_path, monkey
         "integration-pattern.md", "loader.py", "rm_consumer.py", "schema.yaml"]
     assert not any("/tests/" in n or "/extract/" in n for n in names)
     assert not any("<skill-dir>/../_parallax" in d for d in docs)
+
+
+def test_missing_anchor_modules_reports_a_module_a_one_liner_imports(tmp_path):
+    """A one-liner adds a shared dir to sys.path and imports from it; every
+    module it imports from that dir must ship (replays a reviewer mutation)."""
+    skill = tmp_path / "parallax-demo"
+    wl = skill / "_vendored" / "_parallax" / "white-label"
+    wl.mkdir(parents=True)
+    (wl / "rm_consumer.py").write_text("x = 1\n", encoding="utf-8")
+    (skill / "SKILL.md").write_text(
+        "python3 -c \"import sys; sys.path.insert(0, '<skill-dir>/_vendored/_parallax/white-label'); "
+        "from rm_consumer import resolve_audience; from validator import validate\"\n",
+        encoding="utf-8")
+    assert bb.missing_anchor_modules(skill, {"white-label"}) == [
+        "_vendored/_parallax/white-label/validator.py"]
+    (wl / "validator.py").write_text("x = 1\n", encoding="utf-8")
+    assert bb.missing_anchor_modules(skill, {"white-label"}) == []
+
+
+def test_web_packages_with_the_house_view_loader_ship_view_status(tmp_path, monkeypatch):
+    monkeypatch.setattr(bb, "WEB_OUT_DIR", tmp_path)
+    bb.build_web(["parallax-should-i-buy"])
+    with zipfile.ZipFile(tmp_path / "parallax-should-i-buy.skill") as zf:
+        names = set(zf.namelist())
+    base = "parallax-should-i-buy/_vendored/_parallax/house-view/"
+    assert base + "loader.md" in names
+    assert base + "view_status.py" in names

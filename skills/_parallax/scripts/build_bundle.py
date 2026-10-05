@@ -791,6 +791,24 @@ def missing_python_siblings(skill_root: Path) -> list[str]:
     return sorted(missing)
 
 
+_IMPORTED_NAME = re.compile(r"\b(?:from|import)\s+([A-Za-z_]\w*)")
+
+
+def missing_anchor_modules(skill_root: Path, anchors: set) -> list[str]:
+    """Modules that a package's docs import from a directory they put on
+    sys.path (a dir anchor) but that the package lacks. Only names that are
+    modules in that source directory count, so ordinary prose cannot trip it."""
+    text = "\n".join(p.read_text(encoding="utf-8") for p in skill_root.rglob("*.md"))
+    names = set(_IMPORTED_NAME.findall(text))
+    missing = []
+    for rel in sorted(anchors):
+        for n in sorted(names):
+            if ((SKILLS_DIR / "_parallax" / rel / f"{n}.py").is_file()
+                    and not (skill_root / "_vendored" / "_parallax" / rel / f"{n}.py").exists()):
+                missing.append(f"_vendored/_parallax/{rel}/{n}.py")
+    return missing
+
+
 REF_PARALLAX = re.compile(r"_parallax/[A-Za-z0-9_./-]+")
 REF_REFERENCES = re.compile(
     r"(\.\./)?[A-Za-z0-9_-]*/?references/[A-Za-z0-9_/-]+\.md")
@@ -988,6 +1006,8 @@ RUNTIME_COMPANIONS = {
     "house-view/gap_suggest.py": ("house-view/gap_detect.py",),
     "white-label/rm_consumer.py": ("white-label/loader.py",),
     "white-label/loader.py": ("white-label/schema.yaml",),
+    # loader.md runs `python -m view_status` from the house-view directory.
+    "house-view/loader.md": ("house-view/view_status.py",),
 }
 
 # Authoring/meta docs — not runtime material; left out of web zips even though
@@ -1140,7 +1160,8 @@ def build_web(names: list[str]) -> None:
                 if not (skill_root / "_vendored" / "_parallax" / rel).is_dir():
                     raise BuildError(f"{name}: directory ref _parallax/{rel} names no "
                                      "vendored file; name the files the skill uses")
-            missing = missing_python_siblings(skill_root)
+            missing = (missing_python_siblings(skill_root)
+                       + missing_anchor_modules(skill_root, dir_anchors))
             if missing:
                 raise BuildError(f"{name}: vendored code needs unshipped files: {missing}")
             canary_scan(staging)
