@@ -9,6 +9,8 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 ### Fixed
 - `build_bundle.py web` builds all 12 web skills again. A `_parallax/...` placeholder in prose is no longer read as a file reference. The web resolution check skips `_parallax/scripts/` refs, as the plugin check does. The web copy of `house-view/loader.md` drops its citation of an authoring doc that web zips do not ship. Plugin output is unchanged.
 - Both resolution checks normalize a ref before the `_parallax/scripts/` skip, so `_parallax/scripts/../x.md` is still checked. A bare mention of the scripts directory itself is skipped.
+- The web `parallax-rebalance` package ships only the white-label files it uses (53 files down to 23). Its audience-mode `run-shell` call now points inside the package, so it no longer fails with `ModuleNotFoundError` on claude.ai. The SKILL.md names `rm_consumer.py` and `loader.py`.
+- Web builds: a `<skill-dir>` path is rewritten whatever quote precedes it. A directory ref ships no files, and the build fails if that directory ends up empty. Shared files a vendored module needs at run time are listed in `RUNTIME_COMPANIONS`. The build fails when vendored Python opens or imports a sibling file the package lacks, or when a doc keeps `<skill-dir>/../`. Web packages that vendor the white-label loader now also ship `white-label/schema.yaml`, so branding configs are validated. Plugin output changes only in the rebalance SKILL.md.
 
 ## 2026-10-05 (translate skill descriptions)
 
