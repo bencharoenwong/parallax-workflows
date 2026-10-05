@@ -157,7 +157,7 @@ Array indexed by integer rank. Each entry:
 | `name` | string | Company name |
 | `total_pl` | float | Cumulative P&L attributed to holding |
 | `avg_weight` | float | Mean portfolio weight over period |
-| `contribution_pct` | float | Share of total portfolio P&L |
+| `contribution_pct` | float | Return contribution: `total_pl / portfolio_parameters.initial_value`; rows sum to `portfolio_summary.total_return`. An older server build returned a P&L-share basis (rows summing to 1.0) — callers should guard against a reversion rather than assume this basis. |
 | `return_pct` | float | Holding's own return |
 | `avg_allocation` | float | Mean dollar allocation |
 
