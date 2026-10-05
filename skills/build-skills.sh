@@ -183,6 +183,33 @@ if [[ $# -eq 0 ]]; then
   set -- $KNOWN_SKILLS
 fi
 
+# claude.ai caps skill descriptions at 200 chars (stricter than the spec's
+# 1024). Not skippable with --no-lint: an over-length package fails upload.
+echo "Checking claude.ai description cap (200 chars)…"
+if ! python3 - "$@" <<'PY'
+import sys
+from pathlib import Path
+
+import yaml
+
+failed = 0
+for name in sys.argv[1:]:
+    md = Path(name) / "SKILL.md"
+    if not md.is_file():
+        continue  # build_one reports the missing directory
+    fm = yaml.safe_load(md.read_text(encoding="utf-8").split("---\n", 2)[1])
+    desc = fm.get("description") or ""
+    if len(desc) > 200:
+        print(f"  ✗ {name}: description {len(desc)} chars (> 200)", file=sys.stderr)
+        failed = 1
+sys.exit(failed)
+PY
+then
+  echo "FAIL: shorten the description(s) above before packaging for claude.ai." >&2
+  exit 1
+fi
+echo ""
+
 echo "Building .skill packages:"
 for name in "$@"; do
   build_one "$name" || true

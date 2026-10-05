@@ -1,6 +1,6 @@
 ---
 name: translate-thai-finance
-description: Translate supplied finance analysis to Thai with consistent institutional or retail terminology. NOT for writing new analysis (run the analysis skill first, then translate its output), not for other target languages (use the matching translate-*-finance skill), not for general non-finance translation.
+description: Translate supplied finance analysis to Thai with consistent institutional or retail terminology. NOT for writing new analysis or other target languages.
 ---
 
 # Thai finance translation

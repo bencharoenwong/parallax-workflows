@@ -1,6 +1,6 @@
 ---
 name: translate-chinese-finance
-description: Translate supplied finance analysis to zh-CN, zh-TW or zh-HK Chinese with locale-specific terminology. NOT for writing new analysis (run the analysis skill first, then translate its output), not for other target languages (use the matching translate-*-finance skill), not for general non-finance translation.
+description: Translate supplied finance analysis to zh-CN, zh-TW or zh-HK Chinese with locale-specific terminology. NOT for writing new analysis or other target languages.
 ---
 
 # Chinese finance translation
