@@ -10,7 +10,7 @@
 | **Concentration** | Single holding too large or top-3 dominate | Holdings weights (computed over original holdings, not just verified) | Any single >15% OR top-3 >45% |
 | **Redundancy** | Multiple overlapping positions | `check_portfolio_redundancy` | ≥ 2 redundant pairs |
 | **Value Trap** | Portfolio-weighted value score is low | `get_peer_snapshot.value` aggregate (V2) / `quick_portfolio_scores` (V1) — verified-holdings weighted average | Portfolio value score ≤ 3.0 |
-| **Macro Misalignment** | Overweight in sectors with negative tactical outlook | `macro_analyst` (tactical), evaluated against verified-holdings sector weights | Holdings overweight in unfavourable sectors |
+| **Macro Misalignment** | Overweight in sectors with negative tactical outlook | `macro_analyst` (tactical), evaluated against verified-holdings sector weights | Holdings overweight in unfavorable sectors |
 
 ## Threshold calibration scope
 

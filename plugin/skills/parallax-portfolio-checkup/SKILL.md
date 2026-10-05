@@ -83,7 +83,7 @@ Gate for Step 4; do not start Batch B or Step 4 before it completes.
 
 ### Step 4 — Compute
 
-Per `references/health-flags.md`, evaluate the 5 flags over the verified set (concentration over the original holdings — it is structural): Low Score (weighted overall ≤ 5.0), Concentration (>15% single / >45% top-3), Redundancy (≥ 2 pairs; low-confidence if coverage < 60%), Value Trap (weighted value ≤ 3.0), Macro Misalignment (overweight in sectors flagged unfavourable in Batch B). Health status: Healthy (0) · Monitor (1–2) · Attention (3+). If a view is active, apply loader.md §3 multipliers (sector × factor) to the verified aggregates before the plain-language mapping; raw per-holding scores stay unchanged.
+Per `references/health-flags.md`, evaluate the 5 flags over the verified set (concentration over the original holdings — it is structural): Low Score (weighted overall ≤ 5.0), Concentration (>15% single / >45% top-3), Redundancy (≥ 2 pairs; low-confidence if coverage < 60%), Value Trap (weighted value ≤ 3.0), Macro Misalignment (overweight in sectors flagged unfavorable in Batch B). Health status: Healthy (0) · Monitor (1–2) · Attention (3+). If a view is active, apply loader.md §3 multipliers (sector × factor) to the verified aggregates before the plain-language mapping; raw per-holding scores stay unchanged.
 
 ### Step 5 — Compose
 
