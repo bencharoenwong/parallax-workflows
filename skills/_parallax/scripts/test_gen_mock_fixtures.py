@@ -166,15 +166,17 @@ def test_company_pl_sums_to_total_pl(portfolio):
 def test_contribution_pct_sums_to_total_return_within_rounding(portfolio):
     """contribution_pct is total_pl / initial_value, rounded per row to its own
     6-decimal budget -- NOT force-balanced. The sum is therefore only CLOSE to
-    total_return, inside the rows' combined rounding budget, and asserted both
-    ways: inside the budget, and NOT exact, so a future force-balance
-    regression (which would make it exact again) is caught too."""
+    total_return, inside the rows' combined rounding budget. A force-balance
+    regression is caught per row instead: balancing would have to move at
+    least one row off its own rounded ratio."""
+    initial = portfolio["portfolio_parameters"]["initial_value"]
+    for row in portfolio["company_contribution"]:
+        assert row["contribution_pct"] == gen.q(row["total_pl"] / initial, 6), (
+            f"{row['ric']} contribution_pct is not its own rounded "
+            "total_pl / initial_value -- the fixture is force-balancing rows")
     total_return = portfolio["portfolio_summary"]["total_return"]
     total = sum(r["contribution_pct"] for r in portfolio["company_contribution"])
     assert abs(total - total_return) < 1e-5
-    assert total != total_return, (
-        "contribution_pct sums to total_return exactly -- the fixture is now "
-        "modelling a force-balanced identity the API does not have")
 
 
 def test_ending_value_minus_pl_recovers_the_initial_allocation(portfolio):
