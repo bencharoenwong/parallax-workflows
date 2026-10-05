@@ -638,3 +638,52 @@ def test_arabic_common_unit_variants(text, unit):
 @pytest.mark.parametrize("text", ["بنهاية 2024 الفائدة", "خلال 2023 الفترة"])
 def test_arabic_definite_nouns_starting_with_alef_fa_are_not_thousand(text):
     assert common._units(text) == Counter()
+
+
+@pytest.mark.parametrize("text,unit", [("5 مِليون", "million"), ("5 مليـون", "million"),
+                                       ("5 مَلايين", "million"), ("3 مِليار", "billion"),
+                                       ("30 ألفًا", "thousand")])
+def test_arabic_units_ignore_diacritics_and_tatweel(text, unit):
+    assert common._units(text) == Counter({unit: 1})
+
+
+@pytest.mark.parametrize("text", ["5 مليونير", "5 مليونيرات", "3 ملياردير", "3 مليارديرات", "5 ألفية"])
+def test_arabic_words_built_on_unit_stems_are_not_units(text):
+    assert common._units(text) == Counter()
+
+
+def test_arabic_currency_ignores_diacritics():
+    assert common._counts("5 رِيال سعودي", common.CURRENCIES) == Counter({"SAR": 1})
+
+
+def test_arabic_unit_with_diacritics_passes_fidelity(tmp_path):
+    source, output = documents(tmp_path, "ar-SA", "قد ترتفع الإيرادات 5 مِليون", "Revenue may rise 5 million")
+    assert common.validate_common(str(output), "ar-SA", str(source))[2] == []
+
+
+@pytest.mark.parametrize("lang,translated", [("ar-SA", "ارتفعت الإيرادات ١٢٫٥٪"),
+                                             ("ar-SA", "ارتفعت الإيرادات ۱۲٫۵%"),
+                                             ("ar-SA", "ارتفعت الإيرادات 12٫5٪"),
+                                             ("zh", "收入增长１２.５%")])
+def test_non_western_numerals_fail_as_numeral_style(tmp_path, lang, translated):
+    source, output = documents(tmp_path, lang, translated, "Revenue rose 12.5%")
+    errors = common.validate_common(str(output), lang, str(source))[2]
+    assert any("numerals" in e and "Western" in e for e in errors)
+    assert not any("Numeric tokens differ" in e for e in errors)
+
+
+def test_non_western_digits_with_changed_value_still_report_the_number(tmp_path):
+    source, output = documents(tmp_path, "ar-SA", "ارتفعت الإيرادات ١٣٫٥٪", "Revenue rose 12.5%")
+    errors = common.validate_common(str(output), "ar-SA", str(source))[2]
+    assert any("Numeric tokens differ" in e for e in errors)
+
+
+def test_source_digits_in_the_same_script_are_kept(tmp_path):
+    source, output = documents(tmp_path, "ar-SA", "ارتفعت الإيرادات ١٢٪", "Revenue rose ١٢٪")
+    errors = common.validate_common(str(output), "ar-SA", str(source))[2]
+    assert not any("numerals" in e or "Numeric tokens" in e for e in errors)
+
+
+def test_arabic_hamza_marks_are_kept_for_unit_matching():
+    import unicodedata
+    assert common._units(unicodedata.normalize("NFD", "5 ألف")) == Counter({"thousand": 1})

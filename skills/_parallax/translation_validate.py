@@ -13,6 +13,7 @@ import math
 from pathlib import Path
 import re
 import sys
+import unicodedata
 
 
 FIELDS = {"th": "thai_translation", "zh": "chinese_translation",
@@ -75,7 +76,37 @@ _UNIT_COMPOUNDS = {
     "triệu": r"(?!\s*chứng\b)",
     "พัน": r"(?!ธ)",
     "千": r"(?![瓦克米])",
+    # مليونير / ملياردير are millionaire / billionaire; ألفية is millennium.
+    "مليون": r"(?!ير)",
+    "مليار": r"(?!دير)",
+    "ألف": r"(?!ية)",
 }
+
+# Arabic short vowels, shadda, sukun, dagger alif and tatweel do not change a
+# word, so they are removed before unit and currency matching (مِليون = مليون).
+# Maddah and hamza marks (U+0653-U+0655) stay: they are part of أ إ آ.
+_ARABIC_MARKS = dict.fromkeys([*range(0x064B, 0x0653), 0x0670, 0x0640])
+
+
+def _plain_arabic(text: str) -> str:
+    """Composed (NFC) form without the marks above, as the alias lists are written."""
+    return unicodedata.normalize("NFC", text).translate(_ARABIC_MARKS)
+# Arabic decimal point, thousands separator and percent sign.
+_ARABIC_NUMBER_PUNCT = str.maketrans({"\u066b": ".", "\u066c": ",", "\u066a": "%"})
+
+
+def _non_western_numerals(text: str) -> set[str]:
+    """Decimal digits other than 0-9, plus Arabic number punctuation."""
+    return {c for c in text if c in "\u066b\u066c\u066a" or (c.isdecimal() and c not in "0123456789")}
+
+
+def _western_digits(text: str) -> str:
+    """Arabic-Indic, full-width and other decimal digits as 0-9, so numbers
+    compare by value; the digit script is checked separately."""
+    if not any(c.isdecimal() and c not in "0123456789" for c in text):
+        return text.translate(_ARABIC_NUMBER_PUNCT)
+    return "".join(str(unicodedata.decimal(c)) if c.isdecimal() else c
+                   for c in text.translate(_ARABIC_NUMBER_PUNCT))
 
 
 def _literal_pattern(value: str) -> str:
@@ -98,6 +129,7 @@ def _literal_pattern(value: str) -> str:
 
 
 def _counts(text: str, aliases: dict) -> Counter:
+    text = _plain_arabic(text)
     pairs = sorted(((v, k) for k, vs in aliases.items() for v in vs),
                    key=lambda pair: len(pair[0]), reverse=True)
     pattern = re.compile("|".join(f"({_literal_pattern(v)})" for v, _ in pairs))
@@ -111,6 +143,7 @@ def _protected(text: str) -> Counter:
 
 
 def _units(text: str) -> Counter:
+    text = _western_digits(_plain_arabic(text))
     pairs = sorted(((v, k) for k, vs in UNITS.items() for v in vs),
                    key=lambda pair: len(pair[0]), reverse=True)
     units = "|".join(f"({_literal_pattern(v)})" for v, _ in pairs)
@@ -242,8 +275,8 @@ def _numbers_differ(before: str, after: str, lang: str) -> bool:
     (12.5% -> 12,5%; 1,234.5 -> 1.234,5) while tables keep the source form, so
     for vi-VN a translated token matches its source as written or swapped.
     Digits, signs, and order of magnitude must still match."""
-    left = Counter(re.findall(NUMBER, before))
-    right = re.findall(NUMBER, after)
+    left = Counter(re.findall(NUMBER, _western_digits(before)))
+    right = re.findall(NUMBER, _western_digits(after))
     if lang != "vi-VN":
         return left != Counter(right)
     for token in right:
@@ -288,6 +321,9 @@ def fidelity(source: dict, output: dict, translations: dict[str, str], lang: str
             errors.append(f"[INTEGRITY] [{key}] Source prose was copied without translation")
         if _numbers_differ(before, after, lang):
             errors.append(f"[INTEGRITY] [{key}] Numeric tokens differ from source")
+        if _non_western_numerals(after) - _non_western_numerals(before):
+            errors.append(f"[INTEGRITY] [{key}] Translation writes numerals in another script; "
+                          "keep the source numerals (Western digits 0-9, period decimal, comma thousands, %)")
         if _counts(before, CURRENCIES) - _counts(after, CURRENCIES):
             errors.append(f"[INTEGRITY] [{key}] Source currency identifiers missing or changed in translation")
         for label, left, right in (
