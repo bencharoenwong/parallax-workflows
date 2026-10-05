@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Rebuild .skill packages for upload to claude.ai.
 # Usage: ./build-skills.sh [--no-lint] [--normalize] [skill-name ...]
-# No args = build all KNOWN_SKILLS (general-release set).
+# No args = build all KNOWN_SKILLS (manifest `standalone: release` tier).
 #   --no-lint    skip lint/validation (emergencies only); the 200-char
 #                description cap on translate-*-finance still runs
 #   --normalize  rewrite SKILL.md frontmatter to spec-clean form first
@@ -14,12 +14,10 @@
 # workflow set ships to claude.ai via `_parallax/scripts/build_bundle.py web`
 # (see its docstring for how the two packagers split).
 #
-# Two skill tiers:
-#   KNOWN_SKILLS       — general-release skills, built by default (no-arg run).
-#   PRIVATE_BETA_SKILLS — limited-distribution skills. Build by name only;
-#                        never included in the no-arg default. A WARN line is
-#                        emitted on every explicit build to keep the operator
-#                        aware that the artifact is not for general release.
+# Tiers come from the `standalone` field in _parallax/manifest.json (see
+# STANDALONE_TIERS in _parallax/skill_manifest.py). Each package holds tracked
+# files only and must pass `build_bundle.py verify` before it is written; any
+# failed skill makes the run exit 1.
 #
 # Portable to bash 3.2 (macOS default — no associative arrays).
 set -euo pipefail
@@ -50,7 +48,7 @@ HELD_SKILLS=$(python3 ./_parallax/skill_manifest.py standalone held)
 in_list() {
   local name="$1" s
   shift
-  for s in $*; do
+  for s in "$@"; do
     if [[ "$s" == "$name" ]]; then
       return 0
     fi

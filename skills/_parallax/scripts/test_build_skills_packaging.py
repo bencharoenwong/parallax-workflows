@@ -1,6 +1,5 @@
 """build-skills.sh packaging: which skills build by default, what a package
 may contain, and that a failed package fails the run."""
-import json
 import os
 import shutil
 import subprocess
