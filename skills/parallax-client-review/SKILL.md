@@ -69,7 +69,7 @@ Validate holdings: RIC format (plain tickers → conventions §1), weights ~1.0.
 | `analyze_portfolio` | `portfolio=[{date, symbol, weight}]`, `fields=["performance_metrics","rolling_metrics","drawdown_analysis","portfolio_summary","time_period_returns"]` | Returns/risk. State the as-of date used. |
 | `analyze_portfolio` | same portfolio, `fields=["concentration_metrics","sector_allocation","company_contribution"]` | Concentration and attribution; two calls to stay under the 180K-char ceiling. |
 | `check_portfolio_redundancy` | `holdings` | Overlap; cross-checked against `sector_allocation` in Step 3. |
-| `get_peer_snapshot` | per holding, all in parallel | **Primary scoring source** (V2), aggregated per loader.md §3b. A timeout leaves the holding unscored; a successful call with no data for the listing is a coverage gap → `get_company_info` + `get_score_analysis` for that holding, labelled **profile-derived score**, with the same-scale guard in Step 3. |
+| `get_peer_snapshot` | per holding, all in parallel | **Primary scoring source** (V2), aggregated per loader.md §3b. A timeout leaves the holding unscored; a successful call with no data for the listing is a coverage gap → `get_company_info` + `get_score_analysis` for that holding, labeled **profile-derived score**, with the same-scale guard in Step 3. |
 | `get_company_info` | per holding, all in parallel | **Ground-truth oracle** (loader.md §5 rule 3); records `expected_name`. |
 | `list_macro_countries` | — | Coverage |
 | `macro_analyst` | `component="tactical"` per unique covered home market (cap 3) | Fired in the same turn, not after. |

@@ -6,9 +6,9 @@ Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[
 
 ## 2026-10-05: Translate skill descriptions carry a NOT-for clause and a 200-character cap
 
-**Why:** The translate skills need a negative trigger so they are not picked for writing new analysis or for unsupported languages. claude.ai caps skill descriptions at 200 characters, stricter than the spec's 1024, so the longer first draft of the clause risked a rejected or truncated upload.
+**Why:** The translate skills need a negative trigger so they are not picked for writing new analysis or for non-finance text. They also point Parallax reports to the analysis skill's `lang=`, because that hand-off passes the zh-HK variant, retail register and disclaimer check to the translator, and translating raw output afterwards loses them. An "other target languages" clause was dropped: no translate skill exists for every language, and plugin installs ship only zh and th. claude.ai caps skill descriptions at 200 characters, stricter than the spec's 1024, so the longer first draft of the clause risked a rejected or truncated upload.
 
-**Impact:** All four descriptions end with the same short NOT-for clause and fit in 200 characters. `build-skills.sh` enforces the cap for `translate-*-finance` only, and `--no-lint` cannot skip it.
+**Impact:** All four descriptions end with "For Parallax reports, use the analysis skill's lang=. NOT for new analysis or non-finance text." and fit in 200 characters. `build-skills.sh` enforces the cap for `translate-*-finance` only, and `--no-lint` cannot skip it.
 
 **Alternatives:**
 - [DROP] Apply the cap to every skill `build-skills.sh` packages. `parallax-cio-letter-prep` (private beta) has a longer description, so its explicit build and any mixed run would stop.

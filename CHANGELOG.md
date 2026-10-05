@@ -7,7 +7,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 ## 2026-10-05 (translate skill descriptions)
 
 ### Changed
-- `translate-{arabic,chinese,thai,vietnamese}-finance` descriptions end with "NOT for writing new analysis or other target languages." Each stays at or under 200 characters; the Vietnamese base sentence is shortened to fit.
+- `translate-{arabic,chinese,thai,vietnamese}-finance` descriptions end with "For Parallax reports, use the analysis skill's lang=. NOT for new analysis or non-finance text." The `lang=` hint points Parallax output to the analysis skills' hand-off, which passes the zh-HK variant, retail register and disclaimer check to the translator. The earlier "other target languages" clause is dropped: no translate skill exists for every language, and plugin installs ship only zh and th. All four base sentences are shortened so each description stays at or under the 200-character cap.
 - `build-skills.sh` fails before packaging when a `translate-*-finance` description exceeds claude.ai's 200-character cap. `--no-lint` does not skip this check. Other skills, including private-beta ones, build as before. Test: `skills/_parallax/scripts/test_build_skills_description_cap.py`.
 
 ## 2026-10-05 (Arabic text in the translation validator)
