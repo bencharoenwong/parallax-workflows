@@ -681,3 +681,42 @@ def test_web_build_succeeds_for_the_shortlist(tmp_path, monkeypatch):
     for name in bb.WEB_SKILLS:
         with zipfile.ZipFile(tmp_path / f"{name}.skill") as zf:
             assert f"{name}/SKILL.md" in zf.namelist()
+
+
+def test_rewrite_refs_handles_single_quoted_skill_dir():
+    text = "sys.path.insert(0, '<skill-dir>/../_parallax/white-label')"
+    out = bb.rewrite_refs(text)
+    assert "'<skill-dir>/_vendored/_parallax/white-label'" in out
+    assert bb.rewrite_refs(out) == out
+
+
+def test_web_resolution_check_rejects_unrewritten_skill_dir(tmp_path):
+    skill = tmp_path / "parallax-demo"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "run `python3 '<skill-dir>/../_parallax/x.py'`\n", encoding="utf-8")
+    with pytest.raises(bb.BuildError):
+        bb.web_resolution_check(skill)
+
+
+def test_missing_python_siblings_reports_an_unshipped_companion(tmp_path):
+    root = tmp_path / "parallax-demo" / "_vendored" / "_parallax" / "pkg"
+    root.mkdir(parents=True)
+    (root / "a.py").write_text(
+        'from pathlib import Path\nP = Path(__file__).with_name("b.py")\n', encoding="utf-8")
+    assert bb.missing_python_siblings(tmp_path / "parallax-demo") == ["_vendored/_parallax/pkg/b.py"]
+    (root / "b.py").write_text("x = 1\n", encoding="utf-8")
+    assert bb.missing_python_siblings(tmp_path / "parallax-demo") == []
+
+
+def test_web_rebalance_ships_only_the_white_label_files_it_uses(tmp_path, monkeypatch):
+    monkeypatch.setattr(bb, "WEB_OUT_DIR", tmp_path)
+    bb.build_web(["parallax-rebalance"])
+    with zipfile.ZipFile(tmp_path / "parallax-rebalance.skill") as zf:
+        names = zf.namelist()
+        docs = [zf.read(n).decode("utf-8") for n in names if n.endswith(".md")]
+    prefix = "parallax-rebalance/_vendored/_parallax/white-label/"
+    assert sorted(n[len(prefix):] for n in names if n.startswith(prefix)) == [
+        "integration-pattern.md", "loader.py", "rm_consumer.py", "schema.yaml"]
+    assert not any("/tests/" in n or "/extract/" in n for n in names)
+    assert not any("<skill-dir>/../_parallax" in d for d in docs)
