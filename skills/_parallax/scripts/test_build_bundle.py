@@ -255,6 +255,24 @@ def test_web_resolution_check_flags_an_excluded_meta_doc_ref(tmp_path):
         bb.web_resolution_check(skill)
 
 
+def test_web_resolution_check_does_not_skip_a_path_that_leaves_scripts(tmp_path):
+    skill = tmp_path / "parallax-demo"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "see `_vendored/_parallax/scripts/../missing-doc.md`\n", encoding="utf-8")
+    with pytest.raises(bb.BuildError):
+        bb.web_resolution_check(skill)
+
+
+def test_resolution_check_does_not_skip_a_path_that_leaves_scripts(tmp_path):
+    (tmp_path / "_parallax").mkdir()
+    (tmp_path / "parallax-demo").mkdir()
+    (tmp_path / "parallax-demo" / "SKILL.md").write_text(
+        "see `_parallax/scripts/../missing-doc.md`\n", encoding="utf-8")
+    with pytest.raises(bb.BuildError):
+        bb.resolution_check(tmp_path)
+
+
 def test_web_resolution_check_passes_when_vendored_ref_resolves(tmp_path):
     skill = tmp_path / "parallax-demo"
     (skill / "_vendored" / "_parallax").mkdir(parents=True)

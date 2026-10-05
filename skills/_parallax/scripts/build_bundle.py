@@ -32,6 +32,7 @@ import argparse
 import importlib.util
 import json
 import os
+import posixpath
 import re
 import shutil
 import subprocess
@@ -742,7 +743,7 @@ def web_resolution_check(skill_root: Path) -> None:
         for ref in sorted({m.group(0) for m in REF_VENDORED.finditer(text)}):
             # _parallax/scripts/ is author-time repo tooling (lints, the bundler
             # itself) — never bundled by design, so a ref to it is not a break.
-            if ref.startswith("_vendored/_parallax/scripts/"):
+            if posixpath.normpath(ref).startswith("_vendored/_parallax/scripts/"):
                 continue
             if not (skill_root / ref).exists():
                 failures.append(f"{doc.relative_to(skill_root)}: {ref}")
@@ -796,7 +797,7 @@ def resolution_check(skills_root: Path) -> None:
         for ref in set(REF_PARALLAX.findall(text)):
             # _parallax/scripts/ is author-time repo tooling (lints, the bundler
             # itself) — never bundled by design, so a ref to it is not a break.
-            if ref.startswith("_parallax/scripts/"):
+            if posixpath.normpath(ref).startswith("_parallax/scripts/"):
                 continue
             if not _resolve_parallax_ref(skills_root, ref):
                 failures.append(f"{where}: {ref}")
