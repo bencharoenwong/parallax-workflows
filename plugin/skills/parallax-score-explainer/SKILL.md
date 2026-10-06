@@ -17,7 +17,7 @@ description: "Explain Parallax scores, factors, and methodology in plain languag
 
 - Expected Parallax spend: 0–2 tokens (`_parallax/token-costs.md`): methodology-only questions are free; score data adds 1–2. `get_stock_report` (10, paid) only when a comprehensive explanation is explicitly needed.
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §4 fallbacks, §11 (this skill's "What Would Change It" line is the grandfathered form), §13 audience mode, §14 host primitives, §15 translation.
-- `explain_methodology` takes a topic string — be specific ("quality score", "momentum factor"). `get_docs` / `list_docs` reach the full methodology documentation. `get_score_analysis` shows the trajectory — the tool for "why did this change".
+- `explain_methodology` takes a `concept` parameter restricted to a fixed enum — `value`, `quality`, `momentum`, `defensive`, `tactical`, `overall`, `scoring`, `factor_weighting` (plus aliases `total`→overall, `composite`→overall, `scores`→scoring, `weights`→factor_weighting). Pick the exact concept name, not a free-text phrase like "quality score" — an unmatched string returns `{success:false, error:"Unknown concept..."}`, not a fuzzy match. `get_docs` / `list_docs` reach the full methodology documentation. `get_score_analysis` shows the trajectory — the tool for "why did this change".
 - Output must be readable by non-technical clients and compliance teams; this is the likeliest `register=retail` consumer.
 - Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
 - Not a house-view consumer: no loader step, no audit row.
@@ -113,7 +113,7 @@ Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 ## Failure modes
 
 - Symbol given but unresolvable: answer the methodology part of the question (branch b) and state that the symbol-specific part could not be resolved.
-- `explain_methodology` returns nothing for a topic: fall back to `list_docs` → `get_docs`; if still nothing, say the methodology page was not found rather than paraphrasing from memory.
+- `explain_methodology` returns an error payload (`{success:false, error:"Unknown concept..."}`), not nothing, when `concept` doesn't match a known value: fall back to `list_docs` → `get_docs`; if still nothing, say the methodology page was not found rather than paraphrasing from memory.
 - `get_news_synthesis` pending in branch (c): render the trajectory explanation and mark the catalyst check pending (conventions §5).
 - Host lacks a primitive: conventions §14.3, per primitive.
 
