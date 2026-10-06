@@ -70,9 +70,11 @@ build_one() {
     echo "  ✗ $name: directory not found, skipping" >&2
     return 1
   fi
+  # shellcheck disable=SC2086  # split the space-separated tier list on purpose
   if in_list "$name" $PRIVATE_BETA_SKILLS; then
     echo "  WARN: building private-beta skill '$name' — not for general release" >&2
   fi
+  # shellcheck disable=SC2086  # split the space-separated tier list on purpose
   if in_list "$name" $HELD_SKILLS; then
     echo "  WARN: building held skill '$name' — awaiting native review, not for distribution" >&2
   fi
