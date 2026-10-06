@@ -63,10 +63,12 @@ Resolve the RIC per conventions §1 (suffix table).
 | `get_company_info` | `symbol` | Sector, market cap, for peer group selection |
 | `get_peer_snapshot` | `symbol` | Factor sub-scores (Value used as backup check) |
 | `get_financials` | `symbol`, `statement=balance_sheet` | Cash, total debt, equity (4 periods default) |
-| `get_financials` | `symbol`, `statement=cash_flow` | FCF across 4 periods (default) |
-| `get_financials` | `symbol`, `statement=ratios` | D/E, P/E, peer medians where available (4 periods default) |
+| `get_financials` | `symbol`, `statement=cash_flow` | Operating cash flow and capex across 4 periods (default) — see FCF derivation below |
+| `get_financials` | `symbol`, `statement=ratios` | D/E, P/E — target-only; no peer-median field (4 periods default; see Check 2) |
 
 Rely on the 4-period server default, or pass a typed integer at the call site (conventions §0.2).
+
+The `cash_flow` response has no `fcf`/`free_cash_flow` field. Derive it: `FCF = cash_from_operating_activities + capital_expenditures` — `capital_expenditures` is already signed negative, so this is a sum, not a subtraction.
 
 ### Step 3 — Verify
 
@@ -79,11 +81,11 @@ Error: Symbol cross-validation failed for <ticker>.
 Cannot render Klarman-style profile — possible wrong-company mapping (see parallax-conventions.md §2).
 ```
 
-Fewer than 4 periods: compute on what is available (minimum 2) and flag the coverage loss; no peer median: absolute thresholds with the note; all four checks unavailable → `DATA_UNAVAILABLE`, never a false `no_match`.
+Fewer than 4 periods: compute on what is available (minimum 2) and flag the coverage loss; Check 2 always runs on the absolute D/E threshold with the "Peer comparison unavailable" note (no tool in the sequence ever supplies a peer-median D/E — see Step 4); all four checks unavailable → `DATA_UNAVAILABLE`, never a false `no_match`.
 
 ### Step 4 — Compute
 
-The four checks: **1 Net cash** — (cash − total debt) / market cap: PASS ≥ 0, PARTIAL ≥ −0.2, FAIL < −0.2. **2 Debt vs peers** — D/E ≤ peer median × 1.1 PASS, else FAIL (no peer median → absolute D/E < 1.0 with "Peer comparison unavailable"). **3 FCF stability** — positive FCF periods of 4: PASS ≥ 3, PARTIAL 2, FAIL ≤ 1. **4 Valuation discount** — P/E vs peer median (P/B fallback on negative earnings): PASS ≤ × 0.85, PARTIAL ≤ × 1.0, FAIL above. **Backup** — Parallax Value ≥ 4; below 4 flag "⚠️ Parallax Value sub-score suggests valuation may not be attractive even if peer-relative metrics pass". Verdict with N = PASS count: N ≥ 3 and Value ≥ 4 → `match`; N ≥ 3 and Value < 4 → `partial_match` (flag "strong balance sheet but absolute Parallax Value below backup threshold — intangibles-era calibration caveat applies"); N = 2 → `partial_match`; N ≤ 1 → `no_match`; N = 0 and Value < 4 → append *"No position warranted on this ticker per margin-of-safety principles. Cash is a valid stance."*
+The four checks: **1 Net cash** — (cash − total debt) / market cap: PASS ≥ 0, PARTIAL ≥ −0.2, FAIL < −0.2. **2 Debt vs peers** — no tool in this workflow's `tool_sequence` ever supplies a peer-median D/E: `get_financials(ratios)` is target-only (no peer field at all), and `get_peer_snapshot.comparison[]` carries factor scores and `pe_ratio`, not a debt field. So this check always runs on the absolute fallback, every run, not as an occasional degradation: D/E < 1.0 PASS, else FAIL, rendered with the note "Peer comparison unavailable." **3 FCF stability** — positive FCF periods of 4: PASS ≥ 3, PARTIAL 2, FAIL ≤ 1. **4 Valuation discount** — P/E vs peer median (P/B fallback on negative earnings): PASS ≤ × 0.85, PARTIAL ≤ × 1.0, FAIL above. **Backup** — Parallax Value ≥ 4; below 4 flag "⚠️ Parallax Value sub-score suggests valuation may not be attractive even if peer-relative metrics pass". Verdict with N = PASS count: N ≥ 3 and Value ≥ 4 → `match`; N ≥ 3 and Value < 4 → `partial_match` (flag "strong balance sheet but absolute Parallax Value below backup threshold — intangibles-era calibration caveat applies"); N = 2 → `partial_match`; N ≤ 1 → `no_match`; N = 0 and Value < 4 → append *"No position warranted on this ticker per margin-of-safety principles. Cash is a valid stance."*
 
 ### Step 5 — Compose (render through the output template)
 
@@ -98,7 +100,7 @@ Klarman's framework prioritizes survival over return: balance-sheet strength, do
 | Check                        | Target                    | Actual              | Result  |
 |------------------------------|---------------------------|---------------------|---------|
 | Net cash position            | Net cash ratio ≥ 0        | <value>             | PASS/PARTIAL/FAIL |
-| Debt vs peer median          | D/E ≤ peer median × 1.1   | <value> vs <peer>   | PASS/FAIL |
+| Debt vs peers (absolute only — peer comparison unavailable) | D/E < 1.0 | <value>   | PASS/FAIL |
 | FCF stability                | Positive ≥ 3 of 4 periods | <count> of 4        | PASS/PARTIAL/FAIL |
 | Valuation discount           | P/E ≤ peer median × 0.85  | <value> vs <peer>   | PASS/PARTIAL/FAIL |
 
@@ -142,7 +144,7 @@ Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 ## Failure modes
 
 
-If balance-sheet data is unavailable for 4 periods, compute the checks on whatever is available (minimum 2 periods) and flag the coverage loss. If peer-median data is unavailable, skip the debt-vs-peers check and note "Peer comparison unavailable — absolute thresholds applied." If all four checks fail due to missing data, return `DATA_UNAVAILABLE` rather than a false `no_match`.
+If balance-sheet data is unavailable for 4 periods, compute the checks on whatever is available (minimum 2 periods) and flag the coverage loss. The debt-vs-peers check always runs on the absolute threshold with the note "Peer comparison unavailable — absolute thresholds applied" — no tool in this skill's tool_sequence ever supplies a peer-median D/E, so this is the permanent behavior, not a degraded fallback. If all four checks fail due to missing data, return `DATA_UNAVAILABLE` rather than a false `no_match`.
 
 
 ## Done when
