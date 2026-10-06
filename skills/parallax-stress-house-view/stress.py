@@ -316,6 +316,39 @@ def evaluate_internal_rules(view: View, rules_path: Path) -> List[RuleResult]:
         
     return results
 
+def compute_parallax_age_days(
+    mcp_responses: Dict[str, Any],
+    now: Optional[datetime.date] = None,
+) -> int:
+    """Max staleness (days) across Step 2 MCP responses' own `report_date`.
+
+    Mirrors `judge.py`'s `_parallax_age_days` exactly — this skill and the
+    judge must not disagree about what "Parallax data age" means.
+    `check_macro_health` carries no freshness timestamp (it is deprecated
+    and returns only `{success, markets, market_count}`), so age is read
+    from each response's own `report_date` (set by `macro_analyst`) instead.
+    Missing dates count as 0 — we cannot prove staleness when a response
+    omits the field, so 0 is treated as "fresh" by `compute_age_delta`
+    below, matching judge.py's semantics.
+    """
+    today = now if now is not None else datetime.date.today()
+    best = 0
+    for resp in mcp_responses.values():
+        if not isinstance(resp, dict):
+            continue
+        report_date = resp.get("report_date") or resp.get("data_as_of")
+        if not report_date:
+            continue
+        try:
+            d = datetime.date.fromisoformat(str(report_date)[:10])
+        except (TypeError, ValueError):
+            continue
+        age = (today - d).days
+        if age > best:
+            best = age
+    return best
+
+
 def compute_age_delta(cio_age_days: int, parallax_age_days: Optional[int]) -> str:
     """Computes the age delta classification."""
     if parallax_age_days is None:

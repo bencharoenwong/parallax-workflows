@@ -18,7 +18,7 @@ description: "Country or region equity discovery: which equities screen stronges
 - Expected Parallax spend: ~29 tokens (`_parallax/token-costs.md`): one macro summary + universe + 5 snapshots + 5 info checks + 3 score trends.
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.2 named-parameter discipline (`build_stock_universe(query=…)`, `macro_analyst(market=…)` with no `component`), §2 identity cross-check, §3 parallel execution, §4 fallbacks, §12 framing, §14 host primitives.
 - JIT-load `_parallax/house-view/loader.md` UNCONDITIONALLY: §5 rule 3, rule 6 and §6 apply with or without a view. With a view: §3 multipliers bias the Top Opportunities ranking (region/sector tilts) and §5 rendering applies; the country's own macro narrative is sovereign and untouched. Boundary with /parallax-macro-outlook: that skill's census is untilted by design — do not "harmonize" the two contracts.
-- Smaller markets may have fewer scored equities; `check_macro_health` confirms macro coverage.
+- Smaller markets may have fewer scored equities; `list_macro_countries` confirms macro coverage (`check_macro_health` is DEPRECATED per its own tool description and returns the same markets list at the same cost — do not call both).
 - Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report, with the unconditional currency line).
 
 Macro + equity opportunity analysis for a specific country or region.
@@ -52,14 +52,14 @@ The market name must match `list_macro_countries` verbatim; a region maps to its
 
 ### Step 2 — Fetch (parallel batches)
 
-**Batch A** — `call-tool` together: `list_macro_countries`; `check_macro_health`; `build_stock_universe(query="[country] equities")`.
+**Batch A** — `call-tool` together: `list_macro_countries`; `build_stock_universe(query="[country] equities")`.
 
 **Batch B** — after A: `macro_analyst(market="[country]")` summary mode (no `component`; all components inline); for the top N universe results, `get_peer_snapshot` AND `get_company_info` per symbol together; for the top 3, `get_score_analysis` with `weeks` as int 26.
 
 ### Step 3 — Verify
 
 - Coverage: an uncovered market is stated under Country Overview; no `macro_analyst` call for it.
-- Identity per loader.md §5 rule 3 / conventions §2: `get_peer_snapshot.target_company` vs `get_company_info.name`; on mismatch flag ⚠ MISMATCH and recover from the `comparison[]` row whose `symbol` matches, else "scores unavailable"; never rank a mismatched score.
+- Identity per loader.md §5 rule 3 / conventions §2: `get_peer_snapshot.target_company` vs `get_company_info.data.name` (the identity fields live under a top-level `data` object, not bare — live probe confirms no top-level `name`); on mismatch flag ⚠ MISMATCH and recover from the `comparison[]` row whose `symbol` matches, else "scores unavailable"; never rank a mismatched score.
 
 ### Step 4 — Compute
 

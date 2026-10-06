@@ -18,7 +18,7 @@ description: "Full macro regime analysis with optional equity screening: country
 
 ## Gotchas
 
-- Expected Parallax spend: ~46 tokens with `equities=true`, ~28 without (`_parallax/token-costs.md`); `check_macro_health` is 5 of that.
+- Expected Parallax spend: ~46 tokens with `equities=true`, ~28 without (`_parallax/token-costs.md`). This skill no longer calls `check_macro_health` (DEPRECATED per its own tool description, and `list_macro_countries` already covers the coverage check).
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.2 (`macro_analyst` takes `market`; summary mode returns all components inline — never per-component calls), §2 identity cross-check, §3 parallel execution, §4 fallbacks, §13 audience mode, §14 host primitives.
 - JIT-load `_parallax/house-view/loader.md` UNCONDITIONALLY: §5 rule 3 (ground-truth), rule 6 (AI disclosure) and §6 (audit) apply with or without a view. This skill answers the regime question, so neither §3 multipliers nor §7 apply: the macro narrative reflects live data and the optional equity census is **deliberately untilted** (tilted discovery is /parallax-country-deep-dive's job). Regime-alignment mode (this skill's own §7.4): when the view's stated regime conflicts with live `get_telemetry.regime_tag`, render `View regime: <X> | Live regime: <Y>` directly under the preamble; live wins for the narrative.
 - Smaller/EM markets may have fewer scored equities — set expectations. ETFs are not in the scoring universe.
@@ -59,7 +59,7 @@ Market names must match `list_macro_countries` verbatim (conventions §0.2); a b
 
 ### Step 2 — Fetch (parallel batches)
 
-**Batch A** — `call-tool` together: `list_macro_countries`; `check_macro_health`; `get_telemetry` (fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences).
+**Batch A** — `call-tool` together: `list_macro_countries`; `get_telemetry` (fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences).
 
 **Batch B** — after A: `macro_analyst(market=<country>)` in summary mode (all components inline); `get_score_analysis` for the bellwether. Repeat per market when comparing.
 
@@ -68,8 +68,8 @@ Market names must match `list_macro_countries` verbatim (conventions §0.2); a b
 ### Step 3 — Verify
 
 - Coverage: a market absent from `list_macro_countries` is reported as not covered; no `macro_analyst` call for it.
-- Freshness: `check_macro_health` result drives the Data Freshness section; stale data is stated, not hidden.
-- Batch C identity per loader.md §5 rule 3 / conventions §2: `get_peer_snapshot.target_company` vs `get_company_info.name`; ⚠ MISMATCH rows recover per rule 3 or read "scores unavailable".
+- Freshness: `check_macro_health` is DEPRECATED and carries no freshness timestamp (live response is only `{success, markets, market_count}`) — Data Freshness is driven by Batch B's own `macro_analyst.report_date` per queried market instead; stale data is stated, not hidden; if `report_date` is absent from the response, state freshness as unavailable rather than guessing.
+- Batch C identity per loader.md §5 rule 3 / conventions §2: `get_peer_snapshot.target_company` vs `get_company_info.data.name` (the identity fields live under a top-level `data` object, not bare — live probe confirms no top-level `name`); ⚠ MISMATCH rows recover per rule 3 or read "scores unavailable".
 
 ### Step 4 — Compute
 
@@ -118,7 +118,7 @@ If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwis
 ## Failure modes
 
 - Market not covered: say so under Regime Status and stop the macro depth for that market; other markets still render.
-- `check_macro_health` reports stale data: Data Freshness states the date; the analysis proceeds with the caveat.
+- `macro_analyst.report_date` is stale or absent: Data Freshness states the date (or "unavailable" if absent); the analysis proceeds with the caveat.
 - `get_telemetry` unavailable: Regime Status renders from `macro_analyst` only and says the regime tag was unavailable; the §7.4 check is skipped.
 - Equity census unavailable or thin: Top Equity Opportunities states the coverage limit.
 - House-view banner states `malformed` / `expired` / `critical`: the banner renders verbatim (conventions §0.3 item 4).
@@ -127,7 +127,7 @@ If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwis
 ## Done when
 
 - First line is `## Regime Status` or the House View Preamble / Branding Header; every Output Format section rendered or marked unavailable with its reason.
-- Data Freshness carries the `check_macro_health` date; the census (when requested) is untilted and every ⚠ MISMATCH row is marked.
+- Data Freshness carries each queried market's `macro_analyst.report_date` (or states it as unavailable); the census (when requested) is untilted and every ⚠ MISMATCH row is marked.
 - When a view is active: the `view_status` banner appears verbatim and the §7.4 line renders when regimes diverge.
 - Audit entry appended per loader.md §6 (every run, including no-view).
 - The render gate ran and the reply is its stdout (or the §14.3 note is present in About This Report).

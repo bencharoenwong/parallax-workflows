@@ -32,7 +32,7 @@ Report-producer shape: the spine headings below. The four phases in `skills/_par
 
 1. Resolve every `_parallax/...` path named in this file to the canonical copy (conventions §0.0 item 1).
 2. `load-reference` `_parallax/house-view/stress-test-design.md`, `_parallax/house-view/schema.yaml`, `_parallax/house-view/loader.md`, `_parallax/parallax-conventions.md`.
-3. `discover-tools`: bind `list_macro_countries`, `check_macro_health`, `get_telemetry`, `macro_analyst` to the exact callables and schemas exposed now (conventions §0.0–§0.1).
+3. `discover-tools`: bind `list_macro_countries`, `get_telemetry`, `macro_analyst` to the exact callables and schemas exposed now (conventions §0.0–§0.1).
    <!-- host-note -->
    Claude Code: `ToolSearch` with query `"+Parallax"` once before the first Parallax call; `ask-operator` = `AskUserQuestion`; `run-shell` = `Bash`.
    <!-- /host-note -->
@@ -47,11 +47,11 @@ Report-producer shape: the spine headings below. The four phases in `skills/_par
 ### Step 2 — Fetch (parallel batches)
 
 1. **Market fan-out cap** — `stress.enforce_fanout_cap()` on the tilted markets from Step 1. Over the cap (12): `ask-operator` with the three choices from the design doc (stress all in batches, top-12, or cancel).
-2. **Batch** — `call-tool` `list_macro_countries` once (the `covered_markets` set for Step 3), `check_macro_health` once globally, and per market together: `get_telemetry` and `macro_analyst` (summary). A view with macro tilts but no region tilts falls back to the primary market (per design doc).
+2. **Batch** — `call-tool` `list_macro_countries` once (the `covered_markets` set for Step 3) and `get_telemetry` once globally (its queried fields — `regime_tag`, `signals`, `commentary`, `divergences` — are global, not per-market; `check_macro_health` is DEPRECATED and dropped — `list_macro_countries` already gives the coverage signal), then per market: `macro_analyst` (summary). A view with macro tilts but no region tilts falls back to the primary market (per design doc).
 
 ### Step 3 — Verify (Closure 2: response meta-state)
 
-    - For each MCP response returned from the Step 2 batch, call `stress.classify_mcp_meta_state(response, market, covered_markets)` where `covered_markets` is the set of market names from `list_macro_countries`.
+    - For each market's `macro_analyst` response from the Step 2 batch, call `stress.classify_mcp_meta_state(response, market, covered_markets)` where `covered_markets` is the set of market names from `list_macro_countries`. The single global `get_telemetry` response is classified once (its one call either succeeds or fails for every market, since it carries no market parameter); reuse that one state for every market's telemetry-sourced dimensions rather than reclassifying per market.
     - The returned state is one of `"ok"`, `"PARALLAX_SILENT"`, `"UNCOVERED"`, `"UNREACHABLE"`.
     - If state ≠ `"ok"`, propagate that state into every (market × dim) cell resolution for this market — skip per-dim prose interpretation.
     - If state == `"ok"`, proceed with per-dim prose→sign interpretation as today before passing `parallax_view` to `resolve_cell_state`.
@@ -59,7 +59,7 @@ Report-producer shape: the spine headings below. The four phases in `skills/_par
 ### Step 4 — Compute
 
 1. **Resolve cell states**
-    - Compute the age delta ONCE per run: `age_delta = stress.compute_age_delta(cio_age_days, parallax_age_days)` (where `cio_age_days = today − view.metadata.effective_date` and `parallax_age_days = today − check_macro_health.last_updated`).
+    - Compute the age delta ONCE per run: `age_delta = stress.compute_age_delta(cio_age_days, parallax_age_days)` (where `cio_age_days = today − view.metadata.effective_date` and `parallax_age_days = stress.compute_parallax_age_days(step2_responses)` — the max staleness across the Step 2 `macro_analyst` responses' own `report_date` fields, mirroring `judge.py`'s `_parallax_age_days`. `check_macro_health` carries no freshness timestamp and is not used here).
     - For each (market, dimension) pair, invoke `stress.resolve_cell_state(cio_tilt, parallax_view, age_delta, market=<key>, covered_markets=<set from list_macro_countries>)`. `age_delta` is a required positional argument — there is no internal default; passing the wrong value silently misclassifies every cell.
     - The result will be one of the six states: `ALIGNED`, `DIVERGENT_STALE`, `DIVERGENT_FRESH`, `CIO_SILENT`, `PARALLAX_SILENT`, `UNCOVERED`.
 2.  **Synthesize Themes**:
