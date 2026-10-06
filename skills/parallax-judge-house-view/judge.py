@@ -230,15 +230,18 @@ def _view_age_days(view_data: dict[str, Any], now: datetime.datetime) -> int:
     return max(0, delta.days)
 
 
-def _parallax_age_days(mcp_responses: dict[str, Any], now: datetime.datetime) -> int:
+def _parallax_age_days(
+    mcp_responses: dict[str, Any], now: datetime.datetime
+) -> int | None:
     """Max staleness across MCP responses. Mirrors stress's semantics.
 
     Each response may carry a ``report_date`` (YYYY-MM-DD) per the
-    inventory; we compute (now.date() - report_date).days. Missing
-    dates count as 0 (we cannot prove staleness if the response omits
-    the field).
+    inventory; we compute (now.date() - report_date).days. Responses
+    without a parseable date are skipped. Returns None when no response
+    carries one, so ``stress.compute_age_delta`` classifies the run as
+    "unverifiable" rather than fresh.
     """
-    best = 0
+    best: int | None = None
     for _, resp in mcp_responses.items():
         if not isinstance(resp, dict):
             continue
@@ -246,11 +249,11 @@ def _parallax_age_days(mcp_responses: dict[str, Any], now: datetime.datetime) ->
         if not report_date:
             continue
         try:
-            d = datetime.date.fromisoformat(report_date[:10])
+            d = datetime.date.fromisoformat(str(report_date)[:10])
         except (TypeError, ValueError):
             continue
         age = (now.date() - d).days
-        if age > best:
+        if best is None or age > best:
             best = age
     return best
 
@@ -525,7 +528,7 @@ def _summarize_parallax(value: Any) -> str:
 def phase_4_build_deltas(
     resolutions: list[dict[str, Any]],
     cio_age_days: int,
-    parallax_age_days: int,
+    parallax_age_days: int | None,
 ) -> list[dict[str, Any]]:
     """Reuse stress.build_recommended_deltas with include_fresh=True.
 
@@ -687,7 +690,7 @@ def phase_6_render_and_phase_7_audit(
     recommendations: list[dict[str, Any]],
     deltas: list[dict[str, Any]],
     view_age_days: int,
-    parallax_age_days: int,
+    parallax_age_days: int | None,
     mcp_responses: dict[str, Any],
     judged_at: datetime.datetime,
 ) -> tuple[Path, dict[str, Any], str]:

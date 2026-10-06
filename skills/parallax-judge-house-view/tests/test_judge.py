@@ -598,3 +598,39 @@ def test_view_changed_guards_share_a_catchable_base():
 def test_auto_on_load_threshold_is_at_or_past_30_days(age, expected):
     import cadence
     assert cadence.should_run_auto_on_load(age) is expected
+
+
+def test_undated_responses_make_parallax_age_unverifiable(
+    active_view_dir: Path,
+    report_dir: Path,
+    fresh_divergent_responses: dict,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A stale view judged against responses with no report_date must not
+    be classed DIVERGENT_STALE: the missing date proves no freshness."""
+    chain_dir = tmp_path / "chains"
+    monkeypatch.setattr("chain_emit.DEFAULT_CHAIN_DIR", chain_dir)
+    undated = {
+        k: {f: v for f, v in r.items() if f not in ("report_date", "data_as_of")}
+        if isinstance(r, dict) else r
+        for k, r in fresh_divergent_responses.items()
+    }
+
+    config = judge.JudgeConfig(
+        dry=True,
+        mock_mcp_responses=undated,
+        explicit=True,
+        view_dir=active_view_dir,
+        report_dir=report_dir,
+    )
+    result = judge.run_judge(config=config)
+
+    assert result.audit_entry["view_age_days"] > stress.STALE_THRESHOLD_DAYS
+    assert result.audit_entry["parallax_age_days"] is None
+    states = {r["state"] for r in result.resolutions}
+    assert "DIVERGENT_STALE" not in states
+    assert "DIVERGENT_FRESH" in states
+    assert json.loads(result.json_payload)["parallax_age_days"] is None
+    report = (result.report_dir / "report.md").read_text()
+    assert "**Parallax Age:** unverifiable" in report

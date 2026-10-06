@@ -93,6 +93,8 @@ When `mock_mcp_responses` is provided (via `--mock-mcp <path>` or programmatic i
 
 #### Step 4a — Per-cell diff (Phase 2)
 
+Compute `age_delta = stress.compute_age_delta(view_age_days, judge._parallax_age_days(mcp_responses, now))`. `_parallax_age_days` is the max staleness across the MCP responses' own `report_date`/`data_as_of` fields. It returns `None` when no response carries a parseable date, so `age_delta` is `"unverifiable"` and no cell is classed `DIVERGENT_STALE`; `parallax_age_days` is then `null` in the audit row and JSON sidecar.
+
 For each non-zero cell in the active view (enumerated via `stress.enumerate_dimensions`), call `stress.resolve_cell_state(cio_tilt, parallax_view, age_delta, market=..., covered_markets=...)`. States:
 
 - `ALIGNED`

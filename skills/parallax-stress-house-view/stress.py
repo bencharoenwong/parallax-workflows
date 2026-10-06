@@ -319,7 +319,7 @@ def evaluate_internal_rules(view: View, rules_path: Path) -> List[RuleResult]:
 def compute_parallax_age_days(
     mcp_responses: Dict[str, Any],
     now: Optional[datetime.date] = None,
-) -> int:
+) -> Optional[int]:
     """Max staleness (days) across Step 2 MCP responses' own `report_date`.
 
     Mirrors `judge.py`'s `_parallax_age_days` exactly — this skill and the
@@ -328,12 +328,12 @@ def compute_parallax_age_days(
     and returns `{success, markets, service, status}` -- no
     `report_date`/`last_updated` field), so age is read
     from each response's own `report_date` (set by `macro_analyst`) instead.
-    Missing dates count as 0 — we cannot prove staleness when a response
-    omits the field, so 0 is treated as "fresh" by `compute_age_delta`
-    below, matching judge.py's semantics.
+    Responses without a parseable `report_date`/`data_as_of` are skipped.
+    Returns None when no response carries one, so `compute_age_delta`
+    below classifies the run as "unverifiable" rather than fresh.
     """
     today = now if now is not None else datetime.date.today()
-    best = 0
+    best: Optional[int] = None
     for resp in mcp_responses.values():
         if not isinstance(resp, dict):
             continue
@@ -345,7 +345,7 @@ def compute_parallax_age_days(
         except (TypeError, ValueError):
             continue
         age = (today - d).days
-        if age > best:
+        if best is None or age > best:
             best = age
     return best
 
@@ -413,7 +413,7 @@ def enforce_fanout_cap(tilted_markets: List[str], cap: int = FANOUT_CAP) -> List
 def build_recommended_deltas(
     resolutions: List[Dict[str, Any]],
     cio_age_days: int,
-    parallax_age_days: int,
+    parallax_age_days: Optional[int],
     include_fresh: bool = False,
 ) -> List[Dict[str, Any]]:
     """Turn DIVERGENT cell resolutions into a list of recommended deltas.

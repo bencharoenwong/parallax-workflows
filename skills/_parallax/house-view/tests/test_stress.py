@@ -1328,3 +1328,27 @@ def test_fragile_extraction_reference_removed():
         if "fragile_extraction" in content:
             offenders.append(str(path.relative_to(_REPO_ROOT)))
     assert not offenders, f"fragile_extraction still referenced in: {offenders}"
+
+
+def test_compute_parallax_age_days_none_without_dated_response():
+    """No parseable report_date/data_as_of → None → "unverifiable", not stale."""
+    today = datetime.date(2026, 10, 6)
+    responses = {
+        "macro_analyst:United_States:tactical": {"content": "...", "success": True},
+        "macro_analyst:Japan:tactical": {"report_date": "not-a-date"},
+        "get_telemetry:commentary": "raw string",
+    }
+    age = stress.compute_parallax_age_days(responses, now=today)
+    assert age is None
+    assert stress.compute_age_delta(45, age) == "unverifiable"
+    assert stress.resolve_cell_state(1, -1, stress.compute_age_delta(45, age)) == "DIVERGENT_FRESH"
+
+
+def test_compute_parallax_age_days_takes_max_over_dated_responses():
+    today = datetime.date(2026, 10, 6)
+    responses = {
+        "a": {"report_date": "2026-10-04"},
+        "b": {"data_as_of": "2026-09-26T00:00:00Z"},
+        "c": {"content": "undated"},
+    }
+    assert stress.compute_parallax_age_days(responses, now=today) == 10

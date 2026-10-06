@@ -59,7 +59,7 @@ Report-producer shape: the spine headings below. The four phases in `skills/_par
 ### Step 4 — Compute
 
 1. **Resolve cell states**
-    - Compute the age delta ONCE per run: `age_delta = stress.compute_age_delta(cio_age_days, parallax_age_days)` (where `cio_age_days = today − view.metadata.effective_date` and `parallax_age_days = stress.compute_parallax_age_days(step2_responses)` — the max staleness across the Step 2 `macro_analyst` responses' own `report_date` fields, mirroring `judge.py`'s `_parallax_age_days`. `check_macro_health` carries no freshness timestamp and is not used here).
+    - Compute the age delta ONCE per run: `age_delta = stress.compute_age_delta(cio_age_days, parallax_age_days)` (where `cio_age_days = today − view.metadata.effective_date` and `parallax_age_days = stress.compute_parallax_age_days(step2_responses)` — the max staleness across the Step 2 `macro_analyst` responses' own `report_date` fields, mirroring `judge.py`'s `_parallax_age_days`. It returns `None` when no Step 2 response carries a parseable `report_date`/`data_as_of`, which makes `age_delta` `"unverifiable"` so no cell is classed `DIVERGENT_STALE`. `check_macro_health` carries no freshness timestamp and is not used here).
     - For each (market, dimension) pair, invoke `stress.resolve_cell_state(cio_tilt, parallax_view, age_delta, market=<key>, covered_markets=<set from list_macro_countries>)`. `age_delta` is a required positional argument — there is no internal default; passing the wrong value silently misclassifies every cell.
     - The result will be one of the six states: `ALIGNED`, `DIVERGENT_STALE`, `DIVERGENT_FRESH`, `CIO_SILENT`, `PARALLAX_SILENT`, `UNCOVERED`.
 2.  **Synthesize Themes**:

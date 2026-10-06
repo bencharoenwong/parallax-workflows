@@ -70,7 +70,7 @@ def render_markdown_report(
     judged_view_id: str,
     judged_version_id: str,
     view_age_days: int,
-    parallax_age_days: int,
+    parallax_age_days: int | None,
     severity: str,
     severity_details: dict[str, Any],
     drift_summary: dict[str, int],
@@ -97,7 +97,11 @@ def render_markdown_report(
         f"**Judged At:** {_isoformat(judged_at)}  ",
         f"**Trigger:** `{trigger}`  ",
         f"**View Age:** {view_age_days} day(s)  ",
-        f"**Parallax Age:** {parallax_age_days} day(s)  ",
+        (
+            f"**Parallax Age:** {parallax_age_days} day(s)  "
+            if parallax_age_days is not None
+            else "**Parallax Age:** unverifiable (no dated response)  "
+        ),
         "",
         "---",
         "",
@@ -200,7 +204,7 @@ def render_json_sidecar(
     judged_view_id: str,
     judged_version_id: str,
     view_age_days: int,
-    parallax_age_days: int,
+    parallax_age_days: int | None,
     severity: str,
     severity_details: dict[str, Any],
     drift_summary: dict[str, int],
