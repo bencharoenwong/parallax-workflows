@@ -295,7 +295,7 @@ Options (mirrors autoplan, adapted to a view update):
 | Active view loading | `~/.parallax/active-house-view/view.yaml` + loader.md | yes |
 | Audit append + hash chain | `audit_chain.append_entry()` | yes (new `action` value) |
 | Restore / version archive | `.archive/<view_id>-<version_id>/` | yes (no extra work needed; stress test doesn't mutate) |
-| Macro data | `get_telemetry`, `macro_analyst`, `check_macro_health` | yes |
+| Macro data | `get_telemetry`, `macro_analyst` | yes (`check_macro_health` is deprecated — see the fan-out cap note above; use `check_api_health`/`list_macro_countries` instead) |
 | Country coverage | `list_macro_countries` | yes (drives UNCOVERED classification) |
 | Provenance taxonomy | `manual_edit` class in schema.yaml §"Classification taxonomy" | yes (for the Phase 4-B handoff) |
 | Status banner | `view_status.py` | extend later to surface "stale vs Parallax data" — not in this scope |
@@ -307,14 +307,14 @@ Options (mirrors autoplan, adapted to a view update):
 
 | ID | Mode | Mitigation |
 |---|---|---|
-| M1 | `check_macro_health` returns no `last_updated` | mark cell `UNVERIFIABLE_DATA` (separate from `UNCOVERED`); proceed |
+| M1 | `macro_analyst` returns no `report_date` | mark cell `UNVERIFIABLE_DATA` (separate from `UNCOVERED`); proceed |
 | M2 | Parallax MCP not connected | fail loud, no audit write, exit |
 | M3 | View identity at Phase 3 ≠ identity captured at Phase 0 — `view_hash` covers only tilts + excludes, so `view_id`/`version_id` are compared too (a maker re-save of identical tilts mints a fresh `version_id`); checked under the view transaction lock (see `stress.audit_identity`) | abort with "view changed mid-run, retry"; partial work discarded |
 | M4 | Every tilted market is `UNCOVERED` | render full UNCOVERED report; audit entry with `applied=false`; suggest expanding region tilts to broader keys covered by Parallax |
 | M5 | Hash chain broken when reading `audit.jsonl` | refuse to run; user must restore from `.archive/` or `--re-pair` (existing flow) |
 | M6 | User picks B/C at gate but `load-house-view` confirmation fails | stress-test audit entry already written with `applied=false`; load-house-view writes its own `save` entry; no state corruption |
 | M7 | Two stress-test runs concurrently (parallel terminals) | second run sees `view_hash` unchanged at Phase 0 + 3 (no view mutation); both audits append safely via hash-chain serialisation; CIO sees two artifacts |
-| M8 | Parallax `last_updated` is present but stale (e.g., `parallax_age_days >> 30`) | `compute_age_delta` returns `"fresh"` when CIO is younger than Parallax-age + 30d, so a 90-day-old Parallax signal vs. fresh CIO renders as `DIVERGENT_FRESH` (Taste) — not flagged as a data-quality issue. v1 limitation; CIO must inspect `last_updated` directly via `check_macro_health` before treating divergences as substantive (the artifact's header does not yet surface Parallax age — v2 dependency). v2 will add a `PARALLAX_DATA_STALE` sentinel above an absolute age threshold and surface `parallax_age_days` in the artifact header. Surfaced by adversarial-reviewer post-implementation. |
+| M8 | `macro_analyst` `report_date` is present but stale (e.g., `parallax_age_days >> 30`) | `compute_age_delta` returns `"fresh"` when CIO is younger than Parallax-age + 30d, so a 90-day-old Parallax signal vs. fresh CIO renders as `DIVERGENT_FRESH` (Taste) — not flagged as a data-quality issue. v1 limitation; CIO must inspect `report_date` on the `macro_analyst` response before treating divergences as substantive (the artifact's header does not yet surface Parallax age — v2 dependency). v2 will add a `PARALLAX_DATA_STALE` sentinel above an absolute age threshold and surface `parallax_age_days` in the artifact header. Surfaced by adversarial-reviewer post-implementation. |
 
 ---
 

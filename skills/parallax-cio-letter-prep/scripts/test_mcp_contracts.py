@@ -212,13 +212,17 @@ def test_analyze_portfolio_mock_has_realistic_values():
 
 
 def test_export_price_series_mock_has_realistic_values():
+    # The mock models format="json" only — "data" rows carry "price" (not
+    # "close"), per EXPORT_PRICE_SERIES_SCHEMA. list/csv are differently
+    # shaped (dates[]/prices[] and a csv string respectively) and are not
+    # covered by this schema or this mock.
     data = load_mock("export_price_series")
     assert "." in data["symbol"], "symbol should be RIC format e.g. AAPL.O"
-    assert len(data["prices"]) > 0, "prices list is empty"
+    assert len(data["data"]) > 0, "data list is empty"
     prev_date = None
-    for entry in data["prices"]:
+    for entry in data["data"]:
         assert is_iso_date(entry["date"]), f"date {entry['date']!r} not ISO"
-        assert entry["close"] > 0
+        assert entry["price"] > 0
         if prev_date is not None:
             assert entry["date"] > prev_date, "dates not strictly increasing"
         prev_date = entry["date"]
@@ -227,20 +231,28 @@ def test_export_price_series_mock_has_realistic_values():
 
 
 def test_get_company_info_mock_has_realistic_values():
+    # Identity/pricing/score fields live under "data"; only "symbol" and
+    # "success" sit at the top level. See GET_COMPANY_INFO_SCHEMA.
     data = load_mock("get_company_info")
     assert "." in data["symbol"]
-    assert len(data["name"]) >= 2
-    assert len(data["sector"]) >= 3
+    assert len(data["data"]["name"]) >= 2
+    assert len(data["data"]["sector"]) >= 3
 
 
 def test_check_portfolio_redundancy_mock_has_realistic_values():
+    # No "overlap_pairs"/"coverage_pct" live — the real shape is
+    # sector_concentration (sector -> weight fraction, 0-1) + industry_overlap.
+    # See CHECK_PORTFOLIO_REDUNDANCY_SCHEMA.
     data = load_mock("check_portfolio_redundancy")
-    assert isinstance(data["overlap_pairs"], list)
-    for pair in data["overlap_pairs"]:
-        assert pair["symbol_a"] != pair["symbol_b"]
-        assert 0 <= pair["overlap_score"] <= 1.0
-    if "coverage_pct" in data:
-        assert 0 <= data["coverage_pct"] <= 1.0
+    assert isinstance(data["sector_concentration"], dict)
+    assert data["sector_concentration"], "sector_concentration is empty"
+    for sector, weight in data["sector_concentration"].items():
+        assert len(sector) >= 2
+        assert 0 <= weight <= 1.0, f"{sector} weight {weight} not a 0-1 fraction"
+    if "industry_overlap" in data:
+        assert isinstance(data["industry_overlap"], dict)
+    if "coverage_weight_fraction" in data:
+        assert 0 <= data["coverage_weight_fraction"] <= 1.0
 
 
 def test_get_assessment_mock_has_realistic_values():
@@ -285,23 +297,22 @@ def test_get_score_analysis_mock_has_realistic_values():
 
 
 def test_get_news_synthesis_mock_has_realistic_values():
+    # The live endpoint returns a fixed 3-bullet shape, not a variable-length
+    # "summary"/"articles_analyzed" synthesis. See GET_NEWS_SYNTHESIS_SCHEMA.
     data = load_mock("get_news_synthesis")
-    assert len(data["summary"]) >= 50, "news summary suspiciously short"
-    if "articles_analyzed" in data:
-        assert data["articles_analyzed"] >= 0
+    assert len(data["title"]) >= 5, "title suspiciously short"
+    for key in ("bullet1", "bullet2", "bullet3"):
+        assert len(data[key]) >= 30, f"{key} suspiciously short — likely a stub"
 
 
 def test_macro_analyst_mock_has_realistic_values():
+    # Free prose lives in "content"; there is no structured "tactical.stance"/
+    # "tactical.summary" object. See MACRO_ANALYST_SCHEMA.
     data = load_mock("macro_analyst")
     assert len(data["market"]) >= 3
-    t = data["tactical"]
-    assert len(t["stance"]) >= 3
-    # 30 chars ≈ shortest plausible tactical headline (e.g., "Constructive on
-    # US large-cap growth"); tighter would false-positive on terse-but-real
-    # outputs.
-    assert len(t["summary"]) >= 30
-    if "horizon_months" in t:
-        assert t["horizon_months"] > 0
+    assert len(data["content"]) >= 30
+    if "report_date" in data:
+        assert is_iso_date(data["report_date"])
 
 
 # Validator self-tests live in `_parallax/scripts/test_contract_validator.py`

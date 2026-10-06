@@ -273,10 +273,22 @@ ANALYZE_PORTFOLIO_ERROR_SCHEMA = {
 }
 
 
-# Corrected 2026-10-06 against a live probe. "prices"/"close" never existed;
-# the real top-level shape is {success, symbol, format, data_points, data}.
-# "json" format rows carry open/high/low/volume beyond "price"; list/csv rows
-# expose "price" only (format changes the row schema, not just serialization).
+# Corrected 2026-10-06 against a live probe. "prices"/"close" never existed
+# as a top-level field. This schema models format="json" ONLY (the mock's
+# format), with the shape {success, symbol, format, data_points, data: [{date,
+# price, open, high, low, volume}]}.
+#
+# format="list" and format="csv" are NOT a subset of this row schema -- they
+# are structurally different responses with no "data" key at all:
+#   * format="list" (the tool's DEFAULT): {success, symbol, format,
+#     data_points, dates: [...], prices: [...]} -- two parallel top-level
+#     arrays.
+#   * format="csv": {success, symbol, format, data_points, csv: "<string>"}
+#     -- a single CSV-text field.
+# "data" is required (not OPTIONAL) here, so validating a list/csv response
+# against EXPORT_PRICE_SERIES_SCHEMA fails outright rather than silently
+# passing. If a skill calls with format="list" or format="csv", write a
+# separate schema/mock for that shape rather than reusing this one.
 # "price" is the raw daily close, NOT a dividend-adjusted or total-return
 # series -- do not assume TR convention for this endpoint.
 EXPORT_PRICE_SERIES_SCHEMA = {
