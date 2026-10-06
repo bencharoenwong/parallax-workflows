@@ -1,6 +1,6 @@
 ---
 name: parallax-morning-brief
-description: "Fund manager morning brief: market regime, macro outlook, portfolio health, and key holding news via Parallax MCP tools. Provide portfolio as [{symbol, weight}] in RIC format. NOT for individual stock analysis (use /parallax-should-i-buy), not for client portfolio review (use /parallax-client-review), not for a desk-wide call list across many books (use /parallax-desk-call-list), not for retail health checks (use /parallax-portfolio-checkup), not for backtesting (use /backtest)."
+description: "Fund manager morning brief: market regime, macro outlook, portfolio health, and key holding news via Parallax MCP tools. Provide portfolio as [{symbol, weight}] in RIC format. NOT for individual stock analysis (use /parallax-should-i-buy), not for client portfolio review (use /parallax-client-review), not for a desk-wide call list across many books (use /parallax-desk-call-list), not for retail health checks (use /parallax-portfolio-checkup), not for backtesting."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -10,7 +10,7 @@ description: "Fund manager morning brief: market regime, macro outlook, portfoli
 ## When not to use
 
 - Single stock analysis → use /parallax-should-i-buy or /parallax-deep-dive
-- Running backtests → use /backtest
+- Running backtests (not covered by Parallax workflows)
 - Client portfolio review → use /parallax-client-review
 - Retail investor health check → use /parallax-portfolio-checkup
 - Multiple client books / desk-wide morning call list → use /parallax-desk-call-list

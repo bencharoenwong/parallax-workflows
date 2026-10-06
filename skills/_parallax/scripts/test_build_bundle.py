@@ -803,3 +803,80 @@ def test_token_costs_filter_fails_on_a_mention_it_cannot_remove():
             "Prose names /parallax-deep-dive here.\n")
     with pytest.raises(bb.BuildError):
         bb.filter_token_costs(text, {"parallax-should-i-buy"})
+
+
+def test_web_packages_do_not_advertise_held_languages(tmp_path, monkeypatch):
+    monkeypatch.setattr(bb, "WEB_OUT_DIR", tmp_path)
+    bb.build_web(bb.WEB_SKILLS)
+    held = ("vi-VN", "ar-SA", "translate-vietnamese-finance", "translate-arabic-finance")
+    for pkg in tmp_path.glob("*.skill"):
+        with zipfile.ZipFile(pkg) as zf:
+            for n in zf.namelist():
+                if n.endswith((".md", ".json")) and not n.endswith("manifest.json"):
+                    text = zf.read(n).decode("utf-8")
+                    assert not [h for h in held if h in text], (pkg.name, n)
+    with zipfile.ZipFile(tmp_path / "parallax-should-i-buy.skill") as zf:
+        conv = zf.read("parallax-should-i-buy/_vendored/_parallax/parallax-conventions.md").decode()
+    assert "translate-chinese-finance" in conv and "translate-thai-finance" in conv
+
+
+def test_annotate_unavailable_commands():
+    avail = {"parallax-should-i-buy"}
+    note = bb.UNAVAILABLE_NOTE
+    text = ("- Calls → use /parallax-desk-call-list\n"
+            "Run `/parallax-pair-finder AAPL.O long` first.\n"
+            "Then /parallax-should-i-buy.\n")
+    out = bb.annotate_unavailable_commands(text, avail)
+    assert f"/parallax-desk-call-list{note}" in out
+    assert f"`/parallax-pair-finder AAPL.O long`{note}" in out
+    assert "/parallax-should-i-buy." in out
+    assert bb.annotate_unavailable_commands(out, avail) == out
+
+
+def _unannotated(root, available):
+    bad = []
+    for p in root.rglob("*"):
+        if p.is_file() and p.suffix in (".md", ".yaml"):
+            text = p.read_text(encoding="utf-8")
+            if bb.annotate_unavailable_commands(text, available) != text:
+                bad.append(str(p))
+    return bad
+
+
+def test_web_packages_mark_every_unavailable_command(tmp_path, monkeypatch):
+    monkeypatch.setattr(bb, "WEB_OUT_DIR", tmp_path / "out")
+    bb.build_web(bb.WEB_SKILLS)
+    avail = set(bb.WEB_SKILLS) | set(bb.skill_manifest.standalone_skills("release"))
+    for pkg in (tmp_path / "out").glob("*.skill"):
+        d = tmp_path / pkg.stem
+        zipfile.ZipFile(pkg).extractall(d)
+        assert not _unannotated(d, avail), pkg.name
+
+
+def test_plugin_bundle_marks_every_unavailable_command():
+    root = Path(__file__).resolve().parents[3] / "plugin" / "skills"
+    if not root.exists():
+        pytest.skip("plugin bundle not built in this checkout")
+    assert not _unannotated(root, set(bb.PLUGIN_SKILLS))
+
+
+def test_public_skills_do_not_route_to_a_private_command():
+    hits = [str(p) for p in SKILLS.rglob("*.md") if "/backtest" in p.read_text(encoding="utf-8")]
+    assert not hits
+
+
+def test_house_view_operators_match_the_manifest_family():
+    family = {n for n in bb.skill_manifest.skills() if "house-view" in n}
+    assert bb.HOUSE_VIEW_OPERATORS == family
+
+
+def test_house_view_operator_mentions_are_not_marked():
+    text = "Run /parallax-judge-house-view for the full report.\n"
+    assert bb.annotate_unavailable_commands(text, set()) == text
+
+
+def test_fenced_examples_are_not_marked():
+    text = "```\n/parallax-desk-call-list --desk a\n```\nThen /parallax-desk-call-list.\n"
+    out = bb.annotate_unavailable_commands(text, set())
+    assert "/parallax-desk-call-list --desk a\n" in out
+    assert f"Then /parallax-desk-call-list{bb.UNAVAILABLE_NOTE}." in out

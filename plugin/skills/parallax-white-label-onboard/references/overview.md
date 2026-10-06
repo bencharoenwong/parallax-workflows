@@ -232,7 +232,7 @@ The loader never raises exceptions. All failures are logged with severity level 
 
 Sixteen visual consumer skills are wired against the canonical contract in `_parallax/white-label/integration-pattern.md`:
 
-- **Tier 1**: `/parallax-cio-letter-prep`, `/parallax-client-review`, `/parallax-due-diligence`, `/parallax-deep-dive`
+- **Tier 1**: `/parallax-cio-letter-prep` (not in this package), `/parallax-client-review`, `/parallax-due-diligence`, `/parallax-deep-dive`
 - **Tier 2**: `/parallax-should-i-buy`, `/parallax-thematic-screen`, `/parallax-portfolio-checkup`, `/parallax-portfolio-builder`, `/parallax-rebalance`, `/parallax-morning-brief`, `/parallax-explain-portfolio`, `/parallax-scenario-analysis`, `/parallax-country-deep-dive`, `/parallax-pair-finder`, `/parallax-peer-comparison`, `/parallax-macro-outlook`
 
 New visual consumers must JIT-load `integration-pattern.md` via the `<!-- white-label: integration-pattern.md -->` sentinel; `tests/test_integration_pattern_referenced.py` enforces the sentinel ↔ load-directive pairing.

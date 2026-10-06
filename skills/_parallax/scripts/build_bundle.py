@@ -319,6 +319,66 @@ def filter_token_costs(text: str, available: set[str]) -> str:
     return text
 
 
+# House-view operator skills install together, outside the plugin and web sets.
+# Every mention of one applies only once a house view exists, and a view
+# exists only through them, so they are never marked unavailable.
+HOUSE_VIEW_OPERATORS = frozenset({
+    "parallax-load-house-view", "parallax-make-house-view",
+    "parallax-judge-house-view", "parallax-stress-house-view",
+    "parallax-house-view-diff", "parallax-house-view-attribution",
+})
+
+# Appended to a slash command for a skill the distribution does not ship, so
+# a reader is never told to run something that is not installed.
+UNAVAILABLE_NOTE = " (not in this package)"
+_CMD_REF = re.compile(r"(?<![\w/.~-])/((?:parallax|translate)-[a-z0-9-]*[a-z0-9])\b")
+_CODE_SPAN = re.compile(r"(`[^`\n]*`)")
+
+
+def annotate_unavailable_commands(text: str, available: set[str]) -> str:
+    """Mark every `/parallax-x` command whose skill is not in `available`.
+    Inside a code span the note goes after the span; fenced code blocks are
+    left as written so examples stay copyable. Idempotent. Only real skill
+    names (manifest rows) count."""
+    known = set(skill_manifest.skills())
+
+    def unavailable(name: str) -> bool:
+        return name in known and name not in available and name not in HOUSE_VIEW_OPERATORS
+
+    out, fenced = [], False
+    for line in text.splitlines(keepends=True):
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+        if fenced or line.lstrip().startswith("```"):
+            out.append(line)                    # examples stay copyable
+            continue
+        pieces = _CODE_SPAN.split(line)
+        for i, piece in enumerate(pieces):
+            after = pieces[i + 1] if i + 1 < len(pieces) else ""
+            if _CODE_SPAN.fullmatch(piece):
+                if (any(unavailable(n) for n in _CMD_REF.findall(piece))
+                        and not after.startswith(UNAVAILABLE_NOTE)):
+                    pieces[i] = piece + UNAVAILABLE_NOTE
+            else:
+                pieces[i] = _CMD_REF.sub(
+                    lambda m, p=piece: m.group(0) + (
+                        UNAVAILABLE_NOTE if unavailable(m.group(1))
+                        and not p[m.end():].startswith(UNAVAILABLE_NOTE) else ""),
+                    piece)
+        out.append("".join(pieces))
+    return "".join(out)
+
+
+def annotate_tree(root: Path, available: set[str]) -> None:
+    """Apply annotate_unavailable_commands to every staged .md and .yaml."""
+    for path in sorted(root.rglob("*")):
+        if path.is_file() and path.suffix in (".md", ".yaml"):
+            text = path.read_text(encoding="utf-8")
+            new = annotate_unavailable_commands(text, available)
+            if new != text:
+                path.write_text(new, encoding="utf-8")
+
+
 def filter_shipped_docs(parallax_root: Path, available: set[str]) -> None:
     """Apply the skill-set filters to staged shared docs (plugin and web)."""
     path = parallax_root / "token-costs.md"
@@ -613,15 +673,20 @@ UNSHIPPED_LANGUAGES = (
 )
 
 
-def strip_unshipped_languages(skills_root: Path, skills: list[str]) -> None:
+def strip_unshipped_languages(skills_root: Path, skills: list[str],
+                              locate=None) -> None:
     """Remove each held language from the staged bundle when its translate
-    skill is not bundled, then fail closed on any surviving mention."""
+    skill is not bundled, then fail closed on any surviving mention.
+
+    `locate` maps a transform's skills/-relative path to its staged file; the
+    default is the plugin layout. The web build passes its _vendored layout."""
+    locate = locate or (lambda rel: skills_root / rel)
     for lang in UNSHIPPED_LANGUAGES:
         if lang.skill in skills:
             continue
         for rel, transform in lang.transforms.items():
-            path = skills_root / rel
-            if path.is_file():
+            path = locate(rel)
+            if path is not None and path.is_file():
                 path.write_text(transform(path.read_text(encoding="utf-8")),
                                 encoding="utf-8")
         # Shared executable validators can support draft locales without
@@ -1048,6 +1113,7 @@ def build_plugin() -> None:
         assemble_parallax_shared(skills_root)
         strip_unshipped_languages(skills_root, skills)
         filter_shipped_docs(skills_root / "_parallax", set(skills))
+        annotate_tree(skills_root, set(skills))
 
         # repo-root examples/ docs referenced from bundled skills ship at
         # <plugin>/examples/ so the ../../examples/ relative form resolves.
@@ -1264,9 +1330,19 @@ def build_web(names: list[str]) -> None:
                     cross_deps |= c
 
             filter_shipped_docs(skill_root / "_vendored" / "_parallax", set(WEB_SKILLS))
+            # Languages whose translator is held stay out of web packages too.
+            # The release-tier translators ship as standalone packages, so
+            # their routes stay.
+            def locate(rel: str, name: str = name) -> Path | None:
+                if rel == f"{name}/SKILL.md":
+                    return skill_root / "SKILL.md"
+                return skill_root / "_vendored" / rel
+            web_available = set(WEB_SKILLS) | set(skill_manifest.standalone_skills("release"))
+            strip_unshipped_languages(skill_root, sorted(web_available), locate)
             for md in sorted(skill_root.rglob("*.md")):
                 md.write_text(rewrite_refs(md.read_text(encoding="utf-8"), name),
                               encoding="utf-8")
+            annotate_tree(skill_root, web_available)
             replace_description(skill_root / "SKILL.md", desc)
 
             web_resolution_check(skill_root)

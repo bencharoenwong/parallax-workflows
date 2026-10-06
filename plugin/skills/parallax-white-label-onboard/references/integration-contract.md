@@ -6,7 +6,7 @@ How visual and voice consumers load and apply white-label branding. SKILL.md kee
 
 **Visual consumers** — Skills that produce a PDF or formatted report. They read `branding.colors`, `branding.logos`, `branding.fonts`. They ignore `voice`. Currently integrated:
 
-- **Tier 1**: `/parallax-cio-letter-prep`, `/parallax-client-review`, `/parallax-due-diligence`, `/parallax-deep-dive`
+- **Tier 1**: `/parallax-cio-letter-prep` (not in this package), `/parallax-client-review`, `/parallax-due-diligence`, `/parallax-deep-dive`
 - **Tier 2**: `/parallax-should-i-buy`, `/parallax-thematic-screen`, `/parallax-portfolio-checkup`, `/parallax-portfolio-builder`, `/parallax-rebalance`, `/parallax-morning-brief`, `/parallax-explain-portfolio`, `/parallax-scenario-analysis`, `/parallax-country-deep-dive`, `/parallax-pair-finder`, `/parallax-peer-comparison`, `/parallax-macro-outlook`
 
 The canonical consumer-side contract — header rendering, footer line, color substitution, logo placement, fallback behavior — lives in `_parallax/white-label/integration-pattern.md` (§1–§9). New visual consumers must JIT-load it via the `<!-- white-label: integration-pattern.md -->` sentinel; the drift gate at `tests/test_integration_pattern_referenced.py` enforces the sentinel ↔ load-directive pairing.

@@ -13,7 +13,7 @@ description: "Applies the Buffett-style factor profile (per Frazzini-Kabiller-Pe
 - Full due diligence → use /parallax-due-diligence
 - Quick stock evaluation without a specific investor lens → use /parallax-should-i-buy
 - Peer comparison → use /parallax-peer-comparison
-- Running backtests → use /backtest
+- Running backtests (not covered by Parallax workflows)
 - Other investor profiles → use /parallax-ai-greenblatt, /parallax-ai-klarman, /parallax-ai-soros, /parallax-ai-ptj
 - Cross-profile consensus → use /parallax-ai-consensus
 
