@@ -64,7 +64,7 @@ get_financials(symbol=<RIC>, statement="ratios")          # D/E, D/EBITDA, curre
 get_peer_snapshot(symbol=<RIC>)                           # peer medians, factor scores
 ```
 
-**Batch B — solvency, trend, macro (6 tokens, async).** `call-tool` all three together; `get_financial_analysis` never blocks the rest:
+**Batch B — solvency, trend, macro (7 tokens, async).** `call-tool` all three together; `get_financial_analysis` never blocks the rest:
 
 ```
 get_financial_analysis(symbol=<RIC>)   # Palepu solvency AND liquidity read (async)
