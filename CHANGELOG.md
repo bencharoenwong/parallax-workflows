@@ -7,7 +7,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 ## 2026-10-05 (standalone .skill packaging)
 
 ### Fixed
-- `build-skills.sh` packages git-tracked files only and leaves out tests, test fixtures, `conftest.py` and the Chinese skill's `normalize_runtime.py` maintenance script. Each staged package must pass the new `build_bundle.py verify` (no development files, caches or dotfiles, then the term scan) before anything is written. `build_bundle.py web` runs the same check. A failed skill now makes the run exit 1 instead of being skipped silently.
+- `build-skills.sh` packages git-tracked files only, listed by the new `build_bundle.py files`, and leaves out development material (tests, test fixtures, `conftest.py`, caches, dotfiles, notebooks, planning notes) and the Chinese skill's `normalize_runtime.py` maintenance script. Each staged package must pass the new `build_bundle.py verify` before anything is written: no symlinks or development files, text files only (`.md`, `.py`, `.txt`, `.yaml`, `.yml`, `.json`, valid UTF-8), then the term scan, which also reads file paths and matches after NFKC normalization with format characters removed. `build_bundle.py web` runs the same check. A failed skill, zip or move now makes the run exit 1, and the output path is cleared first so an earlier package cannot pass for a fresh one.
 
 ### Changed
 - Standalone build tiers move to a `standalone` field in `_parallax/manifest.json`: `release` (Chinese, Thai) builds by default; `beta` (`parallax-cio-letter-prep`) and `held` (Vietnamese, Arabic, pending native review) build only when named, with a warning. Vietnamese no longer builds by default. Test: `skills/_parallax/scripts/test_build_skills_packaging.py`.
