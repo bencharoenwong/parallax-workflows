@@ -10,7 +10,7 @@ description: "Configure white-label client branding for Parallax report output. 
 - Generating a client report → use /parallax-client-review (it loads the saved branding automatically)
 - One-off color/font question → answer inline, don't save as config
 - Portfolio construction → use /parallax-portfolio-builder
-- Single-prompt voice rewrite of one piece of content → use /humanizer or /chicago-global-voice; this skill is for persistent client brand state
+- Single-prompt voice rewrite of one piece of content (not covered by Parallax workflows; this skill is for persistent client brand state)
 
 ## Gotchas
 

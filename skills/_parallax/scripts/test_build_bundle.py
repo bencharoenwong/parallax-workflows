@@ -890,8 +890,6 @@ _NOT_COMMANDS = {
     "slash": "the `/slash` chaining syntax, named as a host primitive",
     "name": "the `/name` placeholder in the host-primitive table",
     "numeric": "the `.HK`/numeric ambiguity, not a command",
-    "humanizer": "a user-level skill outside this repo, named as an alternative",
-    "chicago-global-voice": "a user-level skill outside this repo, named as an alternative",
 }
 
 
