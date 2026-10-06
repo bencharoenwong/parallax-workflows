@@ -884,9 +884,69 @@ def test_plugin_bundle_marks_every_unavailable_command():
     assert not _unannotated(root, set(bb.PLUGIN_SKILLS), bb.PLUGIN_NOTE)
 
 
-def test_public_skills_do_not_route_to_a_private_command():
-    hits = [str(p) for p in SKILLS.rglob("*.md") if "/backtest" in p.read_text(encoding="utf-8")]
-    assert not hits
+_NOT_COMMANDS = {
+    "host-note": "closing marker of the <!-- /host-note --> comment",
+    "tmp": "the /tmp directory, named as a path hazard",
+    "slash": "the `/slash` chaining syntax, named as a host primitive",
+    "name": "the `/name` placeholder in the host-primitive table",
+    "numeric": "the `.HK`/numeric ambiguity, not a command",
+    "humanizer": "a user-level skill outside this repo, named as an alternative",
+    "chicago-global-voice": "a user-level skill outside this repo, named as an alternative",
+}
+
+
+def _unresolved_commands(root, note):
+    """Every `/<command>` outside a fenced block that is neither a manifest
+    skill, followed by the note, nor in _NOT_COMMANDS."""
+    import re
+    known = set(bb.skill_manifest.skills()) | set(_NOT_COMMANDS)
+    pat = re.compile(r"(?:^|(?<=[\s`(]))(?<!\]\()/([a-z][a-z0-9-]*)(?=[\s`).,;]|$)")
+    bad = []
+    for p in root.rglob("*"):
+        if not (p.is_file() and p.suffix in (".md", ".yaml")):
+            continue
+        fenced = False
+        for line in p.read_text(encoding="utf-8").splitlines():
+            if line.lstrip().startswith("```"):
+                fenced = not fenced
+                continue
+            if fenced:
+                continue
+            for m in pat.finditer(line):
+                if m.group(1) in known:
+                    continue
+                rest = line[m.end():]
+                if line[:m.start()].count("`") % 2:
+                    rest = rest[rest.find("`") + 1:]
+                if not rest.startswith(note):
+                    bad.append(f"{p}: /{m.group(1)}")
+    return bad
+
+
+def test_built_skills_route_only_to_commands_that_exist(tmp_path, monkeypatch):
+    plugin = Path(__file__).resolve().parents[3] / "plugin" / "skills"
+    if plugin.exists():
+        assert not _unresolved_commands(plugin, bb.PLUGIN_NOTE)
+    monkeypatch.setattr(bb, "WEB_OUT_DIR", tmp_path / "out")
+    bb.build_web(bb.WEB_SKILLS)
+    for pkg in (tmp_path / "out").glob("*.skill"):
+        d = tmp_path / pkg.stem
+        zipfile.ZipFile(pkg).extractall(d)
+        assert not _unresolved_commands(d, bb.WEB_NOTE), pkg.name
+
+
+def test_unresolved_command_scan_catches_a_private_route(tmp_path):
+    skill = tmp_path / "parallax-should-i-buy" / "SKILL.md"
+    skill.parent.mkdir()
+    src = (Path(__file__).resolve().parents[3] / "plugin" / "skills"
+           / "parallax-should-i-buy" / "SKILL.md")
+    if not src.exists():
+        pytest.skip("plugin bundle not built in this checkout")
+    skill.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    assert not _unresolved_commands(tmp_path, bb.PLUGIN_NOTE)
+    with skill.open("a", encoding="utf-8") as f:
+        f.write("\nThen run /backtest.\n")
+    assert _unresolved_commands(tmp_path, bb.PLUGIN_NOTE) == [f"{skill}: /backtest"]
 
 
 def test_house_view_operators_match_the_manifest_family():
