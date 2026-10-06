@@ -239,18 +239,20 @@ def test_etf_endpoints_priced_and_no_unverified_section():
     assert "## Unverified costs" not in doc
 
 
-def test_peer_comparison_documented_sequence_costs_eight():
-    # token-costs.md: peer snapshot + peer comparison export
-    # + 3 score histories + 3 etf_profile probes = 8.
+def test_peer_comparison_documented_sequence_costs_eleven():
+    # token-costs.md: peer snapshot + peer comparison export + 3 score histories
+    # + 3 etf_profile probes + 3 price-series calls (export_price_series is billed
+    # 1 credit, corrected 2026-10-06) = 11.
     calls = [
         ToolCall("mcp__claude_ai_Parallax__get_peer_snapshot", {}),
         ToolCall("mcp__claude_ai_Parallax__export_peer_comparison", {}),
         *[ToolCall("mcp__claude_ai_Parallax__get_score_analysis", {})] * 3,
         *[ToolCall("mcp__claude_ai_Parallax__etf_profile", {})] * 3,
+        *[ToolCall("mcp__claude_ai_Parallax__export_price_series", {})] * 3,
     ]
     est = estimate(calls)
     assert est.unknown_endpoints == ()
-    assert est.total == 8
+    assert est.total == 11
 
 
 def test_unrecognised_endpoint_is_flagged_not_free():
