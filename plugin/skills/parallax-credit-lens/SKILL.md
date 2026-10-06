@@ -59,7 +59,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 
 ```
 get_financials(symbol=<RIC>, statement="balance_sheet")   # Total debt, equity, total assets, working capital, retained earnings
-get_financials(symbol=<RIC>, statement="cash_flow")       # Operating CF, Capex, FCF
+get_financials(symbol=<RIC>, statement="cash_flow")       # Operating CF, Capex — no fcf field; derive if needed (FCF = cash_from_operating_activities + capital_expenditures)
 get_financials(symbol=<RIC>, statement="ratios")          # D/E, D/EBITDA, current/quick ratio, margins — target-only; no interest-coverage field and no peer_median/peer_p75 anywhere in this response (see Step 4)
 get_peer_snapshot(symbol=<RIC>)                           # peer medians, factor scores
 ```
@@ -143,7 +143,7 @@ This is the normal case, not an edge case: the live `ratios` response carries no
 | Leverage      | ➖ UNAVAILABLE | —     | —           | No absolute band and no peer data (D/Assets) |
 | Coverage      | ➖ UNAVAILABLE | —     | —           | No raw value in `ratios` and no peer data (Interest Coverage) |
 | Coverage      | ➖ UNAVAILABLE | —     | —           | No absolute band and no peer data (EBITDA/Interest) |
-| Liquidity     | 🟡 AMBER| Curr Ratio 1.3x | —        | Below absolute threshold (1.2x); peer comparison unavailable |
+| Liquidity     | 🟡 AMBER| Curr Ratio 1.1x | —        | Below absolute threshold (1.2x); peer comparison unavailable |
 | Liquidity     | ➖ UNAVAILABLE | —     | —           | No absolute band and no peer data (Quick Ratio) |
 | Profitability | ➖ UNAVAILABLE | —     | —           | No absolute band and no peer data (EBITDA Margin) |
 | Profitability | ➖ UNAVAILABLE | —     | —           | No absolute band and no peer data (EBIT Margin) |
