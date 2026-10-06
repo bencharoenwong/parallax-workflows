@@ -742,8 +742,6 @@ _BRAND_TOKENS = ("Chicago Global", "Parallax", "CGC", "Monetary Authority of Sin
 
 
 def render_html(response, branding):
-    rep = response.get("report", response) if isinstance(response, dict) else {}
-
     # Guard: full-white-label with no client disclosures would emit a regulated
     # document with an empty disclosures section. Refuse early so library callers
     # get the same protection as the CLI path.
@@ -762,6 +760,7 @@ def render_html(response, branding):
     # passed through verbatim. These fields are served brand-neutral by Parallax; if
     # your integration uses a non-standard response source, review the prose for
     # brand mentions before external distribution.
+    rep = response.get("report", response) if isinstance(response, dict) else {}
     co = rep.get("company", {})
     title = f"{co.get('name') or rep.get('symbol', 'Stock')} - Equity Research"
     if branding.get("client_name"):
