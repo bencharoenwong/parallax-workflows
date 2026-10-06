@@ -2,7 +2,7 @@
   "symbol": "DIST.N",
   "statement": "ratios",
   "currency": "USD",
-  "_fixture_note": "Field names and the absence of peer_median/peer_p75 match the live get_financials(ratios) response (verified against a live probe, 2026-10-05). `ebit`, `ebitda`, `revenue`, and `interest_expense` are NOT part of the live ratios shape (it carries no raw dollar line items) — they are kept here only so TestIntegrationFixtures can exercise compute_altman_z() against one realistic set of figures without a second fixture file.",
+  "_fixture_note": "Field names and the absence of peer_median/peer_p75 and of any interest-coverage or debt-to-assets field match the live get_financials(ratios) response (verified against a live probe, 2026-10-05). `ebit`, `ebitda`, `revenue`, and `interest_expense` are NOT part of the live ratios shape (it carries no raw dollar line items) — they are kept here only so TestIntegrationFixtures can exercise compute_altman_z() against one realistic set of figures without a second fixture file.",
   "periods": [
     {
       "period": "FY2024",

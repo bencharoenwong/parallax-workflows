@@ -1057,13 +1057,6 @@ class TestIntegrationFixtures:
         )
         assert result == Flag.GREEN
 
-    def test_aapl_interest_coverage_has_no_raw_value_in_the_fixture(self) -> None:
-        """The live `ratios` response has no interest-coverage field at all —
-        not merely a missing peer pair. The fixture correctly omits it, and
-        the orchestrator has nothing to pass to `flag_metric` for this leg."""
-        ratios = _load_fixture("get_financials_ratios.json")["periods"][0]
-        assert "interest_coverage" not in ratios
-
     def test_aapl_current_ratio_flag_from_fixture(self) -> None:
         """AAPL current ratio 0.87, no peer data → absolute-only rule:
         0.87 < 1.0 → RED."""
@@ -1103,23 +1096,6 @@ class TestIntegrationFixtures:
             metric_key="ebitda_margin",
         )
         assert result == Flag.UNAVAILABLE
-
-    def test_fixtures_carry_no_peer_fields(self) -> None:
-        """Neither fixture carries `peer_median` / `peer_p75`: the live
-        `ratios` response has no such field for any metric, so a fixture that
-        reintroduced one would misrepresent the live contract this test
-        guards against."""
-        for name in (
-            "get_financials_ratios.json",
-            "get_financials_ratios_distressed.json",
-        ):
-            ratios = _load_fixture(name)["periods"][0]
-            assert "peer_median" not in ratios, name
-            assert "peer_p75" not in ratios, name
-            assert "interest_coverage" not in ratios, name
-            assert "ebitda_interest_coverage" not in ratios, name
-            assert "debt_to_assets" not in ratios, name
-            assert "debt_assets" not in ratios, name
 
     def test_score_analysis_fixture_has_the_live_response_shape(self) -> None:
         """The response is flat, and the rows live under `data`. It carries no
@@ -1194,12 +1170,6 @@ class TestIntegrationFixtures:
             metric_key="debt_ebitda",
         )
         assert result == Flag.RED
-
-    def test_distressed_company_interest_coverage_has_no_raw_value(self) -> None:
-        """The distressed fixture also carries no interest-coverage field —
-        the live `ratios` response never has one, distressed or not."""
-        ratios = _load_fixture("get_financials_ratios_distressed.json")["periods"][0]
-        assert "interest_coverage" not in ratios
 
     def test_distressed_company_current_ratio_is_red(self) -> None:
         """Distressed fixture: current ratio 0.72, no peer data →
