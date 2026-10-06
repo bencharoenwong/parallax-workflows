@@ -73,7 +73,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 
 ### Step 3 — Verify
 
-`load-reference` `references/ranking-and-bounding.md`. Scan integrity first: priced coverage < 80% → SCAN DEGRADED, no call list. Movers = `abs(move_pct) > threshold` (strictly greater). More than 40 movers → auto-raise the threshold to the 40th-largest absolute move rounded up to 0.5 pp, recompute, and state the raise. No movers, or no client clearing `min_impact` → the no-calls short form. Identity: `get_peer_snapshot.target_company` vs `get_company_info.name`; on mismatch render Ground-truth Integrity, exclude that symbol's scores, keep its price move in ranking.
+`load-reference` `references/ranking-and-bounding.md`. Scan integrity first: priced coverage < 80% → SCAN DEGRADED, no call list. Movers = `abs(move_pct) > threshold` (strictly greater). More than 40 movers → auto-raise the threshold to the 40th-largest absolute move rounded up to 0.5 pp, recompute, and state the raise. No movers, or no client clearing `min_impact` → the no-calls short form. Identity: `get_peer_snapshot.target_company` vs `get_company_info.data.name`; on mismatch render Ground-truth Integrity, exclude that symbol's scores, keep its price move in ranking.
 
 ### Step 4 — Compute
 

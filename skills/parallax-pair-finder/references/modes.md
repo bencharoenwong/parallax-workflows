@@ -135,7 +135,7 @@ Fire all in parallel:
 
 | Tool | Parameters | Notes |
 |---|---|---|
-| `get_company_info` | symbol = `<long_ric>,<short_ric>` (comma-separated) | Single multi-symbol call per MCP schema. For a comma-separated `symbol`, `data` is an array, one row per symbol in request order — `get_company_info.data[0].market` for the long leg, `data[1].market` for the short leg (not a top-level field, and not a flat object as for a single symbol) |
+| `get_company_info` | symbol = `<long_ric>,<short_ric>` (comma-separated) | Single multi-symbol call per MCP schema. For a comma-separated `symbol`, `data` is an array, one row per symbol in request order — `get_company_info.data[0].market` for the long leg, `data[1].market` for the short leg (not a top-level field, and not a flat object as for a single symbol) **only when both legs resolve.** An unresolved symbol is dropped from `data` rather than padded with a null slot, so `data.length < 2` means one leg failed to resolve and position no longer maps to leg — do not index `data[0]`/`data[1]` in that case. Match each returned row back to its RIC (the row's `ric` field) instead, apply §1 RIC resolution (`.O`, then `.N`, then escalate to user) to whichever of `long_ric`/`short_ric` has no matching row, then retry `get_company_info` for that leg alone before proceeding. |
 | `export_peer_comparison` | symbol = long_ric, format = "json" | Get long's peer set. If short_ric appears in this peer set → both legs scored in same universe (safe to subtract) |
 | `list_macro_countries` | (none) | For Batch C |
 

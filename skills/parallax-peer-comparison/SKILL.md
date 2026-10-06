@@ -61,7 +61,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 
 ### Step 3 — Verify
 
-- Identity cross-check per conventions §2: `get_peer_snapshot.target_company` vs `get_company_info.name`; each `get_score_analysis` `data[0].symbol` vs the RIC sent.
+- Identity cross-check per conventions §2: `get_peer_snapshot.target_company` vs `get_company_info.data.name`; each `get_score_analysis` `data[0].symbol` vs the RIC sent.
 - **Halt-and-surface rule:** a leg empty from BOTH price endpoints is excluded from Relative Price Performance with the explicit note `⚠ Could not retrieve price history for <symbol>; relative price chart shows the remaining legs only.` Never drop a leg silently.
 - Other failed or empty calls: §0.1 retry classification, then §4. No gate is rendered, so §4.0 does not apply.
 
