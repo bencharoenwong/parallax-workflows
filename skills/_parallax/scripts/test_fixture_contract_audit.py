@@ -327,10 +327,7 @@ def identity_pairs(portfolio: dict, oracle: dict) -> dict[str, list[str]]:
     negative twins below drive the same lookup with planted payloads.
 
     ``oracle`` here is the get_company_info envelope: ``symbol`` is top-level,
-    ``name`` lives under ``data`` (confirmed live, 2026-10-05). The two
-    negative-twin tests below use a flat planted dict on purpose -- they drive
-    this helper directly with their own shape, not the real envelope -- so
-    they read ``oracle["name"]``, not ``oracle["data"]["name"]``.
+    ``name`` lives under ``data`` (confirmed live, 2026-10-05).
     """
     ric = oracle["symbol"]
     candidates = []
@@ -338,8 +335,7 @@ def identity_pairs(portfolio: dict, oracle: dict) -> dict[str, list[str]]:
         for row in portfolio.get(block, []):
             if row.get("ric") == ric and "name" in row:
                 candidates.append(row["name"])
-    oracle_name = oracle["data"]["name"] if "data" in oracle else oracle["name"]
-    return {"oracle": [oracle_name], "candidates": candidates}
+    return {"oracle": [oracle["data"]["name"]], "candidates": candidates}
 
 
 def test_every_holding_row_carries_the_name_the_gate_reads(tracked_portfolio):
@@ -388,7 +384,7 @@ def test_identity_pair_lookup_finds_nothing_for_an_absent_holding():
     rather than as a pass."""
     portfolio = {"latest_holdings": [{"ric": "ZZAA.O", "name": "Zulu Alpha Corp"}],
                  "company_contribution": [{"ric": "ZZAA.O", "name": "Zulu Alpha Corp"}]}
-    oracle = {"symbol": "ZZBB.O", "name": "Zulu Bravo Corp"}
+    oracle = {"symbol": "ZZBB.O", "data": {"name": "Zulu Bravo Corp"}}
     assert identity_pairs(portfolio, oracle)["candidates"] == []
 
 
@@ -397,10 +393,10 @@ def test_identity_pair_lookup_flags_a_genuine_divergence():
     portfolio = {"latest_holdings": [{"ric": "ZZAA.O", "name": "Zulu Alpha Corp"}],
                  "company_contribution": [
                      {"ric": "ZZAA.O", "name": "Zulu Alpha Hospitality Trust"}]}
-    oracle = {"symbol": "ZZAA.O", "name": "Zulu Alpha Corp."}
+    oracle = {"symbol": "ZZAA.O", "data": {"name": "Zulu Alpha Corp."}}
     candidates = identity_pairs(portfolio, oracle)["candidates"]
     normalized = [normalize_company_name(c) for c in candidates]
-    target = normalize_company_name(oracle["name"])
+    target = normalize_company_name(oracle["data"]["name"])
     assert normalized[0] == target, "punctuation-only difference must not flag"
     assert normalized[1] != target, "a different company must flag"
 
@@ -410,7 +406,7 @@ def test_a_row_without_a_name_is_not_offered_as_a_comparison():
     lookup must not hand back an empty string that then compares equal."""
     portfolio = {"latest_holdings": [{"ric": "ZZAA.O"}],
                  "company_contribution": [{"ric": "ZZAA.O", "name": "Zulu Alpha Corp"}]}
-    oracle = {"symbol": "ZZAA.O", "name": "Zulu Alpha Corp"}
+    oracle = {"symbol": "ZZAA.O", "data": {"name": "Zulu Alpha Corp"}}
     assert identity_pairs(portfolio, oracle)["candidates"] == ["Zulu Alpha Corp"]
 
 
