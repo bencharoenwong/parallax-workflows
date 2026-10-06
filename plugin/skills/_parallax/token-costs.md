@@ -111,7 +111,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 
 With the **Standard plan** ($2,000/month, 2,000 included tokens, $0.20 overage):
 - A daily morning brief (~50 tokens) = ~1,100 tokens/month (22 trading days)
-- A daily desk call list (~49 tokens for 6 equity movers) = ~1,080 tokens/month (22 trading days)
+- A daily `/parallax-desk-call-list` (~49 tokens for 6 equity movers) = ~1,080 tokens/month (22 trading days)
 - 5 should-i-buy checks/week (~29 each) = ~580 tokens/month
 - 2 client reviews/week (~105 each) = ~840 tokens/month
 - **Typical active RM usage:** 2,000-3,000 tokens/month

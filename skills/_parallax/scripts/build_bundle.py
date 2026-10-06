@@ -279,10 +279,11 @@ def named_skills(text: str) -> set[str]:
 
 
 def filter_token_costs(text: str, available: set[str]) -> str:
-    """Keep only the cost rows and callouts for skills this distribution
-    ships. Drops a table row whose first cell names an unavailable skill, a
-    `>` callout that names one, and a `###` section whose table ends up with
-    no rows. Fails if any unavailable skill is still named afterwards."""
+    """Keep only the cost rows, bullets and callouts for skills this
+    distribution ships. Drops a table row whose first cell names an
+    unavailable skill, a `-` bullet or `>` callout that names one, and a `###`
+    section whose table ends up with no rows. Fails if any unavailable skill
+    is still named afterwards."""
     lines = text.splitlines(keepends=True)
     out, i = [], 0
     while i < len(lines):
@@ -300,6 +301,9 @@ def filter_token_costs(text: str, available: set[str]) -> str:
             continue
         if (line.startswith("|") and not line.startswith("|---")
                 and named_skills(line.split("|")[1]) - available):
+            i += 1
+            continue
+        if line.startswith("- ") and named_skills(line) - available:
             i += 1
             continue
         out.append(line)
@@ -330,12 +334,16 @@ HOUSE_VIEW_OPERATORS = frozenset({
 
 # Appended to a slash command for a skill the distribution does not ship, so
 # a reader is never told to run something that is not installed.
-UNAVAILABLE_NOTE = " (not in this package)"
-_CMD_REF = re.compile(r"(?<![\w/.~-])/((?:parallax|translate)-[a-z0-9-]*[a-z0-9])\b")
+PLUGIN_NOTE = " (not in the plugin)"
+WEB_NOTE = " (not available on claude.ai)"
+# A link target is left alone: a note inside `](...)` would break the link.
+_CMD_REF = re.compile(
+    r"(?<![\w/.~-])(?<!\]\()/((?:parallax|translate)-[a-z0-9-]*[a-z0-9])\b")
 _CODE_SPAN = re.compile(r"(`[^`\n]*`)")
 
 
-def annotate_unavailable_commands(text: str, available: set[str]) -> str:
+def annotate_unavailable_commands(text: str, available: set[str],
+                                  note: str = PLUGIN_NOTE) -> str:
     """Mark every `/parallax-x` command whose skill is not in `available`.
     Inside a code span the note goes after the span; fenced code blocks are
     left as written so examples stay copyable. Idempotent. Only real skill
@@ -357,24 +365,24 @@ def annotate_unavailable_commands(text: str, available: set[str]) -> str:
             after = pieces[i + 1] if i + 1 < len(pieces) else ""
             if _CODE_SPAN.fullmatch(piece):
                 if (any(unavailable(n) for n in _CMD_REF.findall(piece))
-                        and not after.startswith(UNAVAILABLE_NOTE)):
-                    pieces[i] = piece + UNAVAILABLE_NOTE
+                        and not after.startswith(note)):
+                    pieces[i] = piece + note
             else:
                 pieces[i] = _CMD_REF.sub(
                     lambda m, p=piece: m.group(0) + (
-                        UNAVAILABLE_NOTE if unavailable(m.group(1))
-                        and not p[m.end():].startswith(UNAVAILABLE_NOTE) else ""),
+                        note if unavailable(m.group(1))
+                        and not p[m.end():].startswith(note) else ""),
                     piece)
         out.append("".join(pieces))
     return "".join(out)
 
 
-def annotate_tree(root: Path, available: set[str]) -> None:
+def annotate_tree(root: Path, available: set[str], note: str) -> None:
     """Apply annotate_unavailable_commands to every staged .md and .yaml."""
     for path in sorted(root.rglob("*")):
         if path.is_file() and path.suffix in (".md", ".yaml"):
             text = path.read_text(encoding="utf-8")
-            new = annotate_unavailable_commands(text, available)
+            new = annotate_unavailable_commands(text, available, note)
             if new != text:
                 path.write_text(new, encoding="utf-8")
 
@@ -586,9 +594,28 @@ def transform_loader_web(text: str) -> str:
         "loader web skill-structure citation")
 
 
+def transform_due_diligence_web(text: str) -> str:
+    """Web-only. The client-safe refusal is rendered verbatim to the user, so
+    it must not name a workflow claude.ai does not offer; nor should the
+    routing bullet. Both keep their client-review alternative."""
+    text = _swap(
+        text,
+        "for a client-facing deliverable use /parallax-client-review or "
+        "/parallax-white-label-stock-report.",
+        "for a client-facing deliverable use /parallax-client-review.",
+        "due-diligence client-safe refusal")
+    return _swap(
+        text,
+        "→ use /parallax-client-review (portfolio) or "
+        "/parallax-white-label-stock-report (single name)",
+        "→ use /parallax-client-review (portfolio)",
+        "due-diligence client-forwardable route")
+
+
 WEB_TRANSFORMS = {
     "_parallax/parallax-conventions.md": transform_conventions_web,
     "_parallax/house-view/loader.md": transform_loader_web,
+    "parallax-due-diligence/SKILL.md": transform_due_diligence_web,
 }
 
 
@@ -1113,7 +1140,6 @@ def build_plugin() -> None:
         assemble_parallax_shared(skills_root)
         strip_unshipped_languages(skills_root, skills)
         filter_shipped_docs(skills_root / "_parallax", set(skills))
-        annotate_tree(skills_root, set(skills))
 
         # repo-root examples/ docs referenced from bundled skills ship at
         # <plugin>/examples/ so the ../../examples/ relative form resolves.
@@ -1127,6 +1153,7 @@ def build_plugin() -> None:
             dest = staging / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(REPO_ROOT / rel, dest)
+        annotate_tree(staging, set(skills), PLUGIN_NOTE)
 
         manifest_dir = staging / ".claude-plugin"
         manifest_dir.mkdir()
@@ -1329,7 +1356,13 @@ def build_web(names: list[str]) -> None:
                                         strict=False)
                     cross_deps |= c
 
-            filter_shipped_docs(skill_root / "_vendored" / "_parallax", set(WEB_SKILLS))
+            web_available = set(WEB_SKILLS) | set(skill_manifest.standalone_skills("release"))
+            filter_shipped_docs(skill_root / "_vendored" / "_parallax", web_available)
+            for key, transform in WEB_TRANSFORMS.items():
+                if key.startswith(f"{name}/"):
+                    own = skill_root / key[len(name) + 1:]
+                    own.write_text(transform(own.read_text(encoding="utf-8")),
+                                   encoding="utf-8")
             # Languages whose translator is held stay out of web packages too.
             # The release-tier translators ship as standalone packages, so
             # their routes stay.
@@ -1337,12 +1370,11 @@ def build_web(names: list[str]) -> None:
                 if rel == f"{name}/SKILL.md":
                     return skill_root / "SKILL.md"
                 return skill_root / "_vendored" / rel
-            web_available = set(WEB_SKILLS) | set(skill_manifest.standalone_skills("release"))
             strip_unshipped_languages(skill_root, sorted(web_available), locate)
             for md in sorted(skill_root.rglob("*.md")):
                 md.write_text(rewrite_refs(md.read_text(encoding="utf-8"), name),
                               encoding="utf-8")
-            annotate_tree(skill_root, web_available)
+            annotate_tree(skill_root, web_available, WEB_NOTE)
             replace_description(skill_root / "SKILL.md", desc)
 
             web_resolution_check(skill_root)

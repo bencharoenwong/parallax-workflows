@@ -1,6 +1,6 @@
 ---
 name: parallax-scenario-analysis
-description: "React to a news event or scenario: assess portfolio exposure, macro regime shift, sector impact, identify most-exposed holdings, find rotation candidates, and output an information-framed action analysis via Parallax MCP tools. Also surfaces under PM/RIA vocabulary: 'stress book', 'scenario suite', 'stress test' (e.g., rates +100bps, USD shock, 2008 / 2020 / 2022 replays). Requires a portfolio and a scenario description. NOT for routine morning briefs (use /parallax-morning-brief), not for macro outlook without a triggering event (use /parallax-macro-outlook), not for testing the reasoning of a written thesis (use /parallax-stress-test-thesis (not in this package)), not for stress-testing the house view itself (use /parallax-stress-house-view)."
+description: "React to a news event or scenario: assess portfolio exposure, macro regime shift, sector impact, identify most-exposed holdings, find rotation candidates, and output an information-framed action analysis via Parallax MCP tools. Also surfaces under PM/RIA vocabulary: 'stress book', 'scenario suite', 'stress test' (e.g., rates +100bps, USD shock, 2008 / 2020 / 2022 replays). Requires a portfolio and a scenario description. NOT for routine morning briefs (use /parallax-morning-brief), not for macro outlook without a triggering event (use /parallax-macro-outlook), not for testing the reasoning of a written thesis (use /parallax-stress-test-thesis (not in the plugin)), not for stress-testing the house view itself (use /parallax-stress-house-view)."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -11,7 +11,7 @@ description: "React to a news event or scenario: assess portfolio exposure, macr
 
 - Routine morning brief → use /parallax-morning-brief
 - General macro outlook → use /parallax-macro-outlook
-- Pressure-testing a written thesis's reasoning → use /parallax-stress-test-thesis (not in this package)
+- Pressure-testing a written thesis's reasoning → use /parallax-stress-test-thesis (not in the plugin)
 - Stress-testing the active house view for contradictions → use /parallax-stress-house-view
 - Single stock analysis → use /parallax-deep-dive
 - Portfolio rebalancing without a trigger event → use /parallax-rebalance

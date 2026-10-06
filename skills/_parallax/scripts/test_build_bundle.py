@@ -822,7 +822,7 @@ def test_web_packages_do_not_advertise_held_languages(tmp_path, monkeypatch):
 
 def test_annotate_unavailable_commands():
     avail = {"parallax-should-i-buy"}
-    note = bb.UNAVAILABLE_NOTE
+    note = bb.PLUGIN_NOTE
     text = ("- Calls → use /parallax-desk-call-list\n"
             "Run `/parallax-pair-finder AAPL.O long` first.\n"
             "Then /parallax-should-i-buy.\n")
@@ -833,13 +833,37 @@ def test_annotate_unavailable_commands():
     assert bb.annotate_unavailable_commands(out, avail) == out
 
 
-def _unannotated(root, available):
+def _unannotated(root, available, note):
+    """Independent of the annotator's regex: a case-insensitive scan for any
+    `/<skill>` naming a real, unshipped, non-operator skill outside a fenced
+    block, not followed by the note (after its code span, if in one)."""
+    import re
+    known = set(bb.skill_manifest.skills())
+    pat = re.compile(r"/((?:parallax|translate)-[a-z0-9-]*[a-z0-9])", re.I)
     bad = []
     for p in root.rglob("*"):
-        if p.is_file() and p.suffix in (".md", ".yaml"):
-            text = p.read_text(encoding="utf-8")
-            if bb.annotate_unavailable_commands(text, available) != text:
-                bad.append(str(p))
+        if not (p.is_file() and p.suffix in (".md", ".yaml")):
+            continue
+        fenced = False
+        for line in p.read_text(encoding="utf-8").splitlines():
+            if line.lstrip().startswith("```"):
+                fenced = not fenced
+                continue
+            if fenced:
+                continue
+            for m in pat.finditer(line):
+                name = m.group(1).lower()
+                if (name not in known or name in available
+                        or name in bb.HOUSE_VIEW_OPERATORS
+                        or line[:m.start()].endswith("](")
+                        or (m.start() and (line[m.start() - 1].isalnum()
+                                           or line[m.start() - 1] in "/.~-_"))):
+                    continue
+                rest = line[m.end():]
+                if line[:m.start()].count("`") % 2:
+                    rest = rest[rest.find("`") + 1:]
+                if not rest.startswith(note):
+                    bad.append(f"{p}: {line.strip()[:90]}")
     return bad
 
 
@@ -850,14 +874,14 @@ def test_web_packages_mark_every_unavailable_command(tmp_path, monkeypatch):
     for pkg in (tmp_path / "out").glob("*.skill"):
         d = tmp_path / pkg.stem
         zipfile.ZipFile(pkg).extractall(d)
-        assert not _unannotated(d, avail), pkg.name
+        assert not _unannotated(d, avail, bb.WEB_NOTE), pkg.name
 
 
 def test_plugin_bundle_marks_every_unavailable_command():
     root = Path(__file__).resolve().parents[3] / "plugin" / "skills"
     if not root.exists():
         pytest.skip("plugin bundle not built in this checkout")
-    assert not _unannotated(root, set(bb.PLUGIN_SKILLS))
+    assert not _unannotated(root, set(bb.PLUGIN_SKILLS), bb.PLUGIN_NOTE)
 
 
 def test_public_skills_do_not_route_to_a_private_command():
@@ -879,4 +903,28 @@ def test_fenced_examples_are_not_marked():
     text = "```\n/parallax-desk-call-list --desk a\n```\nThen /parallax-desk-call-list.\n"
     out = bb.annotate_unavailable_commands(text, set())
     assert "/parallax-desk-call-list --desk a\n" in out
-    assert f"Then /parallax-desk-call-list{bb.UNAVAILABLE_NOTE}." in out
+    assert f"Then /parallax-desk-call-list{bb.PLUGIN_NOTE}." in out
+
+
+def test_link_targets_are_not_marked():
+    text = "See [desk](/parallax-desk-call-list) and /parallax-desk-call-list.\n"
+    out = bb.annotate_unavailable_commands(text, set())
+    assert "](/parallax-desk-call-list)" in out
+    assert out.count(bb.PLUGIN_NOTE) == 1
+
+
+def test_web_due_diligence_names_only_workflows_claude_ai_offers(tmp_path, monkeypatch):
+    monkeypatch.setattr(bb, "WEB_OUT_DIR", tmp_path)
+    bb.build_web(["parallax-due-diligence"])
+    with zipfile.ZipFile(tmp_path / "parallax-due-diligence.skill") as zf:
+        text = zf.read("parallax-due-diligence/SKILL.md").decode()
+    assert "white-label-stock-report" not in text
+    assert "for a client-facing deliverable use /parallax-client-review." in text
+
+
+def test_cost_bullets_follow_the_distribution():
+    text = (bb.SKILLS_DIR / "_parallax" / "token-costs.md").read_text(encoding="utf-8")
+    web = bb.filter_token_costs(text, set(bb.WEB_SKILLS))
+    plugin = bb.filter_token_costs(text, set(bb.PLUGIN_SKILLS))
+    assert "desk-call-list" not in web
+    assert "/parallax-desk-call-list` (~49 tokens" in plugin
