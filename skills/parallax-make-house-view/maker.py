@@ -307,6 +307,26 @@ class MakerOrchestrator:
             if not markets:
                 markets = list(HARDCODED_COVERAGE)
 
+        # Pin fan-out to markets with an aggregator weight (MARKET_TO_SCHEMA_KEY).
+        # list_macro_countries can — and as of 2026-10 does (17 markets incl.
+        # "Brazil") — return markets aggregator_weights.yaml has no weight for.
+        # Fanning out to those pays for macro_analyst calls that cross_country's
+        # weights.get(k, 0.0) then zero-weights, i.e. paid-for signal silently
+        # dropped. Filtering here (rather than widening the weight table, which
+        # needs a CIO/business weighting judgment call this module can't make)
+        # keeps today's documented 14-market/56-call budget accurate until the
+        # weights are deliberately expanded. HARDCODED_COVERAGE is already this
+        # same key set, so this is a no-op on the fallback path above.
+        unweighted = [m for m in markets if m not in MARKET_TO_SCHEMA_KEY]
+        if unweighted:
+            logger.warning(
+                "maker.resolve_covered_markets.dropping_unweighted: %s "
+                "(list_macro_countries returned them but aggregator_weights.yaml "
+                "has no weight — see MARKET_TO_SCHEMA_KEY)",
+                unweighted,
+            )
+            markets = [m for m in markets if m in MARKET_TO_SCHEMA_KEY]
+
         # CLI filter: e.g. options.market_filter = ["us", "japan"] → keep
         # only those Parallax market names.
         if self.options.market_filter:
