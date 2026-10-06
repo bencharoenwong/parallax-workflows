@@ -197,3 +197,59 @@ def test_skill_with_only_development_files_names_the_real_problem(tmp_path):
     res = _run(root / "build-skills.sh", tmp_path / "out", "parallax-demo-skill")
     assert res.returncode != 0
     assert "no tracked SKILL.md" in res.stderr
+
+
+def _ascii_term():
+    return next(t for t in bb.load_canary_terms() if t.isascii() and t.isalpha() and len(t) > 3)
+
+
+@pytest.mark.parametrize("cp", list(range(0x0300, 0x0370)) + [0x2474, 0xFF41, 0x00B2])
+def test_scan_still_catches_terms_beside_marks_and_compat_chars(tmp_path, cp):
+    """Normalization must never lose a hit the plain scan finds: a combining
+    mark after a term composes with its last letter under NFKC."""
+    term = _ascii_term()
+    for i, text in enumerate((term + chr(cp), chr(cp) + term)):
+        d = tmp_path / str(i)
+        d.mkdir()
+        (d / "a.md").write_text(f"x {text} y\n", encoding="utf-8")
+        with pytest.raises(bb.BuildError, match="term scan"):
+            bb.canary_scan(d)
+
+
+@pytest.mark.parametrize("glue", ["́_raw", "⑴", "̣s"])
+def test_allowlist_entry_does_not_mask_a_glued_sibling(tmp_path, glue):
+    entry = next(iter(bb.CANARY_ALLOWLIST))
+    if not any(t.lower() in entry.lower() for t in bb.load_canary_terms()):
+        pytest.skip("no scan term inside the allowlist entry on this machine")
+    (tmp_path / "a.md").write_text(f"field {entry}{glue} here\n", encoding="utf-8")
+    with pytest.raises(bb.BuildError, match="term scan"):
+        bb.canary_scan(tmp_path)
+
+
+@pytest.mark.parametrize("name", ["..", "../plugin/skills/translate-thai-finance", "Bad_Name", "a/b"])
+def test_unsafe_skill_names_are_refused(tmp_path, name):
+    res = _run(SCRIPT, tmp_path, name)
+    assert res.returncode != 0
+    assert "invalid skill name" in res.stderr
+    assert not list(tmp_path.glob("*.skill"))
+
+
+def test_files_listing_handles_trailing_slash_and_empty(tmp_path):
+    cmd = [sys.executable, str(Path(bb.__file__)), "files"]
+    a = subprocess.run(cmd + ["translate-thai-finance"], cwd=SKILLS, capture_output=True, text=True)
+    b = subprocess.run(cmd + ["translate-thai-finance/"], cwd=SKILLS, capture_output=True, text=True)
+    assert a.returncode == 0 and a.stdout and a.stdout == b.stdout
+    empty = subprocess.run(cmd + ["translate-thai-finance"], cwd=tmp_path, capture_output=True, text=True)
+    assert empty.returncode != 0
+
+
+@pytest.mark.parametrize("rel", ["plans.md", "Decisions.md", "LEARNINGS.md", "notes/x.md", "Handoff.md"])
+def test_planning_notes_match_any_case(rel):
+    assert bb.is_dev_path(rel)
+
+
+def test_beta_package_ships_no_maintainer_comparison_script(tmp_path):
+    res = _run(SCRIPT, tmp_path, "parallax-cio-letter-prep")
+    assert res.returncode == 0, res.stderr
+    names = zipfile.ZipFile(tmp_path / "parallax-cio-letter-prep.skill").namelist()
+    assert not any(n.endswith("compare_docx.py") for n in names)

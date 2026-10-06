@@ -32,6 +32,10 @@ get_excludes() {
       # maintenance script that rewrites the skill's own files if run.
       echo "translate-chinese-finance/references/INTEGRATION.md translate-chinese-finance/references/normalize_runtime.py"
       ;;
+    parallax-cio-letter-prep)
+      # Maintainer retrofit check; it compares against the excluded fixture.
+      echo "parallax-cio-letter-prep/scripts/compare_docx.py"
+      ;;
     *)
       echo ""
       ;;
@@ -58,6 +62,10 @@ in_list() {
 
 build_one() {
   local name="${1%/}"
+  if [[ ! "$name" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+    echo "  ✗ invalid skill name: '$1' (lowercase letters, digits, hyphens)" >&2
+    return 1
+  fi
   if [[ ! -d "$name" ]]; then
     echo "  ✗ $name: directory not found, skipping" >&2
     return 1

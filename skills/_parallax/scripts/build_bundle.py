@@ -695,6 +695,27 @@ def load_canary_terms() -> list[str]:
     return terms
 
 
+# A combining mark continues the word it follows, so an allowlist entry with a
+# mark glued on is a different identifier and must not be masked.
+_WORDISH = r"\w\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f"
+
+
+def _fold(text: str) -> str:
+    """Lower-case with format characters (Cf) removed."""
+    return "".join(c for c in text if unicodedata.category(c) != "Cf").lower()
+
+
+def _mask_allowlisted(haystack: str) -> str:
+    """Token-bounded masking of CANARY_ALLOWLIST entries (see canary_scan).
+    Word characters are Unicode-aware, so a homoglyph or mark glued onto an entry keeps it
+    unmasked and the scan still sees the term inside it."""
+    for allowed in CANARY_ALLOWLIST:
+        haystack = re.sub(
+            rf"(?<![{_WORDISH}])" + re.escape(allowed.lower()) + rf"(?![{_WORDISH}])",
+            "\x00", haystack)
+    return haystack
+
+
 def canary_scan(root: Path) -> None:
     """Case-INSENSITIVE substring scan. Warehouse/schema identifiers are written
     upper-case in the term list but appear lower-case in real prose and SQL, so a
@@ -719,35 +740,38 @@ def canary_scan(root: Path) -> None:
             continue
         text = path.read_bytes().decode("utf-8", errors="replace")
         # The path is scanned too: a file named after a term leaks the term.
-        # NFKC folds full-width and compatibility forms; format characters
-        # (zero-width space, soft hyphen) are removed so they cannot split a
-        # term. Encodings such as base64 or HTML entities are out of scope.
-        text = unicodedata.normalize(
-            "NFKC", f"{path.relative_to(root).as_posix()}\n{text}")
-        haystack = "".join(c for c in text if unicodedata.category(c) != "Cf").lower()
-        for allowed in CANARY_ALLOWLIST:
-            # \w (Unicode-aware) rather than [a-z0-9_]: an ASCII-only boundary
-            # still masks an entry followed directly by a non-ASCII letter, so a
-            # homoglyph glued onto the field name would suppress the term.
-            haystack = re.sub(
-                r"(?<!\w)" + re.escape(allowed.lower()) + r"(?!\w)",
-                "\x00", haystack)
-        for term in terms:
-            if term.lower() in haystack:
-                hits.append((path.relative_to(root), term))
+        # Two haystacks, a hit in either fails: the plain text, and its NFKC
+        # form (folds full-width and compatibility variants). NFKC alone would
+        # lose hits, because a combining mark after a term's last letter
+        # composes with it. Format characters (zero-width space, soft hyphen)
+        # are removed from both so they cannot split a term. Encodings such
+        # as base64 or HTML entities are out of scope.
+        raw = f"{path.relative_to(root).as_posix()}\n{text}"
+        for form in (raw, unicodedata.normalize("NFKC", raw)):
+            haystack = _mask_allowlisted(_fold(form))
+            for term in terms:
+                if any(t in haystack for t in {_fold(term), _fold(
+                        unicodedata.normalize("NFKC", term))}):
+                    hits.append((path.relative_to(root), term))
+    hits = sorted(set(hits), key=lambda h: (str(h[0]), h[1]))
     if hits:
         for rel, term in hits:
             print(f"  SCAN HIT: {rel}: {term}", file=sys.stderr)
         raise BuildError(f"term scan failed with {len(hits)} hit(s)")
 
 
+# A skill directory name: lowercase letters, digits, hyphens. Anything else
+# (`..`, a slash) could stage files outside the package.
+SKILL_NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
+
 # Packages carry text only: every file must be one of these types and valid
 # UTF-8. A binary or a UTF-16 file cannot be term-scanned meaningfully, so it
 # is refused rather than special-cased.
 PACKAGE_TEXT_SUFFIXES = frozenset({".md", ".py", ".txt", ".yaml", ".yml", ".json"})
-_DEV_DIRS = frozenset({"tests", "test", "__tests__", "fixtures", "__pycache__",
-                       ".pytest_cache"})
-_DEV_NOTES = frozenset({"PLANS.md", "HANDOFF.md", "LESSONS.md"})
+_DEV_DIRS = frozenset({"tests", "test", "__tests__", "fixtures", "notes",
+                       "__pycache__", ".pytest_cache"})
+_DEV_NOTES = frozenset({"plans.md", "handoff.md", "lessons.md", "decisions.md",
+                        "learnings.md"})
 
 
 def is_dev_path(rel: str) -> bool:
@@ -757,7 +781,7 @@ def is_dev_path(rel: str) -> bool:
     parts = PurePosixPath(rel).parts
     name = parts[-1]
     return (any(p in _DEV_DIRS or p.startswith(".") for p in parts)
-            or name in _DEV_NOTES or name in ("conftest.py", "tests.py")
+            or name.lower() in _DEV_NOTES or name in ("conftest.py", "tests.py")
             or name.endswith(".ipynb")
             or name.endswith(".py") and (name.startswith("test_")
                                          or name.endswith("_test.py")))
@@ -1260,11 +1284,17 @@ def main(argv: list[str]) -> int:
         elif args.cmd == "files":
             # Paths are tracked in the repo the caller runs from (cwd = the
             # skills/ dir build-skills.sh works in), relative to that cwd.
+            skill = args.skill.rstrip("/")
+            if not SKILL_NAME.fullmatch(skill):
+                raise BuildError(f"invalid skill name: {args.skill!r}")
             listed = subprocess.run(
-                ["git", "ls-files", "-z", "--", f"{args.skill}/"],
+                ["git", "--literal-pathspecs", "ls-files", "-z", "--", f"{skill}/"],
                 capture_output=True, check=True).stdout.decode("utf-8")
-            for f in listed.split("\0"):
-                if f and not is_dev_path(f[len(args.skill) + 1:]):
+            paths = [f for f in listed.split("\0") if f]
+            if not paths:
+                raise BuildError(f"no tracked files under {skill}/ (run from skills/)")
+            for f in paths:
+                if not is_dev_path(PurePosixPath(f).relative_to(skill).as_posix()):
                     print(f)
         else:
             build_web(args.names or WEB_SKILLS)
