@@ -6,7 +6,7 @@ Verbatim field paths the renderer depends on, observed from a live `get_stock_re
 
 The MCP response is a plain JSON object:
 
-    { success: bool, symbol: str, pdf_url: str, html_url: str, report: {...32 keys...} }
+    { success: bool, symbol: str, pdf_url: str, html_url: str, report: {...~31 keys for a standard report, some conditional (e.g. esg only when covered); dcf_valuation is not one of them...} }
 
 The renderer reads `response["report"]`. `pdf_url` and `html_url` point to the official CG-branded renders. `report.images` has three chart PNG URLs (price_chart, technical_plot, analyst_chart): out of scope for v1.
 
@@ -19,8 +19,8 @@ The renderer reads `response["report"]`. `pdf_url` and `html_url` point to the o
 | Rating | report.company.recommendation (e.g. "HOLD") |
 | Factor scores (0-10) | report.company.value / .quality / .momentum / .defensive / .tactical / .total  (strings; total IS Overall) |
 | Score bar widths (score x 10, 0-100) | report.score_widths.value/quality/momentum/defensive/tactical/total |
-| Cover price target (peer-P/E) | report.dcf_valuation.target_value + report.dcf_valuation.target_footnote (method line) |
-| Reconciliation chip / state / body | report.dcf_valuation.reconciliation_chip / .reconciliation_state / .reconciliation_body |
+| Cover price target (peer-P/E), OPTIONAL | report.dcf_valuation.target_value + report.dcf_valuation.target_footnote (method line) |
+| Reconciliation chip / state / body, OPTIONAL | report.dcf_valuation.reconciliation_chip / .reconciliation_state / .reconciliation_body |
 | Current price | report.vital_stats.current_price (use this cluster, not dcf_valuation.current_price) |
 | Market cap | report.company.mktcap (string of raw value); convenience report.peers[0].mktcap_b (in billions) |
 | Currency | report.company.currency / report.financial_statement_currency ("USD") |
@@ -31,7 +31,7 @@ The renderer reads `response["report"]`. `pdf_url` and `html_url` point to the o
 | Data-basis notes | report.data_basis_note / report.ratio_snapshot_note |
 | Generated date | report.generated_date |
 
-Two different price targets: cover uses the peer-P/E target (dcf_valuation), the Analyst Ratings section uses the sell-side consensus (price_target.target_mean). Do not conflate.
+`report.dcf_valuation` is NOT present in the standard `get_stock_report` payload — the server dropped the valuation lane from the standard report entirely. The renderer treats it as optional: the cover's "Price Target" box and the Rating reconciliation line render only when `dcf_valuation.target_value` is present, and are omitted (not blank) otherwise. In practice, for a standard report, expect the cover to show Rating / Current Price / Market Cap only, with no Price Target box. If a non-standard response does carry `dcf_valuation`, it is a *different* price target from the Analyst Ratings section's sell-side consensus (`price_target.target_mean`) — do not conflate the two.
 
 ## Company analysis
 
@@ -85,14 +85,16 @@ The MAS regulatory disclosure, AI analyst certification, conflict-management pol
 ## Type / value gotchas
 
 1. report.company.* numeric fields are strings; report.peers[].* and report.score_widths.* are numeric. Normalize on read.
-2. Two price targets (cover peer-P/E vs analyst consensus). Two current-price snapshots (use vital_stats). Two return sets (use period_returns for the strip, current_ratios for Key Statistics).
+2. Two price targets when both exist (cover peer-P/E via dcf_valuation, OPTIONAL and typically absent, vs analyst consensus via price_target, always present) — do not conflate them. Two current-price snapshots (use vital_stats). Two return sets (use period_returns for the strip, current_ratios for Key Statistics).
 3. Statement values are raw units (e.g. revenue 416161000000 with unitsconvtocode "M"); divide to millions for display to match the official report.
 
 ## Localization boundary (translation contract)
 
 The branded stock-report renderer and its HTML/PDF output are English-only. Section chrome, table headers, and the pinned disclosure boilerplate are hardcoded in `render_stock_report.py`; disclosures may never be reworded, including by translation, without compliance sign-off.
 
-The library's translation skills consume composed chat-layer prose or the flat `*Text`-key macro/CIO JSON shape. The nested `get_stock_report` schema documented in this file is not a supported translator input.
+`get_stock_report` itself takes `lang: enum(["en","th"])`. This is not a cosmetic switch: with `lang="th"`, the server translates the narrative fields of the report JSON itself (investment thesis, company profile, news analysis, financial/technical analysis prose, etc. — the "Prose" list below) in place, before the JSON is persisted and served as `json_url`. It is not limited to a few rendered HTML labels. The translated response also carries a `thai_translation` stats key that is absent from an English response — this skill checks for that key (SKILL.md Step 3) and refuses to render a report that has it, because mixing that Thai prose with this renderer's hardcoded English headers and pinned English disclosures would produce a mixed-language document. This skill always fetches `lang="en"`; the check exists for the "Supplied file" input path, where an operator can hand the skill an arbitrary saved response.
+
+The library's other translation skills consume composed chat-layer prose or the flat `*Text`-key macro/CIO JSON shape — a different, unrelated input shape from the nested `get_stock_report` schema documented in this file.
 
 Field-path classification for a future localized-report project:
 
@@ -118,7 +120,7 @@ Field-path classification for a future localized-report project:
 - Financial statements: `report.income_statement`, `report.balance_sheet`, `report.cash_flow`
 - Ratios and key statistics: `report.current_ratios.*`, `report.key_ratios`
 - Peer rows: `report.peers`
-- Price target fields: `report.dcf_valuation.target_value`, `report.price_target.*`
+- Price target fields: `report.dcf_valuation.target_value` (OPTIONAL, absent from the standard payload), `report.price_target.*`
 - Return fields: `report.period_returns.*`
 - Dates: `report.generated_date`, statement period dates, `report.price_target.target_calc_date`
 - Currency fields: `report.company.currency`, `report.financial_statement_currency`

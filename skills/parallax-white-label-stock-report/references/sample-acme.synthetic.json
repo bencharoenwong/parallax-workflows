@@ -116,20 +116,6 @@
       "bullet3": "Acme Robotics Inc designs and builds industrial automation systems. This is synthetic placeholder text for a fictional company used only as a rendering fixture; it is not investment analysis.",
       "_prompt_version": "synthetic"
     },
-    "dcf_valuation": {
-      "target_value": 142.0,
-      "target_kind": "peer_pe",
-      "target_footnote": "via Peer P/E ~22.0x - 7 comps",
-      "peer_implied_pe": 142.0,
-      "peer_implied_ev_ebitda": 150.0,
-      "peer_count": 7,
-      "dcf_price": 119.0,
-      "current_price": 128.4,
-      "reconciliation_state": "modest-upside",
-      "reconciliation_chip": "Modest upside",
-      "reconciliation_body": "Buy-rated; peer-multiple target sits 10.6% above current price",
-      "reconciliation_icon": "+"
-    },
     "company": {
       "activity": "Active",
       "change": "0.85",

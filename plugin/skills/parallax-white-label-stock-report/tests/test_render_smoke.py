@@ -127,6 +127,33 @@ def test_client_name_in_header_when_active():
     assert "Northwind Capital" in html
 
 
+def test_cover_omits_price_target_box_when_dcf_valuation_absent():
+    # The standard get_stock_report payload carries no dcf_valuation key at
+    # all. The fixture reflects that: assert the cover renders no stale "-"
+    # Price Target box or empty reconciliation line for data that was never
+    # there.
+    assert "dcf_valuation" not in REPORT
+    html = _render()
+    assert "Price Target" not in html
+
+
+def test_cover_renders_price_target_box_when_dcf_valuation_present():
+    # Forward-compat: if a response does carry dcf_valuation (e.g. a
+    # non-standard partner pipeline), the cover should still render it.
+    report_with_dcf = dict(REPORT)
+    report_with_dcf["dcf_valuation"] = {
+        "target_value": 142.0,
+        "target_footnote": "via Peer P/E ~22.0x - 7 comps",
+        "reconciliation_body": "Buy-rated; peer-multiple target sits 10.6% above current price",
+        "reconciliation_chip": "Modest upside",
+    }
+    response_with_dcf = dict(RESPONSE, report=report_with_dcf)
+    html = r.render_html(response_with_dcf, CLIENT_BRANDING)
+    assert "Price Target" in html
+    assert "142" in html
+    assert "Modest upside" in html or "peer-multiple target" in html
+
+
 def test_renders_with_no_branding_default():
     branding = r.load_branding("/nonexistent/path/config.yaml")
     assert branding["active"] is False
@@ -194,6 +221,28 @@ def test_full_white_label_with_credit_keeps_powered_by():
     assert "Example Securities Commission" in html          # client's own disclosures
     assert "Monetary Authority of Singapore" not in html    # not the CGC/MAS boilerplate
     assert "Chicago Global" not in html                     # no CG entity trace anywhere
+
+
+# --- Thai-translated report guard ---
+THAI_REPORT = dict(REPORT, thai_translation={"fields_translated": 12, "fields_failed": 0, "fields_flagged": 0})
+THAI_RESPONSE = dict(RESPONSE, report=THAI_REPORT)
+
+
+def test_render_html_refuses_thai_translated_report():
+    import pytest
+    with pytest.raises(ValueError, match="thai_translation"):
+        r.render_html(THAI_RESPONSE, CLIENT_BRANDING)
+
+
+def test_cli_refuses_thai_translated_report():
+    import os
+    import tempfile
+    out = os.path.join(tempfile.mkdtemp(), "out.html")
+    thai_fixture = os.path.join(tempfile.mkdtemp(), "thai-report.json")
+    Path(thai_fixture).write_text(json.dumps(THAI_RESPONSE))
+    rc = r.main([thai_fixture, "--branding", "/nonexistent.yaml", "--out", out])
+    assert rc == 2
+    assert not os.path.exists(out)
 
 
 if __name__ == "__main__":

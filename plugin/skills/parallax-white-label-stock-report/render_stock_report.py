@@ -467,7 +467,11 @@ def render_cover(rep, branding):
     ccy = co.get("currency", "")
     tline = " | ".join([x for x in [ric, co.get("market"), co.get("sector"), co.get("industry")] if x])
     rec = co.get("recommendation", "")
-    dcf = rep.get("dcf_valuation", {})
+    # The standard get_stock_report payload carries no dcf_valuation/price-target
+    # lane at all. Treat it as optional: render the Price Target box and the
+    # Rating reconciliation line only when it is present.
+    dcf = rep.get("dcf_valuation") or {}
+    has_price_target = dcf.get("target_value") is not None
     vital = rep.get("vital_stats", {})
 
     logo_html = ""
@@ -532,10 +536,10 @@ def render_cover(rep, branding):
   <div class="toprow">
     <div class="pt"><div class="label">Rating</div>
       <div><span class="rating-badge {rating_kind(rec)}">{esc(rec or '-')}</span></div>
-      <div class="sub">{esc(g(dcf, 'reconciliation_body') or g(dcf, 'reconciliation_chip') or '')}</div></div>
-    <div class="pt"><div class="label">Price Target</div>
-      <div class="val">{esc(fmt(dcf.get('target_value'), 'money'))} {esc(ccy)}</div>
-      <div class="sub">{esc(dcf.get('target_footnote') or '')}</div></div>
+      {('<div class="sub">' + esc(g(dcf, 'reconciliation_body') or g(dcf, 'reconciliation_chip') or '') + '</div>') if has_price_target else ''}</div>
+    {('<div class="pt"><div class="label">Price Target</div>'
+      '<div class="val">' + esc(fmt(dcf.get('target_value'), 'money')) + ' ' + esc(ccy) + '</div>'
+      '<div class="sub">' + esc(dcf.get('target_footnote') or '') + '</div></div>') if has_price_target else ''}
     <div class="pt"><div class="label">Current Price</div>
       <div class="val">{esc(fmt(vital.get('current_price'), 'money'))} {esc(ccy)}</div></div>
     <div class="pt"><div class="label">Market Cap</div>
@@ -738,6 +742,21 @@ _BRAND_TOKENS = ("Chicago Global", "Parallax", "CGC", "Monetary Authority of Sin
 
 
 def render_html(response, branding):
+    rep = response.get("report", response) if isinstance(response, dict) else {}
+
+    # Guard: a report fetched with lang="th" has its narrative fields already
+    # translated to Thai in place server-side, signaled by a `thai_translation`
+    # stats key with no English equivalent. This renderer's section chrome,
+    # labels, and disclosures are hardcoded English; rendering such a report
+    # would silently mix Thai prose into an English template. Refuse rather
+    # than produce a mixed-language document.
+    if isinstance(rep, dict) and "thai_translation" in rep:
+        raise ValueError(
+            "report JSON carries a thai_translation key (generated with "
+            'lang="th"); this renderer is English-only. Fetch or supply the '
+            'lang="en" report instead.'
+        )
+
     # Guard: full-white-label with no client disclosures would emit a regulated
     # document with an empty disclosures section. Refuse early so library callers
     # get the same protection as the CLI path.
@@ -756,7 +775,6 @@ def render_html(response, branding):
     # passed through verbatim. These fields are served brand-neutral by Parallax; if
     # your integration uses a non-standard response source, review the prose for
     # brand mentions before external distribution.
-    rep = response.get("report", response) if isinstance(response, dict) else {}
     co = rep.get("company", {})
     title = f"{co.get('name') or rep.get('symbol', 'Stock')} - Equity Research"
     if branding.get("client_name"):
@@ -900,6 +918,13 @@ def main(argv=None):
                   "regulated research with no disclosures. Add them via the onboard config, or "
                   "render in the default co-brand mode.", file=sys.stderr)
             return 2
+
+    report_payload = response.get("report", response) if isinstance(response, dict) else {}
+    if isinstance(report_payload, dict) and "thai_translation" in report_payload:
+        print('ERROR: report_json carries a thai_translation key (generated with lang="th"); '
+              "this renderer is English-only and does not localize headers, labels, or "
+              'disclosures. Fetch or supply the lang="en" report instead.', file=sys.stderr)
+        return 2
 
     symbol = (response.get("symbol") if isinstance(response, dict) else None) or "report"
     out = args.out or f"{symbol.replace('.', '_')}-white-label.html"
