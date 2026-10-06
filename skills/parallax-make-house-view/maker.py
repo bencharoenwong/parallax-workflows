@@ -87,8 +87,10 @@ DEFAULT_CONCURRENCY = 8
 # Per-market timeout (v2 plan §2.1).
 DEFAULT_MARKET_TIMEOUT_S = 45
 
-# Schema-side region key for each Parallax market name. Includes all
-# markets observed via list_macro_countries (MCP_FIELD_INVENTORY.md §1).
+# Schema-side region key for each Parallax market name. This is a curated
+# weighted subset, not the full live list_macro_countries() output --
+# resolve_covered_markets() filters the live list down to this dict's keys
+# before fan-out (MCP_FIELD_INVENTORY.md §1).
 MARKET_TO_SCHEMA_KEY: dict[str, str] = {
     "United States": "us",
     "Canada": "canada",

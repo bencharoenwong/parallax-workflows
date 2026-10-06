@@ -325,7 +325,8 @@ def compute_parallax_age_days(
     Mirrors `judge.py`'s `_parallax_age_days` exactly — this skill and the
     judge must not disagree about what "Parallax data age" means.
     `check_macro_health` carries no freshness timestamp (it is deprecated
-    and returns only `{success, markets, market_count}`), so age is read
+    and returns `{success, markets, service, status}` -- no
+    `report_date`/`last_updated` field), so age is read
     from each response's own `report_date` (set by `macro_analyst`) instead.
     Missing dates count as 0 — we cannot prove staleness when a response
     omits the field, so 0 is treated as "fresh" by `compute_age_delta`
