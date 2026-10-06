@@ -17,7 +17,7 @@ description: "Reactive portfolio performance attribution: decompose a drawdown i
 
 ## Gotchas
 
-- Expected Parallax spend: ~80 tokens at 10 holdings (`_parallax/token-costs.md`): 10 info + 10 scoring + 10 trends + telemetry + 2 macro + 3 news + 3 detractor snapshots + 10 `etf_profile` probes + 10 per-holding price-series calls (`export_price_series` or `etf_daily_price`, 1 credit each, billed — not included in the tool's own free-tier set).
+- Expected Parallax spend: ~80 tokens at 10 holdings (`_parallax/token-costs.md`): 10 info + 10 scoring + 10 trends + telemetry + 2 macro + 3 news + 3 detractor snapshots + 10 `etf_profile` probes + 10 per-holding price-series calls (`export_price_series` or `etf_daily_price`, 1 credit each).
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.2 typed integers, §1 RIC resolution, §2 identity cross-check, §3 parallel execution, §4/§5 fallbacks, §6 macro reasoning, §14 host primitives.
 - JIT-load `_parallax/coverage-matrix.md`: `export_price_series` is equity-only; every holding is classified via `etf_profile` before any price call, and ETFs price via `etf_daily_price`.
 - JIT-load `_parallax/house-view/loader.md` FIRST if a view is present: §2, §5, §6. The view does NOT change the attribution math; it shapes the verdict — a loss in a view-OW sector is "expected pain from view exposure", a loss in a view-UW sector still held raises a portfolio-management question.

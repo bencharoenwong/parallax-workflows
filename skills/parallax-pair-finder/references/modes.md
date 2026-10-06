@@ -135,7 +135,7 @@ Fire all in parallel:
 
 | Tool | Parameters | Notes |
 |---|---|---|
-| `get_company_info` | symbol = `<long_ric>,<short_ric>` (comma-separated) | Single multi-symbol call per MCP schema. Returns sector, industry, market cap, market for both legs — all nested under each symbol's `data` object (`get_company_info.data.market`, not a top-level field) |
+| `get_company_info` | symbol = `<long_ric>,<short_ric>` (comma-separated) | Single multi-symbol call per MCP schema. For a comma-separated `symbol`, `data` is an array, one row per symbol in request order — `get_company_info.data[0].market` for the long leg, `data[1].market` for the short leg (not a top-level field, and not a flat object as for a single symbol) |
 | `export_peer_comparison` | symbol = long_ric, format = "json" | Get long's peer set. If short_ric appears in this peer set → both legs scored in same universe (safe to subtract) |
 | `list_macro_countries` | (none) | For Batch C |
 
