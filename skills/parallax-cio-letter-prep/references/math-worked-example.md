@@ -6,7 +6,13 @@ so the math is verifiable without running the script.
 ## Inputs
 
 - Period: `2026-01-01` to `2026-01-31` (30 return-days, 31 calendar dates)
-- 3 equally-weighted holdings, no trades
+- 3 equally-weighted holdings, no trades, no `dividend_schedule` — this fixture
+  is a plain price-return computation. The reported total below is therefore a
+  price-only return, not a total return before FX; it is NOT directly
+  comparable to a real period's `total_price_pl` (which includes dividends —
+  see the Step 3 reconciliation gotcha in SKILL.md and
+  `test_vz_single_holding_with_dividend_schedule_matches_server_total_return`
+  for a worked example that DOES include a dividend via `dividend_schedule`).
 - Price-return prices (linear paths for clean hand-computation):
 
 | Symbol | Day 0 | Day 30 | Daily price formula |

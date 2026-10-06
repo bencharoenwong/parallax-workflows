@@ -300,11 +300,19 @@ def test_exited_mid_period():
 def test_price_return_prices_with_ex_dividend_drop_compute_correctly():
     """The real contract: `daily_prices` is price-return (raw close, no
     dividend adjustment) — exactly what `export_price_series` returns. An
-    ex-dividend drop shows up as a price drop on the ex-date, and the
-    function correctly computes the price-only return over that drop: it
-    does not try to recover the dividend, because the server-side
-    reconciliation target (`total_price_pl`) is price-only too (see the
-    SKILL.md reconciliation gotcha).
+    ex-dividend drop shows up as a price drop on the ex-date, and WITHOUT a
+    `dividend_schedule` the function correctly computes the price-only
+    return over that drop: it does not try to recover the dividend.
+
+    Live verification against the Parallax server (see
+    test_vz_single_holding_with_dividend_schedule_matches_server_total_return)
+    established that the server-side reconciliation target
+    (`total_price_pl`) is actually a TOTAL-RETURN field, dividends included
+    — the earlier assumption that it was price-only was wrong. Reconciling
+    against it correctly therefore requires passing `dividend_schedule`
+    (see that test); passing none, as here, is still a valid and useful
+    computation — it is simply a price-only return, not the total return
+    the server reports.
 
     Setup: single holding, weight=1.0, 10 days. Price-return price drops
     from 100 to 95 on ex-date day 5 (a 5% cash dividend was paid that day,
@@ -312,11 +320,13 @@ def test_price_return_prices_with_ex_dividend_drop_compute_correctly():
     then climbs back toward 100.
 
     The economic total return for the period (price + dividend) is
-    approximately +5%, but that is not what this function reports: it
-    reports the price-only return, which is a small number dominated by the
-    unrecovered dividend. That is expected and correct under the price-
-    return contract — see test_total_return_style_prices_overstate_vs_price_only_negative_control
-    for what happens if dividend-adjusted prices are supplied instead.
+    approximately +5%, but that is not what this function reports when no
+    `dividend_schedule` is supplied: it reports the price-only return,
+    which is a small number dominated by the unrecovered dividend. That is
+    expected and correct under the price-return contract — see
+    test_total_return_style_prices_plus_dividend_schedule_double_counts_negative_control
+    for what happens if dividend-adjusted prices are supplied directly
+    instead of using `dividend_schedule`.
     """
     days = 10
     # Price-return price: 100, 100, ..., 100, 95 (day 5), 96, 97, 98, 99, 100
@@ -364,28 +374,34 @@ def test_price_return_prices_with_ex_dividend_drop_compute_correctly():
     )
     # Sanity: this is materially different from the economic total return
     # (price + the unrecovered ~5% dividend) — the gap is the dividend this
-    # function intentionally excludes, not a bug. The pack's reconciliation
-    # step compares this price-only number against the server's price-only
-    # field, not against a dividend-inclusive one.
+    # function excludes when no dividend_schedule is supplied, not a bug.
+    # Reconciling this price-only number against the server's total-return
+    # field (`total_price_pl`) would fail — the pack must supply
+    # dividend_schedule for that comparison to be like-for-like.
     economic_total_return_approx = 0.05
     assert (
         abs(expected_price_only - economic_total_return_approx) > 0.04
     ), "price-only result should differ materially from the economic (dividend-inclusive) return"
 
 
-def test_total_return_style_prices_overstate_vs_price_only_negative_control():
-    """Negative control: if dividend-adjusted / total-return-style prices are
-    supplied instead of the documented price-return contract, the computed
-    return is WRONG relative to the server's price-only reconciliation
-    target — it overstates by roughly the dividend amount. This test asserts
-    that wrong (inflated) answer, documenting why `export_price_series`
-    output must be passed through unmodified rather than dividend-adjusted.
+def test_total_return_style_prices_plus_dividend_schedule_double_counts_negative_control():
+    """Negative control: `dividend_schedule` exists precisely so callers do
+    NOT need to smooth dividends into `daily_prices`. If a caller supplies
+    dividend-adjusted / total-return-style prices directly as `daily_prices`
+    AND ALSO passes `dividend_schedule` for the same symbol/dividend, the
+    dividend is counted twice — once baked into the smoothed price ramp,
+    once again via the schedule's cash add-back. This test pins that
+    double-counted (wrong) answer, documenting why `daily_prices` must stay
+    raw price-return and `dividend_schedule` is the only sanctioned path for
+    adding dividends back in.
 
     Setup: same economic event as
     test_price_return_prices_with_ex_dividend_drop_compute_correctly (a ~5%
-    cash dividend around day 5), but here the price path is smoothed as a
-    total-return series would show it — no ex-date drop, just a steady
-    100 -> 105 climb baking the dividend into the price.
+    cash dividend around day 5). Here the price path is WRONGLY smoothed as
+    a total-return series would show it (no ex-date drop, just a steady
+    100 -> 105 climb baking the dividend into the price), and a
+    dividend_schedule for the same ~5-unit dividend on day 5 is passed on
+    top of it.
     """
     days = 10
     tr_style_prices = {_date(d): 100.0 + 0.5 * d for d in range(days + 1)}  # 100 -> 105
@@ -393,6 +409,7 @@ def test_total_return_style_prices_overstate_vs_price_only_negative_control():
 
     prior = {"AAPL.O": 1.0}
     current = {"AAPL.O": 1.0}
+    dividend_schedule = {"AAPL.O": {_date(5): 5.0}}
 
     result = daily_contribution(
         prior_portfolio=prior,
@@ -401,31 +418,224 @@ def test_total_return_style_prices_overstate_vs_price_only_negative_control():
         daily_prices=daily_prices,
         period_start=_date(0),
         period_end=_date(days),
+        dividend_schedule=dividend_schedule,
     )
 
-    # Hand-computed: r[d] = 0.5 / (99.5 + 0.5*d), arithmetic sum over d=1..10
-    expected_tr_style_total = sum(0.5 / (99.5 + 0.5 * d) for d in range(1, days + 1))
+    # Hand-computed: r[d] = 0.5 / (99.5 + 0.5*d) for every day except day 5,
+    # where the +5.0 cash add-back on top of the already-smoothed price
+    # applies: r[5] = (102.5 + 5.0) / 102.0 - 1.
+    expected_double_count_total = sum(
+        0.5 / (99.5 + 0.5 * d) for d in range(1, days + 1) if d != 5
+    )
+    expected_double_count_total += (102.5 + 5.0) / 102.0 - 1.0
     assert math.isclose(
-        result["contributions"]["AAPL.O"], expected_tr_style_total, abs_tol=1e-12
+        result["contributions"]["AAPL.O"], expected_double_count_total, abs_tol=1e-12
     )
     assert math.isclose(
-        result["portfolio_total_return"], expected_tr_style_total, abs_tol=1e-12
+        result["portfolio_total_return"], expected_double_count_total, abs_tol=1e-12
     )
-    # This is the wrong number to reconcile against total_price_pl: it is
-    # overstated, relative to the true price-only result for the same
-    # economic event, by roughly the dividend amount (~5%) — large enough
-    # to blow through the 25-bp reconciliation tolerance in SKILL.md.
-    price_only_result_for_same_event = (
-        -0.05
-        + (96 / 95 - 1)
-        + (97 / 96 - 1)
-        + (98 / 97 - 1)
-        + (99 / 98 - 1)
-        + (100 / 99 - 1)
+
+    # The correct way to get this same ~5-unit dividend into the total
+    # return is price-return prices (the ex-date drop, no smoothing) PLUS
+    # dividend_schedule — not smoothed prices plus dividend_schedule.
+    price_return_prices = {_date(0): 100.0}
+    for d in range(1, 5):
+        price_return_prices[_date(d)] = 100.0
+    price_return_prices[_date(5)] = 95.0
+    for d in range(6, days + 1):
+        price_return_prices[_date(d)] = 95.0 + (d - 5)
+    correct_result = daily_contribution(
+        prior_portfolio=prior,
+        current_portfolio=current,
+        trade_log=[],
+        daily_prices={"AAPL.O": price_return_prices},
+        period_start=_date(0),
+        period_end=_date(days),
+        dividend_schedule=dividend_schedule,
     )
-    assert (
-        expected_tr_style_total - price_only_result_for_same_event > 0.04
-    ), "total-return-style input should overstate the price-only result by roughly the dividend amount"
+    correct_total = correct_result["portfolio_total_return"]
+
+    # The double-counted (wrong) total overstates the correct total-return
+    # figure by roughly the dividend amount (~5%) — large enough to blow
+    # through the 25-bp reconciliation tolerance in SKILL.md, and large
+    # enough that this is not merely a rounding difference.
+    assert expected_double_count_total - correct_total > 0.04, (
+        "smoothed total-return-style prices plus dividend_schedule should "
+        "overstate the correct price-return-plus-schedule total by roughly "
+        "the dividend amount (double counting)"
+    )
+
+
+# --------------------------------------------------------------------------
+# Test 4b: Live-verified VZ.N single-holding book (2026-10-06 settled facts)
+#
+# Raw closes and server-reported total_price_pl are from a live
+# analyze_portfolio / export_price_series / get_stock_outlook run against a
+# single-holding VZ.N book, period 2026-07-06..2026-07-14, ex-dividend
+# 2026-07-10, divrate 0.7075. The server reported total_price_pl = 264.6483
+# on a 10000 initial_value (+2.6465%), establishing that total_price_pl is a
+# TOTAL-RETURN field (dividends included via a compounded/geometric path),
+# not price-only.
+# --------------------------------------------------------------------------
+
+
+_VZ_CLOSES = {
+    "2026-07-06": 42.070008,
+    "2026-07-07": 42.589997,
+    "2026-07-08": 42.449997,
+    "2026-07-09": 42.240006,
+    "2026-07-10": 42.119996,
+    "2026-07-13": 42.679993,
+    "2026-07-14": 42.470002,
+}
+_VZ_EX_DATE = "2026-07-10"
+_VZ_DIVRATE = 0.7075
+_VZ_PERIOD_START = "2026-07-06"
+_VZ_PERIOD_END = "2026-07-14"
+_VZ_SERVER_TOTAL_RETURN = 264.6483 / 10000.0  # 0.02646483
+
+
+def test_vz_single_holding_with_dividend_schedule_matches_server_total_return():
+    """Reproduce the live-verified VZ.N numbers: raw closes + the one
+    ex-dividend cash amount, via `dividend_schedule`, should match the
+    server's total_price_pl-implied return within the documented
+    arithmetic-vs-geometric gap, not bit-for-bit.
+
+    Pinned facts, in increasing order of looseness:
+    (a) the six daily returns, hand-computed from the raw closes (with the
+        dividend added back only on the 2026-07-10 ex-date), are exact —
+        this module never approximates a single day's return;
+    (b) the GEOMETRIC compounding of those same six returns —
+        prod(1+r_d) - 1 — matches the server's reported total_price_pl
+        return to within 1e-5 (well under 1bp), confirming the server
+        compounds daily total returns rather than summing them;
+    (c) this module's own ARITHMETIC sum of the same six returns — what
+        `daily_contribution` actually reports as `portfolio_total_return`
+        — differs from the server's geometric figure by the documented,
+        intentional arithmetic-vs-geometric gap (see module docstring and
+        SKILL.md's 25-bp outer reconciliation tolerance), not by some
+        unrelated bug. For this 6-return period the gap is a fraction of a
+        basis point, comfortably inside the 25-bp tolerance.
+    """
+    dates = sorted(_VZ_CLOSES)
+    assert dates[0] == _VZ_PERIOD_START
+    assert dates[-1] == _VZ_PERIOD_END
+
+    # (a) Hand-computed daily returns, dividend added back only on the ex-date.
+    r = {}
+    for prev_d, cur_d in zip(dates, dates[1:]):
+        p_prev = _VZ_CLOSES[prev_d]
+        p_cur = _VZ_CLOSES[cur_d]
+        div = _VZ_DIVRATE if cur_d == _VZ_EX_DATE else 0.0
+        r[cur_d] = (p_cur + div) / p_prev - 1.0
+
+    assert math.isclose(
+        r["2026-07-07"], 42.589997 / 42.070008 - 1.0, abs_tol=1e-15
+    )
+    assert math.isclose(
+        r["2026-07-10"],
+        (42.119996 + _VZ_DIVRATE) / 42.240006 - 1.0,
+        abs_tol=1e-15,
+    )
+
+    # (b) Geometric compounding of the hand-computed returns matches the
+    # server's reported total_price_pl return to within 1e-5.
+    geometric_total = 1.0
+    for cur_d in dates[1:]:
+        geometric_total *= 1.0 + r[cur_d]
+    geometric_total -= 1.0
+    assert math.isclose(
+        geometric_total, _VZ_SERVER_TOTAL_RETURN, abs_tol=1e-5
+    ), (
+        f"geometric compound {geometric_total} should match the server's "
+        f"reported total_price_pl return {_VZ_SERVER_TOTAL_RETURN} to 1e-5 — "
+        "the server compounds daily total returns"
+    )
+
+    # (c) This module's arithmetic sum, via daily_contribution + dividend_schedule.
+    daily_prices = {"VZ.N": dict(_VZ_CLOSES)}
+    dividend_schedule = {"VZ.N": {_VZ_EX_DATE: _VZ_DIVRATE}}
+    result = daily_contribution(
+        prior_portfolio={"VZ.N": 1.0},
+        current_portfolio={"VZ.N": 1.0},
+        trade_log=[],
+        daily_prices=daily_prices,
+        period_start=_VZ_PERIOD_START,
+        period_end=_VZ_PERIOD_END,
+        dividend_schedule=dividend_schedule,
+    )
+    arithmetic_total = result["portfolio_total_return"]
+
+    expected_arithmetic_total = sum(r.values())
+    assert math.isclose(
+        arithmetic_total, expected_arithmetic_total, abs_tol=1e-12
+    ), "daily_contribution must sum the same six hand-computed returns arithmetically"
+
+    # The arithmetic-vs-geometric gap is small for a 6-return period and
+    # within the 25-bp SKILL.md outer reconciliation tolerance — NOT a
+    # 1bp-tight match, which would be the wrong bar for an arithmetic sum
+    # being compared against a geometric compound.
+    assert abs(arithmetic_total - _VZ_SERVER_TOTAL_RETURN) < 25e-4, (
+        f"arithmetic total {arithmetic_total} vs server (geometric) "
+        f"{_VZ_SERVER_TOTAL_RETURN} should be within the documented 25bp "
+        "arithmetic-vs-geometric gap"
+    )
+    # But it is NOT bit-identical — the gap is real and non-zero, confirming
+    # this test would actually catch a regression back to pure price-only
+    # (which would be off by ~170bps, not a few bps).
+    assert abs(arithmetic_total - _VZ_SERVER_TOTAL_RETURN) > 1e-7
+
+
+def test_vz_single_holding_without_dividend_schedule_gives_price_only_result():
+    """Same VZ.N raw closes, but WITHOUT `dividend_schedule` (the default).
+    The result must be the plain price-only return — i.e. only the one
+    ex-date term changes between the with-dividend and without-dividend
+    runs, and it changes by exactly the dividend's contribution to that
+    day's return: `0.7075 / 42.240006`, not approximately.
+    """
+    daily_prices = {"VZ.N": dict(_VZ_CLOSES)}
+
+    with_div = daily_contribution(
+        prior_portfolio={"VZ.N": 1.0},
+        current_portfolio={"VZ.N": 1.0},
+        trade_log=[],
+        daily_prices=daily_prices,
+        period_start=_VZ_PERIOD_START,
+        period_end=_VZ_PERIOD_END,
+        dividend_schedule={"VZ.N": {_VZ_EX_DATE: _VZ_DIVRATE}},
+    )
+    without_div = daily_contribution(
+        prior_portfolio={"VZ.N": 1.0},
+        current_portfolio={"VZ.N": 1.0},
+        trade_log=[],
+        daily_prices=daily_prices,
+        period_start=_VZ_PERIOD_START,
+        period_end=_VZ_PERIOD_END,
+        # dividend_schedule omitted entirely — default None -> price-only.
+    )
+
+    # Hand-computed price-only total (no dividend on any day).
+    dates = sorted(_VZ_CLOSES)
+    expected_price_only = sum(
+        _VZ_CLOSES[cur] / _VZ_CLOSES[prev] - 1.0
+        for prev, cur in zip(dates, dates[1:])
+    )
+    assert math.isclose(
+        without_div["portfolio_total_return"], expected_price_only, abs_tol=1e-12
+    )
+
+    # The ONLY thing that changes is the ex-date term's numerator picking up
+    # the cash dividend: exact, not approximate.
+    expected_delta = _VZ_DIVRATE / 42.240006
+    actual_delta = (
+        with_div["portfolio_total_return"] - without_div["portfolio_total_return"]
+    )
+    assert math.isclose(actual_delta, expected_delta, abs_tol=1e-12)
+
+    # Sanity: the price-only result is materially smaller than the
+    # total-return result — roughly the dividend's ~1.7% contribution on a
+    # ~42 close — confirming omitting dividend_schedule is not a no-op.
+    assert with_div["portfolio_total_return"] - without_div["portfolio_total_return"] > 0.01
 
 
 # --------------------------------------------------------------------------

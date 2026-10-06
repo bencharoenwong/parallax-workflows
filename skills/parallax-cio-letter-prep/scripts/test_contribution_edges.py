@@ -40,7 +40,7 @@ def _series(values: list[float]) -> dict[str, float]:
     return {_date(d): v for d, v in enumerate(values)}
 
 
-def _run(prior, current, prices, trade_log=None, days=None):
+def _run(prior, current, prices, trade_log=None, days=None, dividend_schedule=None):
     last = days if days is not None else max(
         len(s) for s in prices.values()) - 1
     return daily_contribution(
@@ -50,6 +50,7 @@ def _run(prior, current, prices, trade_log=None, days=None):
         daily_prices=prices,
         period_start=_date(0),
         period_end=_date(last),
+        dividend_schedule=dividend_schedule,
     )
 
 
@@ -219,6 +220,73 @@ def test_a_trade_dated_period_end_moves_no_return_at_all():
                   {"ZZAA.O": 0.0, "ZZBB.O": 1.0}, prices, trade_log)
     # Weight during the only return day was still the prior 0.5.
     assert result["contributions"]["ZZAA.O"] == pytest.approx(0.05, abs=1e-12)
+
+
+# --------------------------------------------------------------------------
+# dividend_schedule validation (new branches, no existing coverage)
+# --------------------------------------------------------------------------
+
+def test_dividend_schedule_unknown_symbol_raises():
+    """A dividend_schedule entry naming a symbol absent from
+    prior/current/trade_log must raise rather than being silently ignored
+    -- an unknown symbol here is almost always a typo'd RIC."""
+    prices = {"ZZAA.O": _series([100.0, 110.0, 120.0])}
+    with pytest.raises(ValueError, match="(?i)not in"):
+        _run({"ZZAA.O": 1.0}, {"ZZAA.O": 1.0}, prices,
+             dividend_schedule={"ZZBB.O": {_date(1): 1.0}}, days=2)
+
+
+def test_dividend_schedule_ex_date_not_in_timeline_raises():
+    """An ex_date strictly inside (period_start, period_end] but with no
+    price data on that exact date (e.g. a holiday the price feed skips)
+    must raise -- silently no-op would mean the dividend is dropped
+    without any signal. period_end is widened to _date(5) so _date(3)
+    passes the in-period check, but the 3-entry price series only has
+    dates 0, 1, 2 -- _date(3) is never in the timeline."""
+    prices = {"ZZAA.O": _series([100.0, 110.0, 120.0])}  # dates 0, 1, 2 only
+    with pytest.raises(ValueError, match="(?i)not a date present"):
+        daily_contribution(
+            prior_portfolio={"ZZAA.O": 1.0},
+            current_portfolio={"ZZAA.O": 1.0},
+            trade_log=[],
+            daily_prices=prices,
+            period_start=_date(0),
+            period_end=_date(5),
+            dividend_schedule={"ZZAA.O": {_date(3): 1.0}},
+        )
+
+
+def test_dividend_schedule_dated_period_start_raises():
+    """period_start has no return day (it is only the prior price for
+    return-day 1), so a dividend dated period_start can never be applied.
+    Rejecting it is consistent with how trade_log applies at period_start
+    (before return-day 1) but a dividend has nothing to attach to there."""
+    prices = {"ZZAA.O": _series([100.0, 110.0, 120.0])}
+    with pytest.raises(ValueError, match="(?i)outside period"):
+        _run({"ZZAA.O": 1.0}, {"ZZAA.O": 1.0}, prices,
+             dividend_schedule={"ZZAA.O": {_date(0): 1.0}}, days=2)
+
+
+def test_dividend_schedule_applies_with_the_weight_in_force_on_the_ex_date():
+    """The dividend add-back must use the SAME weight the price return
+    uses for that day -- i.e. it respects mid-period trades exactly like
+    the price-return term does. AAPL is trimmed from 1.0 to 0.5 effective
+    return-day 2 (trade dated day 1); the ex-date (day 2) dividend must
+    therefore be weighted at 0.5, not the prior 1.0."""
+    prices = {"ZZAA.O": _series([100.0, 100.0, 100.0]),
+              "ZZBB.O": _series([100.0, 100.0, 100.0])}
+    trade_log = [{"symbol": "ZZAA.O", "action": "trim",
+                  "date": _date(1), "weight_delta": -0.5},
+                 {"symbol": "ZZBB.O", "action": "add",
+                  "date": _date(1), "weight_delta": +0.5}]
+    result = _run({"ZZAA.O": 1.0, "ZZBB.O": 0.0},
+                  {"ZZAA.O": 0.5, "ZZBB.O": 0.5},
+                  prices, trade_log,
+                  dividend_schedule={"ZZAA.O": {_date(2): 4.0}})
+    # Day 2 return for ZZAA: (100 + 4.0)/100 - 1 = 0.04, weighted at the
+    # post-trade 0.5 -> contribution 0.02. Day 1 return is flat (0.0).
+    assert result["contributions"]["ZZAA.O"] == pytest.approx(0.02, abs=1e-12)
+    assert result["portfolio_total_return"] == pytest.approx(0.02, abs=1e-12)
 
 
 # --------------------------------------------------------------------------

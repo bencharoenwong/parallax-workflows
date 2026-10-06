@@ -35,19 +35,53 @@ Price-return prices contract
 
 `daily_prices` MUST be price-return prices: raw daily closes, with no
 dividend adjustment. This is what the upstream price tool actually returns,
-so callers should pass its output directly. With price-return prices the
-daily-return formula price[t]/price[t-1] - 1 captures price moves only — it
-does NOT capture dividend yield, so the reported portfolio_total_return is a
-price-only return. Dividends paid during the period are therefore not
-captured by this function; callers that reconcile against a server-side
-total-return figure must account for that gap separately (it is not a bug in
-this module). Supplying dividend-adjusted / total-return prices instead will
-OVER-state holding returns by roughly the dividend amount and break
-reconciliation against a price-only benchmark. See
-test_total_return_style_prices_overstate_vs_price_only_negative_control for a
-concrete demo, and test_price_return_prices_with_ex_dividend_drop_compute_correctly
+so callers should pass its output directly. With price-return prices and no
+`dividend_schedule` (see below), the daily-return formula
+price[t]/price[t-1] - 1 captures price moves only — it does NOT capture
+dividend yield, so the reported portfolio_total_return is a price-only
+return. Supplying dividend-adjusted / total-return prices directly as
+`daily_prices` instead of using `dividend_schedule` is still wrong under this
+contract: it bakes the dividend into a smoothed price ramp instead of the
+discrete jump it actually is on the ex-date, and if a `dividend_schedule` is
+also supplied for the same symbol, the dividend is counted twice. See
+test_total_return_style_prices_plus_dividend_schedule_double_counts_negative_control
+for a concrete demo, and test_price_return_prices_with_ex_dividend_drop_compute_correctly
 for confirmation that price-return input (including an ex-dividend price
-drop) computes correctly under this contract.
+drop) computes the price-only return correctly when no `dividend_schedule`
+is supplied.
+
+Dividend schedule (optional) — total return, not price-only
+-------------------------------------------------------------
+
+Live verification against the Parallax server (single-holding VZ.N book,
+2026-07-06..2026-07-14, ex-dividend 2026-07-10) established that the
+server-side fields this skill reconciles against (`total_price_pl`,
+`total_pl`, `total_return`, per-row `price_pl`) are TOTAL-RETURN fields:
+dividends are included (added to the price on the ex-date, then carried
+forward), and only FX is isolated separately (`total_fx_pl` plus a
+price x FX cross term). A price-only local computation therefore does NOT
+match `total_price_pl` on a dividend-paying book — the earlier assumption
+that `total_price_pl` was price-only was wrong.
+
+To compute a like-for-like local total return, pass the optional
+`dividend_schedule` parameter: `{symbol: {ex_date: cash_amount}}`, cash
+amount in the holding's own listing currency, keyed by the SAME ex-date
+convention the server uses (`get_stock_outlook(aspect="dividends")`'s
+`effective_date`). On each ex-date present in the schedule, the daily-return
+formula becomes `(price[t] + dividend[t]) / price[t-1] - 1` instead of the
+plain price-return formula; every other day is unaffected. The resulting
+`portfolio_total_return` is then a total return BEFORE FX — directly
+comparable to `total_price_pl / initial_value` — not a price-only return.
+Omitting `dividend_schedule` (the default, `None` -> treated as empty)
+preserves the original price-only behavior documented above; it is not
+removed, since not every caller has dividend data to supply.
+
+The reported total still sums arithmetically across days, not
+geometrically (see "Arithmetic vs geometric" below), so even with a correct
+`dividend_schedule` the local total return will differ from the server's
+compounded figure by a small amount for multi-day periods — this is a
+known, documented gap, not a bug (see
+test_vz_single_holding_with_dividend_schedule_matches_server_total_return).
 
 Trade convention
 ----------------
@@ -119,12 +153,14 @@ def daily_contribution(
     daily_prices: dict[str, dict[str, float]],
     period_start: str,
     period_end: str,
+    dividend_schedule: dict[str, dict[str, float]] | None = None,
     reconciliation_tolerance: float = DEFAULT_RECONCILIATION_TOLERANCE,
 ) -> dict:
     """Compute per-holding contribution to portfolio total return.
 
     See module docstring for math approach, the price-return-prices
-    contract, and trade convention.
+    contract, the optional dividend_schedule / total-return extension, and
+    trade convention.
 
     Parameters
     ----------
@@ -150,6 +186,20 @@ def daily_contribution(
         for this date — only used as the prior price for return-day 1).
     period_end : str
         ISO 'YYYY-MM-DD'. Last date of the period.
+    dividend_schedule : dict[str, dict[str, float]] | None
+        Optional. {symbol: {ex_date: cash_amount}}, cash amount in the
+        holding's own listing currency. ex_date MUST fall strictly after
+        period_start and on/before period_end, and MUST be a date present
+        in the computed timeline (a date in daily_prices within the
+        period) — there is no return day for period_start itself, so a
+        dividend dated period_start can never be applied and is rejected
+        rather than silently dropped. When supplied for a given
+        {symbol, ex_date}, that day's return becomes
+        (price[ex_date] + cash_amount) / price[prior_date] - 1 instead of
+        the plain price-return formula, turning the reported
+        portfolio_total_return into a total return before FX (see module
+        docstring). Defaults to None, treated as empty (no dividends
+        applied) — the original price-only behavior.
     reconciliation_tolerance : float
         Tolerance for the sum(contributions) == portfolio_total_return
         check. Defaults to DEFAULT_RECONCILIATION_TOLERANCE (1bp).
@@ -173,6 +223,9 @@ def daily_contribution(
         - trade_log not chronologically ordered
         - invalid action vocabulary
         - trade dates outside [period_start, period_end]
+        - dividend_schedule naming an unknown symbol, an ex_date outside
+          (period_start, period_end], or an ex_date not present in the
+          computed timeline
     ReconciliationError
         If abs(sum(contributions) - portfolio_total_return) > tolerance.
     """
@@ -232,6 +285,10 @@ def daily_contribution(
                     f"missing price for symbol '{sym}' on date {d_str}"
                 )
 
+    # ---- 5b. Validate dividend_schedule (optional) ------------------------
+    dividend_schedule = dividend_schedule or {}
+    _validate_dividend_schedule(dividend_schedule, symbols, set(timeline), start_d, end_d)
+
     # ---- 6. Group trades by date for fast lookup --------------------------
     trades_by_date: dict[str, list[dict]] = {}
     for trade in trade_log:
@@ -266,7 +323,14 @@ def daily_contribution(
                 raise ValueError(
                     f"price for '{sym}' on {prev_date} is zero; cannot compute return"
                 )
-            r = p_cur / p_prev - 1.0
+            # Dividend add-back: on an ex-date present in dividend_schedule,
+            # the day's total return is (price + cash dividend) / prior
+            # price - 1 instead of the plain price-return formula. Every
+            # other day (and every symbol/date absent from the schedule)
+            # is unaffected — this is what turns a price-only computation
+            # into a total return before FX (see module docstring).
+            dividend = dividend_schedule.get(sym, {}).get(cur_date, 0.0)
+            r = (p_cur + dividend) / p_prev - 1.0
             c = weights[sym] * r
             contributions[sym] += c
             portfolio_total_return += c
@@ -386,5 +450,56 @@ def _validate_trade_log(
                 f"{trade['date']} < previous {prev_d.isoformat()}"
             )
         prev_d = d
+
+
+def _validate_dividend_schedule(
+    dividend_schedule: dict[str, dict[str, float]],
+    symbols: set[str],
+    timeline_dates: set[str],
+    start_d: _date_cls,
+    end_d: _date_cls,
+) -> None:
+    """Validate the optional dividend_schedule parameter.
+
+    Every {symbol, ex_date} pair must: name a symbol already in the
+    computed universe (prior/current/trade_log — a typo'd or unheld symbol
+    is rejected rather than silently ignored); carry an ex_date strictly
+    after period_start and on/before period_end (period_start has no
+    return day, so a dividend dated period_start can never be applied and
+    is rejected rather than silently dropped); and fall on a date actually
+    present in the timeline (an ex_date outside the available price dates
+    would otherwise silently no-op instead of being applied).
+    """
+    for sym, by_date in dividend_schedule.items():
+        if sym not in symbols:
+            raise ValueError(
+                f"dividend_schedule names symbol '{sym}' which is not in "
+                "prior_portfolio, current_portfolio, or trade_log"
+            )
+        if not isinstance(by_date, dict):
+            raise ValueError(
+                f"dividend_schedule['{sym}'] must be a dict of {{ex_date: cash_amount}}"
+            )
+        for ex_date, cash_amount in by_date.items():
+            d = _parse_iso(ex_date, field=f"dividend_schedule['{sym}']")
+            if d <= start_d or d > end_d:
+                raise ValueError(
+                    f"dividend_schedule['{sym}']['{ex_date}'] outside period "
+                    f"({start_d.isoformat()}, {end_d.isoformat()}] — period_start "
+                    "has no return day, so a dividend dated period_start can "
+                    "never be applied"
+                )
+            if ex_date not in timeline_dates:
+                raise ValueError(
+                    f"dividend_schedule['{sym}']['{ex_date}'] is not a date "
+                    "present in the computed timeline (no price data for "
+                    "that date) — the dividend would silently never be "
+                    "applied"
+                )
+            if not isinstance(cash_amount, (int, float)) or isinstance(cash_amount, bool):
+                raise ValueError(
+                    f"dividend_schedule['{sym}']['{ex_date}'] cash amount "
+                    f"must be a number, got {type(cash_amount).__name__}"
+                )
 
 
