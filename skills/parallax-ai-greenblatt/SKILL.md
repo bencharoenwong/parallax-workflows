@@ -19,9 +19,9 @@ description: "Applies Joel Greenblatt's Magic Formula (per 'The Little Book That
 
 ## Gotchas
 
-- Expected Parallax spend: ~10–15 tokens ticker-check, ~10–30 universe mode (`_parallax/token-costs.md`); `build_stock_universe` is 5 of that.
+- Expected Parallax spend: ~35–40 tokens in BOTH modes — `build_stock_universe` (5) + `get_financials(statement=ratios)` × up to 30 candidates (1 credit each; the tool has no multi-symbol support, so this is per-candidate) + `get_peer_snapshot`. The `_parallax/token-costs.md` figures of ~10-15/~10-30 predate this count and have not been corrected in that shared table.
 - JIT-load `_parallax/parallax-conventions.md`, `_parallax/AI-profiles/profile-schema.md`, `_parallax/AI-profiles/output-template.md`, `_parallax/AI-profiles/profiles/greenblatt.md` — Step 0.
-- Universe mode is the default with no ticker; ticker-check mode with exactly one. Exclude financials and utilities from the default universe per Greenblatt's original rule.
+- Universe mode is the default with no ticker; ticker-check mode with exactly one. `build_stock_universe` is a free-text relevance search with no sector-exclusion parameter — it does NOT enforce Greenblatt's financials/utilities exclusion. The default query (consumer staples) avoids those sectors only because it names a different one; a custom `--universe <theme>` query can return financials or utilities names with nothing to filter them out.
 - `build_stock_universe` is async and broad queries time out: queries MUST be sector-scoped (default `"US large-cap consumer staples"`); a broad request runs sector-by-sector and merges.
 - NEVER use first-person impersonation — always "Greenblatt-style" or "Magic Formula". Disclaimer verbatim with "Joel Greenblatt" for [Investor]. Public book + academic replication only — no `get_assessment`, no `score_total`.
 - Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
@@ -93,7 +93,7 @@ Top decile by combined ROC + earnings yield rank:
 Workflow derived from: Greenblatt, J. (2006). The Little Book That Beats the Market; Gray & Carlisle (2012).
 Last anchor-tested: 2026-04-06 (CSCO.O, MSFT.O, NVDA.O)
 Tool sequence: build_stock_universe, get_peer_snapshot × N, get_financials(ratios) × N
-Token cost: ~10-30 tokens (universe mode) / ~10-15 tokens (ticker-check mode)
+Token cost: ~35-40 tokens (both modes)
 
 ---
 This output is an AI-inferred interpretation of Joel Greenblatt's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by Joel Greenblatt or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.
@@ -119,8 +119,8 @@ Verdict sensitivity: combined rank sits at the <percentile>th percentile, <D> po
 
 Workflow derived from: Greenblatt, J. (2006). The Little Book That Beats the Market; Gray & Carlisle (2012).
 Last anchor-tested: 2026-04-06 (CSCO.O, MSFT.O, NVDA.O)
-Tool sequence: get_peer_snapshot, get_financials(ratios) × N
-Token cost: ~10-15 tokens
+Tool sequence: build_stock_universe, get_peer_snapshot, get_financials(ratios) × N
+Token cost: ~35-40 tokens
 
 ---
 This output is an AI-inferred interpretation of Joel Greenblatt's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by Joel Greenblatt or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.
