@@ -30,15 +30,24 @@ is therefore the arithmetic sum of daily portfolio returns, NOT the
 geometrically compounded period return; for short letter periods (one month)
 the gap is small but it is non-zero and callers should be aware.
 
-Total-return prices assumption
-------------------------------
+Price-return prices contract
+-----------------------------
 
-`daily_prices` MUST be total-return prices (dividends reinvested). With
-TR-prices the daily-return formula price[t]/price[t-1] - 1 already captures
-both price moves and dividend yield. Supplying non-TR (raw close) prices
-will under-state holding returns by the dividend amount and break the
-reconciliation against true portfolio total return. See
-test_non_total_return_prices_break_math_negative_control for a concrete demo.
+`daily_prices` MUST be price-return prices: raw daily closes, with no
+dividend adjustment. This is what the upstream price tool actually returns,
+so callers should pass its output directly. With price-return prices the
+daily-return formula price[t]/price[t-1] - 1 captures price moves only — it
+does NOT capture dividend yield, so the reported portfolio_total_return is a
+price-only return. Dividends paid during the period are therefore not
+captured by this function; callers that reconcile against a server-side
+total-return figure must account for that gap separately (it is not a bug in
+this module). Supplying dividend-adjusted / total-return prices instead will
+OVER-state holding returns by roughly the dividend amount and break
+reconciliation against a price-only benchmark. See
+test_total_return_style_prices_overstate_vs_price_only_negative_control for a
+concrete demo, and test_price_return_prices_with_ex_dividend_drop_compute_correctly
+for confirmation that price-return input (including an ex-dividend price
+drop) computes correctly under this contract.
 
 Trade convention
 ----------------
@@ -114,8 +123,8 @@ def daily_contribution(
 ) -> dict:
     """Compute per-holding contribution to portfolio total return.
 
-    See module docstring for math approach, total-return-prices assumption,
-    and trade convention.
+    See module docstring for math approach, the price-return-prices
+    contract, and trade convention.
 
     Parameters
     ----------
@@ -131,7 +140,8 @@ def daily_contribution(
         does NOT enforce this strictly; weights are recomputed daily and
         the reconciliation gate catches material drift).
     daily_prices : dict[str, dict[str, float]]
-        {symbol: {ISO_date: total_return_price}}. Every symbol that
+        {symbol: {ISO_date: price_return_price}}. Raw daily close, no
+        dividend adjustment. Every symbol that
         appears in prior_portfolio, in current_portfolio, or as the
         'symbol' of any trade in trade_log MUST have an entry covering
         all required dates.

@@ -292,22 +292,104 @@ def test_exited_mid_period():
 
 
 # --------------------------------------------------------------------------
-# Test 4: Dividend / total-return-prices assumption
+# Test 4: Price-return-prices contract (the real contract — export_price_series
+# returns raw closes, no dividend adjustment)
 # --------------------------------------------------------------------------
 
 
-def test_total_return_prices_assumption_correct():
-    """With TR-prices (dividends reinvested), a 5% dividend appears as a
-    smooth/flat segment with no ex-date drop (because the price is adjusted
-    to bake in the reinvestment). Math is correct.
+def test_price_return_prices_with_ex_dividend_drop_compute_correctly():
+    """The real contract: `daily_prices` is price-return (raw close, no
+    dividend adjustment) — exactly what `export_price_series` returns. An
+    ex-dividend drop shows up as a price drop on the ex-date, and the
+    function correctly computes the price-only return over that drop: it
+    does not try to recover the dividend, because the server-side
+    reconciliation target (`total_price_pl`) is price-only too (see the
+    SKILL.md reconciliation gotcha).
 
-    Setup: single holding, weight=1.0 throughout, 10 days.
-    TR price: 100 -> 105 linearly over 10 days. r_total ~= sum of daily returns.
-    Single-holding contribution must equal portfolio total return.
+    Setup: single holding, weight=1.0, 10 days. Price-return price drops
+    from 100 to 95 on ex-date day 5 (a 5% cash dividend was paid that day,
+    but — correctly, per the contract — is NOT reflected in the price),
+    then climbs back toward 100.
+
+    The economic total return for the period (price + dividend) is
+    approximately +5%, but that is not what this function reports: it
+    reports the price-only return, which is a small number dominated by the
+    unrecovered dividend. That is expected and correct under the price-
+    return contract — see test_total_return_style_prices_overstate_vs_price_only_negative_control
+    for what happens if dividend-adjusted prices are supplied instead.
     """
     days = 10
-    tr_prices = {_date(d): 100.0 + 0.5 * d for d in range(days + 1)}  # 100 -> 105
-    daily_prices = {"AAPL.O": tr_prices}
+    # Price-return price: 100, 100, ..., 100, 95 (day 5), 96, 97, 98, 99, 100
+    price_return = {_date(0): 100.0}
+    for d in range(1, 5):
+        price_return[_date(d)] = 100.0
+    price_return[_date(5)] = 95.0
+    for d in range(6, days + 1):
+        price_return[_date(d)] = 95.0 + (d - 5)  # 96, 97, 98, 99, 100
+
+    daily_prices = {"AAPL.O": price_return}
+    prior = {"AAPL.O": 1.0}
+    current = {"AAPL.O": 1.0}
+
+    result = daily_contribution(
+        prior_portfolio=prior,
+        current_portfolio=current,
+        trade_log=[],
+        daily_prices=daily_prices,
+        period_start=_date(0),
+        period_end=_date(days),
+    )
+
+    # Hand-computed: sum of daily price-only returns
+    # Day 1..4: r=0
+    # Day 5: r = 95/100 - 1 = -0.05
+    # Day 6: r = 96/95 - 1
+    # Day 7: r = 97/96 - 1
+    # Day 8: r = 98/97 - 1
+    # Day 9: r = 99/98 - 1
+    # Day 10: r = 100/99 - 1
+    expected_price_only = (
+        -0.05
+        + (96 / 95 - 1)
+        + (97 / 96 - 1)
+        + (98 / 97 - 1)
+        + (99 / 98 - 1)
+        + (100 / 99 - 1)
+    )
+    assert math.isclose(
+        result["contributions"]["AAPL.O"], expected_price_only, abs_tol=1e-12
+    )
+    assert math.isclose(
+        result["portfolio_total_return"], expected_price_only, abs_tol=1e-12
+    )
+    # Sanity: this is materially different from the economic total return
+    # (price + the unrecovered ~5% dividend) — the gap is the dividend this
+    # function intentionally excludes, not a bug. The pack's reconciliation
+    # step compares this price-only number against the server's price-only
+    # field, not against a dividend-inclusive one.
+    economic_total_return_approx = 0.05
+    assert (
+        abs(expected_price_only - economic_total_return_approx) > 0.04
+    ), "price-only result should differ materially from the economic (dividend-inclusive) return"
+
+
+def test_total_return_style_prices_overstate_vs_price_only_negative_control():
+    """Negative control: if dividend-adjusted / total-return-style prices are
+    supplied instead of the documented price-return contract, the computed
+    return is WRONG relative to the server's price-only reconciliation
+    target — it overstates by roughly the dividend amount. This test asserts
+    that wrong (inflated) answer, documenting why `export_price_series`
+    output must be passed through unmodified rather than dividend-adjusted.
+
+    Setup: same economic event as
+    test_price_return_prices_with_ex_dividend_drop_compute_correctly (a ~5%
+    cash dividend around day 5), but here the price path is smoothed as a
+    total-return series would show it — no ex-date drop, just a steady
+    100 -> 105 climb baking the dividend into the price.
+    """
+    days = 10
+    tr_style_prices = {_date(d): 100.0 + 0.5 * d for d in range(days + 1)}  # 100 -> 105
+    daily_prices = {"AAPL.O": tr_style_prices}
 
     prior = {"AAPL.O": 1.0}
     current = {"AAPL.O": 1.0}
@@ -322,58 +404,18 @@ def test_total_return_prices_assumption_correct():
     )
 
     # Hand-computed: r[d] = 0.5 / (99.5 + 0.5*d), arithmetic sum over d=1..10
-    expected_total = sum(0.5 / (99.5 + 0.5 * d) for d in range(1, days + 1))
+    expected_tr_style_total = sum(0.5 / (99.5 + 0.5 * d) for d in range(1, days + 1))
     assert math.isclose(
-        result["contributions"]["AAPL.O"], expected_total, abs_tol=1e-12
+        result["contributions"]["AAPL.O"], expected_tr_style_total, abs_tol=1e-12
     )
-    assert math.isclose(result["portfolio_total_return"], expected_total, abs_tol=1e-12)
-
-
-def test_non_total_return_prices_break_math_negative_control():
-    """Negative control: if the user supplies non-TR prices with an ex-dividend
-    drop, the computed return is wrong (it understates total return by the
-    dividend amount). This test asserts the WRONG answer, documenting that
-    the function REQUIRES TR prices.
-
-    Setup: single holding, weight=1.0, 10 days. Non-TR price drops from 100
-    to 95 on ex-date day 5 (5% dividend), then climbs back to 100. Cash dividend
-    of 5 was paid but is NOT in the price.
-
-    True total return for the period = 0% (price ends where it started + 5 dividend
-    on a $100 base = +5%). But because we ignore the dividend, the function
-    computes the price-only return path which sums to a negative number.
-    """
-    days = 10
-    # Non-TR price: 100, 100, ..., 100, 95 (day 5), 96, 97, 98, 99, 100
-    non_tr = {_date(0): 100.0}
-    for d in range(1, 5):
-        non_tr[_date(d)] = 100.0
-    non_tr[_date(5)] = 95.0
-    for d in range(6, days + 1):
-        non_tr[_date(d)] = 95.0 + (d - 5)  # 96, 97, 98, 99, 100
-
-    daily_prices = {"AAPL.O": non_tr}
-    prior = {"AAPL.O": 1.0}
-    current = {"AAPL.O": 1.0}
-
-    result = daily_contribution(
-        prior_portfolio=prior,
-        current_portfolio=current,
-        trade_log=[],
-        daily_prices=daily_prices,
-        period_start=_date(0),
-        period_end=_date(days),
+    assert math.isclose(
+        result["portfolio_total_return"], expected_tr_style_total, abs_tol=1e-12
     )
-
-    # Hand-computed wrong answer: sum of daily price-only returns
-    # Day 1..4: r=0
-    # Day 5: r = 95/100 - 1 = -0.05
-    # Day 6: r = 96/95 - 1
-    # Day 7: r = 97/96 - 1
-    # Day 8: r = 98/97 - 1
-    # Day 9: r = 99/98 - 1
-    # Day 10: r = 100/99 - 1
-    expected_wrong = (
+    # This is the wrong number to reconcile against total_price_pl: it is
+    # overstated, relative to the true price-only result for the same
+    # economic event, by roughly the dividend amount (~5%) — large enough
+    # to blow through the 25-bp reconciliation tolerance in SKILL.md.
+    price_only_result_for_same_event = (
         -0.05
         + (96 / 95 - 1)
         + (97 / 96 - 1)
@@ -381,19 +423,9 @@ def test_non_total_return_prices_break_math_negative_control():
         + (99 / 98 - 1)
         + (100 / 99 - 1)
     )
-    assert math.isclose(
-        result["contributions"]["AAPL.O"], expected_wrong, abs_tol=1e-12
-    )
-    # Sanity: this is materially different from the TRUE ~5% total return
-    # (the ex-date drop is not recovered in price-only terms by the climb back
-    # to par; the numeric residual is dominated by the lost dividend amount).
-    # True TR-period-return ~= +0.05 (5% dividend on flat-priced position).
-    # Computed price-only result is far below that — proving the math breaks
-    # without total-return prices.
-    true_tr_return_approx = 0.05
     assert (
-        abs(expected_wrong - true_tr_return_approx) > 0.04
-    ), "non-TR result should be materially off from true TR return"
+        expected_tr_style_total - price_only_result_for_same_event > 0.04
+    ), "total-return-style input should overstate the price-only result by roughly the dividend amount"
 
 
 # --------------------------------------------------------------------------

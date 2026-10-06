@@ -7,7 +7,7 @@ so the math is verifiable without running the script.
 
 - Period: `2026-01-01` to `2026-01-31` (30 return-days, 31 calendar dates)
 - 3 equally-weighted holdings, no trades
-- Total-return prices (linear paths for clean hand-computation):
+- Price-return prices (linear paths for clean hand-computation):
 
 | Symbol | Day 0 | Day 30 | Daily price formula |
 |---|---|---|---|
