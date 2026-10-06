@@ -57,7 +57,7 @@ Report-producer shape: the spine headings below; `attribution.py` and its tests 
 
 ### Step 2 — Fetch (parallel batches)
 
-For every holding across segments: `export_price_series` (total-return closes — same TR convention as parallax-cio-letter-prep; never mix raw closes) over each segment's sub-window; compute per-holding period returns. `analyze_portfolio` on the chain weights is the server-side cross-check when available — flag if local math diverges materially, mirroring the cio-letter-prep canonical-server rule. Classify each holding via `get_peer_snapshot` / `get_company_info` into schema keys (`sector`, `region`, `themes`) for `holding_meta`; unclassifiable holdings get multiplier 1.0 (their effect lands in the residual — never guess a sector).
+For every holding across segments: `export_price_series` (price-return closes — the server applies no dividend adjustment, so this is NOT a total-return series) over each segment's sub-window; compute per-holding period returns. Measured active-return and attribution magnitudes therefore understate true total-return figures by each holding's dividend yield over the segment, and are not like-for-like against a total-return benchmark; state this limitation alongside the numbers rather than presenting them as total-return attribution. `analyze_portfolio` on the chain weights is the server-side cross-check when available — flag if local math diverges materially, mirroring the cio-letter-prep canonical-server rule. Classify each holding via `get_peer_snapshot` / `get_company_info` into schema keys (`sector`, `region`, `themes`) for `holding_meta`; unclassifiable holdings get multiplier 1.0 (their effect lands in the residual — never guess a sector).
 
 ### Step 3 — Verify
 
