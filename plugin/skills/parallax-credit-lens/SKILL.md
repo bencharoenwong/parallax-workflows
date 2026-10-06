@@ -1,6 +1,6 @@
 ---
 name: parallax-credit-lens
-description: "Credit risk assessment for publicly traded companies: leverage, coverage, liquidity, solvency (Palepu), Altman Z-score, and credit health signals vs. peer medians. Symbol in RIC format (AAPL.O, JPM.N). NOT for portfolio credit risk (use /parallax-scenario-analysis), not for private companies (requires document ingestion; not covered), not for forensic earnings-quality screening (use /parallax-earnings-quality), not for single-stock fundamental analysis (use /parallax-deep-dive)."
+description: "Credit risk assessment for publicly traded companies: leverage, coverage, liquidity, solvency (Palepu), Altman Z-score, and traffic-light credit health signals on published absolute thresholds. Symbol in RIC format (AAPL.O, JPM.N). NOT for portfolio credit risk (use /parallax-scenario-analysis), not for private companies (requires document ingestion; not covered), not for forensic earnings-quality screening (use /parallax-earnings-quality), not for single-stock fundamental analysis (use /parallax-deep-dive)."
 ---
 
 <!-- white-label: integration-pattern.md -->
