@@ -16,7 +16,7 @@ description: "Credit risk assessment for publicly traded companies: leverage, co
 
 ## Gotchas
 
-- Expected Parallax spend: ~10 tokens: Batch A 4 (three statements + peer snapshot), Batch B 6 (Palepu 5, score analysis 1; telemetry is free).
+- Expected Parallax spend: ~11 tokens: Batch A 4 (three statements + peer snapshot), Batch B 7 (Palepu 5, score analysis 1, telemetry 1).
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §3 parallel execution, §4 / §4.0 fallbacks, §11 verdict sensitivity, §14 host primitives.
 - `credit_lens_logic.py` is the pure arithmetic layer: every flag, the Altman Z-score and zone, the Quality-change flag and the overall traffic-light are computed there, never in prose. No MCP calls or file writes go in it. `assemble_report()` is a test-only reference renderer: it omits §9.1 and §9.2 and must not produce client-facing output.
 - The published cutoffs in Step 4 mirror the module's constants (`ABSOLUTE_THRESHOLDS`, the Altman zone function, `flag_quality_change`); `tests/test_credit_lens.py` pins the two in agreement. Edit the module first, then the table.

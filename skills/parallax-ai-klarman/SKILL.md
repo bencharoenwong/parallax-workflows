@@ -115,7 +115,7 @@ Verdict sensitivity: the verdict-relevant input nearest its cutoff is <check or 
 Workflow derived from: Klarman, S. (1991). Margin of Safety.
 Last anchor-tested: 2026-04-07 (BRKb.N, NVDA.O)
 Tool sequence: get_company_info, get_peer_snapshot, get_financials(balance_sheet/cash_flow/ratios, 4 periods)
-Token cost: ~5 tokens
+Token cost: ~5–7 tokens
 
 ---
 This output is an AI-inferred interpretation of Seth Klarman's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by Seth Klarman or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.
