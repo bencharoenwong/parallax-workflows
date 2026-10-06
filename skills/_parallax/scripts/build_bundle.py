@@ -269,34 +269,130 @@ def transform_view_status(text: str) -> str:
         "view_status operator command")
 
 
-def transform_token_costs(text: str) -> str:
-    """Drop the cost rows for house-view operator workflows. The bundle ships the
-    house-view runtime but none of those commands, so pricing them advertises
-    workflows a plugin user cannot run."""
-    out = []
-    dropped = 0
-    # Every operator command absent from PLUGIN_SKILLS must appear here, or its
-    # row survives into the public bundle and prices a workflow the plugin user
-    # cannot run. /parallax-house-view-attribution was added to token-costs.md
-    # without being added here and did exactly that.
-    excluded = ("/parallax-load-house-view", "/parallax-make-house-view",
-                "/parallax-judge-house-view", "/parallax-stress-house-view",
-                "/parallax-house-view-diff", "/parallax-house-view-attribution")
-    for line in text.splitlines(keepends=True):
-        if line.startswith("|") and any(f"`{c}`" in line for c in excluded):
-            dropped += 1
+# A skill named in a shipped doc, as `/parallax-x` or bare `parallax-x`. Only
+# names that are real skills (manifest rows) count, so prose cannot trip it.
+_SKILL_REF = re.compile(r"(?<![\w-])/?((?:parallax|translate)-[a-z0-9-]*[a-z0-9])")
+
+
+def named_skills(text: str) -> set[str]:
+    return set(_SKILL_REF.findall(text)) & set(skill_manifest.skills())
+
+
+def filter_token_costs(text: str, available: set[str]) -> str:
+    """Keep only the cost rows, bullets and callouts for skills this
+    distribution ships. Drops a table row whose first cell names an
+    unavailable skill, a `-` bullet or `>` callout that names one, and a `###`
+    section whose table ends up with no rows. Fails if any unavailable skill
+    is still named afterwards."""
+    lines = text.splitlines(keepends=True)
+    out, i = [], 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith(">"):
+            j = i
+            while j < len(lines) and lines[j].startswith(">"):
+                j += 1
+            if named_skills("".join(lines[i:j])) - available:
+                if j < len(lines) and not lines[j].strip():
+                    j += 1                      # and the blank line after it
+            else:
+                out.extend(lines[i:j])
+            i = j
+            continue
+        if (line.startswith("|") and not line.startswith("|---")
+                and named_skills(line.split("|")[1]) - available):
+            i += 1
+            continue
+        if line.startswith("- ") and named_skills(line) - available:
+            i += 1
             continue
         out.append(line)
-    if dropped != len(excluded):
-        raise BuildError(
-            f"transform anchor not found (token-costs house-view rows): "
-            f"dropped {dropped}, expected {len(excluded)}")
-    text = "".join(out)
-    # The two callouts below the table price and describe the same excluded
-    # workflows; the auto-trigger one documents a drift check that cannot fire
-    # in a bundle without the judge command.
-    text = _cut(text, "> **Cost gotcha:**", "\n#", "token-costs cost-gotcha callout")
+        i += 1
+    sections = re.split(r"(?m)^(?=#{1,3} )", "".join(out))
+    kept = []
+    for sec in sections:
+        rows = [ln for ln in sec.splitlines() if ln.startswith("|")]
+        if sec.startswith("### ") and rows and len(rows) <= 2:
+            continue                            # header + separator only
+        kept.append(sec)
+    text = "".join(kept)
+    left = named_skills(text) - available
+    if left:
+        raise BuildError(f"token-costs still names skills this distribution "
+                         f"does not ship: {sorted(left)}")
     return text
+
+
+# House-view operator skills install together, outside the plugin and web sets.
+# Every mention of one applies only once a house view exists, and a view
+# exists only through them, so they are never marked unavailable.
+HOUSE_VIEW_OPERATORS = frozenset({
+    "parallax-load-house-view", "parallax-make-house-view",
+    "parallax-judge-house-view", "parallax-stress-house-view",
+    "parallax-house-view-diff", "parallax-house-view-attribution",
+})
+
+# Appended to a slash command for a skill the distribution does not ship, so
+# a reader is never told to run something that is not installed.
+PLUGIN_NOTE = " (not in the plugin)"
+WEB_NOTE = " (not available on claude.ai)"
+# A link target is left alone: a note inside `](...)` would break the link.
+_CMD_REF = re.compile(
+    r"(?<![\w/.~-])(?<!\]\()/((?:parallax|translate)-[a-z0-9-]*[a-z0-9])\b")
+_CODE_SPAN = re.compile(r"(`[^`\n]*`)")
+
+
+def annotate_unavailable_commands(text: str, available: set[str],
+                                  note: str = PLUGIN_NOTE) -> str:
+    """Mark every `/parallax-x` command whose skill is not in `available`.
+    Inside a code span the note goes after the span; fenced code blocks are
+    left as written so examples stay copyable. Idempotent. Only real skill
+    names (manifest rows) count."""
+    known = set(skill_manifest.skills())
+
+    def unavailable(name: str) -> bool:
+        return name in known and name not in available and name not in HOUSE_VIEW_OPERATORS
+
+    out, fenced = [], False
+    for line in text.splitlines(keepends=True):
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+        if fenced or line.lstrip().startswith("```"):
+            out.append(line)                    # examples stay copyable
+            continue
+        pieces = _CODE_SPAN.split(line)
+        for i, piece in enumerate(pieces):
+            after = pieces[i + 1] if i + 1 < len(pieces) else ""
+            if _CODE_SPAN.fullmatch(piece):
+                if (any(unavailable(n) for n in _CMD_REF.findall(piece))
+                        and not after.startswith(note)):
+                    pieces[i] = piece + note
+            else:
+                pieces[i] = _CMD_REF.sub(
+                    lambda m, p=piece: m.group(0) + (
+                        note if unavailable(m.group(1))
+                        and not p[m.end():].startswith(note) else ""),
+                    piece)
+        out.append("".join(pieces))
+    return "".join(out)
+
+
+def annotate_tree(root: Path, available: set[str], note: str) -> None:
+    """Apply annotate_unavailable_commands to every staged .md and .yaml."""
+    for path in sorted(root.rglob("*")):
+        if path.is_file() and path.suffix in (".md", ".yaml"):
+            text = path.read_text(encoding="utf-8")
+            new = annotate_unavailable_commands(text, available, note)
+            if new != text:
+                path.write_text(new, encoding="utf-8")
+
+
+def filter_shipped_docs(parallax_root: Path, available: set[str]) -> None:
+    """Apply the skill-set filters to staged shared docs (plugin and web)."""
+    path = parallax_root / "token-costs.md"
+    if path.is_file():
+        path.write_text(filter_token_costs(path.read_text(encoding="utf-8"),
+                                           available), encoding="utf-8")
 
 
 def transform_macro_outlook(text: str) -> str:
@@ -475,7 +571,6 @@ TRANSFORMS = {
     "_parallax/house-view/schema.yaml": transform_hv_schema,
     "_parallax/parallax-conventions.md": transform_conventions,
     "_parallax/AI-profiles/output-template.md": transform_output_template,
-    "_parallax/token-costs.md": transform_token_costs,
     "_parallax/house-view/view_status.py": transform_view_status,
     "parallax-macro-outlook/SKILL.md": transform_macro_outlook,
     "parallax-thematic-screen/SKILL.md": transform_thematic_screen,
@@ -499,9 +594,28 @@ def transform_loader_web(text: str) -> str:
         "loader web skill-structure citation")
 
 
+def transform_due_diligence_web(text: str) -> str:
+    """Web-only. The client-safe refusal is rendered verbatim to the user, so
+    it must not name a workflow claude.ai does not offer; nor should the
+    routing bullet. Both keep their client-review alternative."""
+    text = _swap(
+        text,
+        "for a client-facing deliverable use /parallax-client-review or "
+        "/parallax-white-label-stock-report.",
+        "for a client-facing deliverable use /parallax-client-review.",
+        "due-diligence client-safe refusal")
+    return _swap(
+        text,
+        "→ use /parallax-client-review (portfolio) or "
+        "/parallax-white-label-stock-report (single name)",
+        "→ use /parallax-client-review (portfolio)",
+        "due-diligence client-forwardable route")
+
+
 WEB_TRANSFORMS = {
     "_parallax/parallax-conventions.md": transform_conventions_web,
     "_parallax/house-view/loader.md": transform_loader_web,
+    "parallax-due-diligence/SKILL.md": transform_due_diligence_web,
 }
 
 
@@ -586,15 +700,20 @@ UNSHIPPED_LANGUAGES = (
 )
 
 
-def strip_unshipped_languages(skills_root: Path, skills: list[str]) -> None:
+def strip_unshipped_languages(skills_root: Path, skills: list[str],
+                              locate=None) -> None:
     """Remove each held language from the staged bundle when its translate
-    skill is not bundled, then fail closed on any surviving mention."""
+    skill is not bundled, then fail closed on any surviving mention.
+
+    `locate` maps a transform's skills/-relative path to its staged file; the
+    default is the plugin layout. The web build passes its _vendored layout."""
+    locate = locate or (lambda rel: skills_root / rel)
     for lang in UNSHIPPED_LANGUAGES:
         if lang.skill in skills:
             continue
         for rel, transform in lang.transforms.items():
-            path = skills_root / rel
-            if path.is_file():
+            path = locate(rel)
+            if path is not None and path.is_file():
                 path.write_text(transform(path.read_text(encoding="utf-8")),
                                 encoding="utf-8")
         # Shared executable validators can support draft locales without
@@ -1020,6 +1139,7 @@ def build_plugin() -> None:
             assemble_skill(name, skills_root)
         assemble_parallax_shared(skills_root)
         strip_unshipped_languages(skills_root, skills)
+        filter_shipped_docs(skills_root / "_parallax", set(skills))
 
         # repo-root examples/ docs referenced from bundled skills ship at
         # <plugin>/examples/ so the ../../examples/ relative form resolves.
@@ -1033,6 +1153,7 @@ def build_plugin() -> None:
             dest = staging / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(REPO_ROOT / rel, dest)
+        annotate_tree(staging, set(skills), PLUGIN_NOTE)
 
         manifest_dir = staging / ".claude-plugin"
         manifest_dir.mkdir()
@@ -1235,9 +1356,25 @@ def build_web(names: list[str]) -> None:
                                         strict=False)
                     cross_deps |= c
 
+            web_available = set(WEB_SKILLS) | set(skill_manifest.standalone_skills("release"))
+            filter_shipped_docs(skill_root / "_vendored" / "_parallax", web_available)
+            for key, transform in WEB_TRANSFORMS.items():
+                if key.startswith(f"{name}/"):
+                    own = skill_root / key[len(name) + 1:]
+                    own.write_text(transform(own.read_text(encoding="utf-8")),
+                                   encoding="utf-8")
+            # Languages whose translator is held stay out of web packages too.
+            # The release-tier translators ship as standalone packages, so
+            # their routes stay.
+            def locate(rel: str, name: str = name) -> Path | None:
+                if rel == f"{name}/SKILL.md":
+                    return skill_root / "SKILL.md"
+                return skill_root / "_vendored" / rel
+            strip_unshipped_languages(skill_root, sorted(web_available), locate)
             for md in sorted(skill_root.rglob("*.md")):
                 md.write_text(rewrite_refs(md.read_text(encoding="utf-8"), name),
                               encoding="utf-8")
+            annotate_tree(skill_root, web_available, WEB_NOTE)
             replace_description(skill_root / "SKILL.md", desc)
 
             web_resolution_check(skill_root)

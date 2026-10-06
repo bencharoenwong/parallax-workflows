@@ -13,7 +13,7 @@ description: "Monthly CIO letter prep pack for fund managers: period attribution
 - Daily fund manager brief → use /parallax-morning-brief
 - RIA / wealth-advisor client review → use /parallax-client-review
 - Reactive drawdown attribution after a single event → use /parallax-explain-portfolio
-- Backtesting a strategy → use /backtest
+- Backtesting a strategy (not covered by Parallax workflows)
 - Period start more than 365 days before today → export_price_series trailing-window cannot reach it; split into quarterly windows or adjust start date
 
 ## Gotchas

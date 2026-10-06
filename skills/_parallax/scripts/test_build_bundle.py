@@ -654,12 +654,12 @@ def test_no_unbundled_operator_command_is_priced_in_the_public_bundle():
     if not bundle.exists():
         import pytest
         pytest.skip("plugin bundle not built in this checkout")
-    priced = set(re.findall(r"^\|\s*`(/parallax-[a-z0-9-]+)`", bundle.read_text(), re.M))
-    shipped = {f"/{name}" for name in bb.PLUGIN_SKILLS}
-    orphans = sorted(priced - shipped)
+    priced = set(re.findall(r"^\|\s*`/?((?:parallax|translate)-[a-z0-9-]*[a-z0-9])`",
+                            bundle.read_text(), re.M))
+    orphans = sorted(priced - set(bb.PLUGIN_SKILLS))
     assert not orphans, (
-        f"token-costs in the PUBLIC bundle prices commands the bundle does not "
-        f"ship: {orphans}. Add them to `excluded` in transform_token_costs.")
+        f"token-costs in the PUBLIC bundle prices skills the bundle does not "
+        f"ship: {orphans}")
 
 
 def test_collect_deps_ignores_the_ellipsis_placeholder():
@@ -772,3 +772,217 @@ def test_web_packages_with_the_house_view_loader_ship_view_status(tmp_path, monk
     base = "parallax-should-i-buy/_vendored/_parallax/house-view/"
     assert base + "loader.md" in names
     assert base + "view_status.py" in names
+
+
+def test_web_token_costs_prices_only_web_skills(tmp_path, monkeypatch):
+    import re
+    monkeypatch.setattr(bb, "WEB_OUT_DIR", tmp_path)
+    bb.build_web(["parallax-should-i-buy"])
+    with zipfile.ZipFile(tmp_path / "parallax-should-i-buy.skill") as zf:
+        text = zf.read("parallax-should-i-buy/_vendored/_parallax/token-costs.md").decode()
+    named = set(re.findall(r"(?<![\w-])/?((?:parallax|translate)-[a-z0-9-]*[a-z0-9])", text))
+    assert named & set(bb.skill_manifest.skills()) <= set(bb.WEB_SKILLS)
+    assert "/parallax-should-i-buy" in text
+
+
+def test_token_costs_filter_drops_rows_callouts_and_empty_sections():
+    text = (
+        "# T\n\n### Kept\n\n| Workflow | Tokens |\n|---|---|\n"
+        "| `/parallax-should-i-buy` | 29 |\n| `/parallax-deep-dive` | 45 |\n\n"
+        "> **Note:** `/parallax-deep-dive` is dearer.\n\n"
+        "### Gone\n\n| Workflow | Tokens |\n|---|---|\n| `parallax-ai-buffett` | 4 |\n\n"
+        "### After\n\nplain\n")
+    out = bb.filter_token_costs(text, {"parallax-should-i-buy"})
+    assert "/parallax-should-i-buy" in out
+    assert "deep-dive" not in out and "ai-buffett" not in out
+    assert "### Gone" not in out and "### After" in out
+
+
+def test_token_costs_filter_fails_on_a_mention_it_cannot_remove():
+    text = ("### S\n\n| Workflow | Tokens |\n|---|---|\n| `/parallax-should-i-buy` | 29 |\n\n"
+            "Prose names /parallax-deep-dive here.\n")
+    with pytest.raises(bb.BuildError):
+        bb.filter_token_costs(text, {"parallax-should-i-buy"})
+
+
+def test_web_packages_do_not_advertise_held_languages(tmp_path, monkeypatch):
+    monkeypatch.setattr(bb, "WEB_OUT_DIR", tmp_path)
+    bb.build_web(bb.WEB_SKILLS)
+    held = ("vi-VN", "ar-SA", "translate-vietnamese-finance", "translate-arabic-finance")
+    for pkg in tmp_path.glob("*.skill"):
+        with zipfile.ZipFile(pkg) as zf:
+            for n in zf.namelist():
+                if n.endswith((".md", ".json")) and not n.endswith("manifest.json"):
+                    text = zf.read(n).decode("utf-8")
+                    assert not [h for h in held if h in text], (pkg.name, n)
+    with zipfile.ZipFile(tmp_path / "parallax-should-i-buy.skill") as zf:
+        conv = zf.read("parallax-should-i-buy/_vendored/_parallax/parallax-conventions.md").decode()
+    assert "translate-chinese-finance" in conv and "translate-thai-finance" in conv
+
+
+def test_annotate_unavailable_commands():
+    avail = {"parallax-should-i-buy"}
+    note = bb.PLUGIN_NOTE
+    text = ("- Calls → use /parallax-desk-call-list\n"
+            "Run `/parallax-pair-finder AAPL.O long` first.\n"
+            "Then /parallax-should-i-buy.\n")
+    out = bb.annotate_unavailable_commands(text, avail)
+    assert f"/parallax-desk-call-list{note}" in out
+    assert f"`/parallax-pair-finder AAPL.O long`{note}" in out
+    assert "/parallax-should-i-buy." in out
+    assert bb.annotate_unavailable_commands(out, avail) == out
+
+
+def _unannotated(root, available, note):
+    """Independent of the annotator's regex: a case-insensitive scan for any
+    `/<skill>` naming a real, unshipped, non-operator skill outside a fenced
+    block, not followed by the note (after its code span, if in one)."""
+    import re
+    known = set(bb.skill_manifest.skills())
+    pat = re.compile(r"/((?:parallax|translate)-[a-z0-9-]*[a-z0-9])", re.I)
+    bad = []
+    for p in root.rglob("*"):
+        if not (p.is_file() and p.suffix in (".md", ".yaml")):
+            continue
+        fenced = False
+        for line in p.read_text(encoding="utf-8").splitlines():
+            if line.lstrip().startswith("```"):
+                fenced = not fenced
+                continue
+            if fenced:
+                continue
+            for m in pat.finditer(line):
+                name = m.group(1).lower()
+                if (name not in known or name in available
+                        or name in bb.HOUSE_VIEW_OPERATORS
+                        or line[:m.start()].endswith("](")
+                        or (m.start() and (line[m.start() - 1].isalnum()
+                                           or line[m.start() - 1] in "/.~-_"))):
+                    continue
+                rest = line[m.end():]
+                if line[:m.start()].count("`") % 2:
+                    rest = rest[rest.find("`") + 1:]
+                if not rest.startswith(note):
+                    bad.append(f"{p}: {line.strip()[:90]}")
+    return bad
+
+
+def test_web_packages_mark_every_unavailable_command(tmp_path, monkeypatch):
+    monkeypatch.setattr(bb, "WEB_OUT_DIR", tmp_path / "out")
+    bb.build_web(bb.WEB_SKILLS)
+    avail = set(bb.WEB_SKILLS) | set(bb.skill_manifest.standalone_skills("release"))
+    for pkg in (tmp_path / "out").glob("*.skill"):
+        d = tmp_path / pkg.stem
+        zipfile.ZipFile(pkg).extractall(d)
+        assert not _unannotated(d, avail, bb.WEB_NOTE), pkg.name
+
+
+def test_plugin_bundle_marks_every_unavailable_command():
+    root = Path(__file__).resolve().parents[3] / "plugin" / "skills"
+    if not root.exists():
+        pytest.skip("plugin bundle not built in this checkout")
+    assert not _unannotated(root, set(bb.PLUGIN_SKILLS), bb.PLUGIN_NOTE)
+
+
+_NOT_COMMANDS = {
+    "host-note": "closing marker of the <!-- /host-note --> comment",
+    "tmp": "the /tmp directory, named as a path hazard",
+    "slash": "the `/slash` chaining syntax, named as a host primitive",
+    "name": "the `/name` placeholder in the host-primitive table",
+    "numeric": "the `.HK`/numeric ambiguity, not a command",
+}
+
+
+def _unresolved_commands(root, note):
+    """Every `/<command>` outside a fenced block that is neither a manifest
+    skill, followed by the note, nor in _NOT_COMMANDS."""
+    import re
+    known = set(bb.skill_manifest.skills()) | set(_NOT_COMMANDS)
+    pat = re.compile(r"(?:^|(?<=[\s`(]))(?<!\]\()/([a-z][a-z0-9-]*)(?=[\s`).,;]|$)")
+    bad = []
+    for p in root.rglob("*"):
+        if not (p.is_file() and p.suffix in (".md", ".yaml")):
+            continue
+        fenced = False
+        for line in p.read_text(encoding="utf-8").splitlines():
+            if line.lstrip().startswith("```"):
+                fenced = not fenced
+                continue
+            if fenced:
+                continue
+            for m in pat.finditer(line):
+                if m.group(1) in known:
+                    continue
+                rest = line[m.end():]
+                if line[:m.start()].count("`") % 2:
+                    rest = rest[rest.find("`") + 1:]
+                if not rest.startswith(note):
+                    bad.append(f"{p}: /{m.group(1)}")
+    return bad
+
+
+def test_built_skills_route_only_to_commands_that_exist(tmp_path, monkeypatch):
+    plugin = Path(__file__).resolve().parents[3] / "plugin" / "skills"
+    if plugin.exists():
+        assert not _unresolved_commands(plugin, bb.PLUGIN_NOTE)
+    monkeypatch.setattr(bb, "WEB_OUT_DIR", tmp_path / "out")
+    bb.build_web(bb.WEB_SKILLS)
+    for pkg in (tmp_path / "out").glob("*.skill"):
+        d = tmp_path / pkg.stem
+        zipfile.ZipFile(pkg).extractall(d)
+        assert not _unresolved_commands(d, bb.WEB_NOTE), pkg.name
+
+
+def test_unresolved_command_scan_catches_a_private_route(tmp_path):
+    skill = tmp_path / "parallax-should-i-buy" / "SKILL.md"
+    skill.parent.mkdir()
+    src = (Path(__file__).resolve().parents[3] / "plugin" / "skills"
+           / "parallax-should-i-buy" / "SKILL.md")
+    if not src.exists():
+        pytest.skip("plugin bundle not built in this checkout")
+    skill.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    assert not _unresolved_commands(tmp_path, bb.PLUGIN_NOTE)
+    with skill.open("a", encoding="utf-8") as f:
+        f.write("\nThen run /backtest.\n")
+    assert _unresolved_commands(tmp_path, bb.PLUGIN_NOTE) == [f"{skill}: /backtest"]
+
+
+def test_house_view_operators_match_the_manifest_family():
+    family = {n for n in bb.skill_manifest.skills() if "house-view" in n}
+    assert bb.HOUSE_VIEW_OPERATORS == family
+
+
+def test_house_view_operator_mentions_are_not_marked():
+    text = "Run /parallax-judge-house-view for the full report.\n"
+    assert bb.annotate_unavailable_commands(text, set()) == text
+
+
+def test_fenced_examples_are_not_marked():
+    text = "```\n/parallax-desk-call-list --desk a\n```\nThen /parallax-desk-call-list.\n"
+    out = bb.annotate_unavailable_commands(text, set())
+    assert "/parallax-desk-call-list --desk a\n" in out
+    assert f"Then /parallax-desk-call-list{bb.PLUGIN_NOTE}." in out
+
+
+def test_link_targets_are_not_marked():
+    text = "See [desk](/parallax-desk-call-list) and /parallax-desk-call-list.\n"
+    out = bb.annotate_unavailable_commands(text, set())
+    assert "](/parallax-desk-call-list)" in out
+    assert out.count(bb.PLUGIN_NOTE) == 1
+
+
+def test_web_due_diligence_names_only_workflows_claude_ai_offers(tmp_path, monkeypatch):
+    monkeypatch.setattr(bb, "WEB_OUT_DIR", tmp_path)
+    bb.build_web(["parallax-due-diligence"])
+    with zipfile.ZipFile(tmp_path / "parallax-due-diligence.skill") as zf:
+        text = zf.read("parallax-due-diligence/SKILL.md").decode()
+    assert "white-label-stock-report" not in text
+    assert "for a client-facing deliverable use /parallax-client-review." in text
+
+
+def test_cost_bullets_follow_the_distribution():
+    text = (bb.SKILLS_DIR / "_parallax" / "token-costs.md").read_text(encoding="utf-8")
+    web = bb.filter_token_costs(text, set(bb.WEB_SKILLS))
+    plugin = bb.filter_token_costs(text, set(bb.PLUGIN_SKILLS))
+    assert "desk-call-list" not in web
+    assert "/parallax-desk-call-list` (~49 tokens" in plugin

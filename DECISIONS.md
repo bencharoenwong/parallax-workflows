@@ -4,6 +4,18 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-10-06: Shipped docs follow each distribution's own skill set
+
+**Why:** The plugin and web packages each ship a subset of skills, but their docs priced and routed to skills the package lacks. Shipped docs now follow the package's own skill set.
+
+**Impact:** `token-costs.md` rows, bullets and callouts naming an unshipped skill are dropped, and the build fails if one survives. Commands for unshipped skills carry a platform note: "(not in the plugin)" or "(not available on claude.ai)". Fenced examples and link targets are left untouched. House-view operator skills are exempt, because their mentions apply only once a house view exists, and a house view needs those skills. Public skills no longer route to commands outside the repo (`/backtest`, `/humanizer`, `/chicago-global-voice`).
+
+**Alternatives:**
+- [DROP] About 30 anchored per-line edits in the built output. Brittle: any source rewording breaks an anchor.
+- [DROP] Delete the routes outright. Loses the negative trigger that tells the agent the skill is not for that job.
+
+**Flip conditions:** a skill joins a distribution → its notes disappear automatically on rebuild.
+
 ## 2026-10-05: Standalone .skill packages build by manifest tier; fixtures never ship
 
 **Why:** `build-skills.sh` built from a hardcoded `KNOWN_SKILLS` list. That list drifted from the plugin hold and built the Vietnamese translator by default. vi-VN and ar-SA stay held until native-speaker review (owner decision), matching their plugin hold. `fixtures/` never ships: the private-beta skill's golden .docx is maintainer verification data, and the term scan cannot read inside a compressed file.

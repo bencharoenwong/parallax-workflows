@@ -1,6 +1,6 @@
 ---
 name: parallax-should-i-buy
-description: "Quick stock evaluation: company overview, Parallax factor scores, financial health, score trends, macro context, dividends, news, and analyst outlook. Plain language output. Accepts plain ticker (AAPL) or RIC (AAPL.O). NOT for portfolio analysis (use /parallax-morning-brief), not for full due diligence (use /parallax-due-diligence), not for a position deep dive with AI assessment (use /parallax-deep-dive), not for peer-set comparison (use /parallax-peer-comparison), not for methodology-only questions (use /parallax-score-explainer), not for backtesting (use /backtest)."
+description: "Quick stock evaluation: company overview, Parallax factor scores, financial health, score trends, macro context, dividends, news, and analyst outlook. Plain language output. Accepts plain ticker (AAPL) or RIC (AAPL.O). NOT for portfolio analysis (use /parallax-morning-brief), not for full due diligence (use /parallax-due-diligence), not for a position deep dive with AI assessment (use /parallax-deep-dive), not for peer-set comparison (use /parallax-peer-comparison), not for methodology-only questions (use /parallax-score-explainer), not for backtesting."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -14,7 +14,7 @@ description: "Quick stock evaluation: company overview, Parallax factor scores, 
 - Position deep dive with AI assessment → use /parallax-deep-dive
 - Peer comparison deep dive → use /parallax-peer-comparison
 - Methodology-only explanation → use /parallax-score-explainer
-- Running backtests → use /backtest
+- Running backtests (not covered by Parallax workflows)
 
 ## Gotchas
 

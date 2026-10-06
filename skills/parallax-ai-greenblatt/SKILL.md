@@ -15,7 +15,7 @@ description: "Applies Joel Greenblatt's Magic Formula (per 'The Little Book That
 - Trend-following + macro overlay → use /parallax-ai-ptj
 - Cross-profile consensus → use /parallax-ai-consensus
 - Full due diligence → use /parallax-due-diligence
-- Running backtests → use /backtest
+- Running backtests (not covered by Parallax workflows)
 
 ## Gotchas
 

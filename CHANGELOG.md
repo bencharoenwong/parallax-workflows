@@ -4,6 +4,14 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-10-06 (package skill sets in shipped docs)
+
+### Fixed
+- `build_bundle.py` filters `token-costs.md` by each distribution's own skill set. Rows, bullets and callouts that name a skill the distribution does not ship are dropped, along with any section left without rows, and the build fails if an unshipped skill name survives. The plugin no longer prices the six AI-profile skills it does not ship; web packages price only the 12 web skills.
+- Plugin and web builds mark every `/parallax-…` command for a skill the package does not ship: "(not in the plugin)" or "(not available on claude.ai)". Fenced code blocks and link targets are left unchanged. On claude.ai, due-diligence names only client-review as the client-facing alternative. House-view operator skills are exempt, since their mentions apply only once a house view exists.
+- Web packages strip the held `vi-VN` and `ar-SA` routes, as the plugin does. Chinese and Thai routes stay because those translators ship as standalone packages.
+- Public skills no longer route to `/backtest` or to other commands outside this repo; white-label-onboard's voice-rewrite exclusion no longer names one. Their "not for" exclusions remain. A build test now checks that every slash command in the built plugin and web skills is a shipped skill or carries the unavailable note.
+
 ## 2026-10-05 (standalone .skill packaging)
 
 ### Fixed

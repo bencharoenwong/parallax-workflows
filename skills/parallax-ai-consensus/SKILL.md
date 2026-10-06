@@ -13,7 +13,7 @@ description: "Runs all installed Parallax AI Investor Profiles (Buffett, Greenbl
 - Broader macro outlook → use /parallax-macro-outlook
 - Portfolio analysis → use /parallax-morning-brief or /parallax-portfolio-checkup
 - Full due diligence → use /parallax-due-diligence
-- Running backtests → use /backtest
+- Running backtests (not covered by Parallax workflows)
 
 ## Gotchas
 
