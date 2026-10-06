@@ -4,6 +4,18 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-10-05: Standalone .skill packages build by manifest tier; fixtures never ship
+
+**Why:** `build-skills.sh` built from a hardcoded `KNOWN_SKILLS` list. That list drifted from the plugin hold and built the Vietnamese translator by default. vi-VN and ar-SA stay held until native-speaker review (owner decision), matching their plugin hold. `fixtures/` never ships: the private-beta skill's golden .docx is maintainer verification data, and the term scan cannot read inside a compressed file.
+
+**Impact:** `_parallax/manifest.json` gives each packaged skill a `standalone` tier. A no-arg run builds `release` skills only. `beta` and `held` skills build only when named, with a warning.
+
+**Alternatives:**
+- [DROP] Keep the hardcoded `KNOWN_SKILLS` list. It drifted from the plugin hold.
+- [DROP] Refuse held skills entirely. Native reviewers need the package.
+
+**Flip conditions:** native review signs off a language → set its `standalone` tier to `release`.
+
 ## 2026-10-05: Translate skill descriptions carry a NOT-for clause and a 200-character cap
 
 **Why:** The translate skills need a negative trigger so they are not picked for writing new analysis or for non-finance text. They also point Parallax reports to the analysis skill's `lang=`, because that hand-off passes the zh-HK variant, retail register and disclaimer check to the translator, and translating raw output afterwards loses them. An "other target languages" clause was dropped: no translate skill exists for every language, and plugin installs ship only zh and th. claude.ai caps skill descriptions at 200 characters, stricter than the spec's 1024, so the longer first draft of the clause risked a rejected or truncated upload.
