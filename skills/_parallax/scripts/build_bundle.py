@@ -5,8 +5,11 @@ Subcommands:
   plugin        Assemble the Claude Code plugin bundle (general-release set) at
                 <repo>/plugin/ and write .claude-plugin/marketplace.json.
                 Output is generated — never hand-edit plugin/; rerun this instead.
-  verify dir... Check staged package directories (no development files;
-                term scan). build-skills.sh runs it before zipping.
+  verify dir... Check staged package directories (no symlinks or
+                development files; text types and UTF-8 only; term scan).
+                build-skills.sh runs it before zipping.
+  files skill   Print a skill's tracked runtime files (development files
+                removed), one per line. build-skills.sh copies this list.
   web [name...] Build self-contained .skill zips for claude.ai upload at
                 ~/Downloads/claude-web-skills/. Defaults to WEB_SKILLS.
                 Shared-file dependencies are vendored under <skill>/_vendored/
@@ -41,8 +44,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import unicodedata
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILLS_DIR = SCRIPT_DIR.parents[1]          # skills/
@@ -714,7 +718,13 @@ def canary_scan(root: Path) -> None:
         if not path.is_file():
             continue
         text = path.read_bytes().decode("utf-8", errors="replace")
-        haystack = text.lower()
+        # The path is scanned too: a file named after a term leaks the term.
+        # NFKC folds full-width and compatibility forms; format characters
+        # (zero-width space, soft hyphen) are removed so they cannot split a
+        # term. Encodings such as base64 or HTML entities are out of scope.
+        text = unicodedata.normalize(
+            "NFKC", f"{path.relative_to(root).as_posix()}\n{text}")
+        haystack = "".join(c for c in text if unicodedata.category(c) != "Cf").lower()
         for allowed in CANARY_ALLOWLIST:
             # \w (Unicode-aware) rather than [a-z0-9_]: an ASCII-only boundary
             # still masks an entry followed directly by a non-ASCII letter, so a
@@ -731,19 +741,50 @@ def canary_scan(root: Path) -> None:
         raise BuildError(f"term scan failed with {len(hits)} hit(s)")
 
 
+# Packages carry text only: every file must be one of these types and valid
+# UTF-8. A binary or a UTF-16 file cannot be term-scanned meaningfully, so it
+# is refused rather than special-cased.
+PACKAGE_TEXT_SUFFIXES = frozenset({".md", ".py", ".txt", ".yaml", ".yml", ".json"})
+_DEV_DIRS = frozenset({"tests", "test", "__tests__", "fixtures", "__pycache__",
+                       ".pytest_cache"})
+_DEV_NOTES = frozenset({"PLANS.md", "HANDOFF.md", "LESSONS.md"})
+
+
+def is_dev_path(rel: str) -> bool:
+    """A path (relative to a skill dir) that is development material: tests,
+    test fixtures, caches, dotfiles, notebooks, planning notes. One rule for
+    both the file list build-skills.sh copies and verify_package."""
+    parts = PurePosixPath(rel).parts
+    name = parts[-1]
+    return (any(p in _DEV_DIRS or p.startswith(".") for p in parts)
+            or name in _DEV_NOTES or name in ("conftest.py", "tests.py")
+            or name.endswith(".ipynb")
+            or name.endswith(".py") and (name.startswith("test_")
+                                         or name.endswith("_test.py")))
+
+
 def verify_package(root: Path) -> None:
     """Checks every distributed package must pass before it is written: no
-    development files (tests, test fixtures, caches, dotfiles), then the term
-    scan."""
-    dev = sorted(
-        p.relative_to(root).as_posix() for p in root.rglob("*")
-        if p.is_file() and (
-            p.name.startswith("test_") and p.suffix == ".py"
-            or p.name == "conftest.py"
-            or any(part in ("tests", "fixtures", "__pycache__", ".pytest_cache")
-                   or part.startswith(".") for part in p.relative_to(root).parts)))
-    if dev:
-        raise BuildError(f"development files in package: {dev}")
+    symlinks, no development files, text files only (allowed types, valid
+    UTF-8), then the term scan."""
+    problems = []
+    for p in sorted(root.rglob("*")):
+        rel = p.relative_to(root).as_posix()
+        if p.is_symlink():
+            problems.append(f"symlink: {rel}")
+        elif not p.is_file():
+            continue
+        elif is_dev_path(rel):
+            problems.append(f"development file: {rel}")
+        elif p.suffix not in PACKAGE_TEXT_SUFFIXES:
+            problems.append(f"not an allowed text type: {rel}")
+        else:
+            try:
+                p.read_bytes().decode("utf-8")
+            except UnicodeDecodeError:
+                problems.append(f"not UTF-8: {rel}")
+    if problems:
+        raise BuildError(f"package check failed: {problems}")
     canary_scan(root)
 
 
@@ -1207,6 +1248,8 @@ def main(argv: list[str]) -> int:
     web.add_argument("names", nargs="*", default=None)
     verify = sub.add_parser("verify", help="check staged package directories")
     verify.add_argument("dirs", nargs="+", type=Path)
+    files = sub.add_parser("files", help="tracked runtime files of one skill")
+    files.add_argument("skill")
     args = parser.parse_args(argv)
     try:
         if args.cmd == "plugin":
@@ -1214,6 +1257,15 @@ def main(argv: list[str]) -> int:
         elif args.cmd == "verify":
             for d in args.dirs:
                 verify_package(d)
+        elif args.cmd == "files":
+            # Paths are tracked in the repo the caller runs from (cwd = the
+            # skills/ dir build-skills.sh works in), relative to that cwd.
+            listed = subprocess.run(
+                ["git", "ls-files", "-z", "--", f"{args.skill}/"],
+                capture_output=True, check=True).stdout.decode("utf-8")
+            for f in listed.split("\0"):
+                if f and not is_dev_path(f[len(args.skill) + 1:]):
+                    print(f)
         else:
             build_web(args.names or WEB_SKILLS)
     except BuildError as exc:

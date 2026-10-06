@@ -255,7 +255,7 @@ The render synthesis applies these tokens to: title (navy-900), body (neutral-90
 
 Cover-page client name follows integration-pattern.md §6: when `white_label_active` AND `client_name != ""`, the cover-page header gains the client name at H1 in the brand `branding["fonts"]["header"]`. When `client_name == ""` (legacy configs), the client name is omitted but the cover-page logo (if present) still renders.
 
-**Golden fixture:** Reference output at `skills/parallax-cio-letter-prep/fixtures/golden_pack_2026-04.docx` is the pre-retrofit baseline rendered with the default Parallax palette (no client config active). Post-retrofit verification: see `scripts/compare_docx.py` and the **Retrofit gate procedure** below.
+**Golden fixture (maintainers, repo checkout only):** the fixture is not part of the standalone `.skill` package. Reference output at `skills/parallax-cio-letter-prep/fixtures/golden_pack_2026-04.docx` is the pre-retrofit baseline rendered with the default Parallax palette (no client config active). Post-retrofit verification: see `scripts/compare_docx.py` and the **Retrofit gate procedure** below.
 
 **Retrofit gate procedure (one-shot, best-effort).**
 

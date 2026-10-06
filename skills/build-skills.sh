@@ -57,7 +57,7 @@ in_list() {
 }
 
 build_one() {
-  local name="$1"
+  local name="${1%/}"
   if [[ ! -d "$name" ]]; then
     echo "  ✗ $name: directory not found, skipping" >&2
     return 1
@@ -71,21 +71,29 @@ build_one() {
   local out_dir="${SKILL_BUILD_OUT_DIR:-$HOME/Downloads}"
   mkdir -p "$out_dir"
   local out="$out_dir/${name}.skill"
+  # A failed build must not leave an earlier package that looks fresh.
+  rm -rf "$out"
   local staging
   staging=$(mktemp -d)
 
-  # Tracked files only (as build_bundle.py does), minus tests, test fixtures
-  # and the per-skill excludes; untracked caches and work in progress never
-  # ship. Fixtures are maintainer verification data, and a compressed binary
-  # cannot be term-scanned meaningfully.
-  local excludes
+  # Tracked runtime files only (build_bundle.py `files` drops development
+  # material with the same rule `verify` enforces), minus per-skill excludes.
+  # Untracked caches and work in progress never ship; symlinks are refused.
+  local excludes list
   excludes=" $(get_excludes "$name") "
-  if ! git ls-files -- "$name" \
-      | grep -Ev '(^|/)(tests/|fixtures/|test_[^/]*[.]py$|conftest[.]py$)' \
-      | while IFS= read -r f; do
-          [[ "$excludes" == *" $f "* ]] && continue
-          mkdir -p "$staging/$(dirname "$f")" && cp "$f" "$staging/$f" || exit 1
-        done; then
+  if ! list=$(python3 ./_parallax/scripts/build_bundle.py files "$name"); then
+    echo "  ✗ $name: listing tracked files failed" >&2
+    rm -rf "$staging"
+    return 1
+  fi
+  if ! printf '%s\n' "$list" | while IFS= read -r f; do
+        [[ -z "$f" || "$excludes" == *" $f "* ]] && continue
+        if [[ -L "$f" ]]; then
+          echo "  ✗ $name: tracked symlink $f" >&2
+          exit 1
+        fi
+        mkdir -p "$staging/$(dirname "$f")" && cp "$f" "$staging/$f" || exit 1
+      done; then
     echo "  ✗ $name: copying tracked files failed" >&2
     rm -rf "$staging"
     return 1
@@ -104,8 +112,12 @@ build_one() {
     return 1
   fi
   # Fresh archive: stale files from a previous package must not survive.
-  (cd "$staging" && zip -rq package.skill "$name")
-  mv "$staging/package.skill" "$out"
+  if ! (cd "$staging" && zip -rq package.skill "$name") \
+      || ! mv "$staging/package.skill" "$out" || [[ ! -s "$out" ]]; then
+    echo "  ✗ $name: writing the package failed" >&2
+    rm -rf "$staging" "$out"
+    return 1
+  fi
   rm -rf "$staging"
   printf "  ✓ %s → %s (%s)\n" "$name" "$out" "$(du -h "$out" | cut -f1)"
 }
@@ -204,6 +216,12 @@ fi
 if [[ $# -eq 0 ]]; then
   set -- $KNOWN_SKILLS
 fi
+# Tab completion adds a trailing slash; every check below compares bare names.
+NAMES=()
+for a in "$@"; do
+  NAMES+=("${a%/}")
+done
+set -- ${NAMES[@]+"${NAMES[@]}"}
 
 # claude.ai caps skill descriptions at 200 chars (stricter than the spec's
 # 1024). Enforced for translate-*-finance only; not skippable with --no-lint.
