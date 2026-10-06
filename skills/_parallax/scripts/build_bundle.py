@@ -620,13 +620,13 @@ WEB_TRANSFORMS = {
 
 
 # --------------------------------------------------------------------------
-# Unshipped-language strip (plugin build only)
+# Unshipped-language strip (plugin and web builds)
 #
-# A language whose translate skill is held out of the bundle (manifest
-# "plugin": false) must not be advertised by the bundle either: the lang=
-# docs and the §15 routing table would otherwise send plugin users to a skill
-# that is not installed. Applied to staged files after assembly, and only when
-# the translate skill is absent from the bundled set.
+# A language whose translate skill a distribution does not ship must not be
+# advertised by it either: the lang= docs and the §15 routing table would
+# otherwise send users to a skill that is not installed. Applied to staged
+# files after assembly, and only when the translate skill is absent from the
+# distribution's skill set.
 # --------------------------------------------------------------------------
 
 class UnshippedLanguage:

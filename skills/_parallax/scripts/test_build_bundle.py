@@ -674,12 +674,28 @@ def test_collect_deps_still_rejects_a_real_ref_outside_the_set():
         bb.collect_deps("Load `_parallax/no-such-shared-file.md` first.", strict=True)
 
 
-def test_web_build_succeeds_for_the_shortlist(tmp_path, monkeypatch):
-    monkeypatch.setattr(bb, "WEB_OUT_DIR", tmp_path)
-    bb.build_web(bb.WEB_SKILLS)
-    assert sorted(p.stem for p in tmp_path.glob("*.skill")) == sorted(bb.WEB_SKILLS)
+@pytest.fixture(scope="module")
+def web_build(tmp_path_factory):
+    """All web packages, built once per module: (zip dir, unzipped dir).
+    Module scope runs before the function-scoped term fixture, so a machine
+    without the extra term file builds with the built-in terms only."""
+    out = tmp_path_factory.mktemp("web")
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(bb, "WEB_OUT_DIR", out / "zips")
+        if not bb.EXTRA_CANARY_FILE.is_file():
+            mp.setenv(bb.PARTIAL_SCAN_ENV, "1")
+        bb.build_web(bb.WEB_SKILLS)
+    for pkg in (out / "zips").glob("*.skill"):
+        with zipfile.ZipFile(pkg) as zf:
+            zf.extractall(out / "unzipped" / pkg.stem)
+    return out / "zips", out / "unzipped"
+
+
+def test_web_build_succeeds_for_the_shortlist(web_build):
+    zips, _ = web_build
+    assert sorted(p.stem for p in zips.glob("*.skill")) == sorted(bb.WEB_SKILLS)
     for name in bb.WEB_SKILLS:
-        with zipfile.ZipFile(tmp_path / f"{name}.skill") as zf:
+        with zipfile.ZipFile(zips / f"{name}.skill") as zf:
             assert f"{name}/SKILL.md" in zf.namelist()
 
 
@@ -805,17 +821,16 @@ def test_token_costs_filter_fails_on_a_mention_it_cannot_remove():
         bb.filter_token_costs(text, {"parallax-should-i-buy"})
 
 
-def test_web_packages_do_not_advertise_held_languages(tmp_path, monkeypatch):
-    monkeypatch.setattr(bb, "WEB_OUT_DIR", tmp_path)
-    bb.build_web(bb.WEB_SKILLS)
+def test_web_packages_do_not_advertise_held_languages(web_build):
+    zips, _ = web_build
     held = ("vi-VN", "ar-SA", "translate-vietnamese-finance", "translate-arabic-finance")
-    for pkg in tmp_path.glob("*.skill"):
+    for pkg in zips.glob("*.skill"):
         with zipfile.ZipFile(pkg) as zf:
             for n in zf.namelist():
                 if n.endswith((".md", ".json")) and not n.endswith("manifest.json"):
                     text = zf.read(n).decode("utf-8")
                     assert not [h for h in held if h in text], (pkg.name, n)
-    with zipfile.ZipFile(tmp_path / "parallax-should-i-buy.skill") as zf:
+    with zipfile.ZipFile(zips / "parallax-should-i-buy.skill") as zf:
         conv = zf.read("parallax-should-i-buy/_vendored/_parallax/parallax-conventions.md").decode()
     assert "translate-chinese-finance" in conv and "translate-thai-finance" in conv
 
@@ -833,14 +848,12 @@ def test_annotate_unavailable_commands():
     assert bb.annotate_unavailable_commands(out, avail) == out
 
 
-def _unannotated(root, available, note):
-    """Independent of the annotator's regex: a case-insensitive scan for any
-    `/<skill>` naming a real, unshipped, non-operator skill outside a fenced
-    block, not followed by the note (after its code span, if in one)."""
-    import re
-    known = set(bb.skill_manifest.skills())
-    pat = re.compile(r"/((?:parallax|translate)-[a-z0-9-]*[a-z0-9])", re.I)
-    bad = []
+def _command_matches(root, pattern):
+    """(path, line, match, rest) for each `pattern` match in staged .md and
+    .yaml files outside fenced blocks. `rest` is the text after the match, or
+    after its closing backtick when the match sits in a code span. Only the
+    fence and span bookkeeping is shared; each caller classifies matches with
+    its own rule, independent of the build's annotator."""
     for p in root.rglob("*"):
         if not (p.is_file() and p.suffix in (".md", ".yaml")):
             continue
@@ -851,30 +864,39 @@ def _unannotated(root, available, note):
                 continue
             if fenced:
                 continue
-            for m in pat.finditer(line):
-                name = m.group(1).lower()
-                if (name not in known or name in available
-                        or name in bb.HOUSE_VIEW_OPERATORS
-                        or line[:m.start()].endswith("](")
-                        or (m.start() and (line[m.start() - 1].isalnum()
-                                           or line[m.start() - 1] in "/.~-_"))):
-                    continue
+            for m in pattern.finditer(line):
                 rest = line[m.end():]
                 if line[:m.start()].count("`") % 2:
                     rest = rest[rest.find("`") + 1:]
-                if not rest.startswith(note):
-                    bad.append(f"{p}: {line.strip()[:90]}")
+                yield p, line, m, rest
+
+
+def _unannotated(root, available, note):
+    """Independent of the annotator's regex: a case-insensitive scan for any
+    `/<skill>` naming a real, unshipped, non-operator skill outside a fenced
+    block, not followed by the note (after its code span, if in one)."""
+    import re
+    known = set(bb.skill_manifest.skills())
+    pat = re.compile(r"/((?:parallax|translate)-[a-z0-9-]*[a-z0-9])", re.I)
+    bad = []
+    for p, line, m, rest in _command_matches(root, pat):
+        name = m.group(1).lower()
+        if (name not in known or name in available
+                or name in bb.HOUSE_VIEW_OPERATORS
+                or line[:m.start()].endswith("](")
+                or (m.start() and (line[m.start() - 1].isalnum()
+                                   or line[m.start() - 1] in "/.~-_"))):
+            continue
+        if not rest.startswith(note):
+            bad.append(f"{p}: {line.strip()[:90]}")
     return bad
 
 
-def test_web_packages_mark_every_unavailable_command(tmp_path, monkeypatch):
-    monkeypatch.setattr(bb, "WEB_OUT_DIR", tmp_path / "out")
-    bb.build_web(bb.WEB_SKILLS)
+def test_web_packages_mark_every_unavailable_command(web_build):
+    _, unzipped = web_build
     avail = set(bb.WEB_SKILLS) | set(bb.skill_manifest.standalone_skills("release"))
-    for pkg in (tmp_path / "out").glob("*.skill"):
-        d = tmp_path / pkg.stem
-        zipfile.ZipFile(pkg).extractall(d)
-        assert not _unannotated(d, avail, bb.WEB_NOTE), pkg.name
+    for d in sorted(unzipped.iterdir()):
+        assert not _unannotated(d, avail, bb.WEB_NOTE), d.name
 
 
 def test_plugin_bundle_marks_every_unavailable_command():
@@ -899,38 +921,17 @@ def _unresolved_commands(root, note):
     import re
     known = set(bb.skill_manifest.skills()) | set(_NOT_COMMANDS)
     pat = re.compile(r"(?:^|(?<=[\s`(]))(?<!\]\()/([a-z][a-z0-9-]*)(?=[\s`).,;]|$)")
-    bad = []
-    for p in root.rglob("*"):
-        if not (p.is_file() and p.suffix in (".md", ".yaml")):
-            continue
-        fenced = False
-        for line in p.read_text(encoding="utf-8").splitlines():
-            if line.lstrip().startswith("```"):
-                fenced = not fenced
-                continue
-            if fenced:
-                continue
-            for m in pat.finditer(line):
-                if m.group(1) in known:
-                    continue
-                rest = line[m.end():]
-                if line[:m.start()].count("`") % 2:
-                    rest = rest[rest.find("`") + 1:]
-                if not rest.startswith(note):
-                    bad.append(f"{p}: /{m.group(1)}")
-    return bad
+    return [f"{p}: /{m.group(1)}" for p, _, m, rest in _command_matches(root, pat)
+            if m.group(1) not in known and not rest.startswith(note)]
 
 
-def test_built_skills_route_only_to_commands_that_exist(tmp_path, monkeypatch):
+def test_built_skills_route_only_to_commands_that_exist(web_build):
     plugin = Path(__file__).resolve().parents[3] / "plugin" / "skills"
     if plugin.exists():
         assert not _unresolved_commands(plugin, bb.PLUGIN_NOTE)
-    monkeypatch.setattr(bb, "WEB_OUT_DIR", tmp_path / "out")
-    bb.build_web(bb.WEB_SKILLS)
-    for pkg in (tmp_path / "out").glob("*.skill"):
-        d = tmp_path / pkg.stem
-        zipfile.ZipFile(pkg).extractall(d)
-        assert not _unresolved_commands(d, bb.WEB_NOTE), pkg.name
+    _, unzipped = web_build
+    for d in sorted(unzipped.iterdir()):
+        assert not _unresolved_commands(d, bb.WEB_NOTE), d.name
 
 
 def test_unresolved_command_scan_catches_a_private_route(tmp_path):
