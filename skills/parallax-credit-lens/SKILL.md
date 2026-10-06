@@ -60,7 +60,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 ```
 get_financials(symbol=<RIC>, statement="balance_sheet")   # Total debt, equity, total assets, working capital, retained earnings
 get_financials(symbol=<RIC>, statement="cash_flow")       # Operating CF, Capex, FCF
-get_financials(symbol=<RIC>, statement="ratios")          # D/E, D/EBITDA, Interest Cov, margins, peer_median / peer_p75
+get_financials(symbol=<RIC>, statement="ratios")          # D/E, D/EBITDA, current/quick ratio, margins — target-only; no interest-coverage field and no peer_median/peer_p75 anywhere in this response (see Step 4)
 get_peer_snapshot(symbol=<RIC>)                           # peer medians, factor scores
 ```
 
@@ -92,7 +92,9 @@ Zero tool calls. `run-shell` `credit_lens_logic.py` for every number: `flag_metr
 | Altman Z (public-company variant, Altman 1968) | Grey zone 1.81–2.99 | Distress zone < 1.81 (Safe > 2.99) |
 | Quality score change, 52 weeks, 0–10 scale | ≤ −0.5 pts | ≤ −1.5 pts |
 
-Peer-relative rule for every metric: better than `peer_median` → GREEN; between median and the adverse `peer_p75` → AMBER; worse than `peer_p75` → RED. Overall: majority color wins; ties go to the more conservative color; UNAVAILABLE legs do not vote.
+Interest Coverage has no raw value anywhere in the live `ratios` response (no interest-expense or interest-coverage field), so this band is published but never currently reachable — the leg renders UNAVAILABLE, not a silently-skipped band.
+
+Peer-relative rule for every metric: better than `peer_median` → GREEN; between median and the adverse `peer_p75` → AMBER; worse than `peer_p75` → RED. No tool in this skill's tool_sequence currently returns a `peer_median` / `peer_p75` pair for any metric, so this rule is published for the module's contract but never currently exercised in production — every peer-relative-only leg (no absolute band) renders UNAVAILABLE. Overall: majority color wins; ties go to the more conservative color; UNAVAILABLE legs do not vote.
 
 ### Step 5 — Compose
 
@@ -130,27 +132,27 @@ Overall traffic-light determined by: count of RED flags (→ Red), count of AMBE
 
 List which metrics went unjudged, and why, in Key Flags.
 
-This is the normal case, not an edge case: seven of the ten registered keys carry no absolute band, and the `ratios` response supplies peer percentiles for only five metrics, so the five with neither are unjudged on a routine run. Never present a majority verdict drawn from a minority of the metrics without saying so.
+This is the normal case, not an edge case: the live `ratios` response carries no `peer_median` / `peer_p75` field for any metric — it is target-only data, full stop, not a per-run gap. Seven of the ten registered keys have no absolute band either, so those seven (`debt_equity`, `debt_assets`, `ebitda_interest_coverage`, `quick_ratio`, `ebitda_margin`, `ebit_margin`, `fcf_margin`) are UNAVAILABLE on every run. Of the three keys with an absolute band, `interest_coverage` has no raw value anywhere in `ratios` either, so it is also UNAVAILABLE on every run; only `debt_ebitda` and `current_ratio` are reliably judged on a routine run — eight of the ten registered keys unjudged, not five. Never present a majority verdict drawn from a minority of the metrics without saying so.
 
 ### 2. **Metrics Dashboard** (table)
 ```
 | Category      | Signal | Metric Value | Peer Median | Interpretation |
 |---------------|--------|--------------|-------------|-----------------|
-| Leverage      | 🔴 RED  | D/E 2.1x     | Peer 1.2x   | 75% above peer |
-| Leverage      | 🟡 AMBER| D/EBITDA 3.9x | Peer 2.8x  | Above peer |
-| Leverage      | ➖ UNAVAILABLE | —     | —           | No peer data and no absolute band |
-| Coverage      | 🟢 GREEN| Int Cov 5.2x | Peer 3.1x   | Top quartile |
-| Coverage      | ➖ UNAVAILABLE | —     | —           | No peer data and no absolute band |
-| Liquidity     | 🟡 AMBER| Curr Ratio 1.3x | Peer 1.8x | Below median |
-| Liquidity     | ➖ UNAVAILABLE | —     | —           | No peer data and no absolute band |
-| Profitability | 🟢 GREEN| EBITDA Margin 28% | Peer 22% | Above peer |
-| Profitability | ➖ UNAVAILABLE | —     | —           | No peer data and no absolute band |
-| Profitability | ➖ UNAVAILABLE | —     | —           | No peer data and no absolute band |
+| Leverage      | 🟡 AMBER| D/EBITDA 3.9x | —          | Above absolute threshold (3.5x); peer comparison unavailable |
+| Leverage      | ➖ UNAVAILABLE | —     | —           | No absolute band and no peer data (D/E) |
+| Leverage      | ➖ UNAVAILABLE | —     | —           | No absolute band and no peer data (D/Assets) |
+| Coverage      | ➖ UNAVAILABLE | —     | —           | No raw value in `ratios` and no peer data (Interest Coverage) |
+| Coverage      | ➖ UNAVAILABLE | —     | —           | No absolute band and no peer data (EBITDA/Interest) |
+| Liquidity     | 🟡 AMBER| Curr Ratio 1.3x | —        | Below absolute threshold (1.2x); peer comparison unavailable |
+| Liquidity     | ➖ UNAVAILABLE | —     | —           | No absolute band and no peer data (Quick Ratio) |
+| Profitability | ➖ UNAVAILABLE | —     | —           | No absolute band and no peer data (EBITDA Margin) |
+| Profitability | ➖ UNAVAILABLE | —     | —           | No absolute band and no peer data (EBIT Margin) |
+| Profitability | ➖ UNAVAILABLE | —     | —           | No absolute band and no peer data (FCF Margin) |
 | Altman Z      | 🟡 AMBER| Z = 2.1      | —           | Grey Zone |
 | Quality Trend | 🔴 RED  | –1.8 pts (52w) | —         | Deteriorating |
 ```
 
-Twelve rows: ten registered metrics plus the two module-owned legs. **Category repeats** — it is a grouping label, not the row identity. Five rows read `➖ UNAVAILABLE` on a routine run because those metrics carry no absolute band and `ratios` returns no peer pair for them; that is the normal shape, not a failure.
+Twelve rows: ten registered metrics plus the two module-owned legs. **Category repeats** — it is a grouping label, not the row identity. The "Peer Median" column reads `—` on every row today: no tool in this skill's tool_sequence returns a `peer_median` / `peer_p75` pair for any metric. Eight of the ten registered metrics read `➖ UNAVAILABLE` on a routine run — the seven with no absolute band, plus Interest Coverage, which has an absolute band but no raw value anywhere in `ratios` either. Only Debt/EBITDA and Current Ratio are reliably judged, and only on the absolute rule. That is the normal shape with the current tool set, not a failure — state it plainly rather than implying peer comparison is merely degraded this run.
 
 **Build the table with `dashboard_rows(report)`, not from `metric_rows` directly.** It returns your metric rows plus the Altman and Quality rows, which it renders from `altman_flag` / `quality_flag`. Those two are legs in their own right: supplying them as rows as well makes each vote twice, and doubling two legs flips real verdicts — three RED metrics against two GREEN is RED, but with both GREEN legs doubled it becomes 3 RED against 4 GREEN and renders GREEN.
 
@@ -167,9 +169,9 @@ Output the Palepu liquidity section from the same `get_financial_analysis` respo
 
 ### 4. **Key Flags** (bulleted list)
 List every RED and AMBER flag with one-line explanation:
-- 🔴 RED: Debt/EBITDA 5.2x exceeds peer 75th percentile (3.8x) and absolute threshold (5.0x)
+- 🔴 RED: Debt/EBITDA 5.2x exceeds the absolute threshold (5.0x); peer comparison unavailable
 - 🟡 AMBER: Quality score down 1.4 pts over 52 weeks — monitor for further deterioration
-- 🔴 RED: Interest Coverage 2.1x below absolute threshold (3.0x); limited debt service cushion
+- 🔴 RED: Current Ratio 0.8x below the absolute threshold (1.0x); peer comparison unavailable
 
 ### 5. **Quality Trend** (one sentence)
 [Quality score 52-week trajectory + interpretation from `get_score_analysis`]

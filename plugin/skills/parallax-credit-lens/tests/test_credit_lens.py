@@ -995,11 +995,19 @@ class TestIntegrationFixtures:
     """Integration tests using fixture JSON files for realistic tool output."""
 
     def test_aapl_ratios_fixture_loads(self) -> None:
-        """Ratios fixture is parseable and has expected keys."""
+        """Ratios fixture is parseable and has expected keys.
+
+        Field names match the live get_financials(ratios) response: no
+        `interest_coverage` key, because the live response carries no such
+        field at all (confirmed by live probe) — not merely no peer pair for
+        it.
+        """
         data = _load_fixture("get_financials_ratios.json")
         period = data["periods"][0]
-        assert "debt_to_ebitda" in period
-        assert "interest_coverage" in period
+        assert "total_debt_ebitda" in period
+        assert "interest_coverage" not in period
+        assert "peer_median" not in period
+        assert "peer_p75" not in period
         assert "current_ratio" in period
 
     def test_aapl_balance_sheet_fixture_loads(self) -> None:
@@ -1037,94 +1045,81 @@ class TestIntegrationFixtures:
         assert flag == Flag.GREEN
 
     def test_aapl_debt_ebitda_flag_from_fixture(self) -> None:
-        """AAPL Debt/EBITDA=1.21 vs peer_median=1.10.
-
-        In high_bad direction: 1.21 > peer_median=1.10 → peer says AMBER.
-        Absolute: 1.21 < 3.5 → absolute says GREEN.
-        Conservative rule picks AMBER (peer is more conservative).
+        """AAPL Debt/EBITDA=1.21 with no peer data (live `ratios` never
+        supplies a peer pair) → absolute-only rule: 1.21 < 3.5 → GREEN.
         """
         ratios = _load_fixture("get_financials_ratios.json")["periods"][0]
         result = flag_metric(
-            ratios["debt_to_ebitda"],
-            peer_median=ratios["peer_median"]["debt_to_ebitda"],
-            peer_p75=ratios["peer_p75"]["debt_to_ebitda"],
+            ratios["total_debt_ebitda"],
+            peer_median=None,
+            peer_p75=None,
             metric_key="debt_ebitda",
-        )
-        assert result == Flag.AMBER
-
-    def test_aapl_interest_coverage_flag_from_fixture(self) -> None:
-        """AAPL interest coverage 29.1x → GREEN (well above peer median 18.2x and absolute 3.0x)."""
-        ratios = _load_fixture("get_financials_ratios.json")["periods"][0]
-        result = flag_metric(
-            ratios["interest_coverage"],
-            peer_median=ratios["peer_median"]["interest_coverage"],
-            peer_p75=ratios["peer_p75"]["interest_coverage"],
-            metric_key="interest_coverage",
         )
         assert result == Flag.GREEN
 
+    def test_aapl_interest_coverage_has_no_raw_value_in_the_fixture(self) -> None:
+        """The live `ratios` response has no interest-coverage field at all —
+        not merely a missing peer pair. The fixture correctly omits it, and
+        the orchestrator has nothing to pass to `flag_metric` for this leg."""
+        ratios = _load_fixture("get_financials_ratios.json")["periods"][0]
+        assert "interest_coverage" not in ratios
+
     def test_aapl_current_ratio_flag_from_fixture(self) -> None:
-        """AAPL current ratio 0.87 → RED (below absolute red threshold 1.0)."""
+        """AAPL current ratio 0.87, no peer data → absolute-only rule:
+        0.87 < 1.0 → RED."""
         ratios = _load_fixture("get_financials_ratios.json")["periods"][0]
         result = flag_metric(
             ratios["current_ratio"],
-            peer_median=ratios["peer_median"]["current_ratio"],
-            peer_p75=ratios["peer_p75"]["current_ratio"],
+            peer_median=None,
+            peer_p75=None,
             metric_key="current_ratio",
         )
-        # 0.87 < 1.0 → absolute RED
         assert result == Flag.RED
 
-    def test_aapl_debt_equity_flag_from_fixture(self) -> None:
-        """AAPL D/E=1.84 vs peer median 0.52 and peer p75 1.20 → RED.
-
-        The row carries no absolute band, so the peer rule is the only one that
-        can flag it. It rendered GREEN until direction stopped being read off
-        ABSOLUTE_THRESHOLDS.
+    def test_aapl_debt_equity_flag_from_fixture_is_unavailable(self) -> None:
+        """D/E has no absolute band, and the live `ratios` response never
+        supplies a peer pair — so this leg is UNAVAILABLE on every run, not a
+        peer-judged RED. (It rendered a fictitious RED when the fixture
+        carried an invented peer_median/peer_p75 object; the live tool
+        carries no such object.)
         """
         ratios = _load_fixture("get_financials_ratios.json")["periods"][0]
         result = flag_metric(
-            ratios["debt_to_equity"],
-            peer_median=ratios["peer_median"]["debt_to_equity"],
-            peer_p75=ratios["peer_p75"]["debt_to_equity"],
+            ratios["debt_equity"],
+            peer_median=None,
+            peer_p75=None,
             metric_key="debt_equity",
         )
-        assert result == Flag.RED
+        assert result == Flag.UNAVAILABLE
 
-    def test_aapl_ebitda_margin_flag_from_fixture(self) -> None:
-        """AAPL EBITDA margin 33.6% vs peer median 22.1% → GREEN."""
+    def test_aapl_ebitda_margin_flag_from_fixture_is_unavailable(self) -> None:
+        """EBITDA margin has no absolute band, and the live `ratios` response
+        never supplies a peer pair — UNAVAILABLE, not a peer-judged GREEN."""
         ratios = _load_fixture("get_financials_ratios.json")["periods"][0]
         result = flag_metric(
             ratios["ebitda_margin"],
-            peer_median=ratios["peer_median"]["ebitda_margin"],
-            peer_p75=ratios["peer_p75"]["ebitda_margin"],
+            peer_median=None,
+            peer_p75=None,
             metric_key="ebitda_margin",
         )
-        assert result == Flag.GREEN
+        assert result == Flag.UNAVAILABLE
 
-    def test_fixture_peer_percentiles_follow_the_adverse_tail_convention(self) -> None:
-        """`peer_p75` carries the adverse tail, so for a low_bad metric it sits
-        below the median. Both fixtures already encode this; `flag_metric`
-        raises when they do not, so a fixture that drifted would break the
-        peer-flag tests in a confusing way rather than an obvious one."""
+    def test_fixtures_carry_no_peer_fields(self) -> None:
+        """Neither fixture carries `peer_median` / `peer_p75`: the live
+        `ratios` response has no such field for any metric, so a fixture that
+        reintroduced one would misrepresent the live contract this test
+        guards against."""
         for name in (
             "get_financials_ratios.json",
             "get_financials_ratios_distressed.json",
         ):
             ratios = _load_fixture(name)["periods"][0]
-            for field_name, key in (
-                ("debt_to_equity", "debt_equity"),
-                ("debt_to_ebitda", "debt_ebitda"),
-                ("interest_coverage", "interest_coverage"),
-                ("current_ratio", "current_ratio"),
-                ("ebitda_margin", "ebitda_margin"),
-            ):
-                median = ratios["peer_median"][field_name]
-                p75 = ratios["peer_p75"][field_name]
-                if METRIC_DIRECTIONS[key] == "low_bad":
-                    assert p75 <= median, f"{name}:{field_name}"
-                else:
-                    assert p75 >= median, f"{name}:{field_name}"
+            assert "peer_median" not in ratios, name
+            assert "peer_p75" not in ratios, name
+            assert "interest_coverage" not in ratios, name
+            assert "ebitda_interest_coverage" not in ratios, name
+            assert "debt_to_assets" not in ratios, name
+            assert "debt_assets" not in ratios, name
 
     def test_score_analysis_fixture_has_the_live_response_shape(self) -> None:
         """The response is flat, and the rows live under `data`. It carries no
@@ -1189,60 +1184,62 @@ class TestIntegrationFixtures:
         )
 
     def test_distressed_company_debt_ebitda_is_red(self) -> None:
-        """Distressed fixture: D/EBITDA=6.2x → RED."""
+        """Distressed fixture: D/EBITDA=6.2x, no peer data → absolute-only
+        rule: 6.2 > 5.0 → RED."""
         ratios = _load_fixture("get_financials_ratios_distressed.json")["periods"][0]
         result = flag_metric(
-            ratios["debt_to_ebitda"],
-            peer_median=ratios["peer_median"]["debt_to_ebitda"],
-            peer_p75=ratios["peer_p75"]["debt_to_ebitda"],
+            ratios["total_debt_ebitda"],
+            peer_median=None,
+            peer_p75=None,
             metric_key="debt_ebitda",
         )
         assert result == Flag.RED
 
-    def test_distressed_company_interest_coverage_is_red(self) -> None:
-        """Distressed fixture: interest coverage 1.1x → RED (below absolute threshold 1.5x)."""
+    def test_distressed_company_interest_coverage_has_no_raw_value(self) -> None:
+        """The distressed fixture also carries no interest-coverage field —
+        the live `ratios` response never has one, distressed or not."""
         ratios = _load_fixture("get_financials_ratios_distressed.json")["periods"][0]
-        result = flag_metric(
-            ratios["interest_coverage"],
-            peer_median=ratios["peer_median"]["interest_coverage"],
-            peer_p75=ratios["peer_p75"]["interest_coverage"],
-            metric_key="interest_coverage",
-        )
-        assert result == Flag.RED
+        assert "interest_coverage" not in ratios
 
     def test_distressed_company_current_ratio_is_red(self) -> None:
-        """Distressed fixture: current ratio 0.72 → RED."""
+        """Distressed fixture: current ratio 0.72, no peer data →
+        absolute-only rule: 0.72 < 1.0 → RED."""
         ratios = _load_fixture("get_financials_ratios_distressed.json")["periods"][0]
         result = flag_metric(
             ratios["current_ratio"],
-            peer_median=ratios["peer_median"]["current_ratio"],
-            peer_p75=ratios["peer_p75"]["current_ratio"],
+            peer_median=None,
+            peer_p75=None,
             metric_key="current_ratio",
         )
         assert result == Flag.RED
 
-    def test_distressed_company_debt_equity_is_red(self) -> None:
-        """Distressed fixture: D/E=6.80 above peer p75 4.50 → RED on the peer
-        rule alone, with no absolute band to catch it."""
+    def test_distressed_company_debt_equity_is_unavailable(self) -> None:
+        """Distressed fixture: D/E=6.80 has no absolute band, and the live
+        `ratios` response never supplies a peer pair — UNAVAILABLE, not a
+        peer-judged RED. A distressed D/E is still unjudgeable without a peer
+        source; that gap does not get narrower just because the company is
+        in worse shape."""
         ratios = _load_fixture("get_financials_ratios_distressed.json")["periods"][0]
         result = flag_metric(
-            ratios["debt_to_equity"],
-            peer_median=ratios["peer_median"]["debt_to_equity"],
-            peer_p75=ratios["peer_p75"]["debt_to_equity"],
+            ratios["debt_equity"],
+            peer_median=None,
+            peer_p75=None,
             metric_key="debt_equity",
         )
-        assert result == Flag.RED
+        assert result == Flag.UNAVAILABLE
 
-    def test_distressed_company_ebitda_margin_is_red(self) -> None:
-        """Distressed fixture: EBITDA margin 5.1% below peer p75 6.5% → RED."""
+    def test_distressed_company_ebitda_margin_is_unavailable(self) -> None:
+        """Distressed fixture: EBITDA margin 5.1% has no absolute band, and
+        the live `ratios` response never supplies a peer pair — UNAVAILABLE,
+        not a peer-judged RED."""
         ratios = _load_fixture("get_financials_ratios_distressed.json")["periods"][0]
         result = flag_metric(
             ratios["ebitda_margin"],
-            peer_median=ratios["peer_median"]["ebitda_margin"],
-            peer_p75=ratios["peer_p75"]["ebitda_margin"],
+            peer_median=None,
+            peer_p75=None,
             metric_key="ebitda_margin",
         )
-        assert result == Flag.RED
+        assert result == Flag.UNAVAILABLE
 
     def test_distressed_company_overall_is_red(self) -> None:
         """All-RED metrics → overall traffic-light RED."""
@@ -1459,12 +1456,14 @@ class TestEdgeCases:
             flag_metric(9.9, 1.0, 2.0, "debt_ebita")
 
     def test_registered_key_with_no_rule_to_apply_is_unavailable(self) -> None:
-        """Registered, but no peer row this run and no absolute band — nothing
-        can judge it, so it must not report GREEN. Five registered keys hit
-        this whenever the peer response omits them."""
+        """Registered, but no peer row and no absolute band — nothing can
+        judge it, so it must not report GREEN. Seven registered keys hit this
+        on every run: the live `ratios` response never supplies a
+        peer_median/peer_p75 pair for any metric today, not merely for some
+        of them."""
         for key in (
-            "debt_assets", "ebitda_interest_coverage",
-            "quick_ratio", "ebit_margin", "fcf_margin",
+            "debt_equity", "debt_assets", "ebitda_interest_coverage",
+            "quick_ratio", "ebitda_margin", "ebit_margin", "fcf_margin",
         ):
             assert flag_metric(999.0, None, None, key) == Flag.UNAVAILABLE, key
 

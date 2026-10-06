@@ -223,8 +223,10 @@ def flag_metric(
     has_absolute = metric_key in ABSOLUTE_THRESHOLDS
     if not has_peer and not has_absolute:
         # Registered, but this run has no peer row and the metric carries no
-        # fixed band — so there is no rule to apply. Five of the registered
-        # keys hit this whenever the peer response omits them.
+        # fixed band — so there is no rule to apply. Seven of the registered
+        # keys hit this on every run: the live `ratios` response never
+        # supplies a peer_median/peer_p75 pair for any metric today, so this
+        # is not a per-run gap.
         return Flag.UNAVAILABLE
 
     peer_flag = _peer_relative_flag(value, peer_median, peer_p75, metric_key)
@@ -708,8 +710,11 @@ def coverage(flags: list[Flag]) -> tuple[int, int]:
     the arithmetic and silent in the output: a GREEN header can rest on a small
     minority of the metrics and still read as a full clean bill. This is not a
     corner case — seven of the ten registered keys carry no absolute band, and
-    the `ratios` response supplies peer percentiles for only five metrics, so
-    the five keys with neither are UNAVAILABLE on a routine run.
+    the live `ratios` response supplies a peer_median/peer_p75 pair for none of
+    them, so those seven are UNAVAILABLE on every run. `interest_coverage` has
+    an absolute band but no raw value anywhere in `ratios` either, so it is
+    UNAVAILABLE too — eight of the ten keys unjudged on a routine run, not a
+    rare degradation.
 
     Pass `report_flags(report)`, not a hand-assembled list. Counting a
     different list than the one the verdict was computed from is the bug this
