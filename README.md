@@ -273,7 +273,7 @@ Each Parallax API call consumes tokens. Quick reference:
 |---|---|---|
 | Quick stock check | 2–29 | `/parallax-should-i-buy` ~29 |
 | Deep analysis | 31–46 | `/parallax-due-diligence` ~31 |
-| Portfolio (10 holdings) | 36–105 | `/parallax-portfolio-checkup` ~36 |
+| Portfolio (10 holdings) | 36–105 | `/parallax-portfolio-checkup` ~46 |
 
 Full breakdown in `skills/_parallax/token-costs.md`.
 
