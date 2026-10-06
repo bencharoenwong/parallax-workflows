@@ -17,7 +17,7 @@ description: "Desk-level morning call list for relationship managers covering mu
 
 ## Gotchas
 
-- Expected Parallax spend: `1 + |U| + 3|M_equity| + 5·min(|M_equity|,K) + 1·|M_etf|` (`_parallax/token-costs.md`); the wide equity price scan is billed — `export_price_series` costs 1 credit per call, up to `|U|` calls, not FREE.
+- Expected Parallax spend: `1 + |U| + |U_etf| + 3|M_equity| + 2|M_etf| + 5·min(|M_equity|,K)` (`_parallax/token-costs.md`), where `U_etf` is the ETFs in `U`. Batch A bills up to `|U|` `export_price_series` calls (1 credit each, not FREE; cached ETFs skip it, so `|U|` is an upper bound) plus one `etf_daily_price` per ETF in `U`; Batch B bills `get_company_info` + `get_peer_snapshot` (2) per ETF mover.
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.1 discovery, §0.2 typed integer params, §3 parallel execution, §3.1 annotation/rank separation, §9.1/§9.2 disclosures, §10 render gate, §11 verdict sensitivity, §12 information framing, §13 audience mode, and §14 host primitives.
 - JIT-load `_parallax/coverage-matrix.md` before Batch A. `export_price_series` is equity-only and billed 1 credit per call (not FREE), and its `success:false` response classifies ETFs; ETFs then price via `etf_daily_price` (also 1 credit per call). This skill does not call `etf_profile`.
 - JIT-load `_parallax/house-view/loader.md` §1-§2, §5, and §6. The house view annotates movers but never changes rank order or membership.
@@ -112,7 +112,7 @@ The entire final message is that command's stdout. The stderr `[render-gate] WAR
 11. Symbol Movers Reference: symbol, name, move %, four-week score change, news headline, number of clients holding, desk-wide weighted exposure, and house-view tag.
 12. Verdict Sensitivity per `_parallax/parallax-conventions.md §11`; omit when the seam's `resolved_audience` is `client_safe`.
 13. Next steps: point to `/parallax-client-review`, `/parallax-should-i-buy`, or `/parallax-watchlist-monitor` as appropriate. Do not auto-invoke them.
-14. About This Report: first the seam's `about_lines` verbatim — they already carry the `_parallax/white-label/integration-pattern.md §7` branding line, the unconditional currency line, any skipped local-logo basename, and the audience mode/notice lines; do not re-add any of them — then desk-book provenance, redaction state, and a cost note that the equity price scan is billed 1 credit per `export_price_series` call (not free) while `etf_daily_price` costs 1 token per ETF priced.
+14. About This Report: first the seam's `about_lines` verbatim — they already carry the `_parallax/white-label/integration-pattern.md §7` branding line, the unconditional currency line, any skipped local-logo basename, and the audience mode/notice lines; do not re-add any of them — then desk-book provenance, redaction state, and a cost note that the equity price scan is billed 1 credit per `export_price_series` call (not free) while `etf_daily_price` costs 1 credit per ETF priced, and each ETF mover adds 2 credits of enrichment.
 15. AI-interaction disclosure per `_parallax/parallax-conventions.md §9.2`.
 16. Disclaimer: view-aware per `_parallax/house-view/loader.md §5` if active; otherwise render the standard disclaimer from `_parallax/parallax-conventions.md §9.1`.
 
