@@ -1,7 +1,7 @@
 # Parallax Skill Conventions
 
 <!-- authority: contract -->
-<!-- verified: 2026-09-05 -->
+<!-- verified: 2026-10-06 -->
 <!-- overrides: none -->
 
 Shared patterns for all `parallax-*` skills. JIT-load from any skill that calls Parallax MCP tools.
@@ -119,7 +119,7 @@ Scoring tools (`get_peer_snapshot`, `get_score_analysis`, `quick_portfolio_score
 
    | Tool | Identity field |
    |---|---|
-   | `get_company_info` | `name` — the oracle the other checks compare against |
+   | `get_company_info` | `data.name` — the oracle the other checks compare against. Nested under a `data` object (confirmed live, 2026-10-05); there is no top-level `name`, and the market/region field is `data.market`, never `country` — `data` has no `country` key at all |
    | `get_peer_snapshot` | `target_company`, **top level**. There is no `name` field anywhere in the response — each peer's name is `comparison[].company` |
    | `get_score_analysis` | no company name in the response — verify `data[0].symbol` matches the requested RIC instead |
    | `quick_portfolio_scores` | `holdings_analyzed[].company_name`, per holding row |
