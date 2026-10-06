@@ -37,10 +37,13 @@ own captures show. Do not generalise from one endpoint to another:
     path -- ``test_gen_mock_fixtures.py`` now fails if the wrapper is dropped.
   * ``get_score_analysis`` is NOT wrapped. Its payload is flat: ``success``,
     ``symbol``, ``weeks``, ``data``.
-  * ``get_company_info`` is emitted unwrapped because the ledger documents
-    ``company_info`` only as a BLOCK inside an ``analyze_portfolio`` response
-    and says nothing about the standalone endpoint. That is an absence of
-    evidence, deliberately NOT resolved by analogy with the sibling above.
+  * ``get_company_info`` carries its OWN envelope, ``{success, symbol, data:
+    {...}, score_scale: {...}}`` -- confirmed by a live probe (2026-10-05),
+    not inferred by analogy with the ``analyze_portfolio`` block of the same
+    name. ``data`` is not ``result``: there is no top-level ``name`` or
+    ``market``/``country``, and it is NOT the same shape as the 25-key
+    ``company_info`` block documented inside ``analyze_portfolio`` -- the two
+    are different endpoints that happen to share a name.
 
     SUCCESS IS NOT A STATUS FLAG. Branch on the PRESENCE OF ``result``.
     A credit-exhausted call returns ``success: true`` -- true, on a call that
@@ -1122,32 +1125,88 @@ def _build_get_company_info(paths: dict[str, Any]) -> dict:
 
     This is deliberately NOT the 25-key ``company_info`` block that lives inside
     an ``analyze_portfolio`` response. The ledger documents that block; it says
-    nothing about this endpoint, and inventing a shape for it from the block
-    would be a guess dressed as a record. The shape below is the one this repo's
-    schema and consumers already agree on; what changes is provenance -- every
-    value is now derived from the seeded path and the issuer is synthetic."""
+    nothing about this endpoint. Unlike the module's earlier state, this is NOT
+    an absence of evidence any more: a live probe (skill-drift audit,
+    2026-10-05) confirmed the standalone endpoint wraps the identity, pricing
+    and factor-score fields in a ``data`` object, keyed ``success``/``symbol``/
+    ``data``/``score_scale`` -- there is no top-level ``name``, ``country`` or
+    ``market_cap_usd``, and the field is ``data.market``, not ``data.country``.
+    The probe also showed every numeric-looking field under ``data`` (price,
+    volume, market cap, the five factor scores and their composite) coming back
+    as a STRING, not a number -- a real consumer-facing trap this fixture now
+    reproduces rather than quietly "fixing" into the nicer type.
+
+    Every value below is still derived from the seeded path and the issuer is
+    still synthetic; what changed is the envelope and field set, not the
+    derivation method."""
     subject = paths["holdings"][0]
+    scores = _scores(paths)[0]
     close = subject["price_units"][-1] / SUBUNIT
     # Share count derived from the path, then rounded hard so the market cap
     # stays well inside the 9-significant-figure budget. A cap accurate to the
     # dollar is precisely the identity signature gate 2 exists to catch.
+    # (Emitted as a string below, matching the live endpoint, so the precision
+    # gate -- which only inspects int/float scalars -- does not apply to it
+    # either way; the hard rounding is kept so the underlying number stays
+    # honestly synthetic even if a future edit changes the emitted type.)
     shares = round(subject["value_units"][-1] * 2_600_000 / SUBUNIT, -8)
+    mktcap = int(q(shares * close, -6))
+    prev_close = subject["price_units"][-2] / SUBUNIT
+    change = q(close - prev_close, 2)
+    changepercent = q(change / prev_close * 100.0, 2)
     return {
+        "success": True,
         "symbol": subject["ric"],
-        "name": subject["name"],
-        "exchange": subject["exchange"],
-        "sector": subject["sector"],
-        "industry": subject["industry"],
-        "country": subject["market"],
-        "market_cap_usd": int(q(shares * close, -6)),
-        "currency": BASE_CURRENCY,
-        "description": (
-            f"{subject['name']} is a synthetic issuer used in Parallax fixture "
-            f"tests. It does not exist. Every value in this fixture is produced "
-            f"by gen_mock_fixtures.py from a pinned seed, so the file can be "
-            f"regenerated and compared byte for byte."
-        ),
-        "website": "https://www.example.com/axiom-compute",
+        "data": {
+            "ric": subject["ric"],
+            "name": subject["name"],
+            "sector": subject["sector"],
+            "industry": subject["industry"],
+            # The live field is "market" (a country/region name), never
+            # "country" -- dropping the old "country" key is the fix, not a
+            # rename left for a consumer to discover.
+            "market": subject["market"],
+            "exchange": subject["exchange"],
+            "currency": BASE_CURRENCY,
+            "description": (
+                f"{subject['name']} is a synthetic issuer used in Parallax "
+                f"fixture tests. It does not exist. Every value in this "
+                f"fixture is produced by gen_mock_fixtures.py from a pinned "
+                f"seed, so the file can be regenerated and compared byte for "
+                f"byte."
+            ),
+            "activity": "Active",
+            # Price/volume/market-cap/change and the five factor scores are
+            # all returned as STRINGS by the live endpoint -- str() here is
+            # the fixture modelling that type, not a formatting convenience.
+            "close": str(close),
+            "change": str(change),
+            "changepercent": str(changepercent),
+            "volume": str(subject["vol_bp"] * 1000),
+            "mktcap": str(mktcap),
+            "value": str(scores["value"]),
+            "quality": str(scores["quality"]),
+            "momentum": str(scores["momentum"]),
+            "defensive": str(scores["defensive"]),
+            "tactical": str(scores["tactical"]),
+            "total": str(scores["total"]),
+            "recommendation": scores["recommendation"],
+        },
+        "score_scale": {
+            "range": (
+                "0-10. Each per-stock score is a percentile rank against "
+                "other covered stocks, not an absolute measure."
+            ),
+            "weighting": (
+                "The overall score's factor weights shift across market "
+                "regimes, so one factor can dominate `total` in a way a "
+                "plain average would not."
+            ),
+            "more": (
+                "Ask what a factor measures or why a score changed; the "
+                "methodology lookup costs nothing extra on this call."
+            ),
+        },
     }
 
 

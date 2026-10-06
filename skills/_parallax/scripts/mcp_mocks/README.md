@@ -1,7 +1,7 @@
 # Shared MCP Mock Fixtures
 
 <!-- authority: registry -->
-<!-- verified: 2026-09-05 -->
+<!-- verified: 2026-10-06 -->
 <!-- overrides: the code it mirrors (contract_schemas.py); regenerate, do not hand-edit -->
 
 One JSON file per Parallax MCP endpoint consumed by parallax-* skills. These mocks back the contract tests in `../contract_validator.py` + `../contract_schemas.py` and are imported by per-skill `test_mcp_contracts.py` files.
@@ -22,23 +22,19 @@ A red contract test in CI surfaces drift before a customer hits it.
 
 | File | Endpoint | Notes |
 |---|---|---|
-| `get_telemetry.json` | `mcp__claude_ai_Parallax__get_telemetry` | Market regime, signals, divergences |
+| `get_telemetry.json` | `mcp__claude_ai_Parallax__get_telemetry` | Market regime, signals, divergences. **Corrected 2026-10-06** against a live probe: `divergences[]` carries `{name, type, market, daily, mtd, basket_id}` — there is no `ticker`/`factor`/`magnitude` shape and no `basket_name` field. |
 | `analyze_portfolio.json` | `mcp__claude_ai_Parallax__analyze_portfolio` | **MANAGED — generated.** Full response: `{"success": true, "result": {…}}`. **Consumers read `response["result"][<block>]`** — the blocks are not at the top level. A 4-holding / 3-sector / 28-calendar-day book. `result` carries `_meta`, `portfolio_parameters`, `data_quality`, `portfolio_summary`, `performance_metrics`, `drawdown_analysis`, `portfolio_scores`, `concentration_metrics`, `company_contribution`, `sector_contribution`, `sector_allocation`, `time_period_returns`, `latest_holdings`. Shape corrected 2026-08-13 to the live response: `sector_allocation` and `sector_contribution` are **lists**, not dicts; holdings key on `ric`, not `symbol`; there is no `factor_exposures` block. `rolling_metrics` and `benchmark_prices` are not in this mock. |
 | `analyze_portfolio_credit_exhausted.json` | `mcp__claude_ai_Parallax__analyze_portfolio` | **MANAGED — generated. Failure-mode fixture.** The credit-exhausted envelope: `success: true` on a call that FAILED, a `detail` object, and **no `result` key at all**. Branch on the presence of `result`, never on `success` — `if payload["success"]` passes here and then raises `KeyError`. |
-| `export_price_series.json` | `mcp__claude_ai_Parallax__export_price_series` | One holding's daily OHLCV |
-| `get_company_info.json` | `mcp__claude_ai_Parallax__get_company_info` | **MANAGED — generated.** One synthetic holding; ground-truth name oracle. Cross-references the first `analyze_portfolio` holding. |
-| `check_portfolio_redundancy.json` | `mcp__claude_ai_Parallax__check_portfolio_redundancy` | **PROVISIONAL** — see below |
-| `check_portfolio_redundancy_silent_fail.json` | `mcp__claude_ai_Parallax__check_portfolio_redundancy` | **Failure-mode fixture** — models the empty-payload silent-failure on sector-concentrated portfolios. Pair with the happy-path mock when testing skills that have sanity-check gates against this mode (portfolio-builder Step 4 + Step 6 fallback, halal-screen Step 2). |
+| `export_price_series.json` | `mcp__claude_ai_Parallax__export_price_series` | **Corrected 2026-10-06** against a live probe: top-level shape is `{success, symbol, format, data_points, data: [...]}` — there is no `prices`/`close` field. `json` format rows carry `open`/`high`/`low`/`volume` beyond `price`; `list`/`csv` rows expose `price` only. `price` is the raw daily close, not confirmed dividend-adjusted/total-return. |
+| `get_company_info.json` | `mcp__claude_ai_Parallax__get_company_info` | **MANAGED — generated.** One synthetic holding; ground-truth name oracle. Cross-references the first `analyze_portfolio` holding. **Corrected 2026-10-06** against a live probe: the live endpoint wraps identity/pricing/score fields under `data`, keyed `{success, symbol, data: {...}, score_scale: {...}}` — there is no top-level `name`/`sector`/`market_cap_usd`, and the live field is `data.market` (not `country`; `data` has no `country` key). Price, volume, market cap and the five factor scores + composite are returned as **strings**, not numbers. |
+| `check_portfolio_redundancy.json` | `mcp__claude_ai_Parallax__check_portfolio_redundancy` | **Corrected 2026-10-06** (no longer PROVISIONAL — confirmed by a live probe): `{success, has_issues, holdings_input/resolved/failed/trimmed, holdings_unresolved, coverage_weight_fraction, sector_concentration, industry_overlap, warnings, recommendations}`. There is no `overlap_pairs`, `coverage_pct`, `holdings_analyzed` or `holdings_total` field live. `sector_concentration` is a dict of sector → weight **fraction** (0-1), a third numeric scale alongside the 0-10 score scale and the 0-100 `analyze_portfolio` scale used elsewhere. |
+| `check_portfolio_redundancy_silent_fail.json` | `mcp__claude_ai_Parallax__check_portfolio_redundancy` | **Failure-mode fixture** — models the empty-payload silent-failure on sector-concentrated portfolios. Pair with the happy-path mock when testing skills that have sanity-check gates against this mode (portfolio-builder Step 4 + Step 6 fallback, halal-screen Step 2). Field names corrected 2026-10-06 to match the happy-path mock above. |
 | `get_assessment.json` | `mcp__claude_ai_Parallax__get_assessment` | AI synthesis (async, ~30-90s) |
 | `get_score_analysis.json` | `mcp__claude_ai_Parallax__get_score_analysis` | **MANAGED — generated.** Weekly score history per ticker. Shape corrected 2026-08-13 to the live response: rows live under **`data`** (not `history`) with **lowercase** factor keys, sub-scores are 0-10 ints, and `total` is a separately-computed 0-10 composite that is **not** the mean of the five. Resolves the three-way divergence recorded in the 2026-08-11 `DECISIONS.md` entry ("Convert the credit-lens quality-trend bands…", fact D and the deferred fixture-shape alternative). |
-| `get_news_synthesis.json` | `mcp__claude_ai_Parallax__get_news_synthesis` | News synthesis per ticker (async) |
-| `macro_analyst.json` | `mcp__claude_ai_Parallax__macro_analyst` | One country's tactical view |
+| `get_news_synthesis.json` | `mcp__claude_ai_Parallax__get_news_synthesis` | **Corrected 2026-10-06** against a live probe: the live endpoint returns a FIXED 3-bullet shape, `{success, symbol, title, bullet1, bullet2, bullet3, sources, generation_time_ms}` — there is no `summary`/`key_themes`/`sentiment`/`articles_analyzed` field. `sources` was empty in the probed sample despite the tool description's "sources used" framing. |
+| `macro_analyst.json` | `mcp__claude_ai_Parallax__macro_analyst` | One country's tactical view. **Corrected 2026-10-06** against a live probe: the live endpoint returns free prose in `content` plus a pre-signed, time-limited storage URL in `file_url` for the fuller report, `{report_date, market, file_url, component_name, content, truncated, success, next_steps}` — there is no structured `regime`/`tactical.stance`/`factor_tilts` object. `truncated` flags server-side truncation of `content` itself, not completeness of the underlying report. |
 
 For multi-holding fan-out endpoints, the mock represents **one** call's response. Skills call them in parallel per holding / per top-mover.
-
-## Provisional schemas
-
-`check_portfolio_redundancy` field-level usage is not yet documented in any SKILL.md with explicit field reads. The schema is best-inference from the function name and the redundancy concept used in `portfolio-checkup`. When a skill explicitly relies on a specific field, validate the schema against an actual MCP call and update both the schema and this mock.
 
 ## How to add contract tests for a new skill
 

@@ -1,21 +1,22 @@
 {
-  "overlap_pairs": [
-    {
-      "symbol_a": "AAPL.O",
-      "symbol_b": "MSFT.O",
-      "overlap_score": 0.62,
-      "shared_factors": ["MOMENTUM", "QUALITY"],
-      "shared_sector": "Information Technology"
-    },
-    {
-      "symbol_a": "JPM.N",
-      "symbol_b": "BAC.N",
-      "overlap_score": 0.71,
-      "shared_factors": ["VALUE"],
-      "shared_sector": "Financials"
-    }
+  "success": true,
+  "has_issues": true,
+  "holdings_input": 3,
+  "holdings_resolved": 3,
+  "holdings_failed": 0,
+  "holdings_trimmed": 0,
+  "holdings_unresolved": [],
+  "coverage_weight_fraction": 1.0,
+  "sector_concentration": {
+    "Information Technology": 0.7,
+    "Financials": 0.3
+  },
+  "industry_overlap": {},
+  "warnings": [
+    "High concentration in Information Technology: 70.0%"
   ],
-  "coverage_pct": 0.875,
-  "holdings_analyzed": 7,
-  "holdings_total": 8
+  "recommendations": [
+    "Consider diversifying across sectors",
+    "Reduce overlapping industry positions"
+  ]
 }

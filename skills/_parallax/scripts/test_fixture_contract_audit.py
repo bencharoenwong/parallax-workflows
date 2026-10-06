@@ -140,7 +140,7 @@ def test_real_generator_rejects_a_mutated_string_value(tmp_path):
     """
     tree = _real_tree(tmp_path)
     payload = json.loads((tree / "get_company_info.json").read_text("utf-8"))
-    payload["name"] = "zz-planted-sentinel"
+    payload["data"]["name"] = "zz-planted-sentinel"
     _rewrite(tree, "get_company_info", payload)
 
     errors = prov.regeneration_errors(gen.build_fixtures(), tree, prov.MANAGED)
@@ -325,6 +325,12 @@ def identity_pairs(portfolio: dict, oracle: dict) -> dict[str, list[str]]:
 
     Returns ``{"oracle": [...], "candidates": [...]}``. Injectable so the
     negative twins below drive the same lookup with planted payloads.
+
+    ``oracle`` here is the get_company_info envelope: ``symbol`` is top-level,
+    ``name`` lives under ``data`` (confirmed live, 2026-10-05). The two
+    negative-twin tests below use a flat planted dict on purpose -- they drive
+    this helper directly with their own shape, not the real envelope -- so
+    they read ``oracle["name"]``, not ``oracle["data"]["name"]``.
     """
     ric = oracle["symbol"]
     candidates = []
@@ -332,7 +338,8 @@ def identity_pairs(portfolio: dict, oracle: dict) -> dict[str, list[str]]:
         for row in portfolio.get(block, []):
             if row.get("ric") == ric and "name" in row:
                 candidates.append(row["name"])
-    return {"oracle": [oracle["name"]], "candidates": candidates}
+    oracle_name = oracle["data"]["name"] if "data" in oracle else oracle["name"]
+    return {"oracle": [oracle_name], "candidates": candidates}
 
 
 def test_every_holding_row_carries_the_name_the_gate_reads(tracked_portfolio):
@@ -434,7 +441,7 @@ def test_a_real_name_never_folds_to_the_empty_string(tracked_portfolio):
     risk of the collapse, so the hole is reachable only through absent or
     contentless input."""
     oracle = _tracked("get_company_info")
-    names = [oracle["name"]]
+    names = [oracle["data"]["name"]]
     for block in ("latest_holdings", "company_contribution"):
         names += [row["name"] for row in tracked_portfolio[block]]
     for name in names:
@@ -645,14 +652,15 @@ def test_tracked_fixtures_describe_one_issuer_consistently(tracked_portfolio):
     Consumers load the FILES through ``load_mock``, so the same statement is
     made here against what is on disk."""
     oracle = _tracked("get_company_info")
+    data = oracle["data"]
     score = _tracked("get_score_analysis")
     assert score["symbol"] == oracle["symbol"]
 
     holding = next(h for h in tracked_portfolio["latest_holdings"]
                    if h["ric"] == oracle["symbol"])
-    assert holding["sector"] == oracle["sector"]
-    assert holding["industry"] == oracle["industry"]
-    assert names_match(holding["name"], oracle["name"]) is True
+    assert holding["sector"] == data["sector"]
+    assert holding["industry"] == data["industry"]
+    assert names_match(holding["name"], data["name"]) is True
 
 
 def test_cross_fixture_check_fails_on_a_planted_disagreement():

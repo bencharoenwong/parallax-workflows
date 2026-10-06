@@ -117,10 +117,12 @@ def test_envelope_conventions_are_per_endpoint(fixtures):
     score = fixtures["get_score_analysis"]
     assert "result" not in score
     assert {"success", "symbol", "weeks", "data"} <= set(score)
-    # Flat. The ledger documents company_info only as a BLOCK inside an
-    # analyze_portfolio response and is silent on this standalone endpoint, so
-    # it is emitted unwrapped rather than by analogy with its sibling.
-    assert "result" not in fixtures["get_company_info"]
+    # Its own envelope -- "data", not "result". Confirmed live (2026-10-05):
+    # {success, symbol, data: {...}, score_scale: {...}}.
+    info = fixtures["get_company_info"]
+    assert "result" not in info
+    assert {"success", "symbol", "data", "score_scale"} <= set(info)
+    assert "name" not in info, "identity fields live under data, not top level"
 
 
 def test_credit_exhausted_envelope_reports_success_with_no_result(fixtures):
@@ -534,11 +536,15 @@ def test_score_analysis_total_is_not_the_mean(fixtures):
 # --------------------------------------------------------------------------
 
 def test_company_info_agrees_with_the_portfolio_holding(fixtures, portfolio):
-    """One synthetic issuer, one identity, across every fixture that names it."""
+    """One synthetic issuer, one identity, across every fixture that names it.
+
+    ``symbol`` is top-level; name/sector/industry live under ``data`` -- see
+    the envelope test above."""
     info = fixtures["get_company_info"]
+    data = info["data"]
     holding = next(h for h in portfolio["latest_holdings"]
                    if h["ric"] == info["symbol"])
-    assert info["name"] == holding["name"]
-    assert info["sector"] == holding["sector"]
-    assert info["industry"] == holding["industry"]
+    assert data["name"] == holding["name"]
+    assert data["sector"] == holding["sector"]
+    assert data["industry"] == holding["industry"]
     assert fixtures["get_score_analysis"]["symbol"] == info["symbol"]

@@ -12,14 +12,20 @@
   },
   "divergences": [
     {
-      "ticker": "AAPL.O",
-      "factor": "MOMENTUM",
-      "magnitude": -1.4
+      "name": "Life Science Tools & Diagnostics",
+      "type": "rebound",
+      "market": "US",
+      "daily": 0.0241,
+      "mtd": -0.0067,
+      "basket_id": "US_20330114_031"
     },
     {
-      "ticker": "JNJ.N",
-      "factor": "DEFENSIVE",
-      "magnitude": 0.9
+      "name": "Semiconductors & Semiconductor Equipment",
+      "type": "breakdown",
+      "market": "US",
+      "daily": -0.0183,
+      "mtd": 0.0124,
+      "basket_id": "US_20330114_012"
     }
   ]
 }
