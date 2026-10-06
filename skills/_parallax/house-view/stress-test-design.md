@@ -1,7 +1,7 @@
 # House View Stress Test — Feature Design
 
 <!-- authority: observation -->
-<!-- verified: 2026-05-24 -->
+<!-- verified: 2026-10-06 -->
 <!-- overrides: live schema and live responses win -->
 
 Method: autoplan-style review structure, adapted to a CIO setting. Pulled from
@@ -125,20 +125,25 @@ default to US if ambiguous) so the macro_regime dimensions still get a compariso
 anchor. Document this fallback explicitly in the run artifact.
 
 **Fan-out cap.** The schema's `regions` block has 27 keys. Worst-case naive fan-out
-is `27 markets × 3 tools (telemetry + macro_analyst + score_analysis-bellwether) ≈
-80 concurrent MCP calls`, which exceeds reasonable per-run MCP budget and may trip
-rate limits. Cap: **12 tilted markets per run** (covers the typical CIO view; an
-"EM-overweight, granular" view rarely exceeds this). If `tilted_markets > 12`,
-prompt the user once with three options: (a) stress all, chunk into ceil(N/12)
-sequential batches; (b) stress top-12 by `|tilt|`, surface remainder as "deferred,
-re-run for full coverage"; (c) cancel. Never silently truncate. `check_macro_health`
-is one global call regardless of market count.
+is `27 markets × 2 tools (macro_analyst + score_analysis-bellwether) ≈ 54
+concurrent MCP calls`, plus one global `get_telemetry` call, which exceeds
+reasonable per-run MCP budget and may trip rate limits. Cap: **12 tilted markets
+per run** (covers the typical CIO view; an "EM-overweight, granular" view rarely
+exceeds this). If `tilted_markets > 12`, prompt the user once with three options:
+(a) stress all, chunk into ceil(N/12) sequential batches; (b) stress top-12 by
+`|tilt|`, surface remainder as "deferred, re-run for full coverage"; (c) cancel.
+Never silently truncate. `get_telemetry` is one global call regardless of market
+count — it is synchronous (no polling) and takes only `date`/`fields`, with no
+per-market parameter, so one call returns every covered market's slice and
+calling it again per tilted market just re-bills 1 credit for identical data.
+`check_macro_health` is DEPRECATED (1 credit, not 5) and carries no freshness
+field; prefer `check_api_health` (liveness, 0 credits) or `list_macro_countries`
+(coverage, 1 credit) instead of calling it at all.
 
 | Tool | Purpose |
 |---|---|
-| `check_macro_health` (once, not per market) | freshness of macro data across markets |
-| `get_telemetry` | per-market regime tag + signals + commentary |
-| `macro_analyst` (summary) | per-market 9-component macro view |
+| `get_telemetry` (once, global — no market parameter) | regime tag + signals + commentary + per-market divergences, all markets in one call |
+| `macro_analyst` (summary, per market) | per-market 9-component macro view |
 
 Bail on tool failure with explicit `PARALLAX_SILENT` / `UNCOVERED` marking
 (Principle 2). Never let a fail-empty silently look like agreement.

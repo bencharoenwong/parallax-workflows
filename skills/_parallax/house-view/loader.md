@@ -1,7 +1,7 @@
 # Parallax House View — Shared Loader & Resolver
 
 <!-- authority: contract -->
-<!-- verified: 2026-09-05 -->
+<!-- verified: 2026-10-06 -->
 <!-- overrides: none -->
 
 JIT-loaded by every `parallax-*` skill that consumes the active house view. Defines: where the view lives, how to validate it, how to apply tilts to MCP tool calls, how to resolve conflicts with explicit user constraints, and how to render conflict banners.
@@ -157,7 +157,7 @@ These deltas STACK with explicit factor tilts — uploader can override at confi
 
 When `PARALLAX_LOADER_V2=1`, portfolio consumer skills call `get_peer_snapshot` per holding (fanned out in parallel) rather than `quick_portfolio_scores`. Aggregate the per-holding scores client-side as follows:
 
-1. **Collect** `VALUE`, `QUALITY`, `MOMENTUM`, `DEFENSIVE` from each successful `get_peer_snapshot` response. Apply the factor alias collapse from §3 above (`quality → profitability`, `defensive → low_volatility`) before aggregating.
+1. **Select, then collect.** `get_peer_snapshot` has no top-level `VALUE`/`QUALITY`/`MOMENTUM`/`DEFENSIVE` fields — the top-level `target_score` is a pre-formatted string (e.g. `"5.5/10 (Fair)"`), not a per-factor breakdown. The four factor scores live only inside `comparison[]`, one row per company (the queried holding plus its peers). For each successful response, first select the `comparison[]` row with `is_target: true` (fallback: the row whose `symbol` matches the input ticker, per the ground-truth rule above), then collect `VALUE`, `QUALITY`, `MOMENTUM`, `DEFENSIVE` from that row — never from the response's top level. Apply the factor alias collapse from §3 above (`quality → profitability`, `defensive → low_volatility`) before aggregating.
 2. **Weight** each factor score by the holding's portfolio weight.
 3. **Sum** the weighted scores: `portfolio_VALUE = Σ(weight_i × value_i)` etc.
 4. **Partial results**: if one or more holdings timed out or errored, compute the weighted average over successful calls only — renormalise weights to sum to 1.0 over successful holdings and annotate the composite as partial.

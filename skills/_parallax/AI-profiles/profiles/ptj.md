@@ -24,15 +24,24 @@ tool_sequence:
   - get_company_info
   - get_score_analysis
   - get_technical_analysis
-  - get_stock_outlook:aspect=risk_return
+  - get_stock_outlook:aspect=analyst_targets
   - get_peer_snapshot
 required_factors_present: []
 thresholds:
-  channel_t_technical: "get_technical_analysis trend direction POSITIVE or STRONG_POSITIVE AND get_score_analysis Momentum sub-trend positive"
-  channel_t_partial: "exactly one of: trend direction POSITIVE/STRONG_POSITIVE OR momentum sub-trend positive (not both); OR get_technical_analysis unavailable and Momentum score >= 6 with trend upward"
+  # get_technical_analysis is LLM-authored prose (trend_direction is
+  # "bullish"/"bearish"/null; the separate enrichment layer's trend_regime is
+  # "trending_up"/"trending_down"/"rangebound_or_transition"/"mixed") -- there
+  # is no POSITIVE/STRONG_POSITIVE enum anywhere in the pipeline. Confirmed
+  # live, 2026-10-05.
+  channel_t_technical: "get_technical_analysis reads as a bullish trend (trend_direction: bullish, or trend_regime: trending_up) AND get_score_analysis Momentum sub-trend positive"
+  channel_t_partial: "exactly one of: a bullish technical read OR momentum sub-trend positive (not both); OR get_technical_analysis unavailable and Momentum score >= 6 with trend upward"
   channel_m_macro: "macro_analyst tactical view compatible with home market or sector tailwind"
   channel_m_partial: "macro view is neutral, or mixed across exposure markets (some favor, others do not)"
-  channel_v_volatility: "get_stock_outlook risk_return analyst upside target >= 15% AND Momentum factor score >= 5"
+  # aspect=risk_return maps to trailing return/volatility, NOT an analyst
+  # price target -- confirmed live, 2026-10-05. Analyst upside needs
+  # aspect=analyst_targets (current/high/low/mean/median); compute
+  # upside = (mean - current) / current.
+  channel_v_volatility: "get_stock_outlook(aspect=analyst_targets) upside = (mean - current) / current >= 15% AND Momentum factor score >= 5"
   channel_v_partial: "analyst upside 8-15% OR Momentum >= 5 but upside < 8%"
   channels_for_match: 3
   channels_for_partial: 2
@@ -52,9 +61,9 @@ Paul Tudor Jones's philosophy, documented at length in Jack Schwager's 1989 *Mar
 
 PTJ-style operates in single-ticker mode only: the user provides one equity ticker, and the profile evaluates it across three independent **conviction channels**:
 
-- **Channel T — Technical setup:** Does the stock exhibit positive or strong-positive trend direction (via `get_technical_analysis`) AND upward momentum in the score-analysis 52-week trend? This channel captures whether the asset's price action aligns with PTJ's primary signal source.
+- **Channel T — Technical setup:** Does the stock read as a bullish trend (via `get_technical_analysis`'s prose, or the enrichment layer's `trending_up`/`trending_down` read — there is no POSITIVE/STRONG_POSITIVE enum on this endpoint) AND upward momentum in the score-analysis 52-week trend? This channel captures whether the asset's price action aligns with PTJ's primary signal source.
 - **Channel M — Macro regime:** Is the stock's home market's macroeconomic backdrop (from `macro_analyst`) currently favorable to risk-on positioning or sector-aligned to a tactical theme? This channel validates that the technical move is backed by fundamental macro momentum, not merely noise.
-- **Channel V — Volatility and asymmetry:** Does the analyst price target show meaningful upside (>= 15% to target) AND does the stock exhibit established momentum (factor score >= 5) that supports the volatility regime? This channel enforces the 5:1 risk-reward principle and ensures capital is deployed only during asymmetric windows.
+- **Channel V — Volatility and asymmetry:** Does the analyst price target show meaningful upside (>= 15% to target, from `get_stock_outlook(aspect=analyst_targets)` as `(mean - current) / current` — `aspect=risk_return` is a different endpoint and returns trailing return/volatility, not an analyst target) AND does the stock exhibit established momentum (factor score >= 5) that supports the volatility regime? This channel enforces the 5:1 risk-reward principle and ensures capital is deployed only during asymmetric windows.
 
 **Verdict logic:**
 - All 3 channels flagged → `match` (high-conviction tri-channel alignment)

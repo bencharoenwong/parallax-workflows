@@ -1,12 +1,12 @@
 # MCP Field Inventory — Parallax house-view dependencies
 
 <!-- authority: observation -->
-<!-- verified: 2026-05-24 -->
+<!-- verified: 2026-10-06 -->
 <!-- overrides: live schema and live responses win -->
 
-**Generated:** 2026-05-24
+**Generated:** 2026-05-24 (market-coverage section flagged stale 2026-10-06 — see §1; not a fresh full capture)
 **Source:** Phase A0 live MCP smoke calls
-**Reviewed by:** N/A (initial generation)
+**Reviewed by:** N/A (initial generation); staleness flag added per the 2026-10-05 skill-drift audit
 **Refresh cadence:** Monthly, by hand. No automated refresh exists: re-run the `get_telemetry` request in §3 and the `macro_analyst` call forms in §6 against the live connector and update the observed fields below. (An earlier note named a CI smoke test and a validator module; neither was ever built.)
 
 This artifact documents the **observed** shape of `macro_analyst` and
@@ -23,7 +23,19 @@ handle gracefully.
 
 ## 1. Market coverage
 
-`list_macro_countries()` returns **15 entries**: 14 country reports + 1 "Global" aggregate.
+**STALE — flagged, not fully refreshed, 2026-10-06.** A live probe during the
+2026-10-05 skill-drift audit found `list_macro_countries()` now returning
+**17 entries** (`market_count: 17`), including **Brazil** — a market this
+section's 2026-05-24 table and `aggregator_weights.yaml` both still list as
+"out of MCP coverage." The 15-entries table below is 4+ months overdue against
+this file's own monthly refresh cadence and is known wrong on at least the
+Brazil point; it is kept here as the last point-in-time observation rather
+than guessed at, because the audit did not capture the full 17-market list.
+**Before relying on this section, re-run `list_macro_countries()` live and
+replace the table below wholesale** — do not patch it market-by-market.
+
+Last full capture (2026-05-24, now superseded on market count):
+`list_macro_countries()` returned **15 entries**: 14 country reports + 1 "Global" aggregate.
 
 | Group | Markets |
 |---|---|
@@ -31,12 +43,12 @@ handle gracefully.
 | Emerging Asia | China, India, Indonesia, Malaysia, South Korea, Taiwan, Thailand |
 | Cross-market | Global (aggregate, not a country) |
 
-**Coverage gaps vs. v0 `aggregator_weights.yaml`:**
-- ❌ **Brazil, Mexico, Hong Kong** — listed in weights but NOT in MCP coverage. Drop from weights file OR redistribute their weight.
+**Coverage gaps vs. v0 `aggregator_weights.yaml`, as of the 2026-05-24 capture:**
+- ❌ **Brazil, Mexico, Hong Kong** — listed in weights but NOT in MCP coverage at that time. **Brazil is now back in coverage** per the 2026-10-05 probe above; Mexico and Hong Kong were not independently re-checked. Do not assume either is still excluded.
 - ❌ **Malaysia** — in MCP coverage but NOT in weights file. Add with ~0.005 weight.
 - ⚠️ **Global** — special aggregate market; cross_country.aggregate should NOT include it in per-country fan-out (it's already aggregated).
 
-**Action:** `aggregator_weights.yaml` needs an alignment pass before B1 implementation starts. Single-file edit.
+**Action:** `aggregator_weights.yaml` needs a full re-alignment pass against a fresh `list_macro_countries()` capture before any further B1 work — not a hand-patch for Brazil alone, since the other 16 (now potentially more) markets were not re-verified in this pass either.
 
 ---
 
@@ -159,8 +171,16 @@ inputs. **Revise as follows:**
 
 ### 5.2 `cross_country.py` market list alignment
 
-Update `aggregator_weights.yaml` to match observed coverage (14 markets, drop
-Brazil/Mexico/Hong Kong, add Malaysia, exclude Global from per-country fan-out).
+**Superseded 2026-10-06** — this 2026-05-24 instruction assumed 14 markets and
+named Brazil as out of coverage; a 2026-10-05 probe shows coverage at 17
+markets including Brazil, so "drop Brazil" is no longer correct. Re-derive
+this instruction from a fresh `list_macro_countries()` capture (§1 above)
+rather than following the stale market list below: update
+`aggregator_weights.yaml` to match CURRENT observed coverage, assign weights
+to every newly-covered market rather than silently zero-weighting it via
+`weights.get(k, 0.0)`, and continue to exclude Global from per-country
+fan-out (that part still holds — Global is a cross-market aggregate by
+construction, not an observed-coverage fact that can go stale).
 
 ### 5.3 Component fan-out scope
 
