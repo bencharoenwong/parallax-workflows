@@ -16,13 +16,16 @@ from canary_fixture import hermetic_extra_terms  # noqa: F401 -- autouse fixture
 
 SKILLS = Path(__file__).resolve().parents[2]
 SCRIPT = SKILLS / "build-skills.sh"
+# The subprocess reads the real home-directory file; the autouse fixture only
+# re-points the in-process attribute, so capture the real path before it runs.
+REAL_EXTRA_CANARY_FILE = bb.EXTRA_CANARY_FILE
 
 pytestmark = pytest.mark.skipif(shutil.which("zip") is None, reason="zip not on PATH")
 
 
 def _env(out_dir):
     env = {**os.environ, "SKILL_BUILD_OUT_DIR": str(out_dir)}
-    if not bb.EXTRA_CANARY_FILE.is_file():
+    if not REAL_EXTRA_CANARY_FILE.is_file():
         env[bb.PARTIAL_SCAN_ENV] = "1"
     return env
 
