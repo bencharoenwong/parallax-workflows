@@ -223,28 +223,6 @@ def test_full_white_label_with_credit_keeps_powered_by():
     assert "Chicago Global" not in html                     # no CG entity trace anywhere
 
 
-# --- Thai-translated report guard ---
-THAI_REPORT = dict(REPORT, thai_translation={"fields_translated": 12, "fields_failed": 0, "fields_flagged": 0})
-THAI_RESPONSE = dict(RESPONSE, report=THAI_REPORT)
-
-
-def test_render_html_refuses_thai_translated_report():
-    import pytest
-    with pytest.raises(ValueError, match="thai_translation"):
-        r.render_html(THAI_RESPONSE, CLIENT_BRANDING)
-
-
-def test_cli_refuses_thai_translated_report():
-    import os
-    import tempfile
-    out = os.path.join(tempfile.mkdtemp(), "out.html")
-    thai_fixture = os.path.join(tempfile.mkdtemp(), "thai-report.json")
-    Path(thai_fixture).write_text(json.dumps(THAI_RESPONSE))
-    rc = r.main([thai_fixture, "--branding", "/nonexistent.yaml", "--out", out])
-    assert rc == 2
-    assert not os.path.exists(out)
-
-
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

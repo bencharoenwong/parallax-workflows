@@ -744,19 +744,6 @@ _BRAND_TOKENS = ("Chicago Global", "Parallax", "CGC", "Monetary Authority of Sin
 def render_html(response, branding):
     rep = response.get("report", response) if isinstance(response, dict) else {}
 
-    # Guard: a report fetched with lang="th" has its narrative fields already
-    # translated to Thai in place server-side, signaled by a `thai_translation`
-    # stats key with no English equivalent. This renderer's section chrome,
-    # labels, and disclosures are hardcoded English; rendering such a report
-    # would silently mix Thai prose into an English template. Refuse rather
-    # than produce a mixed-language document.
-    if isinstance(rep, dict) and "thai_translation" in rep:
-        raise ValueError(
-            "report JSON carries a thai_translation key (generated with "
-            'lang="th"); this renderer is English-only. Fetch or supply the '
-            'lang="en" report instead.'
-        )
-
     # Guard: full-white-label with no client disclosures would emit a regulated
     # document with an empty disclosures section. Refuse early so library callers
     # get the same protection as the CLI path.
@@ -918,13 +905,6 @@ def main(argv=None):
                   "regulated research with no disclosures. Add them via the onboard config, or "
                   "render in the default co-brand mode.", file=sys.stderr)
             return 2
-
-    report_payload = response.get("report", response) if isinstance(response, dict) else {}
-    if isinstance(report_payload, dict) and "thai_translation" in report_payload:
-        print('ERROR: report_json carries a thai_translation key (generated with lang="th"); '
-              "this renderer is English-only and does not localize headers, labels, or "
-              'disclosures. Fetch or supply the lang="en" report instead.', file=sys.stderr)
-        return 2
 
     symbol = (response.get("symbol") if isinstance(response, dict) else None) or "report"
     out = args.out or f"{symbol.replace('.', '_')}-white-label.html"
