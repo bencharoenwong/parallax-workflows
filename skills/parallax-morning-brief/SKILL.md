@@ -72,7 +72,7 @@ Validate holdings: RIC format (plain tickers → conventions §1), weights ~1.0;
 
 ### Step 3 — Verify
 
-- Cross-validation per conventions §2 / loader.md §5 rule 3: `get_peer_snapshot.target_company` vs `get_company_info.name`; V2 mismatches are ⚠ MISMATCH and excluded from aggregates; V1 mismatches are re-scored individually via `get_peer_snapshot`.
+- Cross-validation per conventions §2 / loader.md §5 rule 3: `get_peer_snapshot.target_company` vs `get_company_info.data.name` (nested under the response's `data` object, not a top-level field); V2 mismatches are ⚠ MISMATCH and excluded from aggregates; V1 mismatches are re-scored individually via `get_peer_snapshot`.
 - Failed or empty calls: §0.1 retry classification, then §4. News still pending at compose time: the pending note goes inside that holding's paragraph (§5), never above the report.
 
 ### Step 4 — Compute
