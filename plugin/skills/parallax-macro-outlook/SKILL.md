@@ -67,7 +67,7 @@ Market names must match `list_macro_countries` verbatim (conventions §0.2); a b
 ### Step 3 — Verify
 
 - Coverage: a market absent from `list_macro_countries` is reported as not covered; no `macro_analyst` call for it.
-- Freshness: `check_macro_health` is DEPRECATED and carries no `report_date`/`last_updated` field (live response is `{success, markets, service, status}`) — Data Freshness is driven by Batch B's own `macro_analyst.report_date` per queried market instead; stale data is stated, not hidden; if `report_date` is absent from the response, state freshness as unavailable rather than guessing.
+- Freshness: `check_macro_health` is DEPRECATED and carries no `report_date`/`last_updated` field (live response is `{success, service, status, markets, market_count}`) — Data Freshness is driven by Batch B's own `macro_analyst.report_date` per queried market instead; stale data is stated, not hidden; if `report_date` is absent from the response, state freshness as unavailable rather than guessing.
 - Batch C identity per loader.md §5 rule 3 / conventions §2: `get_peer_snapshot.target_company` vs `get_company_info.data.name` (the identity fields live under a top-level `data` object, not bare — live probe confirms no top-level `name`); ⚠ MISMATCH rows recover per rule 3 or read "scores unavailable".
 
 ### Step 4 — Compute
