@@ -269,34 +269,62 @@ def transform_view_status(text: str) -> str:
         "view_status operator command")
 
 
-def transform_token_costs(text: str) -> str:
-    """Drop the cost rows for house-view operator workflows. The bundle ships the
-    house-view runtime but none of those commands, so pricing them advertises
-    workflows a plugin user cannot run."""
-    out = []
-    dropped = 0
-    # Every operator command absent from PLUGIN_SKILLS must appear here, or its
-    # row survives into the public bundle and prices a workflow the plugin user
-    # cannot run. /parallax-house-view-attribution was added to token-costs.md
-    # without being added here and did exactly that.
-    excluded = ("/parallax-load-house-view", "/parallax-make-house-view",
-                "/parallax-judge-house-view", "/parallax-stress-house-view",
-                "/parallax-house-view-diff", "/parallax-house-view-attribution")
-    for line in text.splitlines(keepends=True):
-        if line.startswith("|") and any(f"`{c}`" in line for c in excluded):
-            dropped += 1
+# A skill named in a shipped doc, as `/parallax-x` or bare `parallax-x`. Only
+# names that are real skills (manifest rows) count, so prose cannot trip it.
+_SKILL_REF = re.compile(r"(?<![\w-])/?((?:parallax|translate)-[a-z0-9-]*[a-z0-9])")
+
+
+def named_skills(text: str) -> set[str]:
+    return set(_SKILL_REF.findall(text)) & set(skill_manifest.skills())
+
+
+def filter_token_costs(text: str, available: set[str]) -> str:
+    """Keep only the cost rows and callouts for skills this distribution
+    ships. Drops a table row whose first cell names an unavailable skill, a
+    `>` callout that names one, and a `###` section whose table ends up with
+    no rows. Fails if any unavailable skill is still named afterwards."""
+    lines = text.splitlines(keepends=True)
+    out, i = [], 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith(">"):
+            j = i
+            while j < len(lines) and lines[j].startswith(">"):
+                j += 1
+            if named_skills("".join(lines[i:j])) - available:
+                if j < len(lines) and not lines[j].strip():
+                    j += 1                      # and the blank line after it
+            else:
+                out.extend(lines[i:j])
+            i = j
+            continue
+        if (line.startswith("|") and not line.startswith("|---")
+                and named_skills(line.split("|")[1]) - available):
+            i += 1
             continue
         out.append(line)
-    if dropped != len(excluded):
-        raise BuildError(
-            f"transform anchor not found (token-costs house-view rows): "
-            f"dropped {dropped}, expected {len(excluded)}")
-    text = "".join(out)
-    # The two callouts below the table price and describe the same excluded
-    # workflows; the auto-trigger one documents a drift check that cannot fire
-    # in a bundle without the judge command.
-    text = _cut(text, "> **Cost gotcha:**", "\n#", "token-costs cost-gotcha callout")
+        i += 1
+    sections = re.split(r"(?m)^(?=#{1,3} )", "".join(out))
+    kept = []
+    for sec in sections:
+        rows = [ln for ln in sec.splitlines() if ln.startswith("|")]
+        if sec.startswith("### ") and rows and len(rows) <= 2:
+            continue                            # header + separator only
+        kept.append(sec)
+    text = "".join(kept)
+    left = named_skills(text) - available
+    if left:
+        raise BuildError(f"token-costs still names skills this distribution "
+                         f"does not ship: {sorted(left)}")
     return text
+
+
+def filter_shipped_docs(parallax_root: Path, available: set[str]) -> None:
+    """Apply the skill-set filters to staged shared docs (plugin and web)."""
+    path = parallax_root / "token-costs.md"
+    if path.is_file():
+        path.write_text(filter_token_costs(path.read_text(encoding="utf-8"),
+                                           available), encoding="utf-8")
 
 
 def transform_macro_outlook(text: str) -> str:
@@ -475,7 +503,6 @@ TRANSFORMS = {
     "_parallax/house-view/schema.yaml": transform_hv_schema,
     "_parallax/parallax-conventions.md": transform_conventions,
     "_parallax/AI-profiles/output-template.md": transform_output_template,
-    "_parallax/token-costs.md": transform_token_costs,
     "_parallax/house-view/view_status.py": transform_view_status,
     "parallax-macro-outlook/SKILL.md": transform_macro_outlook,
     "parallax-thematic-screen/SKILL.md": transform_thematic_screen,
@@ -1020,6 +1047,7 @@ def build_plugin() -> None:
             assemble_skill(name, skills_root)
         assemble_parallax_shared(skills_root)
         strip_unshipped_languages(skills_root, skills)
+        filter_shipped_docs(skills_root / "_parallax", set(skills))
 
         # repo-root examples/ docs referenced from bundled skills ship at
         # <plugin>/examples/ so the ../../examples/ relative form resolves.
@@ -1235,6 +1263,7 @@ def build_web(names: list[str]) -> None:
                                         strict=False)
                     cross_deps |= c
 
+            filter_shipped_docs(skill_root / "_vendored" / "_parallax", set(WEB_SKILLS))
             for md in sorted(skill_root.rglob("*.md")):
                 md.write_text(rewrite_refs(md.read_text(encoding="utf-8"), name),
                               encoding="utf-8")

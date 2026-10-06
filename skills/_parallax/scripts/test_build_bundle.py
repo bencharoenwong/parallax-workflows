@@ -654,12 +654,12 @@ def test_no_unbundled_operator_command_is_priced_in_the_public_bundle():
     if not bundle.exists():
         import pytest
         pytest.skip("plugin bundle not built in this checkout")
-    priced = set(re.findall(r"^\|\s*`(/parallax-[a-z0-9-]+)`", bundle.read_text(), re.M))
-    shipped = {f"/{name}" for name in bb.PLUGIN_SKILLS}
-    orphans = sorted(priced - shipped)
+    priced = set(re.findall(r"^\|\s*`/?((?:parallax|translate)-[a-z0-9-]*[a-z0-9])`",
+                            bundle.read_text(), re.M))
+    orphans = sorted(priced - set(bb.PLUGIN_SKILLS))
     assert not orphans, (
-        f"token-costs in the PUBLIC bundle prices commands the bundle does not "
-        f"ship: {orphans}. Add them to `excluded` in transform_token_costs.")
+        f"token-costs in the PUBLIC bundle prices skills the bundle does not "
+        f"ship: {orphans}")
 
 
 def test_collect_deps_ignores_the_ellipsis_placeholder():
@@ -772,3 +772,34 @@ def test_web_packages_with_the_house_view_loader_ship_view_status(tmp_path, monk
     base = "parallax-should-i-buy/_vendored/_parallax/house-view/"
     assert base + "loader.md" in names
     assert base + "view_status.py" in names
+
+
+def test_web_token_costs_prices_only_web_skills(tmp_path, monkeypatch):
+    import re
+    monkeypatch.setattr(bb, "WEB_OUT_DIR", tmp_path)
+    bb.build_web(["parallax-should-i-buy"])
+    with zipfile.ZipFile(tmp_path / "parallax-should-i-buy.skill") as zf:
+        text = zf.read("parallax-should-i-buy/_vendored/_parallax/token-costs.md").decode()
+    named = set(re.findall(r"(?<![\w-])/?((?:parallax|translate)-[a-z0-9-]*[a-z0-9])", text))
+    assert named & set(bb.skill_manifest.skills()) <= set(bb.WEB_SKILLS)
+    assert "/parallax-should-i-buy" in text
+
+
+def test_token_costs_filter_drops_rows_callouts_and_empty_sections():
+    text = (
+        "# T\n\n### Kept\n\n| Workflow | Tokens |\n|---|---|\n"
+        "| `/parallax-should-i-buy` | 29 |\n| `/parallax-deep-dive` | 45 |\n\n"
+        "> **Note:** `/parallax-deep-dive` is dearer.\n\n"
+        "### Gone\n\n| Workflow | Tokens |\n|---|---|\n| `parallax-ai-buffett` | 4 |\n\n"
+        "### After\n\nplain\n")
+    out = bb.filter_token_costs(text, {"parallax-should-i-buy"})
+    assert "/parallax-should-i-buy" in out
+    assert "deep-dive" not in out and "ai-buffett" not in out
+    assert "### Gone" not in out and "### After" in out
+
+
+def test_token_costs_filter_fails_on_a_mention_it_cannot_remove():
+    text = ("### S\n\n| Workflow | Tokens |\n|---|---|\n| `/parallax-should-i-buy` | 29 |\n\n"
+            "Prose names /parallax-deep-dive here.\n")
+    with pytest.raises(bb.BuildError):
+        bb.filter_token_costs(text, {"parallax-should-i-buy"})

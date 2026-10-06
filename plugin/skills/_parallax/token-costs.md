@@ -107,28 +107,6 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 > deterministically raises its move threshold to cap `|M|` at 40 and states the
 > auto-raise in the report. With every endpoint this workflow calls now priced, the numeric worst case for a pure-equity desk at cap is `1 + 3×40 + 5×K` (e.g. K=10 → ~171 tokens).
 
-### House View Workflows
-
-| Workflow | Tokens (typical) | Key cost drivers |
-|---|---|---|
-
-
-### AI investor profile workflows
-
-Single source for the `parallax-ai-*` family; the AI-profiles framework README points here rather than carrying a copy.
-
-| Workflow | Tokens (typical) | Key cost drivers |
-|---|---|---|
-| `parallax-ai-buffett` | **~4** | company info + peer snapshot + financials + score analysis |
-| `parallax-ai-greenblatt` (ticker-check) | **~10-15** | universe build (5) + peer ratios |
-| `parallax-ai-greenblatt` (universe mode) | **~10-30** | universe build + per-candidate ratios; scales with basket size |
-| `parallax-ai-klarman` | **~5-7** | balance sheet + cash flow + ratios + peer snapshot |
-| `parallax-ai-soros` (single-ticker) | **~25-30** | macro + telemetry + universe |
-| `parallax-ai-soros` (basket mode) | **~30-40** | macro once + per-ticker exposure checks |
-| `parallax-ai-ptj` (single-ticker) | **~14-16** | macro + technical + peer snapshot + outlook + score analysis |
-| `parallax-ai-consensus` (single ticker) | **~60-70** | all five profiles in parallel |
-| `parallax-ai-consensus` (basket of 5) | **~180-240** | per-ticker factor profiles; macro profiles run once |
-
 ### Cost Context
 
 With the **Standard plan** ($2,000/month, 2,000 included tokens, $0.20 overage):
