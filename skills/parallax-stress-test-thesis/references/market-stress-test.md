@@ -11,9 +11,11 @@ Pick relevant markets per `_parallax/parallax-conventions.md` §6 (home market +
 derive markets from the thesis's own macro claims (e.g., a thesis about "US rate cuts" needs
 `United States`; a thesis about "China reopening consumer demand" needs `China`).
 
-Call `list_macro_countries` first if market coverage is in doubt — 15 markets, publicly-traded
-equities only (see Known Limitations below). A macro or sector claim about an uncovered market is
-marked `out-of-scope` in the Assumption Map, not guessed.
+Call `list_macro_countries` first if market coverage is in doubt — it returns the current list of
+covered markets plus "Global"; publicly-traded equities only (see Known Limitations below). The
+count drifts as Parallax adds coverage (17 markets as of 2026-10-05) — don't hardcode a number,
+read the live response. A macro or sector claim about an uncovered market is marked `out-of-scope`
+in the Assumption Map, not guessed.
 
 ## Known Limitations — asset-class coverage & routing
 
@@ -63,19 +65,19 @@ asset-class support.)*
 
 ## Batch — fire in parallel
 
-For each selected market:
+`get_telemetry` (`fields: ["regime_tag","signals","commentary.headline","commentary.mechanism","divergences"]`) — current regime baseline, fired **once per run, not once per market**: it is synchronous (returns directly, no polling) and global (no market/country parameter), so one call's result covers every selected market. Alongside it, for each selected market:
 
 | Tool | Parameters | Use for |
 |---|---|---|
-| `get_telemetry` | `fields: ["regime_tag","signals","commentary.headline","commentary.mechanism","divergences"]` | Current regime baseline. **Async, ~15-30s** — do not block the rest of the batch on it. |
 | `macro_analyst` | `market: "<market>"`, `component` per which layers the thesis needs: `"macro_indicators"` (inflation, growth, surprise-index reads — **fire this whenever the thesis makes an explicit inflation or Fed-path claim**, e.g. "disinflation continues" or "the Fed keeps cutting"), `"tactical"` (regime/rates/growth), `"fixed_income"` (**the rates/curve/duration path** — yield-curve shape, term-premium, front-end vs. long-end, foreign-demand; fire this for any bond-yield or duration thesis leg), `"currency"` (**the FX path** — dollar/DXY level and regime, carry, mean-reversion; fire this for any currency thesis leg), `"factors"` (macro-level factor tilts), `"sectors"` (sector demand/pricing power claims), `"news"` (theme/sector-level news — **this is how theme news gets tested, not `get_news_synthesis`**, which is symbol-only and belongs to Phase 3) | Layer 1–4 assumption testing, one call per (market × component) |
 
 Fire every (market × component) combination simultaneously — these are independent per
 `_parallax/parallax-conventions.md` §3. A thesis touching 2 markets across 3 components is 6
-parallel `macro_analyst` calls plus 2 `get_telemetry` calls, not a serial loop. **A CPI/inflation
-or rate-path claim without a `macro_indicators` call is an Unconfirmed masquerading as a guess** —
-don't classify A1/A2-style macro claims off `tactical` alone if the thesis's own wording turns on
-the inflation trajectory specifically.
+parallel `macro_analyst` calls plus 1 `get_telemetry` call (not 2 — it is a single global call,
+reused for every market), not a serial loop. **A CPI/inflation or rate-path claim without a
+`macro_indicators` call is an Unconfirmed masquerading as a guess** — don't classify A1/A2-style
+macro claims off `tactical` alone if the thesis's own wording turns on the inflation trajectory
+specifically.
 
 ## Classification
 
