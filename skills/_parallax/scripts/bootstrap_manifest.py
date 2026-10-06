@@ -2,7 +2,8 @@
 """Maintain `_parallax/manifest.json` — add missing rows, refresh gate anchors.
 
 The manifest is the AUTHORITY for per-skill distribution metadata. Editorial
-fields (`plugin`, `web`, `web_description`, `nine_two_exempt`, `exempt_docs`) are
+fields (`plugin`, `web`, `web_description`, `standalone`, `nine_two_exempt`,
+`exempt_docs`) are
 decisions, not derived data: this script preserves whatever the manifest already
 says about them and never overwrites them from a consumer. Overwriting would be
 circular, because `build_bundle.py` reads those fields FROM here.
@@ -64,8 +65,8 @@ def build() -> dict:
             row.pop("anchors_key", None)
             row.pop("anchors", None)
         # stable field order so the diff of a real change stays readable
-        order = ("plugin", "web", "web_description", "anchors_key", "anchors",
-                 "nine_two_exempt")
+        order = ("plugin", "web", "web_description", "standalone", "anchors_key",
+                 "anchors", "nine_two_exempt")
         out[name] = {k: row[k] for k in order if k in row}
 
     authority = dict(current.get("_authority", {}))

@@ -355,4 +355,4 @@ Chinese (`zh-CN`, `zh-TW`, `zh-HK`) and Thai (`th`) translation skills ship in t
 
 Translation entry instructions load only the relevant references. JSON and saved-prose deliverables run a source-fidelity validator; a passing style check alone cannot approve fidelity. Meaning and uncertainty still require source review.
 
-Standalone `.skill` packages include the same validator helper and can be built with `skills/build-skills.sh`. `SKILL_BUILD_OUT_DIR` optionally selects an output directory instead of Downloads.
+Standalone `.skill` packages include the same validator helper and can be built with `skills/build-skills.sh`. A no-argument run builds the Chinese and Thai packages; the held `vi-VN` and `ar-SA` packages build only when named, with a warning, and are not for distribution. Each package passes the same leak-scan gate as the web build, so a fresh clone needs `PARALLAX_ALLOW_PARTIAL_SCAN=1`. `SKILL_BUILD_OUT_DIR` optionally selects an output directory instead of Downloads.

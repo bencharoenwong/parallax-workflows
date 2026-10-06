@@ -25,6 +25,11 @@ from pathlib import Path
 
 MANIFEST_PATH = Path(__file__).resolve().parent / "manifest.json"
 
+# Standalone .skill tiers built by skills/build-skills.sh: `release` builds by
+# default, `beta` and `held` only when named (with a warning). `held` means
+# awaiting native-speaker review; such a package must not be distributed.
+STANDALONE_TIERS = ("release", "beta", "held")
+
 # claude.ai truncates skill descriptions past this length.
 WEB_DESCRIPTION_MAX = 200
 
@@ -61,6 +66,10 @@ def _validate(data: dict) -> None:
                     f"{MANIFEST_PATH}: {name} web_description is {len(desc)} chars, "
                     f"over the {WEB_DESCRIPTION_MAX}-char claude.ai cap"
                 )
+        if row.get("standalone", "release") not in STANDALONE_TIERS:
+            raise ValueError(
+                f"{MANIFEST_PATH}: {name} standalone must be one of {STANDALONE_TIERS}"
+            )
         if ("anchors" in row) != ("anchors_key" in row):
             raise ValueError(
                 f"{MANIFEST_PATH}: {name} must carry anchors and anchors_key together"
@@ -115,3 +124,20 @@ def nine_two_exempt() -> frozenset[str]:
 def exempt_docs() -> set[str]:
     """Bundled docs exempt from build_bundle's reference-resolution check."""
     return set(_data()["exempt_docs"])
+
+
+def standalone_skills(tier: str) -> list[str]:
+    """Skill dirs packaged as standalone .skill files at the given tier. Sorted."""
+    if tier not in STANDALONE_TIERS:
+        raise ValueError(f"unknown standalone tier: {tier}")
+    return sorted(n for n, r in _data()["skills"].items() if r.get("standalone") == tier)
+
+
+if __name__ == "__main__":
+    # `python3 skill_manifest.py standalone <tier>` prints space-separated names
+    # for build-skills.sh (bash 3.2 has no JSON parser).
+    import sys
+
+    if len(sys.argv) != 3 or sys.argv[1] != "standalone":
+        sys.exit("usage: skill_manifest.py standalone {release|beta|held}")
+    print(" ".join(standalone_skills(sys.argv[2])))

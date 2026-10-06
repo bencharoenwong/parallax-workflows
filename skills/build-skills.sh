@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Rebuild .skill packages for upload to claude.ai.
 # Usage: ./build-skills.sh [--no-lint] [--normalize] [skill-name ...]
-# No args = build all KNOWN_SKILLS (general-release set).
+# No args = build all KNOWN_SKILLS (manifest `standalone: release` tier).
 #   --no-lint    skip lint/validation (emergencies only); the 200-char
 #                description cap on translate-*-finance still runs
 #   --normalize  rewrite SKILL.md frontmatter to spec-clean form first
@@ -14,12 +14,10 @@
 # workflow set ships to claude.ai via `_parallax/scripts/build_bundle.py web`
 # (see its docstring for how the two packagers split).
 #
-# Two skill tiers:
-#   KNOWN_SKILLS       — general-release skills, built by default (no-arg run).
-#   PRIVATE_BETA_SKILLS — limited-distribution skills. Build by name only;
-#                        never included in the no-arg default. A WARN line is
-#                        emitted on every explicit build to keep the operator
-#                        aware that the artifact is not for general release.
+# Tiers come from the `standalone` field in _parallax/manifest.json (see
+# STANDALONE_TIERS in _parallax/skill_manifest.py). Each package holds tracked
+# files only and must pass `build_bundle.py verify` before it is written; any
+# failed skill makes the run exit 1.
 #
 # Portable to bash 3.2 (macOS default — no associative arrays).
 set -euo pipefail
@@ -30,7 +28,13 @@ cd "$(dirname "$0")"
 get_excludes() {
   case "$1" in
     translate-chinese-finance)
-      echo "translate-chinese-finance/references/INTEGRATION.md"
+      # INTEGRATION.md is repo-integration notes; normalize_runtime.py is a
+      # maintenance script that rewrites the skill's own files if run.
+      echo "translate-chinese-finance/references/INTEGRATION.md translate-chinese-finance/references/normalize_runtime.py"
+      ;;
+    parallax-cio-letter-prep)
+      # Maintainer retrofit check; it compares against the excluded fixture.
+      echo "parallax-cio-letter-prep/scripts/compare_docx.py"
       ;;
     *)
       echo ""
@@ -38,16 +42,17 @@ get_excludes() {
   esac
 }
 
-KNOWN_SKILLS="translate-chinese-finance translate-thai-finance translate-vietnamese-finance"
+# Tiers come from _parallax/manifest.json (`standalone`): release builds by
+# default; beta (pilot customers only) and held (awaiting native-speaker
+# review) build only when named, with a warning.
+KNOWN_SKILLS=$(python3 ./_parallax/skill_manifest.py standalone release)
+PRIVATE_BETA_SKILLS=$(python3 ./_parallax/skill_manifest.py standalone beta)
+HELD_SKILLS=$(python3 ./_parallax/skill_manifest.py standalone held)
 
-# Private beta — opt-in only, not built by default.
-# Skills here are gated until pilot customers complete one full usage cycle.
-PRIVATE_BETA_SKILLS="parallax-cio-letter-prep"
-
-is_private_beta() {
-  local name="$1"
-  local s
-  for s in $PRIVATE_BETA_SKILLS; do
+in_list() {
+  local name="$1" s
+  shift
+  for s in "$@"; do
     if [[ "$s" == "$name" ]]; then
       return 0
     fi
@@ -56,35 +61,73 @@ is_private_beta() {
 }
 
 build_one() {
-  local name="$1"
+  local name="${1%/}"
+  if [[ ! "$name" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+    echo "  ✗ invalid skill name: '$1' (lowercase letters, digits, hyphens)" >&2
+    return 1
+  fi
   if [[ ! -d "$name" ]]; then
     echo "  ✗ $name: directory not found, skipping" >&2
     return 1
   fi
-  if is_private_beta "$name"; then
+  # shellcheck disable=SC2086  # split the space-separated tier list on purpose
+  if in_list "$name" $PRIVATE_BETA_SKILLS; then
     echo "  WARN: building private-beta skill '$name' — not for general release" >&2
+  fi
+  # shellcheck disable=SC2086  # split the space-separated tier list on purpose
+  if in_list "$name" $HELD_SKILLS; then
+    echo "  WARN: building held skill '$name' — awaiting native review, not for distribution" >&2
   fi
   local out_dir="${SKILL_BUILD_OUT_DIR:-$HOME/Downloads}"
   mkdir -p "$out_dir"
   local out="$out_dir/${name}.skill"
+  # A failed build must not leave an earlier package that looks fresh.
+  rm -rf "$out"
   local staging
   staging=$(mktemp -d)
 
-  local exc_args=()
-  local exc
-  for exc in $(get_excludes "$name"); do
-    exc_args+=(-x "$exc")
-  done
-
-  cp -R "$name" "$staging/$name"
+  # Tracked runtime files only (build_bundle.py `files` drops development
+  # material with the same rule `verify` enforces), minus per-skill excludes.
+  # Untracked caches and work in progress never ship; symlinks are refused.
+  local excludes list
+  excludes=" $(get_excludes "$name") "
+  if ! list=$(python3 ./_parallax/scripts/build_bundle.py files "$name"); then
+    echo "  ✗ $name: listing tracked files failed" >&2
+    rm -rf "$staging"
+    return 1
+  fi
+  if ! printf '%s\n' "$list" | while IFS= read -r f; do
+        [[ -z "$f" || "$excludes" == *" $f "* ]] && continue
+        if [[ -L "$f" ]]; then
+          echo "  ✗ $name: tracked symlink $f" >&2
+          exit 1
+        fi
+        mkdir -p "$staging/$(dirname "$f")" && cp "$f" "$staging/$f" || exit 1
+      done; then
+    echo "  ✗ $name: copying tracked files failed" >&2
+    rm -rf "$staging"
+    return 1
+  fi
+  if [[ ! -f "$staging/$name/SKILL.md" ]]; then
+    echo "  ✗ $name: no tracked SKILL.md (commit the skill first)" >&2
+    rm -rf "$staging"
+    return 1
+  fi
   if [[ "$name" == translate-*-finance ]]; then
     cp "_parallax/translation_validate.py" "$staging/$name/references/translation_common.py"
   fi
+  if ! python3 ./_parallax/scripts/build_bundle.py verify "$staging/$name"; then
+    echo "  ✗ $name: package failed verification; nothing written" >&2
+    rm -rf "$staging"
+    return 1
+  fi
   # Fresh archive: stale files from a previous package must not survive.
-  (cd "$staging" && zip -rq package.skill "$name" \
-    -x "*.DS_Store" "*/__pycache__/*" "*/.git/*" "*/.ruff_cache/*" \
-    ${exc_args[@]+"${exc_args[@]}"})
-  mv "$staging/package.skill" "$out"
+  if ! (cd "$staging" && zip -rq package.skill "$name") \
+      || ! mv "$staging/package.skill" "$out" || [[ ! -s "$out" ]]; then
+    echo "  ✗ $name: writing the package failed" >&2
+    rm -rf "$staging" "$out"
+    return 1
+  fi
   rm -rf "$staging"
   printf "  ✓ %s → %s (%s)\n" "$name" "$out" "$(du -h "$out" | cut -f1)"
 }
@@ -183,6 +226,12 @@ fi
 if [[ $# -eq 0 ]]; then
   set -- $KNOWN_SKILLS
 fi
+# Tab completion adds a trailing slash; every check below compares bare names.
+NAMES=()
+for a in "$@"; do
+  NAMES+=("${a%/}")
+done
+set -- ${NAMES[@]+"${NAMES[@]}"}
 
 # claude.ai caps skill descriptions at 200 chars (stricter than the spec's
 # 1024). Enforced for translate-*-finance only; not skippable with --no-lint.
@@ -215,6 +264,11 @@ fi
 echo ""
 
 echo "Building .skill packages:"
+FAILED=""
 for name in "$@"; do
-  build_one "$name" || true
+  build_one "$name" || FAILED="$FAILED $name"
 done
+if [[ -n "$FAILED" ]]; then
+  echo "FAIL: not built:$FAILED" >&2
+  exit 1
+fi

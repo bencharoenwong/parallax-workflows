@@ -4,6 +4,14 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-10-05 (standalone .skill packaging)
+
+### Fixed
+- `build-skills.sh` packages git-tracked files only, listed by the new `build_bundle.py files`, and leaves out development material (tests, test fixtures, `conftest.py`, caches, dotfiles, notebooks, planning notes), the Chinese skill's `normalize_runtime.py` maintenance script, and the private-beta skill's `compare_docx.py` maintainer check. Skill names must be lowercase letters, digits and hyphens. Each staged package must pass the new `build_bundle.py verify` before anything is written: no symlinks or development files, text files only (`.md`, `.py`, `.txt`, `.yaml`, `.yml`, `.json`, valid UTF-8), then the term scan, which also reads file paths and fails on a hit in either the plain text or its NFKC form, with format characters removed. `build_bundle.py web` runs the same check. A failed skill, zip or move now makes the run exit 1, and the output path is cleared first so an earlier package cannot pass for a fresh one.
+
+### Changed
+- Standalone build tiers move to a `standalone` field in `_parallax/manifest.json`: `release` (Chinese, Thai) builds by default; `beta` (`parallax-cio-letter-prep`) and `held` (Vietnamese, Arabic, pending native review) build only when named, with a warning. Vietnamese no longer builds by default. Test: `skills/_parallax/scripts/test_build_skills_packaging.py`.
+
 ## 2026-10-05 (claude.ai web build)
 
 ### Fixed
