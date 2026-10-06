@@ -53,7 +53,7 @@ Add the Parallax MCP server to Claude Code. Connection details are provided duri
 /plugin install parallax@parallax-workflows
 ```
 
-Plugin skills are namespaced — invoke them as `/parallax:parallax-should-i-buy`. Updates arrive with `/plugin marketplace update parallax-workflows`.
+Plugin skills work with or without the plugin prefix: `/parallax-should-i-buy` or `/parallax:parallax-should-i-buy`. Use the prefixed form only if another command already has the same name. Updates arrive with `/plugin marketplace update parallax-workflows`.
 
 **Option B — full clone (development, or if you want every workflow including the house-view operator tools):**
 
@@ -79,7 +79,7 @@ The `_parallax` directory contains shared conventions, token-cost reference, and
 /parallax-should-i-buy AAPL
 ```
 
-(or `/parallax:parallax-should-i-buy AAPL` for the plugin install). If you see "tool not found" errors, the MCP server is not connected.
+(the plugin install also accepts `/parallax:parallax-should-i-buy AAPL`). If you see "tool not found" errors, the MCP server is not connected.
 
 ### Claude web and mobile (claude.ai)
 
