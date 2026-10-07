@@ -912,6 +912,9 @@ _NOT_COMMANDS = {
     "slash": "the `/slash` chaining syntax, named as a host primitive",
     "name": "the `/name` placeholder in the host-primitive table",
     "numeric": "the `.HK`/numeric ambiguity, not a command",
+    "schedule": "the host's `/schedule` command, named in the §14.2 "
+                "host-primitive table; a real command on one host, absent "
+                "elsewhere per §14.3",
 }
 
 

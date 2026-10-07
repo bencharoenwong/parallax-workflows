@@ -14,7 +14,7 @@ The shared layer every `parallax-*` skill reads. This file is the map; it states
 | L4 | Skill orchestrator | `skills/parallax-<name>/SKILL.md` — one workflow, one output contract |
 | L3 | Shared contracts | this directory's `.md` files (each declares `authority: contract`, `registry`, or `observation` in its header) |
 | L2 | Deterministic helpers | this directory's `.py` modules and each skill's own helpers — math, gates, renderers; invoked, never re-derived in prose |
-| L1 | Host primitives | `parallax-conventions.md` §14 — the nine primitives and their per-host bindings |
+| L1 | Host primitives | `parallax-conventions.md` §14 — the ten primitives and their per-host bindings |
 | L0 | Parallax MCP | the live tool contract; discovered each session, never remembered (§0.1) |
 
 Start with `parallax-conventions.md` (runtime rules) and `skill-structure-conventions.md` (how a SKILL.md is shaped). Everything else is JIT-loaded from a skill when it names the file.
