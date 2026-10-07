@@ -316,6 +316,86 @@ def evaluate_internal_rules(view: View, rules_path: Path) -> List[RuleResult]:
         
     return results
 
+def _parse_date_field(value: Any) -> Optional[datetime.date]:
+    """Parse a `report_date`/`data_as_of` value into a UTC calendar date.
+
+    Accepts either a plain `YYYY-MM-DD` date or a full ISO 8601 datetime
+    (a trailing `Z` or a numeric UTC offset). A timezone-aware datetime is
+    converted to UTC before its date is taken, so an offset that crosses
+    midnight resolves to the correct UTC day rather than the naive
+    `str(value)[:10]` slice this replaced (which ignored the offset
+    entirely). Returns None when `value` parses as neither form — this is
+    "document the limitation" territory for anything stranger than ISO
+    8601 (e.g. a non-ISO locale format), which we don't attempt to parse.
+    """
+    text = str(value).strip()
+    try:
+        parsed = datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        pass
+    else:
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(datetime.timezone.utc)
+        return parsed.date()
+    try:
+        return datetime.date.fromisoformat(text[:10])
+    except (TypeError, ValueError):
+        return None
+
+
+def _first_parseable_date(resp: Dict[str, Any]) -> Optional[datetime.date]:
+    """Try `report_date`, then `data_as_of`, returning the first that parses.
+
+    An unparseable `report_date` no longer hides a valid `data_as_of`:
+    each candidate field is tried in turn and a parse failure falls
+    through to the next field rather than short-circuiting on the first
+    truthy value (the old `resp.get("report_date") or resp.get("data_as_of")`
+    never reached `data_as_of` once `report_date` was merely present).
+    """
+    for field_name in ("report_date", "data_as_of"):
+        value = resp.get(field_name)
+        if not value:
+            continue
+        parsed = _parse_date_field(value)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def compute_parallax_age_days(
+    mcp_responses: Dict[str, Any],
+    now: Optional[datetime.date] = None,
+) -> Optional[int]:
+    """Max staleness (days) across Step 2 MCP responses' own `report_date`.
+
+    `judge.py`'s `_parallax_age_days` delegates to this function directly
+    (rather than keeping a second copy) so the skill and the judge can
+    never disagree about what "Parallax data age" means.
+    `check_macro_health` carries no freshness timestamp (it is deprecated
+    and returns `{success, service, status, markets}` -- no
+    `report_date`/`last_updated` field), so age is read
+    from each response's own `report_date` (set by `macro_analyst`) instead,
+    falling back to `data_as_of` when `report_date` is absent or
+    unparseable. Responses without any parseable date are skipped.
+    Returns None when no response carries one, so `compute_age_delta`
+    below classifies the run as "unverifiable" rather than fresh.
+    A future-dated report clamps to an age of 0 rather than going
+    negative (consistent with `judge.py`'s `_view_age_days`).
+    """
+    today = now if now is not None else datetime.date.today()
+    best: Optional[int] = None
+    for resp in mcp_responses.values():
+        if not isinstance(resp, dict):
+            continue
+        d = _first_parseable_date(resp)
+        if d is None:
+            continue
+        age = max(0, (today - d).days)
+        if best is None or age > best:
+            best = age
+    return best
+
+
 def compute_age_delta(cio_age_days: int, parallax_age_days: Optional[int]) -> str:
     """Computes the age delta classification."""
     if parallax_age_days is None:
@@ -379,7 +459,7 @@ def enforce_fanout_cap(tilted_markets: List[str], cap: int = FANOUT_CAP) -> List
 def build_recommended_deltas(
     resolutions: List[Dict[str, Any]],
     cio_age_days: int,
-    parallax_age_days: int,
+    parallax_age_days: Optional[int],
     include_fresh: bool = False,
 ) -> List[Dict[str, Any]]:
     """Turn DIVERGENT cell resolutions into a list of recommended deltas.

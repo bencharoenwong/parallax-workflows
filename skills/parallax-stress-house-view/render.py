@@ -19,21 +19,41 @@ def render_artifact(
     view_hash: str,
     recommended_deltas: List[Dict[str, Any]] | None = None,
     audit_hash_short: str | None = None,
+    age_delta: str | None = None,
+    parallax_age_days: int | None = None,
 ) -> str:
     """Renders the markdown report for the stress test.
 
     recommended_deltas + audit_hash_short, when provided, render the
     Phase 4-B handoff section (manual apply instructions citing the audit hash).
+
+    age_delta + parallax_age_days, when provided, render a header line
+    stating the Parallax data age. When age_delta is "unverifiable" (no
+    Step 2 response carried a parseable date — see
+    `stress.compute_parallax_age_days`), no cell can be classed
+    DIVERGENT_STALE, so every divergence in this report files as Taste
+    rather than a CIO Challenge; the header says so explicitly rather than
+    leaving that silent. Mirrors render_judge.py's equivalent banner.
+    Callers that omit both (older call sites) get the unchanged header.
     """
-    
+
     report = []
-    
+
     # Header
-    report.append(f"# House View Stress Test Report")
+    report.append("# House View Stress Test Report")
     report.append(f"**View Name:** {view_meta.get('view_name', 'N/A')}")
     report.append(f"**View Version:** {view_meta.get('version_id', 'N/A')}")
     report.append(f"**Run Date:** {datetime.datetime.now(datetime.timezone.utc).isoformat()}")
     report.append(f"**View Hash:** `{view_hash}`")
+    if age_delta is not None or parallax_age_days is not None:
+        if parallax_age_days is not None and age_delta != "unverifiable":
+            report.append(f"**Parallax Data Age:** {parallax_age_days} day(s)")
+        else:
+            report.append(
+                "**Parallax Data Age:** unverifiable — no cell can be classed "
+                "DIVERGENT_STALE this run, so CIO Challenges are suppressed "
+                "and every divergence below files as Taste."
+            )
     report.append("\n---\n")
 
     # Internal Consistency

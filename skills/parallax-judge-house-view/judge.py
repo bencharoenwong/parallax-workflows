@@ -230,29 +230,23 @@ def _view_age_days(view_data: dict[str, Any], now: datetime.datetime) -> int:
     return max(0, delta.days)
 
 
-def _parallax_age_days(mcp_responses: dict[str, Any], now: datetime.datetime) -> int:
-    """Max staleness across MCP responses. Mirrors stress's semantics.
+def _parallax_age_days(
+    mcp_responses: dict[str, Any], now: datetime.datetime
+) -> int | None:
+    """Max staleness across MCP responses.
 
-    Each response may carry a ``report_date`` (YYYY-MM-DD) per the
-    inventory; we compute (now.date() - report_date).days. Missing
-    dates count as 0 (we cannot prove staleness if the response omits
-    the field).
+    Delegates to ``stress.compute_parallax_age_days`` — the one
+    implementation of "Parallax data age" shared by this skill and
+    stress's, so the two can no longer drift apart by maintaining
+    separate copies. ``now`` is UTC (see ``_utcnow``); only its calendar
+    date is passed through, which is what ``compute_parallax_age_days``
+    diffs each response's ``report_date``/``data_as_of`` against.
+    Responses without a parseable date are skipped, a future-dated
+    response clamps to 0, and None is returned when no response carries
+    a parseable date, so ``stress.compute_age_delta`` classifies the run
+    as "unverifiable" rather than fresh.
     """
-    best = 0
-    for _, resp in mcp_responses.items():
-        if not isinstance(resp, dict):
-            continue
-        report_date = resp.get("report_date") or resp.get("data_as_of")
-        if not report_date:
-            continue
-        try:
-            d = datetime.date.fromisoformat(report_date[:10])
-        except (TypeError, ValueError):
-            continue
-        age = (now.date() - d).days
-        if age > best:
-            best = age
-    return best
+    return stress.compute_parallax_age_days(mcp_responses, now=now.date())
 
 
 def _response_hash(mcp_responses: dict[str, Any]) -> str:
@@ -525,7 +519,7 @@ def _summarize_parallax(value: Any) -> str:
 def phase_4_build_deltas(
     resolutions: list[dict[str, Any]],
     cio_age_days: int,
-    parallax_age_days: int,
+    parallax_age_days: int | None,
 ) -> list[dict[str, Any]]:
     """Reuse stress.build_recommended_deltas with include_fresh=True.
 
@@ -687,7 +681,7 @@ def phase_6_render_and_phase_7_audit(
     recommendations: list[dict[str, Any]],
     deltas: list[dict[str, Any]],
     view_age_days: int,
-    parallax_age_days: int,
+    parallax_age_days: int | None,
     mcp_responses: dict[str, Any],
     judged_at: datetime.datetime,
 ) -> tuple[Path, dict[str, Any], str]:

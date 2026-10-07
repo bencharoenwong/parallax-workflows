@@ -24,7 +24,7 @@ description: "Read-only LLM-as-judge that compares the saved CIO house view agai
 - The judge does NOT use `gate_present.run_gate_loop` — there is no confirmation gate. It's a read-only report.
 - Maker shared modules (`cross_country`, `pillar_compose`, `pillar_formulas`) are imported lazily; if they are not importable (a partial or older deployment without `/parallax-make-house-view`'s modules), the orchestrator surfaces the gap in diagnostics and falls back to PARALLAX_SILENT for cells where the imputed view can't be computed.
 - Server-side `house_view_judge` MCP tool: not planned. The judge is client-side permanently — bank clients run this skill / CLI on their own side, for methodology transparency under model-validation review and zero cross-tenant blast radius. Do NOT resurrect the server-side framing without a new architectural decision.
-- Expected Parallax spend: ~282 tokens at the default market set (~14 markets × 4 components; `_parallax/token-costs.md`). `--dry` skips the Phase 5 LLM step but NOT the macro fan-out — the full cost is still incurred.
+- Expected Parallax spend: ~282 tokens at the default market set (~14 markets × 4 components; `_parallax/token-costs.md`). Those 14 are the markets weighted in `maker.MARKET_TO_SCHEMA_KEY` / `aggregator_weights.yaml`. Judge-house-view's own Phase 1 fan-out is pinned to that static 14-market recipe (Step 2) — `list_macro_countries` is bound and called (Step 0), but its live result is not used to decide fan-out scope the way `maker.resolve_covered_markets()` filters it for the maker, so the newly-covered-market problem (Brazil; `list_macro_countries` returns 17 as of 2026-10-05, growing over time) that affects the maker's dynamic resolution does not apply here the same way. This budget stays accurate until the static 14-market recipe in Step 2 is deliberately widened. `--dry` skips the Phase 5 LLM step but NOT the macro fan-out — the full cost is still incurred.
 - Every host interaction is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3). `judge.py` names its stages Phase 0–8; this file cites them as identifiers under the spine headings.
 - Auto-on-load triggers (portfolio-builder, rebalance, thematic-screen) suppress the run when `view_age_days < cadence.AUTO_ON_LOAD_MIN_AGE_DAYS` (30 days). Banner only at drift_material.
 
@@ -79,7 +79,7 @@ Invoke `judge.phase_0_load_view()`, which wraps `stress.load_active_view()`. Thi
 
 ### Step 2 — Fetch (parallel batches)
 
-Phase 1 — MCP fan-out. Same recipe as the maker: 14 markets × 4 components (`macro_indicators`, `tactical`, `sectors`, `news`) + 1 `get_telemetry` call. Concurrency capped at 8. (`fixed_income` is out of scope — no formula consumes it yet.)
+Phase 1 — MCP fan-out. Same recipe as the maker: the 14 markets in `maker.MARKET_TO_SCHEMA_KEY`, not however many `list_macro_countries` returns live — × 4 components (`macro_indicators`, `tactical`, `sectors`, `news`) + 1 `get_telemetry` call. Concurrency capped at 8. (`fixed_income` is out of scope — no formula consumes it yet.)
 
 ### Step 3 — Verify
 
@@ -92,6 +92,8 @@ When `mock_mcp_responses` is provided (via `--mock-mcp <path>` or programmatic i
 ### Step 4 — Compute
 
 #### Step 4a — Per-cell diff (Phase 2)
+
+Compute `age_delta = stress.compute_age_delta(view_age_days, judge._parallax_age_days(mcp_responses, now))`. `_parallax_age_days` is the max staleness across the MCP responses' own `report_date`/`data_as_of` fields. It returns `None` when no response carries a parseable date, so `age_delta` is `"unverifiable"` and no cell is classed `DIVERGENT_STALE`; `parallax_age_days` is then `null` in the audit row and JSON sidecar.
 
 For each non-zero cell in the active view (enumerated via `stress.enumerate_dimensions`), call `stress.resolve_cell_state(cio_tilt, parallax_view, age_delta, market=..., covered_markets=...)`. States:
 

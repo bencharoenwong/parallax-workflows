@@ -60,9 +60,9 @@ Config-producer shape (authoring conventions, "Canonical step spine"): Steps 0�
 
 Parse flags: `--compare` and `--status` short-circuit to `## Modes` before any Parallax call; `--shadow-diff`, `--basis`, `--markets` set the synthesis mode, hint, and scope.
 
-Then resolve covered markets: `call-tool` `list_macro_countries()`. Expect 15 entries (14 country reports + "Global"). Exclude "Global" from per-country fan-out (it's an aggregate, would double-count). When `--markets` filter is set, intersect with the live coverage.
+Then resolve covered markets: `call-tool` `list_macro_countries()`. Exclude "Global" from per-country fan-out (it's an aggregate, would double-count). Its entry count is not pinned to 14/15 and will keep drifting as Parallax adds coverage (it returned 17, including a newly-added "Brazil", as of 2026-10-05) — `maker.resolve_covered_markets()` filters the live list down to the markets `MARKET_TO_SCHEMA_KEY` has an `aggregator_weights.yaml` weight for (14 as of this writing) and logs any dropped market, so a newly-covered market is never silently fanned out and zero-weighted; widening that set is a deliberate weighting decision (CIO/business judgment), not something this skill infers from the live count. When `--markets` filter is set, intersect with that weighted ∩ live-coverage set.
 
-Fallback: if `list_macro_countries` fails, use the hardcoded `HARDCODED_COVERAGE` tuple in `maker.py` (14 markets matching `aggregator_weights.yaml`).
+Fallback: if `list_macro_countries` fails, use the hardcoded `HARDCODED_COVERAGE` tuple in `maker.py` (the same 14 markets matching `aggregator_weights.yaml`).
 
 ### Step 2 — Fetch (parallel batches)
 

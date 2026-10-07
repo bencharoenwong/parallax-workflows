@@ -87,8 +87,10 @@ DEFAULT_CONCURRENCY = 8
 # Per-market timeout (v2 plan §2.1).
 DEFAULT_MARKET_TIMEOUT_S = 45
 
-# Schema-side region key for each Parallax market name. Includes all
-# markets observed via list_macro_countries (MCP_FIELD_INVENTORY.md §1).
+# Schema-side region key for each Parallax market name. This is a curated
+# weighted subset, not the full live list_macro_countries() output --
+# resolve_covered_markets() filters the live list down to this dict's keys
+# before fan-out (MCP_FIELD_INVENTORY.md §1).
 MARKET_TO_SCHEMA_KEY: dict[str, str] = {
     "United States": "us",
     "Canada": "canada",
@@ -306,6 +308,26 @@ class MakerOrchestrator:
             markets = [m for m in markets if m and m.lower() != "global"]
             if not markets:
                 markets = list(HARDCODED_COVERAGE)
+
+        # Pin fan-out to markets with an aggregator weight (MARKET_TO_SCHEMA_KEY).
+        # list_macro_countries can — and as of 2026-10 does (17 markets incl.
+        # "Brazil") — return markets aggregator_weights.yaml has no weight for.
+        # Fanning out to those pays for macro_analyst calls that cross_country's
+        # weights.get(k, 0.0) then zero-weights, i.e. paid-for signal silently
+        # dropped. Filtering here (rather than widening the weight table, which
+        # needs a CIO/business weighting judgment call this module can't make)
+        # keeps today's documented 14-market/56-call budget accurate until the
+        # weights are deliberately expanded. HARDCODED_COVERAGE is already this
+        # same key set, so this is a no-op on the fallback path above.
+        unweighted = [m for m in markets if m not in MARKET_TO_SCHEMA_KEY]
+        if unweighted:
+            logger.warning(
+                "maker.resolve_covered_markets.dropping_unweighted: %s "
+                "(list_macro_countries returned them but aggregator_weights.yaml "
+                "has no weight — see MARKET_TO_SCHEMA_KEY)",
+                unweighted,
+            )
+            markets = [m for m in markets if m in MARKET_TO_SCHEMA_KEY]
 
         # CLI filter: e.g. options.market_filter = ["us", "japan"] → keep
         # only those Parallax market names.

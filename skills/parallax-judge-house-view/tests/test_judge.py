@@ -598,3 +598,85 @@ def test_view_changed_guards_share_a_catchable_base():
 def test_auto_on_load_threshold_is_at_or_past_30_days(age, expected):
     import cadence
     assert cadence.should_run_auto_on_load(age) is expected
+
+
+def test_undated_responses_make_parallax_age_unverifiable(
+    active_view_dir: Path,
+    report_dir: Path,
+    fresh_divergent_responses: dict,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A stale view judged against responses with no report_date must not
+    be classed DIVERGENT_STALE: the missing date proves no freshness."""
+    chain_dir = tmp_path / "chains"
+    monkeypatch.setattr("chain_emit.DEFAULT_CHAIN_DIR", chain_dir)
+    undated = {
+        k: {f: v for f, v in r.items() if f not in ("report_date", "data_as_of")}
+        if isinstance(r, dict) else r
+        for k, r in fresh_divergent_responses.items()
+    }
+
+    config = judge.JudgeConfig(
+        dry=True,
+        mock_mcp_responses=undated,
+        explicit=True,
+        view_dir=active_view_dir,
+        report_dir=report_dir,
+    )
+    result = judge.run_judge(config=config)
+
+    assert result.audit_entry["view_age_days"] > stress.STALE_THRESHOLD_DAYS
+    assert result.audit_entry["parallax_age_days"] is None
+    states = {r["state"] for r in result.resolutions}
+    assert "DIVERGENT_STALE" not in states
+    assert "DIVERGENT_FRESH" in states
+    assert json.loads(result.json_payload)["parallax_age_days"] is None
+    report = (result.report_dir / "report.md").read_text()
+    assert "**Parallax Age:** unverifiable" in report
+    # The undated path still succeeds end-to-end: chain_emit must not fail
+    # just because no response carried a parseable date.
+    assert result.chain_emit_failed is False
+
+
+def test_parallax_age_days_mixed_dates_skips_malformed_uses_fallback():
+    """A malformed report_date must not hide a valid data_as_of, and a
+    response with no parseable date at all is skipped rather than raising."""
+    now = datetime.datetime(2026, 10, 6, tzinfo=datetime.timezone.utc)
+    responses = {
+        "a": {"report_date": "not-a-date", "data_as_of": "2026-09-30"},
+        "b": {"report_date": "garbage"},
+        "c": {"report_date": "2026-10-01"},
+        "d": "not-a-dict",
+    }
+    # "a" falls back to data_as_of (age 6), "b" has no parseable date
+    # anywhere and is skipped, "c" parses directly (age 5), "d" is not a
+    # dict and is skipped. Max over the parseable entries is 6.
+    assert judge._parallax_age_days(responses, now) == 6
+
+
+def test_parallax_age_days_future_date_clamps_to_zero():
+    """A future-dated report must not produce a negative age."""
+    now = datetime.datetime(2026, 10, 6, tzinfo=datetime.timezone.utc)
+    responses = {"a": {"report_date": "2026-10-10"}}
+    assert judge._parallax_age_days(responses, now) == 0
+
+
+@pytest.mark.parametrize(
+    "responses",
+    [
+        {"a": {"report_date": "2026-10-01"}, "b": {"data_as_of": "2026-09-20T00:00:00Z"}},
+        {"a": {"report_date": "not-a-date"}, "b": {}},
+        {"a": {"report_date": "2026-10-10"}},  # future-dated, clamps to 0
+        {},
+    ],
+)
+def test_parallax_age_days_parity_with_stress(responses):
+    """judge._parallax_age_days must never disagree with
+    stress.compute_parallax_age_days — judge delegates to it directly, so
+    this test is a regression guard against a future re-copy of the logic
+    reintroducing drift between the two."""
+    now = datetime.datetime(2026, 10, 6, tzinfo=datetime.timezone.utc)
+    assert judge._parallax_age_days(responses, now) == stress.compute_parallax_age_days(
+        responses, now=now.date()
+    )

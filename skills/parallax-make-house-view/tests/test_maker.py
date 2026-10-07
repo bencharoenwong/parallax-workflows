@@ -140,6 +140,24 @@ def test_resolve_falls_back_to_hardcoded_on_list_failure():
     assert set(markets) == set(HARDCODED_COVERAGE)
 
 
+def test_resolve_covered_markets_drops_unweighted_markets():
+    """Regression guard for the 2026-10 coverage-count drift.
+
+    `list_macro_countries` now returns markets (e.g. "Brazil") that
+    `aggregator_weights.yaml` / `MARKET_TO_SCHEMA_KEY` has no weight for.
+    Fanning out to them would pay for macro_analyst calls that
+    `cross_country.aggregate`'s `weights.get(k, 0.0)` then zero-weights —
+    paid-for signal silently dropped. `resolve_covered_markets` must filter
+    them out rather than fan out to them.
+    """
+    orc = MakerOrchestrator(MakerOptions())
+    runner = _FixtureRunner(markets=["United States", "Japan", "Brazil", "Global"])
+    markets, _ = orc.resolve_covered_markets(runner)
+    assert "Brazil" not in markets
+    assert "Global" not in markets
+    assert set(markets) == {"United States", "Japan"}
+
+
 # ---------------------------------------------------------------------------
 # DEFAULT_COMPONENTS fan-out set (cost regression guard)
 # ---------------------------------------------------------------------------
