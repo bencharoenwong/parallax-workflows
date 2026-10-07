@@ -16,7 +16,10 @@ This is a cross-check BETWEEN TWO INDEPENDENT IMPLEMENTATIONS of the same
 method, not a hand-derived expected value: the oracle below shares no code
 with `contribution.py` beyond the economic method itself (iterate every
 calendar day; rebalance after a day's return using that day's own
-`changepercent`, 0 when there is no close).
+`changepercent`, 0 when there is no close). Like the live server, the oracle
+seeds each symbol from its last close on or before `start`, so a weekend or
+holiday period start earns the prior-close-to-first-close return on the
+first trading day.
 """
 
 from __future__ import annotations
@@ -48,7 +51,8 @@ def _server_oracle(
 
     cp: dict[str, dict[str, float]] = {r: {} for r in rics}
     for r in rics:
-        last = None
+        seed = [d for d in closes[r] if d <= start]
+        last = closes[r][max(seed)] if seed else None
         for d in dates:
             if d in closes[r]:
                 c = closes[r][d]
@@ -215,4 +219,56 @@ def test_server_oracle_without_the_saturday_rebalance_also_matches():
         assert result["contributions"][sym] == pytest.approx(
             oracle_per_holding[sym] / 10000.0, abs=1e-9
         )
+    assert result["portfolio_total_return"] == pytest.approx(oracle_total_return, abs=1e-9)
+
+
+def test_weekend_period_start_seeds_from_the_prior_friday_close():
+    """BUG-004: a Saturday period_start has no close of its own. The live
+    server seeds it from the prior Friday close, so Monday earns the
+    Friday-to-Monday return. Both implementations must book that return."""
+    period_start = "2026-01-31"  # Saturday
+    period_end = "2026-02-06"  # Friday
+    closes = {
+        "AAA.O": {
+            "2026-01-29": 98.0, "2026-01-30": 100.0, "2026-02-02": 103.0,
+            "2026-02-03": 104.0, "2026-02-04": 102.0, "2026-02-05": 105.0,
+            "2026-02-06": 106.0,
+        },
+        "BBB.O": {
+            "2026-01-29": 51.0, "2026-01-30": 50.0, "2026-02-02": 49.0,
+            "2026-02-03": 50.0, "2026-02-04": 52.0, "2026-02-05": 51.0,
+            "2026-02-06": 53.0,
+        },
+    }
+    prior = {"AAA.O": 0.5, "BBB.O": 0.5}
+    current = {"AAA.O": 0.6, "BBB.O": 0.4}
+    rebal = "2026-02-04"
+    trade_log = [
+        {"symbol": "AAA.O", "action": "add", "date": rebal, "weight_delta": +0.1},
+        {"symbol": "BBB.O", "action": "trim", "date": rebal, "weight_delta": -0.1},
+    ]
+    snapshots = [(period_start, prior), (rebal, current)]
+
+    oracle_per_holding, _, oracle_total_return = _server_oracle(
+        period_start, period_end, snapshots, closes, {},
+    )
+    result = daily_contribution(
+        prior_portfolio=prior,
+        current_portfolio=current,
+        trade_log=trade_log,
+        daily_prices=closes,
+        period_start=period_start,
+        period_end=period_end,
+    )
+
+    monday_aaa = 0.5 * (103.0 / 100.0 - 1)
+    monday_bbb = 0.5 * (49.0 / 50.0 - 1)
+    single_day = _server_oracle(period_start, "2026-02-02", [(period_start, prior)], closes, {})
+    assert single_day[0]["AAA.O"] / 10000.0 == pytest.approx(monday_aaa, abs=1e-12)
+    assert single_day[0]["BBB.O"] / 10000.0 == pytest.approx(monday_bbb, abs=1e-12)
+
+    for sym in ("AAA.O", "BBB.O"):
+        assert result["contributions"][sym] == pytest.approx(
+            oracle_per_holding[sym] / 10000.0, abs=1e-9
+        ), f"{sym} diverges from the server-walk oracle"
     assert result["portfolio_total_return"] == pytest.approx(oracle_total_return, abs=1e-9)
