@@ -17,7 +17,7 @@ description: "Runs all installed Parallax AI Investor Profiles (Buffett, Greenbl
 
 ## Gotchas
 
-- Expected Parallax spend: ~85–95 tokens single ticker (sum of the five profiles' per-profile spends, with Greenblatt's own corrected to ~35-40 tokens — see its SKILL.md Gotchas). The ~180–240 basket-of-5 figure in `_parallax/token-costs.md` has not been recomputed against that correction; treat it as stale pending that update rather than as a verified number.
+- Expected Parallax spend: ~85–95 tokens single ticker (sum of the five profiles' per-profile spends, with Greenblatt's own corrected to ~35-40 tokens — see its SKILL.md Gotchas). The ~180–240 basket-of-5 figure in `_parallax/token-costs.md` is marked there as pending re-derivation.
 - JIT-load `_parallax/parallax-conventions.md`, `_parallax/AI-profiles/profile-schema.md`, `_parallax/AI-profiles/output-template.md`, `_parallax/AI-profiles/consensus-config.md`, and ALL profile specs under `_parallax/AI-profiles/profiles/` — Step 0.
 - Do NOT re-implement profile logic — run each dispatcher's workflow as documented in `skills/parallax-ai-<name>/SKILL.md`. Cap basket input at 5 tickers.
 - Super-majority uses ceiling rounding per consensus-config.md — `required = ceil(0.75 × applicable)`; partial matches do NOT count toward the signal but DO count toward factor-level agreement. Factor-level agreement is the highest-value section — never skip it.
@@ -55,7 +55,7 @@ Single ticker → **single-ticker mode** (5 profiles applicable); 2–5 comma-se
 
 ### Step 2 — Fetch (parallel batches)
 
-Run every applicable profile's dispatcher workflow in parallel where tool sequences do not share dependencies (never sequentialize): Buffett (info + snapshot + summary financials + score analysis, 4 thresholds); Greenblatt (info + sector-scoped universe + ratios for top 30 + rank); Klarman (info + snapshot + balance_sheet + cash_flow + ratios, 4 checks); Soros (macro countries + tactical × N + telemetry + info + universe per theme, dual channel; telemetry may be `UNAVAILABLE`); PTJ (macro countries + tactical × N + info + score analysis + technicals + risk_return outlook + snapshot, tri-channel). Rely on server defaults for `weeks`/`periods` or typed integers (conventions §0.2). Each returns `verdict` (`match` | `partial_match` | `no_match` | `skipped`), `verdict_detail`, `factor_flags` (factor → `FLAGGED` | `NOT_FLAGGED` | `NOT_APPLICABLE`), `fallback_notes`.
+Run every applicable profile's dispatcher workflow in parallel where tool sequences do not share dependencies (never sequentialize): Buffett (info + snapshot + summary financials + score analysis, 4 thresholds); Greenblatt (info + sector-scoped universe + `get_company_info` sector-filter batch dropping Financials/Utilities + ratios for top 30 + rank; ticker-check skips with `skipped` when the target itself is Financials or Utilities); Klarman (info + snapshot + balance_sheet + cash_flow + ratios, 4 checks); Soros (macro countries + tactical × N + telemetry + info + universe per theme, dual channel; telemetry may be `UNAVAILABLE`); PTJ (macro countries + tactical × N + info + score analysis + technicals + `get_stock_outlook(aspect="analyst_targets")` + snapshot, tri-channel). Rely on server defaults for `weeks`/`periods` or typed integers (conventions §0.2). Each returns `verdict` (`match` | `partial_match` | `no_match` | `skipped`), `verdict_detail`, `factor_flags` (factor → `FLAGGED` | `NOT_FLAGGED` | `NOT_APPLICABLE`), `fallback_notes`.
 
 ### Step 3 — Verify
 
