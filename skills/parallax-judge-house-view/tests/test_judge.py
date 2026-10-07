@@ -634,3 +634,49 @@ def test_undated_responses_make_parallax_age_unverifiable(
     assert json.loads(result.json_payload)["parallax_age_days"] is None
     report = (result.report_dir / "report.md").read_text()
     assert "**Parallax Age:** unverifiable" in report
+    # The undated path still succeeds end-to-end: chain_emit must not fail
+    # just because no response carried a parseable date.
+    assert result.chain_emit_failed is False
+
+
+def test_parallax_age_days_mixed_dates_skips_malformed_uses_fallback():
+    """A malformed report_date must not hide a valid data_as_of, and a
+    response with no parseable date at all is skipped rather than raising."""
+    now = datetime.datetime(2026, 10, 6, tzinfo=datetime.timezone.utc)
+    responses = {
+        "a": {"report_date": "not-a-date", "data_as_of": "2026-09-30"},
+        "b": {"report_date": "garbage"},
+        "c": {"report_date": "2026-10-01"},
+        "d": "not-a-dict",
+    }
+    # "a" falls back to data_as_of (age 6), "b" has no parseable date
+    # anywhere and is skipped, "c" parses directly (age 5), "d" is not a
+    # dict and is skipped. Max over the parseable entries is 6.
+    assert judge._parallax_age_days(responses, now) == 6
+
+
+def test_parallax_age_days_future_date_clamps_to_zero():
+    """A future-dated report must not produce a negative age."""
+    now = datetime.datetime(2026, 10, 6, tzinfo=datetime.timezone.utc)
+    responses = {"a": {"report_date": "2026-10-10"}}
+    assert judge._parallax_age_days(responses, now) == 0
+
+
+@pytest.mark.parametrize(
+    "responses",
+    [
+        {"a": {"report_date": "2026-10-01"}, "b": {"data_as_of": "2026-09-20T00:00:00Z"}},
+        {"a": {"report_date": "not-a-date"}, "b": {}},
+        {"a": {"report_date": "2026-10-10"}},  # future-dated, clamps to 0
+        {},
+    ],
+)
+def test_parallax_age_days_parity_with_stress(responses):
+    """judge._parallax_age_days must never disagree with
+    stress.compute_parallax_age_days — judge delegates to it directly, so
+    this test is a regression guard against a future re-copy of the logic
+    reintroducing drift between the two."""
+    now = datetime.datetime(2026, 10, 6, tzinfo=datetime.timezone.utc)
+    assert judge._parallax_age_days(responses, now) == stress.compute_parallax_age_days(
+        responses, now=now.date()
+    )
