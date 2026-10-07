@@ -29,6 +29,7 @@ from contract_schemas import (  # noqa: E402
     GET_COMPANY_INFO_SCHEMA,
     GET_NEWS_SYNTHESIS_SCHEMA,
     GET_SCORE_ANALYSIS_SCHEMA,
+    GET_STOCK_OUTLOOK_DIVIDENDS_SCHEMA,
     GET_TELEMETRY_SCHEMA,
     MACRO_ANALYST_SCHEMA,
 )
@@ -146,6 +147,15 @@ def test_macro_analyst_mock_conforms_to_schema():
         load_mock("macro_analyst"),
         MACRO_ANALYST_SCHEMA,
         "macro_analyst",
+    )
+
+
+def test_get_stock_outlook_dividends_mock_conforms_to_schema():
+    """Flat list, no envelope -- see the schema's own docstring for why."""
+    validate(
+        load_mock("get_stock_outlook_dividends"),
+        GET_STOCK_OUTLOOK_DIVIDENDS_SCHEMA,
+        "get_stock_outlook_dividends",
     )
 
 
@@ -313,6 +323,24 @@ def test_macro_analyst_mock_has_realistic_values():
     assert len(data["content"]) >= 30
     if "report_date" in data:
         assert is_iso_date(data["report_date"])
+
+
+def test_get_stock_outlook_dividends_mock_has_realistic_values():
+    data = load_mock("get_stock_outlook_dividends")
+    assert isinstance(data, list) and data, "dividend records should be a non-empty list"
+    company_info = load_mock("get_company_info")
+    for row in data:
+        if "symbol" in row:
+            assert "." in row["symbol"], f"{row['symbol']!r} is not RIC form"
+        assert is_iso_date(row["effective_date"])
+        assert row["divrate"] > 0
+        # The record's currency must agree with the same holding's listing
+        # currency per get_company_info -- a mismatch here is exactly the
+        # dividend-currency-mismatch case SKILL.md's Gotcha documents, and
+        # the happy-path fixture must not accidentally model it.
+        assert row["currency"] == company_info["currency"]
+        if "record_date" in row and "pay_date" in row:
+            assert row["record_date"] <= row["pay_date"]
 
 
 # Validator self-tests live in `_parallax/scripts/test_contract_validator.py`
