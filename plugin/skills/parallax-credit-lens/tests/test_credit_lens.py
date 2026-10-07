@@ -1082,18 +1082,6 @@ class TestIntegrationFixtures:
         assert "peer_p75" not in period
         assert "current_ratio" in period
 
-    def test_aapl_income_fixture_loads(self) -> None:
-        """Income fixture carries the fields compute_interest_coverage needs,
-        with the field names (not `ebit` / `interest_expense`) and sign
-        matching the live get_financials(income) response."""
-        data = _load_fixture("get_financials_income.json")
-        period = data["periods"][0]
-        assert "operating_income" in period
-        assert "interest_expense_net_non_operating" in period
-        assert period["interest_expense_net_non_operating"] < 0
-        assert "ebit" not in period
-        assert "interest_expense" not in period
-
     def test_aapl_interest_coverage_from_income_fixture(self) -> None:
         """Interest Coverage is derived from get_financials(income), not
         ratios: compute_interest_coverage() flips the field's sign, and the

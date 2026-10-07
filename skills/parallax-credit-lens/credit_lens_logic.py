@@ -390,7 +390,7 @@ def compute_interest_coverage(
     if ebit is None or not math.isfinite(ebit):
         return None
     interest_expense = compute_interest_expense(interest_expense_net_non_operating)
-    if interest_expense is None or interest_expense == 0:
+    if interest_expense is None:
         return None
     return ebit / interest_expense
 
