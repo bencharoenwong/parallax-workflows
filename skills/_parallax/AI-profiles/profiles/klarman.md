@@ -26,7 +26,7 @@ tool_sequence_notes: "get_financials defaults to periods=4. Numeric parameters (
 required_factors_present: []
 thresholds:
   net_cash_to_market_cap: ">= -0.2"
-  debt_to_equity_vs_peers: "<= peer median × 1.1"
+  debt_to_equity_vs_peers: "absolute D/E < 1.0 — no tool in tool_sequence supplies a peer-median D/E, so the peer-relative form (<= peer median × 1.1) is never applied; see parallax-ai-klarman/SKILL.md Step 4"
   fcf_positive_periods: ">= 3 of 4"
   pe_discount_to_peers: "<= peer median × 1.0"
   value_score_backup: ">= 4"
@@ -50,7 +50,7 @@ Seth Klarman's 1991 *Margin of Safety: Risk-Averse Value Investing Strategies fo
 
 ## What this profile does
 
-Applies a balance-sheet-first four-check test to a single stock: (1) net cash position, (2) debt versus peer median, (3) free-cash-flow stability across four periods, (4) valuation discount to peer median. A Parallax Value score ≥ 4 is used as a backup sanity check (loose threshold per Lev-Srivastava 2022 intangibles caveat). A stock `match`es if it passes ≥ 3 of the 4 balance-sheet checks AND the Value backup. 2 of 4 → `partial_match`. ≤ 1 of 4 → `no_match`.
+Applies a balance-sheet-first four-check test to a single stock: (1) net cash position, (2) debt on an absolute D/E threshold (peer comparison unavailable from the tool sequence), (3) free-cash-flow stability across four periods, (4) valuation discount to peer median. A Parallax Value score ≥ 4 is used as a backup sanity check (loose threshold per Lev-Srivastava 2022 intangibles caveat). A stock `match`es if it passes ≥ 3 of the 4 balance-sheet checks AND the Value backup. 2 of 4 → `partial_match`. ≤ 1 of 4 → `no_match`.
 
 ## Distinctive output: "no position warranted"
 
