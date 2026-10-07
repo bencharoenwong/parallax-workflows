@@ -15,7 +15,7 @@ This is a presentation overlay. The onboarded client is the presentation brand; 
 /parallax-white-label-stock-report <TICKER>            # resolve, fetch, render with the active brand config
 /parallax-white-label-stock-report AAPL.O              # RIC form (preferred)
 /parallax-white-label-stock-report <path/to/report.json>  # use an already-downloaded report JSON (no fetch, no paid call)
-/parallax-white-label-stock-report <TICKER> --force    # ignore cache, re-fetch the paid report
+/parallax-white-label-stock-report <TICKER> --force    # ignore the local cache AND tell the server to regenerate (force=true)
 /parallax-white-label-stock-report <TICKER> --full-white-label  # private-label: client's own disclosures, no CG/Parallax attribution
 /parallax-white-label-stock-report <TICKER> --full-white-label --powered-by  # client's own disclosures, keep the Parallax credit
 ```
@@ -75,7 +75,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 
 ### Step 0 — Pre-flight
 
-1. `discover-tools`: bind `search_stocks` and `get_stock_report` to the exact callables exposed now.
+1. `discover-tools`: bind `search_stocks`, `get_stock_report`, and `check_job_status` to the exact callables exposed now. `get_stock_report` is async and polls internally for up to 5 minutes; on a timeout it returns a `job_id` instead of a report, and `check_job_status(job_id)` is how to pick that job back up (see Failure modes) rather than concluding the report failed.
    <!-- host-note -->
    Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
    <!-- /host-note -->
@@ -84,14 +84,14 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 
 ### Step 1 — Resolve inputs
 
-A plain ticker or company name → `call-tool` `search_stocks` for the RIC (`AAPL.O`, `V.N`). Single-letter US tickers must be in RIC form or the report call fails with "Symbol too short".
+A plain ticker or company name → `call-tool` `search_stocks` for the RIC (`AAPL.O`, `V.N`). Prefer the RIC form for single-letter US tickers (Visa = `V.N`, not `V`): `get_stock_report` accepts a bare short symbol without erroring, so an unresolved ticker risks silently analyzing the wrong company rather than failing loudly.
 
 ### Step 2 — Fetch (parallel batches)
 
-The renderer reads a `get_stock_report` JSON file; it never calls the MCP itself. Resolve the source cheapest first:
-1. **Supplied file** — a saved `get_stock_report` response passed on the command line: no fetch, no paid call (it must be the JSON response, not a rendered PDF).
-2. **Same-day cache** — `~/.parallax/stock-report-cache/<RIC>-<YYYY-MM-DD>.json` when present and `--force` was not passed.
-3. **Fresh fetch** — `call-tool` `get_stock_report(symbol=<RIC>)` (paid, about 1–2 min) and `write-artifact` the full raw response to the cache path above (`mkdir -p ~/.parallax/stock-report-cache` first).
+The renderer reads a `get_stock_report` JSON file; it never calls the MCP itself. This skill always requests the English report (`lang=en`, the tool's default) — it has no Thai workflow. Resolve the source cheapest first:
+1. **Supplied file** — a saved `get_stock_report` response passed on the command line: no fetch, no paid call (it must be the JSON response, not a rendered PDF). This is the one path where a non-English report can sneak in (someone saved a `lang=th` response). The renderer does not detect a `lang=th` report; the operator must supply `lang=en` JSON (see `references/field-map.md`, 'Localization boundary').
+2. **Same-day cache** — `~/.parallax/stock-report-cache/<RIC>-en-<YYYY-MM-DD>.json` when present and `--force` was not passed.
+3. **Fresh fetch** — `call-tool` `get_stock_report(symbol=<RIC>, lang="en", force=<true if --force was passed, else omit>)` (paid, async, usually 1–2 min but polls internally for up to 5 min — see Failure modes on timeout) and `write-artifact` the full raw response to the cache path above (`mkdir -p ~/.parallax/stock-report-cache` first). Pass `force=true` explicitly when `--force` was given — bypassing only this skill's local file cache (step 2) still leaves the server's own same-day cache in place, so without `force=true` on the tool call a "fresh fetch" can still return a report the server already generated earlier the same Asia/Singapore calendar day.
 
 ### Step 3 — Verify
 
@@ -114,7 +114,7 @@ When the client wants their own disclosures, collect what their regulator requir
 
 ```
 python3 <skill-dir>/render_stock_report.py \
-  ~/.parallax/stock-report-cache/<RIC>-<date>.json \
+  ~/.parallax/stock-report-cache/<RIC>-en-<date>.json \
   --branding ~/.parallax/client-branding/config.yaml \
   --out "Stock Report - <RIC> - <ClientName>.html" \
   --pdf
@@ -141,7 +141,10 @@ Fixed semantic colors, never branded: positive `#1a7f4b`, negative `#b3261e`, wa
 
 - No brand config: the render is not white-labeled; say so and offer `/parallax-white-label-onboard` before delivering.
 - `--full-white-label` with empty `voice.disclaimers[]`: the renderer refuses; collect the disclosures per Step 5, never improvise them.
-- `get_stock_report` fails or times out: no render; report the failure and whether a cached copy exists.
+- `get_stock_report` returns a `job_id` whose error text reads "Job still running after ...s" (polled for 5 min server-side and gave up): this is NOT a terminal failure. Branch on the error text, not on whether a `job_id` is present — any OTHER error carrying a `job_id` (a 401/403, three consecutive poll errors, completed-with-no-result, or an unexpected job status) IS terminal; treat it per the next bullet instead of retrying.
+  For the still-running case, call `check_job_status(job_id)` to pick the job back up. Its payload has no `report` key: `check_job_status` returns the raw job record (`{status, result, success, job_id}`), and for a completed job `result` is `{success, symbol, lang, pdf_url, html_url, json_url}` with no inlined content — only `get_stock_report` itself fetches `json_url` and wraps it under a `report` key. Saving a `check_job_status` result straight to the cache path and rendering it is refused: the renderer checks for `report.company` and raises `ValueError` pointing back to this section, instead of silently producing a hollow report.
+  When `check_job_status` shows `status: completed`: `fetch-url` `result.json_url`, then `write-artifact` `{success: true, symbol, pdf_url: result.pdf_url, html_url: result.html_url, report: <fetched JSON>}` to the cache path, and render from that file. Still pending/queued/running/processing: retry `check_job_status` after a short wait. If `fetch-url` is absent on this host (§14.3: report the source as not fetched), skip straight to the alternative below rather than asking the operator to paste JSON. Alternative: re-call `get_stock_report` without `--force` — same-day this usually hits the server's own cache quickly, but it still bills 10 credits because the API charges per POST regardless of a cache hit; state that trade-off to the operator before choosing it. Never respond to a still-running job by re-fetching with `force=true` — that starts a second paid job on top of one that is likely still running.
+- `get_stock_report` returns a terminal error (not a "still running" timeout): no render; report the failure and whether a cached copy exists.
 - Chrome absent: HTML only; state that the PDF was not produced.
 - Host lacks `run-shell` or `write-artifact`: the skill cannot run on this host (conventions §14.3); say so, do not hand-write HTML.
 
@@ -152,6 +155,7 @@ Open the PDF and confirm every line; then deliver:
 - positive/negative/warning still in the fixed semantic colors (green/red/amber), NOT recolored to the brand;
 - the six factor scores, the peer table, all three financial statements, and the ratios table rendered;
 - the Chicago Global / MAS disclosures present verbatim and the "Powered by Parallax" credit in the cover header (or, in the chosen private-label variant, the client's confirmed disclosures and the credit state the client chose);
+- cover shows no Price Target box — the standard report carries no valuation lane, so this is expected; if a Price Target box IS present, the source report is non-standard and its number needs review before delivery;
 - no leakage of internal source paths or pre-signed URLs.
 
 During early rollout, do not send externally without Chicago Global sign-off on the compliance posture.
@@ -171,11 +175,12 @@ The renderer is plain deterministic Python, so Claude and Codex produce identica
 
 - Standalone by design. This skill imports NO sibling or shared module (no _parallax/white-label/ loader, no integration-pattern.md). render_stock_report.py inlines its own branding reader, token map, semantic-color rule, and the CGC disclosure boilerplate. The only files it reads at runtime are the report JSON and the brand config.
 - The renderer is deterministic. The model's job is orchestration only (resolve ticker, call get_stock_report, run the script, review). NEVER hand-write or hand-edit the report HTML; that breaks Claude/Codex parity. Same script + same inputs = identical output.
-- get_stock_report is PAID (about 1-2 min). Check the cache at ~/.parallax/stock-report-cache/<RIC>-<YYYY-MM-DD>.json first; pass --force only to refresh.
-- Single-letter US tickers fail as bare symbols ("Symbol too short"). Resolve to RIC first (Visa = V.N, not V). Use search_stocks to confirm the RIC.
+- get_stock_report is PAID and async (usually 1-2 min, but polls internally for up to 5 min before returning a job_id instead of timing out outright). Check the cache at ~/.parallax/stock-report-cache/<RIC>-en-<YYYY-MM-DD>.json first; pass --force to bypass it AND pass force=true on the tool call itself, or the server's own same-day cache still returns the old report.
+- A `job_id` alone is not the failure signal — the error text is; a still-running job is resumable via `check_job_status(job_id)`, while any other error carrying a `job_id` is terminal. See Failure modes for the full branch and for feeding a completed `check_job_status` result back into the renderer.
+- Resolve single-letter US tickers to RIC first (Visa = V.N, not V) via search_stocks — get_stock_report accepts a bare short symbol without erroring (see Step 1).
 - Disclosures are NOT in the get_stock_report JSON. The skill renders its own bundled verbatim copy of the Chicago Global / MAS disclosure boilerplate. It is a pinned asset; if CGC updates its disclosure wording, re-sync the constant in render_stock_report.py from response.html_url. Never reword it.
 - Semantic colors (positive green, negative red, warning amber) are FIXED and never taken from the brand. They carry meaning, not identity. Only primary/secondary/accent/background/fonts/logo come from the client config.
-- Output language is English only. Translation hand-offs in the workflow skills operate on chat-layer prose; they do not localize this renderer's HTML/PDF (see `references/field-map.md`, 'Localization boundary').
+- Output language is English only. The renderer's chrome and disclosures are hardcoded English and never translated; `lang=th` from get_stock_report translates the report JSON's own narrative prose (not just labels), and the renderer does not detect or refuse a Thai-sourced "Supplied file," so only ever supply `lang=en` JSON (see `references/field-map.md`, 'Localization boundary').
 - No active brand config → the renderer falls back to the default Parallax palette and the output is NOT white-labeled. Run /parallax-white-label-onboard first to skin it for a client.
 - Output is two independent choices (see Compliance): whose disclosures (Chicago Global / MAS by default, or the client's OWN via --full-white-label, collected at run time into voice.disclaimers[] and refused if empty), and whether to keep the "Powered by Parallax" credit (shown by default; kept in full white-label only with --powered-by). Never hand-edit disclosures or improvise a private-label without the client's confirmed disclosure language.
 - During early rollout, do not send a generated report to an end client until Chicago Global has signed off on the compliance posture.

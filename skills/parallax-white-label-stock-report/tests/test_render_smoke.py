@@ -127,6 +127,30 @@ def test_client_name_in_header_when_active():
     assert "Northwind Capital" in html
 
 
+def test_cover_omits_price_target_box_when_dcf_valuation_absent():
+    # Standard payload has no dcf_valuation; cover must omit the box, not render it blank.
+    assert "dcf_valuation" not in REPORT
+    html = _render()
+    assert "Price Target" not in html
+
+
+def test_cover_renders_price_target_box_when_dcf_valuation_present():
+    # Forward-compat: if a response does carry dcf_valuation (e.g. a
+    # non-standard partner pipeline), the cover should still render it.
+    report_with_dcf = dict(REPORT)
+    report_with_dcf["dcf_valuation"] = {
+        "target_value": 142.0,
+        "target_footnote": "via Peer P/E ~22.0x - 7 comps",
+        "reconciliation_body": "Buy-rated; peer-multiple target sits 10.6% above current price",
+        "reconciliation_chip": "Modest upside",
+    }
+    response_with_dcf = dict(RESPONSE, report=report_with_dcf)
+    html = r.render_html(response_with_dcf, CLIENT_BRANDING)
+    assert "Price Target" in html
+    assert "142" in html
+    assert "Modest upside" in html or "peer-multiple target" in html
+
+
 def test_renders_with_no_branding_default():
     branding = r.load_branding("/nonexistent/path/config.yaml")
     assert branding["active"] is False
@@ -194,6 +218,34 @@ def test_full_white_label_with_credit_keeps_powered_by():
     assert "Example Securities Commission" in html          # client's own disclosures
     assert "Monetary Authority of Singapore" not in html    # not the CGC/MAS boilerplate
     assert "Chicago Global" not in html                     # no CG entity trace anywhere
+
+
+def test_refuses_check_job_status_shaped_payload():
+    # A raw check_job_status result has no "report" key; must refuse, not render a hollow report.
+    import pytest
+    job_status_payload = {
+        "status": "completed",
+        "result": {
+            "success": True,
+            "symbol": "ACME.O",
+            "lang": "en",
+            "pdf_url": "https://example.com/acme.pdf",
+            "html_url": "https://example.com/acme.html",
+            "json_url": "https://example.com/acme.json",
+        },
+        "success": True,
+        "job_id": "11111111-1111-1111-1111-111111111111",
+    }
+    with pytest.raises(ValueError, match="report"):
+        r.render_html(job_status_payload, CLIENT_BRANDING)
+
+
+def test_bare_report_dict_still_renders():
+    # The pre-existing fallback (response.get("report", response)) must still
+    # accept a bare report dict with no "report" wrapper, not just the full
+    # get_stock_report envelope.
+    html = r.render_html(REPORT, CLIENT_BRANDING)
+    assert 'id="sec-cover"' in html
 
 
 if __name__ == "__main__":

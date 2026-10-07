@@ -467,7 +467,11 @@ def render_cover(rep, branding):
     ccy = co.get("currency", "")
     tline = " | ".join([x for x in [ric, co.get("market"), co.get("sector"), co.get("industry")] if x])
     rec = co.get("recommendation", "")
-    dcf = rep.get("dcf_valuation", {})
+    # The standard get_stock_report payload carries no dcf_valuation/price-target
+    # lane at all. Treat it as optional: render the Price Target box and the
+    # Rating reconciliation line only when it is present.
+    dcf = rep.get("dcf_valuation") or {}
+    has_price_target = dcf.get("target_value") is not None
     vital = rep.get("vital_stats", {})
 
     logo_html = ""
@@ -532,10 +536,10 @@ def render_cover(rep, branding):
   <div class="toprow">
     <div class="pt"><div class="label">Rating</div>
       <div><span class="rating-badge {rating_kind(rec)}">{esc(rec or '-')}</span></div>
-      <div class="sub">{esc(g(dcf, 'reconciliation_body') or g(dcf, 'reconciliation_chip') or '')}</div></div>
-    <div class="pt"><div class="label">Price Target</div>
-      <div class="val">{esc(fmt(dcf.get('target_value'), 'money'))} {esc(ccy)}</div>
-      <div class="sub">{esc(dcf.get('target_footnote') or '')}</div></div>
+      {('<div class="sub">' + esc(g(dcf, 'reconciliation_body') or g(dcf, 'reconciliation_chip') or '') + '</div>') if has_price_target else ''}</div>
+    {('<div class="pt"><div class="label">Price Target</div>'
+      '<div class="val">' + esc(fmt(dcf.get('target_value'), 'money')) + ' ' + esc(ccy) + '</div>'
+      '<div class="sub">' + esc(dcf.get('target_footnote') or '') + '</div></div>') if has_price_target else ''}
     <div class="pt"><div class="label">Current Price</div>
       <div class="val">{esc(fmt(vital.get('current_price'), 'money'))} {esc(ccy)}</div></div>
     <div class="pt"><div class="label">Market Cap</div>
@@ -745,6 +749,21 @@ def render_html(response, branding):
         raise ValueError(
             "full_white_label requires client_disclaimers in the brand config; "
             "refusing to render regulated research with no disclosures."
+        )
+
+    # Guard: a get_stock_report response always carries its content under a
+    # "report" key. A raw check_job_status payload does not (its completed
+    # result is {success, symbol, lang, pdf_url, html_url, json_url}, with no
+    # inlined content) and would otherwise fall through silently to a hollow
+    # report with "-" in every field. Refuse rather than render that.
+    _rep_check = response.get("report", response) if isinstance(response, dict) else {}
+    if not isinstance(_rep_check, dict) or not _rep_check.get("company"):
+        raise ValueError(
+            "Input has no report content (no 'report' key, or report.company is "
+            "missing); refusing to render. This usually means a check_job_status "
+            "result was saved and rendered directly instead of a get_stock_report "
+            "response. See SKILL.md Failure modes for fetching result.json_url and "
+            "wrapping it under a 'report' key first."
         )
 
     # Note: in --full-white-label mode this renderer removes the static Parallax
