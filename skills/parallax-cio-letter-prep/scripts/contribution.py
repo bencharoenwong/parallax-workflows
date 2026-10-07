@@ -10,7 +10,7 @@ Math approach — replicates the server's method
 -------------------------------------------------
 
 This module replicates, in weight space, the same method the Parallax
-server (`analytics-engine-v2`) uses to turn a portfolio snapshot plus a
+server-side analytics engine uses to turn a portfolio snapshot plus a
 trade log into a value path:
 
   * Between rebalances, each holding is buy-and-hold: its value compounds
