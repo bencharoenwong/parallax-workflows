@@ -128,10 +128,7 @@ def test_client_name_in_header_when_active():
 
 
 def test_cover_omits_price_target_box_when_dcf_valuation_absent():
-    # The standard get_stock_report payload carries no dcf_valuation key at
-    # all. The fixture reflects that: assert the cover renders no stale "-"
-    # Price Target box or empty reconciliation line for data that was never
-    # there.
+    # Standard payload has no dcf_valuation; cover must omit the box, not render it blank.
     assert "dcf_valuation" not in REPORT
     html = _render()
     assert "Price Target" not in html
@@ -224,10 +221,7 @@ def test_full_white_label_with_credit_keeps_powered_by():
 
 
 def test_refuses_check_job_status_shaped_payload():
-    # A raw check_job_status result has no "report" key — its completed result is
-    # {success, symbol, lang, pdf_url, html_url, json_url}, with no inlined content.
-    # Saving that straight to the cache path and rendering it must not silently
-    # produce a hollow report; it must refuse.
+    # A raw check_job_status result has no "report" key; must refuse, not render a hollow report.
     import pytest
     job_status_payload = {
         "status": "completed",

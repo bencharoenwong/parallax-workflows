@@ -31,7 +31,7 @@ The renderer reads `response["report"]`. `pdf_url` and `html_url` point to the o
 | Data-basis notes | report.data_basis_note / report.ratio_snapshot_note |
 | Generated date | report.generated_date |
 
-`report.dcf_valuation` is NOT present in the standard `get_stock_report` payload — the server dropped the valuation lane from the standard report entirely. The renderer treats it as optional: the cover's "Price Target" box and the Rating reconciliation line render only when `dcf_valuation.target_value` is present, and are omitted (not blank) otherwise. In practice, for a standard report, expect the cover to show Rating / Current Price / Market Cap only, with no Price Target box. If a non-standard response does carry `dcf_valuation`, it is a *different* price target from the Analyst Ratings section's sell-side consensus (`price_target.target_mean`) — do not conflate the two.
+`report.dcf_valuation` is NOT present in the standard `get_stock_report` payload — the server dropped the valuation lane entirely, so the renderer treats it as optional and omits the cover's "Price Target" box and the Rating reconciliation line (not blank) when `dcf_valuation.target_value` is absent. If a non-standard response does carry `dcf_valuation`, it is a *different* price target from the Analyst Ratings section's sell-side consensus (`price_target.target_mean`) — do not conflate the two.
 
 ## Company analysis
 
