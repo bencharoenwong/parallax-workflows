@@ -995,13 +995,7 @@ class TestIntegrationFixtures:
     """Integration tests using fixture JSON files for realistic tool output."""
 
     def test_aapl_ratios_fixture_loads(self) -> None:
-        """Ratios fixture is parseable and has expected keys.
-
-        Field names match the live get_financials(ratios) response: no
-        `interest_coverage` key, because the live response carries no such
-        field at all (confirmed by live probe) — not merely no peer pair for
-        it.
-        """
+        """Ratios fixture field names match the live get_financials(ratios) response."""
         data = _load_fixture("get_financials_ratios.json")
         period = data["periods"][0]
         assert "total_debt_ebitda" in period
@@ -1045,9 +1039,7 @@ class TestIntegrationFixtures:
         assert flag == Flag.GREEN
 
     def test_aapl_debt_ebitda_flag_from_fixture(self) -> None:
-        """AAPL Debt/EBITDA=1.21 with no peer data (live `ratios` never
-        supplies a peer pair) → absolute-only rule: 1.21 < 3.5 → GREEN.
-        """
+        """AAPL Debt/EBITDA=1.21, no peer data → absolute-only rule: 1.21 < 3.5 → GREEN."""
         ratios = _load_fixture("get_financials_ratios.json")["periods"][0]
         result = flag_metric(
             ratios["total_debt_ebitda"],
@@ -1070,12 +1062,8 @@ class TestIntegrationFixtures:
         assert result == Flag.RED
 
     def test_aapl_debt_equity_flag_from_fixture_is_unavailable(self) -> None:
-        """D/E has no absolute band, and the live `ratios` response never
-        supplies a peer pair — so this leg is UNAVAILABLE on every run, not a
-        peer-judged RED. (It rendered a fictitious RED when the fixture
-        carried an invented peer_median/peer_p75 object; the live tool
-        carries no such object.)
-        """
+        """D/E has no absolute band and no peer data → UNAVAILABLE, not a
+        peer-judged RED (the fixture used to carry an invented peer pair)."""
         ratios = _load_fixture("get_financials_ratios.json")["periods"][0]
         result = flag_metric(
             ratios["debt_equity"],
@@ -1086,8 +1074,7 @@ class TestIntegrationFixtures:
         assert result == Flag.UNAVAILABLE
 
     def test_aapl_ebitda_margin_flag_from_fixture_is_unavailable(self) -> None:
-        """EBITDA margin has no absolute band, and the live `ratios` response
-        never supplies a peer pair — UNAVAILABLE, not a peer-judged GREEN."""
+        """EBITDA margin has no absolute band and no peer data → UNAVAILABLE, not a peer-judged GREEN."""
         ratios = _load_fixture("get_financials_ratios.json")["periods"][0]
         result = flag_metric(
             ratios["ebitda_margin"],
@@ -1184,11 +1171,8 @@ class TestIntegrationFixtures:
         assert result == Flag.RED
 
     def test_distressed_company_debt_equity_is_unavailable(self) -> None:
-        """Distressed fixture: D/E=6.80 has no absolute band, and the live
-        `ratios` response never supplies a peer pair — UNAVAILABLE, not a
-        peer-judged RED. A distressed D/E is still unjudgeable without a peer
-        source; that gap does not get narrower just because the company is
-        in worse shape."""
+        """Distressed fixture: D/E=6.80, no absolute band and no peer data →
+        UNAVAILABLE, not a peer-judged RED, even for a distressed name."""
         ratios = _load_fixture("get_financials_ratios_distressed.json")["periods"][0]
         result = flag_metric(
             ratios["debt_equity"],
@@ -1199,9 +1183,8 @@ class TestIntegrationFixtures:
         assert result == Flag.UNAVAILABLE
 
     def test_distressed_company_ebitda_margin_is_unavailable(self) -> None:
-        """Distressed fixture: EBITDA margin 5.1% has no absolute band, and
-        the live `ratios` response never supplies a peer pair — UNAVAILABLE,
-        not a peer-judged RED."""
+        """Distressed fixture: EBITDA margin 5.1%, no absolute band and no
+        peer data → UNAVAILABLE, not a peer-judged RED."""
         ratios = _load_fixture("get_financials_ratios_distressed.json")["periods"][0]
         result = flag_metric(
             ratios["ebitda_margin"],

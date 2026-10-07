@@ -222,11 +222,8 @@ def flag_metric(
     has_peer = peer_median is not None and peer_p75 is not None
     has_absolute = metric_key in ABSOLUTE_THRESHOLDS
     if not has_peer and not has_absolute:
-        # Registered, but this run has no peer row and the metric carries no
-        # fixed band — so there is no rule to apply. Seven of the registered
-        # keys hit this on every run: the live `ratios` response never
-        # supplies a peer_median/peer_p75 pair for any metric today, so this
-        # is not a per-run gap.
+        # Registered, but no peer row and no fixed band — no rule to apply.
+        # Seven registered keys hit this on every run (see coverage() below).
         return Flag.UNAVAILABLE
 
     peer_flag = _peer_relative_flag(value, peer_median, peer_p75, metric_key)

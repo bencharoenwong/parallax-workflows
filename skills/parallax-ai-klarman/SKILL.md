@@ -81,7 +81,7 @@ Error: Symbol cross-validation failed for <ticker>.
 Cannot render Klarman-style profile — possible wrong-company mapping (see parallax-conventions.md §2).
 ```
 
-Fewer than 4 periods: compute on what is available (minimum 2) and flag the coverage loss; Check 2 always runs on the absolute D/E threshold with the "Peer comparison unavailable" note (no tool in the sequence ever supplies a peer-median D/E — see Step 4); all four checks unavailable → `DATA_UNAVAILABLE`, never a false `no_match`.
+Fewer than 4 periods: compute on what is available (minimum 2) and flag the coverage loss; Check 2 always runs on the absolute D/E threshold with the "Peer comparison unavailable" note (see Step 4); all four checks unavailable → `DATA_UNAVAILABLE`, never a false `no_match`.
 
 ### Step 4 — Compute
 
@@ -144,7 +144,7 @@ Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 ## Failure modes
 
 
-If balance-sheet data is unavailable for 4 periods, compute the checks on whatever is available (minimum 2 periods) and flag the coverage loss. The debt-vs-peers check always runs on the absolute threshold with the note "Peer comparison unavailable — absolute thresholds applied" — no tool in this skill's tool_sequence ever supplies a peer-median D/E, so this is the permanent behavior, not a degraded fallback. If all four checks fail due to missing data, return `DATA_UNAVAILABLE` rather than a false `no_match`.
+If balance-sheet data is unavailable for 4 periods, compute the checks on whatever is available (minimum 2 periods) and flag the coverage loss. The debt-vs-peers check always runs on the absolute threshold with the note "Peer comparison unavailable — absolute thresholds applied" (see Step 4). If all four checks fail due to missing data, return `DATA_UNAVAILABLE` rather than a false `no_match`.
 
 
 ## Done when
