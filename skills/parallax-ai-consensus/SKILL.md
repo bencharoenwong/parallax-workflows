@@ -17,7 +17,7 @@ description: "Runs all installed Parallax AI Investor Profiles (Buffett, Greenbl
 
 ## Gotchas
 
-- Expected Parallax spend: ~85–95 tokens single ticker (sum of the five profiles' per-profile spends, with Greenblatt's own corrected to ~36-41 tokens — see its SKILL.md Gotchas). The ~180–240 basket-of-5 figure in `_parallax/token-costs.md` has not been recomputed against that correction; treat it as stale pending that update rather than as a verified number.
+- Expected Parallax spend: ~85–95 tokens single ticker (sum of the five profiles' per-profile spends, with Greenblatt's own corrected to ~35-40 tokens — see its SKILL.md Gotchas). The ~180–240 basket-of-5 figure in `_parallax/token-costs.md` has not been recomputed against that correction; treat it as stale pending that update rather than as a verified number.
 - JIT-load `_parallax/parallax-conventions.md`, `_parallax/AI-profiles/profile-schema.md`, `_parallax/AI-profiles/output-template.md`, `_parallax/AI-profiles/consensus-config.md`, and ALL profile specs under `_parallax/AI-profiles/profiles/` — Step 0.
 - Do NOT re-implement profile logic — run each dispatcher's workflow as documented in `skills/parallax-ai-<name>/SKILL.md`. Cap basket input at 5 tickers.
 - Super-majority uses ceiling rounding per consensus-config.md — `required = ceil(0.75 × applicable)`; partial matches do NOT count toward the signal but DO count toward factor-level agreement. Factor-level agreement is the highest-value section — never skip it.
