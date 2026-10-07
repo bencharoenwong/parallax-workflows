@@ -62,7 +62,7 @@ get_financials(symbol=<RIC>, statement="balance_sheet")   # Total debt, equity, 
 get_financials(symbol=<RIC>, statement="cash_flow")       # Operating CF, Capex — no fcf field; derive if needed (FCF = cash_from_operating_activities + capital_expenditures)
 get_financials(symbol=<RIC>, statement="income")          # operating_income (EBIT proxy) and interest_expense_net_non_operating for Interest Coverage (see Step 4) — ratios has neither
 get_financials(symbol=<RIC>, statement="ratios")          # D/E, D/EBITDA, current/quick ratio, margins — target-only; no peer_median/peer_p75 anywhere in this response (see Step 4)
-get_peer_snapshot(symbol=<RIC>)                           # peer medians, factor scores
+get_peer_snapshot(symbol=<RIC>)                           # factor scores and pe_ratio only — no peer medians (see Step 4)
 ```
 
 **Batch B — solvency, trend, macro (7 tokens, async).** `call-tool` all three together; `get_financial_analysis` never blocks the rest:
