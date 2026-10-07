@@ -1,7 +1,7 @@
 # House View Stress Test — Feature Design
 
 <!-- authority: observation -->
-<!-- verified: 2026-10-06 -->
+<!-- verified: 2026-10-07 -->
 <!-- overrides: live schema and live responses win -->
 
 Method: autoplan-style review structure, adapted to a CIO setting. Pulled from
@@ -307,7 +307,7 @@ Options (mirrors autoplan, adapted to a view update):
 
 | ID | Mode | Mitigation |
 |---|---|---|
-| M1 | `macro_analyst` returns no `report_date` | mark cell `UNVERIFIABLE_DATA` (separate from `UNCOVERED`); proceed |
+| M1 | No Step 2 response carries a parseable `report_date`/`data_as_of` | `stress.compute_parallax_age_days` returns `None`; `compute_age_delta` returns `"unverifiable"`; divergent cells resolve to `DIVERGENT_FRESH` (CIO Challenges suppressed — only `DIVERGENT_STALE` escalates) with an explicit "Parallax data age: unverifiable" line in the run artifact; proceed |
 | M2 | Parallax MCP not connected | fail loud, no audit write, exit |
 | M3 | View identity at Phase 3 ≠ identity captured at Phase 0 — `view_hash` covers only tilts + excludes, so `view_id`/`version_id` are compared too (a maker re-save of identical tilts mints a fresh `version_id`); checked under the view transaction lock (see `stress.audit_identity`) | abort with "view changed mid-run, retry"; partial work discarded |
 | M4 | Every tilted market is `UNCOVERED` | render full UNCOVERED report; audit entry with `applied=false`; suggest expanding region tilts to broader keys covered by Parallax |
@@ -363,8 +363,8 @@ CODE PATHS                                              CIO FLOWS (stress test r
 [+] stress-house-view/external_comparison.py
   ├── compute_age_delta()                               [+] MCP failure paths
   │   ├── [GAP] ★★★ stale/fresh/both-fresh classifier     ├── [GAP] ★★★  market times out → PARALLAX_SILENT, run completes
-  │   └── [GAP] ★★  parallax_age=null → UNVERIFIABLE_     ├── [GAP] ★★   429 rate-limit on one market → same handling
-  │                  DATA path                            ├── [GAP] ★★   Parallax MCP unreachable → fail-loud, no audit
+  │   └── [GAP] ★★  parallax_age=null → DIVERGENT_FRESH   ├── [GAP] ★★   429 rate-limit on one market → same handling
+  │                  (unverifiable, no CIO Challenge)     ├── [GAP] ★★   Parallax MCP unreachable → fail-loud, no audit
   ├── resolve_cell_state()                                └── [GAP] ★    market not in list_macro_countries → UNCOVERED
   │   ├── [GAP] ★★★ ALIGNED                                              with explicit note (no proxy)
   │   ├── [GAP] ★★★ DIVERGENT_STALE → CIO Challenge     [+] Schema validation gate

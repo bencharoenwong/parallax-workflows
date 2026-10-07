@@ -1,7 +1,7 @@
 # Parallax Skill Conventions
 
 <!-- authority: contract -->
-<!-- verified: 2026-10-06 -->
+<!-- verified: 2026-10-07 -->
 <!-- overrides: none -->
 
 Shared patterns for all `parallax-*` skills. JIT-load from any skill that calls Parallax MCP tools.
@@ -54,7 +54,7 @@ The table below records commonly observed parameter names. It is a maintenance a
 | `macro_analyst` | `market` (not `country`) | string | e.g., `"United States"`, `"Japan"`. Matches names returned by `list_macro_countries`. |
 | `macro_analyst` | `component` | string | e.g., `"tactical"`, `"sectors"`, `"factors"`. See `list_macro_countries` next_steps for others. |
 | `build_stock_universe` | `query` (not `description`) | string | Free-text sector-scoped query, e.g., `"US large-cap technology software"`. Broad/abstract queries time out. |
-| `get_financials` | `statement` | string | `"summary"`, `"balance_sheet"`, `"cash_flow"`, `"ratios"`. Defaults to `"summary"`. |
+| `get_financials` | `statement` | string | `"summary"`, `"income"`, `"balance_sheet"`, `"cash_flow"`, `"ratios"`. Defaults to `"summary"`. |
 | `get_financials` | `periods` | integer | Defaults to 4. **Do NOT pass as string via `:periods=4` syntax** — MCP serializes it as a string and fails validation. Rely on server default or pass as typed integer at call site. |
 | `get_score_analysis` | `weeks` | integer | Defaults to 52. Same serialization caveat as `periods`. |
 | `get_stock_outlook` | `limit` | integer | Defaults to 20 (applies to `dividends` aspect, range 1-100). Same serialization caveat as `periods`. |
