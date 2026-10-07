@@ -325,10 +325,25 @@ def test_macro_analyst_mock_has_realistic_values():
         assert is_iso_date(data["report_date"])
 
 
+def _company_currency(company_info: dict) -> str:
+    """Read `currency` from get_company_info's response shape.
+
+    BUG-002: robust to both the current flat shape
+    (``{"currency": ...}``) and the nested shape a pending upstream PR
+    introduces (``{"success": ..., "symbol": ..., "data": {"currency": ...}}``).
+    This branch must not assume either shape, since the two land on
+    different schedules -- see SKILL.md's dividend-currency-fallback
+    Gotcha for the caller-facing wording."""
+    if "data" in company_info:
+        return company_info["data"]["currency"]
+    return company_info["currency"]
+
+
 def test_get_stock_outlook_dividends_mock_has_realistic_values():
     data = load_mock("get_stock_outlook_dividends")
     assert isinstance(data, list) and data, "dividend records should be a non-empty list"
     company_info = load_mock("get_company_info")
+    company_currency = _company_currency(company_info)
     for row in data:
         if "symbol" in row:
             assert "." in row["symbol"], f"{row['symbol']!r} is not RIC form"
@@ -338,7 +353,7 @@ def test_get_stock_outlook_dividends_mock_has_realistic_values():
         # currency per get_company_info -- a mismatch here is exactly the
         # dividend-currency-mismatch case SKILL.md's Gotcha documents, and
         # the happy-path fixture must not accidentally model it.
-        assert row["currency"] == company_info["currency"]
+        assert row["currency"] == company_currency
         if "record_date" in row and "pay_date" in row:
             assert row["record_date"] <= row["pay_date"]
 
