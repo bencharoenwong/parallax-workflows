@@ -37,7 +37,7 @@ Parallax uses token-based pricing. All tools consume the same number of tokens w
 | Tool | Description | 10-holding portfolio |
 |---|---|---|
 | `quick_portfolio_scores` | Portfolio factor scores | 10 tokens |
-| `check_portfolio_redundancy` | Overlap detection | 10 tokens |
+| `check_portfolio_redundancy` | Overlap detection | 1 token per holding checked, up to 100 tokens (10 tokens at 10 holdings) |
 
 > **Tip:** For large portfolios (15+ holdings), `analyze_portfolio` at 5 tokens flat may be more cost-effective than `quick_portfolio_scores` at 1 token per holding.
 
@@ -93,7 +93,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 |---|---|---|
 | `/parallax-thematic-screen` | **~19** (default) / **~14** (`--no-macro`) | Universe build + 5 snapshots + 3 financials + `list_macro_countries` + `macro_analyst` × up to 3 markets + `get_telemetry` regime signal. `--no-macro` reverts to the prior ~14-token baseline. |
 | `/parallax-portfolio-builder` | **36** | Universe + 10 snapshots + redundancy + validation |
-| `/parallax-portfolio-checkup` | **36** | 2x fan-out (20) + 3 macro markets (15) |
+| `/parallax-portfolio-checkup` | **46** | 2x fan-out (20) + 3 macro markets (15) + `check_portfolio_redundancy` (10) + `list_macro_countries` (1) |
 | `/parallax-morning-brief` | **50** | Telemetry + macro + 2x fan-out + 3 news |
 | `/parallax-watchlist-monitor` | **54** | 10 score scans + news/tech/analyst for ~4 flagged |
 | `/parallax-explain-portfolio` | **70** | 10 company-info checks + 10 primary scoring calls + 10 score trends + telemetry + country listing + 2 macro + 3 news + 3 detractor snapshots + 10 `etf_profile` probes = 70 |

@@ -18,7 +18,7 @@ description: "Individual investor portfolio checkup: health flags, factor scores
 
 ## Gotchas
 
-- Expected Parallax spend: ~46 tokens at 10 holdings (`_parallax/token-costs.md`): 2× per-holding fan-out (20) + up to 3 macro markets (15) + `check_portfolio_redundancy` at 1 credit per holding checked (10).
+- Expected Parallax spend: ~46 tokens at 10 holdings (`_parallax/token-costs.md`): 2× per-holding fan-out (20) + up to 3 macro markets (15) + `check_portfolio_redundancy` at 1 credit per holding checked (10) + `list_macro_countries` (1).
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §2 identity cross-check, §3 parallel execution, §4 fallbacks, §11 sensitivity, §13 audience mode, §14 host primitives.
 - JIT-load `references/health-flags.md` for the 5-flag system, thresholds, the mixed-exchange fallback, and the Verdict-sensitivity wording.
 - Per-holding `get_peer_snapshot` + `get_company_info` cross-validation is the primary scoring path; `quick_portfolio_scores` is the V1 fallback with known symbol-mapping bugs for non-US numeric tickers. Never fire it unconditionally.
