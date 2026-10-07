@@ -16,7 +16,7 @@ The known field alone already clears the cutoff, so the ratio is at least 6.0% r
 
 - Compliance Results: `NON-COMPLIANT — interest_investment_income_operating alone is 6.0% of total_revenue (≥ 5%); interest_investment_income_non_operating unavailable`
 - Key Ratios: `Interest-and-investment income / Total revenue: ≥ 6.0% (lower bound; interest_investment_income_non_operating unavailable)`
-- Verdict sensitivity: Ratio 3 is not selected — a lower bound has no exact distance to the cutoff. If Ratios 1 and 2 pass, Ratio 3 is the only failing ratio, so no passing ratio is named either: the line states that the verdict rests on a lower bound, that the full Ratio 3 is unknown because `interest_investment_income_non_operating` is unavailable, and that the verdict would change only if the measured interest-and-investment income fell below 5% of `total_revenue`.
+- Verdict sensitivity: Ratio 3 gets no exact distance — a lower bound has none. If Ratios 1 and 2 pass, Ratio 3 is the only failing ratio, so no passing ratio is named either: the line states that the verdict rests on a lower bound, that the full Ratio 3 is unknown because `interest_investment_income_non_operating` is unavailable, and that the verdict would change only if the measured interest-and-investment income fell below 5% of `total_revenue`.
 
 ## 3. Single field < 5%, other absent → UNVERIFIED
 
@@ -35,3 +35,19 @@ Inputs: `op` = 28 (positive), `non_op` = -10 (negative — a loss, per the live-
 Without flooring, a naive sum would be 28 + (-10) = 18, and 18 / 500 = 3.6% < 5% — which would wrongly let a loss in one field offset income in the other. With the required floor, `max(non_op, 0)` = 0, so the sum is 28 + 0 = 28, and 28 / 500 = 5.6% ≥ 5%.
 
 Verdict: **NON-COMPLIANT** — the floored `op` field alone already proves the FAIL (case 2's logic), and the negative `non_op` field cannot rescue it. Compliance Results: `NON-COMPLIANT — interest_investment_income_operating alone is 5.6% of total_revenue (≥ 5%); interest_investment_income_non_operating is present but negative (-10) and floored at 0, not netted against the operating field`.
+
+## Verdict sensitivity with more than one failing ratio
+
+A NON-COMPLIANT verdict flips only if every failing ratio falls below its cutoff, so the sensitivity line lists every failing ratio, not just one.
+
+### 6. Ratio 1 fails exactly; Ratio 3 fails on a lower bound
+
+Inputs: total debt = 40, total assets = 100 → Ratio 1 = 40% (FAIL). `cash_and_short_term_investments` = 10 → Ratio 2 = 10% (PASS). `op` = 30, `non_op` absent, `total_revenue` = 500 → Ratio 3 ≥ 6.0% (lower-bound FAIL, as in case 2). Verdict: **NON-COMPLIANT**.
+
+Verdict sensitivity: both Ratio 1 and Ratio 3 would need to fall below their cutoffs. Ratio 1 is 7pp above 33%. Ratio 3 is a lower bound (≥ 6.0%, full value unknown because `interest_investment_income_non_operating` is unavailable), so it has no exact distance. Moving Ratio 1 below 33% alone leaves the name NON-COMPLIANT. Even if both cleared, the overall verdict could reach only `UNVERIFIED`: a Ratio 3 below 5% with `non_op` still absent is unchecked, per case 3.
+
+### 7. Ratios 1 and 2 both fail exactly
+
+Inputs: total debt = 45, `cash_and_short_term_investments` = 40, total assets = 100 → Ratio 1 = 45%, Ratio 2 = 40% (both FAIL). `op` = 8, `non_op` = 12, `total_revenue` = 500 → Ratio 3 = 4.0% (PASS, both fields present). Verdict: **NON-COMPLIANT**.
+
+Verdict sensitivity: both Ratio 1 (12pp above 33%) and Ratio 2 (7pp above 33%) would need to fall below 33%. Moving either one alone leaves the name NON-COMPLIANT. No ratio is unchecked, so the flip target is `COMPLIANT`.
