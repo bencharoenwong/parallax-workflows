@@ -3,32 +3,67 @@ Daily contribution math for the CIO letter prep skill.
 
 Pure-Python (stdlib only) helper that computes per-holding contribution to
 portfolio total return over a period by reconstructing daily portfolio
-weights from a prior snapshot plus a trade log, then summing daily
-contributions across the period.
+values from a prior snapshot plus a trade log, then summing the per-day
+dollar P&L across the period.
 
-Math approach
--------------
+Math approach — replicates the server's method
+-------------------------------------------------
+
+This module replicates, in weight space, the same method the Parallax
+server (`analytics-engine-v2`) uses to turn a portfolio snapshot plus a
+trade log into a value path:
+
+  * Between rebalances, each holding is buy-and-hold: its value compounds
+    daily by `value[d] = value[d-1] * (1 + r[d])`, so weights DRIFT with
+    relative performance rather than staying fixed.
+  * On a rebalance date D, D's return is applied to the pre-rebalance
+    (drifted) values FIRST; only after that does the book reweight to the
+    new target weights — i.e. the trade is applied after D's close, exactly
+    like the server.
+  * Portfolio value is the sum of holding values. Per-holding contribution
+    is that holding's dollar P&L (the sum of its own daily price_pl terms,
+    which EXCLUDES any value transferred in or out at a rebalance — a
+    rebalance moves value between holdings, it does not create return).
+  * `portfolio_total_return = final_total_value / initial_total_value - 1`,
+    computed independently of the per-holding P&L sum (see "Reconciliation
+    gate" below) — the same identity the server reports.
 
 For each return-day d in (period_start, period_end]:
-    r_i[d] = price_i[d] / price_i[d-1] - 1                  (per-holding daily return)
-    c_i[d] = w_i[d] * r_i[d]                                (per-holding daily contribution)
-    r_p[d] = sum_i c_i[d]                                   (portfolio daily return)
+    r_i[d] = (price_i[d] + dividend_i[d]) / price_i[d-1] - 1
+    price_pl_i[d] = value_i[d-1] * r_i[d]
+    value_i[d] = value_i[d-1] + price_pl_i[d]           (drift)
+    # ... then, only on a date with trades dated d:
+    total_value[d] = sum_i value_i[d]                    (post-return, pre-rebalance)
+    target_weight_i[d] = target_weight_i[d-1] + weight_delta_i[d]
+    value_i[d] = target_weight_i[d] * total_value[d]      (reweight, after d's close)
 
-Period totals (ARITHMETIC sums, NOT geometric compounding):
-    contribution[i] = sum_d c_i[d]
-    portfolio_total_return = sum_d r_p[d]
+contribution[i] = sum_d price_pl_i[d]
+portfolio_total_return = sum_i value_i[final] / sum_i value_i[initial] - 1
 
-By construction, sum_i contribution[i] == portfolio_total_return exactly
-(modulo floating-point error). The reconciliation gate enforces this within
-a tolerance and raises ReconciliationError on violation.
+Because a rebalance only ever MOVES value between holdings (it preserves
+the post-return total as long as the target weights it reweights to sum to
+1.0), `sum_i contribution[i]` telescopes to exactly
+`sum_i value_i[final] - sum_i value_i[initial]` — the same total return the
+server reports, to floating-point precision, not merely within a tolerance
+that papers over an arithmetic-vs-geometric gap. There is no such gap here:
+this module compounds, it does not sum arithmetically.
 
-We use ARITHMETIC summing rather than geometric linking on purpose: it makes
-the per-holding decomposition clean (sum-of-daily-contributions == portfolio
-total) and avoids the linking-error correction that geometric attribution
-schemes (Carino, Menchero, etc.) require. The reported portfolio_total_return
-is therefore the arithmetic sum of daily portfolio returns, NOT the
-geometrically compounded period return; for short letter periods (one month)
-the gap is small but it is non-zero and callers should be aware.
+Reconciliation gate
+--------------------
+
+`contributions` is accumulated as the running sum of each day's
+`price_pl_i[d]` terms. `portfolio_total_return` is derived SEPARATELY, from
+the literal end state of the per-holding `value` dict (which also reflects
+every rebalance, including a malformed one). The two are therefore
+independent accumulations of the same underlying walk, and the gate
+(`|sum(contributions) - portfolio_total_return| > 1bp` -> `ReconciliationError`)
+is a real identity check: it is unreachable for a clean input (any book with
+no trades, or whose trade deltas sum to zero on net), and it fires whenever
+a rebalance's target weights do not sum to 1.0 at the time they are applied
+even transiently — because that rebalance manufactures or destroys value
+that the per-holding P&L sum never counted. See
+`test_reconciliation_gate_fires_on_a_transient_weight_imbalance_that_nets_to_zero`
+in `test_contribution_edges.py` for a worked, reachable example.
 
 Price-return prices contract
 -----------------------------
@@ -45,10 +80,19 @@ contract: it bakes the dividend into a smoothed price ramp instead of the
 discrete jump it actually is on the ex-date, and if a `dividend_schedule` is
 also supplied for the same symbol, the dividend is counted twice. See
 test_total_return_style_prices_plus_dividend_schedule_double_counts_negative_control
-for a concrete demo, and test_price_return_prices_with_ex_dividend_drop_compute_correctly
-for confirmation that price-return input (including an ex-dividend price
-drop) computes the price-only return correctly when no `dividend_schedule`
-is supplied.
+for a concrete demo.
+
+Calendar handling — forward-fill, zero return
+-----------------------------------------------
+
+The timeline is the union of every symbol's price dates in
+[period_start, period_end]; every symbol involved MUST have a price exactly
+on `period_start` (there is nothing earlier to carry forward from). For any
+LATER timeline date on which a given symbol has no price of its own — a
+vendor gap, a market holiday the feed skips, a different exchange calendar —
+that symbol's close is carried forward from its last known price and its
+return for that day is exactly 0, matching the server's calendar-daily grid
+with forward-filled closes.
 
 Dividend schedule (optional) — total return, not price-only
 -------------------------------------------------------------
@@ -59,9 +103,7 @@ server-side fields this skill reconciles against (`total_price_pl`,
 `total_pl`, `total_return`, per-row `price_pl`) are TOTAL-RETURN fields:
 dividends are included (added to the price on the ex-date, then carried
 forward), and only FX is isolated separately (`total_fx_pl` plus a
-price x FX cross term). A price-only local computation therefore does NOT
-match `total_price_pl` on a dividend-paying book — the earlier assumption
-that `total_price_pl` was price-only was wrong.
+price x FX cross term).
 
 To compute a like-for-like local total return, pass the optional
 `dividend_schedule` parameter: `{symbol: {ex_date: cash_amount}}`, cash
@@ -75,13 +117,6 @@ comparable to `total_price_pl / initial_value` — not a price-only return.
 Omitting `dividend_schedule` (the default, `None` -> treated as empty)
 preserves the original price-only behavior documented above; it is not
 removed, since not every caller has dividend data to supply.
-
-The reported total still sums arithmetically across days, not
-geometrically (see "Arithmetic vs geometric" below), so even with a correct
-`dividend_schedule` the local total return will differ from the server's
-compounded figure by a small amount for multi-day periods — this is a
-known, documented gap, not a bug (see
-test_vz_single_holding_with_dividend_schedule_matches_server_total_return).
 
 Trade convention
 ----------------
@@ -100,11 +135,14 @@ Therefore:
     drops to weight 0 from D+1 onward.
 
 Trade weight_deltas in the same period must sum to zero across all symbols
-(weight redistribution preserves total = 1.0).
+(weight redistribution preserves total = 1.0). This is NOT enforced
+strictly by this function (see docstring of `daily_contribution`); the
+reconciliation gate above is what catches material drift from it.
 """
 
 from __future__ import annotations
 
+import math
 from datetime import date as _date_cls
 from typing import Iterable
 
@@ -158,9 +196,10 @@ def daily_contribution(
 ) -> dict:
     """Compute per-holding contribution to portfolio total return.
 
-    See module docstring for math approach, the price-return-prices
-    contract, the optional dividend_schedule / total-return extension, and
-    trade convention.
+    See module docstring for the compounding/rebalancing method this
+    replicates from the server, the price-return-prices contract, the
+    calendar forward-fill rule, the optional dividend_schedule / total-return
+    extension, and the trade convention.
 
     Parameters
     ----------
@@ -168,19 +207,24 @@ def daily_contribution(
         {symbol: weight} at period start. Weights must sum to ~1.0
         (within DEFAULT_WEIGHT_SUM_TOLERANCE).
     current_portfolio : dict[str, float]
-        {symbol: weight} at period end. Sum tolerance same as prior.
+        {symbol: weight} at period end. This is the DECLARED target weight
+        after the last trade (`prior_portfolio` walked forward through
+        `trade_log`), not the drifted/compounded ending weight — same
+        convention `analyze_portfolio`'s multi-date `portfolio` array uses.
+        Sum tolerance same as prior.
     trade_log : list[dict]
         Ordered (chronologically) list of trades. Each entry has
         keys 'symbol', 'action', 'date', 'weight_delta'. Weight deltas
         on the same date should sum to zero across symbols (the function
-        does NOT enforce this strictly; weights are recomputed daily and
-        the reconciliation gate catches material drift).
+        does NOT enforce this strictly; the reconciliation gate below
+        catches material drift from it).
     daily_prices : dict[str, dict[str, float]]
         {symbol: {ISO_date: price_return_price}}. Raw daily close, no
-        dividend adjustment. Every symbol that
-        appears in prior_portfolio, in current_portfolio, or as the
-        'symbol' of any trade in trade_log MUST have an entry covering
-        all required dates.
+        dividend adjustment. Every symbol that appears in prior_portfolio,
+        in current_portfolio, or as the 'symbol' of any trade in trade_log
+        MUST have an entry with a price exactly on `period_start`; any later
+        timeline date it lacks is forward-filled from its last known price
+        (zero return that day) rather than erroring.
     period_start : str
         ISO 'YYYY-MM-DD'. First date of the period (no return computed
         for this date — only used as the prior price for return-day 1).
@@ -189,12 +233,11 @@ def daily_contribution(
     dividend_schedule : dict[str, dict[str, float]] | None
         Optional. {symbol: {ex_date: cash_amount}}, cash amount in the
         holding's own listing currency. ex_date MUST fall strictly after
-        period_start and on/before period_end, and MUST be a date present
-        in the computed timeline (a date in daily_prices within the
-        period) — there is no return day for period_start itself, so a
-        dividend dated period_start can never be applied and is rejected
-        rather than silently dropped. When supplied for a given
-        {symbol, ex_date}, that day's return becomes
+        period_start and on/before period_end, and MUST be a date on which
+        that SYMBOL has an actual (non-forward-filled) close in
+        `daily_prices` — a forward-filled day cannot carry an ex-dividend
+        event. Cash amounts must be finite and non-negative. When supplied
+        for a given {symbol, ex_date}, that day's return becomes
         (price[ex_date] + cash_amount) / price[prior_date] - 1 instead of
         the plain price-return formula, turning the reported
         portfolio_total_return into a total return before FX (see module
@@ -209,7 +252,7 @@ def daily_contribution(
     dict
         {
             'contributions': {symbol: contribution_decimal, ...},
-            'portfolio_total_return': float,  # arithmetic sum of daily portfolio returns
+            'portfolio_total_return': float,  # final_total/initial_total - 1
             'reconciliation_diff': float,      # sum(contributions) - portfolio_total_return
         }
 
@@ -218,16 +261,19 @@ def daily_contribution(
     ValueError
         On input shape / consistency violations:
         - period_end before period_start
-        - prior or current weights don't sum to ~1.0
-        - missing prices for a held / traded holding
+        - prior or current weights don't sum to ~1.0 (or are NaN)
+        - missing prices for a held / traded holding, or no price on
+          period_start for an involved symbol
         - trade_log not chronologically ordered
         - invalid action vocabulary
         - trade dates outside [period_start, period_end]
-        - dividend_schedule naming an unknown symbol, an ex_date outside
-          (period_start, period_end], or an ex_date not present in the
-          computed timeline
+        - dividend_schedule naming an unknown symbol, a non-finite or
+          negative cash amount, an ex_date outside (period_start, period_end],
+          or an ex_date on which that symbol has no actual close
+        - current_portfolio inconsistent with prior_portfolio + trade_log
     ReconciliationError
-        If abs(sum(contributions) - portfolio_total_return) > tolerance.
+        If abs(sum(contributions) - portfolio_total_return) > tolerance, or
+        if that diff is not finite (a NaN diff is never treated as passing).
     """
     # ---- 1. Validate dates ------------------------------------------------
     start_d = _parse_iso(period_start, field="period_start")
@@ -272,85 +318,117 @@ def daily_contribution(
             f"period_start ({period_start}) is not present in any daily_prices series"
         )
 
-    # ---- 5. Validate every involved symbol has prices for all timeline dates
+    # ---- 5. Every involved symbol must have a price ON period_start. A
+    # later gap is forward-filled during the walk (step 7) rather than
+    # rejected here — see the module docstring's calendar-handling section.
     for sym in symbols:
         series = daily_prices.get(sym)
         if series is None:
             raise ValueError(
                 f"missing daily_prices entry for symbol '{sym}' (held or traded)"
             )
-        for d_str in timeline:
-            if d_str not in series:
-                raise ValueError(
-                    f"missing price for symbol '{sym}' on date {d_str}"
-                )
+        if period_start not in series:
+            raise ValueError(
+                f"missing price for symbol '{sym}' on date {period_start} "
+                "(period_start) — there is no earlier price to forward-fill from"
+            )
 
     # ---- 5b. Validate dividend_schedule (optional) ------------------------
     dividend_schedule = dividend_schedule or {}
-    _validate_dividend_schedule(dividend_schedule, symbols, set(timeline), start_d, end_d)
+    _validate_dividend_schedule(dividend_schedule, symbols, daily_prices, start_d, end_d)
 
     # ---- 6. Group trades by date for fast lookup --------------------------
     trades_by_date: dict[str, list[dict]] = {}
     for trade in trade_log:
         trades_by_date.setdefault(trade["date"], []).append(trade)
 
-    # ---- 7. Walk the timeline, accumulating contributions -----------------
-    # weights[symbol] is the weight effective for the next return day's move.
-    weights: dict[str, float] = {s: 0.0 for s in symbols}
+    # ---- 7. Walk the timeline, compounding per-holding values and
+    # reweighting on trade dates — see module docstring.
+    #
+    # `target_weight` is the DECLARED weight (prior_portfolio walked through
+    # trade_log deltas); it is what current_portfolio is cross-checked
+    # against (step 7b) and what a rebalance reweights `value` to.
+    # `value` is the actual compounding per-holding value, normalized so the
+    # portfolio's total starts at exactly 1.0 (the ~1e-3 rounding slop
+    # `prior_portfolio` is allowed to carry is snapped to 1.0 here so a
+    # rebalance's `target_weight * total_value` reweight is dimensionally
+    # exact rather than leaking that slop into every subsequent rebalance).
+    initial_total = sum(prior_portfolio.values())
+    scale = 1.0 / initial_total
+
+    target_weight: dict[str, float] = {s: 0.0 for s in symbols}
     for sym, w in prior_portfolio.items():
-        weights[sym] = w
+        target_weight[sym] = w * scale
+    value: dict[str, float] = dict(target_weight)
+
+    last_price: dict[str, float] = {sym: daily_prices[sym][period_start] for sym in symbols}
 
     # Trades dated period_start apply AFTER period_start's close, which is
-    # BEFORE return-day 1, so we apply them up-front before walking.
-    for trade in trades_by_date.get(period_start, []):
-        sym = trade["symbol"]
-        weights[sym] = weights.get(sym, 0.0) + trade["weight_delta"]
+    # BEFORE return-day 1, so we apply them (and the resulting reweight)
+    # up-front before walking.
+    start_trades = trades_by_date.get(period_start, [])
+    if start_trades:
+        for trade in start_trades:
+            sym = trade["symbol"]
+            target_weight[sym] = target_weight.get(sym, 0.0) + trade["weight_delta"]
+        total_value_t = sum(value.values())
+        for sym in symbols:
+            value[sym] = target_weight.get(sym, 0.0) * total_value_t
 
     contributions: dict[str, float] = {s: 0.0 for s in symbols}
-    portfolio_total_return: float = 0.0
 
     for i in range(1, len(timeline)):
-        prev_date = timeline[i - 1]
         cur_date = timeline[i]
 
-        # Returns on day cur_date use weights effective DURING the move from
-        # prev_date to cur_date — i.e., the post-trade weights from the
-        # previous iteration (or the initial weights for i==1).
         for sym in symbols:
-            p_prev = daily_prices[sym][prev_date]
-            p_cur = daily_prices[sym][cur_date]
+            series = daily_prices[sym]
+            p_prev = last_price[sym]
             if p_prev == 0:
                 raise ValueError(
-                    f"price for '{sym}' on {prev_date} is zero; cannot compute return"
+                    f"price for '{sym}' is zero (as of its last known close); "
+                    f"cannot compute the return into {cur_date}"
                 )
-            # Dividend add-back: on an ex-date present in dividend_schedule,
-            # the day's total return is (price + cash dividend) / prior
-            # price - 1 instead of the plain price-return formula. Every
-            # other day (and every symbol/date absent from the schedule)
-            # is unaffected — this is what turns a price-only computation
-            # into a total return before FX (see module docstring).
+            if cur_date in series:
+                p_cur = series[cur_date]
+                last_price[sym] = p_cur
+            else:
+                # Forward-fill: no price for this symbol on this calendar
+                # date (vendor gap, holiday the feed skips, different
+                # exchange calendar) — carry the last known close forward,
+                # which makes this day's return exactly 0 for this symbol.
+                p_cur = p_prev
+
             dividend = dividend_schedule.get(sym, {}).get(cur_date, 0.0)
             r = (p_cur + dividend) / p_prev - 1.0
-            c = weights[sym] * r
-            contributions[sym] += c
-            portfolio_total_return += c
+            price_pl = value[sym] * r
+            contributions[sym] += price_pl
+            value[sym] += price_pl  # value_i[t] = value_i[t-1] * (1 + r)
 
-        # After the day's return, apply trades dated cur_date so they take
-        # effect for the NEXT iteration's return computation.
-        for trade in trades_by_date.get(cur_date, []):
-            sym = trade["symbol"]
-            weights[sym] = weights.get(sym, 0.0) + trade["weight_delta"]
+        # After the day's return, apply any trades dated cur_date: reweight
+        # the post-return (pre-rebalance) total to the new target weights.
+        # This is the "trade after D's close" convention, and it is also
+        # exactly where a target_weight sum that drifts away from 1.0
+        # manufactures or destroys value — see the reconciliation-gate
+        # section of the module docstring.
+        day_trades = trades_by_date.get(cur_date, [])
+        if day_trades:
+            total_value_t = sum(value.values())
+            for trade in day_trades:
+                sym = trade["symbol"]
+                target_weight[sym] = target_weight.get(sym, 0.0) + trade["weight_delta"]
+            for sym in symbols:
+                value[sym] = target_weight.get(sym, 0.0) * total_value_t
 
-    # ---- 7b. Cross-check reconstructed ending weights vs current_portfolio
-    # The trade walk above produced `weights` as the ending state implied by
-    # prior_portfolio + trade_log. The caller's `current_portfolio` claims
-    # the ending state independently. If the two disagree by more than
-    # DEFAULT_WEIGHT_SUM_TOLERANCE for any symbol present in either dict,
-    # the inputs are internally inconsistent — fail loudly rather than
+    # ---- 7b. Cross-check the DECLARED ending weights vs current_portfolio
+    # `target_weight` is the ending state implied by prior_portfolio +
+    # trade_log, walked forward with no drift (the same convention
+    # `current_portfolio` is defined under). If the two disagree by more
+    # than DEFAULT_WEIGHT_SUM_TOLERANCE for any symbol present in either
+    # dict, the inputs are internally inconsistent — fail loudly rather than
     # silently letting sub-tolerance trade-log drift accumulate.
-    cross_check_symbols = set(weights.keys()) | set(current_portfolio.keys())
+    cross_check_symbols = set(target_weight.keys()) | set(current_portfolio.keys())
     for sym in cross_check_symbols:
-        reconstructed = weights.get(sym, 0.0)
+        reconstructed = target_weight.get(sym, 0.0)
         claimed = current_portfolio.get(sym, 0.0)
         diff = reconstructed - claimed
         if abs(diff) > DEFAULT_WEIGHT_SUM_TOLERANCE:
@@ -362,8 +440,14 @@ def daily_contribution(
             )
 
     # ---- 8. Reconciliation gate ------------------------------------------
+    # portfolio_total_return is derived from the literal end state of
+    # `value` — independently of the running `contributions` sum above —
+    # so this is a real identity check, not a tautology. See the
+    # reconciliation-gate section of the module docstring.
+    final_total = sum(value.values())
+    portfolio_total_return = final_total - 1.0
     diff = sum(contributions.values()) - portfolio_total_return
-    if abs(diff) > reconciliation_tolerance:
+    if not math.isfinite(diff) or abs(diff) > reconciliation_tolerance:
         raise ReconciliationError(diff=diff, tolerance=reconciliation_tolerance)
 
     return {
@@ -392,10 +476,12 @@ def validate_contributions(
     Raises
     ------
     ReconciliationError
-        If abs(diff) > tolerance.
+        If abs(diff) > tolerance, or if diff is not finite (a NaN diff is
+        never treated as passing — `abs(nan) > tolerance` is False in
+        Python, which would otherwise let a NaN silently clear the gate).
     """
     diff = sum(contributions.values()) - portfolio_total_return
-    if abs(diff) > tolerance:
+    if not math.isfinite(diff) or abs(diff) > tolerance:
         raise ReconciliationError(diff=diff, tolerance=tolerance)
     return diff
 
@@ -416,9 +502,9 @@ def _validate_weights_sum(weights: dict[str, float], label: str) -> None:
     if not weights:
         raise ValueError(f"{label} is empty")
     total = sum(weights.values())
-    if abs(total - 1.0) > DEFAULT_WEIGHT_SUM_TOLERANCE:
+    if not math.isfinite(total) or abs(total - 1.0) > DEFAULT_WEIGHT_SUM_TOLERANCE:
         raise ValueError(
-            f"{label} weights sum to {total:.6f}, expected ~1.0 "
+            f"{label} weights sum to {total!r}, expected ~1.0 "
             f"(tolerance {DEFAULT_WEIGHT_SUM_TOLERANCE})"
         )
 
@@ -455,7 +541,7 @@ def _validate_trade_log(
 def _validate_dividend_schedule(
     dividend_schedule: dict[str, dict[str, float]],
     symbols: set[str],
-    timeline_dates: set[str],
+    daily_prices: dict[str, dict[str, float]],
     start_d: _date_cls,
     end_d: _date_cls,
 ) -> None:
@@ -466,9 +552,13 @@ def _validate_dividend_schedule(
     is rejected rather than silently ignored); carry an ex_date strictly
     after period_start and on/before period_end (period_start has no
     return day, so a dividend dated period_start can never be applied and
-    is rejected rather than silently dropped); and fall on a date actually
-    present in the timeline (an ex_date outside the available price dates
-    would otherwise silently no-op instead of being applied).
+    is rejected rather than silently dropped); fall on a date where that
+    SYMBOL has an actual, non-forward-filled close in daily_prices (an
+    ex-date is a trading day on the symbol's own exchange, so a forward-
+    filled or otherwise priceless day cannot carry one); and carry a
+    finite, non-negative cash amount (BUG-005: a NaN or negative dividend
+    must be rejected here rather than silently corrupting a downstream
+    gate that compares it with `>`, which treats NaN as always-False).
     """
     for sym, by_date in dividend_schedule.items():
         if sym not in symbols:
@@ -489,17 +579,21 @@ def _validate_dividend_schedule(
                     "has no return day, so a dividend dated period_start can "
                     "never be applied"
                 )
-            if ex_date not in timeline_dates:
+            if ex_date not in daily_prices.get(sym, {}):
                 raise ValueError(
                     f"dividend_schedule['{sym}']['{ex_date}'] is not a date "
-                    "present in the computed timeline (no price data for "
-                    "that date) — the dividend would silently never be "
-                    "applied"
+                    f"present in '{sym}''s own daily_prices entries (an ex-date "
+                    "must be an actual close for that symbol, not a "
+                    "forward-filled day) — the dividend would silently never "
+                    "be applied"
                 )
             if not isinstance(cash_amount, (int, float)) or isinstance(cash_amount, bool):
                 raise ValueError(
                     f"dividend_schedule['{sym}']['{ex_date}'] cash amount "
                     f"must be a number, got {type(cash_amount).__name__}"
                 )
-
-
+            if not math.isfinite(cash_amount) or cash_amount < 0:
+                raise ValueError(
+                    f"dividend_schedule['{sym}']['{ex_date}'] cash amount "
+                    f"must be finite and >= 0, got {cash_amount!r}"
+                )

@@ -5,6 +5,11 @@ Convention notes (must match the implementation):
 - Dates are ISO 'YYYY-MM-DD'. We use 2026-01-01..2026-01-31 (31 calendar dates,
   30 return days). Day 0 = 2026-01-01 (period_start), Day 30 = 2026-01-31.
 - Returns are computed for return-days 1..30: r_i[d] = price[d]/price[d-1] - 1.
+- Per-holding value COMPOUNDS daily (value[d] = value[d-1] * (1 + r[d])); a
+  holding's weight therefore drifts with its own relative performance unless
+  a rebalance resets it. A rebalance applies AFTER its date's close: that
+  day's return still accrues to the PRE-rebalance value, and only then does
+  the book reweight to the new target.
 - Trade convention: a trade with date D applies AFTER day D's close. The new
   weights take effect for the next return day (D+1). So:
     * "Added a holding on return-day 15" => trade.date = day 14 (2026-01-15
@@ -17,6 +22,10 @@ To avoid off-by-one ambiguity in prose we always express trade dates as
 explicit ISO strings tied to which return-days the new weights are in effect.
 
 All expected values are HAND-COMPUTED in the test comments, not reverse-derived.
+Where a fixture has no rebalance before the days that move, a single holding's
+own compounded return telescopes to a simple end/start price ratio
+(`P_end / P_start - 1`), independent of the path between them — several tests
+below rely on that identity rather than summing per-day terms.
 """
 
 from __future__ import annotations
@@ -63,41 +72,31 @@ def _flat_then_jump_series(start: float, end: float, days: int) -> dict[str, flo
 def test_held_entire_period_no_trades():
     """3 holdings, equal weights, no trades over 30 return-days.
 
-    AAPL: 100 -> 130 (linear). Daily price[d] = 100 + d. Daily return r[d] = 1/(99+d).
-    MSFT: 100 -> 100 (flat). Daily return = 0.
-    JPM:  100 -> 70  (linear). Daily price[d] = 100 - d. Daily return r[d] = -1/(101-d).
+    No rebalance ever occurs, so each holding's own value compounds
+    independently of the others and telescopes exactly to its end/start
+    price ratio — the per-day path shape (linear here) is irrelevant to the
+    total, only the endpoints matter:
 
-    All weights = 1/3 throughout.
+      AAPL: 100 -> 130. contribution = (1/3) * (130/100 - 1) = (1/3)*0.30 = +0.10
+      JPM:  100 -> 70.  contribution = (1/3) * (70/100 - 1)  = (1/3)*-0.30 = -0.10
+      MSFT: 100 -> 100. contribution = 0
 
-    Hand-computed sum of arithmetic daily returns:
-      AAPL: sum_{d=1..30} 1/(99+d) = sum_{k=100..129} 1/k
-      JPM:  sum_{d=1..30} -1/(101-d) = -sum_{k=71..100} 1/k
-      MSFT: 0
-
-    Contribution per holding = (1/3) * sum_of_daily_returns_for_holding.
-    Portfolio total return = sum of contributions (by construction).
+    Portfolio total return = sum of contributions = 0.0.
     """
     days = 30
-    aapl = _flat_then_jump_series(100.0, 130.0, days)  # price[d] = 100 + d
-    msft = _flat_then_jump_series(100.0, 100.0, days)  # flat
-    jpm = _flat_then_jump_series(100.0, 70.0, days)  # price[d] = 100 - d
+    aapl = _flat_then_jump_series(100.0, 130.0, days)
+    msft = _flat_then_jump_series(100.0, 100.0, days)
+    jpm = _flat_then_jump_series(100.0, 70.0, days)
 
     daily_prices = {"AAPL.O": aapl, "MSFT.O": msft, "JPM.N": jpm}
 
     prior = {"AAPL.O": 1 / 3, "MSFT.O": 1 / 3, "JPM.N": 1 / 3}
     current = {"AAPL.O": 1 / 3, "MSFT.O": 1 / 3, "JPM.N": 1 / 3}
 
-    # Hand-computed expected sums (using fractions to keep precision):
-    aapl_ret_sum = sum(1.0 / k for k in range(100, 130))  # k = 100..129
-    msft_ret_sum = 0.0
-    jpm_ret_sum = sum(-1.0 / k for k in range(71, 101))  # k = 71..100
-
-    expected_aapl_contrib = (1 / 3) * aapl_ret_sum
-    expected_msft_contrib = (1 / 3) * msft_ret_sum
-    expected_jpm_contrib = (1 / 3) * jpm_ret_sum
-    expected_total = (
-        expected_aapl_contrib + expected_msft_contrib + expected_jpm_contrib
-    )
+    expected_aapl_contrib = (1 / 3) * (130.0 / 100.0 - 1.0)
+    expected_jpm_contrib = (1 / 3) * (70.0 / 100.0 - 1.0)
+    expected_msft_contrib = 0.0
+    expected_total = expected_aapl_contrib + expected_msft_contrib + expected_jpm_contrib
 
     result = daily_contribution(
         prior_portfolio=prior,
@@ -118,7 +117,7 @@ def test_held_entire_period_no_trades():
         result["contributions"]["JPM.N"], expected_jpm_contrib, abs_tol=1e-12
     )
     assert math.isclose(result["portfolio_total_return"], expected_total, abs_tol=1e-12)
-    assert abs(result["reconciliation_diff"]) < DEFAULT_RECONCILIATION_TOLERANCE
+    assert abs(result["reconciliation_diff"]) < 1e-12
 
 
 # --------------------------------------------------------------------------
@@ -145,6 +144,11 @@ def test_added_mid_period():
     Trade on day 14: trim AAPL by -0.10, add NVDA at +0.10.
     Post-trade weights (effective return-days 15..30):
       AAPL=0.4, MSFT=0.25, JPM=0.25, NVDA=0.10  (sum=1.0)
+
+    Every price here is flat except NVDA's single jump, and that jump
+    happens strictly after the only rebalance in this fixture, so there is
+    nothing for compounding drift to act on before the trade — this result
+    is identical under compounding and under a naive per-day sum.
 
     Expected contributions:
       AAPL contrib = 0 (price flat, every day)
@@ -195,7 +199,6 @@ def test_added_mid_period():
         period_end=_date(days),
     )
 
-    # Hand-computed expected contributions:
     assert math.isclose(result["contributions"]["AAPL.O"], 0.0, abs_tol=1e-12)
     assert math.isclose(result["contributions"]["MSFT.O"], 0.0, abs_tol=1e-12)
     assert math.isclose(result["contributions"]["JPM.N"], 0.0, abs_tol=1e-12)
@@ -221,18 +224,25 @@ def test_exited_mid_period():
       GOOG: flat 100
       JPM:  100 on day 0..4, 90 on day 5..30 (one-shot -10% return on day 5)
 
+    AAPL and JPM each have exactly one non-flat day, and both occur before
+    (or simultaneously with, for AAPL) the single rebalance on day 10 while
+    every weight involved has been constant since day 0 — so there is no
+    compounding drift to diverge from a naive per-day sum here either, and
+    the total P&L at the moment of rebalance is exactly 0, so the
+    rebalance itself does not even change total portfolio value.
+
     Pre-exit weights (return days 1..10): AAPL=0.25, MSFT=0.25, GOOG=0.25, JPM=0.25
     Post-exit weights (return days 11..30): AAPL=0.25 + 0.25/3 = 1/3,
                                             MSFT=1/3, GOOG=1/3, JPM=0
 
     Hand-computed contributions:
-      AAPL: only day 10 contributes (r[10] = 110/100 - 1 = 0.10).
-            Pre-exit weight on day 10 = 0.25 -> contrib_aapl = 0.25 * 0.10 = 0.025
-            (days 11..30 have r=0 for AAPL)
+      AAPL: only day 10 contributes (r[10] = 110/100 - 1 = 0.10), using the
+            PRE-rebalance weight 0.25 (the trade applies after day 10's
+            close) -> contrib_aapl = 0.25 * 0.10 = 0.025
       MSFT: 0
       GOOG: 0
       JPM:  only day 5 contributes (r[5] = 90/100 - 1 = -0.10).
-            Pre-exit weight on day 5 = 0.25 -> contrib_jpm = 0.25 * -0.10 = -0.025
+            weight on day 5 = 0.25 -> contrib_jpm = 0.25 * -0.10 = -0.025
     Portfolio total return = 0.025 + 0 + 0 - 0.025 = 0.0
     """
     days = 30
@@ -292,6 +302,61 @@ def test_exited_mid_period():
 
 
 # --------------------------------------------------------------------------
+# Test 3b: One rebalance AND one dividend in the same short period
+# --------------------------------------------------------------------------
+
+
+def test_one_rebalance_and_one_dividend():
+    """2 holdings, 0.5/0.5. A rallies, B pays a dividend the next day, and a
+    rebalance sits between the two events — exercising compounding,
+    rebalance-after-close, and the dividend add-back together.
+
+    Day 1: A 100 -> 110 (r=0.10), B flat (r=0). Trade dated day 1: A +0.10
+    (0.5 -> 0.6), B -0.10 (0.5 -> 0.4).
+    Day 2: A flat (r=0), B flat price but a 5.0 cash dividend on this
+    ex-date (r = (100+5)/100 - 1 = 0.05). No further trade.
+
+    Hand-computed walk (initial value A=0.5, B=0.5):
+      Day 1: price_pl_A = 0.5*0.10 = 0.05 -> value_A = 0.55 (pre-rebalance)
+             price_pl_B = 0.5*0 = 0 -> value_B = 0.5 (pre-rebalance)
+             rebalance: total = 0.55+0.5 = 1.05;
+               value_A = 0.6*1.05 = 0.63, value_B = 0.4*1.05 = 0.42
+      Day 2: price_pl_A = 0.63*0 = 0 -> value_A stays 0.63
+             price_pl_B = 0.42*0.05 = 0.021 -> value_B = 0.441
+
+    contributions: A = 0.05 + 0 = 0.05; B = 0 + 0.021 = 0.021
+    Final total value = 0.63 + 0.441 = 1.071 -> portfolio_total_return = 0.071
+    sum(contributions) = 0.071, matching exactly.
+    """
+    prices = {
+        "A": {_date(0): 100.0, _date(1): 110.0, _date(2): 110.0},
+        "B": {_date(0): 100.0, _date(1): 100.0, _date(2): 100.0},
+    }
+    prior = {"A": 0.5, "B": 0.5}
+    current = {"A": 0.6, "B": 0.4}
+    trade_log = [
+        {"symbol": "A", "action": "add", "date": _date(1), "weight_delta": +0.10},
+        {"symbol": "B", "action": "trim", "date": _date(1), "weight_delta": -0.10},
+    ]
+    dividend_schedule = {"B": {_date(2): 5.0}}
+
+    result = daily_contribution(
+        prior_portfolio=prior,
+        current_portfolio=current,
+        trade_log=trade_log,
+        daily_prices=prices,
+        period_start=_date(0),
+        period_end=_date(2),
+        dividend_schedule=dividend_schedule,
+    )
+
+    assert math.isclose(result["contributions"]["A"], 0.05, abs_tol=1e-12)
+    assert math.isclose(result["contributions"]["B"], 0.021, abs_tol=1e-12)
+    assert math.isclose(result["portfolio_total_return"], 0.071, abs_tol=1e-12)
+    assert abs(result["reconciliation_diff"]) < 1e-12
+
+
+# --------------------------------------------------------------------------
 # Test 4: Price-return-prices contract (the real contract — export_price_series
 # returns raw closes, no dividend adjustment)
 # --------------------------------------------------------------------------
@@ -304,44 +369,31 @@ def test_price_return_prices_with_ex_dividend_drop_compute_correctly():
     `dividend_schedule` the function correctly computes the price-only
     return over that drop: it does not try to recover the dividend.
 
-    Live verification against the Parallax server (see
-    test_vz_single_holding_with_dividend_schedule_matches_server_total_return)
-    established that the server-side reconciliation target
-    (`total_price_pl`) is actually a TOTAL-RETURN field, dividends included
-    — the earlier assumption that it was price-only was wrong. Reconciling
-    against it correctly therefore requires passing `dividend_schedule`
-    (see that test); passing none, as here, is still a valid and useful
-    computation — it is simply a price-only return, not the total return
-    the server reports.
+    Single holding, weight=1.0, 10 days. Price-return price is flat at 100
+    through day 4, drops to 95 on ex-date day 5 (a 5.0 cash dividend was
+    paid that day, but — correctly, per the contract — is NOT reflected in
+    the price), then stays flat at 95 through day 10 (no recovery, so the
+    numbers stay hand-computable).
 
-    Setup: single holding, weight=1.0, 10 days. Price-return price drops
-    from 100 to 95 on ex-date day 5 (a 5% cash dividend was paid that day,
-    but — correctly, per the contract — is NOT reflected in the price),
-    then climbs back toward 100.
-
-    The economic total return for the period (price + dividend) is
-    approximately +5%, but that is not what this function reports when no
-    `dividend_schedule` is supplied: it reports the price-only return,
-    which is a small number dominated by the unrecovered dividend. That is
-    expected and correct under the price-return contract — see
-    test_total_return_style_prices_plus_dividend_schedule_double_counts_negative_control
+    With no rebalance, this telescopes to the simple end/start ratio:
+      price-only: 95 / 100 - 1 = -0.05
+    Supplying the 5.0 dividend via `dividend_schedule` on the ex-date
+    exactly cancels the drop: (95 + 5) / 100 - 1 = 0.0 on that day, and
+    every other day is flat, so the total with the schedule is exactly 0.0.
+    See test_total_return_style_prices_plus_dividend_schedule_double_counts_negative_control
     for what happens if dividend-adjusted prices are supplied directly
     instead of using `dividend_schedule`.
     """
     days = 10
-    # Price-return price: 100, 100, ..., 100, 95 (day 5), 96, 97, 98, 99, 100
-    price_return = {_date(0): 100.0}
-    for d in range(1, 5):
-        price_return[_date(d)] = 100.0
-    price_return[_date(5)] = 95.0
-    for d in range(6, days + 1):
-        price_return[_date(d)] = 95.0 + (d - 5)  # 96, 97, 98, 99, 100
+    price_return = {_date(d): 100.0 for d in range(5)}
+    for d in range(5, days + 1):
+        price_return[_date(d)] = 95.0
 
     daily_prices = {"AAPL.O": price_return}
     prior = {"AAPL.O": 1.0}
     current = {"AAPL.O": 1.0}
 
-    result = daily_contribution(
+    price_only = daily_contribution(
         prior_portfolio=prior,
         current_portfolio=current,
         trade_log=[],
@@ -349,39 +401,22 @@ def test_price_return_prices_with_ex_dividend_drop_compute_correctly():
         period_start=_date(0),
         period_end=_date(days),
     )
+    assert math.isclose(
+        price_only["contributions"]["AAPL.O"], -0.05, abs_tol=1e-12
+    )
+    assert math.isclose(price_only["portfolio_total_return"], -0.05, abs_tol=1e-12)
 
-    # Hand-computed: sum of daily price-only returns
-    # Day 1..4: r=0
-    # Day 5: r = 95/100 - 1 = -0.05
-    # Day 6: r = 96/95 - 1
-    # Day 7: r = 97/96 - 1
-    # Day 8: r = 98/97 - 1
-    # Day 9: r = 99/98 - 1
-    # Day 10: r = 100/99 - 1
-    expected_price_only = (
-        -0.05
-        + (96 / 95 - 1)
-        + (97 / 96 - 1)
-        + (98 / 97 - 1)
-        + (99 / 98 - 1)
-        + (100 / 99 - 1)
+    with_div = daily_contribution(
+        prior_portfolio=prior,
+        current_portfolio=current,
+        trade_log=[],
+        daily_prices=daily_prices,
+        period_start=_date(0),
+        period_end=_date(days),
+        dividend_schedule={"AAPL.O": {_date(5): 5.0}},
     )
-    assert math.isclose(
-        result["contributions"]["AAPL.O"], expected_price_only, abs_tol=1e-12
-    )
-    assert math.isclose(
-        result["portfolio_total_return"], expected_price_only, abs_tol=1e-12
-    )
-    # Sanity: this is materially different from the economic total return
-    # (price + the unrecovered ~5% dividend) — the gap is the dividend this
-    # function excludes when no dividend_schedule is supplied, not a bug.
-    # Reconciling this price-only number against the server's total-return
-    # field (`total_price_pl`) would fail — the pack must supply
-    # dividend_schedule for that comparison to be like-for-like.
-    economic_total_return_approx = 0.05
-    assert (
-        abs(expected_price_only - economic_total_return_approx) > 0.04
-    ), "price-only result should differ materially from the economic (dividend-inclusive) return"
+    assert math.isclose(with_div["contributions"]["AAPL.O"], 0.0, abs_tol=1e-12)
+    assert math.isclose(with_div["portfolio_total_return"], 0.0, abs_tol=1e-12)
 
 
 def test_total_return_style_prices_plus_dividend_schedule_double_counts_negative_control():
@@ -401,7 +436,11 @@ def test_total_return_style_prices_plus_dividend_schedule_double_counts_negative
     a total-return series would show it (no ex-date drop, just a steady
     100 -> 105 climb baking the dividend into the price), and a
     dividend_schedule for the same ~5-unit dividend on day 5 is passed on
-    top of it.
+    top of it. Expected values are computed by the same compounding the
+    module performs (a running product of daily factors), not by a
+    hand-derived closed form — this test's job is to show the double-count
+    overstates the correct (price-return + schedule) total, not to pin an
+    exact number from first principles.
     """
     days = 10
     tr_style_prices = {_date(d): 100.0 + 0.5 * d for d in range(days + 1)}  # 100 -> 105
@@ -421,13 +460,17 @@ def test_total_return_style_prices_plus_dividend_schedule_double_counts_negative
         dividend_schedule=dividend_schedule,
     )
 
-    # Hand-computed: r[d] = 0.5 / (99.5 + 0.5*d) for every day except day 5,
-    # where the +5.0 cash add-back on top of the already-smoothed price
-    # applies: r[5] = (102.5 + 5.0) / 102.0 - 1.
-    expected_double_count_total = sum(
-        0.5 / (99.5 + 0.5 * d) for d in range(1, days + 1) if d != 5
-    )
-    expected_double_count_total += (102.5 + 5.0) / 102.0 - 1.0
+    # Compounded double-counted total: the same running product the module
+    # itself performs, computed independently here from the raw prices.
+    dates = sorted(tr_style_prices)
+    double_count_factor = 1.0
+    for prev_d, cur_d in zip(dates, dates[1:]):
+        p_prev = tr_style_prices[prev_d]
+        p_cur = tr_style_prices[cur_d]
+        div = 5.0 if cur_d == _date(5) else 0.0
+        double_count_factor *= (p_cur + div) / p_prev
+    expected_double_count_total = double_count_factor - 1.0
+
     assert math.isclose(
         result["contributions"]["AAPL.O"], expected_double_count_total, abs_tol=1e-12
     )
@@ -438,12 +481,9 @@ def test_total_return_style_prices_plus_dividend_schedule_double_counts_negative
     # The correct way to get this same ~5-unit dividend into the total
     # return is price-return prices (the ex-date drop, no smoothing) PLUS
     # dividend_schedule — not smoothed prices plus dividend_schedule.
-    price_return_prices = {_date(0): 100.0}
-    for d in range(1, 5):
-        price_return_prices[_date(d)] = 100.0
-    price_return_prices[_date(5)] = 95.0
-    for d in range(6, days + 1):
-        price_return_prices[_date(d)] = 95.0 + (d - 5)
+    price_return_prices = {_date(d): 100.0 for d in range(5)}
+    for d in range(5, days + 1):
+        price_return_prices[_date(d)] = 95.0 + (d - 5)  # 95, 96, ..., 100
     correct_result = daily_contribution(
         prior_portfolio=prior,
         current_portfolio=current,
@@ -456,9 +496,8 @@ def test_total_return_style_prices_plus_dividend_schedule_double_counts_negative
     correct_total = correct_result["portfolio_total_return"]
 
     # The double-counted (wrong) total overstates the correct total-return
-    # figure by roughly the dividend amount (~5%) — large enough to blow
-    # through the 25-bp reconciliation tolerance in SKILL.md, and large
-    # enough that this is not merely a rounding difference.
+    # figure by roughly the dividend amount (~5%) — large enough that this
+    # is not merely a rounding difference.
     assert expected_double_count_total - correct_total > 0.04, (
         "smoothed total-return-style prices plus dividend_schedule should "
         "overstate the correct price-return-plus-schedule total by roughly "
@@ -474,8 +513,9 @@ def test_total_return_style_prices_plus_dividend_schedule_double_counts_negative
 # single-holding VZ.N book, period 2026-07-06..2026-07-14, ex-dividend
 # 2026-07-10, divrate 0.7075. The server reported total_price_pl = 264.6483
 # on a 10000 initial_value (+2.6465%), establishing that total_price_pl is a
-# TOTAL-RETURN field (dividends included via a compounded/geometric path),
-# not price-only.
+# TOTAL-RETURN field (dividends included via a compounded path), not
+# price-only — and this module now compounds too, so the comparison is
+# tight (1e-5), not a 25-bp arithmetic-vs-geometric allowance.
 # --------------------------------------------------------------------------
 
 
@@ -497,31 +537,19 @@ _VZ_SERVER_TOTAL_RETURN = 264.6483 / 10000.0  # 0.02646483
 
 def test_vz_single_holding_with_dividend_schedule_matches_server_total_return():
     """Reproduce the live-verified VZ.N numbers: raw closes + the one
-    ex-dividend cash amount, via `dividend_schedule`, should match the
-    server's total_price_pl-implied return within the documented
-    arithmetic-vs-geometric gap, not bit-for-bit.
-
-    Pinned facts, in increasing order of looseness:
-    (a) the six daily returns, hand-computed from the raw closes (with the
-        dividend added back only on the 2026-07-10 ex-date), are exact —
-        this module never approximates a single day's return;
-    (b) the GEOMETRIC compounding of those same six returns —
-        prod(1+r_d) - 1 — matches the server's reported total_price_pl
-        return to within 1e-5 (well under 1bp), confirming the server
-        compounds daily total returns rather than summing them;
-    (c) this module's own ARITHMETIC sum of the same six returns — what
-        `daily_contribution` actually reports as `portfolio_total_return`
-        — differs from the server's geometric figure by the documented,
-        intentional arithmetic-vs-geometric gap (see module docstring and
-        SKILL.md's 25-bp outer reconciliation tolerance), not by some
-        unrelated bug. For this 6-return period the gap is a fraction of a
-        basis point, comfortably inside the 25-bp tolerance.
+    ex-dividend cash amount, via `dividend_schedule`, must match the
+    server's total_price_pl-implied return to within 1e-5 — this module
+    now replicates the server's own compounding method, so there is no
+    arithmetic-vs-geometric gap left to absorb.
     """
     dates = sorted(_VZ_CLOSES)
     assert dates[0] == _VZ_PERIOD_START
     assert dates[-1] == _VZ_PERIOD_END
 
-    # (a) Hand-computed daily returns, dividend added back only on the ex-date.
+    # Hand-computed daily returns, dividend added back only on the ex-date —
+    # used here only to pin the two single-day assertions below, not to
+    # derive the module's answer independently (the module's own compounding
+    # is what is under test).
     r = {}
     for prev_d, cur_d in zip(dates, dates[1:]):
         p_prev = _VZ_CLOSES[prev_d]
@@ -538,21 +566,6 @@ def test_vz_single_holding_with_dividend_schedule_matches_server_total_return():
         abs_tol=1e-15,
     )
 
-    # (b) Geometric compounding of the hand-computed returns matches the
-    # server's reported total_price_pl return to within 1e-5.
-    geometric_total = 1.0
-    for cur_d in dates[1:]:
-        geometric_total *= 1.0 + r[cur_d]
-    geometric_total -= 1.0
-    assert math.isclose(
-        geometric_total, _VZ_SERVER_TOTAL_RETURN, abs_tol=1e-5
-    ), (
-        f"geometric compound {geometric_total} should match the server's "
-        f"reported total_price_pl return {_VZ_SERVER_TOTAL_RETURN} to 1e-5 — "
-        "the server compounds daily total returns"
-    )
-
-    # (c) This module's arithmetic sum, via daily_contribution + dividend_schedule.
     daily_prices = {"VZ.N": dict(_VZ_CLOSES)}
     dividend_schedule = {"VZ.N": {_VZ_EX_DATE: _VZ_DIVRATE}}
     result = daily_contribution(
@@ -564,34 +577,31 @@ def test_vz_single_holding_with_dividend_schedule_matches_server_total_return():
         period_end=_VZ_PERIOD_END,
         dividend_schedule=dividend_schedule,
     )
-    arithmetic_total = result["portfolio_total_return"]
+    compounded_total = result["portfolio_total_return"]
 
-    expected_arithmetic_total = sum(r.values())
+    # Single holding, no trades: contribution IS the portfolio total, and it
+    # must equal the geometric compound of the same six hand-computed
+    # returns pinned above.
+    geometric_total = 1.0
+    for cur_d in dates[1:]:
+        geometric_total *= 1.0 + r[cur_d]
+    geometric_total -= 1.0
+    assert math.isclose(compounded_total, geometric_total, abs_tol=1e-12)
+    assert math.isclose(result["contributions"]["VZ.N"], compounded_total, abs_tol=1e-12)
+
     assert math.isclose(
-        arithmetic_total, expected_arithmetic_total, abs_tol=1e-12
-    ), "daily_contribution must sum the same six hand-computed returns arithmetically"
-
-    # The arithmetic-vs-geometric gap is small for a 6-return period and
-    # within the 25-bp SKILL.md outer reconciliation tolerance — NOT a
-    # 1bp-tight match, which would be the wrong bar for an arithmetic sum
-    # being compared against a geometric compound.
-    assert abs(arithmetic_total - _VZ_SERVER_TOTAL_RETURN) < 25e-4, (
-        f"arithmetic total {arithmetic_total} vs server (geometric) "
-        f"{_VZ_SERVER_TOTAL_RETURN} should be within the documented 25bp "
-        "arithmetic-vs-geometric gap"
+        compounded_total, _VZ_SERVER_TOTAL_RETURN, abs_tol=1e-5
+    ), (
+        f"compounded local total {compounded_total} should match the "
+        f"server's reported total_price_pl return {_VZ_SERVER_TOTAL_RETURN} "
+        "to within 1e-5 now that local replicates the server's method"
     )
-    # But it is NOT bit-identical — the gap is real and non-zero, confirming
-    # this test would actually catch a regression back to pure price-only
-    # (which would be off by ~170bps, not a few bps).
-    assert abs(arithmetic_total - _VZ_SERVER_TOTAL_RETURN) > 1e-7
 
 
 def test_vz_single_holding_without_dividend_schedule_gives_price_only_result():
     """Same VZ.N raw closes, but WITHOUT `dividend_schedule` (the default).
-    The result must be the plain price-only return — i.e. only the one
-    ex-date term changes between the with-dividend and without-dividend
-    runs, and it changes by exactly the dividend's contribution to that
-    day's return: `0.7075 / 42.240006`, not approximately.
+    With no trades, the price-only result telescopes to the simple
+    end/start close ratio — hand-verifiable without summing six terms.
     """
     daily_prices = {"VZ.N": dict(_VZ_CLOSES)}
 
@@ -614,23 +624,12 @@ def test_vz_single_holding_without_dividend_schedule_gives_price_only_result():
         # dividend_schedule omitted entirely — default None -> price-only.
     )
 
-    # Hand-computed price-only total (no dividend on any day).
-    dates = sorted(_VZ_CLOSES)
-    expected_price_only = sum(
-        _VZ_CLOSES[cur] / _VZ_CLOSES[prev] - 1.0
-        for prev, cur in zip(dates, dates[1:])
+    expected_price_only = (
+        _VZ_CLOSES[_VZ_PERIOD_END] / _VZ_CLOSES[_VZ_PERIOD_START] - 1.0
     )
     assert math.isclose(
         without_div["portfolio_total_return"], expected_price_only, abs_tol=1e-12
     )
-
-    # The ONLY thing that changes is the ex-date term's numerator picking up
-    # the cash dividend: exact, not approximate.
-    expected_delta = _VZ_DIVRATE / 42.240006
-    actual_delta = (
-        with_div["portfolio_total_return"] - without_div["portfolio_total_return"]
-    )
-    assert math.isclose(actual_delta, expected_delta, abs_tol=1e-12)
 
     # Sanity: the price-only result is materially smaller than the
     # total-return result — roughly the dividend's ~1.7% contribution on a
@@ -698,6 +697,17 @@ def test_reconciliation_gate_carries_diff_and_tolerance():
     assert err.tolerance == DEFAULT_RECONCILIATION_TOLERANCE
 
 
+def test_reconciliation_gate_rejects_nan_diff_rather_than_passing_it():
+    """BUG-005: a NaN diff must never silently clear the gate. In plain
+    Python, `abs(float('nan')) > tolerance` is False, so an unguarded gate
+    would treat a NaN total return as reconciled. The gate must check
+    isfinite first and fail closed.
+    """
+    contributions = {"AAPL.O": float("nan")}
+    with pytest.raises(ReconciliationError):
+        validate_contributions(contributions=contributions, portfolio_total_return=0.0)
+
+
 # --------------------------------------------------------------------------
 # Test 6: Input validation
 # --------------------------------------------------------------------------
@@ -730,6 +740,28 @@ def test_weights_not_summing_raises():
         "MSFT.O": _flat_then_jump_series(100.0, 105.0, days),
     }
     prior = {"AAPL.O": 0.4, "MSFT.O": 0.4}  # sums to 0.8
+    current = {"AAPL.O": 0.5, "MSFT.O": 0.5}
+
+    with pytest.raises(ValueError, match="(?i)sum"):
+        daily_contribution(
+            prior_portfolio=prior,
+            current_portfolio=current,
+            trade_log=[],
+            daily_prices=daily_prices,
+            period_start=_date(0),
+            period_end=_date(days),
+        )
+
+
+def test_weights_sum_rejects_nan_rather_than_passing():
+    """BUG-005-adjacent: a NaN weight sum must raise, not silently pass the
+    sum-close-to-1.0 check (`abs(nan - 1.0) > tolerance` is False in Python)."""
+    days = 5
+    daily_prices = {
+        "AAPL.O": _flat_then_jump_series(100.0, 105.0, days),
+        "MSFT.O": _flat_then_jump_series(100.0, 105.0, days),
+    }
+    prior = {"AAPL.O": float("nan"), "MSFT.O": 0.5}
     current = {"AAPL.O": 0.5, "MSFT.O": 0.5}
 
     with pytest.raises(ValueError, match="(?i)sum"):
