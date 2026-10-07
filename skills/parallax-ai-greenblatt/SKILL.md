@@ -19,7 +19,7 @@ description: "Applies Joel Greenblatt's Magic Formula (per 'The Little Book That
 
 ## Gotchas
 
-- Expected Parallax spend: ~35–40 tokens in BOTH modes — `build_stock_universe` (5) + `get_company_info` (1, comma-separated sector-filter batch — Step 2.2) + `get_financials(statement=ratios)` × up to 30 candidates (1 credit each; the tool has no multi-symbol support, so this is per-candidate) + `get_peer_snapshot`; plus up to +1 credit per candidate missing from the batched `get_company_info` response (worst case +30 if the batch returns empty) for the Step 2.2 single-symbol re-queries.
+- Expected Parallax spend: ~35–40 tokens in BOTH modes — `build_stock_universe` (5) + `get_company_info` (1, comma-separated sector-filter batch — Step 2.2) + `get_financials(statement=ratios)` × up to 30 candidates (1 credit each; the tool has no multi-symbol support, so this is per-candidate) + `get_peer_snapshot`; plus up to +1 credit per candidate returned by `build_stock_universe` that is missing from the batched `get_company_info` response (the re-query runs before the top-30 cap, so the worst case is +N where N is the number of candidates returned) for the Step 2.2 single-symbol re-queries.
 - JIT-load `_parallax/parallax-conventions.md`, `_parallax/AI-profiles/profile-schema.md`, `_parallax/AI-profiles/output-template.md`, `_parallax/AI-profiles/profiles/greenblatt.md` — Step 0.
 - Universe mode is the default with no ticker; ticker-check mode with exactly one. `build_stock_universe` is a free-text relevance search with no sector-exclusion parameter — it does NOT enforce Greenblatt's financials/utilities exclusion itself. Step 2.2 enforces it instead: a `get_company_info` batch call reads each candidate's `sector` and drops Financials and Utilities names before the top-30 cap.
 - `build_stock_universe` is async and broad queries time out: queries MUST be sector-scoped (default `"US large-cap consumer staples"`); a broad request runs sector-by-sector and merges.
@@ -95,7 +95,7 @@ Workflow derived from: Greenblatt, J. (2006). The Little Book That Beats the Mar
 Last anchor-tested: 2026-04-06 (CSCO.O, MSFT.O, NVDA.O)
 Tool sequence: build_stock_universe, get_company_info (sector filter), get_financials(ratios) × N, get_peer_snapshot × N
 Dropped: <n> excluded sector, <n> unreadable sector
-Token cost: ~35-40 tokens (both modes), plus up to +1 credit per candidate missing from the batched get_company_info response (worst case +30 if the batch returns empty)
+Token cost: ~35-40 tokens (both modes), plus up to +1 credit per candidate returned by build_stock_universe that is missing from the batched get_company_info response (the re-query runs before the top-30 cap, so the worst case is +N where N is the number of candidates returned)
 
 ---
 This output is an AI-inferred interpretation of Joel Greenblatt's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by Joel Greenblatt or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.
@@ -123,7 +123,7 @@ Workflow derived from: Greenblatt, J. (2006). The Little Book That Beats the Mar
 Last anchor-tested: 2026-04-06 (CSCO.O, MSFT.O, NVDA.O)
 Tool sequence: get_company_info (target), build_stock_universe, get_company_info (sector filter), get_financials(ratios) × N, get_peer_snapshot
 Dropped: <n> excluded sector, <n> unreadable sector
-Token cost: ~35-40 tokens, plus up to +1 credit per candidate missing from the batched get_company_info response (worst case +30 if the batch returns empty)
+Token cost: ~35-40 tokens, plus up to +1 credit per candidate returned by build_stock_universe that is missing from the batched get_company_info response (the re-query runs before the top-30 cap, so the worst case is +N where N is the number of candidates returned)
 
 ---
 This output is an AI-inferred interpretation of Joel Greenblatt's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by Joel Greenblatt or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.
