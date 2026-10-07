@@ -65,7 +65,8 @@ MARKETPLACE_FILE = REPO_ROOT / ".claude-plugin" / "marketplace.json"
 WEB_OUT_DIR = Path.home() / "Downloads" / "claude-web-skills"
 EXTRA_CANARY_FILE = Path.home() / ".claude" / "parallax-canary-extra.txt"
 
-PLUGIN_VERSION = "0.1.0"
+PLUGIN_VERSION = "2026.10.07"  # date form; the release step bumps it
+PARALLAX_MCP_URL = "https://mcp.chicago.global/api/mcp"
 # Derived per build from the skills actually bundled: the same source builds
 # parallax-workflows (translate-* present) and the parallax-agent tap output
 # (translate-* absent), and the marketplace listing must match what installs.
@@ -1165,6 +1166,10 @@ def build_plugin() -> None:
             "homepage": "https://parallax.chicago.global",
             "repository": "https://github.com/bencharoenwong/parallax-workflows",
             "license": "MIT",
+        }, indent=2) + "\n", encoding="utf-8")
+
+        (staging / ".mcp.json").write_text(json.dumps({
+            "mcpServers": {"parallax": {"type": "http", "url": PARALLAX_MCP_URL}},
         }, indent=2) + "\n", encoding="utf-8")
 
         canary_scan(staging)
