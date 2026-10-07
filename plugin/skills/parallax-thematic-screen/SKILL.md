@@ -17,7 +17,7 @@ description: "Thematic stock screen and idea analysis: build a stock universe fr
 
 ## Gotchas
 
-- Expected Parallax spend: ~19 tokens default, ~14 with `--no-macro` (`_parallax/token-costs.md`).
+- Expected Parallax spend: ~26 tokens default (one inferred macro market; up to ~36 at the 3-market cap), ~20 with `--no-macro` (`_parallax/token-costs.md`'s recipe omits several calls this workflow actually makes — the full list at `top_n=5` is: universe build (5) + Batch B's `get_peer_snapshot` and `get_company_info` per candidate (2×5=10) + 3 `get_financials` calls for the top 3 trusted picks (3) + `get_telemetry` (1) + C2's `export_peer_comparison` for the top row (1) + macro (`list_macro_countries` (1) + `macro_analyst` × markets, 5 each, skipped entirely with `--no-macro`)). Each candidate above or below the default `top_n=5` changes cost by 2 credits (one `get_peer_snapshot` + one `get_company_info`), not 1.
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.2 (`macro_analyst` needs the exact market name from `list_macro_countries`), §1 RIC resolution, §2 identity cross-check, §3/§3.1 parallel execution and the Concurrent Annotation Pattern (this skill is its reference implementation), §4 fallbacks, §13 audience mode, §14 host primitives.
 - JIT-load `_parallax/house-view/loader.md` FIRST. §5 rules 3 (ground-truth check) and 4 (divergence assertion) apply universally; rules 1–2 and 5 when a view is active. The user's theme is sovereign per §4 — conflicts render as banners, never as silent re-ranking. Drift check per `_parallax/house-view/auto-on-load-judge-pattern.md` (this skill builds a candidate set).
 - Macro context is a SOFT annotation: with a view, tilts stay sovereign; without one, macro may drive emphasis in the Output Format only. Rank is always composite-driven.
@@ -67,21 +67,21 @@ Apply the macro-self-confirming test to the theme (Gotchas). Infer up to 3 relev
 2. **Telemetry** — `get_telemetry` (basket-level; failure → `telemetry = None`).
 3. **Macro** (skip with `--no-macro`) — 3a `list_macro_countries`; 3b `macro_analyst(market=<m>, component="tactical")` per inferred market whose name matches the 3a list verbatim ("United States", not "US"); unmatched inferences are dropped silently; none left, or all unavailable → `macro_context = None`. Cap 3.
 
-**Batch B — scoring (C1).** For the top N candidates, `call-tool` `get_peer_snapshot` AND `get_company_info` per candidate together. Record `returned_name` (`target_company`) and `expected_name` (`name`).
+**Batch B — scoring (C1).** For the top N candidates, `call-tool` `get_peer_snapshot` AND `get_company_info` per candidate together. Record `returned_name` (`target_company`) and `expected_name` (`get_company_info.data.name` — nested under the response's `data` object, not a top-level field).
 
 **Batch C — after Step 4 establishes rank, in one turn:** **C2** `export_peer_comparison` (`format="json"`) for the highest-scored TRUSTED row; **C3** `get_financials` (`statement="summary"`) for the top 3 trusted picks. C1.5 annotation runs concurrently with these and never gates them.
 
 ### Step 3 — Verify
 
 - **Divergence assertion** (loader.md §5 rule 4, universal): if the query named N ≥ 2 sectors/themes and `max_sector_share / total > 0.6`, warn "universe collapsed to single sector despite multi-sector request" (V2: use it to verify merge quality).
-- **Freeform excludes** — with a view and non-empty `tilts.excludes_freeform`, drop candidates matching any pattern against `get_company_info` name/description/sector (loader.md §3).
+- **Freeform excludes** — with a view and non-empty `tilts.excludes_freeform`, drop candidates matching any pattern against `get_company_info.data.name`/`.data.description`/`.data.sector` (loader.md §3).
 - **Ground-truth check** (loader.md §5 rule 3, universal): any row where `returned_name ≠ expected_name` after normalization per conventions §2 step 2 is UNTRUSTED — ⚠ MISMATCH, not ranked.
 
 ### Step 4 — Compute
 
 **C1 rank:** composite-driven; with a view, re-rank trusted rows by `composite × multiplier(sector)` per loader.md §3.
 
-**C1.5 — Annotation (Phase C1.5; reference implementation of conventions §3.1, concurrent with C2/C3):** if `macro_context` is present, tag each trusted row `macro_tag ∈ {with-regime, against-regime, orthogonal}` from the row's primary market — read `get_company_info.country`, normalize to the canonical market name from `list_macro_countries`; missing or unmatched → `orthogonal`, never inferred from sector or judgement. Tags annotate the Output Format only: **they MUST NOT change rank order, alter membership, or override the composite score**, and downstream consumers must preserve every annotated row (Macro Tag is never a filter predicate).
+**C1.5 — Annotation (Phase C1.5; reference implementation of conventions §3.1, concurrent with C2/C3):** if `macro_context` is present, tag each trusted row `macro_tag ∈ {with-regime, against-regime, orthogonal}` from the row's primary market — read `get_company_info.data.market` (there is no `country` field anywhere in the response; every identity field, including `market`, lives under `data` — only `success`, `symbol`, and `score_scale` are top-level), normalize to the canonical market name from `list_macro_countries`; missing or unmatched → `orthogonal`, never inferred from sector or judgement. Tags annotate the Output Format only: **they MUST NOT change rank order, alter membership, or override the composite score**, and downstream consumers must preserve every annotated row (Macro Tag is never a filter predicate).
 
 ### Step 5 — Compose
 

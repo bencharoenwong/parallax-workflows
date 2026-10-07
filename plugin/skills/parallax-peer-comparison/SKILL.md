@@ -16,7 +16,7 @@ description: "Research analyst peer comparison: peer snapshot, exported data, sc
 
 ## Gotchas
 
-- Expected Parallax spend: ~8 tokens (`_parallax/token-costs.md`): peer snapshot + export + 3 score histories + 3 `etf_profile` probes.
+- Expected Parallax spend: ~12 tokens (`_parallax/token-costs.md`): `get_company_info` (Step 2) + peer snapshot + export + 3 score histories + 3 `etf_profile` probes + 3 price-series calls (`export_price_series` or `etf_daily_price`, 1 credit each per leg — billed, not free).
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution (peer symbols from `get_peer_snapshot` may lack suffixes; `F` fails without `.N`), §2 identity cross-check, §3 parallel execution, §4 fallbacks, §14 host primitives.
 - JIT-load `_parallax/coverage-matrix.md`: `export_price_series` is equity-only; ETFs that surface as peers must go through `etf_daily_price`. The Step 2 asset-class pre-classification is mandatory for every price leg.
 - JIT-load `_parallax/house-view/loader.md` if a view is present; single-stock consumer per §7 — tilts are NOT applied to scoring or peer ranking. Render the full §7 surface (§7.3 tension banner, §7.2 peer-suggest tokens under the matrix — flag, never filter — §7.1 note after Score Trajectory) via `render_view_conflict()` per `_parallax/house-view/render_helpers.md`; audit per §6.1.
@@ -61,7 +61,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 
 ### Step 3 — Verify
 
-- Identity cross-check per conventions §2: `get_peer_snapshot.target_company` vs `get_company_info.name`; each `get_score_analysis` `data[0].symbol` vs the RIC sent.
+- Identity cross-check per conventions §2: `get_peer_snapshot.target_company` vs `get_company_info.data.name`; each `get_score_analysis` `data[0].symbol` vs the RIC sent.
 - **Halt-and-surface rule:** a leg empty from BOTH price endpoints is excluded from Relative Price Performance with the explicit note `⚠ Could not retrieve price history for <symbol>; relative price chart shows the remaining legs only.` Never drop a leg silently.
 - Other failed or empty calls: §0.1 retry classification, then §4. No gate is rendered, so §4.0 does not apply.
 

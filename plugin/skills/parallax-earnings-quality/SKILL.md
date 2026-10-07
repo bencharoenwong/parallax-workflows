@@ -63,7 +63,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 
 ### Step 3 — Verify
 
-- Identity: `get_score_analysis` `data[0].symbol` against the requested RIC (conventions §2); `get_company_info.name` is the oracle for the narrative.
+- Identity: `get_score_analysis` `data[0].symbol` against the requested RIC (conventions §2); `get_company_info.data.name` is the oracle for the narrative.
 - Failed or empty calls: §0.1 retry classification, then §4. The traffic light is a display classification of Parallax's own quality data, not a gate on the name; §4.0 does not apply, but a Risk Summary cannot be rendered without the Palepu result — state `pending` rather than inventing a color.
 
 ### Step 4 — Compute
