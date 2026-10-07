@@ -24,12 +24,10 @@ GET_TELEMETRY_SCHEMA = {
         "mechanism": str,
     },
     # Corrected 2026-10-06 against a live probe. There is no "ticker"/"factor"/
-    # "magnitude" shape and no "basket_name" field anywhere in this array --
-    # three different wrong shapes were in play across this schema, the old
-    # mock and parallax-ai-soros's SKILL.md before this fix. Per-ticker basket
-    # membership exists only as an upstream baskets[].members field this tool
-    # does not expose; best-effort matching is on "name" (a sector/industry
-    # theme label), not a ticker-level field.
+    # "magnitude" shape and no "basket_name" field anywhere in this array.
+    # Per-ticker basket membership exists only as an upstream baskets[].members
+    # field this tool does not expose; best-effort matching is on "name" (a
+    # sector/industry theme label), not a ticker-level field.
     "divergences": [
         {
             "name": str,
@@ -314,8 +312,7 @@ EXPORT_PRICE_SERIES_SCHEMA = {
 # score_scale} -- there is no top-level "name"/"sector"/"market_cap_usd", and
 # the live field is "data.market" (a country/region name), never "country".
 # Price, volume, market cap and the five factor scores + composite are all
-# returned as STRINGS by the live endpoint, not numbers -- a real consumer
-# trap, modelled here rather than "corrected" into the nicer type.
+# returned as STRINGS by the live endpoint, not numbers.
 GET_COMPANY_INFO_SCHEMA = {
     "success": bool,
     "symbol": str,

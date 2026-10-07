@@ -1125,20 +1125,18 @@ def _build_get_company_info(paths: dict[str, Any]) -> dict:
 
     This is deliberately NOT the 25-key ``company_info`` block that lives inside
     an ``analyze_portfolio`` response. The ledger documents that block; it says
-    nothing about this endpoint. Unlike the module's earlier state, this is NOT
-    an absence of evidence any more: a live probe (skill-drift audit,
-    2026-10-05) confirmed the standalone endpoint wraps the identity, pricing
-    and factor-score fields in a ``data`` object, keyed ``success``/``symbol``/
+    nothing about this endpoint. A live probe (skill-drift audit, 2026-10-05)
+    confirmed the standalone endpoint wraps the identity, pricing and
+    factor-score fields in a ``data`` object, keyed ``success``/``symbol``/
     ``data``/``score_scale`` -- there is no top-level ``name``, ``country`` or
     ``market_cap_usd``, and the field is ``data.market``, not ``data.country``.
-    The probe also showed every numeric-looking field under ``data`` (price,
-    volume, market cap, the five factor scores and their composite) coming back
-    as a STRING, not a number -- a real consumer-facing trap this fixture now
-    reproduces rather than quietly "fixing" into the nicer type.
+    Every numeric-looking field under ``data`` (price, volume, market cap, the
+    five factor scores and their composite) is a STRING, not a number -- a
+    real consumer-facing trap this fixture reproduces rather than "fixing"
+    into the nicer type.
 
-    Every value below is still derived from the seeded path and the issuer is
-    still synthetic; what changed is the envelope and field set, not the
-    derivation method."""
+    Every value below is derived from the seeded path; the issuer is
+    synthetic."""
     subject = paths["holdings"][0]
     scores = _scores(paths)[0]
     close = subject["price_units"][-1] / SUBUNIT
@@ -1162,9 +1160,8 @@ def _build_get_company_info(paths: dict[str, Any]) -> dict:
             "name": subject["name"],
             "sector": subject["sector"],
             "industry": subject["industry"],
-            # The live field is "market" (a country/region name), never
-            # "country" -- dropping the old "country" key is the fix, not a
-            # rename left for a consumer to discover.
+            # Live field is "market" (a country/region name); there is no
+            # "country" key.
             "market": subject["market"],
             "exchange": subject["exchange"],
             "currency": BASE_CURRENCY,
@@ -1176,9 +1173,8 @@ def _build_get_company_info(paths: dict[str, Any]) -> dict:
                 f"byte."
             ),
             "activity": "Active",
-            # Price/volume/market-cap/change and the five factor scores are
-            # all returned as STRINGS by the live endpoint -- str() here is
-            # the fixture modelling that type, not a formatting convenience.
+            # Live endpoint returns price/volume/market-cap/change and the
+            # five factor scores as STRINGS, not numbers.
             "close": str(close),
             "change": str(change),
             "changepercent": str(changepercent),
