@@ -1,15 +1,11 @@
 {
-  "symbol": "AAPL.O",
-  "name": "Apple Inc.",
-  "summary": "Apple reported Q2 2026 earnings on April 28: revenue $94.8B (+5% YoY) beat consensus by 1.2%, EPS $1.65 vs $1.61 expected. Services revenue grew 14% YoY to $24.1B, while iPhone revenue was flat. Management raised the dividend by 4% and authorized an additional $90B buyback. Guidance for Q3 implied low-single-digit revenue growth, slightly below sell-side consensus. China iPhone shipments declined 8% YoY per Counterpoint data, partially offset by India growth.",
-  "key_themes": [
-    "Services growth offsetting hardware softness",
-    "China demand remains the swing factor",
-    "Capital return program expanded"
-  ],
-  "sentiment": "neutral-positive",
-  "articles_analyzed": 47,
-  "period_start": "2026-04-01",
-  "period_end": "2026-04-30",
-  "generated_at": "2026-04-30T19:14:00Z"
+  "success": true,
+  "symbol": "AXCM.O",
+  "title": "Catalysts & Watchpoints - 18/01/2033",
+  "bullet1": "Axiom Compute reported Q4 2032 earnings on January 14: revenue beat consensus by 2.1% on strong data-center demand, while gross margin compressed 80bps on component costs.",
+  "bullet2": "Two sell-side desks raised price targets following the print, citing a stronger-than-expected order backlog into the first half of 2033.",
+  "bullet3": "A pending antitrust review in one export market adds a monitoring point against the quality score's assumption of unconstrained channel access.",
+  "sources": [],
+  "generation_time_ms": 21840,
+  "as_of": "2033-01-17"
 }

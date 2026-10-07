@@ -85,6 +85,18 @@ HAND_AUTHORED = {
         "from the failure description in mcp_mocks/README.md, not produced by a "
         "generator, so there is nothing to regenerate against. Covered by the "
         "gate 2 precision budget instead.",
+    "check_portfolio_redundancy_insufficient_coverage":
+        "Models the live tool's has_issues: \"unknown\" tri-state branch "
+        "(resolved coverage < 50%). Synthetic fixture modelled on the live "
+        "response shape, not a captured response. No generator covers this "
+        "endpoint. "
+        "Covered by the gate 2 precision budget instead.",
+    "macro_analyst_overview":
+        "Models macro_analyst's component-omitted (overview) response shape. "
+        "Synthetic fixture modelled on the live response shape, not a "
+        "captured response. Structurally distinct from macro_analyst.json "
+        "(drilldown). No generator covers this endpoint. Covered by the gate 2 "
+        "precision budget instead.",
 }
 
 # name -> why this fixture is outside the generator's scope. A reason is

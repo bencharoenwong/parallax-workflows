@@ -1,12 +1,17 @@
 {
   "_fixture_purpose": "Models the documented silent-failure mode of check_portfolio_redundancy on sector-concentrated portfolios. The tool returns has_issues=false with empty sector_concentration and a 'well-diversified' summary even when the portfolio is clearly concentrated. Sanity-check gates in portfolio-builder Step 4, portfolio-builder Step 6 fallback, and halal-screen Step 2 protect against this mode. See PHASE_0_TEST_REPORT (notes/load-house-view) for the original empirical observation on an 86%-financials portfolio.",
-  "_replay_context": "Synthetic — derived from observed live-server behavior, not a captured response. Update if/when upstream Parallax fixes the empty-payload bug.",
-  "overlap_pairs": [],
-  "coverage_pct": 1.0,
-  "holdings_analyzed": 8,
-  "holdings_total": 8,
+  "_replay_context": "Synthetic — derived from observed live-server behavior, not a captured response. Update if/when upstream Parallax fixes the empty-payload bug. Field names corrected 2026-10-06 to the live shape (success/has_issues/holdings_*/sector_concentration/industry_overlap/warnings/recommendations) confirmed by a live probe; the stale overlap_pairs/coverage_pct/holdings_analyzed/holdings_total fields this fixture previously carried do not exist on this endpoint.",
+  "success": true,
   "has_issues": false,
+  "holdings_input": 8,
+  "holdings_resolved": 8,
+  "holdings_failed": 0,
+  "holdings_trimmed": 0,
+  "holdings_unresolved": [],
+  "coverage_weight_fraction": 1.0,
   "sector_concentration": {},
   "industry_overlap": {},
+  "warnings": [],
+  "recommendations": [],
   "summary": "Portfolio looks well-diversified"
 }

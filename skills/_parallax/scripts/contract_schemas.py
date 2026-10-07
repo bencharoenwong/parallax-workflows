@@ -23,11 +23,19 @@ GET_TELEMETRY_SCHEMA = {
         "headline": str,
         "mechanism": str,
     },
+    # Corrected 2026-10-06 against a live probe. There is no "ticker"/"factor"/
+    # "magnitude" shape and no "basket_name" field anywhere in this array.
+    # Per-ticker basket membership exists only as an upstream baskets[].members
+    # field this tool does not expose; best-effort matching is on "name" (a
+    # sector/industry theme label), not a ticker-level field.
     "divergences": [
         {
-            "ticker": str,
-            "factor": str,
-            "magnitude": NUM,
+            "name": str,
+            "type": str,
+            "market": str,
+            "daily": NUM,
+            "mtd": NUM,
+            "basket_id": (str, OPTIONAL),
         }
     ],
 }
@@ -263,53 +271,121 @@ ANALYZE_PORTFOLIO_ERROR_SCHEMA = {
 }
 
 
+# Corrected 2026-10-06 against a live probe. "prices"/"close" never existed
+# as a top-level field. This schema models format="json" ONLY (the mock's
+# format), with the shape {success, symbol, format, data_points, data: [{date,
+# price, open, high, low, volume}]}.
+#
+# format="list" and format="csv" are NOT a subset of this row schema -- they
+# are structurally different responses with no "data" key at all:
+#   * format="list" (the tool's DEFAULT): {success, symbol, format,
+#     data_points, dates: [...], prices: [...]} -- two parallel top-level
+#     arrays.
+#   * format="csv": {success, symbol, format, data_points, csv: "<string>"}
+#     -- a single CSV-text field.
+# "data" is required (not OPTIONAL) here, so validating a list/csv response
+# against EXPORT_PRICE_SERIES_SCHEMA fails outright rather than silently
+# passing. If a skill calls with format="list" or format="csv", write a
+# separate schema/mock for that shape rather than reusing this one.
+# "price" is the raw daily close, NOT a dividend-adjusted or total-return
+# series -- do not assume TR convention for this endpoint.
 EXPORT_PRICE_SERIES_SCHEMA = {
+    "success": bool,
     "symbol": str,
-    "currency": (str, OPTIONAL),
-    "prices": [
+    "format": (str, OPTIONAL),
+    "data_points": (int, OPTIONAL),
+    "data": [
         {
             "date": str,
+            "price": NUM,
             "open": (NUM, OPTIONAL),
             "high": (NUM, OPTIONAL),
             "low": (NUM, OPTIONAL),
-            "close": NUM,
             "volume": (NUM, OPTIONAL),
         }
     ],
 }
 
 
+# Corrected 2026-10-06 against a live probe. The live endpoint wraps every
+# identity/pricing/score field under "data", keyed by {success, symbol, data,
+# score_scale} -- there is no top-level "name"/"sector"/"market_cap_usd", and
+# the live field is "data.market" (a country/region name), never "country".
+# Price, volume, market cap and the five factor scores + composite are all
+# returned as STRINGS by the live endpoint, not numbers.
 GET_COMPANY_INFO_SCHEMA = {
+    "success": bool,
     "symbol": str,
-    "name": str,
-    "exchange": (str, OPTIONAL),
-    "sector": str,
-    "industry": (str, OPTIONAL),
-    "country": (str, OPTIONAL),
-    "market_cap_usd": (NUM, OPTIONAL),
-    "currency": (str, OPTIONAL),
-    "description": (str, OPTIONAL),
-    "website": (str, OPTIONAL),
+    "data": {
+        "ric": (str, OPTIONAL),
+        "name": str,
+        "sector": str,
+        "industry": (str, OPTIONAL),
+        "market": (str, OPTIONAL),
+        "exchange": (str, OPTIONAL),
+        "currency": (str, OPTIONAL),
+        "description": (str, OPTIONAL),
+        "activity": (str, OPTIONAL),
+        "close": (str, OPTIONAL),
+        "change": (str, OPTIONAL),
+        "changepercent": (str, OPTIONAL),
+        "volume": (str, OPTIONAL),
+        "mktcap": (str, OPTIONAL),
+        "value": (str, OPTIONAL),
+        "quality": (str, OPTIONAL),
+        "momentum": (str, OPTIONAL),
+        "defensive": (str, OPTIONAL),
+        "tactical": (str, OPTIONAL),
+        "total": (str, OPTIONAL),
+        "recommendation": (str, OPTIONAL),
+    },
+    "score_scale": (
+        {
+            "range": (str, OPTIONAL),
+            "weighting": (str, OPTIONAL),
+            "more": (str, OPTIONAL),
+        },
+        OPTIONAL,
+    ),
 }
 
 
-# PROVISIONAL — see mcp_mocks/README.md. The skill plans refer to this endpoint
-# but field-level usage is not yet documented in any existing SKILL.md. The
-# schema below is best-inference from the function name and conventions; refresh
-# against the live MCP response when wiring it into a new skill's contract test.
+# Corrected 2026-10-06 against a live probe (no longer PROVISIONAL): the live
+# shape is sector_concentration (dict of sector -> weight FRACTION, 0-1) +
+# industry_overlap + warnings + recommendations. There is no overlap_pairs,
+# coverage_pct, holdings_analyzed or holdings_total field anywhere live.
+#
+# Corrected 2026-10-07 to the live response shape: ``has_issues`` is tri-state,
+# not bool-only -- the tool returns the literal string "unknown" when
+# coverage is insufficient (< 50% of weight resolved), and only falls back to
+# a real bool (warnings present) once coverage is sufficient.
+# ``holdings_unresolved`` is a list of per-holding failure objects
+# (``{symbol, weight, status?, error, industry?}``), not a list of symbol
+# strings -- it carries the resolution error alongside each symbol.
 CHECK_PORTFOLIO_REDUNDANCY_SCHEMA = {
-    "overlap_pairs": [
-        {
-            "symbol_a": str,
-            "symbol_b": str,
-            "overlap_score": NUM,
-            "shared_factors": ([str], OPTIONAL),
-            "shared_sector": (str, OPTIONAL),
-        }
-    ],
-    "coverage_pct": (NUM, OPTIONAL),
-    "holdings_analyzed": (int, OPTIONAL),
-    "holdings_total": (int, OPTIONAL),
+    "success": bool,
+    "has_issues": ((bool, str), OPTIONAL),
+    "holdings_input": (int, OPTIONAL),
+    "holdings_resolved": (int, OPTIONAL),
+    "holdings_failed": (int, OPTIONAL),
+    "holdings_trimmed": (int, OPTIONAL),
+    "holdings_unresolved": (
+        [
+            {
+                "symbol": str,
+                "weight": NUM,
+                "status": (NUM, OPTIONAL),
+                "error": str,
+                "industry": (str, OPTIONAL),
+            }
+        ],
+        OPTIONAL,
+    ),
+    "coverage_weight_fraction": (NUM, OPTIONAL),
+    "sector_concentration": dict,
+    "industry_overlap": (dict, OPTIONAL),
+    "warnings": ([str], OPTIONAL),
+    "recommendations": ([str], OPTIONAL),
 }
 
 
@@ -355,29 +431,69 @@ GET_SCORE_ANALYSIS_SCHEMA = {
 }
 
 
+# Corrected 2026-10-06 against a live probe. There is no "summary"/
+# "key_themes"/"sentiment"/"articles_analyzed" shape -- the live endpoint
+# returns a FIXED 3-bullet shape every time, not a variable-length synthesis.
+# "sources" was an empty array in the probed sample despite the tool
+# description's "sources used" framing; do not assume it is ever populated.
 GET_NEWS_SYNTHESIS_SCHEMA = {
+    "success": (bool, OPTIONAL),
     "symbol": str,
-    "name": (str, OPTIONAL),
-    "summary": str,
-    "key_themes": ([str], OPTIONAL),
-    "sentiment": (str, OPTIONAL),
-    "articles_analyzed": (int, OPTIONAL),
-    "period_start": (str, OPTIONAL),
-    "period_end": (str, OPTIONAL),
-    "generated_at": (str, OPTIONAL),
+    "title": str,
+    "bullet1": str,
+    "bullet2": str,
+    "bullet3": str,
+    "sources": ([str], OPTIONAL),
+    "generation_time_ms": (int, OPTIONAL),
+    # Present in the polled (non-cached) branch per the tool description's
+    # "as-of date where available"; absent when upstream omits it.
+    "as_of": (str, OPTIONAL),
+    # Only the instant-cache-hit branch sets this (to `true`); the polled
+    # branch never sets it at all, so OPTIONAL rather than a plain bool.
+    "cached": (bool, OPTIONAL),
 }
 
 
+# Corrected 2026-10-06 against a live probe. There is no structured "regime"/
+# "tactical.stance"/"factor_tilts" object -- the live endpoint returns free
+# prose in "content" plus a pre-signed, time-limited storage URL in
+# "file_url" for the fuller report. "truncated" flags server-side truncation
+# of the "content" field itself, not completeness of the underlying report.
 MACRO_ANALYST_SCHEMA = {
+    "success": (bool, OPTIONAL),
+    "report_date": (str, OPTIONAL),
     "market": str,
     "component": (str, OPTIONAL),
-    "regime": (str, OPTIONAL),
-    "tactical": {
-        "stance": str,
-        "horizon_months": (int, OPTIONAL),
-        "summary": str,
-        "key_drivers": ([str], OPTIONAL),
-        "factor_tilts": (dict, OPTIONAL),
-    },
-    "generated_at": (str, OPTIONAL),
+    "component_name": (str, OPTIONAL),
+    "content": str,
+    "file_url": (str, OPTIONAL),
+    "truncated": (bool, OPTIONAL),
+    "next_steps": (dict, OPTIONAL),
+}
+
+
+# MACRO_ANALYST_SCHEMA above models the DRILLDOWN shape only -- a call with an
+# explicit `component`, rendered as a single top-level
+# `content`/`component_name`/`truncated`. A call with `component` omitted
+# ("overview") returns a structurally different live payload instead: no
+# top-level `content` at all, a `components` dict keyed by component name (each value
+# `{content, truncated}`), plus `component_count` and `budget_applied`.
+# Validating an overview-mode mock against MACRO_ANALYST_SCHEMA fails on the
+# missing required `content` field -- use this schema for component-omitted
+# mocks instead.
+MACRO_ANALYST_OVERVIEW_SCHEMA = {
+    "success": (bool, OPTIONAL),
+    "report_date": (str, OPTIONAL),
+    "market": str,
+    "component": (str, OPTIONAL),
+    # Opaque: keys are component names (macro_indicators, tactical,
+    # fixed_income, currency, sectors/sector_positioning, liquidity, news,
+    # factors) and vary by market/availability; values are {content, truncated}.
+    "components": dict,
+    "component_count": (int, OPTIONAL),
+    "budget_applied": (bool, OPTIONAL),
+    "file_url": (str, OPTIONAL),
+    "partial": (bool, OPTIONAL),
+    "missing_components": ([str], OPTIONAL),
+    "next_steps": (dict, OPTIONAL),
 }

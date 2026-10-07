@@ -22,7 +22,7 @@ FLAT_COST: dict[str, int] = {
     "get_docs": 0,
     "list_docs": 0,
     "search_stocks": 0,
-    "export_price_series": 0,
+    "export_price_series": 1,
     "check_api_health": 0,
     # 1 token
     "get_company_info": 1,
@@ -44,7 +44,7 @@ FLAT_COST: dict[str, int] = {
     "get_financial_analysis": 5,
     "analyze_portfolio": 5,
     "macro_analyst": 5,
-    "check_macro_health": 5,
+    "check_macro_health": 1,
     # 10 tokens
     "get_stock_report": 10,
     "get_assessment": 10,

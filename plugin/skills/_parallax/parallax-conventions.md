@@ -1,7 +1,7 @@
 # Parallax Skill Conventions
 
 <!-- authority: contract -->
-<!-- verified: 2026-09-05 -->
+<!-- verified: 2026-10-07 -->
 <!-- overrides: none -->
 
 Shared patterns for all `parallax-*` skills. JIT-load from any skill that calls Parallax MCP tools.
@@ -54,7 +54,7 @@ The table below records commonly observed parameter names. It is a maintenance a
 | `macro_analyst` | `market` (not `country`) | string | e.g., `"United States"`, `"Japan"`. Matches names returned by `list_macro_countries`. |
 | `macro_analyst` | `component` | string | e.g., `"tactical"`, `"sectors"`, `"factors"`. See `list_macro_countries` next_steps for others. |
 | `build_stock_universe` | `query` (not `description`) | string | Free-text sector-scoped query, e.g., `"US large-cap technology software"`. Broad/abstract queries time out. |
-| `get_financials` | `statement` | string | `"summary"`, `"balance_sheet"`, `"cash_flow"`, `"ratios"`. Defaults to `"summary"`. |
+| `get_financials` | `statement` | string | `"summary"`, `"income"`, `"balance_sheet"`, `"cash_flow"`, `"ratios"`. Defaults to `"summary"`. |
 | `get_financials` | `periods` | integer | Defaults to 4. **Do NOT pass as string via `:periods=4` syntax** — MCP serializes it as a string and fails validation. Rely on server default or pass as typed integer at call site. |
 | `get_score_analysis` | `weeks` | integer | Defaults to 52. Same serialization caveat as `periods`. |
 | `get_stock_outlook` | `limit` | integer | Defaults to 20 (applies to `dividends` aspect, range 1-100). Same serialization caveat as `periods`. |
@@ -119,7 +119,7 @@ Scoring tools (`get_peer_snapshot`, `get_score_analysis`, `quick_portfolio_score
 
    | Tool | Identity field |
    |---|---|
-   | `get_company_info` | `name` — the oracle the other checks compare against |
+   | `get_company_info` | `data.name` — the oracle the other checks compare against. Nested under a `data` object (confirmed live, 2026-10-05); there is no top-level `name`, and the market/region field is `data.market`, never `country` — `data` has no `country` key at all |
    | `get_peer_snapshot` | `target_company`, **top level**. There is no `name` field anywhere in the response — each peer's name is `comparison[].company` |
    | `get_score_analysis` | no company name in the response — verify `data[0].symbol` matches the requested RIC instead |
    | `quick_portfolio_scores` | `holdings_analyzed[].company_name`, per holding row |
@@ -281,7 +281,7 @@ External integrators and skill authors frequently ask for capabilities that have
 | User-phrased need | Use this | Notes |
 |---|---|---|
 | Stress book / scenario analysis | `/parallax-scenario-analysis` skill | Forward-looking event analysis (rate shock, USD shock, oil shock, regime replays). Skill orchestrates `get_assessment` + macro + news. NOT a REST primitive — talk track lives in skill layer. |
-| Drawdown attribution ("why am I down X%?") | `/parallax-explain-portfolio` skill | Decomposes drawdown into market-regime / factor / stock-specific components via score-vs-price divergence. 70 billable tokens at 10 holdings. |
+| Drawdown attribution ("why am I down X%?") | `/parallax-explain-portfolio` skill | Decomposes drawdown into market-regime / factor / stock-specific components via score-vs-price divergence. ~80 billable tokens at 10 holdings (`_parallax/token-costs.md`). |
 | Per-holding return contribution | `analyze_portfolio` → `company_contribution` field | Returns `total_pl`, `contribution_pct`, `return_pct`, `avg_weight` per holding. **NOTE:** This is RETURN contribution, NOT risk contribution (no marginal vol / component VaR). For risk decomposition, no current capability — flag as gap. **`contribution_pct` is a return contribution: `row.total_pl / portfolio_parameters.initial_value`, rows sum to `portfolio_summary.total_return`.** `contrib_bps = contribution_pct × 10000`; rank and take sign directly from `contribution_pct`. An older server build returned a P&L-share basis instead (rows summing to 1.0, needing `× total_return` to convert) — callers without a client-visible version signal for a given call pattern should guard against a reversion: if `sum(contribution_pct) ≈ 1.0` rather than `≈ total_return`, the share basis is back; apply the `× total_return` conversion and flag it. See `response-schemas.md`. |
 | Portfolio drawdown statistics | `analyze_portfolio` → `drawdown_analysis` field | Includes `current_drawdown`, `max_drawdown`, underwater periods, durations, recovery days, and a per-day timeseries. See `response-schemas.md` for nested structure. |
 | Rolling metrics (Sharpe, vol, beta, correlation) | `analyze_portfolio` → `rolling_metrics` field | Three windows: `window_30d` / `window_60d` / `window_90d`, each with daily timeseries. See `response-schemas.md`. |

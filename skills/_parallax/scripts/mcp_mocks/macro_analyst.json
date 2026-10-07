@@ -1,22 +1,34 @@
 {
+  "success": true,
+  "report_date": "2033-01-18",
   "market": "United States",
   "component": "tactical",
-  "regime": "late-cycle",
-  "tactical": {
-    "stance": "neutral-defensive",
-    "horizon_months": 3,
-    "summary": "Sticky core inflation and a hawkish Fed reaction function argue for trimming duration risk and rotating from high-multiple growth toward quality-defensive equity. Credit remains well-bid but spreads have begun to widen in HY.",
-    "key_drivers": [
-      "Core CPI 3.4% YoY, above target",
-      "Fed minutes show no near-term cut",
-      "Labor market cooling but not breaking"
-    ],
-    "factor_tilts": {
-      "VALUE": "neutral",
-      "QUALITY": "overweight",
-      "MOMENTUM": "underweight",
-      "DEFENSIVE": "overweight"
+  "component_name": "tactical",
+  "content": "The equity overweight is trimmed on valuation alone. At elevated price-to-earnings multiples against a decelerating earnings-revision breadth, the risk/reward for adding duration here is unattractive. Sticky core inflation and a hawkish Fed reaction function argue for trimming duration risk and rotating from high-multiple growth toward quality-defensive equity. Credit remains well-bid but spreads have begun to widen in high yield.",
+  "file_url": "https://example.com/storage/macro_reports/united-states-tactical-20330118-signed.pdf",
+  "truncated": false,
+  "next_steps": {
+    "discovery_suggestion": {
+      "action": "Find stocks matching this macro signal",
+      "tool": "build_stock_universe({ query: '<describe the opportunity>' })",
+      "note": "Use insights from tactical to form a thematic query"
+    },
+    "other_components": {
+      "action": "Explore other components",
+      "available": [
+        "macro_indicators",
+        "sectors",
+        "news",
+        "fixed_income",
+        "currency",
+        "liquidity",
+        "sector_positioning",
+        "factors"
+      ]
+    },
+    "full_report": {
+      "action": "Access the complete untruncated report",
+      "file_url": "https://example.com/storage/macro_reports/united-states-tactical-20330118-signed.pdf"
     }
-  },
-  "generated_at": "2026-04-30T17:55:00Z"
+  }
 }

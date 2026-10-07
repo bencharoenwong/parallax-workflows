@@ -140,7 +140,7 @@ def test_real_generator_rejects_a_mutated_string_value(tmp_path):
     """
     tree = _real_tree(tmp_path)
     payload = json.loads((tree / "get_company_info.json").read_text("utf-8"))
-    payload["name"] = "zz-planted-sentinel"
+    payload["data"]["name"] = "zz-planted-sentinel"
     _rewrite(tree, "get_company_info", payload)
 
     errors = prov.regeneration_errors(gen.build_fixtures(), tree, prov.MANAGED)
@@ -325,6 +325,9 @@ def identity_pairs(portfolio: dict, oracle: dict) -> dict[str, list[str]]:
 
     Returns ``{"oracle": [...], "candidates": [...]}``. Injectable so the
     negative twins below drive the same lookup with planted payloads.
+
+    ``oracle`` here is the get_company_info envelope: ``symbol`` is top-level,
+    ``name`` lives under ``data`` (confirmed live, 2026-10-05).
     """
     ric = oracle["symbol"]
     candidates = []
@@ -332,7 +335,7 @@ def identity_pairs(portfolio: dict, oracle: dict) -> dict[str, list[str]]:
         for row in portfolio.get(block, []):
             if row.get("ric") == ric and "name" in row:
                 candidates.append(row["name"])
-    return {"oracle": [oracle["name"]], "candidates": candidates}
+    return {"oracle": [oracle["data"]["name"]], "candidates": candidates}
 
 
 def test_every_holding_row_carries_the_name_the_gate_reads(tracked_portfolio):
@@ -381,7 +384,7 @@ def test_identity_pair_lookup_finds_nothing_for_an_absent_holding():
     rather than as a pass."""
     portfolio = {"latest_holdings": [{"ric": "ZZAA.O", "name": "Zulu Alpha Corp"}],
                  "company_contribution": [{"ric": "ZZAA.O", "name": "Zulu Alpha Corp"}]}
-    oracle = {"symbol": "ZZBB.O", "name": "Zulu Bravo Corp"}
+    oracle = {"symbol": "ZZBB.O", "data": {"name": "Zulu Bravo Corp"}}
     assert identity_pairs(portfolio, oracle)["candidates"] == []
 
 
@@ -390,10 +393,10 @@ def test_identity_pair_lookup_flags_a_genuine_divergence():
     portfolio = {"latest_holdings": [{"ric": "ZZAA.O", "name": "Zulu Alpha Corp"}],
                  "company_contribution": [
                      {"ric": "ZZAA.O", "name": "Zulu Alpha Hospitality Trust"}]}
-    oracle = {"symbol": "ZZAA.O", "name": "Zulu Alpha Corp."}
+    oracle = {"symbol": "ZZAA.O", "data": {"name": "Zulu Alpha Corp."}}
     candidates = identity_pairs(portfolio, oracle)["candidates"]
     normalized = [normalize_company_name(c) for c in candidates]
-    target = normalize_company_name(oracle["name"])
+    target = normalize_company_name(oracle["data"]["name"])
     assert normalized[0] == target, "punctuation-only difference must not flag"
     assert normalized[1] != target, "a different company must flag"
 
@@ -403,7 +406,7 @@ def test_a_row_without_a_name_is_not_offered_as_a_comparison():
     lookup must not hand back an empty string that then compares equal."""
     portfolio = {"latest_holdings": [{"ric": "ZZAA.O"}],
                  "company_contribution": [{"ric": "ZZAA.O", "name": "Zulu Alpha Corp"}]}
-    oracle = {"symbol": "ZZAA.O", "name": "Zulu Alpha Corp"}
+    oracle = {"symbol": "ZZAA.O", "data": {"name": "Zulu Alpha Corp"}}
     assert identity_pairs(portfolio, oracle)["candidates"] == ["Zulu Alpha Corp"]
 
 
@@ -434,7 +437,7 @@ def test_a_real_name_never_folds_to_the_empty_string(tracked_portfolio):
     risk of the collapse, so the hole is reachable only through absent or
     contentless input."""
     oracle = _tracked("get_company_info")
-    names = [oracle["name"]]
+    names = [oracle["data"]["name"]]
     for block in ("latest_holdings", "company_contribution"):
         names += [row["name"] for row in tracked_portfolio[block]]
     for name in names:
@@ -645,14 +648,15 @@ def test_tracked_fixtures_describe_one_issuer_consistently(tracked_portfolio):
     Consumers load the FILES through ``load_mock``, so the same statement is
     made here against what is on disk."""
     oracle = _tracked("get_company_info")
+    data = oracle["data"]
     score = _tracked("get_score_analysis")
     assert score["symbol"] == oracle["symbol"]
 
     holding = next(h for h in tracked_portfolio["latest_holdings"]
                    if h["ric"] == oracle["symbol"])
-    assert holding["sector"] == oracle["sector"]
-    assert holding["industry"] == oracle["industry"]
-    assert names_match(holding["name"], oracle["name"]) is True
+    assert holding["sector"] == data["sector"]
+    assert holding["industry"] == data["industry"]
+    assert names_match(holding["name"], data["name"]) is True
 
 
 def test_cross_fixture_check_fails_on_a_planted_disagreement():

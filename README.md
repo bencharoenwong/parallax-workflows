@@ -273,7 +273,7 @@ Each Parallax API call consumes tokens. Quick reference:
 |---|---|---|
 | Quick stock check | 2–29 | `/parallax-should-i-buy` ~29 |
 | Deep analysis | 31–46 | `/parallax-due-diligence` ~31 |
-| Portfolio (10 holdings) | 36–105 | `/parallax-portfolio-checkup` ~36 |
+| Portfolio (10 holdings) | 36–105 | `/parallax-portfolio-checkup` ~46 |
 
 Full breakdown in `skills/_parallax/token-costs.md`.
 
@@ -339,7 +339,7 @@ Each `SKILL.md` is a self-contained instruction set. Claude reads it when you in
 - **RIC format required** for most workflows (except `/parallax-should-i-buy`)
 - **`build_stock_universe` uses keyword matching** — use sector-level queries ("US large cap consumer staples"), not abstract concepts ("pricing power in stagflation")
 - **Peer groups are industry-based** — mega-caps may be compared to smaller industry peers
-- **`check_macro_health` costs 5 tokens** — known issue, fix planned
+- **`check_macro_health` is deprecated** — use `check_api_health` for liveness or `list_macro_countries` for coverage (see `skills/_parallax/token-costs.md`)
 
 ## License
 

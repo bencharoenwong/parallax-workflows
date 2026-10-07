@@ -1,7 +1,7 @@
 # House View Stress Test — Feature Design
 
 <!-- authority: observation -->
-<!-- verified: 2026-05-24 -->
+<!-- verified: 2026-10-07 -->
 <!-- overrides: live schema and live responses win -->
 
 Method: autoplan-style review structure, adapted to a CIO setting. Pulled from
@@ -125,20 +125,25 @@ default to US if ambiguous) so the macro_regime dimensions still get a compariso
 anchor. Document this fallback explicitly in the run artifact.
 
 **Fan-out cap.** The schema's `regions` block has 27 keys. Worst-case naive fan-out
-is `27 markets × 3 tools (telemetry + macro_analyst + score_analysis-bellwether) ≈
-80 concurrent MCP calls`, which exceeds reasonable per-run MCP budget and may trip
-rate limits. Cap: **12 tilted markets per run** (covers the typical CIO view; an
-"EM-overweight, granular" view rarely exceeds this). If `tilted_markets > 12`,
-prompt the user once with three options: (a) stress all, chunk into ceil(N/12)
-sequential batches; (b) stress top-12 by `|tilt|`, surface remainder as "deferred,
-re-run for full coverage"; (c) cancel. Never silently truncate. `check_macro_health`
-is one global call regardless of market count.
+is `27 markets × 2 tools (macro_analyst + score_analysis-bellwether) ≈ 54
+concurrent MCP calls`, plus one global `get_telemetry` call, which exceeds
+reasonable per-run MCP budget and may trip rate limits. Cap: **12 tilted markets
+per run** (covers the typical CIO view; an "EM-overweight, granular" view rarely
+exceeds this). If `tilted_markets > 12`, prompt the user once with three options:
+(a) stress all, chunk into ceil(N/12) sequential batches; (b) stress top-12 by
+`|tilt|`, surface remainder as "deferred, re-run for full coverage"; (c) cancel.
+Never silently truncate. `get_telemetry` is one global call regardless of market
+count — it is synchronous (no polling) and takes only `date`/`fields`, with no
+per-market parameter, so one call returns every covered market's slice and
+calling it again per tilted market just re-bills 1 credit for identical data.
+`check_macro_health` is DEPRECATED (1 credit, not 5) and carries no freshness
+field; prefer `check_api_health` (liveness, 0 credits) or `list_macro_countries`
+(coverage, 1 credit) instead of calling it at all.
 
 | Tool | Purpose |
 |---|---|
-| `check_macro_health` (once, not per market) | freshness of macro data across markets |
-| `get_telemetry` | per-market regime tag + signals + commentary |
-| `macro_analyst` (summary) | per-market 9-component macro view |
+| `get_telemetry` (once, global — no market parameter) | regime tag + signals + commentary + per-market divergences, all markets in one call |
+| `macro_analyst` (summary, per market) | per-market 9-component macro view |
 
 Bail on tool failure with explicit `PARALLAX_SILENT` / `UNCOVERED` marking
 (Principle 2). Never let a fail-empty silently look like agreement.
@@ -290,7 +295,7 @@ Options (mirrors autoplan, adapted to a view update):
 | Active view loading | `~/.parallax/active-house-view/view.yaml` + loader.md | yes |
 | Audit append + hash chain | `audit_chain.append_entry()` | yes (new `action` value) |
 | Restore / version archive | `.archive/<view_id>-<version_id>/` | yes (no extra work needed; stress test doesn't mutate) |
-| Macro data | `get_telemetry`, `macro_analyst`, `check_macro_health` | yes |
+| Macro data | `get_telemetry`, `macro_analyst` | yes (`check_macro_health` is deprecated — see the fan-out cap note above; use `check_api_health`/`list_macro_countries` instead) |
 | Country coverage | `list_macro_countries` | yes (drives UNCOVERED classification) |
 | Provenance taxonomy | `manual_edit` class in schema.yaml §"Classification taxonomy" | yes (for the Phase 4-B handoff) |
 | Status banner | `view_status.py` | extend later to surface "stale vs Parallax data" — not in this scope |
@@ -302,14 +307,14 @@ Options (mirrors autoplan, adapted to a view update):
 
 | ID | Mode | Mitigation |
 |---|---|---|
-| M1 | `check_macro_health` returns no `last_updated` | mark cell `UNVERIFIABLE_DATA` (separate from `UNCOVERED`); proceed |
+| M1 | No Step 2 response carries a parseable `report_date`/`data_as_of` | `stress.compute_parallax_age_days` returns `None`; `compute_age_delta` returns `"unverifiable"`; divergent cells resolve to `DIVERGENT_FRESH` (CIO Challenges suppressed — only `DIVERGENT_STALE` escalates) with an explicit "Parallax data age: unverifiable" line in the run artifact; proceed |
 | M2 | Parallax MCP not connected | fail loud, no audit write, exit |
 | M3 | View identity at Phase 3 ≠ identity captured at Phase 0 — `view_hash` covers only tilts + excludes, so `view_id`/`version_id` are compared too (a maker re-save of identical tilts mints a fresh `version_id`); checked under the view transaction lock (see `stress.audit_identity`) | abort with "view changed mid-run, retry"; partial work discarded |
 | M4 | Every tilted market is `UNCOVERED` | render full UNCOVERED report; audit entry with `applied=false`; suggest expanding region tilts to broader keys covered by Parallax |
 | M5 | Hash chain broken when reading `audit.jsonl` | refuse to run; user must restore from `.archive/` or `--re-pair` (existing flow) |
 | M6 | User picks B/C at gate but `load-house-view` confirmation fails | stress-test audit entry already written with `applied=false`; load-house-view writes its own `save` entry; no state corruption |
 | M7 | Two stress-test runs concurrently (parallel terminals) | second run sees `view_hash` unchanged at Phase 0 + 3 (no view mutation); both audits append safely via hash-chain serialisation; CIO sees two artifacts |
-| M8 | Parallax `last_updated` is present but stale (e.g., `parallax_age_days >> 30`) | `compute_age_delta` returns `"fresh"` when CIO is younger than Parallax-age + 30d, so a 90-day-old Parallax signal vs. fresh CIO renders as `DIVERGENT_FRESH` (Taste) — not flagged as a data-quality issue. v1 limitation; CIO must inspect `last_updated` directly via `check_macro_health` before treating divergences as substantive (the artifact's header does not yet surface Parallax age — v2 dependency). v2 will add a `PARALLAX_DATA_STALE` sentinel above an absolute age threshold and surface `parallax_age_days` in the artifact header. Surfaced by adversarial-reviewer post-implementation. |
+| M8 | `macro_analyst` `report_date` is present but stale (e.g., `parallax_age_days >> 30`) | `compute_age_delta` returns `"fresh"` when CIO is younger than Parallax-age + 30d, so a 90-day-old Parallax signal vs. fresh CIO renders as `DIVERGENT_FRESH` (Taste) — not flagged as a data-quality issue. v1 limitation; CIO must inspect `report_date` on the `macro_analyst` response before treating divergences as substantive (the artifact's header does not yet surface Parallax age — v2 dependency). v2 will add a `PARALLAX_DATA_STALE` sentinel above an absolute age threshold and surface `parallax_age_days` in the artifact header. Surfaced by adversarial-reviewer post-implementation. |
 
 ---
 
@@ -358,8 +363,8 @@ CODE PATHS                                              CIO FLOWS (stress test r
 [+] stress-house-view/external_comparison.py
   ├── compute_age_delta()                               [+] MCP failure paths
   │   ├── [GAP] ★★★ stale/fresh/both-fresh classifier     ├── [GAP] ★★★  market times out → PARALLAX_SILENT, run completes
-  │   └── [GAP] ★★  parallax_age=null → UNVERIFIABLE_     ├── [GAP] ★★   429 rate-limit on one market → same handling
-  │                  DATA path                            ├── [GAP] ★★   Parallax MCP unreachable → fail-loud, no audit
+  │   └── [GAP] ★★  parallax_age=null → DIVERGENT_FRESH   ├── [GAP] ★★   429 rate-limit on one market → same handling
+  │                  (unverifiable, no CIO Challenge)     ├── [GAP] ★★   Parallax MCP unreachable → fail-loud, no audit
   ├── resolve_cell_state()                                └── [GAP] ★    market not in list_macro_countries → UNCOVERED
   │   ├── [GAP] ★★★ ALIGNED                                              with explicit note (no proxy)
   │   ├── [GAP] ★★★ DIVERGENT_STALE → CIO Challenge     [+] Schema validation gate

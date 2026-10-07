@@ -1,12 +1,32 @@
 {
-  "country": "United States",
-  "currency": "USD",
-  "description": "Axiom Compute Corp is a synthetic issuer used in Parallax fixture tests. It does not exist. Every value in this fixture is produced by gen_mock_fixtures.py from a pinned seed, so the file can be regenerated and compared byte for byte.",
-  "exchange": "NASDAQ",
-  "industry": "Semiconductors & Semiconductor Equipment",
-  "market_cap_usd": 1274200000000,
-  "name": "Axiom Compute Corp",
-  "sector": "Information Technology",
-  "symbol": "AXCM.O",
-  "website": "https://www.example.com/axiom-compute"
+  "data": {
+    "activity": "Active",
+    "change": "-0.5",
+    "changepercent": "-0.36",
+    "close": "138.5",
+    "currency": "USD",
+    "defensive": "7",
+    "description": "Axiom Compute Corp is a synthetic issuer used in Parallax fixture tests. It does not exist. Every value in this fixture is produced by gen_mock_fixtures.py from a pinned seed, so the file can be regenerated and compared byte for byte.",
+    "exchange": "NASDAQ",
+    "industry": "Semiconductors & Semiconductor Equipment",
+    "market": "United States",
+    "mktcap": "1274200000000",
+    "momentum": "5",
+    "name": "Axiom Compute Corp",
+    "quality": "6",
+    "recommendation": "HOLD",
+    "ric": "AXCM.O",
+    "sector": "Information Technology",
+    "tactical": "4",
+    "total": "5.5",
+    "value": "5",
+    "volume": "74000"
+  },
+  "score_scale": {
+    "more": "Ask what a factor measures or why a score changed; the methodology lookup costs nothing extra on this call.",
+    "range": "0-10. Each per-stock score is a percentile rank against other covered stocks, not an absolute measure.",
+    "weighting": "The overall score's factor weights shift across market regimes, so one factor can dominate `total` in a way a plain average would not."
+  },
+  "success": true,
+  "symbol": "AXCM.O"
 }

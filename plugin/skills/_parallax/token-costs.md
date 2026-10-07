@@ -1,7 +1,7 @@
 # Token Cost Reference
 
 <!-- authority: observation -->
-<!-- verified: 2026-10-01 -->
+<!-- verified: 2026-10-07 -->
 <!-- overrides: live schema and live responses win -->
 
 Parallax uses token-based pricing. All tools consume the same number of tokens whether accessed via API, MCP, or the web platform.
@@ -15,7 +15,6 @@ Parallax uses token-based pricing. All tools consume the same number of tokens w
 | `get_docs` / `list_docs` | Documentation access |
 | `search_stocks` | Stock symbol search (fuzzy). Free by design, so resolving a ticker to its RIC never adds to a workflow's total. **Pending:** as of 2026-10-01 the live service still bills 1 credit per call until the price change deploys; the live tool description wins until it says "FREE". |
 | `check_api_health` | Connector health probe. Free, so a health check never changes a workflow's total. |
-| `export_price_series` | Daily price data export. Its own MCP tool description states "FREE" (verified live 2026-07-20; the whole tool suite marks free tools "FREE" and omits the marker on billable ones). Was previously listed under "1 token each" — reclassified to match the vendor's stated contract. **Reversible:** if operator billing shows this is metered (e.g. free only within plan limits), move it back and revise dependent skill estimates. |
 
 ### 1 token each
 | Tool | Description |
@@ -31,13 +30,15 @@ Parallax uses token-based pricing. All tools consume the same number of tokens w
 | `etf_profile` | ETF profile/classification probe. Cost measured 2026-07-28 — previously carried as UNVERIFIED. |
 | `etf_daily_price` | ETF daily price series. Cost measured 2026-07-28 — previously carried as UNVERIFIED. |
 | `list_macro_countries` | Available macro market coverage |
-| `get_telemetry` | Market regime signals and divergences |
+| `get_telemetry` | Market regime signals and divergences. Synchronous — returns directly, no polling — and global: `date`/`fields` only, no per-market parameter. One call returns every covered market's slice at once; call it once per run, never once per tilted/exposure market. |
+| `export_price_series` | Daily price data export. **Corrected 2026-10-06:** the live tool description now states "Cost: 1 credit" with no FREE marker; a live probe billed `cost_credits=1`. Moved out of the free table — the 2026-07-20 FREE verification is superseded. Returns the raw daily close, not a dividend-adjusted/total-return series; do not assume TR convention. **Reversible:** if a future operator billing check shows this reverting to free, move it back and revise dependent skill estimates. |
+| `check_macro_health` | **DEPRECATED, 1 credit (not 5).** The live tool description reads: "DEPRECATED — for server liveness use `check_api_health` (0 credits); for macro coverage use `list_macro_countries` (1 credit), which returns the same data." Corrected 2026-10-06 — previously listed at 5 credits. The tool returns `{success, service, status, markets}` — no `market_count`, and no `last_updated` or freshness field anywhere in the payload, so it cannot back a "Data Freshness" section. |
 
 ### 1 token per holding (fan-out)
 | Tool | Description | 10-holding portfolio |
 |---|---|---|
 | `quick_portfolio_scores` | Portfolio factor scores | 10 tokens |
-| `check_portfolio_redundancy` | Overlap detection | 10 tokens |
+| `check_portfolio_redundancy` | Overlap detection | 1 token per holding checked, capped at the top 100 by weight (10 tokens at 10 holdings) |
 
 > **Tip:** For large portfolios (15+ holdings), `analyze_portfolio` at 5 tokens flat may be more cost-effective than `quick_portfolio_scores` at 1 token per holding.
 
@@ -49,8 +50,7 @@ Parallax uses token-based pricing. All tools consume the same number of tokens w
 | `get_technical_analysis` | Trend, momentum, support/resistance |
 | `get_financial_analysis` | Palepu framework analysis (async, 2-5 min) |
 | `analyze_portfolio` | Portfolio risk/concentration analysis (flat fee) |
-| `macro_analyst` | Country macro analysis |
-| `check_macro_health` | Macro data freshness check (known bug: routes through macro-report endpoint instead of a dedicated 0-token health endpoint) |
+| `macro_analyst` | Country macro analysis. Returns free prose (`content`) plus a pre-signed, time-limited storage URL (`file_url`) for the full report — not a structured `{regime, tactical: {...}}` object. |
 
 ### 10 tokens each
 | Tool | Description |
@@ -78,8 +78,8 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 | Workflow | Tokens (typical) | Key cost drivers |
 |---|---|---|
 | `/parallax-score-explainer` | **0-2** | Free if methodology-only; 2 if score data needed |
-| `/parallax-peer-comparison` | **8** | Peer snapshot + peer comparison export + 3 score histories (5) + 3 `etf_profile` probes (3) |
-| `/parallax-halal-screen` | **4** single stock (~4-5/holding portfolio) | company_info + balance_sheet (merged debt + interest-bearing check) + ratios + score_analysis = 4; +5 optional Palepu; portfolio mode adds redundancy fan-out + alternatives |
+| `/parallax-peer-comparison` | **~11** | Peer snapshot + peer comparison export + 3 score histories (5) + 3 `etf_profile` probes (3) + 3 price-series calls (`export_price_series` or `etf_daily_price`, 1 credit each per leg — billed, not free) |
+| `/parallax-halal-screen` | **4** single stock (~4-5/holding portfolio) | company_info + balance_sheet (merged debt + interest-bearing check) + income + score_analysis = 4; +5 optional Palepu; portfolio mode adds redundancy fan-out + alternatives |
 | `/parallax-should-i-buy` | **29** | 4 outlook aspects + 2 macro markets + news + technicals (5) |
 | `/parallax-earnings-quality` | **24** | Palepu (5) + assessment (10) + news (5) |
 | `/parallax-due-diligence` | **31** | 4 financials + Palepu + stock report (10) |
@@ -91,27 +91,27 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 
 | Workflow | Tokens (typical) | Key cost drivers |
 |---|---|---|
-| `/parallax-thematic-screen` | **~19** (default) / **~14** (`--no-macro`) | Universe build + 5 snapshots + 3 financials + `list_macro_countries` + `macro_analyst` × up to 3 markets + `get_telemetry` regime signal. `--no-macro` reverts to the prior ~14-token baseline. |
+| `/parallax-thematic-screen` | **~24** (default) / **~19** (`--no-macro`) | Universe build + 5 snapshots + 5 `get_company_info` calls (Step 2 Batch B pairs `get_peer_snapshot` AND `get_company_info` per `top_n` candidate — previously omitted from this recipe) + 3 financials + `list_macro_countries` + `macro_analyst` × up to 3 markets + `get_telemetry` regime signal. Higher at the 3-market macro cap. `--no-macro` drops the macro_analyst fan-out. |
 | `/parallax-portfolio-builder` | **36** | Universe + 10 snapshots + redundancy + validation |
-| `/parallax-portfolio-checkup` | **36** | 2x fan-out (20) + 3 macro markets (15) |
+| `/parallax-portfolio-checkup` | **~46** | 2x per-holding fan-out (20) + `list_macro_countries` (1) + up to 3 macro markets (15) + `check_portfolio_redundancy` at 1 credit per holding checked (10) |
 | `/parallax-morning-brief` | **50** | Telemetry + macro + 2x fan-out + 3 news |
 | `/parallax-watchlist-monitor` | **54** | 10 score scans + news/tech/analyst for ~4 flagged |
-| `/parallax-explain-portfolio` | **70** | 10 company-info checks + 10 primary scoring calls + 10 score trends + telemetry + country listing + 2 macro + 3 news + 3 detractor snapshots + 10 `etf_profile` probes = 70 |
+| `/parallax-explain-portfolio` | **~80** | 10 company-info checks + 10 primary scoring calls + 10 score trends + telemetry + country listing + 2 macro + 3 news + 3 detractor snapshots + 10 `etf_profile` probes + 10 per-holding price-series calls (`export_price_series` or `etf_daily_price`, 1 credit each) = 80 |
 | `/parallax-scenario-analysis` | **78** | The 10-holding equity subtotal includes 10 company-info checks, 10 score scans, portfolio analysis, universe/beneficiary scoring, macro/news, financial checks, and 2 assessments. Plus 10 mandatory `etf_profile` probes (10) = 78. ETFs reduce the billable equity score fan-out. |
 | `/parallax-rebalance` | **76** | 10 score trends + replacements + validation re-score |
 | `/parallax-client-review` | **105** | 8 drill-downs + 5 news + assessment + 2x analyze |
-| `/parallax-desk-call-list` | **~1 + 3\|M_equity\| + 5·min(\|M_equity\|,K) + 1·\|M_etf\|** | 1 telemetry. The wide equity price scan is `export_price_series`, now FREE (above), so it adds nothing. Per equity mover: company_info + peer_snapshot + score_analysis (3) + news (5, cap K). Per ETF mover: `etf_daily_price` (1). Equity-desk formula: `1 + 3\|M_equity\| + 5·min(\|M_equity\|,K)` (e.g. 6 equity movers → ~49). Cost scales with movers, not client count. |
+| `/parallax-desk-call-list` | **~1 + \|U\| + \|U_etf\| + 3\|M_equity\| + 2\|M_etf\| + 5·min(\|M_equity\|,K)** | 1 telemetry. Batch A's wide price scan bills up to `\|U\|` `export_price_series` calls (1 credit each, equity-only, not FREE — corrected 2026-10-06; cached ETFs skip it, so `\|U\|` is an upper bound) plus one `etf_daily_price` per ETF in `U` (`\|U_etf\|`) — every ETF in the universe is priced, not only ETF movers. Per equity mover (Batch B): `get_company_info` + `get_peer_snapshot` + `get_score_analysis` (3) + news (5, cap `K`). Per ETF mover (Batch B): `get_company_info` + `get_peer_snapshot` (2) — enrichment only; its price was already billed via `\|U_etf\|`. Equity-desk formula (no ETFs in `U`): `1 + \|U\| + 3\|M_equity\| + 5·min(\|M_equity\|,K)` (e.g. a 20-symbol universe with 6 equity movers → ~69). Cost scales with universe size, ETF count, and mover count, not client count. |
 
 > **Broad-selloff guard:** on a market-wide morning the mover set `M` can approach
 > `U`, and news + enrichment dominate the bill. `/parallax-desk-call-list`
 > deterministically raises its move threshold to cap `|M|` at 40 and states the
-> auto-raise in the report. With every endpoint this workflow calls now priced, the numeric worst case for a pure-equity desk at cap is `1 + 3×40 + 5×K` (e.g. K=10 → ~171 tokens).
+> auto-raise in the report. With every endpoint this workflow calls now priced, the numeric worst case for a pure-equity desk at cap (`|U| = |M_equity| = 40`, no ETFs) is `1 + |U| + 3×40 + 5×K` (e.g. K=10 → 1 + 40 + 120 + 50 = ~211 tokens).
 
 ### Cost Context
 
 With the **Standard plan** ($2,000/month, 2,000 included tokens, $0.20 overage):
 - A daily morning brief (~50 tokens) = ~1,100 tokens/month (22 trading days)
-- A daily `/parallax-desk-call-list` (~49 tokens for 6 equity movers) = ~1,080 tokens/month (22 trading days)
+- A daily `/parallax-desk-call-list` (~69 tokens for a 20-symbol universe with 6 equity movers, pure-equity) = ~1,518 tokens/month (22 trading days)
 - 5 should-i-buy checks/week (~29 each) = ~580 tokens/month
 - 2 client reviews/week (~105 each) = ~840 tokens/month
 - **Typical active RM usage:** 2,000-3,000 tokens/month

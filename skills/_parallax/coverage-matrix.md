@@ -1,7 +1,7 @@
 # Parallax MCP Coverage Matrix
 
 <!-- authority: observation -->
-<!-- verified: 2026-07-20 -->
+<!-- verified: 2026-10-06 -->
 <!-- overrides: live schema and live responses win -->
 
 **Purpose.** Document which Parallax MCP tool covers which asset class. Skills must consult this before adding a new MCP call. Mismatched tool/asset-class pairs (e.g., `export_price_series(SPY)`) silently fail-empty and would cause silent data drops in downstream computation.
@@ -14,7 +14,7 @@
 
 | Tool | Equity (e.g., AAPL.O, JPM.N) | ETF (e.g., SPY, EWJ, QQQ) | Notes |
 |---|---|---|---|
-| `export_price_series` | ✓ supported | ✗ returns `{success:false, error}` (NOT `[]`; verified live 2026-07-20) | Equity-only, FREE. Pass RIC with exchange suffix. A `success:false` response is a usable equity/ETF discriminator. |
+| `export_price_series` | ✓ supported | ✗ returns `{success:false, error}` (NOT `[]`; verified live 2026-07-20) | Equity-only, **1 credit per call** (corrected 2026-10-06 — the live tool description states "Cost: 1 credit", no FREE marker; see `token-costs.md`). Pass RIC with exchange suffix. A `success:false` response is a usable equity/ETF discriminator. |
 | `etf_daily_price` | ✗ returns `[]` | ✓ supported | ETF-only. Pass plain ticker (no `.X` suffix). Returns per-row `date` + `changepercent` — move AND date in one call. 1 token per call. |
 | `etf_profile` | ✗ returns `{"error":"No profile data found"}` | ✓ rich profile (name, exchange, price, market cap, scores, recommendation, `change_percent`; re-verified live 2026-10-03) | **Use as asset-class oracle.** Also returns `change_percent`, but with NO as-of/date field (verified live 2026-07-20) — use `etf_daily_price` when a dated ETF move is needed. Single-symbol probe; 1 token per call per `token-costs.md`. |
 | `etf_search` | n/a | ✓ supported | Discovery by market/keyword, query required. Deprecated alias of `search_etfs`; prefer `search_etfs`. |

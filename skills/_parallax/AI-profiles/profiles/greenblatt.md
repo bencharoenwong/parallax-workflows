@@ -63,7 +63,7 @@ Because the formula is explicitly mechanical, this profile has zero discretion �
 - **Greenblatt's discretionary judgment.** Greenblatt runs Gotham Capital as a discretionary value investor; the Magic Formula is his simplified systematic version for retail. Not a full replica.
 - **Intangibles-adjusted EY.** Per Lev & Srivastava (2022), traditional earnings yield understates intangibles-heavy firms. The formula is applied as published — not intangibles-adjusted — so high-quality compounders may rank lower than a modernized version would place them.
 - **Small-cap premium.** Gray & Carlisle (2012) show the outperformance is stronger in small-caps. This profile runs on whatever universe is queried. The dispatcher's production default is sector-scoped ("US large-cap consumer staples") because broad universe queries — e.g., all mid-to-large-cap US equities — consistently time out against the async universe builder (see the dispatcher SKILL.md query-scoping rule). For a broad Magic Formula screen, the dispatcher runs sector-by-sector and merges the rankings.
-- **Sector exclusions enforcement.** Greenblatt's book excludes financials and utilities. Default universe build excludes them; custom queries may not.
+- **Sector exclusions enforcement.** Greenblatt's book excludes financials and utilities. `build_stock_universe` has no sector-exclusion parameter, so the tool does not enforce this: the default sector-scoped query avoids those sectors only because it names a different sector, and a custom query can return financials or utilities with nothing to filter them out.
 - **Holding period / rebalancing.** Formula implies annual rebalance; profile is stateless (current ranks only).
 
 ## How to interpret the output

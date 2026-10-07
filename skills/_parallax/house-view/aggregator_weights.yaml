@@ -19,7 +19,16 @@ generated_at: 2026-05-24
 # - Per-region tilts (single-market) bypass threshold.
 
 global_macro_weights:
-  # Aligned to MCP coverage per MCP_FIELD_INVENTORY.md §1 (14 countries).
+  # Aligned to MCP coverage per MCP_FIELD_INVENTORY.md §1's 2026-05-24 capture
+  # (14 countries). STALE as of 2026-10-06: a live probe during the
+  # 2026-10-05 skill-drift audit found list_macro_countries() now returning
+  # 17 markets, including Brazil (listed below as NOT INCLUDED, which is no
+  # longer accurate). This file was not re-derived from that probe — a weight
+  # change needs a full re-alignment pass against a fresh capture, not a
+  # one-line edit — so the markets below remain the 2026-05-24 set pending
+  # that pass. Any market list_macro_countries() returns but this file has no
+  # weight for is zero-weighted by cross_country.py's weights.get(k, 0.0),
+  # silently, which is the bug the audit flagged.
   # "Global" is excluded — it's an aggregate market, not a country (would
   # double-count in cross_country.aggregate).
   # Weights are MSCI ACWI-derived shares; sum normalized to 1.0 across
@@ -43,8 +52,13 @@ global_macro_weights:
   # total_weight coverage ratio uses an honest denominator of 1.0. Smaller
   # markets keep their relative structure intact.
   #
-  # NOT INCLUDED (out of MCP coverage as of 2026-05-24):
+  # NOT INCLUDED (out of MCP coverage as of 2026-05-24 — STALE, see the note
+  # above the weights block):
   #   brazil, mexico, hong_kong, australia, switzerland, netherlands, ...
+  # Brazil is confirmed back in MCP coverage as of a 2026-10-05 probe; do not
+  # treat this list as current for mexico/hong_kong/the rest either, since
+  # they were not independently re-checked in that pass. Re-verify against
+  # list_macro_countries() before adding or removing any market here.
   # If a non-covered market matters for a specific client, add it via
   # client-specific weights overlay (future work) — do NOT add here.
 
