@@ -16,7 +16,7 @@ The known field alone already clears the cutoff, so the ratio is at least 6.0% r
 
 - Compliance Results: `NON-COMPLIANT — interest_investment_income_operating alone is 6.0% of total_revenue (≥ 5%); interest_investment_income_non_operating unavailable`
 - Key Ratios: `Interest-and-investment income / Total revenue: ≥ 6.0% (lower bound; interest_investment_income_non_operating unavailable)`
-- Verdict sensitivity: Ratio 3 gets no exact distance — a lower bound has none. If Ratios 1 and 2 pass, Ratio 3 is the only failing ratio, so no passing ratio is named either: the line states that the verdict rests on a lower bound, that the full Ratio 3 is unknown because `interest_investment_income_non_operating` is unavailable, and that the verdict would change only if the measured interest-and-investment income fell below 5% of `total_revenue`.
+- Verdict sensitivity: Ratio 3 gets no exact distance — a lower bound has none. If Ratios 1 and 2 pass, Ratio 3 is the only failing ratio, so no passing ratio is named either: the line states that the verdict rests on a lower bound, that the full Ratio 3 is unknown because `interest_investment_income_non_operating` is unavailable, and that the verdict would change only if the measured interest-and-investment income fell below 5% of `total_revenue`. The flip target is `UNVERIFIED`, not `COMPLIANT`: a lower bound that clears leaves `interest_investment_income_non_operating` absent, so Ratio 3 becomes unchecked (case 3).
 
 ## 3. Single field < 5%, other absent → UNVERIFIED
 
@@ -44,10 +44,10 @@ A NON-COMPLIANT verdict flips only if every failing ratio falls below its cutoff
 
 Inputs: total debt = 40, total assets = 100 → Ratio 1 = 40% (FAIL). `cash_and_short_term_investments` = 10 → Ratio 2 = 10% (PASS). `op` = 30, `non_op` absent, `total_revenue` = 500 → Ratio 3 ≥ 6.0% (lower-bound FAIL, as in case 2). Verdict: **NON-COMPLIANT**.
 
-Verdict sensitivity: both Ratio 1 and Ratio 3 would need to fall below their cutoffs. Ratio 1 is 7pp above 33%. Ratio 3 is a lower bound (≥ 6.0%, full value unknown because `interest_investment_income_non_operating` is unavailable), so it has no exact distance. Moving Ratio 1 below 33% alone leaves the name NON-COMPLIANT. Even if both cleared, the overall verdict could reach only `UNVERIFIED`: a Ratio 3 below 5% with `non_op` still absent is unchecked, per case 3.
+Verdict sensitivity: both Ratio 1 and Ratio 3 would need to fall below their cutoffs. Ratio 1 is 7pp above 33%. Ratio 3 is a lower bound (≥ 6.0%, full value unknown because `interest_investment_income_non_operating` is unavailable), so it has no exact distance. Moving Ratio 1 below 33% alone leaves the name NON-COMPLIANT. The flip target is `UNVERIFIED`, not `COMPLIANT`, because a failing ratio is a Ratio 3 lower bound: even if both cleared, a Ratio 3 below 5% with `non_op` still absent is unchecked, per case 3.
 
 ### 7. Ratios 1 and 2 both fail exactly
 
 Inputs: total debt = 45, `cash_and_short_term_investments` = 40, total assets = 100 → Ratio 1 = 45%, Ratio 2 = 40% (both FAIL). `op` = 8, `non_op` = 12, `total_revenue` = 500 → Ratio 3 = 4.0% (PASS, both fields present). Verdict: **NON-COMPLIANT**.
 
-Verdict sensitivity: both Ratio 1 (12pp above 33%) and Ratio 2 (7pp above 33%) would need to fall below 33%. Moving either one alone leaves the name NON-COMPLIANT. No ratio is unchecked, so the flip target is `COMPLIANT`.
+Verdict sensitivity: both Ratio 1 (12pp above 33%) and Ratio 2 (7pp above 33%) would need to fall below 33%. Moving either one alone leaves the name NON-COMPLIANT. No ratio is unchecked and no failing ratio is a lower bound, so the flip target is `COMPLIANT`.
