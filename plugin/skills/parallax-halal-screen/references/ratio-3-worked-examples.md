@@ -1,6 +1,6 @@
 # Ratio 3 worked examples
 
-Documentation only — there is no executable test harness for this prose skill. These five cases illustrate Step 3 (Verify) and Step 4 (Compute) of `parallax-halal-screen/SKILL.md` for `interest_investment_income_operating` (`op`), `interest_investment_income_non_operating` (`non_op`), and `total_revenue`. Each component is floored at `max(x, 0)` before summing, per Gotchas and Screening Thresholds in SKILL.md. Figures below are illustrative inputs chosen to exercise the rule, not live Parallax responses (the live-probe evidence cited in SKILL.md — F.N FY2025, 7203.T FY2026-03 — is the basis for the flooring rule itself).
+Documentation only — there is no executable test harness for this prose skill. Cases 1–5 illustrate Step 3 (Verify) and Step 4 (Compute) of `parallax-halal-screen/SKILL.md` for `interest_investment_income_operating` (`op`), `interest_investment_income_non_operating` (`non_op`), and `total_revenue`. Each component is floored at `max(x, 0)` before summing, per Gotchas and Screening Thresholds in SKILL.md. Figures below are illustrative inputs chosen to exercise the rule, not live Parallax responses (the live-probe evidence cited in SKILL.md — F.N FY2025, 7203.T FY2026-03 — is the basis for the flooring rule itself). Cases 6–7 illustrate the Verdict sensitivity rule in SKILL.md's Output Format when more than one ratio fails.
 
 ## 1. Ratio 1 fails; Ratio 3 missing
 
