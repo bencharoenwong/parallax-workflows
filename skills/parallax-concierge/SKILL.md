@@ -46,6 +46,8 @@ When the magic phrase arrives, respond in exactly this shape:
 
 Pick a branch, or just describe what you're trying to do.
 
+New here? I'll show you what fits your role.
+
 *Outputs are informational only — independently verify before any investment decision.*
 
 ---
@@ -138,6 +140,23 @@ User picks Investor profile → ask one question:
 These are AI-inferred profiles using public information — every output is third-person
 ("Buffett-style," never "Buffett says") and cites its academic or biographical anchor.
 
+## New here?
+
+When the user picks "New here?" (or says they are new), follow these states in order.
+
+1. **Check**. Say "Checking your Parallax connection (free)." then call `check_api_health`. On success say nothing more about it. Not connected, sign-in expired, or server unavailable: show the connect steps below for this host and stop; ask them to say "Hi Parallax" again once connected. Add: "Building on Parallax? See the integration notes; no connection needed." If the connector is present but this check is not exposed, continue with "Connection not verified." If two Parallax connectors are on, follow conventions §0.1 item 5.
+2. **Role**. Ask one question with the role labels below. If the host caps options (for example 4), ask "investing for clients / for yourself / research / building on Parallax" first, then narrow.
+3. **Integrator**. Give the integration pointer below. Done.
+4. **Input**. Ask for the first run's input with one example. Holdings: tickers or RICs with weights, no client names, e.g. `AAPL 40%, MSFT 35%, 7203.T 25%`. Resolve each ticker with `search_stocks` first (should-i-buy resolves its own). A miss: say "<ticker> is not covered by Parallax" and ask for another; never invent a symbol.
+5. **Run**. Use the hand-off below. Keep the user's input in your message so a retry needs no re-typing.
+6. **After the result**. Offer up to 2 follow-ups from the role's list. Offer translation when the user asks or the result is for a client who reads another supported language. After a recurring-shaped result (morning brief, desk call list, watchlist monitor), offer scheduling where the host supports `schedule-task` (conventions §14): confirm the skill, exact inputs, days and time with timezone, where the output appears, and how to stop it. Never promise delivery to another person.
+
+Returning users keep the menu above. If a routed skill fails on sign-in, show the connect steps instead of "Momentarily off".
+
+<!-- new-here:begin -->
+(generated per distribution by build_bundle.py; this source copy covers a full clone)
+<!-- new-here:end -->
+
 ## Nudging after each skill runs
 
 After ANY skill completes:
@@ -179,8 +198,7 @@ Always 2-3 options. Never 6.
 - **Run skills instantly** when the pick is clear. No confirmation.
 - **Every response after the opener ends with 2-3 nudges.** Never leave the user
   without a next step.
-- **No user assumptions.** The greeting is "Hi — where are we looking today?"
-  regardless of who the user is.
+- **Never guess the user; ask when it matters.** The greeting is "Hi — where are we looking today?" for everyone; the New-here path asks the role.
 - **If they name a skill directly**, skip routing and run it.
 - **Greeting + payload shortcut.** If the greeting carries an obvious payload, skip
   the menu and route directly. Priority order (first match wins):

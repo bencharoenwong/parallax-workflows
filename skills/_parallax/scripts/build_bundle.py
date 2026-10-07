@@ -529,7 +529,7 @@ def transform_concierge(text: str) -> str:
     text = _cut(text, "**House-view operations** (internal routing",
                 "## \U0001f30d Discovery branch", "concierge house-view block")
     text = _cut(text, "## \U0001f3a9 Investor profile branch",
-                "## Nudging after each skill runs", "concierge profile branch")
+                "## New here?", "concierge profile branch")
     text = _drop_line(text, '- "Run a Buffett-style read on this, or pause?"',
                       "concierge stock nudge")
     text = _cut(text, "**After an Investor-profile skill:**",

@@ -54,6 +54,18 @@ def test_concierge_removes_excluded_routes():
         assert kept in out
 
 
+def test_concierge_keeps_new_here_block():
+    # The "## New here?" section sits between the cut Investor-profile branch
+    # and "## Nudging after each skill runs" in source order; a _cut() whose
+    # end anchor is "## Nudging after each skill runs" silently swallows it
+    # along with the profile branch instead of raising a BuildError.
+    out = bb.transform_concierge(
+        (SKILLS / "parallax-concierge/SKILL.md").read_text(encoding="utf-8"))
+    assert "## New here?" in out
+    assert "<!-- new-here:begin -->" in out
+    assert "<!-- new-here:end -->" in out
+
+
 def test_output_template_subset_keeps_section_headings():
     out = bb.transform_output_template(
         (SKILLS / "_parallax/AI-profiles/output-template.md").read_text(encoding="utf-8"))
