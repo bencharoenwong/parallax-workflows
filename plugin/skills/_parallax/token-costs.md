@@ -1,7 +1,7 @@
 # Token Cost Reference
 
 <!-- authority: observation -->
-<!-- verified: 2026-10-06 -->
+<!-- verified: 2026-10-07 -->
 <!-- overrides: live schema and live responses win -->
 
 Parallax uses token-based pricing. All tools consume the same number of tokens whether accessed via API, MCP, or the web platform.
@@ -38,7 +38,7 @@ Parallax uses token-based pricing. All tools consume the same number of tokens w
 | Tool | Description | 10-holding portfolio |
 |---|---|---|
 | `quick_portfolio_scores` | Portfolio factor scores | 10 tokens |
-| `check_portfolio_redundancy` | Overlap detection | 10 tokens |
+| `check_portfolio_redundancy` | Overlap detection | 1 token per holding checked, capped at the top 100 by weight (10 tokens at 10 holdings) |
 
 > **Tip:** For large portfolios (15+ holdings), `analyze_portfolio` at 5 tokens flat may be more cost-effective than `quick_portfolio_scores` at 1 token per holding.
 

@@ -1,15 +1,22 @@
 {
   "success": true,
   "has_issues": true,
-  "holdings_input": 3,
+  "holdings_input": 4,
   "holdings_resolved": 3,
-  "holdings_failed": 0,
+  "holdings_failed": 1,
   "holdings_trimmed": 0,
-  "holdings_unresolved": [],
-  "coverage_weight_fraction": 1.0,
+  "holdings_unresolved": [
+    {
+      "symbol": "ZZZQ.O",
+      "weight": 0.1,
+      "status": 404,
+      "error": "Target not found in peer response"
+    }
+  ],
+  "coverage_weight_fraction": 0.9,
   "sector_concentration": {
     "Information Technology": 0.7,
-    "Financials": 0.3
+    "Financials": 0.2
   },
   "industry_overlap": {},
   "warnings": [

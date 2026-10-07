@@ -354,14 +354,33 @@ GET_COMPANY_INFO_SCHEMA = {
 # shape is sector_concentration (dict of sector -> weight FRACTION, 0-1) +
 # industry_overlap + warnings + recommendations. There is no overlap_pairs,
 # coverage_pct, holdings_analyzed or holdings_total field anywhere live.
+#
+# Corrected 2026-10-07 against the live handler: ``has_issues`` is tri-state,
+# not bool-only -- the handler emits the literal string "unknown" when
+# coverage is insufficient (< 50% of weight resolved), and only falls back to
+# a real bool (warnings present) once coverage is sufficient.
+# ``holdings_unresolved`` is a list of per-holding failure objects
+# (``{symbol, weight, status?, error, industry?}``), not a list of symbol
+# strings -- it carries the resolution error alongside each symbol.
 CHECK_PORTFOLIO_REDUNDANCY_SCHEMA = {
     "success": bool,
-    "has_issues": (bool, OPTIONAL),
+    "has_issues": ((bool, str), OPTIONAL),
     "holdings_input": (int, OPTIONAL),
     "holdings_resolved": (int, OPTIONAL),
     "holdings_failed": (int, OPTIONAL),
     "holdings_trimmed": (int, OPTIONAL),
-    "holdings_unresolved": ([str], OPTIONAL),
+    "holdings_unresolved": (
+        [
+            {
+                "symbol": str,
+                "weight": NUM,
+                "status": (NUM, OPTIONAL),
+                "error": str,
+                "industry": (str, OPTIONAL),
+            }
+        ],
+        OPTIONAL,
+    ),
     "coverage_weight_fraction": (NUM, OPTIONAL),
     "sector_concentration": dict,
     "industry_overlap": (dict, OPTIONAL),
@@ -426,6 +445,12 @@ GET_NEWS_SYNTHESIS_SCHEMA = {
     "bullet3": str,
     "sources": ([str], OPTIONAL),
     "generation_time_ms": (int, OPTIONAL),
+    # Present in the polled (non-cached) branch per the tool description's
+    # "as-of date where available"; absent when upstream omits it.
+    "as_of": (str, OPTIONAL),
+    # Only the instant-cache-hit branch sets this (to `true`); the polled
+    # branch never sets it at all, so OPTIONAL rather than a plain bool.
+    "cached": (bool, OPTIONAL),
 }
 
 
@@ -443,5 +468,33 @@ MACRO_ANALYST_SCHEMA = {
     "content": str,
     "file_url": (str, OPTIONAL),
     "truncated": (bool, OPTIONAL),
+    "next_steps": (dict, OPTIONAL),
+}
+
+
+# MACRO_ANALYST_SCHEMA above models the DRILLDOWN shape only -- a call with an
+# explicit `component`, rendered as a single top-level
+# `content`/`component_name`/`truncated`. A call with `component` omitted
+# ("overview") goes through the live service's separate overview-shaping path
+# instead, which returns a structurally different payload: no top-level
+# `content` at all, a `components` dict keyed by component name (each value
+# `{content, truncated}`), plus `component_count` and `budget_applied`.
+# Validating an overview-mode mock against MACRO_ANALYST_SCHEMA fails on the
+# missing required `content` field -- use this schema for component-omitted
+# mocks instead.
+MACRO_ANALYST_OVERVIEW_SCHEMA = {
+    "success": (bool, OPTIONAL),
+    "report_date": (str, OPTIONAL),
+    "market": str,
+    "component": (str, OPTIONAL),
+    # Opaque: keys are component names (macro_indicators, tactical,
+    # fixed_income, currency, sectors/sector_positioning, liquidity, news,
+    # factors) and vary by market/availability; values are {content, truncated}.
+    "components": dict,
+    "component_count": (int, OPTIONAL),
+    "budget_applied": (bool, OPTIONAL),
+    "file_url": (str, OPTIONAL),
+    "partial": (bool, OPTIONAL),
+    "missing_components": ([str], OPTIONAL),
     "next_steps": (dict, OPTIONAL),
 }
