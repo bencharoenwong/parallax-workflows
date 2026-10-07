@@ -1223,6 +1223,14 @@ def _build_get_stock_outlook_dividends(paths: dict[str, Any]) -> list[dict]:
     dates = paths["dates"]
     credit_day = len(dates) // 2
     effective_date = dates[credit_day]
+    # BUG-007: a real cash-dividend ex-date is always a trading day. Snap
+    # a weekend `credit_day` back to the preceding weekday so the fixture
+    # does not model an impossible Saturday/Sunday ex-date. This only
+    # changes WHICH day is reported as the ex-date for this one dividend
+    # record -- it draws no extra random value, so it cannot perturb any
+    # other MANAGED fixture derived from the same seeded path.
+    while effective_date.weekday() >= 5:
+        effective_date -= dt.timedelta(days=1)
     entry_price = subject["entry_price_units"] / SUBUNIT
     window_yield = subject["dividend_yield"] * (len(dates) - 1) / 365.0
     divrate = q(entry_price * window_yield, 4)

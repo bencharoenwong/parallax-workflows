@@ -1,13 +1,13 @@
 [
   {
-    "announce_date": "2032-12-16",
+    "announce_date": "2032-12-15",
     "currency": "USD",
     "divrate": 0.0407,
     "divtypecode": "QTR",
-    "effective_date": "2033-01-15",
+    "effective_date": "2033-01-14",
     "infocode": 106825,
-    "pay_date": "2033-01-31",
-    "record_date": "2033-01-17",
+    "pay_date": "2033-01-30",
+    "record_date": "2033-01-16",
     "symbol": "AXCM.O",
     "taxmarker": "0"
   }
