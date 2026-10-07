@@ -65,8 +65,8 @@ def build() -> dict:
             row.pop("anchors_key", None)
             row.pop("anchors", None)
         # stable field order so the diff of a real change stays readable
-        order = ("plugin", "web", "web_description", "standalone", "anchors_key",
-                 "anchors", "nine_two_exempt")
+        order = ("plugin", "web", "web_description", "standalone", "starts",
+                 "anchors_key", "anchors", "nine_two_exempt")
         out[name] = {k: row[k] for k in order if k in row}
 
     authority = dict(current.get("_authority", {}))
@@ -74,6 +74,7 @@ def build() -> dict:
     return {
         "_authority": authority,
         "skills": out,
+        "roles": current.get("roles", []),
         "exempt_docs": sorted(current.get("exempt_docs", [])),
     }
 

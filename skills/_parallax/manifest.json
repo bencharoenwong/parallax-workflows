@@ -39,6 +39,20 @@
       "plugin": true,
       "web": true,
       "web_description": "RIA/wealth-advisor client portfolio review: analysis, redundancy, health flags, macro context, per-holding drill-down, and prioritized recommendations. Holdings as [{symbol, weight}].",
+      "starts": {
+        "rm": {
+          "rank": 1,
+          "input": "holdings"
+        },
+        "rm-support": {
+          "rank": 2,
+          "input": "holdings"
+        },
+        "wealth-advisor": {
+          "rank": 1,
+          "input": "holdings"
+        }
+      },
       "anchors_key": "client-review",
       "anchors": [
         "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:client portfolio review|portfolio review|portfolio summary)\\b",
@@ -71,6 +85,12 @@
       "plugin": true,
       "web": true,
       "web_description": "Deep dive on a single position: profile, peers, financials, score trends, macro, technicals, dividends, news, and AI assessment. Symbol in RIC format. Not for quick checks or portfolio-level work.",
+      "starts": {
+        "fund-manager": {
+          "rank": 3,
+          "input": "ticker"
+        }
+      },
       "anchors_key": "deep-dive",
       "anchors": [
         "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:company overview|position deep dive|deep dive)\\b",
@@ -80,6 +100,16 @@
     "parallax-desk-call-list": {
       "plugin": true,
       "web": false,
+      "starts": {
+        "rm": {
+          "rank": 2,
+          "input": "holdings"
+        },
+        "rm-support": {
+          "rank": 3,
+          "input": "holdings"
+        }
+      },
       "anchors_key": "desk-call-list",
       "anchors": [
         "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:desk call list|priority calls|no calls indicated|scan degraded|scan refused)\\b",
@@ -90,6 +120,12 @@
       "plugin": true,
       "web": true,
       "web_description": "Full research-analyst due diligence: financial statements, Palepu framework, technicals, news, score trends, and the full Parallax research report. Symbol in RIC format.",
+      "starts": {
+        "research-analyst": {
+          "rank": 2,
+          "input": "ticker"
+        }
+      },
       "anchors_key": "due-diligence",
       "anchors": [
         "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:scope note|company overview|full due diligence|due diligence)\\b",
@@ -99,6 +135,12 @@
     "parallax-earnings-quality": {
       "plugin": true,
       "web": false,
+      "starts": {
+        "research-analyst": {
+          "rank": 3,
+          "input": "ticker"
+        }
+      },
       "anchors_key": "earnings-quality",
       "anchors": [
         "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:risk summary|earnings quality)\\b",
@@ -159,6 +201,20 @@
       "plugin": true,
       "web": true,
       "web_description": "Fund manager morning brief: market regime, macro outlook, portfolio health, and key holding news. Portfolio as [{symbol, weight}] in RIC format.",
+      "starts": {
+        "fund-manager": {
+          "rank": 1,
+          "input": "holdings"
+        },
+        "rm": {
+          "rank": 3,
+          "input": "holdings"
+        },
+        "rm-support": {
+          "rank": 1,
+          "input": "holdings"
+        }
+      },
       "anchors_key": "morning-brief",
       "anchors": [
         "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:(?:fund manager )?morning brief|market regime)\\b",
@@ -179,6 +235,12 @@
       "plugin": true,
       "web": true,
       "web_description": "Peer comparison for research analysts: peer snapshot, exported data, score trends, and relative price performance. Symbol in RIC format.",
+      "starts": {
+        "research-analyst": {
+          "rank": 1,
+          "input": "ticker"
+        }
+      },
       "anchors_key": "peer-comparison",
       "anchors": [
         "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:peer group|peer comparison)\\b",
@@ -198,6 +260,16 @@
       "plugin": true,
       "web": true,
       "web_description": "Individual investor portfolio checkup: health flags, factor scores, redundancy, macro context, and plain-language recommendations. Holdings as [{symbol, weight}].",
+      "starts": {
+        "wealth-advisor": {
+          "rank": 2,
+          "input": "holdings"
+        },
+        "individual-investor": {
+          "rank": 2,
+          "input": "holdings"
+        }
+      },
       "anchors_key": "portfolio-checkup",
       "anchors": [
         "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:portfolio health|health status)\\b",
@@ -219,6 +291,12 @@
       "plugin": true,
       "web": true,
       "web_description": "Stress a portfolio against a news event or scenario (rates +100bps, USD shock, 2008 replay): exposure, sector impact, most-exposed holdings, rotation candidates. Needs portfolio + scenario.",
+      "starts": {
+        "fund-manager": {
+          "rank": 2,
+          "input": "holdings"
+        }
+      },
       "anchors_key": "scenario-analysis",
       "anchors": [
         "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:scenario summary|scenario analysis)\\b",
@@ -239,6 +317,16 @@
       "plugin": true,
       "web": true,
       "web_description": "Quick stock evaluation: company overview, Parallax factor scores, financial health, trends, macro context, dividends, news, and analyst outlook in plain language. Accepts plain tickers or RICs.",
+      "starts": {
+        "wealth-advisor": {
+          "rank": 3,
+          "input": "ticker"
+        },
+        "individual-investor": {
+          "rank": 1,
+          "input": "ticker"
+        }
+      },
       "anchors_key": "should-i-buy",
       "anchors": [
         "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:the company|should i buy|stock (?:review|evaluation))\\b",
@@ -271,6 +359,12 @@
       "plugin": true,
       "web": true,
       "web_description": "Monitor a watchlist of tickers: flag score changes, news alerts, technical shifts, and analyst updates. Provide a list of symbols.",
+      "starts": {
+        "individual-investor": {
+          "rank": 3,
+          "input": "ticker"
+        }
+      },
       "anchors_key": "watchlist-monitor",
       "anchors": [
         "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)watchlist (?:monitor|summary|scan)\\b",
@@ -307,6 +401,43 @@
       "standalone": "held"
     }
   },
+  "roles": [
+    {
+      "id": "fund-manager",
+      "label": "Fund manager",
+      "description": "Runs portfolios; daily regime and book checks."
+    },
+    {
+      "id": "rm",
+      "label": "Relationship manager",
+      "description": "Prepares client reviews and calls."
+    },
+    {
+      "id": "rm-support",
+      "label": "RM support",
+      "description": "Prepares briefs and reviews for an RM."
+    },
+    {
+      "id": "research-analyst",
+      "label": "Research analyst",
+      "description": "Researches single names and peers."
+    },
+    {
+      "id": "wealth-advisor",
+      "label": "Wealth advisor",
+      "description": "Reviews client portfolios in plain language."
+    },
+    {
+      "id": "individual-investor",
+      "label": "Individual investor",
+      "description": "Checks stocks and a personal portfolio."
+    },
+    {
+      "id": "integrator",
+      "label": "Building on Parallax",
+      "description": "Embeds Parallax in tools or white-label products."
+    }
+  ],
   "exempt_docs": [
     "_parallax/jit-load-compliance-audit.md",
     "_parallax/skill-structure-conventions.md"
