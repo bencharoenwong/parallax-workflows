@@ -343,6 +343,59 @@ def _worse_flag(a: Flag, b: Flag) -> Flag:
 
 
 # ---------------------------------------------------------------------------
+# Interest coverage derivation (income statement)
+# ---------------------------------------------------------------------------
+
+
+def compute_interest_expense(
+    interest_expense_net_non_operating: Optional[float],
+) -> Optional[float]:
+    """Positive interest-expense magnitude from `get_financials(income)`.
+
+    `interest_expense_net_non_operating` is negative when it is a net expense
+    and non-negative when the company has net non-operating interest INCOME
+    rather than expense (confirmed against a live probe, 2026-10-06).
+
+    A non-negative value does NOT mean "zero interest expense" — it means
+    this field cannot supply a usable expense figure for the coverage ratio,
+    so the caller must treat it as absent, never as a zero denominator (a
+    true zero denominator would make coverage infinite, not a healthy
+    finite number). Returns None on an absent, non-finite, or non-negative
+    value.
+    """
+    if interest_expense_net_non_operating is None:
+        return None
+    if not math.isfinite(interest_expense_net_non_operating):
+        return None
+    if interest_expense_net_non_operating < 0:
+        return -interest_expense_net_non_operating
+    return None
+
+
+def compute_interest_coverage(
+    ebit: Optional[float],
+    interest_expense_net_non_operating: Optional[float],
+) -> Optional[float]:
+    """EBIT / interest expense from `get_financials(income)`, or None.
+
+    `ebit` is `operating_income`, used as the EBIT proxy with no adjustment. The denominator comes from
+    `compute_interest_expense`; None there (absent field, non-finite, or
+    non-negative / no net expense) makes this None rather than a fabricated
+    zero-interest-expense GREEN.
+
+    A zero or negative `ebit` is passed through unchanged: `flag_metric`
+    already handles a negative `low_bad` value correctly (it flags RED); it
+    is only `high_bad` metrics it refuses to score on a negative value.
+    """
+    if ebit is None or not math.isfinite(ebit):
+        return None
+    interest_expense = compute_interest_expense(interest_expense_net_non_operating)
+    if interest_expense is None or interest_expense == 0:
+        return None
+    return ebit / interest_expense
+
+
+# ---------------------------------------------------------------------------
 # Quality score change flag
 # ---------------------------------------------------------------------------
 
@@ -709,9 +762,13 @@ def coverage(flags: list[Flag]) -> tuple[int, int]:
     corner case — seven of the ten registered keys carry no absolute band, and
     the live `ratios` response supplies a peer_median/peer_p75 pair for none of
     them, so those seven are UNAVAILABLE on every run. `interest_coverage` has
-    an absolute band but no raw value anywhere in `ratios` either, so it is
-    UNAVAILABLE too — eight of the ten keys unjudged on a routine run, not a
-    rare degradation.
+    an absolute band and is computed from `get_financials(income)` via
+    `compute_interest_coverage` (operating_income / interest expense; SKILL.md
+    Batch A), not from `ratios` — it is UNAVAILABLE only when that call omits
+    `operating_income` or returns a non-negative
+    `interest_expense_net_non_operating` (see `compute_interest_expense`), a
+    per-run data gap rather than a permanent one. On a routine run where that
+    field is present, seven of the ten keys are unjudged, not eight.
 
     Pass `report_flags(report)`, not a hand-assembled list. Counting a
     different list than the one the verdict was computed from is the bug this

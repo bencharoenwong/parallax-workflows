@@ -2,7 +2,7 @@
   "symbol": "DIST.N",
   "statement": "ratios",
   "currency": "USD",
-  "_fixture_note": "Field names and the absence of peer_median/peer_p75 and of any interest-coverage or debt-to-assets field match the live get_financials(ratios) response (verified against a live probe, 2026-10-05). `ebit`, `ebitda`, `revenue`, and `interest_expense` are NOT part of the live ratios shape (it carries no raw dollar line items) — they are kept here only so TestIntegrationFixtures can exercise compute_altman_z() against one realistic set of figures without a second fixture file.",
+  "_fixture_note": "Field names and the absence of peer_median/peer_p75 and of any interest-coverage or debt-to-assets field match the live get_financials(ratios) response (verified against a live probe, 2026-10-05). `ebit`, `ebitda`, and `revenue` are NOT part of the live ratios shape (it carries no raw dollar line items) — they are kept here only so TestIntegrationFixtures can exercise compute_altman_z() against one realistic set of figures without a second fixture file. Interest coverage's inputs (`operating_income`, `interest_expense_net_non_operating`) live in get_financials_income_distressed.json instead, matching the live income statement, not here — ratios never carried a usable interest-expense field, and the `interest_expense` key that used to sit here was dead weight from before that was fixed.",
   "periods": [
     {
       "period": "FY2024",
@@ -16,8 +16,7 @@
       "return_on_assets": -0.035,
       "ebit": 24000000,
       "ebitda": 61200000,
-      "revenue": 1200000000,
-      "interest_expense": 55800000
+      "revenue": 1200000000
     }
   ]
 }

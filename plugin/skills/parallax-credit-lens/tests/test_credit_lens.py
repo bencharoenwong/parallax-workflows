@@ -30,6 +30,8 @@ from credit_lens_logic import (  # noqa: E402
     assemble_report,
     build_footer,
     build_header,
+    compute_interest_coverage,
+    compute_interest_expense,
     coverage,
     dashboard_rows,
     finalize_verdict,
@@ -342,6 +344,82 @@ class TestAbsoluteFlagging:
 
     def test_current_ratio_below_red(self) -> None:
         assert flag_metric(0.72, None, None, "current_ratio") == Flag.RED
+
+
+class TestInterestCoverageDerivation:
+    """Exercises the income-statement mapping and sign handling directly —
+    `compute_interest_expense` / `compute_interest_coverage` — rather than
+    only asserting a fixture's shape. These are the functions that turn
+    `get_financials(income)`'s `operating_income` and
+    `interest_expense_net_non_operating` into the value `flag_metric` scores;
+    a bug here produces a confidently wrong number, not a crash.
+    """
+
+    # --- compute_interest_expense: sign handling ---
+
+    def test_negative_field_flips_to_positive_expense(self) -> None:
+        # The field is negative-for-expense; -2000 is a $2000 net expense.
+        assert compute_interest_expense(-2000.0) == 2000.0
+
+    def test_positive_field_is_unusable_not_zero(self) -> None:
+        # Non-negative means net non-operating interest INCOME, not a zero
+        # expense — must be None, never 0.0 (0.0 would later divide-by-zero
+        # or imply "infinite coverage" rather than "no usable figure here").
+        assert compute_interest_expense(2000.0) is None
+
+    def test_zero_field_is_unusable_not_a_free_pass(self) -> None:
+        assert compute_interest_expense(0.0) is None
+
+    def test_absent_field_is_none(self) -> None:
+        assert compute_interest_expense(None) is None
+
+    def test_non_finite_field_is_none(self) -> None:
+        assert compute_interest_expense(float("nan")) is None
+        assert compute_interest_expense(float("-inf")) is None
+
+    # --- compute_interest_coverage: EBIT / expense wiring ---
+
+    def test_divides_ebit_by_the_flipped_expense(self) -> None:
+        # 4000 EBIT over a $2000 net expense (field reads -2000) → 2.0x.
+        assert compute_interest_coverage(4000.0, -2000.0) == 2.0
+
+    def test_none_when_expense_field_is_unusable(self) -> None:
+        # Net interest INCOME (positive field), not a zero-expense free pass.
+        assert compute_interest_coverage(4000.0, 2000.0) is None
+
+    def test_none_when_expense_field_is_absent(self) -> None:
+        assert compute_interest_coverage(4000.0, None) is None
+
+    def test_none_when_ebit_is_absent(self) -> None:
+        assert compute_interest_coverage(None, -2000.0) is None
+
+    def test_none_when_ebit_is_non_finite(self) -> None:
+        assert compute_interest_coverage(float("nan"), -2000.0) is None
+
+    def test_negative_ebit_divides_through_and_flags_red(self) -> None:
+        # A negative EBIT against a real expense is negative coverage — this
+        # module computes it (unlike a negative high_bad ratio, low_bad
+        # metrics are not refused on a negative value) and flag_metric must
+        # read it as RED, not UNAVAILABLE and not a crash.
+        value = compute_interest_coverage(-1000.0, -2000.0)
+        assert value == -0.5
+        assert flag_metric(value, None, None, "interest_coverage") == Flag.RED
+
+    def test_hand_computation_without_the_sign_flip_would_be_wrong(self) -> None:
+        # Documents exactly the bug this module exists to prevent: dividing
+        # EBIT by the raw (unflipped) field on a healthy name produces a
+        # negative ratio, which flag_metric would score RED on a company
+        # with ample coverage. compute_interest_coverage must not reproduce
+        # this when fed the same inputs.
+        ebit, raw_field = 4000.0, -2000.0
+        naive = ebit / raw_field
+        assert naive == -2.0
+        assert flag_metric(naive, None, None, "interest_coverage") == Flag.RED
+        correct = compute_interest_coverage(ebit, raw_field)
+        assert correct == 2.0
+        # 2.0x sits between the 1.5x red and 3.0x amber thresholds → AMBER,
+        # not the RED the unflipped sign produced above.
+        assert flag_metric(correct, None, None, "interest_coverage") == Flag.AMBER
 
 
 class TestPeerRelativeFlagging:
@@ -1004,6 +1082,30 @@ class TestIntegrationFixtures:
         assert "peer_p75" not in period
         assert "current_ratio" in period
 
+    def test_aapl_income_fixture_loads(self) -> None:
+        """Income fixture carries the fields compute_interest_coverage needs,
+        with the field names (not `ebit` / `interest_expense`) and sign
+        matching the live get_financials(income) response."""
+        data = _load_fixture("get_financials_income.json")
+        period = data["periods"][0]
+        assert "operating_income" in period
+        assert "interest_expense_net_non_operating" in period
+        assert period["interest_expense_net_non_operating"] < 0
+        assert "ebit" not in period
+        assert "interest_expense" not in period
+
+    def test_aapl_interest_coverage_from_income_fixture(self) -> None:
+        """Interest Coverage is derived from get_financials(income), not
+        ratios: compute_interest_coverage() flips the field's sign, and the
+        resulting value flags through flag_metric like any other metric."""
+        period = _load_fixture("get_financials_income.json")["periods"][0]
+        value = compute_interest_coverage(
+            period["operating_income"],
+            period["interest_expense_net_non_operating"],
+        )
+        assert value == pytest.approx(123216000000 / 3315000000)
+        assert flag_metric(value, None, None, "interest_coverage") == Flag.GREEN
+
     def test_aapl_balance_sheet_fixture_loads(self) -> None:
         data = _load_fixture("get_financials_balance_sheet.json")
         period = data["periods"][0]
@@ -1145,6 +1247,18 @@ class TestIntegrationFixtures:
             "get_score_analysis.json has drifted from the seeded generator — "
             "regenerate it rather than hand-editing"
         )
+
+    def test_distressed_company_interest_coverage_is_red_from_income_fixture(self) -> None:
+        """Distressed income fixture: operating_income=24,000,000 over a
+        $20,000,000 net expense (field reads -20,000,000) → 1.2x, below the
+        1.5x red threshold."""
+        period = _load_fixture("get_financials_income_distressed.json")["periods"][0]
+        value = compute_interest_coverage(
+            period["operating_income"],
+            period["interest_expense_net_non_operating"],
+        )
+        assert value == pytest.approx(1.2)
+        assert flag_metric(value, None, None, "interest_coverage") == Flag.RED
 
     def test_distressed_company_debt_ebitda_is_red(self) -> None:
         """Distressed fixture: D/EBITDA=6.2x, no peer data → absolute-only

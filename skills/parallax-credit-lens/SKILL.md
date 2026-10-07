@@ -16,7 +16,7 @@ description: "Credit risk assessment for publicly traded companies: leverage, co
 
 ## Gotchas
 
-- Expected Parallax spend: ~11 tokens: Batch A 4 (three statements + peer snapshot), Batch B 7 (Palepu 5, score analysis 1, telemetry 1).
+- Expected Parallax spend: ~12 tokens: Batch A 5 (four statements + peer snapshot), Batch B 7 (Palepu 5, score analysis 1, telemetry 1).
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §3 parallel execution, §4 / §4.0 fallbacks, §11 verdict sensitivity, §14 host primitives.
 - `credit_lens_logic.py` is the pure arithmetic layer: every flag, the Altman Z-score and zone, the Quality-change flag and the overall traffic-light are computed there, never in prose. No MCP calls or file writes go in it. `assemble_report()` is a test-only reference renderer: it omits §9.1 and §9.2 and must not produce client-facing output.
 - The published cutoffs in Step 4 mirror the module's constants (`ABSOLUTE_THRESHOLDS`, the Altman zone function, `flag_quality_change`); `tests/test_credit_lens.py` pins the two in agreement. Edit the module first, then the table.
@@ -55,12 +55,13 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 
 ### Step 2 — Fetch (parallel batches)
 
-**Batch A — core financials (4 tokens).** `call-tool` all four together:
+**Batch A — core financials (5 tokens).** `call-tool` all five together:
 
 ```
 get_financials(symbol=<RIC>, statement="balance_sheet")   # Total debt, equity, total assets, working capital, retained earnings
 get_financials(symbol=<RIC>, statement="cash_flow")       # Operating CF, Capex — no fcf field; derive if needed (FCF = cash_from_operating_activities + capital_expenditures)
-get_financials(symbol=<RIC>, statement="ratios")          # D/E, D/EBITDA, current/quick ratio, margins — target-only; no interest-coverage field and no peer_median/peer_p75 anywhere in this response (see Step 4)
+get_financials(symbol=<RIC>, statement="income")          # operating_income (EBIT proxy) and interest_expense_net_non_operating for Interest Coverage (see Step 4) — ratios has neither
+get_financials(symbol=<RIC>, statement="ratios")          # D/E, D/EBITDA, current/quick ratio, margins — target-only; no peer_median/peer_p75 anywhere in this response (see Step 4)
 get_peer_snapshot(symbol=<RIC>)                           # peer medians, factor scores
 ```
 
@@ -76,11 +77,12 @@ get_telemetry()                        # Market regime tag (no symbol parameter)
 
 - Identity per conventions §2: `get_peer_snapshot.target_company` vs `get_company_info.name`; `get_score_analysis` `data[0].symbol` vs the RIC.
 - Input completeness for the helper: zero `total_assets` or `total_liabilities`, or a non-finite value, makes the Altman leg UNAVAILABLE (the module raises; do not substitute zero). A missing `peer_median`/`peer_p75` pair on a peer-relative-only metric makes that row UNAVAILABLE, never GREEN.
+- Interest Coverage: `compute_interest_coverage` returns `None` — render UNAVAILABLE, never divide by hand — when `income.operating_income` is absent/non-finite, or `income.interest_expense_net_non_operating` is absent, non-finite, or non-negative (a non-negative value is net non-operating interest *income*, not a usable expense figure; it is never treated as a zero denominator).
 - The traffic-light is gate-shaped for its legs (conventions §4.0): an unjudgeable leg is UNAVAILABLE and excluded from the vote; the coverage clause in the header states it.
 
 ### Step 4 — Compute
 
-Zero tool calls. `run-shell` `credit_lens_logic.py` for every number: `flag_metric(value, peer_median, peer_p75, metric_key)` per dashboard row (peer-relative and absolute, more conservative wins); `compute_altman_z(AltmanInputs(...))` → score, variant (`Z`, or `Z'` on book equity when market cap is absent) and zone; `quality_change_pts(current, prior)` → `flag_quality_change(...)`; `dashboard_rows(report)`; `build_header(report)` (and `finalize_verdict(report)` when `report.overall_flag` is needed downstream). → Load `references/flagging-rules.md` before building the report: it carries the `metric_key` registry, the peer-p75 direction rule, the Altman fallbacks, and the double-counting traps.
+Zero tool calls. `run-shell` `credit_lens_logic.py` for every number: `compute_interest_coverage(ebit=income.operating_income, interest_expense_net_non_operating=income.interest_expense_net_non_operating)` → the Interest Coverage value (or `None`, which renders UNAVAILABLE — never feed `None` into `flag_metric`); `flag_metric(value, peer_median, peer_p75, metric_key)` per dashboard row (peer-relative and absolute, more conservative wins); `compute_altman_z(AltmanInputs(...))` → score, variant (`Z`, or `Z'` on book equity when market cap is absent) and zone; `quality_change_pts(current, prior)` → `flag_quality_change(...)`; `dashboard_rows(report)`; `build_header(report)` (and `finalize_verdict(report)` when `report.overall_flag` is needed downstream). → Load `references/flagging-rules.md` before building the report: it carries the `metric_key` registry, the peer-p75 direction rule, the Altman fallbacks, and the double-counting traps.
 
 **Published cutoffs** (mirrors of the module constants; the module applies them, this table only documents them for §11 sensitivity lines):
 
@@ -92,7 +94,7 @@ Zero tool calls. `run-shell` `credit_lens_logic.py` for every number: `flag_metr
 | Altman Z (public-company variant, Altman 1968) | Grey zone 1.81–2.99 | Distress zone < 1.81 (Safe > 2.99) |
 | Quality score change, 52 weeks, 0–10 scale | ≤ −0.5 pts | ≤ −1.5 pts |
 
-Interest Coverage has no raw value anywhere in the live `ratios` response (no interest-expense or interest-coverage field), so this band is published but never currently reachable — the leg renders UNAVAILABLE, not a silently-skipped band.
+Interest Coverage has no raw value anywhere in the live `ratios` response (no interest-expense or interest-coverage field there) — it is computed instead from `get_financials(income)`: `operating_income` (EBIT proxy) divided by the positive magnitude of `interest_expense_net_non_operating`. That field is **negative when it is a net expense** and non-negative when the company has net non-operating interest income rather than expense (confirmed against a live probe, 2026-10-06); `compute_interest_expense()` flips the sign on a negative value and returns `None` — never a fabricated zero — on an absent, non-finite, or non-negative one, and `compute_interest_coverage()` returns `None` in that case rather than a zero-denominator result. `None` renders this leg UNAVAILABLE for that run; it is a per-run data gap (the income statement omitting `operating_income` or returning a non-negative non-operating interest field for this name), not a permanent one.
 
 Peer-relative rule for every metric: better than `peer_median` → GREEN; between median and the adverse `peer_p75` → AMBER; worse than `peer_p75` → RED. No tool in this skill's tool_sequence currently returns a `peer_median` / `peer_p75` pair for any metric, so this rule is published for the module's contract but never currently exercised in production — every peer-relative-only leg (no absolute band) renders UNAVAILABLE. Overall: majority color wins; ties go to the more conservative color; UNAVAILABLE legs do not vote.
 
@@ -132,7 +134,7 @@ Overall traffic-light determined by: count of RED flags (→ Red), count of AMBE
 
 List which metrics went unjudged, and why, in Key Flags.
 
-This is the normal case, not an edge case: the live `ratios` response carries no `peer_median` / `peer_p75` field for any metric — it is target-only data, full stop, not a per-run gap. Seven of the ten registered keys have no absolute band either, so those seven (`debt_equity`, `debt_assets`, `ebitda_interest_coverage`, `quick_ratio`, `ebitda_margin`, `ebit_margin`, `fcf_margin`) are UNAVAILABLE on every run. Of the three keys with an absolute band, `interest_coverage` has no raw value anywhere in `ratios` either, so it is also UNAVAILABLE on every run; only `debt_ebitda` and `current_ratio` are reliably judged on a routine run — eight of the ten registered keys unjudged, not five. Never present a majority verdict drawn from a minority of the metrics without saying so.
+This is the normal case, not an edge case: the live `ratios` response carries no `peer_median` / `peer_p75` field for any metric — it is target-only data, full stop, not a per-run gap. Seven of the ten registered keys have no absolute band either, so those seven (`debt_equity`, `debt_assets`, `ebitda_interest_coverage`, `quick_ratio`, `ebitda_margin`, `ebit_margin`, `fcf_margin`) are UNAVAILABLE on every run. Of the three keys with an absolute band, `debt_ebitda` and `current_ratio` are reliably judged from `ratios`; `interest_coverage` is judged from `get_financials(income)` instead (see Step 4) and is UNAVAILABLE only when that call omits `operating_income` or returns a non-negative `interest_expense_net_non_operating` — on a routine run with that field present, seven of the ten registered keys are unjudged, not five. Never present a majority verdict drawn from a minority of the metrics without saying so.
 
 ### 2. **Metrics Dashboard** (table)
 ```
@@ -141,7 +143,7 @@ This is the normal case, not an edge case: the live `ratios` response carries no
 | Leverage      | 🟡 AMBER| D/EBITDA 3.9x | —          | Above absolute threshold (3.5x); peer comparison unavailable |
 | Leverage      | ➖ UNAVAILABLE | —     | —           | No absolute band and no peer data (D/E) |
 | Leverage      | ➖ UNAVAILABLE | —     | —           | No absolute band and no peer data (D/Assets) |
-| Coverage      | ➖ UNAVAILABLE | —     | —           | No raw value in `ratios` and no peer data (Interest Coverage) |
+| Coverage      | 🟢 GREEN| Int Cov 5.2x | —           | Above absolute threshold (3.0x); from get_financials(income), peer comparison unavailable |
 | Coverage      | ➖ UNAVAILABLE | —     | —           | No absolute band and no peer data (EBITDA/Interest) |
 | Liquidity     | 🟡 AMBER| Curr Ratio 1.1x | —        | Below absolute threshold (1.2x); peer comparison unavailable |
 | Liquidity     | ➖ UNAVAILABLE | —     | —           | No absolute band and no peer data (Quick Ratio) |
@@ -152,7 +154,7 @@ This is the normal case, not an edge case: the live `ratios` response carries no
 | Quality Trend | 🔴 RED  | –1.8 pts (52w) | —         | Deteriorating |
 ```
 
-Twelve rows: ten registered metrics plus the two module-owned legs. **Category repeats** — it is a grouping label, not the row identity. The "Peer Median" column reads `—` on every row today (see Header section above for why). Eight of the ten registered metrics read `➖ UNAVAILABLE` on a routine run — only Debt/EBITDA and Current Ratio are reliably judged, on the absolute rule. That is the normal shape with the current tool set, not a failure — state it plainly rather than implying peer comparison is merely degraded this run.
+Twelve rows: ten registered metrics plus the two module-owned legs. **Category repeats** — it is a grouping label, not the row identity. The "Peer Median" column reads `—` on every row today (see Header section above for why). Seven of the ten registered metrics read `➖ UNAVAILABLE` on a routine run — Debt/EBITDA and Current Ratio are reliably judged from `ratios` on the absolute rule, and Interest Coverage is judged from `get_financials(income)` when that call supplies a usable `operating_income` / `interest_expense_net_non_operating` pair (Step 4); it renders UNAVAILABLE only when that pair is missing or unusable for this name. That is the normal shape with the current tool set, not a failure — state it plainly rather than implying peer comparison is merely degraded this run.
 
 **Build the table with `dashboard_rows(report)`, not from `metric_rows` directly.** It returns your metric rows plus the Altman and Quality rows, which it renders from `altman_flag` / `quality_flag`. Those two are legs in their own right: supplying them as rows as well makes each vote twice, and doubling two legs flips real verdicts — three RED metrics against two GREEN is RED, but with both GREEN legs doubled it becomes 3 RED against 4 GREEN and renders GREEN.
 
@@ -172,6 +174,7 @@ List every RED and AMBER flag with one-line explanation:
 - 🔴 RED: Debt/EBITDA 5.2x exceeds the absolute threshold (5.0x); peer comparison unavailable
 - 🟡 AMBER: Quality score down 1.4 pts over 52 weeks — monitor for further deterioration
 - 🔴 RED: Current Ratio 0.8x below the absolute threshold (1.0x); peer comparison unavailable
+- 🔴 RED: Interest Coverage 1.2x below the absolute threshold (1.5x), from operating_income / interest_expense_net_non_operating; peer comparison unavailable
 
 ### 5. **Quality Trend** (one sentence)
 [Quality score 52-week trajectory + interpretation from `get_score_analysis`]
@@ -200,6 +203,7 @@ Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 - `get_financial_analysis` fails or times out: continue; mark **both** §3 `[Solvency assessment unavailable — tool error]` and §3a `[Liquidity assessment unavailable — tool error]`; the Liquidity dashboard row (from `ratios`) is unaffected.
 - `report_flags()` raises (missing, unregistered, reserved or duplicate `metric_key`): a construction error in the row list — fix the rows and re-render; never catch and continue.
 - Peer pair missing or inverted for a metric: absolute rule only where one exists, else UNAVAILABLE; say so in Key Flags.
+- `get_financials(income)` fails, omits `operating_income`, or returns a non-negative `interest_expense_net_non_operating`: Interest Coverage is UNAVAILABLE (`compute_interest_coverage` returns `None`); the other Batch A legs are unaffected.
 - Market cap absent: Z' on book equity with the substitution stated; no book equity either → Altman leg UNAVAILABLE and no §2a line.
 - Host lacks `run-shell`: every flag leg UNVERIFIED (conventions §14.3); the skill states this before any table.
 
