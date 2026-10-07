@@ -4,9 +4,9 @@ Documentation only — there is no executable test harness for this prose skill.
 
 ## 1. Ratio 1 fails; Ratio 3 missing
 
-Inputs: total debt = 45, total assets = 100 → Ratio 1 = 45% (≥ 33%, FAIL). `op` absent, `non_op` absent, `total_revenue` = 500 → Ratio 3 `UNVERIFIED` (no field present to floor or sum).
+Inputs: total debt = 45, total assets = 100 → Ratio 1 = 45% (≥ 33%, FAIL). `cash_and_short_term_investments` = 10, total assets = 100 → Ratio 2 = 10% (< 33%, PASS). `op` absent, `non_op` absent, `total_revenue` = 500 → Ratio 3 `UNVERIFIED` (no field present to floor or sum).
 
-Per Step 3's precedence ("a proven failure wins over a missing input"), the name is **NON-COMPLIANT** on Ratio 1. Ratio 3 still renders as `UNVERIFIED — interest_investment_income_operating and interest_investment_income_non_operating both unavailable` in Compliance Results and Key Ratios; it is not silently dropped. Verdict sensitivity selects only Ratio 1 (the only computed ratio) and states the overall verdict would move to `UNVERIFIED`, not `COMPLIANT`, if Ratio 1 fell below 33%, because Ratio 3 remains unchecked.
+Per Step 3's precedence ("a proven failure wins over a missing input"), the name is **NON-COMPLIANT** on Ratio 1. Ratio 3 still renders as `UNVERIFIED — interest_investment_income_operating and interest_investment_income_non_operating both unavailable` in Compliance Results and Key Ratios; it is not silently dropped. Verdict sensitivity selects among Ratios 1 and 2 (the two computed ratios) — Ratio 1 is nearer its cutoff (45% vs. 33%, against Ratio 2's 10% vs. 33%) — and states the overall verdict would move to `UNVERIFIED`, not `COMPLIANT`, if Ratio 1 fell below 33%, because Ratio 3 remains unchecked.
 
 ## 2. Single field ≥ 5%, other absent → lower-bound FAIL
 
@@ -26,7 +26,7 @@ The known field alone does not clear the cutoff, and the absent field's true val
 
 ## 4. Both fields present → Ratio 3 computed normally
 
-Inputs: `op` = 8, `non_op` = 12, `total_revenue` = 500. Floored sum = 20. 20 / 500 = 4.0% < 5%, and both fields are present, so this is a genuine **PASS** on Ratio 3 (not `UNVERIFIED`). If Ratios 1 and 2 also pass, overall verdict: **COMPLIANT**. Purification ratio does not apply (interest-and-investment income is non-zero but Ratio 3 passed at 4.0%; purification applies when a passing name nonetheless has non-zero interest-and-investment income — here purification = 20 / 500 = 4.0% of dividends, same denominator as Ratio 3).
+Inputs: `op` = 8, `non_op` = 12, `total_revenue` = 500. Floored sum = 20. 20 / 500 = 4.0% < 5%, and both fields are present, so this is a genuine **PASS** on Ratio 3 (not `UNVERIFIED`). If Ratios 1 and 2 also pass, overall verdict: **COMPLIANT**. Because the floored sum is non-zero (> 0% and < 5%, both fields present), the purification ratio applies: purification = 20 / 500 = 4.0% of dividends received — the same denominator as Ratio 3.
 
 ## 5. One field ≥ 5%, other present and negative → still FAIL after flooring
 
