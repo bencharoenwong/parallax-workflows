@@ -1,6 +1,6 @@
 {
-  "_fixture_purpose": "Models macro_analyst called WITHOUT `component` (overview mode), which routes through a different live shaping path than the drilldown mode macro_analyst.json models. Structurally different from macro_analyst.json (drilldown, component='tactical'): no top-level content/component_name/truncated, instead a `components` dict keyed by component name with per-entry {content, truncated}, plus component_count and budget_applied. Validate against MACRO_ANALYST_OVERVIEW_SCHEMA, not MACRO_ANALYST_SCHEMA.",
-  "_replay_context": "Synthetic -- derived from the live overview-shaping helper's source, not a captured response.",
+  "_fixture_purpose": "Models macro_analyst called WITHOUT `component` (overview mode), which returns a different live response shape than the drilldown mode macro_analyst.json models. Structurally different from macro_analyst.json (drilldown, component='tactical'): no top-level content/component_name/truncated, instead a `components` dict keyed by component name with per-entry {content, truncated}, plus component_count and budget_applied. Validate against MACRO_ANALYST_OVERVIEW_SCHEMA, not MACRO_ANALYST_SCHEMA.",
+  "_replay_context": "Synthetic fixture modelled on the live response shape, not a captured response.",
   "success": true,
   "report_date": "2033-01-18",
   "market": "United States",

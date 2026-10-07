@@ -355,8 +355,8 @@ GET_COMPANY_INFO_SCHEMA = {
 # industry_overlap + warnings + recommendations. There is no overlap_pairs,
 # coverage_pct, holdings_analyzed or holdings_total field anywhere live.
 #
-# Corrected 2026-10-07 against the live handler: ``has_issues`` is tri-state,
-# not bool-only -- the handler emits the literal string "unknown" when
+# Corrected 2026-10-07 to the live response shape: ``has_issues`` is tri-state,
+# not bool-only -- the tool returns the literal string "unknown" when
 # coverage is insufficient (< 50% of weight resolved), and only falls back to
 # a real bool (warnings present) once coverage is sufficient.
 # ``holdings_unresolved`` is a list of per-holding failure objects
@@ -475,9 +475,8 @@ MACRO_ANALYST_SCHEMA = {
 # MACRO_ANALYST_SCHEMA above models the DRILLDOWN shape only -- a call with an
 # explicit `component`, rendered as a single top-level
 # `content`/`component_name`/`truncated`. A call with `component` omitted
-# ("overview") goes through the live service's separate overview-shaping path
-# instead, which returns a structurally different payload: no top-level
-# `content` at all, a `components` dict keyed by component name (each value
+# ("overview") returns a structurally different live payload instead: no
+# top-level `content` at all, a `components` dict keyed by component name (each value
 # `{content, truncated}`), plus `component_count` and `budget_applied`.
 # Validating an overview-mode mock against MACRO_ANALYST_SCHEMA fails on the
 # missing required `content` field -- use this schema for component-omitted

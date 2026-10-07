@@ -1,6 +1,6 @@
 {
-  "_fixture_purpose": "Models the live handler's tri-state has_issues when fewer than 50% of input weight resolves: has_issues becomes the literal string \"unknown\", not a real bool, until coverage recovers. Distinct from check_portfolio_redundancy_silent_fail.json, which models a different bug (empty payload despite real concentration) where has_issues stays a real bool. See CHECK_PORTFOLIO_REDUNDANCY_SCHEMA's has_issues note in contract_schemas.py.",
-  "_replay_context": "Synthetic -- derived from the live handler's source, not a captured response. Update if the handler's coverage threshold or has_issues logic changes.",
+  "_fixture_purpose": "Models the live tool's tri-state has_issues when fewer than 50% of input weight resolves: has_issues becomes the literal string \"unknown\", not a real bool, until coverage recovers. Distinct from check_portfolio_redundancy_silent_fail.json, which models a different bug (empty payload despite real concentration) where has_issues stays a real bool. See CHECK_PORTFOLIO_REDUNDANCY_SCHEMA's has_issues note in contract_schemas.py.",
+  "_replay_context": "Synthetic fixture modelled on the live response shape, not a captured response. Update if the live coverage threshold or has_issues behavior changes.",
   "success": true,
   "has_issues": "unknown",
   "holdings_input": 5,
