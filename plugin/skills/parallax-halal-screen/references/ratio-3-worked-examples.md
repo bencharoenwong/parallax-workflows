@@ -6,7 +6,7 @@ Documentation only — there is no executable test harness for this prose skill.
 
 Inputs: total debt = 45, total assets = 100 → Ratio 1 = 45% (≥ 33%, FAIL). `cash_and_short_term_investments` = 10, total assets = 100 → Ratio 2 = 10% (< 33%, PASS). `op` absent, `non_op` absent, `total_revenue` = 500 → Ratio 3 `UNVERIFIED` (no field present to floor or sum).
 
-Per Step 3's precedence ("a proven failure wins over a missing input"), the name is **NON-COMPLIANT** on Ratio 1. Ratio 3 still renders as `UNVERIFIED — interest_investment_income_operating and interest_investment_income_non_operating both unavailable` in Compliance Results and Key Ratios; it is not silently dropped. Verdict sensitivity selects among Ratios 1 and 2 (the two computed ratios) — Ratio 1 is nearer its cutoff (45% vs. 33%, against Ratio 2's 10% vs. 33%) — and states the overall verdict would move to `UNVERIFIED`, not `COMPLIANT`, if Ratio 1 fell below 33%, because Ratio 3 remains unchecked.
+Per Step 3's precedence ("a proven failure wins over a missing input"), the name is **NON-COMPLIANT** on Ratio 1. Ratio 3 still renders as `UNVERIFIED — interest_investment_income_operating and interest_investment_income_non_operating both unavailable` in Compliance Results and Key Ratios; it is not silently dropped. Verdict sensitivity selects among the failing ratios only, so it surfaces Ratio 1 (45% vs. its 33% cutoff); the passing Ratio 2 cannot flip a NON-COMPLIANT verdict. The line states the overall verdict would move to `UNVERIFIED`, not `COMPLIANT`, if Ratio 1 fell below 33%, because Ratio 3 remains unchecked.
 
 ## 2. Single field ≥ 5%, other absent → lower-bound FAIL
 
@@ -16,7 +16,7 @@ The known field alone already clears the cutoff, so the ratio is at least 6.0% r
 
 - Compliance Results: `NON-COMPLIANT — interest_investment_income_operating alone is 6.0% of total_revenue (≥ 5%); interest_investment_income_non_operating unavailable`
 - Key Ratios: `Interest-and-investment income / Total revenue: ≥ 6.0% (lower bound; interest_investment_income_non_operating unavailable)`
-- Verdict sensitivity: excluded — a lower bound has no exact distance to the cutoff.
+- Verdict sensitivity: Ratio 3 is not selected — a lower bound has no exact distance to the cutoff. If Ratios 1 and 2 pass, Ratio 3 is the only failing ratio, so no passing ratio is named either: the line states that the verdict rests on a lower bound, that the full Ratio 3 is unknown because `interest_investment_income_non_operating` is unavailable, and that the verdict would change only if the measured interest-and-investment income fell below 5% of `total_revenue`.
 
 ## 3. Single field < 5%, other absent → UNVERIFIED
 
