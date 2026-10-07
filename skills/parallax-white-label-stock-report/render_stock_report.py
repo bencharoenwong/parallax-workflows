@@ -751,6 +751,21 @@ def render_html(response, branding):
             "refusing to render regulated research with no disclosures."
         )
 
+    # Guard: a get_stock_report response always carries its content under a
+    # "report" key. A raw check_job_status payload does not (its completed
+    # result is {success, symbol, lang, pdf_url, html_url, json_url}, with no
+    # inlined content) and would otherwise fall through silently to a hollow
+    # report with "-" in every field. Refuse rather than render that.
+    _rep_check = response.get("report", response) if isinstance(response, dict) else {}
+    if not isinstance(_rep_check, dict) or not _rep_check.get("company"):
+        raise ValueError(
+            "Input has no report content (no 'report' key, or report.company is "
+            "missing); refusing to render. This usually means a check_job_status "
+            "result was saved and rendered directly instead of a get_stock_report "
+            "response. See SKILL.md Failure modes for fetching result.json_url and "
+            "wrapping it under a 'report' key first."
+        )
+
     # Note: in --full-white-label mode this renderer removes the static Parallax
     # attribution credit and replaces the Chicago Global / MAS disclosure blocks with
     # the client's own. However, all AI-generated prose fields from get_stock_report

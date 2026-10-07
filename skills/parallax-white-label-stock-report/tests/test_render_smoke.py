@@ -223,6 +223,37 @@ def test_full_white_label_with_credit_keeps_powered_by():
     assert "Chicago Global" not in html                     # no CG entity trace anywhere
 
 
+def test_refuses_check_job_status_shaped_payload():
+    # A raw check_job_status result has no "report" key — its completed result is
+    # {success, symbol, lang, pdf_url, html_url, json_url}, with no inlined content.
+    # Saving that straight to the cache path and rendering it must not silently
+    # produce a hollow report; it must refuse.
+    import pytest
+    job_status_payload = {
+        "status": "completed",
+        "result": {
+            "success": True,
+            "symbol": "ACME.O",
+            "lang": "en",
+            "pdf_url": "https://example.com/acme.pdf",
+            "html_url": "https://example.com/acme.html",
+            "json_url": "https://example.com/acme.json",
+        },
+        "success": True,
+        "job_id": "11111111-1111-1111-1111-111111111111",
+    }
+    with pytest.raises(ValueError, match="report"):
+        r.render_html(job_status_payload, CLIENT_BRANDING)
+
+
+def test_bare_report_dict_still_renders():
+    # The pre-existing fallback (response.get("report", response)) must still
+    # accept a bare report dict with no "report" wrapper, not just the full
+    # get_stock_report envelope.
+    html = r.render_html(REPORT, CLIENT_BRANDING)
+    assert 'id="sec-cover"' in html
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0
