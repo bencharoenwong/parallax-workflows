@@ -154,6 +154,9 @@ jobs:
       - name: Judge-house-view gates
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/parallax-judge-house-view/tests -q
+      - name: Stress-house-view gates
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: python -m pytest skills/parallax-stress-house-view/tests -q
       - name: Desk-call-list gates
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/parallax-desk-call-list/tests -q
