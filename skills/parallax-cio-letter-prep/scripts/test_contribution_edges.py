@@ -6,9 +6,11 @@ period can hand this function and the fixture set never does: a flat period, a
 period in which every holding loses, a zero price, a one-dated-price window, an
 empty book, the trade-log validations, and the cases specific to replicating
 the server's compounding/rebalancing method — a transient weight imbalance
-that the reconciliation gate must actually catch, and a dividend ex-date that
-is only valid under a loose (union-timeline) check but not under the tighter
-per-symbol check this module now enforces.
+that the reconciliation gate must actually catch, a dividend ex-date that is
+valid under a loose (union-timeline) check but not under the tighter
+per-symbol check this module enforces before resolving it (BUG-009: shifted or
+unapplied, not rejected), a trade dated on a non-trading day (BUG-003), and
+period_start itself falling on one (BUG-004).
 
 CONVENTIONS. Prices are round numbers chosen so every expected value is exact
 in binary floating point, so the assertions below are ``==`` rather than
@@ -243,56 +245,71 @@ def test_dividend_schedule_unknown_symbol_raises():
              dividend_schedule={"ZZBB.O": {_date(1): 1.0}}, days=2)
 
 
-def test_dividend_schedule_ex_date_not_in_timeline_raises():
-    """An ex_date strictly inside (period_start, period_end] but with no
-    price data on that exact date (e.g. a holiday the price feed skips)
-    must raise -- silently no-op would mean the dividend is dropped
-    without any signal. period_end is widened to _date(5) so _date(3)
-    passes the in-period check, but the 3-entry price series only has
-    dates 0, 1, 2 -- _date(3) is never in the timeline."""
+def test_dividend_schedule_ex_date_not_in_timeline_marks_unapplied_when_no_later_close():
+    """BUG-009: an ex_date strictly inside (period_start, period_end] but
+    with no price data on that exact date (e.g. a holiday the price feed
+    skips) no longer raises. The server includes such a dividend via the
+    vendor return on the NEXT trading day it has a close for that symbol;
+    this module replicates that by shifting the dividend forward. Here
+    ZZAA.O's own series ends at date 2 and the dividend is dated date 3,
+    so there is no later close in the period to shift to -- the dividend
+    is UNAPPLIED, not dropped silently: it is named in the result so the
+    caller can mark the holding dividend-unchecked."""
     prices = {"ZZAA.O": _series([100.0, 110.0, 120.0])}  # dates 0, 1, 2 only
-    with pytest.raises(ValueError, match="(?i)not a date present"):
-        daily_contribution(
-            prior_portfolio={"ZZAA.O": 1.0},
-            current_portfolio={"ZZAA.O": 1.0},
-            trade_log=[],
-            daily_prices=prices,
-            period_start=_date(0),
-            period_end=_date(5),
-            dividend_schedule={"ZZAA.O": {_date(3): 1.0}},
-        )
+    result = daily_contribution(
+        prior_portfolio={"ZZAA.O": 1.0},
+        current_portfolio={"ZZAA.O": 1.0},
+        trade_log=[],
+        daily_prices=prices,
+        period_start=_date(0),
+        period_end=_date(5),
+        dividend_schedule={"ZZAA.O": {_date(3): 1.0}},
+    )
+    assert result["dividends_unapplied"] == {"ZZAA.O": [_date(3)]}
+    assert result["dividends_shifted"] == {}
+    # Unapplied means the price-only path ran: 120/100 - 1 = 0.20.
+    assert result["contributions"]["ZZAA.O"] == pytest.approx(0.20, abs=1e-12)
 
 
-def test_dividend_schedule_ex_date_must_be_an_actual_close_for_that_symbol():
-    """Tightened check: an ex_date that IS in the union timeline (because a
+def test_dividend_schedule_ex_date_not_an_actual_close_shifts_to_the_next_one():
+    """BUG-009: an ex_date that IS in the union timeline (because a
     DIFFERENT symbol has a price that day) but is NOT an actual close for
-    the symbol the dividend names must still raise. A looser check against
-    the union timeline would pass this and let the dividend add-back land
-    on a day this symbol never actually traded -- an ex-date is a trading
-    day on the symbol's OWN exchange, so the per-symbol check is the
-    faithful one.
+    the symbol the dividend names is SHIFTED to that symbol's own next
+    actual close in the period rather than rejected -- an ex-date is a
+    trading day on the symbol's OWN exchange, and a loose union-timeline
+    check would otherwise let the add-back land on a day this symbol never
+    actually traded.
 
-    ZZAA.O has prices on dates 0, 1, 2 only. ZZBB.O additionally has a
-    price on date 3, which is what puts date 3 in the union timeline at
-    all. The dividend below names ZZAA.O on date 3 -- present in the
-    timeline, absent from ZZAA.O's own series.
+    ZZAA.O has prices on dates 0, 1, 2, 4 (date 3 is a gap for ZZAA.O
+    specifically). ZZBB.O has a price on every date 0-4, which is what
+    puts date 3 in the union timeline. The dividend below names ZZAA.O on
+    date 3; it must shift to ZZAA.O's own next close, date 4.
     """
     prices = {
-        "ZZAA.O": {_date(0): 100.0, _date(1): 110.0, _date(2): 120.0},
+        "ZZAA.O": {_date(0): 100.0, _date(1): 110.0, _date(2): 120.0,
+                   _date(4): 130.0},
         "ZZBB.O": {_date(0): 100.0, _date(1): 100.0, _date(2): 100.0,
-                   _date(3): 100.0},
+                   _date(3): 100.0, _date(4): 100.0},
     }
     prior = {"ZZAA.O": 0.5, "ZZBB.O": 0.5}
-    with pytest.raises(ValueError, match="(?i)not a date present"):
-        daily_contribution(
-            prior_portfolio=prior,
-            current_portfolio=dict(prior),
-            trade_log=[],
-            daily_prices=prices,
-            period_start=_date(0),
-            period_end=_date(3),
-            dividend_schedule={"ZZAA.O": {_date(3): 1.0}},
-        )
+    result = daily_contribution(
+        prior_portfolio=prior,
+        current_portfolio=dict(prior),
+        trade_log=[],
+        daily_prices=prices,
+        period_start=_date(0),
+        period_end=_date(4),
+        dividend_schedule={"ZZAA.O": {_date(3): 1.0}},
+    )
+    assert result["dividends_shifted"] == {"ZZAA.O": [(_date(3), _date(4))]}
+    assert result["dividends_unapplied"] == {}
+    # No rebalance ever touches ZZAA, so its contribution telescopes exactly
+    # to its own compounded end/start factor minus 1, scaled by its constant
+    # weight. Date 3 is a zero-return forward-fill for ZZAA (its own series
+    # has no date-3 close); the shifted dividend lands on date 4 instead:
+    # factor = (110/100) * (120/110) * (120/120) * ((130+1)/120) = 131/100.
+    expected_zzaa = 0.5 * (131.0 / 100.0 - 1.0)
+    assert result["contributions"]["ZZAA.O"] == pytest.approx(expected_zzaa, abs=1e-12)
 
 
 def test_dividend_schedule_dated_period_start_raises():
@@ -492,3 +509,179 @@ def test_reconciliation_gate_fires_on_a_transient_weight_imbalance_that_nets_to_
     assert abs(err.diff) > DEFAULT_RECONCILIATION_TOLERANCE
     # The manufactured value is ~10% of the book -- nowhere near the 1bp gate.
     assert abs(err.diff) > 0.05
+
+
+# --------------------------------------------------------------------------
+# BUG-003: a trade dated on a non-trading day must not be dropped
+# --------------------------------------------------------------------------
+
+def test_trade_dated_on_a_weekend_is_applied_after_the_prior_trading_days_close():
+    """2026-01-03/04 (day 2/3) are Saturday/Sunday; neither holding has a
+    price on either date, so they never enter `timeline` at all. A trade
+    dated Sunday (day 3) must still take effect -- it is bucketed under
+    the latest timeline date <= its own date (day 1, Friday) and applied
+    after THAT date's close, exactly matching the server's calendar-daily
+    rebalance (which would reweight on day 3 using day 3's own
+    forward-filled zero return, so the new weights earn nothing until the
+    next date that actually has one -- day 4, Monday).
+
+    AAPL jumps +10% on day 4 (Monday); MSFT stays flat throughout. The
+    trade shifts AAPL 0.5 -> 1.0 / MSFT 0.5 -> 0.0. If the trade were
+    dropped (the bug), AAPL would still be weighted at 0.5 when it jumps,
+    halving the answer.
+    """
+    prices = {
+        "AAPL.O": {_date(0): 100.0, _date(1): 100.0, _date(4): 110.0,
+                   _date(5): 110.0},
+        "MSFT.O": {_date(0): 100.0, _date(1): 100.0, _date(4): 100.0,
+                   _date(5): 100.0},
+    }
+    prior = {"AAPL.O": 0.5, "MSFT.O": 0.5}
+    current = {"AAPL.O": 1.0, "MSFT.O": 0.0}
+    trade_log = [
+        {"symbol": "AAPL.O", "action": "add", "date": _date(3),
+         "weight_delta": +0.5},
+        {"symbol": "MSFT.O", "action": "trim", "date": _date(3),
+         "weight_delta": -0.5},
+    ]
+
+    result = daily_contribution(
+        prior_portfolio=prior,
+        current_portfolio=current,
+        trade_log=trade_log,
+        daily_prices=prices,
+        period_start=_date(0),
+        period_end=_date(5),
+    )
+
+    assert result["contributions"]["AAPL.O"] == pytest.approx(0.10, abs=1e-12)
+    assert result["contributions"]["MSFT.O"] == pytest.approx(0.0, abs=1e-12)
+    assert result["portfolio_total_return"] == pytest.approx(0.10, abs=1e-12)
+    assert abs(result["reconciliation_diff"]) < 1e-12
+
+
+def test_trade_dated_on_saturday_maps_to_the_same_effective_date_as_sunday():
+    """Both weekend dates (Saturday day 2, Sunday day 3) are absent from
+    `timeline`, so both must snap to the SAME last trading day (day 1,
+    Friday) and produce an identical result -- the exact calendar day
+    within the gap must not matter, only "which trading day precedes it"."""
+    prices = {
+        "AAPL.O": {_date(0): 100.0, _date(1): 100.0, _date(4): 110.0},
+        "MSFT.O": {_date(0): 100.0, _date(1): 100.0, _date(4): 100.0},
+    }
+    prior = {"AAPL.O": 0.5, "MSFT.O": 0.5}
+    current = {"AAPL.O": 1.0, "MSFT.O": 0.0}
+
+    def _result_for(trade_date):
+        trade_log = [
+            {"symbol": "AAPL.O", "action": "add", "date": trade_date,
+             "weight_delta": +0.5},
+            {"symbol": "MSFT.O", "action": "trim", "date": trade_date,
+             "weight_delta": -0.5},
+        ]
+        return daily_contribution(
+            prior_portfolio=prior,
+            current_portfolio=current,
+            trade_log=trade_log,
+            daily_prices=prices,
+            period_start=_date(0),
+            period_end=_date(4),
+        )
+
+    saturday_result = _result_for(_date(2))
+    sunday_result = _result_for(_date(3))
+    assert saturday_result["contributions"] == sunday_result["contributions"]
+    assert (
+        saturday_result["portfolio_total_return"]
+        == sunday_result["portfolio_total_return"]
+    )
+
+
+# --------------------------------------------------------------------------
+# BUG-004: period_start on a non-trading day forward-fills, not raises
+# --------------------------------------------------------------------------
+
+def test_period_start_on_a_weekend_forward_fills_from_the_last_close_before_it():
+    """period_start = day 2 (Saturday). AAPL's series has no price on day 2
+    itself, only day 1 (Friday, BEFORE period_start -- used only to seed
+    the period_start anchor) and day 4 (Monday) / day 5 onward. This must
+    forward-fill the period_start anchor from day 1's close rather than
+    raising "no earlier price to forward-fill from"."""
+    prices = {
+        "AAPL.O": {_date(1): 100.0, _date(4): 110.0, _date(5): 110.0},
+    }
+    result = daily_contribution(
+        prior_portfolio={"AAPL.O": 1.0},
+        current_portfolio={"AAPL.O": 1.0},
+        trade_log=[],
+        daily_prices=prices,
+        period_start=_date(2),
+        period_end=_date(5),
+    )
+    assert result["contributions"]["AAPL.O"] == pytest.approx(0.10, abs=1e-12)
+    assert result["portfolio_total_return"] == pytest.approx(0.10, abs=1e-12)
+    assert abs(result["reconciliation_diff"]) < 1e-12
+
+
+def test_period_start_on_a_weekend_still_raises_with_no_price_at_all_before_it():
+    """Unlike the case above, if a symbol has NO price on or before
+    period_start, there is genuinely nothing to forward-fill from, and the
+    function must still raise -- forward-fill extends the contract, it
+    does not remove the floor."""
+    prices = {"AAPL.O": {_date(4): 110.0, _date(5): 115.0}}
+    with pytest.raises(ValueError, match="(?i)no earlier price"):
+        daily_contribution(
+            prior_portfolio={"AAPL.O": 1.0},
+            current_portfolio={"AAPL.O": 1.0},
+            trade_log=[],
+            daily_prices=prices,
+            period_start=_date(2),
+            period_end=_date(5),
+        )
+
+
+# --------------------------------------------------------------------------
+# BUG-008: a zero-weight, zero-value holding with a zero close must not
+# raise; a non-numeric or non-finite weight_delta must raise ValueError
+# (not an uncaught TypeError several frames downstream).
+# --------------------------------------------------------------------------
+
+def test_zero_weight_holding_with_a_zero_close_does_not_raise():
+    """ZZBB.O is held at weight 0.0 throughout (never traded in or out) and
+    its entire price series is a placeholder zero. Nothing ever multiplies
+    that zero close by a nonzero value, so there is nothing to divide by
+    and nothing to raise about -- unlike test_zero_prior_price_raises...,
+    where the zero-priced holding carries full weight 1.0."""
+    prices = {
+        "ZZAA.O": _series([100.0, 110.0]),
+        "ZZBB.O": _series([0.0, 0.0]),
+    }
+    prior = {"ZZAA.O": 1.0, "ZZBB.O": 0.0}
+    result = _run(prior, dict(prior), prices)
+    assert result["contributions"]["ZZBB.O"] == 0.0
+    assert result["contributions"]["ZZAA.O"] == pytest.approx(0.10, abs=1e-12)
+    assert result["portfolio_total_return"] == pytest.approx(0.10, abs=1e-12)
+
+
+def test_non_numeric_weight_delta_raises_value_error_not_type_error():
+    prices = {"ZZAA.O": _series([100.0, 110.0]),
+              "ZZBB.O": _series([100.0, 110.0])}
+    trade_log = [{"symbol": "ZZAA.O", "action": "trim",
+                  "date": _date(0), "weight_delta": "oops"},
+                 {"symbol": "ZZBB.O", "action": "add",
+                  "date": _date(0), "weight_delta": 0.0}]
+    with pytest.raises(ValueError, match="(?i)weight_delta must be a number"):
+        _run({"ZZAA.O": 0.5, "ZZBB.O": 0.5},
+             {"ZZAA.O": 0.5, "ZZBB.O": 0.5}, prices, trade_log)
+
+
+def test_non_finite_weight_delta_raises_value_error():
+    prices = {"ZZAA.O": _series([100.0, 110.0]),
+              "ZZBB.O": _series([100.0, 110.0])}
+    trade_log = [{"symbol": "ZZAA.O", "action": "trim",
+                  "date": _date(0), "weight_delta": float("nan")},
+                 {"symbol": "ZZBB.O", "action": "add",
+                  "date": _date(0), "weight_delta": 0.0}]
+    with pytest.raises(ValueError, match="(?i)weight_delta must be finite"):
+        _run({"ZZAA.O": 0.5, "ZZBB.O": 0.5},
+             {"ZZAA.O": 0.5, "ZZBB.O": 0.5}, prices, trade_log)
