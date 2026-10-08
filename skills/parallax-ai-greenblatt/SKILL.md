@@ -19,9 +19,9 @@ description: "Applies Joel Greenblatt's Magic Formula (per 'The Little Book That
 
 ## Gotchas
 
-- Expected Parallax spend: ~10–15 tokens ticker-check, ~10–30 universe mode (`_parallax/token-costs.md`); `build_stock_universe` is 5 of that.
+- Expected Parallax spend: ~35–40 tokens in BOTH modes — `build_stock_universe` (5) + `get_company_info` (1, comma-separated sector-filter batch — Step 2.2) + `get_financials(statement=ratios)` × up to 30 candidates (1 credit each; the tool has no multi-symbol support, so this is per-candidate) + `get_peer_snapshot`; plus, if the batched `get_company_info` call fails, +1 credit per candidate returned by `build_stock_universe` for the single-symbol re-queries (they run before the top-30 cap, so the worst case is +N where N is the number of candidates returned; Step 2.2).
 - JIT-load `_parallax/parallax-conventions.md`, `_parallax/AI-profiles/profile-schema.md`, `_parallax/AI-profiles/output-template.md`, `_parallax/AI-profiles/profiles/greenblatt.md` — Step 0.
-- Universe mode is the default with no ticker; ticker-check mode with exactly one. Exclude financials and utilities from the default universe per Greenblatt's original rule.
+- Universe mode is the default with no ticker; ticker-check mode with exactly one. `build_stock_universe` is a free-text relevance search with no sector-exclusion parameter — it does NOT enforce Greenblatt's financials/utilities exclusion itself. Step 2.2 enforces it instead: a `get_company_info` batch call reads each candidate's `sector` and drops Financials and Utilities names before the top-30 cap.
 - `build_stock_universe` is async and broad queries time out: queries MUST be sector-scoped (default `"US large-cap consumer staples"`); a broad request runs sector-by-sector and merges.
 - NEVER use first-person impersonation — always "Greenblatt-style" or "Magic Formula". Disclaimer verbatim with "Joel Greenblatt" for [Investor]. Public book + academic replication only — no `get_assessment`, no `score_total`.
 - Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
@@ -52,14 +52,15 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 
 ### Step 1 — Resolve inputs
 
-Mode: no ticker → **universe mode**; exactly one → **ticker-check mode**; more → reject: "Greenblatt profile takes zero or one ticker. For multi-ticker checks use /parallax-ai-consensus." Ticker-check: resolve the RIC per conventions §1 and `call-tool` `get_company_info` for sector/industry.
+Mode: no ticker → **universe mode**; exactly one → **ticker-check mode**; more → reject: "Greenblatt profile takes zero or one ticker. For multi-ticker checks use /parallax-ai-consensus." Ticker-check: resolve the RIC per conventions §1 and `call-tool` `get_company_info` for sector/industry. If the target's own `sector` is Financials or Utilities, the Magic Formula's ROC/EY metrics don't fit that capital structure (Greenblatt's own exclusion rule): return `"Greenblatt-style profile does not apply to <ticker> — sector <sector> is excluded by Greenblatt's financials/utilities rule."` and decline to render a verdict; treat the profile as `skipped` in /parallax-ai-consensus, same as `INSUFFICIENT_UNIVERSE`.
 
 ### Step 2 — Fetch (parallel batches)
 
 1. `call-tool` `build_stock_universe` with a sector-scoped query — universe mode: the default or `--universe "<theme>"`; ticker-check: a peer universe derived from the ticker's sector (e.g. Technology Hardware → `"US large-cap technology hardware"`). Timeout → retry ONCE narrower; second timeout → `INSUFFICIENT_UNIVERSE`, no verdict.
-2. Cap the universe at the top 30 by `composite_score`.
-3. `call-tool` `get_financials(statement=ratios)` for each of the 30 together (ROC via `return_on_invested_capital` when direct ROC is absent; earnings yield = `1 / enterprise_value_ebit`).
-4. Universe mode: `get_peer_snapshot` for the top-3 basket members (pedagogy). Ticker-check: `get_peer_snapshot` on the target.
+2. `call-tool` `get_company_info` once with every returned candidate as a comma-separated batch; read each hit's `sector` and drop any candidate whose sector is Financials or Utilities (Greenblatt's own exclusion rule — `build_stock_universe` has no sector parameter, so this step is what enforces it). The batch either returns a row per symbol or fails as a whole (one unresolvable symbol returns `success: false`, status 400); if it fails, re-query each candidate individually with a single-symbol `get_company_info` and apply the same rule — drop Financials/Utilities and drop any candidate whose `sector` cannot be read (fail closed). Note both dropped counts (excluded sector, unreadable sector) for the methodology footer.
+3. Cap the filtered universe at the top 30 by `composite_score`.
+4. `call-tool` `get_financials(statement=ratios)` for each of the 30 together (ROC via `return_on_invested_capital` when direct ROC is absent; earnings yield = `1 / enterprise_value_ebit`).
+5. Universe mode: `get_peer_snapshot` for the top-3 basket members (pedagogy). Ticker-check: `get_peer_snapshot` on the target.
 
 ### Step 3 — Verify
 
@@ -92,8 +93,9 @@ Top decile by combined ROC + earnings yield rank:
 
 Workflow derived from: Greenblatt, J. (2006). The Little Book That Beats the Market; Gray & Carlisle (2012).
 Last anchor-tested: 2026-04-06 (CSCO.O, MSFT.O, NVDA.O)
-Tool sequence: build_stock_universe, get_peer_snapshot × N, get_financials(ratios) × N
-Token cost: ~10-30 tokens (universe mode) / ~10-15 tokens (ticker-check mode)
+Tool sequence: build_stock_universe, get_company_info (sector filter), get_financials(ratios) × N, get_peer_snapshot × N
+Dropped: <n> excluded sector, <n> unreadable sector
+Token cost: ~35-40 tokens (both modes), plus, if the batched get_company_info call fails, +1 credit per candidate returned by build_stock_universe for the single-symbol re-queries (they run before the top-30 cap, so the worst case is +N where N is the number of candidates returned)
 
 ---
 This output is an AI-inferred interpretation of Joel Greenblatt's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by Joel Greenblatt or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.
@@ -119,8 +121,9 @@ Verdict sensitivity: combined rank sits at the <percentile>th percentile, <D> po
 
 Workflow derived from: Greenblatt, J. (2006). The Little Book That Beats the Market; Gray & Carlisle (2012).
 Last anchor-tested: 2026-04-06 (CSCO.O, MSFT.O, NVDA.O)
-Tool sequence: get_peer_snapshot, get_financials(ratios) × N
-Token cost: ~10-15 tokens
+Tool sequence: get_company_info (target), build_stock_universe, get_company_info (sector filter), get_financials(ratios) × N, get_peer_snapshot
+Dropped: <n> excluded sector, <n> unreadable sector
+Token cost: ~35-40 tokens, plus, if the batched get_company_info call fails, +1 credit per candidate returned by build_stock_universe for the single-symbol re-queries (they run before the top-30 cap, so the worst case is +N where N is the number of candidates returned)
 
 ---
 This output is an AI-inferred interpretation of Joel Greenblatt's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by Joel Greenblatt or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.
