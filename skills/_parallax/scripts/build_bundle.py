@@ -913,7 +913,7 @@ def transform_concierge_web(text: str) -> str:
         text,
         "- **If they name a skill directly**, skip routing and run it.\n",
         "- **If they name a skill directly**, skip routing and run it.\n"
-        f"- **If a routed skill does not load**: {_HANDOFF['zip']}\n",
+        f"- **If a routed skill does not load**, {_HANDOFF['zip'][0].lower()}{_HANDOFF['zip'][1:]}\n",
         "concierge web upload rule")
     return text
 

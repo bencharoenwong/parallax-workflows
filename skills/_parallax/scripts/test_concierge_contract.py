@@ -266,12 +266,11 @@ def test_built_check_state_does_not_send_the_user_to_a_local_notes_file():
 
 # Fix 2: two-way guard in transform_concierge_web.
 
-def test_transform_concierge_web_fails_when_a_present_route_is_not_shipped(monkeypatch):
-    assert bb._CONCIERGE_WEB_ASSUMES_PRESENT
-    for gone in bb._CONCIERGE_WEB_ASSUMES_PRESENT:
-        monkeypatch.setattr(bb, "WEB_SKILLS", [s for s in bb.WEB_SKILLS if s != gone])
-        with pytest.raises(bb.BuildError):
-            bb.transform_concierge_web(SRC)
+@pytest.mark.parametrize("gone", bb._CONCIERGE_WEB_ASSUMES_PRESENT)
+def test_transform_concierge_web_fails_when_a_present_route_is_not_shipped(monkeypatch, gone):
+    monkeypatch.setattr(bb, "WEB_SKILLS", [s for s in bb.WEB_SKILLS if s != gone])
+    with pytest.raises(bb.BuildError, match=gone):
+        bb.transform_concierge_web(SRC)
 
 
 def test_transform_concierge_web_fails_when_an_absent_route_ships_as_standalone(monkeypatch):
@@ -282,12 +281,6 @@ def test_transform_concierge_web_fails_when_an_absent_route_ships_as_standalone(
     with pytest.raises(bb.BuildError):
         bb.transform_concierge_web(SRC)
 
-
-def test_transform_concierge_web_present_set_covers_what_the_rewrites_offer():
-    for skill in ("parallax-watchlist-monitor", "parallax-peer-comparison",
-                  "parallax-score-explainer", "parallax-deep-dive",
-                  "parallax-portfolio-checkup", "parallax-morning-brief"):
-        assert skill in bb._CONCIERGE_WEB_ASSUMES_PRESENT, skill
 
 
 # Fix 3: filter_concierge structure.

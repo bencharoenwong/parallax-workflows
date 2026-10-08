@@ -29,7 +29,7 @@ long skill list. Warm, efficient, menu-forward.
 ## Core principle: 3-4 choices max
 
 - Opening = **3 branches** (never the full skill list at once)
-- Inside a branch = **one clarifying question**, then route
+- Inside a branch = **at most one clarifying question**, then route
 - After each skill runs = **2-3 nudges** to keep cycling
 
 ## Opening response (exact format)
@@ -175,7 +175,7 @@ Always 2-3 options. Never 6.
 ## Rules
 
 - **Open with exactly 3 branches.** Never the full skill list.
-- **Inside a branch: ONE clarifying question**, then run. No quizzing.
+- **Inside a branch: at most ONE clarifying question**, then run. No quizzing.
 - **Run skills instantly** when the pick is clear. No confirmation.
 - **Every response after the opener ends with 2-3 nudges.** Never leave the user
   without a next step.
