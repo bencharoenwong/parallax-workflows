@@ -10,8 +10,10 @@ Pure functions, no I/O:
 - ``check_run(stream_text, journey, exit_code, timed_out)`` parses a
   ``claude -p --output-format stream-json --verbose`` stream and fails closed:
   any permission denial, a missing or errored result, a non-zero exit, a
-  timeout, or the wrong Parallax connector state fails the journey, whatever
-  the final text says.
+  timeout, no successful run of the plugin's concierge skill, or the wrong
+  Parallax connector state fails the journey, whatever the text says.
+  ``expect``/``expect_any`` run on the final answer; ``forbid`` runs on all
+  assistant text in the run, so a forbidden phrase in an earlier turn fails.
 
 The shell runner calls this file's CLI; evals/graders/test_concierge_journeys_check.py
 pytests the pure functions on canned text (no model, no network — CI-safe).
@@ -24,9 +26,14 @@ import sys
 
 ALLOWED_KEYS = frozenset({"id", "prompt", "expect", "forbid", "expect_any", "needs"})
 LIST_KEYS = ("expect", "forbid", "expect_any")
-NEEDS_VALUES = frozenset({"no-connector"})
-# Init-message statuses that mean the Parallax server cannot serve tool calls.
-UNUSABLE_STATUSES = frozenset({"failed", "needs-auth", "disabled"})
+# no-connector: no Parallax server may load. connector-optional: skip only the
+# server-presence check (for a journey that makes no Parallax call, where a
+# claude.ai connector may not be listed in the init message yet).
+NEEDS_VALUES = frozenset({"no-connector", "connector-optional"})
+CONCIERGE_SKILL = "parallax:parallax-concierge"
+# The only init-message status that proves a Parallax server is up. "pending"
+# does not: a pending claude.ai connector can still turn out signed out.
+CONNECTED_STATUS = "connected"
 
 
 def validate_journey(journey: object) -> list[str]:
@@ -52,7 +59,7 @@ def validate_journey(journey: object) -> list[str]:
     return problems
 
 
-def check_journey(output: str, journey: dict) -> tuple[bool, list[str]]:
+def check_journey(output: str, journey: dict, forbid_text: str | None = None) -> tuple[bool, list[str]]:
     """Check ``output`` against one journey's expect/forbid/expect_any lists.
 
     - expect: every substring must appear (case-insensitive). Each missing one
@@ -62,9 +69,13 @@ def check_journey(output: str, journey: dict) -> tuple[bool, list[str]]:
     - expect_any: if non-empty, at least one substring must appear; none
       present is a single failure reason.
 
+    ``forbid_text``, when given, is the text the forbid list is checked
+    against instead of ``output`` (the runner passes all assistant text).
+
     Returns (passed, reasons); reasons lists every failure, not just the first.
     """
     text = (output or "").lower()
+    ftext = text if forbid_text is None else forbid_text.lower()
     reasons: list[str] = []
 
     for phrase in journey.get("expect") or []:
@@ -72,7 +83,7 @@ def check_journey(output: str, journey: dict) -> tuple[bool, list[str]]:
             reasons.append(f"missing expect: {phrase!r}")
 
     for phrase in journey.get("forbid") or []:
-        if phrase.lower() in text:
+        if phrase.lower() in ftext:
             reasons.append(f"found forbidden: {phrase!r}")
 
     expect_any = journey.get("expect_any") or []
@@ -86,10 +97,15 @@ def parse_stream(stream_text: str) -> dict:
     """Pull the init message, the final result message and the Parallax MCP
     tool calls out of a stream-json transcript. Lines that are not JSON
     objects are ignored. ``parallax_calls`` maps each Parallax tool_use id to
-    {"name", "ok"}; ok is True when its tool_result came back without is_error."""
+    {"name", "ok"}; ok is True when its tool_result came back without is_error.
+    ``skill_calls`` does the same for Skill tool calls, keyed by tool_use id,
+    with the requested skill name. ``assistant_texts`` lists every assistant
+    text block in order."""
     init = None
     result = None
     calls: dict[str, dict] = {}
+    skills: dict[str, dict] = {}
+    texts: list[str] = []
     for line in (stream_text or "").splitlines():
         line = line.strip()
         if not line:
@@ -109,12 +125,21 @@ def parse_stream(stream_text: str) -> dict:
             for block in content if isinstance(content, list) else []:
                 if not isinstance(block, dict):
                     continue
-                if block.get("type") == "tool_use" and is_parallax_tool(block.get("name", "")):
+                btype = block.get("type")
+                if btype == "text" and msg["type"] == "assistant" and isinstance(block.get("text"), str):
+                    texts.append(block["text"])
+                elif btype == "tool_use" and block.get("name") == "Skill":
+                    tool_input = block.get("input") if isinstance(block.get("input"), dict) else {}
+                    skills[block.get("id", "")] = {"name": str(tool_input.get("skill", "")), "ok": False}
+                elif btype == "tool_use" and is_parallax_tool(block.get("name", "")):
                     calls[block.get("id", "")] = {"name": block["name"], "ok": False}
-                elif block.get("type") == "tool_result" and block.get("tool_use_id") in calls:
-                    calls[block["tool_use_id"]]["ok"] = not block.get("is_error", False)
+                elif btype == "tool_result":
+                    for table in (calls, skills):
+                        if block.get("tool_use_id") in table:
+                            table[block["tool_use_id"]]["ok"] = not block.get("is_error", False)
     servers = (init or {}).get("mcp_servers") or []
-    return {"init": init, "result": result, "mcp_servers": servers, "parallax_calls": calls}
+    return {"init": init, "result": result, "mcp_servers": servers,
+            "parallax_calls": calls, "skill_calls": skills, "assistant_texts": texts}
 
 
 def is_parallax_tool(name: str) -> bool:
@@ -135,12 +160,17 @@ def _describe(servers: list[dict]) -> str:
 
 
 def check_run(
-    stream_text: str, journey: dict, exit_code: int, timed_out: bool
-) -> tuple[bool, list[str], str]:
+    stream_text: str, journey: dict, exit_code: int, timed_out: bool,
+    plugin_dir: str | None = None,
+) -> tuple[bool, list[str], str, str]:
     """Fail-closed check of one live journey run.
 
-    Returns (passed, reasons, final_text). final_text is the result message's
-    text ("" when there is none); the substring checks run on it.
+    ``plugin_dir``, when given, must be the path of a plugin listed in the
+    init message, so the run used this branch's built plugin.
+
+    Returns (passed, reasons, final_text, all_text). final_text is the result
+    message's text ("" when there is none); expect/expect_any run on it.
+    all_text is every assistant text block joined; forbid runs on it.
     """
     parsed = parse_stream(stream_text)
     reasons: list[str] = []
@@ -153,9 +183,15 @@ def check_run(
     if parsed["init"] is None:
         reasons.append("no init message in stream")
     else:
+        if plugin_dir is not None:
+            paths = [pl.get("path") for pl in parsed["init"].get("plugins") or [] if isinstance(pl, dict)]
+            if plugin_dir not in paths:
+                reasons.append(f"plugin {plugin_dir} not loaded (init plugins: {paths})")
         found = parallax_servers(parsed["mcp_servers"])
         calls = list(parsed["parallax_calls"].values())
-        if journey.get("needs") == "no-connector":
+        if journey.get("needs") == "connector-optional":
+            pass
+        elif journey.get("needs") == "no-connector":
             if found:
                 reasons.append(f"Parallax server present in a no-connector run: {_describe(found)}")
             if calls:
@@ -164,10 +200,10 @@ def check_run(
             # A claude.ai connector can finish loading after the init message
             # is written (absent or "pending" there), so a Parallax tool call
             # that returned without error also proves the connector is up.
-            usable = [s for s in found if s.get("status") not in UNUSABLE_STATUSES]
-            if not usable and not any(c["ok"] for c in calls):
+            connected = [s for s in found if s.get("status") == CONNECTED_STATUS]
+            if not connected and not any(c["ok"] for c in calls):
                 reasons.append(
-                    f"no usable Parallax server at init ({_describe(found) or 'none'}) "
+                    f"no connected Parallax server at init ({_describe(found) or 'none'}) "
                     "and no successful Parallax tool call"
                 )
 
@@ -187,9 +223,17 @@ def check_run(
         if result.get("subtype") != "success":
             reasons.append(f"result subtype {result.get('subtype')!r}")
 
-    _, text_reasons = check_journey(final_text, journey)
+    skill_runs = [c for c in parsed["skill_calls"].values() if c["name"] == CONCIERGE_SKILL]
+    if not any(c["ok"] for c in skill_runs):
+        seen = sorted({c["name"] for c in parsed["skill_calls"].values()})
+        reasons.append(f"skill {CONCIERGE_SKILL} did not run (Skill calls: {seen or 'none'})")
+
+    all_text = "\n\n".join(parsed["assistant_texts"])
+    if final_text and final_text not in all_text:
+        all_text = f"{all_text}\n\n{final_text}" if all_text else final_text
+    _, text_reasons = check_journey(final_text, journey, forbid_text=all_text)
     reasons.extend(text_reasons)
-    return (len(reasons) == 0, reasons, final_text)
+    return (len(reasons) == 0, reasons, final_text, all_text)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -198,10 +242,10 @@ def main(argv: list[str] | None = None) -> int:
     ``concierge_journeys_check.py --validate '<journey-json-line>'``
         exit 0 if the line is a valid journey, 2 with the problems otherwise.
     ``concierge_journeys_check.py '<journey-json-line>' --stream FILE
-        --exit-code N [--timed-out] [--text-out FILE]``
+        --exit-code N [--timed-out] [--plugin-dir DIR] [--text-out FILE]``
         run the fail-closed check, print the Parallax servers seen at init,
-        the denials, then PASS or one FAIL line per reason; write the final
-        assistant text to --text-out; exit 0 on pass, 1 on fail.
+        the denials and tool calls, then PASS or one FAIL line per reason;
+        write all assistant text to --text-out; exit 0 on pass, 1 on fail.
     """
     ap = argparse.ArgumentParser()
     ap.add_argument("journey")
@@ -209,6 +253,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--stream")
     ap.add_argument("--exit-code", type=int, default=0)
     ap.add_argument("--timed-out", action="store_true")
+    ap.add_argument("--plugin-dir")
     ap.add_argument("--text-out")
     args = ap.parse_args(sys.argv[1:] if argv is None else argv)
 
@@ -230,10 +275,12 @@ def main(argv: list[str] | None = None) -> int:
 
     with open(args.stream, encoding="utf-8", errors="replace") as fh:
         stream_text = fh.read()
-    passed, reasons, final_text = check_run(stream_text, journey, args.exit_code, args.timed_out)
+    passed, reasons, _, all_text = check_run(
+        stream_text, journey, args.exit_code, args.timed_out, plugin_dir=args.plugin_dir
+    )
     if args.text_out:
         with open(args.text_out, "w", encoding="utf-8") as fh:
-            fh.write(final_text)
+            fh.write(all_text)
     parsed = parse_stream(stream_text)
     denials = (parsed["result"] or {}).get("permission_denials") or []
     print(f"parallax servers at init: {_describe(parallax_servers(parsed['mcp_servers'])) or 'none'}")

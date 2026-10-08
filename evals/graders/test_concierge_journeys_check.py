@@ -166,20 +166,32 @@ def test_returning_and_direct_task_forbid_every_manifest_role_label():
 
 def _stream(servers=None, result="Hi — where are we looking today?", denials=None,
             is_error=False, subtype="success", with_init=True, with_result=True,
-            tool_call=None):
-    """tool_call: (tool_name, result_is_error) for one tool_use/tool_result pair."""
+            tool_call=None, skill="parallax:parallax-concierge", skill_error=False,
+            texts=None, plugin_path="/repo/plugin"):
+    """tool_call: (tool_name, result_is_error) for one tool_use/tool_result pair.
+    skill: the Skill tool's requested skill (None: no Skill call).
+    texts: assistant text blocks before the result (default: the result text)."""
     lines = []
     if with_init:
         lines.append(json.dumps({"type": "system", "subtype": "init",
+                                 "plugins": [{"name": "parallax", "path": plugin_path}],
                                  "mcp_servers": servers if servers is not None else
-                                 [{"name": "claude.ai Parallax", "status": "pending"}]}))
-    lines.append(json.dumps({"type": "assistant", "message": {"content": []}}))
+                                 [{"name": "claude.ai Parallax", "status": "connected"}]}))
+    if skill is not None:
+        lines.append(json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "sk1", "name": "Skill", "input": {"skill": skill}}]}}))
+        lines.append(json.dumps({"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "sk1", "is_error": skill_error,
+             "content": "Launching skill"}]}}))
     if tool_call:
         name, err = tool_call
         lines.append(json.dumps({"type": "assistant", "message": {"content": [
             {"type": "tool_use", "id": "tu1", "name": name, "input": {}}]}}))
         lines.append(json.dumps({"type": "user", "message": {"content": [
             {"type": "tool_result", "tool_use_id": "tu1", "is_error": err, "content": "x"}]}}))
+    for text in (texts if texts is not None else [result]):
+        lines.append(json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "text", "text": text}]}}))
     if with_result:
         lines.append(json.dumps({"type": "result", "subtype": subtype, "is_error": is_error,
                                  "result": result, "permission_denials": denials or []}))
@@ -190,40 +202,40 @@ J = {"id": "J5", "prompt": "Hi Parallax", "expect": ["where are we looking today
 
 
 def test_run_passes_clean_stream_and_returns_final_text():
-    passed, reasons, text = check_run(_stream(), J, 0, False)
+    passed, reasons, text, _ = check_run(_stream(), J, 0, False)
     assert passed is True, reasons
     assert text == "Hi — where are we looking today?"
 
 
 def test_run_fails_on_permission_denials_even_when_text_matches():
     denials = [{"tool_name": "mcp__claude_ai_Parallax__check_api_health", "tool_use_id": "t", "tool_input": {}}]
-    passed, reasons, _ = check_run(_stream(denials=denials), J, 0, False)
+    passed, reasons, _, _ = check_run(_stream(denials=denials), J, 0, False)
     assert passed is False
     assert any("permission denials" in r and "check_api_health" in r for r in reasons)
 
 
 def test_run_fails_on_nonzero_exit_and_timeout():
-    passed, reasons, _ = check_run(_stream(), J, 1, True)
+    passed, reasons, _, _ = check_run(_stream(), J, 1, True)
     assert passed is False
     assert "timed out" in reasons
     assert any("exited 1" in r for r in reasons)
 
 
 def test_run_fails_without_result_message():
-    passed, reasons, text = check_run(_stream(with_result=False), J, 0, False)
+    passed, reasons, text, _ = check_run(_stream(with_result=False), J, 0, False)
     assert passed is False
     assert text == ""
     assert any("no result message" in r for r in reasons)
 
 
 def test_run_fails_on_error_result():
-    passed, reasons, _ = check_run(_stream(is_error=True, subtype="error_during_execution"), J, 0, False)
+    passed, reasons, _, _ = check_run(_stream(is_error=True, subtype="error_during_execution"), J, 0, False)
     assert passed is False
     assert "result is_error" in reasons
 
 
 def test_run_fails_without_init_message():
-    passed, reasons, _ = check_run(_stream(with_init=False), J, 0, False)
+    passed, reasons, _, _ = check_run(_stream(with_init=False), J, 0, False)
     assert passed is False
     assert any("no init message" in r for r in reasons)
 
@@ -233,41 +245,44 @@ def test_run_fails_without_init_message():
     [{"name": "claude.ai Gmail", "status": "connected"}],
     [{"name": "plugin:parallax:parallax", "status": "needs-auth"}],
     [{"name": "claude.ai Parallax", "status": "failed"}],
+    [{"name": "claude.ai Parallax", "status": "pending"}],
 ])
-def test_run_fails_when_connector_journey_has_no_usable_parallax_server(servers):
-    passed, reasons, _ = check_run(_stream(servers=servers), J, 0, False)
+def test_run_fails_when_connector_journey_has_no_connected_parallax_server(servers):
+    passed, reasons, _, _ = check_run(_stream(servers=servers), J, 0, False)
     assert passed is False
-    assert any("no usable Parallax server" in r for r in reasons)
+    assert any("no connected Parallax server" in r for r in reasons)
 
 
 def test_run_accepts_plugin_server_connected():
     servers = [{"name": "plugin:parallax:parallax", "status": "connected"}]
-    passed, reasons, _ = check_run(_stream(servers=servers), J, 0, False)
+    passed, reasons, _, _ = check_run(_stream(servers=servers), J, 0, False)
     assert passed is True, reasons
 
 
 def test_no_connector_run_fails_when_parallax_server_present():
     j = {**J, "needs": "no-connector"}
-    passed, reasons, _ = check_run(_stream(), j, 0, False)
+    passed, reasons, _, _ = check_run(_stream(), j, 0, False)
     assert passed is False
     assert any("no-connector run" in r for r in reasons)
-    passed2, reasons2, _ = check_run(_stream(servers=[]), j, 0, False)
+    passed2, reasons2, _, _ = check_run(_stream(servers=[]), j, 0, False)
     assert passed2 is True, reasons2
 
 
 def test_run_still_applies_substring_checks():
-    passed, reasons, _ = check_run(_stream(result="Which role are you?"), {**J, "forbid": ["Which role"]}, 0, False)
+    passed, reasons, _, _ = check_run(_stream(result="Which role are you?"), {**J, "forbid": ["Which role"]}, 0, False)
     assert passed is False
     assert any("found forbidden" in r for r in reasons)
 
 
 def test_cli_run_writes_text_and_exit_code(tmp_path, capsys):
     stream = tmp_path / "raw.jsonl"
-    stream.write_text(_stream(denials=[{"tool_name": "x"}]))
+    stream.write_text(_stream(denials=[{"tool_name": "x"}],
+                              texts=["Checking your connection.", "Hi — where are we looking today?"]))
     out = tmp_path / "out.txt"
     rc = main([json.dumps(J), "--stream", str(stream), "--exit-code", "0", "--text-out", str(out)])
     assert rc == 1
-    assert out.read_text() == "Hi — where are we looking today?"
+    written = out.read_text()
+    assert "Checking your connection." in written and "where are we looking today" in written
     printed = capsys.readouterr().out
     assert "permission_denials: 1" in printed and "FAIL: permission denials" in printed
 
@@ -275,29 +290,116 @@ def test_cli_run_writes_text_and_exit_code(tmp_path, capsys):
 def test_successful_parallax_call_proves_connector_absent_from_init():
     # claude.ai connectors can load after the init message is written.
     servers = [{"name": "plugin:parallax:parallax", "status": "needs-auth"}]
-    passed, reasons, _ = check_run(
+    passed, reasons, _, _ = check_run(
         _stream(servers=servers, tool_call=("mcp__claude_ai_Parallax__check_api_health", False)),
         J, 0, False)
     assert passed is True, reasons
 
 
 def test_errored_parallax_call_does_not_prove_connector():
-    passed, reasons, _ = check_run(
+    passed, reasons, _, _ = check_run(
         _stream(servers=[], tool_call=("mcp__claude_ai_Parallax__check_api_health", True)),
         J, 0, False)
     assert passed is False
-    assert any("no usable Parallax server" in r for r in reasons)
+    assert any("no connected Parallax server" in r for r in reasons)
 
 
 def test_non_parallax_tool_call_does_not_prove_connector():
-    passed, _, _ = check_run(
+    passed, _, _, _ = check_run(
         _stream(servers=[], tool_call=("mcp__claude_ai_Gmail__list_labels", False)), J, 0, False)
     assert passed is False
 
 
 def test_no_connector_run_fails_on_any_parallax_tool_call():
     j = {**J, "needs": "no-connector"}
-    passed, reasons, _ = check_run(
+    passed, reasons, _, _ = check_run(
         _stream(servers=[], tool_call=("mcp__claude_ai_Parallax__check_api_health", True)), j, 0, False)
     assert passed is False
     assert any("Parallax tool called in a no-connector run" in r for r in reasons)
+
+
+# --- round 2: concierge skill, forbid on all text, connector-optional --------
+
+def test_run_fails_when_concierge_skill_not_called():
+    passed, reasons, _, _ = check_run(_stream(skill=None), J, 0, False)
+    assert passed is False
+    assert any("parallax:parallax-concierge did not run" in r for r in reasons)
+
+
+def test_run_fails_when_a_different_skill_ran():
+    passed, reasons, _, _ = check_run(_stream(skill="parallax-concierge"), J, 0, False)
+    assert passed is False
+    assert any("did not run" in r and "parallax-concierge" in r for r in reasons)
+
+
+def test_run_fails_when_concierge_skill_errored():
+    passed, reasons, _, _ = check_run(_stream(skill_error=True), J, 0, False)
+    assert passed is False
+    assert any("did not run" in r for r in reasons)
+
+
+def test_run_checks_plugin_path_when_given():
+    ok, reasons, _, _ = check_run(_stream(), J, 0, False, plugin_dir="/repo/plugin")
+    assert ok is True, reasons
+    bad, reasons2, _, _ = check_run(_stream(plugin_path="/elsewhere"), J, 0, False, plugin_dir="/repo/plugin")
+    assert bad is False
+    assert any("not loaded" in r for r in reasons2)
+
+
+def test_forbid_applies_to_earlier_assistant_text():
+    stream = _stream(texts=["Run `/mcp` and authenticate Parallax.", "Hi — where are we looking today?"])
+    passed, reasons, final, all_text = check_run(stream, {**J, "forbid": ["/mcp"]}, 0, False)
+    assert passed is False
+    assert any("found forbidden: '/mcp'" in r for r in reasons)
+    assert final == "Hi — where are we looking today?"
+    assert "/mcp" in all_text and final in all_text
+
+
+def test_expect_reads_only_the_final_answer():
+    stream = _stream(texts=["where are we looking today", "Something else."], result="Something else.")
+    passed, reasons, _, _ = check_run(stream, J, 0, False)
+    assert passed is False
+    assert any("missing expect" in r for r in reasons)
+
+
+def test_connector_optional_skips_only_server_presence():
+    j = {**J, "needs": "connector-optional"}
+    passed, reasons, _, _ = check_run(_stream(servers=[]), j, 0, False)
+    assert passed is True, reasons
+    denials = [{"tool_name": "Bash"}]
+    passed2, reasons2, _, _ = check_run(_stream(servers=[], denials=denials, skill=None), j, 3, False)
+    assert passed2 is False
+    assert any("permission denials" in r for r in reasons2)
+    assert any("exited 3" in r for r in reasons2)
+    assert any("did not run" in r for r in reasons2)
+
+
+def test_validate_accepts_connector_optional():
+    assert validate_journey({**VALID, "needs": "connector-optional"}) == []
+
+
+CONNECTOR_JOURNEYS = ("J1_research_connected", "J3_integrator", "J4_rm_support_schedule",
+                      "J6_uncovered_ticker", "J7_direct_task_bypass", "J8_role_asked_not_guessed")
+
+
+# Phrases of the concierge's not-connected state. "/mcp" itself is not one:
+# a correct connected run can mention it when a second, signed-out Parallax
+# connector is loaded.
+NOT_CONNECTED_MARKERS = ("To connect", "No connection needed")
+
+
+def test_every_connector_journey_forbids_the_not_connected_state():
+    journeys = {j["id"]: j for j in map(json.loads, filter(str.strip, JOURNEYS.read_text().splitlines()))}
+    assert set(CONNECTOR_JOURNEYS) == {jid for jid, j in journeys.items() if "needs" not in j}
+    for jid in CONNECTOR_JOURNEYS:
+        assert set(NOT_CONNECTED_MARKERS) <= set(journeys[jid]["forbid"]), jid
+
+
+def test_pending_server_passes_only_with_a_successful_parallax_call():
+    pending = [{"name": "claude.ai Parallax", "status": "pending"}]
+    ok, reasons, _, _ = check_run(
+        _stream(servers=pending, tool_call=("mcp__claude_ai_Parallax__check_api_health", False)), J, 0, False)
+    assert ok is True, reasons
+    bad, _, _, _ = check_run(
+        _stream(servers=pending, tool_call=("mcp__claude_ai_Parallax__check_api_health", True)), J, 0, False)
+    assert bad is False

@@ -33,18 +33,23 @@
 #                                 Needs a one-time `/mcp` sign-in to that
 #                                 server and the server-side loopback sign-in
 #                                 fix.
-#   PARALLAX_E2E_ALLOWED_TOOLS    Overrides the --allowedTools value the
+#   PARALLAX_E2E_ALLOWED_TOOLS    Overrides the Parallax tool patterns the
 #                                 connector mode picks (comma-separated).
+#                                 Bash, Read, Grep and Glob are always
+#                                 allowed on top.
 #   PARALLAX_E2E_TIMEOUT          Per-journey limit in seconds (default 600).
 #                                 A timeout is a FAIL.
 #
 # Journeys are defined in evals/tasks/concierge/journeys.jsonl, one JSON
 # object per line:
 #   {"id", "prompt", "expect"?: [...], "forbid"?: [...], "expect_any"?: [...],
-#    "needs"?: "no-connector"}
+#    "needs"?: "no-connector" | "connector-optional"}
 # Every line is validated before any `claude` call; an invalid line aborts.
 # "needs": "no-connector" runs with claude.ai connectors disabled,
 # --strict-mcp-config and an empty --mcp-config, so no Parallax server loads.
+# "needs": "connector-optional" runs like a connector journey but skips only
+# the Parallax-server-presence check (for a journey that calls no Parallax
+# tool; a claude.ai connector may be missing from the init message).
 #
 # Each journey runs from a fresh scratch directory (mktemp -d), so the repo's
 # CLAUDE.md and source files are out of reach, with --plugin-dir pointing at
@@ -54,14 +59,16 @@
 #
 # The run fails closed (evals/concierge_journeys_check.py): any
 # permission_denials in the result, a missing/errored result, a non-zero
-# exit, a timeout, a connector journey with no usable Parallax server at init
-# and no successful Parallax tool call, or a no-connector journey that shows a
-# Parallax server or calls a Parallax tool is a FAIL, whatever the final text
-# says. The expect/forbid/expect_any checks then run on the final
-# assistant text.
+# exit, a timeout, no successful Skill call of parallax:parallax-concierge,
+# an init message that does not list this plugin directory, a connector
+# journey with no connected Parallax server at init and no successful Parallax
+# tool call, or a no-connector journey that shows a Parallax server or calls
+# a Parallax tool is a FAIL, whatever the text says. expect/expect_any run on
+# the final answer; forbid runs on all assistant text in the run.
 #
 # Results (gitignored) land in evals/results/: concierge_<id>_<UTC-ts>.jsonl
-# (raw stream), .txt (final assistant text) and .stderr.
+# (raw stream), .txt (all assistant text) and .stderr. INT/TERM stops the
+# running claude and removes its scratch directory.
 
 set -uo pipefail
 
@@ -107,6 +114,11 @@ case "$CONNECTOR" in
     ;;
 esac
 ALLOWED_TOOLS="${PARALLAX_E2E_ALLOWED_TOOLS:-$DEFAULT_TOOLS}"
+# Allowed in every journey: --setting-sources project drops user-level
+# permissions, the plugin's shared files sit outside the scratch cwd, and
+# routed skills run their render gate through Bash. Without these, any read
+# or script step is a permission denial and the journey fails.
+BASE_TOOLS="Bash,Read,Grep,Glob"
 
 [ -f "$JOURNEYS" ] || { echo "journeys file not found: $JOURNEYS" >&2; exit 1; }
 [ -f "$CHECK" ] || { echo "checker not found: $CHECK" >&2; exit 1; }
@@ -167,6 +179,23 @@ done
 
 TOTAL=0
 FAILS=0
+PID=""
+SCRATCH=""
+
+cleanup_and_exit() {
+  # On INT/TERM: stop the running claude and its children, drop the scratch dir.
+  if [ -n "$PID" ]; then
+    pkill -TERM -P "$PID" 2>/dev/null
+    kill -TERM "$PID" 2>/dev/null
+    sleep 1
+    pkill -KILL -P "$PID" 2>/dev/null
+    kill -KILL "$PID" 2>/dev/null
+  fi
+  [ -n "$SCRATCH" ] && rm -rf "$SCRATCH"
+  echo "interrupted" >&2
+  exit 130
+}
+trap cleanup_and_exit INT TERM
 
 while IFS= read -r LINE || [ -n "$LINE" ]; do
   [ -z "$LINE" ] && continue
@@ -180,11 +209,11 @@ while IFS= read -r LINE || [ -n "$LINE" ]; do
 
   if [ "$NEEDS" = "no-connector" ]; then
     RUN_ENV=(ENABLE_CLAUDEAI_MCP_SERVERS=false)
-    XFLAGS=(--strict-mcp-config --mcp-config '{"mcpServers":{}}')
+    # --allowedTools takes a variadic list, so it goes last.
+    XFLAGS=(--strict-mcp-config --mcp-config '{"mcpServers":{}}' --allowedTools "$BASE_TOOLS")
   else
     RUN_ENV=(${CONN_ENV[@]+"${CONN_ENV[@]}"})
-    # --allowedTools takes a variadic list, so it goes last.
-    XFLAGS=(--allowedTools "$ALLOWED_TOOLS")
+    XFLAGS=(--allowedTools "$BASE_TOOLS,$ALLOWED_TOOLS")
   fi
 
   CMD=(env ${RUN_ENV[@]+"${RUN_ENV[@]}"} claude -p "$PROMPT"
@@ -226,9 +255,11 @@ while IFS= read -r LINE || [ -n "$LINE" ]; do
   done
   wait "$PID" 2>/dev/null
   RC=$?
+  PID=""
   rm -rf "$SCRATCH"
+  SCRATCH=""
 
-  CHECK_ARGS=("$LINE" --stream "$RAW" --exit-code "$RC" --text-out "$TXT")
+  CHECK_ARGS=("$LINE" --stream "$RAW" --exit-code "$RC" --plugin-dir "$PLUGIN_DIR" --text-out "$TXT")
   [ "$TIMED_OUT" -eq 1 ] && CHECK_ARGS+=(--timed-out)
 
   if CHECK_OUT=$(python3 "$CHECK" "${CHECK_ARGS[@]}" 2>&1); then

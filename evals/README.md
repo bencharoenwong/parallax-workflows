@@ -244,21 +244,35 @@ PARALLAX_E2E_LIVE=1 bash evals/concierge_journeys.sh
 Journeys are defined in `evals/tasks/concierge/journeys.jsonl`, one JSON object per
 line: `id`, `prompt`, `expect` (substrings that must all appear, case-insensitive),
 `forbid` (substrings that must not appear), an optional `expect_any` (passes if any
-one substring appears), and an optional `"needs": "no-connector"` (runs with claude.ai
-connectors disabled, `--strict-mcp-config` and an empty `--mcp-config`, so no Parallax
-server loads). The runner validates every line before any model call and rejects
-unknown keys or a list field that is not a list of strings.
+one substring appears), and an optional `needs`. `"needs": "no-connector"` runs with
+claude.ai connectors disabled, `--strict-mcp-config` and an empty `--mcp-config`, so no
+Parallax server loads. `"needs": "connector-optional"` runs like a connector journey
+but skips only the Parallax-server-presence check. Use it for a journey that calls no
+Parallax tool, because a claude.ai connector can be missing from the init message. The
+runner validates every line before any model call and rejects unknown keys or a list
+field that is not a list of strings.
 
-Each run is captured as `--output-format stream-json --verbose` and fails closed: a
-journey FAILs when the result lists any `permission_denials`, when the result is
-missing or errored, when `claude` exits non-zero or hits the timeout, when a connector
-journey shows no usable Parallax server in the init message and makes no successful
-Parallax tool call (a claude.ai connector can finish loading after the init message),
-or when a no-connector journey shows a Parallax server or calls a Parallax tool. The substring checks then run on the final assistant text. The
-checker is `evals/concierge_journeys_check.py`, pytested on canned streams at
-`evals/graders/test_concierge_journeys_check.py`; that pytest runs in CI, the
+Each run is captured as `--output-format stream-json --verbose` and fails closed. A
+journey FAILs when:
+
+- the result lists any `permission_denials`, or is missing or errored;
+- `claude` exits non-zero or hits the timeout;
+- no Skill call of `parallax:parallax-concierge` succeeds, or the init message does not
+  list this branch's `plugin/` directory;
+- a connector journey shows no connected Parallax server in the init message and makes no
+  successful Parallax tool call (a claude.ai connector can finish loading after the
+  init message);
+- a no-connector journey shows a Parallax server or calls a Parallax tool.
+
+`expect` and `expect_any` run on the final answer. `forbid` runs on all assistant text
+in the run, so a forbidden phrase in an earlier turn also fails. Every connector
+journey forbids "To connect" and "No connection needed", phrases of the concierge's
+not-connected state, so a not-connected run cannot pass. `/mcp` itself is not
+forbidden: a correct connected run can mention it when a second, signed-out Parallax
+connector is loaded. The checker is `evals/concierge_journeys_check.py`, pytested on canned streams
+at `evals/graders/test_concierge_journeys_check.py`; that pytest runs in CI, the
 journeys do not. Results (gitignored) land in `evals/results/` as the raw stream
-(`.jsonl`), the final text (`.txt`) and stderr.
+(`.jsonl`), all assistant text (`.txt`) and stderr.
 
 | Env var | Required | Purpose |
 |---|---|---|
@@ -266,7 +280,7 @@ journeys do not. Results (gitignored) land in `evals/results/` as the raw stream
 | `PARALLAX_E2E_DRY_RUN` | optional | `1` prints each `claude` command instead of running it. Takes effect even without `PARALLAX_E2E_LIVE=1`. |
 | `PARALLAX_E2E_ONLY` | optional | Comma-separated journey ids. Each entry matches a full id or the part before its first `_` (`J2` matches `J2_not_connected`). An entry that matches nothing prints a warning. |
 | `PARALLAX_E2E_CONNECTOR` | optional | `account` (default) or `plugin`. See below. |
-| `PARALLAX_E2E_ALLOWED_TOOLS` | optional | Overrides the `--allowedTools` value the connector mode picks (comma-separated). `--setting-sources project` drops user-level permissions, so the Parallax tools must be listed here or by the mode. |
+| `PARALLAX_E2E_ALLOWED_TOOLS` | optional | Overrides the Parallax tool patterns the connector mode picks (comma-separated). `--setting-sources project` drops user-level permissions, so the Parallax tools must be listed here or by the mode. `Bash`, `Read`, `Grep` and `Glob` are always allowed on top: the plugin's shared files sit outside the scratch directory, and routed skills run their render gate through Bash. |
 | `PARALLAX_E2E_TIMEOUT` | optional | Per-journey limit in seconds, default `600`. A timeout is a FAIL. |
 
 Connector modes:
@@ -288,7 +302,7 @@ What each journey checks:
 | `J2_not_connected` | No connector: the Check state shows the `/mcp` connect step instead of routing anywhere (no Parallax credits billed). |
 | `J3_integrator` | "Building on Parallax" role gets the integration pointer (the README "Forking and Customizing" link), not a skill run (`check_api_health` only, free). |
 | `J4_rm_support_schedule` | RM-support role with holdings runs `/parallax-morning-brief` (bills Parallax credits) and, because scheduling is currently unverified on every host, the concierge must not offer it; forbids the scheduling and delivery phrasing such an offer would use. |
-| `J5_returning` | A plain "Hi Parallax" (no "new here") gets the standard opener, including the "New here?" pointer, and no role label (`check_api_health` only, free). |
+| `J5_returning` | A plain "Hi Parallax" (no "new here") gets the standard opener, including the "New here?" pointer, and no role label. It makes no Parallax call (free), so it uses `connector-optional`. |
 | `J6_uncovered_ticker` | An unknown ticker is reported as not covered or not resolved, not replaced by an invented symbol. Bills Parallax credits: the should-i-buy route resolves with `get_company_info` (1 credit per attempt). |
 | `J7_direct_task_bypass` | "I'm new here. Should I buy AAPL?" routes the task directly (bills Parallax credits) and shows no role label. |
 | `J8_role_asked_not_guessed` | A bare "I'm new here" (no payload) gets asked the role question with the role labels offered, not guessed, and no skill runs yet (`check_api_health` only, free). |

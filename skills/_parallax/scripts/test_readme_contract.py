@@ -21,8 +21,9 @@ def test_who_for_block_is_generated():
 
 
 # A slash-command token: "/" not preceded by a word, path or URL character,
-# then a parallax- or translate- skill name.
-_COMMAND = re.compile(r"(?<![\w/.:-])/((?:parallax|translate)-[a-z0-9-]+)")
+# an optional "parallax:" plugin prefix, then a parallax- or translate- skill
+# name. Captures the skill name.
+_COMMAND = re.compile(r"(?<![\w/.:-])/(?:parallax:)?((?:parallax|translate)-[a-z0-9-]+)")
 
 
 def test_quick_start_names_only_shipped_commands():
