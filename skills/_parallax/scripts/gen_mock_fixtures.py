@@ -83,8 +83,8 @@ are structural consequences of how the numbers are built:
     portfolio_summary.total_return (itself total_pl_portfolio / initial_value),
     not bit-exact to it: each row absorbs its own rounding, so the sum can
     drift from total_return by a few units in the last decimal. This is the
-    live server's basis (effective 2026-10, parallax-api PR #521); an older
-    build returned a P&L-share basis instead (rows force-balanced to sum to
+    live server's basis since 2026-10; an older build returned a P&L-share
+    basis instead (rows force-balanced to sum to
     1.0 exactly) -- see the contribution_pct gotcha in
     `_parallax/parallax-conventions.md` and `parallax-cio-letter-prep/SKILL.md`
     for the runtime guard that distinguishes the two.
@@ -560,7 +560,7 @@ def _company_contribution(paths: dict[str, Any]) -> tuple[list[dict], float]:
         # deliberately: a test asserting equality here would be wrong.
         #
         # contribution_pct is a RETURN contribution (total_pl / initial_value),
-        # the live server's basis since parallax-api PR #521 -- NOT a P&L
+        # the live server's basis since 2026-10 -- NOT a P&L
         # share of total_pl_portfolio. Each row rounds its own ratio to its
         # own 6-decimal budget independently; there is no force-balance, so
         # the rows sum to portfolio_summary.total_return only to within that
