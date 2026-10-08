@@ -40,7 +40,7 @@ Parallax tool namespaces are runtime-assigned and may differ across Claude Code,
 2. Build a session-local binding map from each logical tool name used by the skill (for example, `get_company_info`) to the exact callable name returned by discovery.
 3. Read the callable's live input schema immediately before constructing its arguments. Send only advertised parameters, with the advertised types and enum values. If static prose conflicts with discovery, discovery wins.
 4. Never synthesize a callable by attaching a remembered namespace to a logical tool name. A configured server alias, README example, previous transcript, or cached skill instruction does not prove that callable exists in the current session.
-5. If discovery returns more than one Parallax namespace (for example a separate connector and a plugin's bundled one), choose one for the whole session. First call the free `check_api_health` probe once on each namespace. If exactly one is signed in, use it. If more than one is signed in, or any probe is missing, fails, or times out, ask the user which to use, naming each, because each may bill a different account. Tell the user once which namespace the session uses. Bind every later call to that namespace, and never call a billed tool on two namespaces. Some hosts merge or suppress same-address servers before discovery; this rule applies whenever discovery still returns more than one.
+5. If discovery returns more than one Parallax namespace (for example a separate connector and a plugin's bundled one), choose one for the whole session. First call the free `check_api_health` probe once on each namespace. If exactly one is signed in, use it. If none is signed in, the connector is unavailable: show the connect steps for this host. If more than one is signed in, or any probe is missing, fails, or times out, ask the user which to use, naming each, because each may bill a different account. Tell the user once which namespace the session uses. Bind every later call to that namespace, and never call a billed tool on two namespaces. Some hosts merge or suppress same-address servers before discovery; this rule applies whenever discovery still returns more than one.
 
 **Retry classification.** A transient transport failure, cancellation, or empty success may be retried once for the affected call after discovery remains available. Do not re-fire an entire batch because one sibling failed. A tool-not-found or schema-validation response is a deterministic contract failure: do not repeat the same payload and do not try guessed aliases or argument variants. Re-read the discovered schema and make one corrected call only when the mapping is unambiguous; otherwise use a discovered fallback per §4 and mark the missing coverage explicitly.
 
@@ -542,7 +542,7 @@ These skills run on more than one harness. A SKILL.md therefore names **host pri
 
 ### §14.2 Per-host binding table
 
-The connector namespace is never written here: it is whatever `discover-tools` returns in the session (§0.1 item 4). Rows marked *verify* were not exercised end-to-end when this section was written (2026-09-04; plugin columns and `schedule-task` added 2026-10-08) and must be confirmed in the first cross-host parity run before a skill relies on them.
+The connector namespace is never written here: it is whatever `discover-tools` returns in the session (§0.1 item 4). Rows marked *verify* were not exercised end-to-end when this section was written (2026-09-04; plugin columns and `schedule-task` added 2026-10-07) and must be confirmed in the first cross-host parity run before a skill relies on them.
 
 | Primitive | Claude Code | Codex CLI | claude.ai (uploaded `.skill`) | claude.ai chat (plugin) | Cowork (plugin) |
 |---|---|---|---|---|---|
@@ -555,7 +555,7 @@ The connector namespace is never written here: it is whatever `discover-tools` r
 | `write-artifact` | `Write` tool | file-write / patch tool (never a heredoc) | file write in the sandbox when code execution is enabled; otherwise absent | *verify* | *verify* |
 | `read-config` | shell env + `~/.parallax/` | shell env + `~/.parallax/` | absent: no environment, no persistent state directory | *verify* | *verify* |
 | `fetch-url` | `WebFetch` | shell fetch per the sandbox network policy (*verify*) | absent unless a browsing tool is enabled | *verify* | *verify* |
-| `schedule-task` | scheduled cloud routine (`/schedule`) (*verify* that the routine sees the installed skills and the signed-in Parallax connector) | absent | absent | *verify* (treated as absent) | scheduled task (cloud; uses installed skills and plugins; paid plans) |
+| `schedule-task` | scheduled cloud routine (`/schedule`) (*verify* that the routine sees the installed skills and the signed-in Parallax connector) | absent | absent | *verify* (treated as absent) | scheduled task (cloud; uses installed skills and plugins; paid plans) (*verify*) |
 
 Install-layout invariant. Every installed skill directory has `../_parallax/` as a sibling (symlink or copy) OR carries the vendored copy under `<skill>/_vendored/_parallax/` with references rewritten. Every `run-shell` and `load-reference` path in a SKILL.md is written relative to the skill directory so both layouts resolve.
 

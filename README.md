@@ -42,7 +42,7 @@ These workflows require an active Parallax subscription from [Chicago Global Cap
 
 ### 1. Connect the Parallax MCP server
 
-**Plugin install (Option A below).** The plugin includes the Parallax connector (`https://mcp.chicago.global/api/mcp`). After installing, open the plugin's Connectors tab or run `/mcp`, then sign in. If Parallax is also added as a separate connector, the host may keep both. Skills then ask which one to use, because each may bill a different account. Sign in with the account your firm bills.
+**Plugin install (Option A below).** The plugin includes the Parallax connector (`https://mcp.chicago.global/api/mcp`). After installing, open the plugin's Connectors tab or run `/mcp`, then sign in. If Parallax is also added as a separate connector, the host may keep both. When both are signed in, skills ask which one to use, because each may bill a different account. Sign in with the account your firm bills.
 
 **Zip or full-clone install.** Add the Parallax MCP server (`https://mcp.chicago.global/api/mcp`) as a connector in your host yourself, then sign in.
 
