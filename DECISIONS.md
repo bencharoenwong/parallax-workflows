@@ -15,6 +15,63 @@ Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[
 - [DROP] Pick the first listed connector automatically. It can bill the wrong account.
 
 **Flip conditions:** a release step automates the version bump → remove the hand-bump rule from `build_bundle.py`.
+## 2026-10-07: Halal-screen — a proven ratio fail outranks an unverified one; Ratio 3 only PASSes with both interest fields present
+
+**Why:** Parallax's `income` statement returns `interest_investment_income_operating` and `interest_investment_income_non_operating` as absent or null on many names, not as `0`, and the present field's sign is not fixed (live probes observed it negative on one name and positive on another). A negative value here is a loss, not negative interest-and-investment income, so it must never offset or reduce the other component. Letting a large present field produce only `UNVERIFIED` because its sibling field is missing would let a real failure hide behind a missing, unrelated input — the opposite of what a fail-closed gate is for.
+
+**Impact:** Each Ratio 3 component is floored at 0 before summing. A name that fails Ratio 1 or 2, or whose one present (floored) interest-and-investment income field alone is ≥5% of `total_revenue`, is NON-COMPLIANT regardless of whether the other field is present — a proven fail always outranks an unresolved input. Ratio 3 can only PASS (a value under 5%, not `UNVERIFIED`) when both fields are present for that period; a present field under 5% with the sibling absent stays `UNVERIFIED`, because the absent field's true value could still push the sum over the cutoff.
+
+**Alternatives:**
+- [DROP] Treat an absent field as `0` outright. Confirmed-absent is not confirmed-zero; this would let a name clear Ratio 3 on data it never actually received.
+- [DROP] Let an `UNVERIFIED` sibling always win over a proven single-field fail. Masks a real failure behind a missing, unrelated input — the exact silent-pass failure mode this gate exists to prevent.
+
+**Flip conditions:** Parallax adds a single, always-populated interest-and-investment-income field (retiring the two-field split) → drop the flooring and lower-bound logic entirely.
+
+## 2026-10-07: cio-letter-prep's local reconciliation audit replicates server compounding and dividends; its 25-bp gate is single-currency only
+
+**Why:** The skill's local reconciliation script recomputes portfolio return from price-series data in each holding's own listing currency, with no currency-conversion step. To be comparable to the server's base-currency total return, the local audit has to replicate the server's buy-and-hold compounding method and add back dividends (from the stock-outlook endpoint) rather than working from a bare price-only series. Without a currency-conversion step, a multi-currency or base-currency book's local total will diverge from the server's total purely on FX — that divergence is not a math bug, so a hard halt on that comparison would reject every multi-currency book for a reason the local audit was never built to check.
+
+**Impact:** The server's `total_fx_pl` field branches the comparison. On a single-currency book (`total_fx_pl == 0`), local return compares directly against the server's total return, and a divergence beyond 25bp halts rendering. On a multi-currency book (`total_fx_pl != 0`), local return instead compares against the server's price-only return; a result within 25bp passes on a price-only basis and reports the FX-plus-interaction residual in bps rather than halting, since FX is not modeled locally. The 25bp gate is a hard halt only for the single-currency case — it is informational, not blocking, once FX is in play.
+
+**Alternatives:**
+- [DROP] Build a currency-conversion step into the local script so the gate can hard-halt on multi-currency books too. Out of scope for a local reconciliation audit; would duplicate the server's own FX handling with no independent verification value.
+- [DROP] Skip the reconciliation audit entirely on multi-currency books. Loses the real signal the price-only comparison still provides for the FX-free part of the return.
+
+**Flip conditions:** the local script gains its own currency-conversion step → promote the multi-currency comparison to a hard halt, matching the single-currency gate.
+
+## 2026-10-07: House-view stress/judge freshness reads "unverifiable" on an undated response, never 0 days
+
+**Why:** The age-computation helpers return `None`, not `0`, when no queried response carries a parseable report date. Rendering `None` as `0` would read as "the data is current" — the opposite of the true state, which is "staleness cannot be determined at all."
+
+**Impact:** The age-delta classifier maps a `None` age to the literal `"unverifiable"` state. Divergent cells under that state resolve to a Taste classification rather than a data-quality escalation, so CIO Challenges are suppressed for a run where staleness is unknown — the run artifact says so explicitly in its header line rather than silently defaulting to a confident-looking day count.
+
+**Alternatives:**
+- [DROP] Default an unparseable date to `0` days. Reads as "fresh," which actively misleads about what the run could and could not verify.
+- [DROP] Hard-fail the run whenever any single response lacks a parseable date. Too strict — one stale or missing date field on one of many markets shouldn't abort an otherwise-useful run.
+
+**Flip conditions:** none anticipated; revisit only if a future Parallax endpoint makes its report-date field a guaranteed one, which would make the unverifiable branch unreachable and a candidate for removal.
+
+## 2026-10-07: White-label stock-report renderer does not refuse a Thai-sourced report at runtime; documentation is the control
+
+**Why:** The renderer's chrome and disclosures are hardcoded English, and the skill has no Thai workflow — it is only ever meant to request the English-language report. The renderer has no code path that inspects a supplied report file's language and refuses a non-English one; adding that detection would mean parsing report prose for language rather than reading one clearly-labeled field.
+
+**Impact:** The control for this boundary is documentation, not code: the skill's own SKILL.md states it always requests the English report and has no Thai workflow, and warns that a Thai-language report must never be supplied in its place, with the localization boundary spelled out in the skill's field-map reference. An operator who hand-supplies a Thai-sourced file bypasses this with no runtime refusal.
+
+**Alternatives:**
+- [DROP] Add a language-detection refusal gate to the renderer. Deferred: no reliable signal exists in a supplied file to key off without parsing narrative text, and the skill's own call path never requests the Thai-language report, so the exposure is limited to a hand-supplied file.
+
+**Flip conditions:** a Thai white-label workflow is built for this skill, or the underlying report endpoint adds an explicit language field to its envelope → add the runtime refusal keyed off that field.
+
+## 2026-10-07: `check_macro_health` is treated as deprecated across docs; use coverage/liveness tools instead
+
+**Why:** The live tool's own description states it is deprecated and costs 1 credit, not the 5 credits this repo's docs previously carried, and its response carries no market-count field and no freshness field of any kind — so nothing in it can back a data-freshness section or a market-count figure.
+
+**Impact:** The token-cost reference lists it at 1 credit with its deprecation note. House-view docs point callers to the liveness-check tool (0 credits) or the macro-coverage-listing tool (1 credit) instead, and state explicitly that macro freshness must come from the macro-analysis tool's own report-date field, never from this one.
+
+**Alternatives:**
+- [DROP] Keep calling it for a quick macro-health check. Its 1-credit cost is no cheaper than the two tools that replace it, and neither of the two things it might have backed — freshness, market count — is actually in its response.
+
+**Flip conditions:** the live tool description drops the deprecated marker or its response gains a freshness or market-count field → revisit.
 
 ## 2026-10-06: Shipped docs follow each distribution's own skill set
 

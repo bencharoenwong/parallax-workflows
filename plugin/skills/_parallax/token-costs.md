@@ -78,7 +78,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 | Workflow | Tokens (typical) | Key cost drivers |
 |---|---|---|
 | `/parallax-score-explainer` | **0-2** | Free if methodology-only; 2 if score data needed |
-| `/parallax-peer-comparison` | **~11** | Peer snapshot + peer comparison export + 3 score histories (5) + 3 `etf_profile` probes (3) + 3 price-series calls (`export_price_series` or `etf_daily_price`, 1 credit each per leg — billed, not free) |
+| `/parallax-peer-comparison` | **~12** | `get_company_info` (1) + peer snapshot (1) + peer comparison export (1) + 3 score histories (3) + 3 `etf_profile` probes (3) + 3 price-series calls (`export_price_series` or `etf_daily_price`, 1 credit each per leg — billed, not free) (3) |
 | `/parallax-halal-screen` | **4** single stock (~4-5/holding portfolio) | company_info + balance_sheet (merged debt + interest-bearing check) + income + score_analysis = 4; +5 optional Palepu; portfolio mode adds redundancy fan-out + alternatives |
 | `/parallax-should-i-buy` | **29** | 4 outlook aspects + 2 macro markets + news + technicals (5) |
 | `/parallax-earnings-quality` | **24** | Palepu (5) + assessment (10) + news (5) |
@@ -91,8 +91,8 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 
 | Workflow | Tokens (typical) | Key cost drivers |
 |---|---|---|
-| `/parallax-thematic-screen` | **~24** (default) / **~19** (`--no-macro`) | Universe build + 5 snapshots + 5 `get_company_info` calls (Step 2 Batch B pairs `get_peer_snapshot` AND `get_company_info` per `top_n` candidate — previously omitted from this recipe) + 3 financials + `list_macro_countries` + `macro_analyst` × up to 3 markets + `get_telemetry` regime signal. Higher at the 3-market macro cap. `--no-macro` drops the macro_analyst fan-out. |
-| `/parallax-portfolio-builder` | **36** | Universe + 10 snapshots + redundancy + validation |
+| `/parallax-thematic-screen` | **~26** (default) / **~20** (`--no-macro`) | Universe build (5) + 5 `get_peer_snapshot` + 5 `get_company_info` calls (Batch B pairs both per `top_n` candidate, 10) + 3 financials (3) + `get_telemetry` regime signal (1) + `export_peer_comparison` for the top trusted row (1) + `list_macro_countries` (1) + `macro_analyst` × up to 3 markets (5 each, one market inferred by default). Higher at the 3-market macro cap. `--no-macro` drops `list_macro_countries` and the `macro_analyst` fan-out. |
+| `/parallax-portfolio-builder` | **40** | Universe (5) + Batch B's 10 `get_peer_snapshot` and 10 `get_company_info` calls (20) + redundancy at 1 credit per holding checked (10) + validation (5) |
 | `/parallax-portfolio-checkup` | **~46** | 2x per-holding fan-out (20) + `list_macro_countries` (1) + up to 3 macro markets (15) + `check_portfolio_redundancy` at 1 credit per holding checked (10) |
 | `/parallax-morning-brief` | **50** | Telemetry + macro + 2x fan-out + 3 news |
 | `/parallax-watchlist-monitor` | **54** | 10 score scans + news/tech/analyst for ~4 flagged |

@@ -524,7 +524,7 @@ def test_contribution_pct_is_a_return_contribution_on_the_tracked_fixture(
 
     The divisor is asserted non-zero first, so a zero initial_value surfaces as
     a stated precondition rather than as a ZeroDivisionError inside the loop.
-    Live basis since parallax-api PR #521 (merge ac3994ea, 2026-10-02):
+    Live server basis since 2026-10:
     ``contribution_pct == total_pl / portfolio_parameters.initial_value``, NOT
     ``total_pl / total_pl_portfolio`` (the retired P&L-share basis).
     """

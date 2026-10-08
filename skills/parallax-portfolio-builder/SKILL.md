@@ -16,7 +16,7 @@ description: "Build a portfolio from a natural language investment thesis. Const
 
 ## Gotchas
 
-- Expected Parallax spend: ~36 tokens at N=10 (`_parallax/token-costs.md`): universe 5 + 10 snapshots + redundancy + validation 5.
+- Expected Parallax spend: ~40 tokens at N=10 (`_parallax/token-costs.md`): universe 5 + Batch B's 10 `get_peer_snapshot` and 10 `get_company_info` calls (20) + redundancy at 1 credit per holding checked (10) + validation 5.
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §2 identity cross-check, §3 parallel execution, §4 fallbacks, §13 audience mode, §14 host primitives.
 - JIT-load `_parallax/house-view/loader.md` FIRST; if a view is present follow §2, §3 (multipliers), §4 (conflict resolution), §5, §6. **The view-status banner is REQUIRED first in output** — never buried after the holdings table; if output gets compressed, keep it and drop other sections first.
 - Drift check: JIT-load `_parallax/house-view/auto-on-load-judge-pattern.md` in Step 0 (this skill builds a portfolio); `--skip-drift-check` bypasses it.

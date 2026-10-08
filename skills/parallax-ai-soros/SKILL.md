@@ -23,7 +23,7 @@ description: "Applies George Soros's top-down reflexivity framework (per 'The Al
 - Expected Parallax spend: ~25–30 tokens single-ticker, ~30–40 basket (`_parallax/token-costs.md`); `macro_analyst` is 5 per market, capped at 5 markets.
 - JIT-load `_parallax/parallax-conventions.md`, `_parallax/AI-profiles/profile-schema.md`, `_parallax/AI-profiles/output-template.md`, `_parallax/AI-profiles/profiles/soros.md` — Step 0.
 - Two modes — basket (no ticker) and single-ticker dual-channel — share the macro workflow. The dual-channel logic is load-bearing: a single-channel flag is `partial_match`, never `match`.
-- Channel B basket membership is best-effort name-matching against `divergences[*].basket_name`; per-ticker basket lookup is not a documented `get_telemetry` field.
+- Channel B basket membership is best-effort name-matching against `divergences[*].name` (a theme name, matched against sector/industry) — `divergences[*]` has no `basket_name` field live, only `name`, `type`, `market`, `daily`, `mtd`, `basket_id`.
 - `build_stock_universe` is async and broad queries time out: thematic queries MUST be sector-scoped and size-bounded (good: "US energy exporters benefiting from dollar weakness").
 - NEVER use first-person impersonation of Soros — always "Soros-style" or "reflexivity lens identifies". Disclaimer verbatim with "George Soros" for [Investor].
 - Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).

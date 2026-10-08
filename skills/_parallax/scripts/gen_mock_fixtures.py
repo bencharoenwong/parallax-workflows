@@ -74,7 +74,9 @@ are structural consequences of how the numbers are built:
       - sum(company_contribution[].total_pl) == portfolio_summary.total_pl
       - ending_value - total_pl == that holding's initial allocation
       - final_value == initial_value + total_pl
-      - total_price_pl + total_fx_pl == total_pl
+      - total_pl - total_price_pl - total_fx_pl == CROSS_PL (a price x
+        FX interaction term the live server includes even on a
+        single-currency book; NOT total_price_pl + total_fx_pl == total_pl)
       - sector_allocation[].value sums to the portfolio value on every date
   * contribution_pct is a RETURN contribution, not a P&L share:
     contribution_pct == total_pl / portfolio_parameters.initial_value, rounded
@@ -83,8 +85,8 @@ are structural consequences of how the numbers are built:
     portfolio_summary.total_return (itself total_pl_portfolio / initial_value),
     not bit-exact to it: each row absorbs its own rounding, so the sum can
     drift from total_return by a few units in the last decimal. This is the
-    live server's basis (effective 2026-10, parallax-api PR #521); an older
-    build returned a P&L-share basis instead (rows force-balanced to sum to
+    live server's basis since 2026-10; an older build returned a P&L-share
+    basis instead (rows force-balanced to sum to
     1.0 exactly) -- see the contribution_pct gotcha in
     `_parallax/parallax-conventions.md` and `parallax-cio-letter-prep/SKILL.md`
     for the runtime guard that distinguishes the two.
@@ -176,6 +178,15 @@ SEED = 20330105
 # so every money sum is exact in float rather than merely close, and a
 # five-figure portfolio value still fits inside the 9-significant-figure budget.
 SUBUNIT = 8
+
+# The live server's total_pl is not a plain sum of total_price_pl
+# and total_fx_pl -- it includes a price x FX interaction (cross) term, so
+# total_pl - total_price_pl - total_fx_pl == CROSS_PL, not 0. This holds even
+# in a single-currency book (total_fx_pl == 0): the cross term is a residual
+# of how the live server composes the two components, not a currency-risk
+# figure. Modeled here as a small fixed constant, one subunit (CROSS_PL stays
+# on the money lattice), charged against total_price_pl.
+CROSS_PL = 1 / SUBUNIT
 
 INITIAL_VALUE = 10000
 BASE_CURRENCY = "USD"
@@ -560,7 +571,7 @@ def _company_contribution(paths: dict[str, Any]) -> tuple[list[dict], float]:
         # deliberately: a test asserting equality here would be wrong.
         #
         # contribution_pct is a RETURN contribution (total_pl / initial_value),
-        # the live server's basis since parallax-api PR #521 -- NOT a P&L
+        # the live server's basis since 2026-10 -- NOT a P&L
         # share of total_pl_portfolio. Each row rounds its own ratio to its
         # own 6-decimal budget independently; there is no force-balance, so
         # the rows sum to portfolio_summary.total_return only to within that
@@ -981,7 +992,9 @@ def _build_analyze_portfolio(paths: dict[str, Any]) -> dict:
     pf_summary = {
         "final_value": final_value,
         "total_return": q(final_value / INITIAL_VALUE - 1.0, 6),
-        "total_price_pl": total_pl,
+        # total_pl - total_price_pl - total_fx_pl == CROSS_PL (not 0)
+        # -- see CROSS_PL's definition above.
+        "total_price_pl": total_pl - CROSS_PL,
         "total_fx_pl": 0,          # single-currency portfolio
         "total_pl": total_pl,
         "total_transaction_cost": 0,
@@ -1206,6 +1219,56 @@ def _build_get_company_info(paths: dict[str, Any]) -> dict:
     }
 
 
+def _build_get_stock_outlook_dividends(paths: dict[str, Any]) -> list[dict]:
+    """``get_stock_outlook(aspect="dividends")``'s flat-list shape, derived
+    from the same seeded holding ``_build_get_company_info`` uses (AXCM.O),
+    so the realistic-values test can assert currency agreement between the
+    two endpoints without inventing a second identity.
+
+    The server's underlying value path (``build_paths`` above) already
+    credits this holding's value with one discrete dividend injection at
+    ``credit_day = len(dates) // 2``, sized by ``dividend_yield`` scaled to
+    the window -- that is the one real economic event in this fixture, so
+    the dividend record below is derived from the SAME numbers rather than
+    picking a second, independent one. ``divrate`` is the per-share cash
+    amount implied by that credited yield on the holding's entry price."""
+    subject = paths["holdings"][0]
+    dates = paths["dates"]
+    credit_day = len(dates) // 2
+    effective_date = dates[credit_day]
+    # BUG-007: a real cash-dividend ex-date is always a trading day. Snap
+    # a weekend `credit_day` back to the preceding weekday so the fixture
+    # does not model an impossible Saturday/Sunday ex-date. This only
+    # changes WHICH day is reported as the ex-date for this one dividend
+    # record -- it draws no extra random value, so it cannot perturb any
+    # other MANAGED fixture derived from the same seeded path.
+    while effective_date.weekday() >= 5:
+        effective_date -= dt.timedelta(days=1)
+    entry_price = subject["entry_price_units"] / SUBUNIT
+    window_yield = subject["dividend_yield"] * (len(dates) - 1) / 365.0
+    divrate = q(entry_price * window_yield, 4)
+    # Derived, not hand-picked: a deterministic function of the entry price
+    # and the window length, distinct per holding/seed.
+    infocode = subject["entry_price_units"] * 97 + len(dates)
+    record_date = effective_date + dt.timedelta(days=2)
+    pay_date = effective_date + dt.timedelta(days=16)
+    announce_date = effective_date - dt.timedelta(days=30)
+    return [
+        {
+            "symbol": subject["ric"],
+            "infocode": infocode,
+            "divtypecode": "QTR",
+            "divrate": divrate,
+            "currency": BASE_CURRENCY,
+            "announce_date": announce_date.isoformat(),
+            "effective_date": effective_date.isoformat(),
+            "record_date": record_date.isoformat(),
+            "pay_date": pay_date.isoformat(),
+            "taxmarker": "0",
+        }
+    ]
+
+
 # --------------------------------------------------------------------------
 # Seed selection
 # --------------------------------------------------------------------------
@@ -1314,6 +1377,8 @@ def build_fixtures() -> dict[str, Any]:
         # Flat -- no wrapper on this endpoint.
         "get_company_info": _build_get_company_info(paths),
         "get_score_analysis": _build_get_score_analysis(paths),
+        # Flat list -- no wrapper, no envelope. See its builder's docstring.
+        "get_stock_outlook_dividends": _build_get_stock_outlook_dividends(paths),
     }
 
 

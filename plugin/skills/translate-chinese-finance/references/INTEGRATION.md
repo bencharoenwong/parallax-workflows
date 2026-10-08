@@ -109,7 +109,7 @@ Until step 2 exists, treat `skill_traditional.md` as hand-edited canonical and d
 
 ## 7. Outstanding decisions
 
-1. **Where does the CIO report project live long-term?** Currently `<workspace>/CIO report` — should be moved (e.g., into `~/parallax-api/` or its own repo) before further work.
+1. **Where does the CIO report project live long-term?** Currently `<workspace>/CIO report` — should be moved into its own standalone repository before further work.
 2. **Should the Thai loader be unified with the Chinese loader?** They use different SKILL.md formats today (Thai = human-readable headers, Chinese = CONSTANT_NAME headers). Could converge if we regenerate the Thai SKILL.md from a `thai_translation_config.py` source the same way Chinese does.
 3. **zh-HK distinct config?** A scoped zh-HK vocabulary overlay is implemented by the loader and documented in `references/locale-hk.md`. A full HK report corpus still needs native review. If HK-listed reports need different terminology (e.g., HK uses some mainland forms), add a top-level `skill_hong_kong.md` (parallel to `skill_simplified.md` / `skill_traditional.md`), wire `"zh-HK"` into `VALID_LOCALES` and `_LOCALE_FILES` in `load_skill.py`.
 

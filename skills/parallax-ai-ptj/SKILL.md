@@ -57,7 +57,7 @@ Exactly one ticker; more → reject: "PTJ profile evaluates single stocks. Use /
 
 **Batch A:** `call-tool` `list_macro_countries` and `get_company_info` together; from them pick the home market plus up to 2 exposure markets by sector (e.g. China or Taiwan for semiconductors, Saudi Arabia for energy), cap 3.
 
-**Batch B (all together):** `get_technical_analysis` (trend direction, momentum, volatility regime, levels — Channel T); `macro_analyst(market=<home>, component="tactical")` (Channel M); `get_score_analysis` (52-week factor trends incl. the Momentum sub-trend — Channel T sub-signal); `get_stock_outlook(aspect="risk_return")` (upside %, downside %, risk score — Channel V); `get_peer_snapshot` (`target_company` for the gate; Momentum factor score — Channel V).
+**Batch B (all together):** `get_technical_analysis` (LLM-authored prose narrative on trend/momentum/volatility/levels, read qualitatively — Channel T; the tool returns no machine trend enum, only `executive_summary` and `technical_analysis.trend_analysis` free text); `macro_analyst(market=<home>, component="tactical")` (Channel M); `get_score_analysis` (52-week factor trends incl. the Momentum sub-trend — Channel T sub-signal); `get_stock_outlook(aspect="analyst_targets")` (sell-side `current`/`high`/`low`/`mean`/`median` price targets, from which upside is computed — Channel V; `aspect="risk_return"` is a different endpoint returning trailing return/volatility, not an analyst target); `get_peer_snapshot` (`target_company` for the gate; Momentum factor score — Channel V).
 
 **Batch C (after B):** `macro_analyst(component="tactical")` for the exposure markets, together.
 
@@ -76,7 +76,7 @@ Unavailable inputs mark their channel `UNAVAILABLE` (never `NOT_FLAGGED`) per Fa
 
 ### Step 4 — Compute
 
-Thresholds from `profiles/ptj.md`. **Channel T:** `FLAGGED` when trend ∈ {POSITIVE, STRONG_POSITIVE} AND momentum trend ↑; `PARTIAL` when exactly one sub-signal is positive; `NOT_FLAGGED` when trend ∈ {NEGATIVE, STRONG_NEGATIVE} or momentum ↓; technical timeout → proxy Momentum ≥ 6 AND trend ↑ with the note "Technical analysis unavailable — Channel T uses factor proxy". **Channel M:** `FLAGGED` when the home tactical view is risk-on OR an exposure market's themes name the sector; `PARTIAL` neutral or mixed; `NOT_FLAGGED` risk-off with no favourable exposure theme. **Channel V:** `FLAGGED` when analyst upside ≥ 15% AND Momentum ≥ 5; `PARTIAL` upside 8–15%, or Momentum ≥ 5 with upside < 8%; `NOT_FLAGGED` upside < 8% or Momentum < 5. **Verdict:** 3 `FLAGGED` → `match` (Grade A); 2 `FLAGGED` → `partial_match` (Grade B; 2 + 1 `PARTIAL` → B/C); 0–1 → `no_match` (Grade C/D). Grade: A = 3 flagged, B = 2, C = 1 or 2+ partial, D = 0.
+Thresholds from `profiles/ptj.md`. **Channel T:** `get_technical_analysis` returns LLM-authored prose (`executive_summary`, `technical_analysis.trend_analysis`), not a machine trend field — read it qualitatively for a bullish/bearish/mixed trend as one sub-signal; `get_score_analysis`'s Momentum sub-trend (↑/→/↓) is the other. `FLAGGED` when the prose reads bullish AND momentum trend ↑; `PARTIAL` when exactly one sub-signal is positive; `NOT_FLAGGED` when the prose reads bearish or momentum ↓; technical timeout → proxy Momentum ≥ 6 AND trend ↑ with the note "Technical analysis unavailable — Channel T uses factor proxy". **Channel M:** `FLAGGED` when the home tactical view is risk-on OR an exposure market's themes name the sector; `PARTIAL` neutral or mixed; `NOT_FLAGGED` risk-off with no favourable exposure theme. **Channel V:** if `get_stock_outlook(aspect="analyst_targets")` returns `data.status != "available"`, or `mean`/`current` is null, Channel V is `UNAVAILABLE` (never `NOT_FLAGGED`). Otherwise analyst upside = `(mean − current) / current`. `FLAGGED` when upside ≥ 15% AND Momentum ≥ 5; `PARTIAL` upside 8–15%, or Momentum ≥ 5 with upside < 8%; `NOT_FLAGGED` upside < 8% or Momentum < 5. **Verdict:** 3 `FLAGGED` → `match` (Grade A); 2 `FLAGGED` → `partial_match` (Grade B; 2 + 1 `PARTIAL` → B/C); 0–1 → `no_match` (Grade C/D). Grade: A = 3 flagged, B = 2, C = 1 or 2+ partial, D = 0.
 
 ### Step 5 — Compose (render through the output template)
 
@@ -91,7 +91,7 @@ Trend-following + macro-overlay framework: technical momentum validation → mac
 Ticker exposure check (tri-channel):
 
   Channel T — Technical setup
-    Trend direction: <POSITIVE / NEGATIVE / etc.>
+    Trend direction: <bullish / bearish / mixed — qualitative read from get_technical_analysis's prose>
     Momentum trend (52-week): <↑ / → / ↓>
     Status: FLAGGED / PARTIAL / NOT_FLAGGED
 
@@ -151,8 +151,8 @@ Evaluate Channel T using `get_peer_snapshot.Momentum` >= 6 AND `get_score_analys
 **If `macro_analyst` fails for home market:**
 Proceed with up to 2 exposure-market macro calls. If ≥1 succeeds, evaluate Channel M based on exposure markets. If all macro calls fail, Channel M is UNAVAILABLE (not NOT_FLAGGED). Maximum verdict becomes partial_match (single-channel + available channels).
 
-**If `get_stock_outlook(risk_return)` fails:**
-Channel V cannot be evaluated. Mark as UNAVAILABLE. Verdict maximum is partial_match if other channels succeed.
+**If `get_stock_outlook(analyst_targets)` fails, or succeeds with `data.status != "available"`, or null `mean`/`current`:**
+Channel V cannot be evaluated. Mark as UNAVAILABLE (never NOT_FLAGGED). Verdict maximum is partial_match if other channels succeed.
 
 **If `get_peer_snapshot` fails (cross-validation blocking):**
 Cannot complete cross-validation gate. Halt rendering with error message per Step 4.
