@@ -927,6 +927,9 @@ _NOT_COMMANDS = {
     "schedule": "the host's `/schedule` command, named in the §14.2 "
                 "host-primitive table; a real command on one host, absent "
                 "elsewhere per §14.3",
+    "mcp": "the host's `/mcp` command, named in the concierge's plugin and "
+           "repo connect steps (Claude Code MCP authentication); a real "
+           "host primitive, not a Parallax skill",
 }
 
 

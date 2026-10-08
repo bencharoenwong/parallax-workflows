@@ -61,7 +61,8 @@
     },
     "parallax-concierge": {
       "plugin": true,
-      "web": false
+      "web": true,
+      "web_description": "Say Hi Parallax: pick a branch or say you're new to get a role-matched first run. Routes to Parallax research workflows. Informational only."
     },
     "parallax-country-deep-dive": {
       "plugin": true,

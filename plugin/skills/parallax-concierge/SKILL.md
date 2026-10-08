@@ -121,7 +121,25 @@ When the user picks "New here?" (or says they are new), follow these states in o
 Returning users keep the menu above. If a routed skill fails on sign-in, show the connect steps instead of "Momentarily off".
 
 <!-- new-here:begin -->
-(generated per distribution by build_bundle.py; this source copy covers a full clone)
+Role table (internal routing; show only the role labels):
+
+| Role | First run | Input | Then |
+|---|---|---|---|
+| Fund manager | `/parallax-morning-brief` | holdings | `/parallax-scenario-analysis`, `/parallax-deep-dive` |
+| Relationship manager | `/parallax-client-review` | holdings | `/parallax-desk-call-list`, `/parallax-morning-brief` |
+| RM support | `/parallax-morning-brief` | holdings | `/parallax-client-review`, `/parallax-desk-call-list` |
+| Research analyst | `/parallax-peer-comparison` | ticker | `/parallax-due-diligence`, `/parallax-earnings-quality` |
+| Wealth advisor | `/parallax-client-review` | holdings | `/parallax-portfolio-checkup`, `/parallax-should-i-buy` |
+| Individual investor | `/parallax-should-i-buy` | ticker | `/parallax-portfolio-checkup`, `/parallax-watchlist-monitor` |
+| Building on Parallax | — (see integration pointer) | — | — |
+
+Hand-off: Say "Running /<skill> now." and run it. If the host does not load it, give the one line to send, e.g. "run should-i-buy on AAPL". Never suggest installing it manually — the plugin already ships it.
+
+Connect steps:
+- claude.ai chat or Cowork: Customize → Plugins → Parallax → Connectors → Connect, then sign in.
+- Claude Code: run `/mcp` and authenticate Parallax.
+
+Integration pointer: the README section "Forking and Customizing" and white-label onboarding.
 <!-- new-here:end -->
 
 ## Nudging after each skill runs

@@ -545,6 +545,86 @@ def transform_concierge(text: str) -> str:
     return text
 
 
+_NEW_HERE = re.compile(r"(<!-- new-here:begin -->\n).*?(<!-- new-here:end -->)", re.S)
+
+_CONNECT = {
+    "plugin": ("- claude.ai chat or Cowork: Customize → Plugins → Parallax → Connectors → "
+               "Connect, then sign in.\n- Claude Code: run `/mcp` and authenticate Parallax."),
+    "zip": (f"- claude.ai: Customize → Connectors → add custom connector "
+            f"`{PARALLAX_MCP_URL}`, then sign in."),
+    "repo": (f"- Claude Code: run `/mcp` and authenticate Parallax (server "
+             f"`{PARALLAX_MCP_URL}`)."),
+}
+_HANDOFF = {
+    "plugin": ('Say "Running /<skill> now." and run it. If the host does not load it, '
+               'give the one line to send, e.g. "run should-i-buy on AAPL". Never suggest '
+               'installing it manually — the plugin already ships it.'),
+    "zip": ('Give the one line to send, e.g. "run should-i-buy on AAPL", plus: '
+            '"if that workflow isn\'t uploaded yet, add it under Customize → Skills."'),
+    "repo": 'Say "Running /<skill> now." and run it.',
+}
+
+
+def render_new_here(available: set[str], distribution: str) -> str:
+    """The generated part of the concierge's New-here section for one
+    distribution: role table, hand-off, connect steps, integrator pointer."""
+    rows = ["| Role | First run | Input | Then |", "|---|---|---|---|"]
+    for role in skill_manifest.roles():
+        starts = skill_manifest.starts_for(role["id"], available)
+        if not starts:
+            rows.append(f"| {role['label']} | — (see integration pointer) | — | — |")
+            continue
+        first, kind = starts[0]
+        then = ", ".join(f"`/{s}`" for s, _ in starts[1:]) or "—"
+        rows.append(f"| {role['label']} | `/{first}` | {kind} | {then} |")
+    return "\n".join([
+        "Role table (internal routing; show only the role labels):", "", *rows, "",
+        f"Hand-off: {_HANDOFF[distribution]}", "",
+        "Connect steps:", _CONNECT[distribution], "",
+        "Integration pointer: the README section \"Forking and Customizing\" and "
+        "white-label onboarding.", ""])
+
+
+def fill_new_here(text: str, block: str) -> str:
+    if len(_NEW_HERE.findall(text)) != 1:
+        raise BuildError("concierge needs exactly one new-here marker pair")
+    return _NEW_HERE.sub(lambda m: m.group(1) + block + m.group(2), text)
+
+
+def filter_concierge(text: str, available: set[str]) -> str:
+    """Drop table rows and bullet items that name a skill this distribution
+    does not ship; fail if one is still named. A bullet item is its `- ` line
+    plus the more-indented continuation lines under it."""
+    lines = text.splitlines(keepends=True)
+    out, i = [], 0
+    while i < len(lines):
+        ln = lines[i]
+        if ln.startswith("|"):
+            if not named_skills(ln) - available - HOUSE_VIEW_OPERATORS:
+                out.append(ln)
+            i += 1
+            continue
+        if ln.lstrip().startswith("- "):
+            indent = len(ln) - len(ln.lstrip())
+            j = i + 1
+            while (j < len(lines) and lines[j].strip()
+                   and len(lines[j]) - len(lines[j].lstrip()) > indent
+                   and not lines[j].lstrip().startswith("- ")):
+                j += 1
+            item = "".join(lines[i:j])
+            if not named_skills(item) - available - HOUSE_VIEW_OPERATORS:
+                out.append(item)
+            i = j
+            continue
+        out.append(ln)
+        i += 1
+    text = "".join(out)
+    left = named_skills(text) - available - HOUSE_VIEW_OPERATORS
+    if left:
+        raise BuildError(f"concierge still names unshipped skills: {sorted(left)}")
+    return text
+
+
 def transform_output_template(text: str) -> str:
     """Distribution copy carries only the sections consumer skills render by
     reference from parallax-conventions.md (verdict language rules + the
@@ -1142,6 +1222,12 @@ def build_plugin() -> None:
         strip_unshipped_languages(skills_root, skills)
         filter_shipped_docs(skills_root / "_parallax", set(skills))
 
+        concierge = skills_root / "parallax-concierge" / "SKILL.md"
+        if concierge.is_file():
+            text = fill_new_here(concierge.read_text(encoding="utf-8"),
+                                 render_new_here(set(skills), "plugin"))
+            concierge.write_text(filter_concierge(text, set(skills)), encoding="utf-8")
+
         # repo-root examples/ docs referenced from bundled skills ship at
         # <plugin>/examples/ so the ../../examples/ relative form resolves.
         example_refs = set()
@@ -1363,6 +1449,11 @@ def build_web(names: list[str]) -> None:
 
             web_available = set(WEB_SKILLS) | set(skill_manifest.standalone_skills("release"))
             filter_shipped_docs(skill_root / "_vendored" / "_parallax", web_available)
+            if name == "parallax-concierge":
+                own = skill_root / "SKILL.md"
+                text = fill_new_here(own.read_text(encoding="utf-8"),
+                                     render_new_here(web_available, "zip"))
+                own.write_text(filter_concierge(text, web_available), encoding="utf-8")
             for key, transform in WEB_TRANSFORMS.items():
                 if key.startswith(f"{name}/"):
                     own = skill_root / key[len(name) + 1:]
