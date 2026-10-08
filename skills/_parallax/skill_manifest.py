@@ -88,7 +88,7 @@ def _validate(data: dict) -> None:
             if role not in ROLE_IDS:
                 raise ValueError(f"{MANIFEST_PATH}: {name} starts unknown role {role}")
             rank, kind = entry.get("rank"), entry.get("input")
-            if not isinstance(rank, int) or rank < 1:
+            if isinstance(rank, bool) or not isinstance(rank, int) or rank < 1:
                 raise ValueError(f"{MANIFEST_PATH}: {name} {role} rank must be a positive integer")
             if kind not in INPUT_KINDS:
                 raise ValueError(f"{MANIFEST_PATH}: {name} {role} input must be one of {INPUT_KINDS}")

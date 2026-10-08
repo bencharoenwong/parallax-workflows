@@ -1002,7 +1002,7 @@ def test_plugin_bundles_the_parallax_connector():
 
 def test_plugin_version_is_a_date():
     import re
-    assert re.fullmatch(r"20\d\d\.(0[1-9]|1[0-2])\.(0[1-9]|[12]\d|3[01])", bb.PLUGIN_VERSION)
+    assert re.fullmatch(r"20\d\d\.(1[0-2]|[1-9])\.(3[01]|[12]\d|[1-9])", bb.PLUGIN_VERSION)
     root = Path(__file__).resolve().parents[3]
     assert json.loads((root / "plugin/.claude-plugin/plugin.json").read_text())["version"] == bb.PLUGIN_VERSION
     market = json.loads((root / ".claude-plugin/marketplace.json").read_text())

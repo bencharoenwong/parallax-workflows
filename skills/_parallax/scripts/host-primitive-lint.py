@@ -3,7 +3,8 @@
 
 `parallax-conventions.md` §14 says a SKILL.md names host PRIMITIVES
 (discover-tools, call-tool, ask-operator, run-shell, invoke-skill,
-load-reference, write-artifact, read-config, fetch-url), never host tools.
+load-reference, write-artifact, read-config, fetch-url, schedule-task), never
+host tools.
 This lint enforces the mechanical half of that rule: outside a
 `<!-- host-note -->` … `<!-- /host-note -->` block, a SKILL.md must not
 contain any of the identifiers in `HOST_IDENTIFIERS`.
