@@ -454,6 +454,28 @@ GET_NEWS_SYNTHESIS_SCHEMA = {
 }
 
 
+# Flat list of dividend-event records for one symbol -- no envelope, no
+# wrapper key. The endpoint returns [] on error, which is indistinguishable from a holding with
+# genuinely zero dividends in the period -- see the dividend-call-failure
+# gotcha in parallax-cio-letter-prep/SKILL.md. ``divtypecode`` is read but
+# not constrained to a vocabulary here: callers decide which codes count as
+# cash (recurring codes plus the special-cash ``SPL``) and exclude the rest.
+GET_STOCK_OUTLOOK_DIVIDENDS_SCHEMA = [
+    {
+        "divrate": NUM,
+        "currency": str,
+        "effective_date": str,
+        "divtypecode": str,
+        "record_date": (str, OPTIONAL),
+        "pay_date": (str, OPTIONAL),
+        "announce_date": (str, OPTIONAL),
+        "taxmarker": (str, OPTIONAL),
+        "infocode": (int, OPTIONAL),
+        "symbol": (str, OPTIONAL),
+    }
+]
+
+
 # Corrected 2026-10-06 against a live probe. There is no structured "regime"/
 # "tactical.stance"/"factor_tilts" object -- the live endpoint returns free
 # prose in "content" plus a pre-signed, time-limited storage URL in

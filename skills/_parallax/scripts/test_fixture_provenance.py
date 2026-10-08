@@ -74,6 +74,7 @@ MANAGED = {
     "analyze_portfolio_credit_exhausted",
     "get_company_info",
     "get_score_analysis",
+    "get_stock_outlook_dividends",
 }
 
 # name -> why regeneration equality cannot cover it. A reason is mandatory: it is

@@ -1206,6 +1206,56 @@ def _build_get_company_info(paths: dict[str, Any]) -> dict:
     }
 
 
+def _build_get_stock_outlook_dividends(paths: dict[str, Any]) -> list[dict]:
+    """``get_stock_outlook(aspect="dividends")``'s flat-list shape, derived
+    from the same seeded holding ``_build_get_company_info`` uses (AXCM.O),
+    so the realistic-values test can assert currency agreement between the
+    two endpoints without inventing a second identity.
+
+    The server's underlying value path (``build_paths`` above) already
+    credits this holding's value with one discrete dividend injection at
+    ``credit_day = len(dates) // 2``, sized by ``dividend_yield`` scaled to
+    the window -- that is the one real economic event in this fixture, so
+    the dividend record below is derived from the SAME numbers rather than
+    picking a second, independent one. ``divrate`` is the per-share cash
+    amount implied by that credited yield on the holding's entry price."""
+    subject = paths["holdings"][0]
+    dates = paths["dates"]
+    credit_day = len(dates) // 2
+    effective_date = dates[credit_day]
+    # BUG-007: a real cash-dividend ex-date is always a trading day. Snap
+    # a weekend `credit_day` back to the preceding weekday so the fixture
+    # does not model an impossible Saturday/Sunday ex-date. This only
+    # changes WHICH day is reported as the ex-date for this one dividend
+    # record -- it draws no extra random value, so it cannot perturb any
+    # other MANAGED fixture derived from the same seeded path.
+    while effective_date.weekday() >= 5:
+        effective_date -= dt.timedelta(days=1)
+    entry_price = subject["entry_price_units"] / SUBUNIT
+    window_yield = subject["dividend_yield"] * (len(dates) - 1) / 365.0
+    divrate = q(entry_price * window_yield, 4)
+    # Derived, not hand-picked: a deterministic function of the entry price
+    # and the window length, distinct per holding/seed.
+    infocode = subject["entry_price_units"] * 97 + len(dates)
+    record_date = effective_date + dt.timedelta(days=2)
+    pay_date = effective_date + dt.timedelta(days=16)
+    announce_date = effective_date - dt.timedelta(days=30)
+    return [
+        {
+            "symbol": subject["ric"],
+            "infocode": infocode,
+            "divtypecode": "QTR",
+            "divrate": divrate,
+            "currency": BASE_CURRENCY,
+            "announce_date": announce_date.isoformat(),
+            "effective_date": effective_date.isoformat(),
+            "record_date": record_date.isoformat(),
+            "pay_date": pay_date.isoformat(),
+            "taxmarker": "0",
+        }
+    ]
+
+
 # --------------------------------------------------------------------------
 # Seed selection
 # --------------------------------------------------------------------------
@@ -1314,6 +1364,8 @@ def build_fixtures() -> dict[str, Any]:
         # Flat -- no wrapper on this endpoint.
         "get_company_info": _build_get_company_info(paths),
         "get_score_analysis": _build_get_score_analysis(paths),
+        # Flat list -- no wrapper, no envelope. See its builder's docstring.
+        "get_stock_outlook_dividends": _build_get_stock_outlook_dividends(paths),
     }
 
 
