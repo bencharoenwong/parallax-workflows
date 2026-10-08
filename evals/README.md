@@ -223,47 +223,72 @@ what *this* skill's output must contain:
 ## Live concierge journeys
 
 Owner-run, pre-release checks for the concierge's New-here path (`skills/parallax-concierge/SKILL.md`,
-`## New here?`) — role question, connect/integrator/uncovered-ticker states, and the
+`## New here?`): role question, connect/integrator/uncovered-ticker states, and the
 scheduling-offer guard. Each journey is one fresh `claude -p` session against **this
-branch's built plugin copy** (`--plugin-dir plugin/ --setting-sources project`), not
-whatever skills happen to be installed under `~/.claude` on the machine running the
-script. They are **not CI tests**: they call a real model and most of them call real
-Parallax MCP tools, which bills Parallax credits.
+branch's built plugin copy** (`--plugin-dir <repo>/plugin --setting-sources project`), run
+from a fresh scratch directory so the repo's `CLAUDE.md` and source files are out of reach.
+They are **not CI tests**: they call a real model and most of them call real Parallax MCP
+tools, which bills Parallax credits.
 
 ```bash
-# Preview every command this would run — no model call, no credits spent
+# Preview every command this would run (no model call, no credits spent)
 PARALLAX_E2E_DRY_RUN=1 bash evals/concierge_journeys.sh
 
-# Run for real (bills Parallax credits on a connected journey)
+# Run only the free journeys
+PARALLAX_E2E_LIVE=1 PARALLAX_E2E_ONLY=J2,J3,J5,J8 bash evals/concierge_journeys.sh
+
+# Run all of them (bills Parallax credits)
 PARALLAX_E2E_LIVE=1 bash evals/concierge_journeys.sh
 ```
 
 Journeys are defined in `evals/tasks/concierge/journeys.jsonl`, one JSON object per
 line: `id`, `prompt`, `expect` (substrings that must all appear, case-insensitive),
 `forbid` (substrings that must not appear), an optional `expect_any` (passes if any
-one substring appears), and an optional `"needs": "no-connector"` (runs with
-`--strict-mcp-config` and an empty `--mcp-config`, simulating a disconnected host
-instead of the plugin's bundled connector). The matching logic lives in
-`evals/concierge_journeys_check.py`, pytested on canned text (pass, missing expect,
-present forbid, `expect_any`, case-insensitivity) at
-`evals/graders/test_concierge_journeys_check.py` — that pytest runs in CI; the
-journeys themselves do not.
+one substring appears), and an optional `"needs": "no-connector"` (runs with claude.ai
+connectors disabled, `--strict-mcp-config` and an empty `--mcp-config`, so no Parallax
+server loads). The runner validates every line before any model call and rejects
+unknown keys or a list field that is not a list of strings.
+
+Each run is captured as `--output-format stream-json --verbose` and fails closed: a
+journey FAILs when the result lists any `permission_denials`, when the result is
+missing or errored, when `claude` exits non-zero or hits the timeout, when a connector
+journey shows no usable Parallax server in the init message and makes no successful
+Parallax tool call (a claude.ai connector can finish loading after the init message),
+or when a no-connector journey shows a Parallax server or calls a Parallax tool. The substring checks then run on the final assistant text. The
+checker is `evals/concierge_journeys_check.py`, pytested on canned streams at
+`evals/graders/test_concierge_journeys_check.py`; that pytest runs in CI, the
+journeys do not. Results (gitignored) land in `evals/results/` as the raw stream
+(`.jsonl`), the final text (`.txt`) and stderr.
 
 | Env var | Required | Purpose |
 |---|---|---|
 | `PARALLAX_E2E_LIVE` | yes (unless dry-run) | Must be `1` to run for real. Unset or anything else prints a skip message and exits 0. |
-| `PARALLAX_E2E_DRY_RUN` | optional | `1` prints each `claude` command instead of running it. Takes effect even without `PARALLAX_E2E_LIVE=1`, so you can always preview for free. |
-| `PARALLAX_E2E_ALLOWED_TOOLS` | optional | `--allowedTools` pattern for the Parallax connector. Default `mcp__parallax__*` matches the plugin's bundled MCP server key (`plugin/.mcp.json`). If you're exercising a different signed-in connector instead (for example a claude.ai OAuth connector named "Parallax"), its tools are namespaced differently — try `mcp__claude_ai_Parallax__*` (see the connector-access contract in `evals/rollout/README.md`) and override this var. |
+| `PARALLAX_E2E_DRY_RUN` | optional | `1` prints each `claude` command instead of running it. Takes effect even without `PARALLAX_E2E_LIVE=1`. |
+| `PARALLAX_E2E_ONLY` | optional | Comma-separated journey ids. Each entry matches a full id or the part before its first `_` (`J2` matches `J2_not_connected`). An entry that matches nothing prints a warning. |
+| `PARALLAX_E2E_CONNECTOR` | optional | `account` (default) or `plugin`. See below. |
+| `PARALLAX_E2E_ALLOWED_TOOLS` | optional | Overrides the `--allowedTools` value the connector mode picks (comma-separated). `--setting-sources project` drops user-level permissions, so the Parallax tools must be listed here or by the mode. |
+| `PARALLAX_E2E_TIMEOUT` | optional | Per-journey limit in seconds, default `600`. A timeout is a FAIL. |
+
+Connector modes:
+
+- **`account`** (default): the Parallax connector on your claude.ai account, or one added
+  with `claude mcp add`. Allows `mcp__claude_ai_Parallax__*` and `mcp__parallax__*`. When
+  the account has the Parallax connector, Claude Code loads it and drops the plugin's
+  bundled copy, so this mode does not exercise the bundled server.
+- **`plugin`**: the plugin's bundled server (`plugin/.mcp.json`). Sets
+  `ENABLE_CLAUDEAI_MCP_SERVERS=false` for the run and allows
+  `mcp__plugin_parallax_parallax__*`. It needs a one-time `/mcp` sign-in to that server,
+  and that sign-in from Claude Code needs the server-side loopback fix to be deployed.
 
 What each journey checks:
 
 | Journey | Checks |
 |---|---|
-| `J1_research_connected` | New-here research-analyst role runs `/parallax-peer-comparison` on NVDA (bills Parallax credits). |
-| `J2_not_connected` | No connector: the Check state shows connect steps instead of routing anywhere (no Parallax credits billed). |
-| `J3_integrator` | "Building on Parallax" role gets the integration pointer, not a skill run (`check_api_health` only — free). |
-| `J4_rm_support_schedule` | RM-support role with holdings runs `/parallax-morning-brief` (bills Parallax credits) and — because scheduling is currently unverified on every host — the concierge must not offer it; forbids the delivery/schedule-setup phrasing a scheduling offer would use. |
-| `J5_returning` | A plain "Hi Parallax" (no "new here") gets the standard opener verbatim, including the "New here?" pointer, and is never asked a role question (`check_api_health` only — free). |
-| `J6_uncovered_ticker` | An unknown ticker gets "not covered by Parallax" rather than an invented symbol (calls `search_stocks` — free). |
-| `J7_direct_task_bypass` | "I'm new here. Should I buy AAPL?" routes the task directly (bills Parallax credits) instead of asking the role question first. |
-| `J8_role_asked_not_guessed` | A bare "I'm new here" (no payload) gets asked the role question with the role labels offered, not guessed, and no skill runs yet (`check_api_health` only — free). |
+| `J1_research_connected` | New-here research-analyst role runs `/parallax-peer-comparison` on NVDA without asking the role question (bills Parallax credits). |
+| `J2_not_connected` | No connector: the Check state shows the `/mcp` connect step instead of routing anywhere (no Parallax credits billed). |
+| `J3_integrator` | "Building on Parallax" role gets the integration pointer (the README "Forking and Customizing" link), not a skill run (`check_api_health` only, free). |
+| `J4_rm_support_schedule` | RM-support role with holdings runs `/parallax-morning-brief` (bills Parallax credits) and, because scheduling is currently unverified on every host, the concierge must not offer it; forbids the scheduling and delivery phrasing such an offer would use. |
+| `J5_returning` | A plain "Hi Parallax" (no "new here") gets the standard opener, including the "New here?" pointer, and no role label (`check_api_health` only, free). |
+| `J6_uncovered_ticker` | An unknown ticker is reported as not covered or not resolved, not replaced by an invented symbol. Bills Parallax credits: the should-i-buy route resolves with `get_company_info` (1 credit per attempt). |
+| `J7_direct_task_bypass` | "I'm new here. Should I buy AAPL?" routes the task directly (bills Parallax credits) and shows no role label. |
+| `J8_role_asked_not_guessed` | A bare "I'm new here" (no payload) gets asked the role question with the role labels offered, not guessed, and no skill runs yet (`check_api_health` only, free). |

@@ -6,6 +6,7 @@ checks the generated "who this is for" block for staleness; the other checks
 that the published Quick Start table (the artifact users actually run)
 advertises no command outside the built plugin."""
 from pathlib import Path
+import re
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -19,6 +20,14 @@ def test_who_for_block_is_generated():
     assert block == bb.render_who_for()
 
 
+# A slash-command token: "/" not preceded by a word, path or URL character,
+# then a parallax- or translate- skill name.
+_COMMAND = re.compile(r"(?<![\w/.:-])/((?:parallax|translate)-[a-z0-9-]+)")
+
+
 def test_quick_start_names_only_shipped_commands():
     qs = README[README.index("## Quick Start"):README.index("## What's in this repo")]
-    assert not (bb.named_skills(qs) - set(bb.PLUGIN_SKILLS))
+    commands = set(_COMMAND.findall(qs))
+    assert commands, "Quick Start names no /parallax- or /translate- command"
+    unshipped = commands - set(bb.PLUGIN_SKILLS)
+    assert not unshipped, f"Quick Start names commands the plugin does not ship: {sorted(unshipped)}"

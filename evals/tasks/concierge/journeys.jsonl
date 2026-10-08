@@ -1,8 +1,8 @@
-{"id": "J1_research_connected", "prompt": "Hi Parallax, I'm new here. I'm a research analyst. Use NVDA.", "expect": ["peer"], "forbid": ["upload"]}
-{"id": "J2_not_connected", "prompt": "Hi Parallax, I'm new here. I'm a wealth advisor.", "needs": "no-connector", "expect": ["Connect"], "forbid": ["upload"]}
-{"id": "J3_integrator", "prompt": "Hi Parallax, new here; I'm building on Parallax.", "expect": ["integration"], "forbid": ["check_api_health failed"]}
-{"id": "J4_rm_support_schedule", "prompt": "Hi Parallax, new here, RM support. Holdings AAPL 40%, MSFT 35%, 7203.T 25%.", "expect": ["morning brief"], "forbid": ["deliver to", "schedule it", "set up a schedule"]}
-{"id": "J5_returning", "prompt": "Hi Parallax", "expect": ["where are we looking today", "New here"], "forbid": ["Which role"]}
-{"id": "J6_uncovered_ticker", "prompt": "Hi Parallax, new here, individual investor, ticker ZZZZQ", "expect": ["not covered by Parallax"], "forbid": []}
-{"id": "J7_direct_task_bypass", "prompt": "Hi Parallax, I'm new here. Should I buy AAPL?", "expect": ["AAPL"], "forbid": ["Relationship manager", "RM support", "investing for clients"]}
+{"id": "J1_research_connected", "prompt": "Hi Parallax, I'm new here. I'm a research analyst. Use NVDA.", "expect": ["peer"], "forbid": ["Which role", "Fund manager", "Relationship manager", "Wealth advisor", "Individual investor", "not covered by Parallax"]}
+{"id": "J2_not_connected", "prompt": "Hi Parallax, I'm new here. I'm a wealth advisor.", "needs": "no-connector", "expect": ["/mcp"], "forbid": ["Running /"]}
+{"id": "J3_integrator", "prompt": "Hi Parallax, new here; I'm building on Parallax.", "expect": ["forking-and-customizing"], "forbid": []}
+{"id": "J4_rm_support_schedule", "prompt": "Hi Parallax, new here, RM support. Holdings AAPL 40%, MSFT 35%, 7203.T 25%.", "expect": ["morning brief"], "forbid": ["schedul", "recurring", "every morning", "every weekday", "deliver to"]}
+{"id": "J5_returning", "prompt": "Hi Parallax", "expect": ["where are we looking today", "New here"], "forbid": ["Which role", "Fund manager", "Relationship manager", "RM support", "Research analyst", "Wealth advisor", "Individual investor", "Building on Parallax"]}
+{"id": "J6_uncovered_ticker", "prompt": "Hi Parallax, new here, individual investor, ticker ZZZZQ", "expect": [], "expect_any": ["not covered", "could not resolve", "couldn't resolve", "unresolved", "could not find", "couldn't find"], "forbid": []}
+{"id": "J7_direct_task_bypass", "prompt": "Hi Parallax, I'm new here. Should I buy AAPL?", "expect": ["AAPL"], "forbid": ["investing for clients", "Fund manager", "Relationship manager", "RM support", "Research analyst", "Wealth advisor", "Individual investor", "Building on Parallax"]}
 {"id": "J8_role_asked_not_guessed", "prompt": "Hi Parallax, I'm new here.", "expect": ["Fund manager", "Wealth advisor", "Individual investor"], "forbid": ["Running /"]}
