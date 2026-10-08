@@ -79,14 +79,26 @@ def _validate(data: dict) -> None:
             raise ValueError(
                 f"{MANIFEST_PATH}: {name} must carry anchors and anchors_key together"
             )
-    ids = [r.get("id") for r in data.get("roles", [])]
+    roles = data.get("roles", [])
+    if not isinstance(roles, list) or not all(isinstance(r, dict) for r in roles):
+        raise ValueError(f"{MANIFEST_PATH}: roles must be a list of objects")
+    ids = [r.get("id") for r in roles]
     if tuple(ids) != ROLE_IDS:
         raise ValueError(f"{MANIFEST_PATH}: roles must be exactly {ROLE_IDS}")
+    for r in roles:
+        for field in ("label", "description"):
+            if not isinstance(r.get(field), str) or not r[field].strip():
+                raise ValueError(f"{MANIFEST_PATH}: role {r['id']} needs a non-empty {field}")
     seen: dict[tuple[str, int], str] = {}
     for name, row in data["skills"].items():
-        for role, entry in row.get("starts", {}).items():
+        starts = row.get("starts", {})
+        if not isinstance(starts, dict):
+            raise ValueError(f"{MANIFEST_PATH}: {name} starts must be an object")
+        for role, entry in starts.items():
             if role not in ROLE_IDS:
                 raise ValueError(f"{MANIFEST_PATH}: {name} starts unknown role {role}")
+            if not isinstance(entry, dict):
+                raise ValueError(f"{MANIFEST_PATH}: {name} {role} start must be an object")
             rank, kind = entry.get("rank"), entry.get("input")
             if isinstance(rank, bool) or not isinstance(rank, int) or rank < 1:
                 raise ValueError(f"{MANIFEST_PATH}: {name} {role} rank must be a positive integer")

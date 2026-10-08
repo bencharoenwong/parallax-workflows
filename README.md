@@ -42,7 +42,9 @@ These workflows require an active Parallax subscription from [Chicago Global Cap
 
 ### 1. Connect the Parallax MCP server
 
-Add the Parallax MCP server to Claude Code. Connection details are provided during client onboarding. The server should appear as `claude_ai_Parallax` in your MCP configuration.
+**Plugin install (Option A below).** The plugin includes the Parallax connector (`https://mcp.chicago.global/api/mcp`). After installing, open the plugin's Connectors tab or run `/mcp`, then sign in. If you already added Parallax as a separate connector at the same address, Claude Code uses the plugin copy and asks you to sign in once; sign in with the account your firm bills.
+
+**Zip or full-clone install.** Add the Parallax MCP server (`https://mcp.chicago.global/api/mcp`) as a connector in your host yourself, then sign in.
 
 ### 2. Install the workflows
 
