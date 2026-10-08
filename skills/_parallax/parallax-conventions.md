@@ -40,6 +40,7 @@ Parallax tool namespaces are runtime-assigned and may differ across Claude Code,
 2. Build a session-local binding map from each logical tool name used by the skill (for example, `get_company_info`) to the exact callable name returned by discovery.
 3. Read the callable's live input schema immediately before constructing its arguments. Send only advertised parameters, with the advertised types and enum values. If static prose conflicts with discovery, discovery wins.
 4. Never synthesize a callable by attaching a remembered namespace to a logical tool name. A configured server alias, README example, previous transcript, or cached skill instruction does not prove that callable exists in the current session.
+5. If discovery returns more than one Parallax namespace (for example a separate connector and a plugin's bundled one), choose one for the whole session. First call the free `check_api_health` probe once on each namespace. If exactly one is signed in, use it. If none is signed in, the connector is unavailable: show the connect steps for this host. If more than one is signed in, or any probe is missing, fails, or times out, ask the user which to use, naming each, because each may bill a different account. Tell the user once which namespace the session uses. Bind every later call to that namespace, and never call a billed tool on two namespaces. Some hosts merge or suppress same-address servers before discovery; this rule applies whenever discovery still returns more than one.
 
 **Retry classification.** A transient transport failure, cancellation, or empty success may be retried once for the affected call after discovery remains available. Do not re-fire an entire batch because one sibling failed. A tool-not-found or schema-validation response is a deterministic contract failure: do not repeat the same payload and do not try guessed aliases or argument variants. Re-read the discovered schema and make one corrected call only when the mapping is unambiguous; otherwise use a discovered fallback per §4 and mark the missing coverage explicitly.
 
@@ -526,7 +527,7 @@ Rollout: this batch wires the mode into the report-rendering consumers named in 
 
 ### §14.1 Principle
 
-These skills run on more than one harness. A SKILL.md therefore names **host primitives**, never host tools. Nine primitives cover everything the skills do outside the Parallax connector. The binding table in §14.2 says what each primitive means on each host; the fail-open table in §14.3 says what a skill does when the host lacks one. A SKILL.md that names a host tool (`ToolSearch`, `AskUserQuestion`, `Write`, `WebFetch`, a `Skill` tool, a `/slash` chaining syntax, or a connector namespace literal) outside a `<!-- host-note -->` block is host-locked and non-conforming; the rule is forward-only for skills that predate 2026-09-04, per the authoring conventions' "Host portability" section (the same document as the "Canonical source & path resolution" reference in §0.0).
+These skills run on more than one harness. A SKILL.md therefore names **host primitives**, never host tools. Ten primitives cover everything the skills do outside the Parallax connector. The binding table in §14.2 says what each primitive means on each host; the fail-open table in §14.3 says what a skill does when the host lacks one. A SKILL.md that names a host tool (`ToolSearch`, `AskUserQuestion`, `Write`, `WebFetch`, a `Skill` tool, a `/slash` chaining syntax, or a connector namespace literal) outside a `<!-- host-note -->` block is host-locked and non-conforming; the rule is forward-only for skills that predate 2026-09-04, per the authoring conventions' "Host portability" section (the same document as the "Canonical source & path resolution" reference in §0.0).
 
 | Primitive | Meaning |
 |---|---|
@@ -539,28 +540,30 @@ These skills run on more than one harness. A SKILL.md therefore names **host pri
 | `write-artifact` | create a file at a named path WITHOUT passing its content through a shell. Document-derived text (CIO prose, client documents) must never reach an unquoted heredoc, which the shell subjects to parameter expansion and command substitution. A quoted-delimiter heredoc (`<<'REPORT'`, the form §10.3 mandates for the render gate) performs no expansion and is the sanctioned shell path for that step. Prefer `write-artifact` wherever the host has it. Never a substitute for an append through a helper that owns a hash chain (`audit_chain.append_entry`) |
 | `read-config` | read an environment switch (`PARALLAX_*`) or operator state under `~/.parallax/` |
 | `fetch-url` | retrieve a public URL as text. A skill that ships its own destination-validated fetcher (`download_public_url()` in white-label onboard) uses that fetcher for those URLs, never this primitive |
+| `schedule-task` | create a recurring run of a skill with fixed inputs |
 
 ### §14.2 Per-host binding table
 
-The connector namespace is never written here: it is whatever `discover-tools` returns in the session (§0.1 item 4). Rows marked *verify* were not exercised end-to-end when this section was written (2026-09-04) and must be confirmed in the first cross-host parity run before a skill relies on them.
+The connector namespace is never written here: it is whatever `discover-tools` returns in the session (§0.1 item 4). Rows marked *verify* were not exercised end-to-end when this section was written (2026-09-04; plugin columns and `schedule-task` added 2026-10-07) and must be confirmed in the first cross-host parity run before a skill relies on them.
 
-| Primitive | Claude Code | Codex CLI | claude.ai (uploaded `.skill`) |
-|---|---|---|---|
-| `discover-tools` | `ToolSearch` with query `"+Parallax"`, then read each returned schema | MCP tools registered in the Codex config are pre-listed in the session tool list; the list is the discovery result. Read each tool's schema from that list | Connector tools are pre-listed when the Parallax connector is enabled; the list is the discovery result |
-| `call-tool` | parallel tool calls in one turn | parallel tool calls in one turn (*verify* batch size) | tool calls in one turn (*verify* parallelism) |
-| `ask-operator` | `AskUserQuestion` | interactive session: ask in prose and wait for the next turn (*verify* whether a structured question tool exists); non-interactive `exec` mode: absent | ask in prose and wait for the next turn |
-| `run-shell` | `Bash` | shell in the sandbox; network per the sandbox policy | code execution when enabled for the workspace; otherwise absent |
-| `invoke-skill` | `Skill` tool or `/name` | skills auto-selected by description; explicit invocation by naming the skill (*verify* syntax) | absent (one uploaded skill per conversation) |
-| `load-reference` | `Read` on the resolved path | file read on the resolved path | file read inside the zip; shared files live under `_vendored/_parallax/` (the web build rewrites references) |
-| `write-artifact` | `Write` tool | file-write / patch tool (never a heredoc) | file write in the sandbox when code execution is enabled; otherwise absent |
-| `read-config` | shell env + `~/.parallax/` | shell env + `~/.parallax/` | absent: no environment, no persistent state directory |
-| `fetch-url` | `WebFetch` | shell fetch per the sandbox network policy (*verify*) | absent unless a browsing tool is enabled |
+| Primitive | Claude Code | Codex CLI | claude.ai (uploaded `.skill`) | claude.ai chat (plugin) | Cowork (plugin) |
+|---|---|---|---|---|---|
+| `discover-tools` | `ToolSearch` with query `"+Parallax"`, then read each returned schema | MCP tools registered in the Codex config are pre-listed in the session tool list; the list is the discovery result. Read each tool's schema from that list | Connector tools are pre-listed when the Parallax connector is enabled; the list is the discovery result | connector tools listed in the session | connector tools listed in the session |
+| `call-tool` | parallel tool calls in one turn | parallel tool calls in one turn (*verify* batch size) | tool calls in one turn (*verify* parallelism) | *verify* | *verify* |
+| `ask-operator` | `AskUserQuestion` | interactive session: ask in prose and wait for the next turn (*verify* whether a structured question tool exists); non-interactive `exec` mode: absent | ask in prose and wait for the next turn | *verify* | *verify* |
+| `run-shell` | `Bash` | shell in the sandbox; network per the sandbox policy | code execution when enabled for the workspace; otherwise absent | *verify* | *verify* |
+| `invoke-skill` | `Skill` tool or `/name` | skills auto-selected by description; explicit invocation by naming the skill (*verify* syntax) | absent (one uploaded skill per conversation) | skills load by description (*verify*) | skills load by description (*verify*) |
+| `load-reference` | `Read` on the resolved path | file read on the resolved path | file read inside the zip; shared files live under `_vendored/_parallax/` (the web build rewrites references) | *verify* | *verify* |
+| `write-artifact` | `Write` tool | file-write / patch tool (never a heredoc) | file write in the sandbox when code execution is enabled; otherwise absent | *verify* | *verify* |
+| `read-config` | shell env + `~/.parallax/` | shell env + `~/.parallax/` | absent: no environment, no persistent state directory | *verify* | *verify* |
+| `fetch-url` | `WebFetch` | shell fetch per the sandbox network policy (*verify*) | absent unless a browsing tool is enabled | *verify* | *verify* |
+| `schedule-task` | scheduled cloud routine (`/schedule`) (*verify* that the routine sees the installed skills and the signed-in Parallax connector) | absent | absent | *verify* (treated as absent) | scheduled task (cloud; uses installed skills and plugins; paid plans) (*verify*) |
 
 Install-layout invariant. Every installed skill directory has `../_parallax/` as a sibling (symlink or copy) OR carries the vendored copy under `<skill>/_vendored/_parallax/` with references rewritten. Every `run-shell` and `load-reference` path in a SKILL.md is written relative to the skill directory so both layouts resolve.
 
 ### §14.3 Fail-open rules (what to do when the host lacks a primitive)
 
-Gates fail closed (§4.0); display sections degrade (§4). The rows below apply that split per primitive.
+Gates fail closed (§4.0); display sections degrade (§4). The rows below apply that split per primitive. A binding marked *verify* in §14.2 counts as absent until it is exercised on that host.
 
 | Primitive absent | Rule |
 |---|---|
@@ -577,6 +580,7 @@ Gates fail closed (§4.0); display sections degrade (§4). The rows below apply 
 | `write-artifact` | Stop. Every consumer is a persist step behind a confirmation gate; report that the artifact could not be written on this host. |
 | `read-config` | No environment: every `PARALLAX_*` switch takes its documented default; say so in About This Report when the default changes behaviour. No state directory: no active view and no branding, per `house-view/loader.md` §1 and `white-label/integration-pattern.md` §4. |
 | `fetch-url` | Report the source as not fetched and ask for pasted text. Never guess content. |
+| `schedule-task` | Do not offer scheduling. Never describe a schedule the host cannot create. A *verify* binding counts as absent. |
 
 ---
 

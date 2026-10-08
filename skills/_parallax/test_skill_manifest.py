@@ -159,6 +159,35 @@ def test_empty_skills_object_is_rejected(tmp_path):
         mod.skills()
 
 
+
+def _live_manifest() -> dict:
+    return json.loads(MANIFEST.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("mutate, message", [
+    (lambda d: d["skills"]["parallax-should-i-buy"].__setitem__("starts", ["rm"]), "starts must be an object"),
+    (lambda d: d["skills"]["parallax-should-i-buy"]["starts"].__setitem__("rm", 1), "start must be an object"),
+    (lambda d: d["roles"][0].pop("label"), "non-empty label"),
+    (lambda d: d["roles"][0].__setitem__("description", " "), "non-empty description"),
+    (lambda d: d["roles"].__setitem__(0, "fund-manager"), "list of objects"),
+    (lambda d: d["skills"]["parallax-should-i-buy"]["starts"]["individual-investor"].__setitem__("rank", True), "positive integer"),
+    (lambda d: d["roles"].reverse(), "roles must be exactly"),
+    (lambda d: d["roles"].pop(), "roles must be exactly"),
+    (lambda d: [row.get("starts", {}).pop("rm", None) for row in d["skills"].values()], "roles without a start"),
+    (lambda d: d["skills"]["parallax-should-i-buy"]["starts"].__setitem__("integrator", {"rank": 9, "input": "ticker"}), "integrator has no starts"),
+    (lambda d: d["skills"]["parallax-ai-buffett"].__setitem__("starts", {"rm": {"rank": 9, "input": "ticker"}}), "cannot be a start"),
+], ids=["starts-list", "entry-int", "role-no-label", "role-blank-description", "role-not-object",
+        "rank-bool", "roles-reordered", "role-missing", "role-without-start", "integrator-start", "ai-profile-start"])
+def test_malformed_roles_and_starts_raise_valueerror(sm, mutate, message):
+    data = _live_manifest()
+    mutate(data)
+    with pytest.raises(ValueError, match=message):
+        sm._validate(data)
+
+
+def test_live_manifest_passes_validation(sm):
+    sm._validate(_live_manifest())
+
 # --- the generator stays the only author --------------------------------------
 
 def test_manifest_rows_and_anchors_are_in_sync():

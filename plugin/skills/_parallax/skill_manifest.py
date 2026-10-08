@@ -33,6 +33,13 @@ STANDALONE_TIERS = ("release", "beta", "held")
 # claude.ai truncates skill descriptions past this length.
 WEB_DESCRIPTION_MAX = 200
 
+# Fixed roster for the concierge welcome flow. Order is the display order.
+ROLE_IDS = ("fund-manager", "rm", "rm-support", "research-analyst",
+            "wealth-advisor", "individual-investor", "integrator")
+INPUT_KINDS = ("ticker", "holdings")
+# Skills that are never a first run or follow-up (spec: AI profiles, translators).
+NEVER_START_PREFIXES = ("parallax-ai-", "translate-")
+
 
 @lru_cache(maxsize=1)
 def _data() -> dict:
@@ -74,6 +81,42 @@ def _validate(data: dict) -> None:
             raise ValueError(
                 f"{MANIFEST_PATH}: {name} must carry anchors and anchors_key together"
             )
+    roles = data.get("roles", [])
+    if not isinstance(roles, list) or not all(isinstance(r, dict) for r in roles):
+        raise ValueError(f"{MANIFEST_PATH}: roles must be a list of objects")
+    ids = [r.get("id") for r in roles]
+    if tuple(ids) != ROLE_IDS:
+        raise ValueError(f"{MANIFEST_PATH}: roles must be exactly {ROLE_IDS}")
+    for r in roles:
+        for field in ("label", "description"):
+            if not isinstance(r.get(field), str) or not r[field].strip():
+                raise ValueError(f"{MANIFEST_PATH}: role {r['id']} needs a non-empty {field}")
+    seen: dict[tuple[str, int], str] = {}
+    for name, row in data["skills"].items():
+        starts = row.get("starts", {})
+        if not isinstance(starts, dict):
+            raise ValueError(f"{MANIFEST_PATH}: {name} starts must be an object")
+        for role, entry in starts.items():
+            if role not in ROLE_IDS:
+                raise ValueError(f"{MANIFEST_PATH}: {name} starts unknown role {role}")
+            if not isinstance(entry, dict):
+                raise ValueError(f"{MANIFEST_PATH}: {name} {role} start must be an object")
+            rank, kind = entry.get("rank"), entry.get("input")
+            if isinstance(rank, bool) or not isinstance(rank, int) or rank < 1:
+                raise ValueError(f"{MANIFEST_PATH}: {name} {role} rank must be a positive integer")
+            if kind not in INPUT_KINDS:
+                raise ValueError(f"{MANIFEST_PATH}: {name} {role} input must be one of {INPUT_KINDS}")
+            if (role, rank) in seen:
+                raise ValueError(f"{MANIFEST_PATH}: {role} rank {rank} used by {seen[(role, rank)]} and {name}")
+            seen[(role, rank)] = name
+        if starts and name.startswith(NEVER_START_PREFIXES):
+            raise ValueError(f"{MANIFEST_PATH}: {name} cannot be a start")
+    started = {role for role, _ in seen}
+    if "integrator" in started:
+        raise ValueError(f"{MANIFEST_PATH}: integrator has no starts")
+    missing = [r for r in ROLE_IDS if r != "integrator" and r not in started]
+    if missing:
+        raise ValueError(f"{MANIFEST_PATH}: roles without a start: {missing}")
 
 
 def reload() -> None:
@@ -119,6 +162,21 @@ def nine_two_exempt() -> frozenset[str]:
     return frozenset(
         n for n, r in _data()["skills"].items() if r.get("nine_two_exempt")
     )
+
+
+def roles() -> list[dict]:
+    """The fixed role roster for the concierge welcome flow, in display order."""
+    return [dict(r) for r in _data()["roles"]]
+
+
+def starts_for(role: str, available: set[str]) -> list[tuple[str, str]]:
+    """Up to 3 (skill, input kind) for a role, in rank order, among the
+    skills a distribution ships. The first is the first run."""
+    ranked = sorted(
+        (row["starts"][role]["rank"], name, row["starts"][role]["input"])
+        for name, row in _data()["skills"].items()
+        if role in row.get("starts", {}) and name in available)
+    return [(name, kind) for _, name, kind in ranked][:3]
 
 
 def exempt_docs() -> set[str]:

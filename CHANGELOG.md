@@ -4,6 +4,17 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-10-08 (plugin connector and welcome data)
+
+### Added
+- The plugin bundles the Parallax connector (`plugin/.mcp.json`, `https://mcp.chicago.global/api/mcp`). Connect it from the plugin's Connectors tab or `/mcp`, then sign in. The README connect section covers the plugin connector and keeps the manual-connector path for zip and non-plugin installs.
+- `_parallax/manifest.json` gains `roles` and per-skill `starts` for the coming concierge welcome. `skill_manifest.py` validates them: roles must be the fixed seven-role roster in display order, each with a non-empty label and description; each start names a known role, a positive integer rank unique within that role, and an input of `ticker` or `holdings`. Tests: `skills/_parallax/test_skill_manifest.py`, `skills/_parallax/scripts/test_skill_roles.py`.
+- Conventions add a tenth host primitive, `schedule-task`. A host cell marked *verify* counts as absent, so skills do not offer scheduling there.
+
+### Changed
+- The plugin version moves from `0.1.0` to date form `2026.10.8` (`YYYY.M.D`, valid semver, no zero padding). `PLUGIN_VERSION` in `build_bundle.py` is bumped by hand for each release. Test: `test_plugin_version_is_a_date`.
+- Conventions §0.1 item 5 covers two Parallax namespaces in one session: probe each with the free `check_api_health`, ask the user which to use if more than one is signed in or a probe fails, and never call a billed tool on two namespaces. The Claude Code and Cowork `schedule-task` bindings are marked *verify*, so scheduling is offered only where it has been exercised.
+
 ## 2026-10-07 (skill-drift batch: fixture cross term, cost reconciliation, stress-artifact freshness, private references)
 
 ### Fixed

@@ -912,6 +912,9 @@ _NOT_COMMANDS = {
     "slash": "the `/slash` chaining syntax, named as a host primitive",
     "name": "the `/name` placeholder in the host-primitive table",
     "numeric": "the `.HK`/numeric ambiguity, not a command",
+    "schedule": "the host's `/schedule` command, named in the §14.2 "
+                "host-primitive table; a real command on one host, absent "
+                "elsewhere per §14.3",
 }
 
 
@@ -987,3 +990,20 @@ def test_cost_bullets_follow_the_distribution():
     plugin = bb.filter_token_costs(text, set(bb.PLUGIN_SKILLS))
     assert "desk-call-list" not in web
     assert "/parallax-desk-call-list` (~69 tokens" in plugin
+
+
+def test_plugin_bundles_the_parallax_connector():
+    root = Path(__file__).resolve().parents[3] / "plugin"
+    cfg = json.loads((root / ".mcp.json").read_text(encoding="utf-8"))
+    server = cfg["mcpServers"]["parallax"]
+    assert server == {"type": "http", "url": bb.PARALLAX_MCP_URL}
+    assert bb.PARALLAX_MCP_URL == "https://mcp.chicago.global/api/mcp"
+
+
+def test_plugin_version_is_a_date():
+    import re
+    assert re.fullmatch(r"20\d\d\.(1[0-2]|[1-9])\.(3[01]|[12]\d|[1-9])", bb.PLUGIN_VERSION)
+    root = Path(__file__).resolve().parents[3]
+    assert json.loads((root / "plugin/.claude-plugin/plugin.json").read_text())["version"] == bb.PLUGIN_VERSION
+    market = json.loads((root / ".claude-plugin/marketplace.json").read_text())
+    assert market["plugins"][0]["version"] == bb.PLUGIN_VERSION
