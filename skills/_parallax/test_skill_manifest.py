@@ -170,7 +170,14 @@ def _live_manifest() -> dict:
     (lambda d: d["roles"][0].pop("label"), "non-empty label"),
     (lambda d: d["roles"][0].__setitem__("description", " "), "non-empty description"),
     (lambda d: d["roles"].__setitem__(0, "fund-manager"), "list of objects"),
-], ids=["starts-list", "entry-int", "role-no-label", "role-blank-description", "role-not-object"])
+    (lambda d: d["skills"]["parallax-should-i-buy"]["starts"]["individual-investor"].__setitem__("rank", True), "positive integer"),
+    (lambda d: d["roles"].reverse(), "roles must be exactly"),
+    (lambda d: d["roles"].pop(), "roles must be exactly"),
+    (lambda d: [row.get("starts", {}).pop("rm", None) for row in d["skills"].values()], "roles without a start"),
+    (lambda d: d["skills"]["parallax-should-i-buy"]["starts"].__setitem__("integrator", {"rank": 9, "input": "ticker"}), "integrator has no starts"),
+    (lambda d: d["skills"]["parallax-ai-buffett"].__setitem__("starts", {"rm": {"rank": 9, "input": "ticker"}}), "cannot be a start"),
+], ids=["starts-list", "entry-int", "role-no-label", "role-blank-description", "role-not-object",
+        "rank-bool", "roles-reordered", "role-missing", "role-without-start", "integrator-start", "ai-profile-start"])
 def test_malformed_roles_and_starts_raise_valueerror(sm, mutate, message):
     data = _live_manifest()
     mutate(data)

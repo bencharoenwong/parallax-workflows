@@ -37,6 +37,8 @@ WEB_DESCRIPTION_MAX = 200
 ROLE_IDS = ("fund-manager", "rm", "rm-support", "research-analyst",
             "wealth-advisor", "individual-investor", "integrator")
 INPUT_KINDS = ("ticker", "holdings")
+# Skills that are never a first run or follow-up (spec: AI profiles, translators).
+NEVER_START_PREFIXES = ("parallax-ai-", "translate-")
 
 
 @lru_cache(maxsize=1)
@@ -107,6 +109,14 @@ def _validate(data: dict) -> None:
             if (role, rank) in seen:
                 raise ValueError(f"{MANIFEST_PATH}: {role} rank {rank} used by {seen[(role, rank)]} and {name}")
             seen[(role, rank)] = name
+        if starts and name.startswith(NEVER_START_PREFIXES):
+            raise ValueError(f"{MANIFEST_PATH}: {name} cannot be a start")
+    started = {role for role, _ in seen}
+    if "integrator" in started:
+        raise ValueError(f"{MANIFEST_PATH}: integrator has no starts")
+    missing = [r for r in ROLE_IDS if r != "integrator" and r not in started]
+    if missing:
+        raise ValueError(f"{MANIFEST_PATH}: roles without a start: {missing}")
 
 
 def reload() -> None:

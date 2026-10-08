@@ -8,13 +8,14 @@ Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[
 
 **Why:** The plugin is the one install that reaches claude.ai chat, Cowork and Claude Code. The Parallax endpoint is public, so bundling it removes a manual connector step. Any change to the plugin version makes clients update, so the version is a date bumped only at release. The role map for the concierge welcome lives in the manifest, so builds and the README can generate from one source. When two Parallax connectors are signed in, the agent asks the user which to use, because each may bill a different account.
 
-**Impact:** `plugin/.mcp.json` declares the connector; users sign in once from the Connectors tab or `/mcp`. `PLUGIN_VERSION` is `2026.10.7` (`YYYY.M.D`, valid semver) and changes by hand per release. `_parallax/manifest.json` carries `roles` and per-skill `starts`, validated by `skill_manifest.py`. Conventions §0.1 item 5 binds a session to one namespace and never calls a billed tool on two. `schedule-task` joins the host primitives; a *verify* cell counts as absent.
+**Impact:** `plugin/.mcp.json` declares the connector; users sign in once from the Connectors tab or `/mcp`. `PLUGIN_VERSION` is `2026.10.8` (`YYYY.M.D`, valid semver) and changes by hand per release. `_parallax/manifest.json` carries `roles` and per-skill `starts`, validated by `skill_manifest.py`. Conventions §0.1 item 5 binds a session to one namespace and never calls a billed tool on two. `schedule-task` joins the host primitives; a *verify* cell counts as absent.
 
 **Alternatives:**
 - [DROP] Drop the plugin `version` field. Without it every merge to the default branch ships as an update.
 - [DROP] Pick the first listed connector automatically. It can bill the wrong account.
 
 **Flip conditions:** a release step automates the version bump → remove the hand-bump rule from `build_bundle.py`.
+
 ## 2026-10-07: Halal-screen — a proven ratio fail outranks an unverified one; Ratio 3 only PASSes with both interest fields present
 
 **Why:** Parallax's `income` statement returns `interest_investment_income_operating` and `interest_investment_income_non_operating` as absent or null on many names, not as `0`, and the present field's sign is not fixed (live probes observed it negative on one name and positive on another). A negative value here is a loss, not negative interest-and-investment income, so it must never offset or reduce the other component. Letting a large present field produce only `UNVERIFIED` because its sibling field is missing would let a real failure hide behind a missing, unrelated input — the opposite of what a fail-closed gate is for.
@@ -464,6 +465,7 @@ One caveat worth recording. A same-size source mutation — swapping a digit, an
 **Flip conditions.** (a) The Parallax MCP server adds a uniform company-name field across scoring tools → collapse the per-tool table back to one field and delete the substitute checks. (b) `profile-schema.md` enters the plugin bundle → replace the inlined §2 table with a pointer.
 
 **Verification.** Field names and the `comparison[]` shape confirmed against live `get_peer_snapshot`, `get_score_analysis`, `get_company_info`, and `quick_portfolio_scores` responses on 2026-08-11.
+
 ## 2026-08-11: Convert the credit-lens quality-trend bands to the scale their input actually uses, and rescale the fixtures rather than only the field under test
 
 **Why.** `flag_quality_change` in `parallax-credit-lens` compared a 52-week Quality factor move against `-5` for AMBER and `-15` for RED. Those are 0-100 numbers. Its input is the per-security Quality score from `get_score_analysis`, which runs 0-10 — confirmed against a live `get_score_analysis` response, and corroborated on range (though not on shape; see the verified facts below) by the repo's canonical mock `_parallax/scripts/mcp_mocks/get_score_analysis.json`, which carries weekly `QUALITY` values in the 8.1–8.7 band. The arithmetic consequence is not a mistuned band, it is a dead one: the largest 52-week decline a 0-10 score can produce is `-10`, which never reaches `-15`, so RED could not fire at all, and AMBER required a five-point collapse — half the full range. A credit early-warning signal whose severe tier is unreachable is worse than an absent one, because the skill's Gotchas section tells the reader that a deteriorating Quality score should escalate to RED even when every other metric is healthy.

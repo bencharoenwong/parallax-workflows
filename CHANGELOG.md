@@ -12,8 +12,9 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 - Conventions add a tenth host primitive, `schedule-task`. A host cell marked *verify* counts as absent, so skills do not offer scheduling there.
 
 ### Changed
-- The plugin version moves from `0.1.0` to date form `2026.10.7` (`YYYY.M.D`, valid semver, no zero padding). `PLUGIN_VERSION` in `build_bundle.py` is bumped by hand for each release. Test: `test_plugin_version_is_a_date`.
-- Conventions §0.1 item 5 covers two Parallax namespaces in one session: probe each with the free `check_api_health`, ask the user which to use if both are signed in, and never call a billed tool on two namespaces.
+- The plugin version moves from `0.1.0` to date form `2026.10.8` (`YYYY.M.D`, valid semver, no zero padding). `PLUGIN_VERSION` in `build_bundle.py` is bumped by hand for each release. Test: `test_plugin_version_is_a_date`.
+- Conventions §0.1 item 5 covers two Parallax namespaces in one session: probe each with the free `check_api_health`, ask the user which to use if more than one is signed in or a probe fails, and never call a billed tool on two namespaces. The Claude Code `schedule-task` binding is marked *verify*, so scheduling is offered only where it has been exercised.
+
 ## 2026-10-07 (skill-drift batch: fixture cross term, cost reconciliation, stress-artifact freshness, private references)
 
 ### Fixed
