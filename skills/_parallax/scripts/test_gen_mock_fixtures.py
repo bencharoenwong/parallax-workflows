@@ -194,7 +194,7 @@ def test_portfolio_summary_internal_identities(portfolio):
     summary = portfolio["portfolio_summary"]
     initial = portfolio["portfolio_parameters"]["initial_value"]
     assert summary["final_value"] == initial + summary["total_pl"]
-    # BUG-009: the live server's total_pl includes a price x FX interaction
+    # The live server's total_pl includes a price x FX interaction
     # (cross) term, so the three fields are NOT a plain additive identity.
     cross = summary["total_pl"] - summary["total_price_pl"] - summary["total_fx_pl"]
     assert abs(cross - gen.CROSS_PL) < 1e-9
