@@ -130,6 +130,19 @@ def test_plugin_concierge_offers_every_route_it_names():
     assert not (bb.named_skills(text) - set(bb.PLUGIN_SKILLS) - bb.HOUSE_VIEW_OPERATORS)
 
 
+def test_transform_concierge_web_fails_closed_if_a_rewritten_route_ships_on_web(monkeypatch):
+    """Follow-up fix: transform_concierge_web's rewrites hardcode today's
+    web set into their wording. If manifest.json later ships one of the
+    skills a rewrite assumes absent, the anchor still matches verbatim
+    (nothing about it depends on the manifest), so _swap's own drift check
+    would stay silent while the prose under-offers. Must raise instead."""
+    assert bb._CONCIERGE_WEB_ASSUMES_ABSENT  # non-empty, or this test is vacuous
+    newly_shipped = bb._CONCIERGE_WEB_ASSUMES_ABSENT[0]
+    monkeypatch.setattr(bb, "WEB_SKILLS", [*bb.WEB_SKILLS, newly_shipped])
+    with pytest.raises(bb.BuildError):
+        bb.transform_concierge_web(SRC)
+
+
 def test_render_new_here_zip_states_the_upload_clause_applies_everywhere():
     """Fix round 1 item 4: spec §2 — every offer on the zip path carries the
     upload clause, not only the state-5 hand-off."""

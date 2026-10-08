@@ -734,6 +734,23 @@ def transform_due_diligence_web(text: str) -> str:
         "due-diligence client-forwardable route")
 
 
+# Skills the rewrites below assume are NOT in WEB_SKILLS. Each rewrite
+# removes that skill's mention from the prose on the assumption claude.ai
+# never ships it; if manifest.json later flips one of these to "web": true,
+# the rewritten wording under-offers (narrower than what the table it sits
+# above would now correctly list) and nothing else catches that — the
+# anchors below still match verbatim, so _swap's own drift check stays
+# silent. Checked at the top of transform_concierge_web so the build fails
+# loudly instead of shipping stale prose.
+_CONCIERGE_WEB_ASSUMES_ABSENT = (
+    "parallax-thematic-screen",      # opening + Discovery question "theme"
+    "parallax-macro-outlook",        # opening + Discovery question "regime"; nudge "this regime"
+    "parallax-earnings-quality",     # Stock question "earnings quality"
+    "parallax-portfolio-builder",    # Discovery question "thesis"; nudge "build a portfolio"
+    "parallax-desk-call-list",       # step-6 recurring-result list
+)
+
+
 def transform_concierge_web(text: str) -> str:
     """Web-only. filter_concierge only drops `| ... |` rows and `- ` bullets
     that name a skill; several prose spots promise a route outside those two
@@ -743,6 +760,13 @@ def transform_concierge_web(text: str) -> str:
     (fails loudly on drift) so claude.ai users are only ever offered what this
     distribution ships. The plugin and full-clone copies keep the original
     wording — both ship every skill these lines mention."""
+    shipped = [s for s in _CONCIERGE_WEB_ASSUMES_ABSENT if s in WEB_SKILLS]
+    if shipped:
+        raise BuildError(
+            f"concierge: transform_concierge_web's rewrites assume "
+            f"{sorted(shipped)} are not on claude.ai, but manifest.json now "
+            f"ships {'it' if len(shipped) == 1 else 'them'} there — revise "
+            f"transform_concierge_web's wording for the routes it covers")
     text = _swap(
         text,
         "**🌍 Discovery** — hunt for ideas, screen by theme, read the macro regime",
