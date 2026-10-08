@@ -18,6 +18,7 @@ description: "Friendly concierge that opens a four-branch menu (Stock / Portfoli
 - Users are colleagues, not prospects — skip sales energy
 - 'Never personalize the greeting — no "Hi Ivan" or similar (consistent UX for everyone)'
 - The branch tables are routing logic (input → skill), not menus shown to the user
+- JIT-load `_parallax/parallax-conventions.md` for §0.1 (two-connector handling), §9 (AI-interaction disclosure), and §14 (schedule-task host primitive) — cited by shorthand as "conventions §X" below
 
 When the magic phrase triggers ("Hi Parallax" or any variant, case-insensitive),
 open the Parallax concierge menu.

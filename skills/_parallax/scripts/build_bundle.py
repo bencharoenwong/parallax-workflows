@@ -565,24 +565,45 @@ _HANDOFF = {
 }
 
 
+_UPLOAD_EVERYWHERE_NOTE = (
+    "Note: the upload clause in the hand-off applies to every route and "
+    "follow-up offer on this host, not only the first run.")
+
+
 def render_new_here(available: set[str], distribution: str) -> str:
     """The generated part of the concierge's New-here section for one
-    distribution: role table, hand-off, connect steps, integrator pointer."""
+    distribution: role table, hand-off, connect steps, integrator pointer.
+
+    Every non-integrator role must resolve to at least one shipped start —
+    a role with none would otherwise silently render as "see integration
+    pointer", which is the integrator row's wording, not a routing failure
+    for a real role. That signals a manifest/distribution mismatch upstream
+    (see skill_manifest.starts_for) and must fail the build, not ship a
+    confusing row."""
     rows = ["| Role | First run | Input | Then |", "|---|---|---|---|"]
     for role in skill_manifest.roles():
         starts = skill_manifest.starts_for(role["id"], available)
         if not starts:
+            if role["id"] != "integrator":
+                raise BuildError(
+                    f"concierge: role {role['id']!r} has no shipped start "
+                    f"for distribution {distribution!r} — add a starts entry "
+                    f"or ship one of its ranked skills")
             rows.append(f"| {role['label']} | — (see integration pointer) | — | — |")
             continue
         first, kind = starts[0]
         then = ", ".join(f"`/{s}`" for s, _ in starts[1:]) or "—"
         rows.append(f"| {role['label']} | `/{first}` | {kind} | {then} |")
-    return "\n".join([
+    parts = [
         "Role table (internal routing; show only the role labels):", "", *rows, "",
-        f"Hand-off: {_HANDOFF[distribution]}", "",
+        f"Hand-off: {_HANDOFF[distribution]}", ""]
+    if distribution == "zip":
+        parts += [_UPLOAD_EVERYWHERE_NOTE, ""]
+    parts += [
         "Connect steps:", _CONNECT[distribution], "",
         "Integration pointer: the README section \"Forking and Customizing\" and "
-        "white-label onboarding.", ""])
+        "white-label onboarding.", ""]
+    return "\n".join(parts)
 
 
 def fill_new_here(text: str, block: str) -> str:
@@ -591,16 +612,36 @@ def fill_new_here(text: str, block: str) -> str:
     return _NEW_HERE.sub(lambda m: m.group(1) + block + m.group(2), text)
 
 
+def _keep_concierge_item(item: str, available: set[str]) -> bool:
+    """True to keep a table row or bullet item unchanged, False to drop it
+    entirely. Raises when the item mixes a shipped skill with an unshipped
+    one: dropping it would silently remove the shipped route too, so the
+    author must split the line into one row/bullet per skill instead."""
+    named = named_skills(item)
+    unshipped = named - available - HOUSE_VIEW_OPERATORS
+    if not unshipped:
+        return True
+    shipped = named & available
+    if shipped:
+        raise BuildError(
+            f"concierge row/item names both a shipped skill ({sorted(shipped)}) "
+            f"and an unshipped one ({sorted(unshipped)}) on the same line — "
+            f"split it: {item.strip()!r}")
+    return False
+
+
 def filter_concierge(text: str, available: set[str]) -> str:
     """Drop table rows and bullet items that name a skill this distribution
-    does not ship; fail if one is still named. A bullet item is its `- ` line
-    plus the more-indented continuation lines under it."""
+    does not ship; fail if one is still named, or if a dropped row/item would
+    have silently taken a shipped skill's route down with it (see
+    _keep_concierge_item). A bullet item is its `- ` line plus the
+    more-indented continuation lines under it."""
     lines = text.splitlines(keepends=True)
     out, i = [], 0
     while i < len(lines):
         ln = lines[i]
         if ln.startswith("|"):
-            if not named_skills(ln) - available - HOUSE_VIEW_OPERATORS:
+            if _keep_concierge_item(ln, available):
                 out.append(ln)
             i += 1
             continue
@@ -612,7 +653,7 @@ def filter_concierge(text: str, available: set[str]) -> str:
                    and not lines[j].lstrip().startswith("- ")):
                 j += 1
             item = "".join(lines[i:j])
-            if not named_skills(item) - available - HOUSE_VIEW_OPERATORS:
+            if _keep_concierge_item(item, available):
                 out.append(item)
             i = j
             continue
@@ -693,10 +734,50 @@ def transform_due_diligence_web(text: str) -> str:
         "due-diligence client-forwardable route")
 
 
+def transform_concierge_web(text: str) -> str:
+    """Web-only. filter_concierge only drops `| ... |` rows and `- ` bullets
+    that name a skill; several prose spots promise a route outside those two
+    shapes (a bold menu line, a clarifying question, a nudge pair, the step-6
+    recurring-result list) and survive its pass untouched even when the route
+    they promise is not in the web set. Rewritten here with anchored `_swap`
+    (fails loudly on drift) so claude.ai users are only ever offered what this
+    distribution ships. The plugin and full-clone copies keep the original
+    wording — both ship every skill these lines mention."""
+    text = _swap(
+        text,
+        "**🌍 Discovery** — hunt for ideas, screen by theme, read the macro regime",
+        "**🌍 Discovery** — monitor a watchlist",
+        "concierge web discovery opener")
+    text = _swap(
+        text,
+        '> (peers, earnings quality, methodology)?"',
+        '> (peers, methodology)?"',
+        "concierge web stock question")
+    text = _swap(
+        text,
+        '> "Country/regime read, a theme, a thesis to build from, or a watchlist to monitor?"',
+        '> "A watchlist to monitor?"',
+        "concierge web discovery question")
+    text = _swap(
+        text,
+        "(morning brief, desk call list, watchlist monitor)",
+        "(morning brief, watchlist monitor)",
+        "concierge web recurring-shaped list")
+    text = _swap(
+        text,
+        '- "Want to build a portfolio from these names, or deep dive the top pick?"\n'
+        '- "Check how your current book looks in this regime?"\n',
+        '- "Deep dive one of these names, or check your portfolio\'s exposure to it?"\n'
+        '- "Keep monitoring, or add another name to the watchlist?"\n',
+        "concierge web discovery nudges")
+    return text
+
+
 WEB_TRANSFORMS = {
     "_parallax/parallax-conventions.md": transform_conventions_web,
     "_parallax/house-view/loader.md": transform_loader_web,
     "parallax-due-diligence/SKILL.md": transform_due_diligence_web,
+    "parallax-concierge/SKILL.md": transform_concierge_web,
 }
 
 
