@@ -575,7 +575,7 @@
       "include_transaction_costs": false,
       "total_fx_pl": 0,
       "total_pl": 143.5,
-      "total_price_pl": 143.5,
+      "total_price_pl": 143.375,
       "total_return": 0.01435,
       "total_transaction_cost": 0,
       "transaction_cost_pct_of_initial": 0

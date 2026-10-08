@@ -74,7 +74,9 @@ are structural consequences of how the numbers are built:
       - sum(company_contribution[].total_pl) == portfolio_summary.total_pl
       - ending_value - total_pl == that holding's initial allocation
       - final_value == initial_value + total_pl
-      - total_price_pl + total_fx_pl == total_pl
+      - total_pl - total_price_pl - total_fx_pl == CROSS_PL (BUG-009: a price
+        x FX interaction term the live server includes even on a
+        single-currency book; NOT total_price_pl + total_fx_pl == total_pl)
       - sector_allocation[].value sums to the portfolio value on every date
   * contribution_pct is a RETURN contribution, not a P&L share:
     contribution_pct == total_pl / portfolio_parameters.initial_value, rounded
@@ -176,6 +178,15 @@ SEED = 20330105
 # so every money sum is exact in float rather than merely close, and a
 # five-figure portfolio value still fits inside the 9-significant-figure budget.
 SUBUNIT = 8
+
+# BUG-009: the live server's total_pl is not a plain sum of total_price_pl
+# and total_fx_pl -- it includes a price x FX interaction (cross) term, so
+# total_pl - total_price_pl - total_fx_pl == CROSS_PL, not 0. This holds even
+# in a single-currency book (total_fx_pl == 0): the cross term is a residual
+# of how the live server composes the two components, not a currency-risk
+# figure. Modeled here as a small fixed constant, one subunit (CROSS_PL stays
+# on the money lattice), charged against total_price_pl.
+CROSS_PL = 1 / SUBUNIT
 
 INITIAL_VALUE = 10000
 BASE_CURRENCY = "USD"
@@ -981,7 +992,9 @@ def _build_analyze_portfolio(paths: dict[str, Any]) -> dict:
     pf_summary = {
         "final_value": final_value,
         "total_return": q(final_value / INITIAL_VALUE - 1.0, 6),
-        "total_price_pl": total_pl,
+        # BUG-009: total_pl - total_price_pl - total_fx_pl == CROSS_PL (not 0)
+        # -- see CROSS_PL's definition above.
+        "total_price_pl": total_pl - CROSS_PL,
         "total_fx_pl": 0,          # single-currency portfolio
         "total_pl": total_pl,
         "total_transaction_cost": 0,
