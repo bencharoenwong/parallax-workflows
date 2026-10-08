@@ -78,7 +78,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 | Workflow | Tokens (typical) | Key cost drivers |
 |---|---|---|
 | `/parallax-score-explainer` | **0-2** | Free if methodology-only; 2 if score data needed |
-| `/parallax-peer-comparison` | **~11** | Peer snapshot + peer comparison export + 3 score histories (5) + 3 `etf_profile` probes (3) + 3 price-series calls (`export_price_series` or `etf_daily_price`, 1 credit each per leg — billed, not free) |
+| `/parallax-peer-comparison` | **~12** | `get_company_info` (1) + peer snapshot (1) + peer comparison export (1) + 3 score histories (3) + 3 `etf_profile` probes (3) + 3 price-series calls (`export_price_series` or `etf_daily_price`, 1 credit each per leg — billed, not free) (3) |
 | `/parallax-halal-screen` | **4** single stock (~4-5/holding portfolio) | company_info + balance_sheet (merged debt + interest-bearing check) + income + score_analysis = 4; +5 optional Palepu; portfolio mode adds redundancy fan-out + alternatives |
 | `/parallax-should-i-buy` | **29** | 4 outlook aspects + 2 macro markets + news + technicals (5) |
 | `/parallax-earnings-quality` | **24** | Palepu (5) + assessment (10) + news (5) |
@@ -91,8 +91,8 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 
 | Workflow | Tokens (typical) | Key cost drivers |
 |---|---|---|
-| `/parallax-thematic-screen` | **~24** (default) / **~19** (`--no-macro`) | Universe build + 5 snapshots + 5 `get_company_info` calls (Step 2 Batch B pairs `get_peer_snapshot` AND `get_company_info` per `top_n` candidate — previously omitted from this recipe) + 3 financials + `list_macro_countries` + `macro_analyst` × up to 3 markets + `get_telemetry` regime signal. Higher at the 3-market macro cap. `--no-macro` drops the macro_analyst fan-out. |
-| `/parallax-portfolio-builder` | **36** | Universe + 10 snapshots + redundancy + validation |
+| `/parallax-thematic-screen` | **~26** (default) / **~20** (`--no-macro`) | Universe build (5) + 5 `get_peer_snapshot` + 5 `get_company_info` calls (Batch B pairs both per `top_n` candidate, 10) + 3 financials (3) + `get_telemetry` regime signal (1) + `export_peer_comparison` for the top trusted row (1) + `list_macro_countries` (1) + `macro_analyst` × up to 3 markets (5 each, one market inferred by default). Higher at the 3-market macro cap. `--no-macro` drops `list_macro_countries` and the `macro_analyst` fan-out. |
+| `/parallax-portfolio-builder` | **40** | Universe (5) + Batch B's 10 `get_peer_snapshot` and 10 `get_company_info` calls (20) + redundancy at 1 credit per holding checked (10) + validation (5) |
 | `/parallax-portfolio-checkup` | **~46** | 2x per-holding fan-out (20) + `list_macro_countries` (1) + up to 3 macro markets (15) + `check_portfolio_redundancy` at 1 credit per holding checked (10) |
 | `/parallax-morning-brief` | **50** | Telemetry + macro + 2x fan-out + 3 news |
 | `/parallax-watchlist-monitor` | **54** | 10 score scans + news/tech/analyst for ~4 flagged |
@@ -112,7 +112,7 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 | Workflow | Tokens (typical) | Key cost drivers |
 |---|---|---|
 | `/parallax-load-house-view` | **0** | File I/O only — no chargeable MCP calls |
-| `/parallax-house-view-diff` | **2× child** | Runs the target skill twice (Leg A without view, Leg B with view) — no additional Parallax tokens beyond the child, but total cost doubles: e.g. 2 × 36 = **72 tokens** with `/parallax-portfolio-builder`. |
+| `/parallax-house-view-diff` | **2× child** | Runs the target skill twice (Leg A without view, Leg B with view) — no additional Parallax tokens beyond the child, but total cost doubles: e.g. 2 × 40 = **80 tokens** with `/parallax-portfolio-builder`. |
 | `/parallax-stress-house-view` | **~26** (scales with tilted markets) | `check_api_health` or `list_macro_countries` (0-1, liveness/coverage — `check_macro_health` is deprecated, see above) + `get_telemetry` (1, once globally — NOT once per tilted market; it has no per-market parameter) + `macro_analyst` × tilted markets (5 each); cap 12 markets |
 | `/parallax-judge-house-view` | **~282** | Same recipe as make: 14 markets × 4 components + telemetry |
 | `/parallax-house-view-attribution` | **~7 + 1×holdings** (scales with holdings) | `export_price_series` per holding (corrected 2026-10-06: 1 credit each, not FREE — see above; returns the raw daily close, not a confirmed total-return series) + `analyze_portfolio` (5) + `get_company_info` (1) + `get_peer_snapshot` (1). Ex-post measurement over a closed window — read-only, but the price leg now scales with holding count, so it is no longer flat. |
@@ -129,13 +129,13 @@ Single source for the `parallax-ai-*` family; the AI-profiles framework README p
 | Workflow | Tokens (typical) | Key cost drivers |
 |---|---|---|
 | `parallax-ai-buffett` | **~4** | company info + peer snapshot + financials + score analysis |
-| `parallax-ai-greenblatt` (ticker-check) | **~35-40** | **Corrected 2026-10-07** (was ~10-15, understated by assuming ticker-check skips universe construction): ticker-check mode builds a sector-scoped peer universe (up to 30 candidates) to rank the target, identical pipeline to universe mode — see that skill's own SKILL.md Gotchas ("~35-40 tokens in BOTH modes"). Same cost breakdown as the universe-mode row below. |
-| `parallax-ai-greenblatt` (universe mode) | **~35-40** | **Corrected 2026-10-06** (was ~10-30, understated by roughly 3x): `get_financials(statement=ratios)` has no multi-symbol support, so Step 2.3 fetches it individually for each of up to 30 universe candidates (1 credit × 30) + `build_stock_universe` (5) + `get_peer_snapshot` (1). Scales with basket size. |
+| `parallax-ai-greenblatt` (ticker-check) | **~37** | **Corrected 2026-10-07** (was ~10-15, understated by assuming ticker-check skips universe construction): `get_company_info` for the target's sector (1, Step 1) + `build_stock_universe` for the derived peer universe, up to 30 candidates (5) + `get_financials(statement=ratios)` for each candidate, no multi-symbol support (1 credit × 30) + `get_peer_snapshot` on the target (1). This row reflects the skill's current main-branch recipe; a pending, not-yet-merged revision to that skill may change the step numbering. |
+| `parallax-ai-greenblatt` (universe mode) | **~41** | **Corrected 2026-10-06** (was ~10-30, understated by roughly 3x): `build_stock_universe` (5) + `get_financials(statement=ratios)` for each of up to 30 universe candidates, no multi-symbol support (1 credit × 30) + `get_peer_snapshot` for the top-3 basket members (3) + `get_company_info` for those same top-3 members at the cross-validation gate (3). Scales with basket size. |
 | `parallax-ai-klarman` | **~5-7** | balance sheet + cash flow + ratios + peer snapshot |
 | `parallax-ai-soros` (single-ticker) | **~25-30** | macro + telemetry + universe |
 | `parallax-ai-soros` (basket mode) | **~30-40** | macro once + per-ticker exposure checks |
 | `parallax-ai-ptj` (single-ticker) | **~14-16** | macro + technical + peer snapshot + outlook + score analysis |
-| `parallax-ai-consensus` (single ticker) | **~85-95** | all five profiles in parallel. **Corrected 2026-10-06:** this is a straight sum of the five per-profile rows above (buffett ~4 + greenblatt ~35-40 + klarman ~5-7 + soros ~25-30 + ptj ~14-16); the prior ~60-70 inherited Greenblatt's understated ~10-30 estimate proportionally. |
+| `parallax-ai-consensus` (single ticker) | **~85-95** | all five profiles in parallel. **Corrected 2026-10-06:** this is a straight sum of the five per-profile rows above (buffett ~4 + greenblatt (ticker-check) ~37 + klarman ~5-7 + soros ~25-30 + ptj ~14-16); the prior ~60-70 inherited Greenblatt's understated ~10-30 estimate proportionally. |
 | `parallax-ai-consensus` (basket of 5) | **~180-240** | per-ticker factor profiles; macro profiles run once. **Flagged 2026-10-06, pending re-derivation:** this basket figure was derived from the single-ticker estimate before Greenblatt's correction above; it has not been independently re-verified against a live basket run and likely understates real cost by a similar margin. Re-derive against a live probe rather than scaling this number by hand. |
 
 ### Cost Context

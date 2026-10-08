@@ -4,6 +4,17 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-10-07 (skill-drift batch: fixture cross term, cost reconciliation, stress-artifact freshness, private references)
+
+### Fixed
+- `gen_mock_fixtures.py`: the `analyze_portfolio` fixture's `total_price_pl` now carries a small modeled interaction term, so `total_pl − total_price_pl − total_fx_pl` equals a nonzero constant rather than 0, matching the live server's basis (confirmed by live probe) even on a single-currency book. `test_gen_mock_fixtures.py` asserts the corrected identity; the mock was regenerated and the plugin bundle rebuilt.
+- `token-costs.md`: reconciled several stale per-workflow totals against each skill's own SKILL.md and the live per-tool costs — peer-comparison (added the `get_company_info` call it already makes), thematic-screen (added `get_telemetry` and `export_peer_comparison`), portfolio-builder (added the `get_company_info` half of its scoring fan-out, and the `/parallax-house-view-diff` doubling example that derives from it), and the two greenblatt rows (corrected the per-mode tool counts and dropped a stale quote of text the skill's own file no longer contains; that skill's own SKILL.md is left as-is pending its open PR).
+- `house-view/stress-test-design.md`: the M8 failure-mode note no longer says the stress-run artifact header omits the Parallax data age — it now renders a "Parallax Data Age" line, including an explicit "unverifiable" state, confirmed by live probe against the current renderer and its tests.
+- Scrubbed a handful of internal-repository references from tracked docs/scripts: a private-repo path mention in `translate-chinese-finance/references/INTEGRATION.md` and two basis citations in the mock generator and its contract-audit test that named an internal PR/merge identifier; both now describe the basis as "the live server's basis since 2026-10" without naming the source.
+
+### Changed
+- DECISIONS.md: recorded five owner calls on existing documented behavior — halal-screen's interest-component flooring and Ratio 3 gating, cio-letter-prep's local-audit scope and its 25-bp gate's single-currency limit, house-view freshness reading "unverifiable" rather than 0 days on an undated response, white-label's documentation-only stance on Thai-translated reports, and `check_macro_health`'s deprecated status.
+
 ## 2026-10-06 (package skill sets in shipped docs)
 
 ### Fixed
