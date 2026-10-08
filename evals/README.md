@@ -219,3 +219,51 @@ what *this* skill's output must contain:
 2. Add task inputs at `evals/tasks/<skill>/core.jsonl`.
 3. For offline regression, drop golden + broken stream-json transcripts under
    `evals/fixtures/<skill>/` and assert against them in a `graders/test_*.py`.
+
+## Live concierge journeys
+
+Owner-run, pre-release checks for the concierge's New-here path (`skills/parallax-concierge/SKILL.md`,
+`## New here?`) — role question, connect/integrator/uncovered-ticker states, and the
+scheduling-offer guard. Each journey is one fresh `claude -p` session against **this
+branch's built plugin copy** (`--plugin-dir plugin/ --setting-sources project`), not
+whatever skills happen to be installed under `~/.claude` on the machine running the
+script. They are **not CI tests**: they call a real model and most of them call real
+Parallax MCP tools, which bills Parallax credits.
+
+```bash
+# Preview every command this would run — no model call, no credits spent
+PARALLAX_E2E_DRY_RUN=1 bash evals/concierge_journeys.sh
+
+# Run for real (bills Parallax credits on a connected journey)
+PARALLAX_E2E_LIVE=1 bash evals/concierge_journeys.sh
+```
+
+Journeys are defined in `evals/tasks/concierge/journeys.jsonl`, one JSON object per
+line: `id`, `prompt`, `expect` (substrings that must all appear, case-insensitive),
+`forbid` (substrings that must not appear), an optional `expect_any` (passes if any
+one substring appears), and an optional `"needs": "no-connector"` (runs with
+`--strict-mcp-config` and an empty `--mcp-config`, simulating a disconnected host
+instead of the plugin's bundled connector). The matching logic lives in
+`evals/concierge_journeys_check.py`, pytested on canned text (pass, missing expect,
+present forbid, `expect_any`, case-insensitivity) at
+`evals/graders/test_concierge_journeys_check.py` — that pytest runs in CI; the
+journeys themselves do not.
+
+| Env var | Required | Purpose |
+|---|---|---|
+| `PARALLAX_E2E_LIVE` | yes (unless dry-run) | Must be `1` to run for real. Unset or anything else prints a skip message and exits 0. |
+| `PARALLAX_E2E_DRY_RUN` | optional | `1` prints each `claude` command instead of running it. Takes effect even without `PARALLAX_E2E_LIVE=1`, so you can always preview for free. |
+| `PARALLAX_E2E_ALLOWED_TOOLS` | optional | `--allowedTools` pattern for the Parallax connector. Default `mcp__parallax__*` matches the plugin's bundled MCP server key (`plugin/.mcp.json`). If you're exercising a different signed-in connector instead (for example a claude.ai OAuth connector named "Parallax"), its tools are namespaced differently — try `mcp__claude_ai_Parallax__*` (see the connector-access contract in `evals/rollout/README.md`) and override this var. |
+
+What each journey checks:
+
+| Journey | Checks |
+|---|---|
+| `J1_research_connected` | New-here research-analyst role runs `/parallax-peer-comparison` on NVDA (bills Parallax credits). |
+| `J2_not_connected` | No connector: the Check state shows connect steps instead of routing anywhere (no Parallax credits billed). |
+| `J3_integrator` | "Building on Parallax" role gets the integration pointer, not a skill run (`check_api_health` only — free). |
+| `J4_rm_support_schedule` | RM-support role with holdings runs `/parallax-morning-brief` (bills Parallax credits) and — because scheduling is currently unverified on every host — the concierge must not offer it; forbids the delivery/schedule-setup phrasing a scheduling offer would use. |
+| `J5_returning` | A plain "Hi Parallax" (no "new here") gets the standard opener verbatim, including the "New here?" pointer, and is never asked a role question (`check_api_health` only — free). |
+| `J6_uncovered_ticker` | An unknown ticker gets "not covered by Parallax" rather than an invented symbol (calls `search_stocks` — free). |
+| `J7_direct_task_bypass` | "I'm new here. Should I buy AAPL?" routes the task directly (bills Parallax credits) instead of asking the role question first. |
+| `J8_role_asked_not_guessed` | A bare "I'm new here" (no payload) gets asked the role question with the role labels offered, not guessed, and no skill runs yet (`check_api_health` only — free). |
