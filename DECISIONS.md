@@ -4,6 +4,17 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-10-08: One verified release build for plugin and upload distributions
+
+**Why:** Users need downloadable artifacts with a version and a source record. Independently building each channel makes it easy to publish stale or mismatched packages.
+
+**Impact:** `release.py` calls the existing builders, verifies extracted archives, and writes an index and checksums. The manifest continues to own distribution membership. A public release requires committed source and the full local scan. A preview records uncommitted provenance and carries no download URLs. The command never publishes. README role and distribution tables derive from the same manifest as the builders.
+
+**Alternatives:** Keep hand-assembled releases, which cannot establish a consistent asset inventory; publish every merge, which removes the explicit release boundary. Neither is used.
+
+**Flip conditions:** A trusted release runner gains the same complete scan and owner approval controls, allowing the local build to move into automation.
+
+
 ## 2026-10-08: The plugin bundles the Parallax connector; versions are release dates
 
 **Why:** The plugin is the one install that reaches claude.ai chat, Cowork and Claude Code. The Parallax endpoint is public, so bundling it removes a manual connector step. Any change to the plugin version makes clients update, so the version is a date bumped only at release. The role map for the concierge welcome lives in the manifest, so builds and the README can generate from one source. When two Parallax connectors are signed in, the agent asks the user which to use, because each may bill a different account.

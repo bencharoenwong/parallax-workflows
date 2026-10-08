@@ -4,6 +4,16 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026.10.8
+
+### Added
+- A release command prepares date versions and builds the plugin, upload skills, checksums and machine-readable asset index. Dirty checkouts require preview mode, which omits download URLs. Builds require the complete maintainer scan and verify the extracted archives before exposing output.
+- Manifest-generated role and distribution tables, a plugin-first installation guide, an agent entry point, and maintainer release instructions.
+
+### Changed
+- Plugin and marketplace versions are prepared together by `release.py prepare`. Release output remains local until explicit publication approval.
+
+
 ## 2026-10-08 (plugin connector and welcome data)
 
 ### Added
