@@ -96,6 +96,13 @@ KNOWN_OPTIONAL_SKILLS = {
 # General-release web shortlist (claude.ai channel).
 WEB_SKILLS = skill_manifest.web_skills()
 
+
+def web_available_skills() -> set[str]:
+    """Every skill a claude.ai user can have: the web packages plus the
+    release-tier standalone packages. Read at call time so a patched
+    WEB_SKILLS or manifest is seen."""
+    return set(WEB_SKILLS) | set(skill_manifest.standalone_skills("release"))
+
 # claude.ai caps skill descriptions at 200 chars; source frontmatter runs longer.
 # Every web-built skill MUST have an entry here (build fails otherwise).
 WEB_DESCRIPTIONS = skill_manifest.web_descriptions()
@@ -565,6 +572,9 @@ _HANDOFF = {
 }
 
 
+README_FORK_URL = ("https://github.com/bencharoenwong/parallax-workflows"
+                   "#forking-and-customizing")
+
 _UPLOAD_EVERYWHERE_NOTE = (
     "Note: the upload clause in the hand-off applies to every route and "
     "follow-up offer on this host, not only the first run.")
@@ -599,10 +609,12 @@ def render_new_here(available: set[str], distribution: str) -> str:
         f"Hand-off: {_HANDOFF[distribution]}", ""]
     if distribution == "zip":
         parts += [_UPLOAD_EVERYWHERE_NOTE, ""]
-    parts += [
-        "Connect steps:", _CONNECT[distribution], "",
-        "Integration pointer: the README section \"Forking and Customizing\" and "
-        "white-label onboarding.", ""]
+    pointer = ("Integration pointer: the README section \"Forking and Customizing\", "
+               f"<{README_FORK_URL}>")
+    if "parallax-white-label-onboard" in available:
+        pointer += ("; for a white-label setup, run "
+                    "`/parallax-white-label-onboard`")
+    parts += ["Connect steps:", _CONNECT[distribution], "", pointer + ".", ""]
     return "\n".join(parts)
 
 
@@ -616,7 +628,9 @@ def _keep_concierge_item(item: str, available: set[str]) -> bool:
     """True to keep a table row or bullet item unchanged, False to drop it
     entirely. Raises when the item mixes a shipped skill with an unshipped
     one: dropping it would silently remove the shipped route too, so the
-    author must split the line into one row/bullet per skill instead."""
+    author must split it into one row/bullet per skill instead. For a bullet
+    that is dropped, `item` is the whole subtree (its child bullets go with
+    it), so a shipped child under an unshipped parent raises too."""
     named = named_skills(item)
     unshipped = named - available - HOUSE_VIEW_OPERATORS
     if not unshipped:
@@ -625,42 +639,119 @@ def _keep_concierge_item(item: str, available: set[str]) -> bool:
     if shipped:
         raise BuildError(
             f"concierge row/item names both a shipped skill ({sorted(shipped)}) "
-            f"and an unshipped one ({sorted(unshipped)}) on the same line — "
+            f"and an unshipped one ({sorted(unshipped)}) in one item — "
             f"split it: {item.strip()!r}")
     return False
 
 
+_TABLE_SEPARATOR = re.compile(r"^\|\s*:?-{3,}")
+
+
+def _indent(line: str) -> int:
+    return len(line) - len(line.lstrip())
+
+
+def _is_bullet(line: str) -> bool:
+    return line.lstrip().startswith("- ")
+
+
+def _filter_concierge_bullet(lines: list[str], i: int,
+                             available: set[str]) -> tuple[list[str], int]:
+    """Filter the bullet starting at lines[i] and every more-indented line
+    under it. Returns (lines to keep, index after the subtree). The bullet's
+    own text is its `- ` line plus more-indented non-bullet continuation
+    lines; its children are the more-indented bullets after that."""
+    indent = _indent(lines[i])
+    j = i + 1
+    while (j < len(lines) and lines[j].strip() and _indent(lines[j]) > indent
+           and not _is_bullet(lines[j])):
+        j += 1
+    end = j
+    while end < len(lines) and lines[end].strip() and _indent(lines[end]) > indent:
+        end += 1
+    head = "".join(lines[i:j])
+    if not _keep_concierge_item(head, available):
+        _keep_concierge_item("".join(lines[i:end]), available)  # shipped child raises
+        return [], end
+    kept, had_children, kept_child, c = list(lines[i:j]), False, False, j
+    while c < end:
+        if _is_bullet(lines[c]):
+            had_children = True
+            sub, c = _filter_concierge_bullet(lines, c, available)
+            kept_child = kept_child or bool(sub)
+            kept.extend(sub)
+        else:
+            kept.append(lines[c])
+            c += 1
+    if had_children and not kept_child and not named_skills(head):
+        raise BuildError(
+            "concierge: label left without routes — every child bullet under "
+            f"this item was dropped; reword or drop it: {head.strip()!r}")
+    return kept, end
+
+
+def unshipped_skill_mentions(text: str, available: set[str]) -> set[str]:
+    """Skills outside `available` (house-view operators exempt) that `text`
+    still names, in any of these forms: the full name in any case
+    (`/Parallax-Desk-Call-List`); the hyphenated short name without the
+    `parallax-` prefix (`desk-call-list`); or, for names of two or more
+    words, the words separated by whitespace (`desk call list`). All forms
+    are case-insensitive and must stand alone, not inside a longer word."""
+    found = set()
+    for name in skill_manifest.skills():
+        if name in available or name in HOUSE_VIEW_OPERATORS:
+            continue
+        short = name.removeprefix("parallax-")
+        forms = [re.escape(name)]
+        if short != name and "-" in short:
+            forms.append(re.escape(short))
+        words = short.split("-")
+        if len(words) >= 2:
+            forms.append(r"\s+".join(re.escape(w) for w in words))
+        if re.search(rf"(?<![\w-])(?:{'|'.join(forms)})(?![\w-])", text, re.I):
+            found.add(name)
+    return found
+
+
 def filter_concierge(text: str, available: set[str]) -> str:
     """Drop table rows and bullet items that name a skill this distribution
-    does not ship; fail if one is still named, or if a dropped row/item would
-    have silently taken a shipped skill's route down with it (see
-    _keep_concierge_item). A bullet item is its `- ` line plus the
-    more-indented continuation lines under it."""
+    does not ship. A dropped bullet takes its more-indented child bullets
+    with it. Fails when:
+    - a dropped row or item would also take a shipped skill's route down
+      (see _keep_concierge_item);
+    - a table is left with its header and separator but no body rows (the
+      question above it would then offer nothing);
+    - a kept item that names no skill loses all its child bullets (a label
+      left without routes);
+    - the result still names an unshipped skill in any form
+      (see unshipped_skill_mentions)."""
     lines = text.splitlines(keepends=True)
     out, i = [], 0
     while i < len(lines):
         ln = lines[i]
         if ln.startswith("|"):
-            if _keep_concierge_item(ln, available):
-                out.append(ln)
-            i += 1
-            continue
-        if ln.lstrip().startswith("- "):
-            indent = len(ln) - len(ln.lstrip())
-            j = i + 1
-            while (j < len(lines) and lines[j].strip()
-                   and len(lines[j]) - len(lines[j].lstrip()) > indent
-                   and not lines[j].lstrip().startswith("- ")):
+            j = i
+            while j < len(lines) and lines[j].startswith("|"):
                 j += 1
-            item = "".join(lines[i:j])
-            if _keep_concierge_item(item, available):
-                out.append(item)
+            block = lines[i:j]
+            kept = [r for r in block if _keep_concierge_item(r, available)]
+            if (len(block) > 2 and _TABLE_SEPARATOR.match(block[1])
+                    and not any(r in kept for r in block[2:])):
+                raise BuildError(
+                    "concierge: a table has no body rows left for this "
+                    "distribution; reword the question above it: "
+                    f"{block[0].strip()!r}")
+            out.extend(kept)
             i = j
+            continue
+        if _is_bullet(ln):
+            kept, i = _filter_concierge_bullet(lines, i, available)
+            out.extend(kept)
             continue
         out.append(ln)
         i += 1
     text = "".join(out)
-    left = named_skills(text) - available - HOUSE_VIEW_OPERATORS
+    left = unshipped_skill_mentions(text, available)
     if left:
         raise BuildError(f"concierge still names unshipped skills: {sorted(left)}")
     return text
@@ -734,7 +825,8 @@ def transform_due_diligence_web(text: str) -> str:
         "due-diligence client-forwardable route")
 
 
-# Skills the rewrites below assume are NOT in WEB_SKILLS. Each rewrite
+# Skills the rewrites below assume are NOT on claude.ai
+# (web_available_skills()). Each rewrite
 # removes that skill's mention from the prose on the assumption claude.ai
 # never ships it; if manifest.json later flips one of these to "web": true,
 # the rewritten wording under-offers (narrower than what the table it sits
@@ -750,6 +842,17 @@ _CONCIERGE_WEB_ASSUMES_ABSENT = (
     "parallax-desk-call-list",       # step-6 recurring-result list
 )
 
+# The other direction: skills the rewritten web wording still offers. If one
+# leaves claude.ai, the rewrite would offer a route that is not there.
+_CONCIERGE_WEB_ASSUMES_PRESENT = (
+    "parallax-watchlist-monitor",    # Discovery opener + direct route; nudge "keep monitoring"
+    "parallax-peer-comparison",      # Stock question "peers"
+    "parallax-score-explainer",      # Stock question "methodology"
+    "parallax-deep-dive",            # Discovery nudge "deep dive one of these names"
+    "parallax-portfolio-checkup",    # Discovery nudge "your portfolio's exposure"
+    "parallax-morning-brief",        # step-6 recurring-result list
+)
+
 
 def transform_concierge_web(text: str) -> str:
     """Web-only. filter_concierge only drops `| ... |` rows and `- ` bullets
@@ -759,13 +862,23 @@ def transform_concierge_web(text: str) -> str:
     they promise is not in the web set. Rewritten here with anchored `_swap`
     (fails loudly on drift) so claude.ai users are only ever offered what this
     distribution ships. The plugin and full-clone copies keep the original
-    wording — both ship every skill these lines mention."""
-    shipped = [s for s in _CONCIERGE_WEB_ASSUMES_ABSENT if s in WEB_SKILLS]
+    wording — both ship every skill these lines mention. build_web runs this
+    before filter_concierge, whose prose check then sees the rewritten text.
+    Also adds the upload clause to the Rules, outside the generated block."""
+    web = web_available_skills()
+    shipped = [s for s in _CONCIERGE_WEB_ASSUMES_ABSENT if s in web]
     if shipped:
         raise BuildError(
             f"concierge: transform_concierge_web's rewrites assume "
             f"{sorted(shipped)} are not on claude.ai, but manifest.json now "
             f"ships {'it' if len(shipped) == 1 else 'them'} there — revise "
+            f"transform_concierge_web's wording for the routes it covers")
+    missing = [s for s in _CONCIERGE_WEB_ASSUMES_PRESENT if s not in web]
+    if missing:
+        raise BuildError(
+            f"concierge: transform_concierge_web's rewrites offer "
+            f"{sorted(missing)}, but manifest.json no longer ships "
+            f"{'it' if len(missing) == 1 else 'them'} on claude.ai — revise "
             f"transform_concierge_web's wording for the routes it covers")
     text = _swap(
         text,
@@ -779,8 +892,10 @@ def transform_concierge_web(text: str) -> str:
         "concierge web stock question")
     text = _swap(
         text,
-        '> "Country/regime read, a theme, a thesis to build from, or a watchlist to monitor?"',
-        '> "A watchlist to monitor?"',
+        "User picks Discovery → ask one question:\n\n"
+        '> "Country/regime read, a theme, a thesis to build from, or a watchlist to monitor?"\n',
+        "User picks Discovery → run `/parallax-watchlist-monitor` straight away. "
+        "Ask only for the names to watch, e.g. `AAPL.O, MSFT.O, 7203.T`.\n",
         "concierge web discovery question")
     text = _swap(
         text,
@@ -794,6 +909,12 @@ def transform_concierge_web(text: str) -> str:
         '- "Deep dive one of these names, or check your portfolio\'s exposure to it?"\n'
         '- "Keep monitoring, or add another name to the watchlist?"\n',
         "concierge web discovery nudges")
+    text = _swap(
+        text,
+        "- **If they name a skill directly**, skip routing and run it.\n",
+        "- **If they name a skill directly**, skip routing and run it.\n"
+        f"- **If a routed skill does not load**: {_HANDOFF['zip']}\n",
+        "concierge web upload rule")
     return text
 
 
@@ -1552,18 +1673,20 @@ def build_web(names: list[str]) -> None:
                                         strict=False)
                     cross_deps |= c
 
-            web_available = set(WEB_SKILLS) | set(skill_manifest.standalone_skills("release"))
+            web_available = web_available_skills()
             filter_shipped_docs(skill_root / "_vendored" / "_parallax", web_available)
-            if name == "parallax-concierge":
-                own = skill_root / "SKILL.md"
-                text = fill_new_here(own.read_text(encoding="utf-8"),
-                                     render_new_here(web_available, "zip"))
-                own.write_text(filter_concierge(text, web_available), encoding="utf-8")
+            # Before the concierge filter: its rewrites remove prose routes
+            # the filter would otherwise fail on.
             for key, transform in WEB_TRANSFORMS.items():
                 if key.startswith(f"{name}/"):
                     own = skill_root / key[len(name) + 1:]
                     own.write_text(transform(own.read_text(encoding="utf-8")),
                                    encoding="utf-8")
+            if name == "parallax-concierge":
+                own = skill_root / "SKILL.md"
+                text = fill_new_here(own.read_text(encoding="utf-8"),
+                                     render_new_here(web_available, "zip"))
+                own.write_text(filter_concierge(text, web_available), encoding="utf-8")
             # Languages whose translator is held stay out of web packages too.
             # The release-tier translators ship as standalone packages, so
             # their routes stay.

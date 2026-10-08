@@ -143,9 +143,9 @@ These are AI-inferred profiles using public information — every output is thir
 
 ## New here?
 
-When the user picks "New here?" (or says they are new), follow these states in order.
+When the user picks "New here?" (or says they are new, unless the message already carries a task or payload; then route that task), follow these states in order.
 
-1. **Check**. Say "Checking your Parallax connection (free)." then call `check_api_health`. On success say nothing more about it. Not connected, sign-in expired, or server unavailable: show the connect steps below for this host and stop; ask them to say "Hi Parallax" again once connected. Add: "Building on Parallax? See the integration notes; no connection needed." If the connector is present but this check is not exposed, continue with "Connection not verified." If two Parallax connectors are on, follow conventions §0.1 item 5.
+1. **Check**. Say "Checking your Parallax connection (free). Your host may ask permission to run this check." then call `check_api_health`. On success say nothing more about it. Not connected, sign-in expired, or server unavailable: show the connect steps below for this host and stop; ask them to say "Hi Parallax" again once connected. Add "Building on Parallax? No connection needed." and the integration pointer below. If the connector is present but this check is not exposed, continue with "Connection not verified." If two Parallax connectors are on, follow conventions §0.1 item 5.
 2. **Role**. Ask one question with the role labels below. If the host caps options (for example 4), ask "investing for clients / for yourself / research / building on Parallax" first, then narrow.
 3. **Integrator**. Give the integration pointer below. Done.
 4. **Input**. Ask for the first run's input with one example. Holdings: tickers or RICs with weights, no client names, e.g. `AAPL 40%, MSFT 35%, 7203.T 25%`. Resolve each ticker with `search_stocks` first (should-i-buy resolves its own). A miss: say "<ticker> is not covered by Parallax" and ask for another; never invent a symbol.
@@ -172,7 +172,7 @@ Hand-off: Say "Running /<skill> now." and run it.
 Connect steps:
 - Claude Code: run `/mcp` and authenticate Parallax (server `https://mcp.chicago.global/api/mcp`).
 
-Integration pointer: the README section "Forking and Customizing" and white-label onboarding.
+Integration pointer: the README section "Forking and Customizing", <https://github.com/bencharoenwong/parallax-workflows#forking-and-customizing>; for a white-label setup, run `/parallax-white-label-onboard`.
 <!-- new-here:end -->
 
 ## Nudging after each skill runs
