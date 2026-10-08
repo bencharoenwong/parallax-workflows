@@ -5,7 +5,8 @@ import pytest
 
 SHARED = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("sm_roles", SHARED / "skill_manifest.py")
-sm = importlib.util.module_from_spec(spec); spec.loader.exec_module(sm)
+sm = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(sm)
 
 PLUGIN = set(sm.plugin_skills())
 WEB = set(sm.web_skills()) | set(sm.standalone_skills("release"))

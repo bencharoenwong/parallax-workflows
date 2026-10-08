@@ -115,7 +115,7 @@ $EDITOR skills/my-should-i-buy/SKILL.md   # change behavior, output format, MCP 
 
 A few common customizations:
 - **Different output format.** Edit the "Output Format" section of `SKILL.md`. The model follows it verbatim.
-- **Different tool sequence.** Add or remove `mcp__claude_ai_Parallax__*` calls in the workflow steps.
+- **Different tool sequence.** Add or remove Parallax tool calls (by logical name, e.g. `get_company_info`) in the workflow steps. The connector namespace differs per host and install, so skills resolve it at runtime (`skills/_parallax/parallax-conventions.md` §0.1).
 - **Different scoring backend.** The schema and loader under `skills/_parallax/house-view/` are scoring-engine-agnostic; the SKILL.md files are the layer that's coupled to Parallax MCP. Replace those calls with your own data source and the rest keeps working.
 - **Different storage path.** House-view artifacts default to `~/.parallax/active-house-view/`. The path is referenced in `SKILL.md` and the Python helpers under `_parallax/house-view/`.
 
