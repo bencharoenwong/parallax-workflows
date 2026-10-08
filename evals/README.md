@@ -280,7 +280,7 @@ journeys do not. Results (gitignored) land in `evals/results/` as the raw stream
 | `PARALLAX_E2E_DRY_RUN` | optional | `1` prints each `claude` command instead of running it. Takes effect even without `PARALLAX_E2E_LIVE=1`. |
 | `PARALLAX_E2E_ONLY` | optional | Comma-separated journey ids. Each entry matches a full id or the part before its first `_` (`J2` matches `J2_not_connected`). An entry that matches nothing prints a warning. |
 | `PARALLAX_E2E_CONNECTOR` | optional | `account` (default) or `plugin`. See below. |
-| `PARALLAX_E2E_ALLOWED_TOOLS` | optional | Overrides the Parallax tool patterns the connector mode picks (comma-separated). `--setting-sources project` drops user-level permissions, so the Parallax tools must be listed here or by the mode. `Bash`, `Read`, `Grep` and `Glob` are always allowed on top: the plugin's shared files sit outside the scratch directory, and routed skills run their render gate through Bash. |
+| `PARALLAX_E2E_ALLOWED_TOOLS` | optional | Overrides the Parallax tool patterns the connector mode picks (comma-separated). `--setting-sources project` drops user-level permissions, so the Parallax tools must be listed here or by the mode. `Read`, `Grep`, `Glob`, and `Bash` limited to `python3` and `cd` are always allowed on top: the plugin's shared files sit outside the scratch directory, and routed skills run their helper scripts with `python3`. No other shell command is allowed. |
 | `PARALLAX_E2E_TIMEOUT` | optional | Per-journey limit in seconds, default `600`. A timeout is a FAIL. |
 
 Connector modes:

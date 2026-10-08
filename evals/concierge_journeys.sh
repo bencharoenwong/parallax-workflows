@@ -35,8 +35,8 @@
 #                                 fix.
 #   PARALLAX_E2E_ALLOWED_TOOLS    Overrides the Parallax tool patterns the
 #                                 connector mode picks (comma-separated).
-#                                 Bash, Read, Grep and Glob are always
-#                                 allowed on top.
+#                                 Read, Grep, Glob and Bash limited to
+#                                 python3 and cd are always allowed on top.
 #   PARALLAX_E2E_TIMEOUT          Per-journey limit in seconds (default 600).
 #                                 A timeout is a FAIL.
 #
@@ -116,9 +116,10 @@ esac
 ALLOWED_TOOLS="${PARALLAX_E2E_ALLOWED_TOOLS:-$DEFAULT_TOOLS}"
 # Allowed in every journey: --setting-sources project drops user-level
 # permissions, the plugin's shared files sit outside the scratch cwd, and
-# routed skills run their render gate through Bash. Without these, any read
+# routed skills run their helper scripts with python3. Bash is limited to
+# python3 and cd, so a journey cannot run other shell commands. Without these, any read
 # or script step is a permission denial and the journey fails.
-BASE_TOOLS="Bash,Read,Grep,Glob"
+BASE_TOOLS="Bash(python3:*),Bash(cd:*),Read,Grep,Glob"
 
 [ -f "$JOURNEYS" ] || { echo "journeys file not found: $JOURNEYS" >&2; exit 1; }
 [ -f "$CHECK" ] || { echo "checker not found: $CHECK" >&2; exit 1; }
