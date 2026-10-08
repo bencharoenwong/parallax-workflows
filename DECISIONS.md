@@ -4,6 +4,18 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-10-08: The plugin bundles the Parallax connector; versions are release dates
+
+**Why:** The plugin is the one install that reaches claude.ai chat, Cowork and Claude Code. The Parallax endpoint is public, so bundling it removes a manual connector step. Any change to the plugin version makes clients update, so the version is a date bumped only at release. The role map for the concierge welcome lives in the manifest, so builds and the README can generate from one source. When two Parallax connectors are signed in, the agent asks the user which to use, because each may bill a different account.
+
+**Impact:** `plugin/.mcp.json` declares the connector; users sign in once from the Connectors tab or `/mcp`. `PLUGIN_VERSION` is `2026.10.7` (`YYYY.M.D`, valid semver) and changes by hand per release. `_parallax/manifest.json` carries `roles` and per-skill `starts`, validated by `skill_manifest.py`. Conventions §0.1 item 5 binds a session to one namespace and never calls a billed tool on two. `schedule-task` joins the host primitives; a *verify* cell counts as absent.
+
+**Alternatives:**
+- [DROP] Drop the plugin `version` field. Without it every merge to the default branch ships as an update.
+- [DROP] Pick the first listed connector automatically. It can bill the wrong account.
+
+**Flip conditions:** a release step automates the version bump → remove the hand-bump rule from `build_bundle.py`.
+
 ## 2026-10-06: Shipped docs follow each distribution's own skill set
 
 **Why:** The plugin and web packages each ship a subset of skills, but their docs priced and routed to skills the package lacks. Shipped docs now follow the package's own skill set.
