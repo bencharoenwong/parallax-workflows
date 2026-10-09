@@ -53,7 +53,7 @@ These workflows require an active Parallax subscription from [Chicago Global Cap
 claude plugin marketplace add bencharoenwong/parallax-workflows && claude plugin install parallax@parallax-workflows
 ```
 
-Then run `/mcp` to sign in. The plugin bundles the same Parallax connector. If the same Parallax connector is also on your claude.ai account, Claude Code keeps only one copy, so there is nothing to choose. The "skills ask" note above applies only when two different Parallax connectors stay loaded. Plugin skills work with or without the plugin prefix: `/parallax-should-i-buy` or `/parallax:parallax-should-i-buy`. Use the prefixed form only if another command already has the same name. To update, run `claude plugin marketplace update parallax-workflows` to refresh the catalog, then `claude plugin update parallax`, and restart Claude Code.
+Then run `/mcp` to sign in. The plugin bundles the same Parallax connector. If the same Parallax connector is also on your claude.ai account, Claude Code keeps only one copy, so there is nothing to choose. The "skills ask" note above applies only when two different Parallax connectors stay loaded. Plugin skills work with or without the plugin prefix: `/parallax-should-i-buy` or `/parallax:parallax-should-i-buy`. Use the prefixed form only if another command already has the same name. To update, run `claude plugin marketplace update parallax-workflows` to refresh the catalog, then `claude plugin update parallax@parallax-workflows`, and restart Claude Code.
 
 **For your organization:** a Team or Enterprise Owner can sync this repository once in organization settings, so members don't each add the marketplace by hand. Optional.
 

@@ -403,3 +403,46 @@ def test_pending_server_passes_only_with_a_successful_parallax_call():
     bad, _, _, _ = check_run(
         _stream(servers=pending, tool_call=("mcp__claude_ai_Parallax__check_api_health", True)), J, 0, False)
     assert bad is False
+
+
+# --- round 3: required skill per journey --------------------------------------
+
+def test_validate_skill_field():
+    assert validate_journey({**VALID, "skill": "parallax:parallax-should-i-buy"}) == []
+    for bad in ("parallax-should-i-buy", "parallax:", 3, ["parallax:x"]):
+        assert any("'skill'" in p for p in validate_journey({**VALID, "skill": bad})), bad
+
+
+def test_required_skill_from_journey_field():
+    j = {**J, "skill": "parallax:parallax-should-i-buy"}
+    ok, reasons, _, _ = check_run(_stream(skill="parallax:parallax-should-i-buy"), j, 0, False)
+    assert ok is True, reasons
+    bad, reasons2, _, _ = check_run(_stream(), j, 0, False)  # concierge ran instead
+    assert bad is False
+    assert any("parallax:parallax-should-i-buy did not run" in r for r in reasons2)
+
+
+def test_unprefixed_parallax_skill_fails_even_with_required_skill():
+    lines = _stream().splitlines()
+    extra = [
+        json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "sk2", "name": "Skill", "input": {"skill": "parallax-should-i-buy"}}]}}),
+        json.dumps({"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "sk2", "content": "ok"}]}}),
+    ]
+    stream = "\n".join(lines[:-1] + extra + lines[-1:]) + "\n"
+    ok, reasons, _, _ = check_run(stream, J, 0, False)
+    assert ok is False
+    assert any("unprefixed Parallax skill" in r and "parallax-should-i-buy" in r for r in reasons)
+
+
+def test_no_plugin_namespace_skill_fails():
+    ok, reasons, _, _ = check_run(_stream(skill="other:thing"), {**J, "skill": "parallax:x"}, 0, False)
+    assert ok is False
+    assert any("plugin namespace" in r for r in reasons)
+
+
+def test_direct_task_journey_requires_should_i_buy():
+    journeys = {j["id"]: j for j in map(json.loads, filter(str.strip, JOURNEYS.read_text().splitlines()))}
+    assert journeys["J7_direct_task_bypass"]["skill"] == "parallax:parallax-should-i-buy"
+    assert all("skill" not in j for jid, j in journeys.items() if jid != "J7_direct_task_bypass")

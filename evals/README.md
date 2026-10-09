@@ -227,7 +227,12 @@ Owner-run, pre-release checks for the concierge's New-here path (`skills/paralla
 scheduling-offer guard. Each journey is one fresh `claude -p` session against **this
 branch's built plugin copy** (`--plugin-dir <repo>/plugin --setting-sources project`), run
 from a fresh scratch directory so the repo's `CLAUDE.md` and source files are out of reach.
-They are **not CI tests**: they call a real model and most of them call real Parallax MCP
+Each run also gets a scratch `HOME` that holds only symlinks to `~/.claude`,
+`~/.claude.json` and, on macOS, `~/Library/Keychains` (where the Claude Code login is
+kept), so sign-in and the claude.ai connectors still load but local Parallax
+config under `~/.parallax` (white-label branding, an active house view) cannot shape the
+report. `PARALLAX_HOUSE_VIEW_DIR` points at an empty scratch directory and `TMPDIR` is
+inside the scratch tree. They are **not CI tests**: they call a real model and most of them call real Parallax MCP
 tools, which bills Parallax credits.
 
 ```bash
@@ -248,17 +253,21 @@ one substring appears), and an optional `needs`. `"needs": "no-connector"` runs 
 claude.ai connectors disabled, `--strict-mcp-config` and an empty `--mcp-config`, so no
 Parallax server loads. `"needs": "connector-optional"` runs like a connector journey
 but skips only the Parallax-server-presence check. Use it for a journey that calls no
-Parallax tool, because a claude.ai connector can be missing from the init message. The
-runner validates every line before any model call and rejects unknown keys or a list
-field that is not a list of strings.
+Parallax tool, because a claude.ai connector can be missing from the init message. An
+optional `skill` names the plugin skill the journey must run (`parallax:` prefix); it
+defaults to `parallax:parallax-concierge`. The runner validates every line before any
+model call and rejects unknown keys, a list field that is not a list of strings, and a
+`skill` without the `parallax:` prefix.
 
 Each run is captured as `--output-format stream-json --verbose` and fails closed. A
 journey FAILs when:
 
 - the result lists any `permission_denials`, or is missing or errored;
 - `claude` exits non-zero or hits the timeout;
-- no Skill call of `parallax:parallax-concierge` succeeds, or the init message does not
-  list this branch's `plugin/` directory;
+- no Skill call of the journey's required skill succeeds, no skill in the `parallax:`
+  plugin namespace runs, a Parallax skill is called without the `parallax:` prefix (a
+  copy outside this plugin answered), or the init message does not list this branch's
+  `plugin/` directory;
 - a connector journey shows no connected Parallax server in the init message and makes no
   successful Parallax tool call (a claude.ai connector can finish loading after the
   init message);
@@ -280,8 +289,32 @@ journeys do not. Results (gitignored) land in `evals/results/` as the raw stream
 | `PARALLAX_E2E_DRY_RUN` | optional | `1` prints each `claude` command instead of running it. Takes effect even without `PARALLAX_E2E_LIVE=1`. |
 | `PARALLAX_E2E_ONLY` | optional | Comma-separated journey ids. Each entry matches a full id or the part before its first `_` (`J2` matches `J2_not_connected`). An entry that matches nothing prints a warning. |
 | `PARALLAX_E2E_CONNECTOR` | optional | `account` (default) or `plugin`. See below. |
-| `PARALLAX_E2E_ALLOWED_TOOLS` | optional | Overrides the Parallax tool patterns the connector mode picks (comma-separated). `--setting-sources project` drops user-level permissions, so the Parallax tools must be listed here or by the mode. `Read`, `Grep`, `Glob`, and `Bash` limited to `python3` and `cd` are always allowed on top: the plugin's shared files sit outside the scratch directory, and routed skills run their helper scripts with `python3`. No other shell command is allowed. |
+| `PARALLAX_E2E_ALLOWED_TOOLS` | optional | Overrides the Parallax tool patterns the connector mode picks (comma-separated). `--setting-sources project` drops user-level permissions, so the Parallax tools must be listed here or by the mode. The base permissions below are always allowed on top. |
 | `PARALLAX_E2E_TIMEOUT` | optional | Per-journey limit in seconds, default `600`. A timeout is a FAIL. |
+
+Permissions in every journey:
+
+- `Read`, `Grep`, `Glob`, and `Bash` for commands starting with `python3`, `cd`, `ls`,
+  `mktemp`, `cat`, `diff`, `echo`, `head`, `wc` or `test`. Claude Code checks each part
+  of a compound command (`&&`, `;`, `|`) separately, so `ls x && rm y` or
+  `cat f | curl …` is still denied. Command substitution (`$(…)`) is never approved by
+  a prefix rule. Paths outside the scratch tree and the plugin directory are denied
+  whatever the prefix.
+- `Write` and `Edit` only inside the scratch tree (`Edit(//<scratch>/**)`, both the
+  `/var/folders` and `/private/var/folders` spellings). A write to `/tmp` or to the
+  real home is denied, which fails the journey.
+- The render-gate command (`parallax-conventions.md` §10.3) needs `$(mktemp …)` and
+  ends with `rm -f "$DRAFT"`, so no prefix rule can approve it. A PreToolUse hook,
+  `evals/concierge_gate_hook.py`, passed with `--settings`, approves that exact command
+  shape when `render_gate.py` resolves inside this branch's `plugin/`, and nothing else.
+  It rejects a heredoc body line that would end the heredoc early, an unquoted
+  heredoc, any trailing command, and a gate script outside the plugin
+  (`evals/graders/test_concierge_gate_hook.py`).
+
+Remaining risk: `python3` is allowed with any arguments, so a model could run arbitrary
+Python, including file deletion or network access. `Read` is not path-limited. The
+prompts are fixed and the run happens in a scratch directory, which limits but does not
+remove this.
 
 Connector modes:
 
@@ -304,5 +337,5 @@ What each journey checks:
 | `J4_rm_support_schedule` | RM-support role with holdings runs `/parallax-morning-brief` (bills Parallax credits) and, because scheduling is currently unverified on every host, the concierge must not offer it; forbids the scheduling and delivery phrasing such an offer would use. |
 | `J5_returning` | A plain "Hi Parallax" (no "new here") gets the standard opener, including the "New here?" pointer, and no role label. It makes no Parallax call (free), so it uses `connector-optional`. |
 | `J6_uncovered_ticker` | An unknown ticker is reported as not covered or not resolved, not replaced by an invented symbol. Bills Parallax credits: the should-i-buy route resolves with `get_company_info` (1 credit per attempt). |
-| `J7_direct_task_bypass` | "I'm new here. Should I buy AAPL?" routes the task directly (bills Parallax credits) and shows no role label. |
+| `J7_direct_task_bypass` | "I'm new here. Should I buy AAPL?" runs `parallax:parallax-should-i-buy` directly (`"skill"` field; bills Parallax credits) and shows no role label. |
 | `J8_role_asked_not_guessed` | A bare "I'm new here" (no payload) gets asked the role question with the role labels offered, not guessed, and no skill runs yet (`check_api_health` only, free). |

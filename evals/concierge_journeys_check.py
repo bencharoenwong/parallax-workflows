@@ -10,7 +10,9 @@ Pure functions, no I/O:
 - ``check_run(stream_text, journey, exit_code, timed_out)`` parses a
   ``claude -p --output-format stream-json --verbose`` stream and fails closed:
   any permission denial, a missing or errored result, a non-zero exit, a
-  timeout, no successful run of the plugin's concierge skill, or the wrong
+  timeout, no successful run of the journey's required plugin skill
+  (``skill``, default parallax:parallax-concierge), a Parallax skill called
+  without the ``parallax:`` plugin prefix, or the wrong
   Parallax connector state fails the journey, whatever the text says.
   ``expect``/``expect_any`` run on the final answer; ``forbid`` runs on all
   assistant text in the run, so a forbidden phrase in an earlier turn fails.
@@ -22,15 +24,21 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 
-ALLOWED_KEYS = frozenset({"id", "prompt", "expect", "forbid", "expect_any", "needs"})
+ALLOWED_KEYS = frozenset({"id", "prompt", "expect", "forbid", "expect_any", "needs", "skill"})
 LIST_KEYS = ("expect", "forbid", "expect_any")
 # no-connector: no Parallax server may load. connector-optional: skip only the
 # server-presence check (for a journey that makes no Parallax call, where a
 # claude.ai connector may not be listed in the init message yet).
 NEEDS_VALUES = frozenset({"no-connector", "connector-optional"})
+# The skill a journey must run when its line names none.
 CONCIERGE_SKILL = "parallax:parallax-concierge"
+PLUGIN_PREFIX = "parallax:"
+# Skill names this plugin ships, without the plugin prefix. A Skill call to
+# one of these unprefixed means a copy outside the plugin answered.
+_UNPREFIXED = re.compile(r"(parallax|translate)-")
 # The only init-message status that proves a Parallax server is up. "pending"
 # does not: a pending claude.ai connector can still turn out signed out.
 CONNECTED_STATUS = "connected"
@@ -54,6 +62,10 @@ def validate_journey(journey: object) -> list[str]:
         value = journey[key]
         if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
             problems.append(f"{key!r} must be a list of strings")
+    if "skill" in journey:
+        value = journey["skill"]
+        if not isinstance(value, str) or not value.startswith(PLUGIN_PREFIX) or value == PLUGIN_PREFIX:
+            problems.append(f"'skill' must be a string starting with {PLUGIN_PREFIX!r}")
     if "needs" in journey and journey["needs"] not in NEEDS_VALUES:
         problems.append(f"'needs' must be one of {sorted(NEEDS_VALUES)}")
     return problems
@@ -223,10 +235,16 @@ def check_run(
         if result.get("subtype") != "success":
             reasons.append(f"result subtype {result.get('subtype')!r}")
 
-    skill_runs = [c for c in parsed["skill_calls"].values() if c["name"] == CONCIERGE_SKILL]
-    if not any(c["ok"] for c in skill_runs):
-        seen = sorted({c["name"] for c in parsed["skill_calls"].values()})
-        reasons.append(f"skill {CONCIERGE_SKILL} did not run (Skill calls: {seen or 'none'})")
+    skill_calls = list(parsed["skill_calls"].values())
+    seen = sorted({c["name"] for c in skill_calls}) or "none"
+    required = journey.get("skill") or CONCIERGE_SKILL
+    if not any(c["ok"] and c["name"] == required for c in skill_calls):
+        reasons.append(f"skill {required} did not run (Skill calls: {seen})")
+    if not any(c["ok"] and c["name"].startswith(PLUGIN_PREFIX) for c in skill_calls):
+        reasons.append(f"no skill from the plugin namespace ran (Skill calls: {seen})")
+    unprefixed = sorted({c["name"] for c in skill_calls if _UNPREFIXED.match(c["name"])})
+    if unprefixed:
+        reasons.append(f"unprefixed Parallax skill called (not this plugin's copy): {unprefixed}")
 
     all_text = "\n\n".join(parsed["assistant_texts"])
     if final_text and final_text not in all_text:

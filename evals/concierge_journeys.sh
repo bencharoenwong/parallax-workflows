@@ -35,15 +35,17 @@
 #                                 fix.
 #   PARALLAX_E2E_ALLOWED_TOOLS    Overrides the Parallax tool patterns the
 #                                 connector mode picks (comma-separated).
-#                                 Read, Grep, Glob and Bash limited to
-#                                 python3 and cd are always allowed on top.
+#                                 The base tools (see BASE_TOOLS below) and
+#                                 Write/Edit inside the scratch tree are
+#                                 always allowed on top.
 #   PARALLAX_E2E_TIMEOUT          Per-journey limit in seconds (default 600).
 #                                 A timeout is a FAIL.
 #
 # Journeys are defined in evals/tasks/concierge/journeys.jsonl, one JSON
 # object per line:
 #   {"id", "prompt", "expect"?: [...], "forbid"?: [...], "expect_any"?: [...],
-#    "needs"?: "no-connector" | "connector-optional"}
+#    "needs"?: "no-connector" | "connector-optional",
+#    "skill"?: "parallax:<skill>"  (default parallax:parallax-concierge)}
 # Every line is validated before any `claude` call; an invalid line aborts.
 # "needs": "no-connector" runs with claude.ai connectors disabled,
 # --strict-mcp-config and an empty --mcp-config, so no Parallax server loads.
@@ -55,11 +57,18 @@
 # CLAUDE.md and source files are out of reach, with --plugin-dir pointing at
 # this branch's built plugin/ (absolute path), --add-dir on the same plugin
 # directory so its shared files are readable, and --setting-sources project
-# so user-level skills and settings stay out.
+# so user-level skills and settings stay out. HOME is a scratch home that
+# holds only symlinks to ~/.claude, ~/.claude.json and, on macOS,
+# ~/Library/Keychains (sign-in and connectors still load), so local Parallax
+# config under ~/.parallax, such as white-label branding, never reaches a
+# report. PARALLAX_HOUSE_VIEW_DIR is an
+# empty scratch directory and TMPDIR is inside the scratch tree.
 #
 # The run fails closed (evals/concierge_journeys_check.py): any
 # permission_denials in the result, a missing/errored result, a non-zero
-# exit, a timeout, no successful Skill call of parallax:parallax-concierge,
+# exit, a timeout, no successful Skill call of the journey's required skill,
+# no skill from the parallax: plugin namespace, a Parallax skill called
+# without the parallax: prefix,
 # an init message that does not list this plugin directory, a connector
 # journey with no connected Parallax server at init and no successful Parallax
 # tool call, or a no-connector journey that shows a Parallax server or calls
@@ -116,10 +125,27 @@ esac
 ALLOWED_TOOLS="${PARALLAX_E2E_ALLOWED_TOOLS:-$DEFAULT_TOOLS}"
 # Allowed in every journey: --setting-sources project drops user-level
 # permissions, the plugin's shared files sit outside the scratch cwd, and
-# routed skills run their helper scripts with python3. Bash is limited to
-# python3 and cd, so a journey cannot run other shell commands. Without these, any read
-# or script step is a permission denial and the journey fails.
-BASE_TOOLS="Bash(python3:*),Bash(cd:*),Read,Grep,Glob"
+# routed skills read files, run helper scripts with python3 and check their
+# output. Bash is limited to these command prefixes. Claude Code checks each
+# part of a compound command (&&, ;, |) on its own, so `ls x && rm y` is still
+# denied. Paths outside the scratch tree and the plugin directory are denied
+# whatever the prefix. Write/Edit is added per journey, limited to the scratch
+# tree. Without these, any read or script step is a permission denial and the
+# journey fails.
+BASE_TOOLS="Read,Grep,Glob,Bash(python3:*),Bash(cd:*),Bash(ls:*),Bash(mktemp:*),Bash(cat:*),Bash(diff:*),Bash(echo:*),Bash(head:*),Bash(wc:*),Bash(test:*)"
+# The render-gate command (parallax-conventions.md §10.3) uses $(mktemp ...)
+# and ends with rm -f, which no prefix rule approves. This PreToolUse hook
+# approves that exact command shape, with render_gate.py inside PLUGIN_DIR,
+# and nothing else (evals/concierge_gate_hook.py).
+HOOK="$REPO_ROOT/evals/concierge_gate_hook.py"
+[ -f "$HOOK" ] || { echo "gate hook not found: $HOOK" >&2; exit 1; }
+HOOK_SETTINGS=$(python3 -c '
+import json, shlex, sys
+cmd = "python3 " + shlex.quote(sys.argv[1])
+print(json.dumps({"hooks": {"PreToolUse": [{"matcher": "Bash",
+      "hooks": [{"type": "command", "command": cmd}]}]}}))
+' "$HOOK")
+REAL_HOME="$HOME"
 
 [ -f "$JOURNEYS" ] || { echo "journeys file not found: $JOURNEYS" >&2; exit 1; }
 [ -f "$CHECK" ] || { echo "checker not found: $CHECK" >&2; exit 1; }
@@ -208,22 +234,52 @@ while IFS= read -r LINE || [ -n "$LINE" ]; do
   NEEDS=$(jfield "$LINE" needs)
   TOTAL=$((TOTAL + 1))
 
+  # Scratch layout (cwd = $SCRATCH): home/ holds only symlinks to the real
+  # ~/.claude, ~/.claude.json and (macOS) ~/Library/Keychains, so sign-in and
+  # connectors still load but
+  # ~/.parallax (local branding and house views) is absent; house-view/ is an
+  # empty PARALLAX_HOUSE_VIEW_DIR; tmp/ is TMPDIR, so the render gate's draft
+  # file lands inside the scratch tree.
+  if [ "$DRY_RUN" = "1" ]; then
+    SCR="<scratch>"
+    SCR_REAL="<scratch>"
+  else
+    SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/concierge_e2e.XXXXXX")
+    SCR="$SCRATCH"
+    SCR_REAL=$(cd "$SCRATCH" && pwd -P)
+    mkdir -p "$SCRATCH/home" "$SCRATCH/house-view" "$SCRATCH/tmp"
+    ln -s "$REAL_HOME/.claude" "$SCRATCH/home/.claude"
+    [ -e "$REAL_HOME/.claude.json" ] && ln -s "$REAL_HOME/.claude.json" "$SCRATCH/home/.claude.json"
+    # macOS keeps the Claude Code login in the login keychain, which is found
+    # through $HOME/Library/Keychains; without it the run is "Not logged in".
+    if [ -d "$REAL_HOME/Library/Keychains" ]; then
+      mkdir -p "$SCRATCH/home/Library"
+      ln -s "$REAL_HOME/Library/Keychains" "$SCRATCH/home/Library/Keychains"
+    fi
+  fi
+  # Write/Edit only inside the scratch tree, under both path spellings
+  # (/var/folders/... and /private/var/folders/... on macOS).
+  EDIT_RULES="Edit(/$SCR/**)"
+  [ "$SCR_REAL" != "$SCR" ] && EDIT_RULES="$EDIT_RULES,Edit(/$SCR_REAL/**)"
+  ISO_ENV=(HOME="$SCR/home" TMPDIR="$SCR/tmp" PARALLAX_HOUSE_VIEW_DIR="$SCR/house-view"
+           PARALLAX_E2E_PLUGIN_DIR="$PLUGIN_DIR")
+
   if [ "$NEEDS" = "no-connector" ]; then
     RUN_ENV=(ENABLE_CLAUDEAI_MCP_SERVERS=false)
     # --allowedTools takes a variadic list, so it goes last.
-    XFLAGS=(--strict-mcp-config --mcp-config '{"mcpServers":{}}' --allowedTools "$BASE_TOOLS")
+    XFLAGS=(--strict-mcp-config --mcp-config '{"mcpServers":{}}' --allowedTools "$BASE_TOOLS,$EDIT_RULES")
   else
     RUN_ENV=(${CONN_ENV[@]+"${CONN_ENV[@]}"})
-    XFLAGS=(--allowedTools "$BASE_TOOLS,$ALLOWED_TOOLS")
+    XFLAGS=(--allowedTools "$BASE_TOOLS,$EDIT_RULES,$ALLOWED_TOOLS")
   fi
 
-  CMD=(env ${RUN_ENV[@]+"${RUN_ENV[@]}"} claude -p "$PROMPT"
+  CMD=(env "${ISO_ENV[@]}" ${RUN_ENV[@]+"${RUN_ENV[@]}"} claude -p "$PROMPT"
        --output-format stream-json --verbose
        --plugin-dir "$PLUGIN_DIR" --add-dir "$PLUGIN_DIR"
-       --setting-sources project "${XFLAGS[@]}")
+       --setting-sources project --settings "$HOOK_SETTINGS" "${XFLAGS[@]}")
 
   if [ "$DRY_RUN" = "1" ]; then
-    printf '[%s] DRY RUN (cwd: fresh mktemp -d, timeout %ss): ' "$ID" "$TIMEOUT"
+    printf '[%s] DRY RUN (cwd: <scratch> = fresh mktemp -d, timeout %ss): ' "$ID" "$TIMEOUT"
     printf '%q ' "${CMD[@]}"
     printf '\n'
     continue
@@ -233,7 +289,6 @@ while IFS= read -r LINE || [ -n "$LINE" ]; do
   RAW="$RESULTS/concierge_${ID}_${TS}.jsonl"
   TXT="$RESULTS/concierge_${ID}_${TS}.txt"
   ERR="$RESULTS/concierge_${ID}_${TS}.stderr"
-  SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/concierge_e2e.XXXXXX")
 
   # exec replaces the subshell, so $PID is claude itself and the kill below
   # reaches it. < /dev/null keeps the journeys file off claude's stdin.
