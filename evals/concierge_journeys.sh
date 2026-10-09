@@ -1,84 +1,17 @@
 #!/usr/bin/env bash
-# evals/concierge_journeys.sh — live journey tests for the concierge's
-# New-here path (see evals/README.md "Live concierge journeys").
-#
-# These run a REAL model via `claude -p` against a signed-in Parallax
-# connector. They are owner-run, pre-release checks, NOT CI tests: most of
-# them bill Parallax credits and take real wall-clock time.
+# evals/concierge_journeys.sh: live journey tests for the concierge's New-here
+# path. Owner-run, pre-release, NOT CI: they run a real model with `claude -p`
+# and most journeys bill Parallax credits.
 #
 # Usage:
 #   PARALLAX_E2E_LIVE=1 bash evals/concierge_journeys.sh
 #   PARALLAX_E2E_LIVE=1 PARALLAX_E2E_ONLY=J2,J3,J5,J8 bash evals/concierge_journeys.sh
 #
-# Env:
-#   PARALLAX_E2E_LIVE            Required to run for real. Unset/not "1" =>
-#                                 print a skip message and exit 0.
-#   PARALLAX_E2E_DRY_RUN          "1" => print each `claude` command instead
-#                                 of running it (no credits, no model call).
-#                                 Takes effect even without PARALLAX_E2E_LIVE.
-#   PARALLAX_E2E_ONLY             Comma-separated journey ids to run. Each
-#                                 entry matches a full id or the part before
-#                                 its first "_" (J2 matches J2_not_connected).
-#   PARALLAX_E2E_CONNECTOR        account (default) | plugin.
-#                                 account: the Parallax connector on your
-#                                 claude.ai account, or one added with
-#                                 `claude mcp add`; allows
-#                                 mcp__claude_ai_Parallax__* and
-#                                 mcp__parallax__*. When the account has the
-#                                 connector, Claude Code drops the plugin's
-#                                 bundled copy.
-#                                 plugin: the plugin's bundled server. Sets
-#                                 ENABLE_CLAUDEAI_MCP_SERVERS=false for the run
-#                                 and allows mcp__plugin_parallax_parallax__*.
-#                                 Needs a one-time `/mcp` sign-in to that
-#                                 server and the server-side loopback sign-in
-#                                 fix.
-#   PARALLAX_E2E_ALLOWED_TOOLS    Overrides the Parallax tool patterns the
-#                                 connector mode picks (comma-separated).
-#                                 Read, Grep, Glob and Write/Edit inside the
-#                                 scratch tree are always allowed on top.
-#                                 Bash runs only inside the sandbox.
-#   PARALLAX_E2E_TIMEOUT          Per-journey limit in seconds (default 600).
-#                                 A timeout is a FAIL.
-#
-# Journeys are defined in evals/tasks/concierge/journeys.jsonl, one JSON
-# object per line:
-#   {"id", "prompt", "expect"?: [...], "forbid"?: [...], "expect_any"?: [...],
-#    "needs"?: "no-connector" | "connector-optional",
-#    "skill"?: "parallax:<skill>"  (default parallax:parallax-concierge)}
-# Every line is validated before any `claude` call; an invalid line aborts.
-# "needs": "no-connector" runs with claude.ai connectors disabled,
-# --strict-mcp-config and an empty --mcp-config, so no Parallax server loads.
-# "needs": "connector-optional" runs like a connector journey but skips only
-# the Parallax-server-presence check (for a journey that calls no Parallax
-# tool; a claude.ai connector may be missing from the init message).
-#
-# Each journey runs from a fresh scratch directory (mktemp -d), so the repo's
-# CLAUDE.md and source files are out of reach, with --plugin-dir pointing at
-# this branch's built plugin/ (absolute path) and --setting-sources project so
-# user-level skills and settings stay out. HOME is a scratch home that holds
-# only symlinks to ~/.claude, ~/.claude.json and, on macOS,
-# ~/Library/Keychains (sign-in and connectors still load), so local Parallax
-# config under ~/.parallax, such as white-label branding, never reaches a
-# report. PARALLAX_HOUSE_VIEW_DIR is an empty scratch directory, and TMPDIR
-# and CLAUDE_CODE_TMPDIR are inside the scratch tree. Shell commands run in
-# Claude Code's Bash sandbox with no network and writes only inside the
-# scratch tree (see SANDBOX_SETTINGS below).
-#
-# The run fails closed (evals/concierge_journeys_check.py): any
-# permission_denials in the result, a missing/errored result, a non-zero
-# exit, a timeout, no successful Skill call of the journey's required skill,
-# no skill from the parallax: plugin namespace, a Parallax skill called
-# without the parallax: prefix,
-# an init message that does not list this plugin directory, a connector
-# journey with no connected Parallax server at init and no successful Parallax
-# tool call, or a no-connector journey that shows a Parallax server or calls
-# a Parallax tool is a FAIL, whatever the text says. expect/expect_any run on
-# the final answer; forbid runs on all assistant text in the run.
-#
-# Results (gitignored) land in evals/results/: concierge_<id>_<UTC-ts>.jsonl
-# (raw stream), .txt (all assistant text) and .stderr. INT/TERM stops the
-# running claude and removes its scratch directory.
+# Env vars (PARALLAX_E2E_LIVE, _DRY_RUN, _ONLY, _CONNECTOR, _ALLOWED_TOOLS,
+# _TIMEOUT), the journey file format, the isolation and sandbox boundary, and
+# the fail-closed conditions are documented once, in evals/README.md
+# "Live concierge journeys". The checks themselves live in
+# evals/concierge_journeys_check.py.
 
 set -uo pipefail
 

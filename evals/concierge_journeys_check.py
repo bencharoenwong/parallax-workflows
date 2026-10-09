@@ -8,14 +8,9 @@ Pure functions, no I/O:
 - ``check_journey(output, journey)`` applies the expect/forbid/expect_any
   substring checks to the final assistant text.
 - ``check_run(stream_text, journey, exit_code, timed_out)`` parses a
-  ``claude -p --output-format stream-json --verbose`` stream and fails closed:
-  any permission denial, a missing or errored result, a non-zero exit, a
-  timeout, no successful run of the journey's required plugin skill
-  (``skill``, default parallax:parallax-concierge), a Parallax skill called
-  without the ``parallax:`` plugin prefix, or the wrong
-  Parallax connector state fails the journey, whatever the text says.
-  ``expect``/``expect_any`` run on the final answer; ``forbid`` runs on all
-  assistant text in the run, so a forbidden phrase in an earlier turn fails.
+  ``claude -p --output-format stream-json --verbose`` stream and fails the
+  journey closed. The full list of fail conditions is in evals/README.md
+  "Live concierge journeys"; this function is the implementation.
 
 The shell runner calls this file's CLI; evals/graders/test_concierge_journeys_check.py
 pytests the pure functions on canned text (no model, no network — CI-safe).
