@@ -385,3 +385,131 @@ def test_nonobject_plugin_manifest_rejected(tmp_path):
             zf.writestr(name, data)
     with pytest.raises(bb.BuildError, match="identity"):
         release.verify_asset(path, "2026.10.8")
+
+
+@pytest.mark.parametrize("encoding", ["utf-16", "utf-16-le", "utf-16-be", "utf-32"])
+@pytest.mark.parametrize("surface", ["plugin", "upload"])
+def test_release_scan_refuses_nontext_encodings(tmp_path, encoding, surface):
+    out = make_release(tmp_path)
+    archive = out / ("parallax-plugin.zip" if surface == "plugin" else "demo.skill")
+    prefix = "plugin/skills/demo" if surface == "plugin" else "demo"
+    with zipfile.ZipFile(archive, "a") as zf:
+        zf.writestr(f"{prefix}/references/extra.txt", bb.CANARY_TERMS[0].encode(encoding))
+    if surface == "upload":
+        release.write_zip(out / "parallax-claude-ai-skills.zip", [(archive.name, archive)])
+    index = json.loads((out / "index.json").read_text())
+    refresh_checksums(out, index)
+    with pytest.raises(bb.BuildError, match="UTF-8 text"):
+        release.verify_release(out)
+
+
+@pytest.mark.parametrize("link_kind", ["file", "directory"])
+@pytest.mark.parametrize("source_kind", ["skill", "example"])
+def test_build_refuses_symlinked_package_source(small_build, monkeypatch, link_kind, source_kind):
+    entrypoint = small_build / "skills/demo/SKILL.md"
+    source = entrypoint
+    tracked = "skills/demo/SKILL.md\0"
+    if source_kind == "example":
+        source = small_build / "examples/demo.md"
+        source.parent.mkdir()
+        source.write_text("Example\n")
+        tracked += "examples/demo.md\0"
+        original_plugin = bb.build_plugin
+
+        def plugin():
+            original_plugin()
+            target = bb.PLUGIN_DIR / "examples/demo.md"
+            target.parent.mkdir()
+            target.write_bytes(source.read_bytes())
+
+        monkeypatch.setattr(bb, "build_plugin", plugin)
+    outside = small_build.parent / "external"
+    if link_kind == "file":
+        source.rename(outside)
+        source.symlink_to(outside)
+    else:
+        source.parent.rename(outside)
+        source.parent.symlink_to(outside, target_is_directory=True)
+    # Git metadata is controlled; the linked bytes and builder are real files.
+    replies = {("ls-files", "-z"): tracked,
+               ("rev-parse", "HEAD"): "a" * 40,
+               ("status", "--porcelain", "--untracked-files=normal"): ""}
+    monkeypatch.setattr(release, "git", lambda *args: replies[args])
+
+    def web(names):
+        # The real web builder copies source bytes before it writes the ZIP.
+        copied = small_build.parent / "copied.md"
+        copied.write_bytes(entrypoint.read_bytes())
+        release.write_zip(bb.WEB_OUT_DIR / "demo.skill", [("demo/SKILL.md", copied)])
+
+    monkeypatch.setattr(bb, "build_web", web)
+    output = small_build / "dist/output"
+    with pytest.raises(bb.BuildError, match="symlink"):
+        release.build(output)
+    assert not output.exists()
+
+
+def test_documentation_symlink_can_remain_in_source_fingerprint(tmp_path, monkeypatch):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "audit.md").write_text("Audit record\n")
+    (root / "audit-latest.md").symlink_to("audit.md")
+    monkeypatch.setattr(release, "ROOT", root)
+    replies = {("ls-files", "-z"): "audit.md\0audit-latest.md\0",
+               ("rev-parse", "HEAD"): "a" * 40,
+               ("status", "--porcelain", "--untracked-files=normal"): ""}
+    monkeypatch.setattr(release, "git", lambda *args: replies[args])
+    assert release.source_state()["dirty"] is False
+
+
+@pytest.mark.parametrize("upload", [True, False])
+def test_index_description_matches_mapped_package(small_build, monkeypatch, upload):
+    state = {"commit": "a" * 40, "dirty": True, "tree_sha256": "b" * 64}
+    monkeypatch.setattr(release, "source_state", lambda: state)
+    original_plugin = bb.build_plugin
+    original_web = bb.build_web
+
+    def plugin():
+        original_plugin()
+        entry = bb.PLUGIN_DIR / "skills/demo/SKILL.md"
+        entry.write_text(entry.read_text().replace("A demo", "Plugin description"))
+        if not upload:
+            other = bb.PLUGIN_DIR / "skills/plugin-only"
+            other.mkdir()
+            (other / "SKILL.md").write_text(
+                "---\nname: plugin-only\ndescription: Plugin-only description\n---\nDemo\n")
+
+    def web(names):
+        original_web(names)
+        archive = bb.WEB_OUT_DIR / "demo.skill"
+        with zipfile.ZipFile(archive) as zf:
+            content = zf.read("demo/SKILL.md").replace(b"A demo", b"Upload description")
+        with zipfile.ZipFile(archive, "w") as zf:
+            zf.writestr("demo/SKILL.md", content)
+
+    monkeypatch.setattr(bb, "build_plugin", plugin)
+    monkeypatch.setattr(bb, "build_web", web)
+    if not upload:
+        monkeypatch.setattr(bb, "PLUGIN_SKILLS", ["demo", "plugin-only"])
+        monkeypatch.setattr(bb.skill_manifest, "skills", lambda: {
+            "demo": {"web": True, "plugin": True}, "plugin-only": {"plugin": True}})
+        source = small_build / "skills/plugin-only"
+        source.mkdir()
+        (source / "SKILL.md").write_text(
+            "---\nname: plugin-only\ndescription: Source description\n---\nDemo\n")
+    output = small_build / "dist/output"
+    release.build(output, preview=True)
+    index = release.verify_release(output)
+    rows = {row["name"]: row for row in index["skills"]}
+    if not upload:
+        assert rows["plugin-only"]["description"] == "Plugin-only description"
+    assert rows["demo"]["description"] == "Upload description"
+
+
+def test_rehashed_index_with_wrong_description_rejected(tmp_path):
+    out = make_release(tmp_path)
+    index = json.loads((out / "index.json").read_text())
+    index["skills"][0]["description"] = "A capability absent from the package"
+    refresh_checksums(out, index)
+    with pytest.raises(bb.BuildError, match="description"):
+        release.verify_release(out)

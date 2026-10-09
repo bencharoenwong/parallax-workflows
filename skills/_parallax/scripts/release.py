@@ -55,6 +55,10 @@ def source_state() -> dict:
     h = hashlib.sha256()
     for rel in sorted(set(filter(None, paths))):
         path = ROOT / rel
+        relative = Path(rel)
+        if relative.parts[0] in {"skills", "examples"} and any(
+                (ROOT / part).is_symlink() for part in (relative, *relative.parents)):
+            raise bb.BuildError(f"release package source cannot contain symlinks: {rel}")
         h.update(rel.encode() + b"\0")
         if path.is_symlink():
             h.update(b"link\0" + os.readlink(path).encode())
@@ -116,9 +120,8 @@ def unpack(archive: Path, target: Path) -> None:
                 dest.write_bytes(zf.read(info))
 
 
-def verify_entrypoint(skill: Path) -> None:
-    """Require usable skill metadata matching the packaged directory."""
-    text = (skill / "SKILL.md").read_text()
+def entrypoint_metadata(text: str, name: str) -> dict:
+    """Require usable skill metadata matching its packaged directory name."""
     lines = text.splitlines()
     if not lines or lines[0] != "---" or "---" not in lines[1:]:
         raise bb.BuildError("skill entrypoint is missing frontmatter")
@@ -126,10 +129,38 @@ def verify_entrypoint(skill: Path) -> None:
         metadata = yaml.safe_load("\n".join(lines[1:lines.index("---", 1)]))
     except yaml.YAMLError as exc:
         raise bb.BuildError("skill entrypoint has invalid frontmatter") from exc
-    if (not isinstance(metadata, dict) or metadata.get("name") != skill.name
+    if (not isinstance(metadata, dict) or metadata.get("name") != name
             or not isinstance(metadata.get("description"), str)
             or not metadata["description"].strip()):
         raise bb.BuildError("skill entrypoint has invalid name or description")
+    return metadata
+
+
+def verify_entrypoint(skill: Path) -> None:
+    """Require usable skill metadata matching the packaged directory."""
+    entrypoint_metadata((skill / "SKILL.md").read_text(encoding="utf-8"), skill.name)
+
+
+def packaged_description(asset: Path, name: str) -> str:
+    """Read discovery metadata from the package to which an index row points."""
+    entry = (f"plugin/skills/{name}/SKILL.md" if asset.name == "parallax-plugin.zip"
+             else f"{name}/SKILL.md")
+    with zipfile.ZipFile(asset) as archive:
+        text = archive.read(entry).decode("utf-8")
+    return entrypoint_metadata(text, name)["description"]
+
+
+def verify_text_tree(root: Path) -> None:
+    """Require text the term scanner can read, including BOM-less encodings."""
+    for member in root.rglob("*"):
+        if not member.is_file():
+            continue
+        try:
+            content = member.read_bytes().decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise bb.BuildError("package files must be UTF-8 text") from exc
+        if "\0" in content:
+            raise bb.BuildError("package files must be UTF-8 text without NUL bytes")
 
 
 def verify_asset(path: Path, version: str, plugin_skills: set[str] | None = None,
@@ -138,6 +169,8 @@ def verify_asset(path: Path, version: str, plugin_skills: set[str] | None = None
     with tempfile.TemporaryDirectory(prefix="parallax-verify-") as tmp:
         root = Path(tmp)
         unpack(path, root)
+        if path.name == "parallax-plugin.zip" or path.suffix == ".skill":
+            verify_text_tree(root)
         if path.name == "parallax-plugin.zip":
             plugin = root / "plugin"
             if sorted(p.name for p in root.iterdir()) != ["plugin"]:
@@ -280,6 +313,9 @@ def verify_release(directory: Path) -> dict:
         if path.is_symlink() or digest(path) != asset["sha256"] or path.stat().st_size != asset["size"]:
             raise bb.BuildError(f"asset checksum/size mismatch: {asset['name']}")
         verify_asset(path, index["version"], plugin_skills, index["mcp"]["url"])
+    for skill in index["skills"]:
+        if skill["description"] != packaged_description(directory / skill["asset"], skill["name"]):
+            raise bb.BuildError("skill description differs from its mapped release asset")
     collection = directory / "parallax-claude-ai-skills.zip"
     if collection.exists():
         with zipfile.ZipFile(collection) as zf:
@@ -351,11 +387,11 @@ def build(output: Path, preview: bool = False) -> Path:
             for name in sorted(set(bb.PLUGIN_SKILLS) | names):
                 row = bb.skill_manifest.skills()[name]
                 surfaces = (["plugin"] if row.get("plugin") else []) + (["skill-upload"] if name in names else [])
-                text = (bb.SKILLS_DIR / name / "SKILL.md").read_text()
-                description = yaml.safe_load(text.split("---", 2)[1])["description"]
+                asset = f"{name}.skill" if name in names else "parallax-plugin.zip"
+                description = packaged_description(assets / asset, name)
                 index["skills"].append({"name": name, "description": description,
                                         "surfaces": surfaces,
-                                        "asset": f"{name}.skill" if name in names else "parallax-plugin.zip"})
+                                        "asset": asset})
             (assets / "index.json").write_text(json.dumps(index, indent=2) + "\n")
             (assets / "SHA256SUMS").write_text("".join(
                 f"{digest(p)}  {p.name}\n" for p in sorted(assets.iterdir())))

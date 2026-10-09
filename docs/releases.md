@@ -43,6 +43,9 @@ A preview can use uncommitted changes. Its index records the base commit,
 working-tree fingerprint and dirty state. Its download URLs are null. Preview
 assets are for local testing, not publication. Builders use tracked files;
 stage new runtime files before previewing them.
+Package input paths under `skills/` and `examples/` must not contain symlinks.
+Extracted plugin and upload files must be UTF-8 text without NUL bytes so the
+full term scan can inspect their contents.
 
 After review and commit, build without `--preview`. A release build requires a
 clean tree and a matching CHANGELOG heading. Every build requires the full
@@ -66,6 +69,7 @@ references, and rejects changes to tracked source files during the build.
 - `parallax-claude-ai-skills.zip`: a collection to unzip before individual skill uploads.
 - `index.json`: version, source provenance, skill descriptions, distributions,
   asset names, byte sizes, SHA-256 hashes, pinned and latest download URLs.
+  Each description matches the packaged skill in the row's mapped asset.
 - `SHA256SUMS`: checksums for all assets and the index.
 
 The index describes planned download URLs. They become available only after an

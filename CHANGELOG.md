@@ -12,6 +12,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 ### Changed
 - Plugin and marketplace versions are prepared together by `release.py prepare`. Release output remains local until explicit publication approval.
+- Release verification rejects non-text encodings and source symlinks in package inputs. Index descriptions match the mapped packaged skills after distribution transforms.
 
 
 ## 2026-10-08 (plugin connector and welcome data)
