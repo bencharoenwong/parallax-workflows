@@ -35,9 +35,9 @@
 #                                 fix.
 #   PARALLAX_E2E_ALLOWED_TOOLS    Overrides the Parallax tool patterns the
 #                                 connector mode picks (comma-separated).
-#                                 The base tools (see BASE_TOOLS below) and
-#                                 Write/Edit inside the scratch tree are
-#                                 always allowed on top.
+#                                 Read, Grep, Glob and Write/Edit inside the
+#                                 scratch tree are always allowed on top.
+#                                 Bash runs only inside the sandbox.
 #   PARALLAX_E2E_TIMEOUT          Per-journey limit in seconds (default 600).
 #                                 A timeout is a FAIL.
 #
@@ -55,14 +55,15 @@
 #
 # Each journey runs from a fresh scratch directory (mktemp -d), so the repo's
 # CLAUDE.md and source files are out of reach, with --plugin-dir pointing at
-# this branch's built plugin/ (absolute path), --add-dir on the same plugin
-# directory so its shared files are readable, and --setting-sources project
-# so user-level skills and settings stay out. HOME is a scratch home that
-# holds only symlinks to ~/.claude, ~/.claude.json and, on macOS,
+# this branch's built plugin/ (absolute path) and --setting-sources project so
+# user-level skills and settings stay out. HOME is a scratch home that holds
+# only symlinks to ~/.claude, ~/.claude.json and, on macOS,
 # ~/Library/Keychains (sign-in and connectors still load), so local Parallax
 # config under ~/.parallax, such as white-label branding, never reaches a
-# report. PARALLAX_HOUSE_VIEW_DIR is an
-# empty scratch directory and TMPDIR is inside the scratch tree.
+# report. PARALLAX_HOUSE_VIEW_DIR is an empty scratch directory, and TMPDIR
+# and CLAUDE_CODE_TMPDIR are inside the scratch tree. Shell commands run in
+# Claude Code's Bash sandbox with no network and writes only inside the
+# scratch tree (see SANDBOX_SETTINGS below).
 #
 # The run fails closed (evals/concierge_journeys_check.py): any
 # permission_denials in the result, a missing/errored result, a non-zero
@@ -124,27 +125,25 @@ case "$CONNECTOR" in
 esac
 ALLOWED_TOOLS="${PARALLAX_E2E_ALLOWED_TOOLS:-$DEFAULT_TOOLS}"
 # Allowed in every journey: --setting-sources project drops user-level
-# permissions, the plugin's shared files sit outside the scratch cwd, and
-# routed skills read files, run helper scripts with python3 and check their
-# output. Bash is limited to these command prefixes. Claude Code checks each
-# part of a compound command (&&, ;, |) on its own, so `ls x && rm y` is still
-# denied. Paths outside the scratch tree and the plugin directory are denied
-# whatever the prefix. Write/Edit is added per journey, limited to the scratch
-# tree. Without these, any read or script step is a permission denial and the
-# journey fails.
-BASE_TOOLS="Read,Grep,Glob,Bash(python3:*),Bash(cd:*),Bash(ls:*),Bash(mktemp:*),Bash(cat:*),Bash(diff:*),Bash(echo:*),Bash(head:*),Bash(wc:*),Bash(test:*)"
-# The render-gate command (parallax-conventions.md §10.3) uses $(mktemp ...)
-# and ends with rm -f, which no prefix rule approves. This PreToolUse hook
-# approves that exact command shape, with render_gate.py inside PLUGIN_DIR,
-# and nothing else (evals/concierge_gate_hook.py).
-HOOK="$REPO_ROOT/evals/concierge_gate_hook.py"
-[ -f "$HOOK" ] || { echo "gate hook not found: $HOOK" >&2; exit 1; }
-HOOK_SETTINGS=$(python3 -c '
-import json, shlex, sys
-cmd = "python3 " + shlex.quote(sys.argv[1])
-print(json.dumps({"hooks": {"PreToolUse": [{"matcher": "Bash",
-      "hooks": [{"type": "command", "command": cmd}]}]}}))
-' "$HOOK")
+# permissions, and routed skills read the plugin's shared files. Write/Edit is
+# added per journey, limited to the scratch tree. Bash has no allow rule: it
+# runs only inside Claude Code's Bash sandbox (SANDBOX_SETTINGS below), which
+# auto-allows a sandboxed command and lets the OS confine it.
+BASE_TOOLS="Read,Grep,Glob"
+# Bash sandbox (code.claude.com/docs/en/sandboxing). The OS (Seatbelt on
+# macOS) confines every shell command and its child processes:
+# - writes only to the cwd (the scratch tree) and the per-user temp dir,
+#   which CLAUDE_CODE_TMPDIR puts inside the scratch tree; Claude Code's
+#   protected paths (~/.claude, ~/.claude.json) stay write-denied even
+#   through the scratch home's symlinks;
+# - no network: allowedDomains is empty and strictAllowlist refuses other
+#   hosts (Parallax calls go through MCP, not Bash);
+# - allowUnsandboxedCommands false ignores dangerouslyDisableSandbox, so there
+#   is no unsandboxed retry; failIfUnavailable refuses to start without the
+#   sandbox instead of running commands unsandboxed.
+# No --add-dir: an added directory would become writable to sandboxed
+# commands, and the plugin must stay read-only.
+SANDBOX_SETTINGS='{"sandbox":{"enabled":true,"failIfUnavailable":true,"autoAllowBashIfSandboxed":true,"allowUnsandboxedCommands":false,"network":{"allowedDomains":[],"strictAllowlist":true}}}'
 REAL_HOME="$HOME"
 
 [ -f "$JOURNEYS" ] || { echo "journeys file not found: $JOURNEYS" >&2; exit 1; }
@@ -209,20 +208,23 @@ FAILS=0
 PID=""
 SCRATCH=""
 
-cleanup_and_exit() {
-  # On INT/TERM: stop the running claude and its children, drop the scratch dir.
+cleanup() {
+  # Stop a running claude and its children, drop the scratch dir.
   if [ -n "$PID" ]; then
     pkill -TERM -P "$PID" 2>/dev/null
     kill -TERM "$PID" 2>/dev/null
     sleep 1
     pkill -KILL -P "$PID" 2>/dev/null
     kill -KILL "$PID" 2>/dev/null
+    PID=""
   fi
-  [ -n "$SCRATCH" ] && rm -rf "$SCRATCH"
-  echo "interrupted" >&2
-  exit 130
+  if [ -n "$SCRATCH" ]; then
+    rm -rf "$SCRATCH"
+    SCRATCH=""
+  fi
 }
-trap cleanup_and_exit INT TERM
+trap 'cleanup; echo "interrupted" >&2; exit 130' INT TERM HUP
+trap cleanup EXIT
 
 while IFS= read -r LINE || [ -n "$LINE" ]; do
   [ -z "$LINE" ] && continue
@@ -236,15 +238,15 @@ while IFS= read -r LINE || [ -n "$LINE" ]; do
 
   # Scratch layout (cwd = $SCRATCH): home/ holds only symlinks to the real
   # ~/.claude, ~/.claude.json and (macOS) ~/Library/Keychains, so sign-in and
-  # connectors still load but
-  # ~/.parallax (local branding and house views) is absent; house-view/ is an
-  # empty PARALLAX_HOUSE_VIEW_DIR; tmp/ is TMPDIR, so the render gate's draft
-  # file lands inside the scratch tree.
+  # connectors still load but ~/.parallax (local branding and house views) is
+  # absent; house-view/ is an empty PARALLAX_HOUSE_VIEW_DIR; tmp/ is TMPDIR
+  # and the sandbox's per-user temp dir.
   if [ "$DRY_RUN" = "1" ]; then
     SCR="<scratch>"
     SCR_REAL="<scratch>"
   else
     SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/concierge_e2e.XXXXXX")
+    [ -n "$SCRATCH" ] && [ -d "$SCRATCH" ] || { echo "mktemp -d failed" >&2; exit 1; }
     SCR="$SCRATCH"
     SCR_REAL=$(cd "$SCRATCH" && pwd -P)
     mkdir -p "$SCRATCH/home" "$SCRATCH/house-view" "$SCRATCH/tmp"
@@ -261,8 +263,8 @@ while IFS= read -r LINE || [ -n "$LINE" ]; do
   # (/var/folders/... and /private/var/folders/... on macOS).
   EDIT_RULES="Edit(/$SCR/**)"
   [ "$SCR_REAL" != "$SCR" ] && EDIT_RULES="$EDIT_RULES,Edit(/$SCR_REAL/**)"
-  ISO_ENV=(HOME="$SCR/home" TMPDIR="$SCR/tmp" PARALLAX_HOUSE_VIEW_DIR="$SCR/house-view"
-           PARALLAX_E2E_PLUGIN_DIR="$PLUGIN_DIR")
+  ISO_ENV=(HOME="$SCR/home" TMPDIR="$SCR/tmp" CLAUDE_CODE_TMPDIR="$SCR/tmp"
+           PARALLAX_HOUSE_VIEW_DIR="$SCR/house-view")
 
   if [ "$NEEDS" = "no-connector" ]; then
     RUN_ENV=(ENABLE_CLAUDEAI_MCP_SERVERS=false)
@@ -275,8 +277,8 @@ while IFS= read -r LINE || [ -n "$LINE" ]; do
 
   CMD=(env "${ISO_ENV[@]}" ${RUN_ENV[@]+"${RUN_ENV[@]}"} claude -p "$PROMPT"
        --output-format stream-json --verbose
-       --plugin-dir "$PLUGIN_DIR" --add-dir "$PLUGIN_DIR"
-       --setting-sources project --settings "$HOOK_SETTINGS" "${XFLAGS[@]}")
+       --plugin-dir "$PLUGIN_DIR"
+       --setting-sources project --settings "$SANDBOX_SETTINGS" "${XFLAGS[@]}")
 
   if [ "$DRY_RUN" = "1" ]; then
     printf '[%s] DRY RUN (cwd: <scratch> = fresh mktemp -d, timeout %ss): ' "$ID" "$TIMEOUT"

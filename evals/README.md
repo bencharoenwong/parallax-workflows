@@ -294,27 +294,40 @@ journeys do not. Results (gitignored) land in `evals/results/` as the raw stream
 
 Permissions in every journey:
 
-- `Read`, `Grep`, `Glob`, and `Bash` for commands starting with `python3`, `cd`, `ls`,
-  `mktemp`, `cat`, `diff`, `echo`, `head`, `wc` or `test`. Claude Code checks each part
-  of a compound command (`&&`, `;`, `|`) separately, so `ls x && rm y` or
-  `cat f | curl …` is still denied. Command substitution (`$(…)`) is never approved by
-  a prefix rule. Paths outside the scratch tree and the plugin directory are denied
-  whatever the prefix.
+- `Read`, `Grep` and `Glob`, not limited by path.
 - `Write` and `Edit` only inside the scratch tree (`Edit(//<scratch>/**)`, both the
-  `/var/folders` and `/private/var/folders` spellings). A write to `/tmp` or to the
-  real home is denied, which fails the journey.
-- The render-gate command (`parallax-conventions.md` §10.3) needs `$(mktemp …)` and
-  ends with `rm -f "$DRAFT"`, so no prefix rule can approve it. A PreToolUse hook,
-  `evals/concierge_gate_hook.py`, passed with `--settings`, approves that exact command
-  shape when `render_gate.py` resolves inside this branch's `plugin/`, and nothing else.
-  It rejects a heredoc body line that would end the heredoc early, an unquoted
-  heredoc, any trailing command, and a gate script outside the plugin
-  (`evals/graders/test_concierge_gate_hook.py`).
+  `/var/folders` and `/private/var/folders` spellings). A write anywhere else is
+  denied, which fails the journey.
+- The Parallax MCP tools for the connector mode.
+- `Bash` has no allow rule. It runs only inside Claude Code's Bash sandbox
+  (Seatbelt on macOS), passed with `--settings`: `sandbox.enabled`,
+  `failIfUnavailable` (refuse to start rather than run unsandboxed),
+  `autoAllowBashIfSandboxed`, `allowUnsandboxedCommands: false` (no unsandboxed
+  retry), and `network.allowedDomains: []` with `strictAllowlist`. The OS confines each
+  command and its child processes: writes only to the scratch tree (the cwd, plus
+  the per-user temp dir that `CLAUDE_CODE_TMPDIR` puts inside it), and no network.
+  Claude Code's protected paths, such as `~/.claude` and `~/.claude.json`, stay
+  write-denied even through the scratch home's symlinks. There is no `--add-dir`,
+  because an added directory would become writable to sandboxed commands.
 
-Remaining risk: `python3` is allowed with any arguments, so a model could run arbitrary
-Python, including file deletion or network access. `Read` is not path-limited. The
-prompts are fixed and the run happens in a scratch directory, which limits but does not
-remove this.
+The sandbox does not lift Claude Code's own command checks. A command that contains a
+shell expansion such as `$(…)` or `${VAR:-default}` is still denied with "Contains
+expansion", sandboxed or not. The render-gate command in `parallax-conventions.md`
+§10.3 starts with `DRAFT="$(mktemp "${TMPDIR:-/tmp}/….XXXXXX")"`, so in a journey
+that reaches the render gate (J1, J4, J6 and J7 when they render a report) the
+first gate attempt is a permission denial and the journey FAILs. A gate form that
+feeds the quoted heredoc straight to `render_gate.py` on stdin runs in the sandbox
+with no denial. Changing the gated skills to that form is a separate skills change.
+
+Remaining risk, stated plainly:
+
+- `Read`, `Grep`, `Glob` and sandboxed shell reads are not limited by path. A journey
+  can read most of the machine, including files under the real home through the
+  scratch home's symlinks (`~/.claude`, `~/.claude.json`, the keychain directory).
+- MCP tools run outside the sandbox. A connector journey can call any allowed
+  Parallax tool, and each billed call costs Parallax credits.
+- Built-in tools such as `Write`/`Edit` follow permission rules, not the sandbox; the
+  scratch-only `Edit` rule is what limits them.
 
 Connector modes:
 
