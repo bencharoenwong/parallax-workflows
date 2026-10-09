@@ -23,7 +23,7 @@ If you have Parallax connected and want to try it now, three commands cover 80% 
 | Run a portfolio health check | `/parallax-portfolio-checkup [{"symbol":"AAPL.O","weight":0.4},{"symbol":"MSFT.O","weight":0.6}]` |
 | Pressure-test an investment thesis | `/parallax-stress-test-thesis "I like NVDA because AI capex keeps compounding and rate cuts extend the duration trade"` |
 
-Everything below is the full catalog. The concierge is the recommended entry point for first-time users — it asks one clarifying question and routes you.
+Everything below is the full catalog. The concierge is the recommended entry point for first-time users — say you're new and it asks your role and starts a matching first run.
 
 ## What's in this repo
 
@@ -140,7 +140,7 @@ Implementation lives in `skills/_parallax/house-view/audit_chain.py`, `chain_emi
 
 | Command | What it does |
 |---|---|
-| `Hi Parallax` or `/parallax-concierge` | Friendly concierge that opens a four-branch menu (Stock / Portfolio / Discovery / Investor profile), asks one clarifying question, then routes you to the right `/parallax-*` workflow. The magic front door for everyday users. Also triggers on "what can Parallax do" and similar exploratory phrasings. |
+| `Hi Parallax` or `/parallax-concierge` | Friendly concierge that opens a four-branch menu (Stock / Portfolio / Discovery / Investor profile), asks at most one clarifying question, then routes you to the right `/parallax-*` workflow. First-time users can say they're new: it checks the connection, asks their role, and starts a role-matched first run. The magic front door for everyday users. Also triggers on "what can Parallax do" and similar exploratory phrasings. |
 
 ### Single Stock
 
