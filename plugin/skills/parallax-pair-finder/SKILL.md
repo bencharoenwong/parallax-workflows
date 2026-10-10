@@ -112,12 +112,10 @@ Fill **Output Format** below in order for the detected mode: House View Preamble
 
 ### Step 6 — Render (deterministic gate, mandatory)
 
-`run-shell` the shared gate per conventions §10.3 with this skill's key:
+`write-artifact` the complete drafted report to a new `<draft-path>`, then `run-shell` the shared gate with this skill's key, both per conventions §10.3:
 
 ```
-python3 "<skill-dir>/../_parallax/render_gate.py" --skill pair-finder <<'REPORT'
-<your complete drafted report goes here>
-REPORT
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill pair-finder --input "<draft-path>"
 ```
 
 The entire final message is that command's stdout (or, on a HALT, exactly the gate message). The stderr `[render-gate] WARN:` line is diagnostics: never include it. If `run-shell` is absent, apply conventions §14.3 (render-gate row; beta math is arithmetic over fetched series and needs no shell). No Step 7.

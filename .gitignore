@@ -85,3 +85,6 @@ skills/PERIMETER.md
 # reports quote the plan under review verbatim, so they can carry unreleased
 # design detail — this repository is public, so they must never be committed.
 plan-reviews/
+
+# Render-gate draft reports (parallax-conventions.md §10.3); may hold client data
+.parallax-render/

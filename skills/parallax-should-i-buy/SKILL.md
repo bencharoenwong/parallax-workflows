@@ -95,12 +95,10 @@ Fill **Output Format** below, in order. Branding Header and About This Report pe
 
 ### Step 6 — Render (deterministic gate, mandatory)
 
-`run-shell` the shared gate per conventions §10.3, with this skill's key (`<skill-dir>` is the absolute path of the directory this SKILL.md was loaded from; `_parallax/` is its sibling):
+`write-artifact` the complete drafted report to a new `<draft-path>`, then `run-shell` the shared gate with this skill's key, both per conventions §10.3 (`<skill-dir>` is the absolute path of the directory this SKILL.md was loaded from; `_parallax/` is its sibling):
 
 ```
-python3 "<skill-dir>/../_parallax/render_gate.py" --skill should-i-buy <<'REPORT'
-<your complete drafted report goes here>
-REPORT
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill should-i-buy --input "<draft-path>"
 ```
 
 The entire final English message is exactly that command's stdout, or the sole input to Step 7. The stderr `[render-gate] WARN:` line is diagnostics: never include it, never translate it; it means the opening drifted from the Output Format start — fix and re-run. If `run-shell` is absent on this host, apply conventions §14.3 (render-gate row).

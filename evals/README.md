@@ -314,11 +314,13 @@ Permissions in every journey:
 The sandbox does not lift Claude Code's own command checks. A command that contains a
 shell expansion such as `$(…)` or `${VAR:-default}` is still denied with "Contains
 expansion", sandboxed or not. The render-gate command in `parallax-conventions.md`
-§10.3 has no expansion: it feeds the report to `render_gate.py` on stdin through a
-quoted heredoc, with no temp file, so it runs in the sandbox under the
-`Bash(python3:*)` rule. A skill or edit that brings back an expanded form, such as
-`DRAFT="$(mktemp …)"`, makes every journey that reaches the render gate (J1, J4, J6
-and J7 when they render a report) FAIL on its first gate attempt.
+§10.3 has no expansion and stays short: the model writes the report to
+`<scratch>/.parallax-render/…` (allowed by the scratch `Edit` rule), then runs
+`render_gate.py --input <path>`, so the sandbox auto-allow above lets it run. Claude
+Code also refuses any command over 10,000 characters, so a report passed inside the
+command, such as through a heredoc, fails once it is long. A skill or edit that brings
+back an expanded or embedded form makes the journeys that reach the render gate (J1,
+J4, J6 and J7 when they render a report) FAIL on the gate attempt.
 
 Remaining risk, stated plainly:
 

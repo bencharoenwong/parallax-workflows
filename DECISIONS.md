@@ -4,17 +4,19 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
-## 2026-10-10: The render gate reads the report on stdin
+## 2026-10-10: The render gate reads the report from a draft file
 
-**Why:** Claude Code denies any command that contains a shell expansion, even inside its sandbox. The old gate form opened with `DRAFT="$(mktemp "${TMPDIR:-/tmp}/….XXXXXX")"`, so the gate command was denied or prompted for approval before the report rendered. That blocked the live concierge journeys that reach the gate and put an approval prompt in front of real users. A quoted heredoc fed straight to `render_gate.py` on stdin has no expansion, needs no temp file and no cleanup, and still stops all shell expansion inside the report.
+**Why:** Claude Code checks every Bash command before it runs, sandboxed or not. It denies a command containing a shell expansion, and it refuses a command over 10,000 characters, because its parser gives up and the sandbox auto-allow does not apply. The old gate form opened with `DRAFT="$(mktemp "${TMPDIR:-/tmp}/….XXXXXX")"`, so it was always denied. A report fed to the gate through a quoted heredoc avoids the expansion but sits inside the command, so a long report (a client review runs to about 17,000 characters) is still refused, and a few characters such as a carriage return or a non-breaking space are rejected too. Writing the draft with `write-artifact` keeps the report out of the command entirely: a 28,600-character report passed sandboxed with no denial.
 
-**Impact:** `parallax-conventions.md` §10.3 owns the one gate form, and every gated skill's render step uses it. `test_render_gate.py` runs each documented gate block in bash and checks its stdout against the gate. The render-gate caveat in `evals/README.md` § Live concierge journeys now records that an expanded form would fail the journeys that reach the gate.
+**Impact:** `parallax-conventions.md` §10.3 owns the one gate form: `write-artifact` the draft to `<cwd>/.parallax-render/<key>-<8 random hex>.md`, then `python3 …/render_gate.py --skill <key> --input "<path>"`. `render_gate.py --input` accepts only `.parallax-render/<key>-<8 hex>.md` for the skill it is gating, so it never prints or deletes another file. It opens the directory and the draft without following symlinks, deletes the draft, and removes the directory once empty. A draft left by an interrupted session holds the full report until someone deletes it. In Claude Code's default permission mode the draft write shows one approval prompt; in accept-edits or auto mode and in the live journeys it does not. Hosts with a shell but no file write fall back to the stdin heredoc, which on Claude Code works only for short reports.
 
 **Alternatives:**
 - [DROP] Keep the temp-file form and approve it with a command-approval hook. Rejected on 2026-10-09: the hook could be made to approve arbitrary code.
-- [DROP] Write the draft to a fixed temp path to avoid `$(mktemp …)`. A predictable `/tmp` path is a symlink hazard.
+- [DROP] Feed the report on stdin through a quoted heredoc as the only form. Refused for reports over about 9,800 characters.
+- [DROP] Use the heredoc for short reports and the file for long ones. The model would have to measure each report, and two forms would need documenting and testing.
+- [DROP] Write the draft to a system temp path. A predictable `/tmp` path is a symlink hazard, and a path outside the working directory may be outside the sandbox's write area.
 
-**Flip conditions:** Claude Code stops denying shell expansions in sandboxed commands, or the gate needs input that cannot pass through stdin → revisit the form in §10.3.
+**Flip conditions:** Claude Code lifts the command-length limit and stops denying shell expansions for sandboxed commands → the stdin heredoc could become the only form again, with no draft write and no write prompt.
 
 ## 2026-10-09: The concierge asks the role and shows only shipped skills; live journeys run sandboxed
 

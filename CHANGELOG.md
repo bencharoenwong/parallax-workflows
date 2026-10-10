@@ -4,10 +4,10 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
-## 2026-10-10 (render gate reads the report on stdin)
+## 2026-10-10 (render gate reads the report from a draft file)
 
 ### Fixed
-- The render gate (`parallax-conventions.md` §10.3) and every gated skill's render step now feed the report to `render_gate.py` on stdin through a quoted heredoc, with no temp file. The old `DRAFT="$(mktemp …)"` form was denied by Claude Code as a shell expansion, even in its sandbox, so the gate command failed or prompted for approval before the report rendered. Test: `skills/_parallax/test_render_gate.py` runs each documented gate block in bash.
+- The render gate (`parallax-conventions.md` §10.3) and every gated skill's render step now write the drafted report to `<cwd>/.parallax-render/<key>-<random>.md` with `write-artifact`, then run `render_gate.py --skill <key> --input <path>`. The gate reads the draft and deletes it. The old `DRAFT="$(mktemp …)"` form was denied by Claude Code as a shell expansion, even in its sandbox. A report passed in the command itself is refused once the command exceeds 10,000 characters, which long reports such as client reviews do. Tests: `skills/_parallax/test_render_gate.py` runs each documented gate command in bash against a draft file, and covers `--input` cleanup and its refusal of any path other than the skill's own draft, symlinks, FIFOs and unreadable drafts.
 
 ### Changed
 - Live concierge journeys: J4 expects the morning brief's section headings instead of the literal words "morning brief", and on macOS a live run keeps the machine awake for the runner's lifetime. See `evals/README.md` § Live concierge journeys.
