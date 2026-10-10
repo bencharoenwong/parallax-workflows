@@ -93,11 +93,9 @@ Fill **Output Format** below in order; conditional advice by verdict: transient 
 `run-shell` the shared gate per conventions §10.3 with this skill's key:
 
 ```
-DRAFT="$(mktemp "${TMPDIR:-/tmp}/explain.XXXXXX")"
-cat > "$DRAFT" <<'REPORT'
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill explain-portfolio <<'REPORT'
 <your complete drafted report goes here>
 REPORT
-python3 "<skill-dir>/../_parallax/render_gate.py" --skill explain-portfolio < "$DRAFT"; rm -f "$DRAFT"
 ```
 
 The entire final message is that command's stdout. The stderr `[render-gate] WARN:` line is diagnostics: never include it. Degraded-state notes go inside their section. If `run-shell` is absent, apply conventions §14.3 (render-gate row). No Step 7.

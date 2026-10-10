@@ -86,11 +86,9 @@ Fill **Output Format** below in order: House View Preamble FIRST when a view is 
 `run-shell` the shared gate per conventions §10.3 with this skill's key:
 
 ```
-DRAFT="$(mktemp "${TMPDIR:-/tmp}/builder.XXXXXX")"
-cat > "$DRAFT" <<'REPORT'
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill portfolio-builder <<'REPORT'
 <your complete drafted report goes here>
 REPORT
-python3 "<skill-dir>/../_parallax/render_gate.py" --skill portfolio-builder < "$DRAFT"; rm -f "$DRAFT"
 ```
 
 The entire final message is that command's stdout. The stderr `[render-gate] WARN:` line is diagnostics: never include it. Degraded-state notes go inside their section. If `run-shell` is absent, apply conventions §14.3 (render-gate row). No Step 7.

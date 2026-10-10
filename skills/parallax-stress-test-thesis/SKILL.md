@@ -125,11 +125,9 @@ Fill **Output Format** below per the selected depth/role/mode (`references/outpu
 `run-shell` the shared gate per conventions §10.3 with this skill's key:
 
 ```
-DRAFT="$(mktemp "${TMPDIR:-/tmp}/thesis.XXXXXX")"
-cat > "$DRAFT" <<'REPORT'
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill stress-test-thesis <<'REPORT'
 <your complete drafted report goes here>
 REPORT
-python3 "<skill-dir>/../_parallax/render_gate.py" --skill stress-test-thesis < "$DRAFT"; rm -f "$DRAFT"
 ```
 
 The entire final message is that command's stdout (`--json` output is a fenced block inside it). The stderr `[render-gate] WARN:` line is diagnostics: never include it. If `run-shell` is absent, apply conventions §14.3 (render-gate row). No Step 7.

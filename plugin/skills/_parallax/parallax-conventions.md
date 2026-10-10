@@ -392,12 +392,12 @@ The gate (`_parallax/render_gate.py`) is a pure-stdlib Python script. It determi
 Every gated skill carries a `### Render — deterministic gate` heading (spine form: `### Step 6 — Render (deterministic gate, mandatory)`, per the authoring conventions' "Canonical step spine" section; both forms carry the same gate command) before its **Output Format** section. The directive specifies the exact Bash one-liner to run:
 
 ```bash
-DRAFT="$(mktemp "${TMPDIR:-/tmp}/skill.XXXXXX")"
-cat > "$DRAFT" <<'REPORT'
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill <skill-key> <<'REPORT'
 <your complete drafted report goes here>
 REPORT
-python3 "<skill-dir>/../_parallax/render_gate.py" --skill <skill-key> < "$DRAFT"; rm -f "$DRAFT"
 ```
+
+The quoted delimiter (`<<'REPORT'`) stops all shell expansion inside the report, and the heredoc goes straight to the gate's stdin. Use this form exactly. Do not add a temp file, a variable, `$(…)` or `${…}`: Claude Code denies any command containing a shell expansion, even in its sandbox, so an expanded form fails before the gate runs.
 
 The skill's **entire final message** is exactly that command's stdout, or, when a conditional Translate step follows (§15), the sole input to that step; translated output is not re-gated. `render_gate.py` uses a fail-open design: if no anchor is found, the input is returned unchanged, ensuring the gate never destroys a report it cannot positively locate. The fail-open path also writes one `[render-gate] WARN: no anchor for skill='<key>'; returned unchanged` line to **stderr**; stdout is untouched. That line is diagnostics — never include it in the reply and never feed it to a downstream translate step. It means the drafted opening drifted from the skill's documented Output Format start: fix the opening and re-run the gate.
 

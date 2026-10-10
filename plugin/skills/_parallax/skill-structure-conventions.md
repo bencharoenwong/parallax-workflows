@@ -40,7 +40,7 @@ The orchestrator is the file the model reads at every invocation. It contains:
 5. **Where artifacts live** — paths the skill reads/writes
 6. **Integration with downstream skills** — the consumer contract
 7. **Workflow skeleton** — Steps 0 → N as numbered headings, each with a one-paragraph summary AND an explicit `→ Load references/<file>.md` directive when the step's full content lives in references/
-8. **Render step (deterministic gate)** — mandatory final `mktemp` + `cat` + `python3 _parallax/render_gate.py` Bash block for report skills (see `parallax-conventions.md §10`)
+8. **Render step (deterministic gate)** — mandatory final `python3 _parallax/render_gate.py` Bash block that reads the report from a quoted heredoc on stdin for report skills (see `parallax-conventions.md §10`)
 9. **Operational modes** — `--status`, `--clear`, etc., one row each
 10. **`## Done when`** — what "done" looks like
 11. **`## Failure modes`** — security gates, compliance gates, irreversible-action warnings the operator MUST know without loading anything else

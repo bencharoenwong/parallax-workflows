@@ -79,11 +79,9 @@ Fill **Output Format** below in order; audience mode per conventions §13 (clien
 `run-shell` the shared gate per conventions §10.3 with this skill's key:
 
 ```
-DRAFT="$(mktemp "${TMPDIR:-/tmp}/scoreexplainer.XXXXXX")"
-cat > "$DRAFT" <<'REPORT'
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill score-explainer <<'REPORT'
 <your complete drafted report goes here>
 REPORT
-python3 "<skill-dir>/../_parallax/render_gate.py" --skill score-explainer < "$DRAFT"; rm -f "$DRAFT"
 ```
 
 The entire final English message is that command's stdout, or the sole input to Step 7. The stderr `[render-gate] WARN:` line is diagnostics: never include or translate it. If `run-shell` is absent, apply conventions §14.3 (render-gate row).

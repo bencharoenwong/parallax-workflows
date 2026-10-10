@@ -88,11 +88,9 @@ Zero tool calls. `run-shell` `desk_call_list_logic.py` for triggered exposure, s
 `run-shell` the shared gate per conventions §10.3 with this skill's key:
 
 ```
-DRAFT="$(mktemp "${TMPDIR:-/tmp}/deskcall.XXXXXX")"
-cat > "$DRAFT" <<'REPORT'
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill desk-call-list <<'REPORT'
 <your complete drafted report goes here>
 REPORT
-python3 "<skill-dir>/../_parallax/render_gate.py" --skill desk-call-list < "$DRAFT"; rm -f "$DRAFT"
 ```
 
 The entire final message is that command's stdout. The stderr `[render-gate] WARN:` line is diagnostics: never include it. Degraded notes go inside their section. If `run-shell` is absent, apply conventions §14.3: the render-gate row, and the gate-shaped-helper row for the ranking (the call list is UNVERIFIED; render the no-calls short form with that reason rather than a hand-ranked list). No Step 7.

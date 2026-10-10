@@ -233,7 +233,8 @@ kept), so sign-in and the claude.ai connectors still load but local Parallax
 config under `~/.parallax` (white-label branding, an active house view) cannot shape the
 report. `PARALLAX_HOUSE_VIEW_DIR` points at an empty scratch directory and `TMPDIR` is
 inside the scratch tree. They are **not CI tests**: they call a real model and most of them call real Parallax MCP
-tools, which bills Parallax credits.
+tools, which bills Parallax credits. On macOS a live run starts `caffeinate -i` for the
+runner's lifetime, so idle sleep cannot cut off a run that has already billed credits.
 
 ```bash
 # Preview every command this would run (no model call, no credits spent)
@@ -313,11 +314,11 @@ Permissions in every journey:
 The sandbox does not lift Claude Code's own command checks. A command that contains a
 shell expansion such as `$(…)` or `${VAR:-default}` is still denied with "Contains
 expansion", sandboxed or not. The render-gate command in `parallax-conventions.md`
-§10.3 starts with `DRAFT="$(mktemp "${TMPDIR:-/tmp}/….XXXXXX")"`, so in a journey
-that reaches the render gate (J1, J4, J6 and J7 when they render a report) the
-first gate attempt is a permission denial and the journey FAILs. A gate form that
-feeds the quoted heredoc straight to `render_gate.py` on stdin runs in the sandbox
-with no denial. Changing the gated skills to that form is a separate skills change.
+§10.3 has no expansion: it feeds the report to `render_gate.py` on stdin through a
+quoted heredoc, with no temp file, so it runs in the sandbox under the
+`Bash(python3:*)` rule. A skill or edit that brings back an expanded form, such as
+`DRAFT="$(mktemp …)"`, makes every journey that reaches the render gate (J1, J4, J6
+and J7 when they render a report) FAIL on its first gate attempt.
 
 Remaining risk, stated plainly:
 

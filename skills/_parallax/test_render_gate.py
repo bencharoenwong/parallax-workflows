@@ -315,6 +315,31 @@ def test_anchor_keys_and_skill_gate_commands_are_bidirectional():
         )
 
 
+def test_gate_commands_use_stdin_heredoc_without_expansion():
+    """Each gate command is the §10.3 form: python3 first, report on stdin via
+    a quoted heredoc. Claude Code denies any Bash command containing `$(` or
+    `${`, even sandboxed, so an expanded form fails before the gate runs."""
+    repo_root = Path(__file__).resolve().parents[2]
+    form = re.compile(
+        r'^python3 "<skill-dir>/\.\./_parallax/render_gate\.py" --skill '
+        r"[a-z0-9<>-]+ <<'REPORT'\n.*?\nREPORT$",
+        re.S | re.M,
+    )
+    sources = sorted((repo_root / "skills").glob("parallax-*/SKILL.md"))
+    sources.append(repo_root / "skills" / "_parallax" / "parallax-conventions.md")
+    for path in sources:
+        text = path.read_text(encoding="utf-8")
+        rel = path.relative_to(repo_root)
+        calls = text.count("render_gate.py\" --skill")
+        if not calls:
+            continue
+        blocks = form.findall(text)
+        assert len(blocks) == calls, f"{rel}: gate command is not the §10.3 stdin form"
+        for block in blocks:
+            assert "$(" not in block and "${" not in block, f"{rel}: expansion in gate command"
+        assert "DRAFT=" not in text, f"{rel}: leftover temp-file gate form"
+
+
 def test_should_i_buy_active_banner_survives_scaffold():
     draft = SCAFFOLD + REAL_BANNERS["active"] + "\n\n## The Company\nApple Inc.\n"
     out = gate(draft, "should-i-buy")

@@ -120,11 +120,9 @@ Fill **Output Format** below in order: House View Preamble per loader.md §5.1; 
 `run-shell` the shared gate per conventions §10.3 with this skill's key:
 
 ```
-DRAFT="$(mktemp "${TMPDIR:-/tmp}/clientrev.XXXXXX")"
-cat > "$DRAFT" <<'REPORT'
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill client-review <<'REPORT'
 <your complete drafted report goes here>
 REPORT
-python3 "<skill-dir>/../_parallax/render_gate.py" --skill client-review < "$DRAFT"; rm -f "$DRAFT"
 ```
 
 The entire final English message is that command's stdout, or the sole input to Step 7. The stderr `[render-gate] WARN:` line is diagnostics: never include or translate it. Degraded-state notes go inside their section. If `run-shell` is absent, apply conventions §14.3: render-gate row; and the policy sections are gate-shaped — without `adaptation.py` they render **UNVERIFIED** (`policy_fallback_tier: unavailable`), never a prose approximation.

@@ -98,11 +98,9 @@ Fill **Output Format** below, in order. Branding Header and About This Report pe
 `run-shell` the shared gate per conventions §10.3, with this skill's key (`<skill-dir>` is the absolute path of the directory this SKILL.md was loaded from; `_parallax/` is its sibling):
 
 ```
-DRAFT="$(mktemp "${TMPDIR:-/tmp}/shouldibuy.XXXXXX")"
-cat > "$DRAFT" <<'REPORT'
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill should-i-buy <<'REPORT'
 <your complete drafted report goes here>
 REPORT
-python3 "<skill-dir>/../_parallax/render_gate.py" --skill should-i-buy < "$DRAFT"; rm -f "$DRAFT"
 ```
 
 The entire final English message is exactly that command's stdout, or the sole input to Step 7. The stderr `[render-gate] WARN:` line is diagnostics: never include it, never translate it; it means the opening drifted from the Output Format start — fix and re-run. If `run-shell` is absent on this host, apply conventions §14.3 (render-gate row).

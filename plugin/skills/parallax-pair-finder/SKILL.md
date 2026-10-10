@@ -115,11 +115,9 @@ Fill **Output Format** below in order for the detected mode: House View Preamble
 `run-shell` the shared gate per conventions §10.3 with this skill's key:
 
 ```
-DRAFT="$(mktemp "${TMPDIR:-/tmp}/pairfinder.XXXXXX")"
-cat > "$DRAFT" <<'REPORT'
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill pair-finder <<'REPORT'
 <your complete drafted report goes here>
 REPORT
-python3 "<skill-dir>/../_parallax/render_gate.py" --skill pair-finder < "$DRAFT"; rm -f "$DRAFT"
 ```
 
 The entire final message is that command's stdout (or, on a HALT, exactly the gate message). The stderr `[render-gate] WARN:` line is diagnostics: never include it. If `run-shell` is absent, apply conventions §14.3 (render-gate row; beta math is arithmetic over fetched series and needs no shell). No Step 7.
