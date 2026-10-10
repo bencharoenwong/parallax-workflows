@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 import pytest
+import subprocess
 import sys
 from pathlib import Path
 
@@ -316,28 +317,42 @@ def test_anchor_keys_and_skill_gate_commands_are_bidirectional():
 
 
 def test_gate_commands_use_stdin_heredoc_without_expansion():
-    """Each gate command is the §10.3 form: python3 first, report on stdin via
-    a quoted heredoc. Claude Code denies any Bash command containing `$(` or
-    `${`, even sandboxed, so an expanded form fails before the gate runs."""
+    """Run every documented gate command through bash with a real report on
+    stdin. Claude Code denies any Bash command containing `$(` or `${`, even
+    sandboxed, so the command must carry no expansion and must pass the report
+    through a quoted heredoc unexpanded."""
     repo_root = Path(__file__).resolve().parents[2]
-    form = re.compile(
-        r'^python3 "<skill-dir>/\.\./_parallax/render_gate\.py" --skill '
-        r"[a-z0-9<>-]+ <<'REPORT'\n.*?\nREPORT$",
-        re.S | re.M,
-    )
-    sources = sorted((repo_root / "skills").glob("parallax-*/SKILL.md"))
-    sources.append(repo_root / "skills" / "_parallax" / "parallax-conventions.md")
+    skills_root = repo_root / "skills"
+    placeholder = "<your complete drafted report goes here>"
+    literals = "literal $HOME ${HOME} $(echo x) `echo y`"
+    fence = re.compile(r"^```[a-z]*\n(.*?)^```$", re.S | re.M)
+    sources = sorted(skills_root.glob("parallax-*/SKILL.md"))
+    sources.append(skills_root / "_parallax" / "parallax-conventions.md")
+    ran = 0
     for path in sources:
         text = path.read_text(encoding="utf-8")
         rel = path.relative_to(repo_root)
         calls = text.count("render_gate.py\" --skill")
-        if not calls:
-            continue
-        blocks = form.findall(text)
-        assert len(blocks) == calls, f"{rel}: gate command is not the §10.3 stdin form"
+        blocks = [b for b in fence.findall(text) if "render_gate.py" in b]
+        assert len(blocks) == calls, f"{rel}: gate command outside a fenced block"
         for block in blocks:
             assert "$(" not in block and "${" not in block, f"{rel}: expansion in gate command"
-        assert "DRAFT=" not in text, f"{rel}: leftover temp-file gate form"
+            assert block.count(placeholder) == 1, f"{rel}: gate block has no report slot"
+            block = block.replace("--skill <skill-key>", "--skill should-i-buy")
+            key = re.search(r"--skill (\S+)", block).group(1)
+            report = SCAFFOLD + FIRST_SECTION[key] + "\n" + literals + "\n"
+            script = block.replace(
+                "<skill-dir>", str(skills_root / f"parallax-{key}")
+            ).replace(placeholder, report.rstrip("\n"))
+            proc = subprocess.run(
+                ["bash", "-c", script], capture_output=True, text=True, timeout=30
+            )
+            assert proc.returncode == 0, f"{rel}: {proc.stderr}"
+            assert proc.stdout == gate(report, key), f"{rel}: gate output differs"
+            assert proc.stdout.startswith(FIRST_SECTION[key]), f"{rel}: scaffold kept"
+            assert literals in proc.stdout, f"{rel}: report was shell-expanded"
+            ran += 1
+    assert ran >= len(SKILL_ANCHORS)
 
 
 def test_should_i_buy_active_banner_survives_scaffold():
