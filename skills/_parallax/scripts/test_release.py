@@ -309,6 +309,26 @@ def test_prepare_turns_unreleased_heading_into_version(tmp_path, monkeypatch):
         "# Changes\n\n## 2026.10.11\nPending.\n\n## 2026-10-07\nPrevious changes.\n")
 
 
+def test_prepare_rerun_keeps_unreleased_after_existing_version(tmp_path, monkeypatch):
+    root = tmp_path / "repo"
+    script = root / "skills/_parallax/scripts/build_bundle.py"
+    script.parent.mkdir(parents=True)
+    script.write_text('PLUGIN_VERSION = "2026.10.8"  # old\n')
+    log = ("# Changes\n\n## Unreleased\nLater work.\n\n"
+           "## 2026.10.8\nReleased.\n\n## 2026-10-07\nPrevious changes.\n")
+    (root / "CHANGELOG.md").write_text(log)
+    (root / "README.md").write_text(
+        "<!-- who-for:begin -->\n<!-- who-for:end -->\n"
+        "<!-- distributions:begin -->\n<!-- distributions:end -->\n")
+    monkeypatch.setattr(release, "ROOT", root)
+    monkeypatch.setattr(bb, "PLUGIN_VERSION", "2026.10.8")
+    monkeypatch.setattr(bb, "build_plugin", lambda: None)
+    release.prepare("2026.10.8")
+    after = (root / "CHANGELOG.md").read_text()
+    assert after == log
+    assert after.count("\n## 2026.10.8\n") == 1
+
+
 @pytest.mark.parametrize("field", ["schema_version", "source", "preview", "tag", "built_at",
                                   "mcp", "skills", "assets"])
 def test_missing_release_contract_fields_rejected(tmp_path, field):

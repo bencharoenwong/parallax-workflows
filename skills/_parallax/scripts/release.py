@@ -346,7 +346,7 @@ def build(output: Path, preview: bool = False) -> Path:
     before = source_state()
     if before["dirty"] and not preview:
         raise bb.BuildError("release requires a clean committed tree; use --preview for review")
-    if not preview and f"## {version}\n" not in (ROOT / "CHANGELOG.md").read_text():
+    if not preview and f"\n## {version}\n" not in (ROOT / "CHANGELOG.md").read_text():
         raise bb.BuildError("prepare the release version and changelog before building")
     if output.exists():
         raise bb.BuildError("output already exists; choose a new directory")
@@ -426,11 +426,12 @@ def prepare(version: str) -> None:
     rendered_readme = distribution_docs.render(readme.read_text())
     changelog = ROOT / "CHANGELOG.md"
     log = changelog.read_text()
-    if "\n## Unreleased\n" in log:
-        log = log.replace("\n## Unreleased\n", f"\n## {version}\n", 1)
-    elif f"## {version}\n" not in log:
-        at = log.index("\n## ")
-        log = log[:at] + f"\n## {version}\n\nRelease packages for the changes listed below.\n" + log[at:]
+    if f"\n## {version}\n" not in log:
+        if "\n## Unreleased\n" in log:
+            log = log.replace("\n## Unreleased\n", f"\n## {version}\n", 1)
+        else:
+            at = log.index("\n## ")
+            log = log[:at] + f"\n## {version}\n\nRelease packages for the changes listed below.\n" + log[at:]
     path.write_text(text)
     bb.PLUGIN_VERSION = version
     changelog.write_text(log)
