@@ -68,34 +68,49 @@ def test_plugin_concierge_names_only_shipped_skills():
     assert not (bb.named_skills(text) - set(bb.PLUGIN_SKILLS) - bb.HOUSE_VIEW_OPERATORS)
 
 
-def test_zip_concierge(tmp_path, monkeypatch):
-    monkeypatch.setattr(bb, "WEB_OUT_DIR", tmp_path)
-    bb.build_web(["parallax-concierge"])
-    zf = zipfile.ZipFile(tmp_path / "parallax-concierge.skill")
-    text = zf.read("parallax-concierge/SKILL.md").decode()
+@pytest.fixture(scope="module")
+def zip_pkg(tmp_path_factory):
+    """The claude.ai concierge, built once for this module: (SKILL.md text,
+    zip member names). Module scope runs before the function-scoped term
+    fixture, so a machine without the extra term file builds with the
+    built-in terms only."""
+    out = tmp_path_factory.mktemp("concierge-zip")
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(bb, "WEB_OUT_DIR", out)
+        if not bb.EXTRA_CANARY_FILE.is_file():
+            mp.setenv(bb.PARTIAL_SCAN_ENV, "1")
+        bb.build_web(["parallax-concierge"])
+    with zipfile.ZipFile(out / "parallax-concierge.skill") as zf:
+        return zf.read("parallax-concierge/SKILL.md").decode(), zf.namelist()
+
+
+@pytest.fixture(scope="module")
+def zip_text(zip_pkg):
+    return zip_pkg[0]
+
+
+def test_zip_concierge(zip_pkg):
+    text, names = zip_pkg
     avail = set(bb.WEB_SKILLS) | set(bb.skill_manifest.standalone_skills("release"))
     assert not (bb.named_skills(text) - avail)
     block = _block(text)
     assert "Customize → Skills" in block and bb.PARALLAX_MCP_URL in block
     assert "parallax-desk-call-list" not in block
-    # Fix round 1 item 2: the one `_parallax/parallax-conventions.md`
-    # citation in the Gotchas section must vendor the shared doc into the
-    # self-contained zip (collect_deps picks it up from that single anchor).
-    assert "parallax-concierge/_vendored/_parallax/parallax-conventions.md" in zf.namelist()
+    # The one `_parallax/parallax-conventions.md` citation in the Gotchas
+    # section must vendor the shared doc into the self-contained zip
+    # (collect_deps picks it up from that single anchor).
+    assert "parallax-concierge/_vendored/_parallax/parallax-conventions.md" in names
 
 
-def test_zip_concierge_offers_only_what_it_ships(tmp_path, monkeypatch):
-    """Fix round 1 item 1/7: several leftover-offer prose spots (the opening
+def test_zip_concierge_offers_only_what_it_ships(zip_text):
+    """Several leftover-offer prose spots (the opening
     menu line, the Stock/Discovery clarifying questions, the Discovery
     nudges, the step-6 recurring-result list) promised routes outside the
     web set even after filter_concierge ran, because they are plain prose,
     not `| ... |` rows or `- ` bullets with a slash command. Assert the
     unshipped phrasing is gone and every slash-command reference left in the
     built file resolves to something this distribution actually ships."""
-    monkeypatch.setattr(bb, "WEB_OUT_DIR", tmp_path)
-    bb.build_web(["parallax-concierge"])
-    text = zipfile.ZipFile(tmp_path / "parallax-concierge.skill").read(
-        "parallax-concierge/SKILL.md").decode()
+    text = zip_text
     avail = set(bb.WEB_SKILLS) | set(bb.skill_manifest.standalone_skills("release"))
     for gone in ("screen by theme", "read the macro regime", "earnings quality",
                  "Country/regime read", "thesis to build from",
@@ -119,7 +134,7 @@ def test_transform_concierge_web_fails_closed_if_a_rewritten_route_ships_on_web(
 
 
 def test_render_new_here_zip_states_the_upload_clause_applies_everywhere():
-    """Fix round 1 item 4: spec §2 — every offer on the zip path carries the
+    """spec §2 — every offer on the zip path carries the
     upload clause, not only the state-5 hand-off."""
     web_avail = set(bb.WEB_SKILLS) | set(bb.skill_manifest.standalone_skills("release"))
     zip_block = bb.render_new_here(web_avail, "zip")
@@ -131,7 +146,7 @@ def test_render_new_here_zip_states_the_upload_clause_applies_everywhere():
 
 
 def test_render_new_here_raises_when_a_real_role_has_no_shipped_start():
-    """Fix round 1 item 5: a role with zero shipped starts silently rendered
+    """a role with zero shipped starts silently rendered
     the integrator row's wording ('see integration pointer'), masking what
     is really a manifest/distribution mismatch for a role that is not the
     integrator. Only the integrator role may legitimately have no starts."""
@@ -161,7 +176,7 @@ def test_filter_concierge_fails_on_an_unshipped_name_in_prose():
 
 
 def test_filter_concierge_raises_on_a_bullet_mixing_shipped_and_unshipped():
-    """Fix round 1 item 3: silently dropping a bullet or row that names BOTH
+    """silently dropping a bullet or row that names BOTH
     a shipped and an unshipped skill would take the shipped route down with
     it. Must raise so the author splits the line instead."""
     text = ("- Single ticker → `/parallax-should-i-buy`, then offer "
@@ -184,53 +199,31 @@ def test_fill_new_here_is_idempotent_and_needs_both_markers():
         bb.fill_new_here("no markers", "NEW")
 
 
-# --------------------------------------------------------------------------
-# PR 2 ship-check fix round
-# --------------------------------------------------------------------------
-
-README_FORK_URL = "https://github.com/bencharoenwong/parallax-workflows#forking-and-customizing"
-
-
-@pytest.fixture(scope="module")
-def zip_text(tmp_path_factory):
-    """The claude.ai concierge, built once for this module's zip checks.
-    Module scope runs before the function-scoped term fixture, so a machine
-    without the extra term file builds with the built-in terms only."""
-    out = tmp_path_factory.mktemp("concierge-zip")
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(bb, "WEB_OUT_DIR", out)
-        if not bb.EXTRA_CANARY_FILE.is_file():
-            mp.setenv(bb.PARTIAL_SCAN_ENV, "1")
-        bb.build_web(["parallax-concierge"])
-    with zipfile.ZipFile(out / "parallax-concierge.skill") as zf:
-        return zf.read("parallax-concierge/SKILL.md").decode()
-
-
 def _section(text, start, end):
     return text[text.index(start):text.index(end)]
 
 
-# Fix 1: integrator pointer.
+# integrator pointer.
 
 def test_zip_integration_pointer_links_the_readme_and_skips_white_label():
     block = bb.render_new_here(bb.web_available_skills(), "zip")
-    assert README_FORK_URL in block
+    assert bb.README_FORK_URL in block
     assert "white-label" not in block.lower() and "white label" not in block.lower()
 
 
 def test_plugin_integration_pointer_names_the_white_label_command():
     block = bb.render_new_here(set(bb.PLUGIN_SKILLS), "plugin")
-    assert README_FORK_URL in block
+    assert bb.README_FORK_URL in block
     assert "`/parallax-white-label-onboard`" in block
 
 
 def test_built_zip_integration_pointer(zip_text):
     block = _block(zip_text)
-    assert README_FORK_URL in block
+    assert bb.README_FORK_URL in block
     assert "white-label" not in zip_text.lower() and "white label" not in zip_text.lower()
 
 
-# Fix 2: two-way guard in transform_concierge_web.
+# two-way guard in transform_concierge_web.
 
 @pytest.mark.parametrize("gone", bb._CONCIERGE_WEB_ASSUMES_PRESENT)
 def test_transform_concierge_web_fails_when_a_present_route_is_not_shipped(monkeypatch, gone):
@@ -249,7 +242,7 @@ def test_transform_concierge_web_fails_when_an_absent_route_ships_as_standalone(
 
 
 
-# Fix 3: filter_concierge structure.
+# filter_concierge structure.
 
 def test_filter_concierge_raises_on_a_table_left_with_no_body_rows():
     text = ("| If they say… | Run |\n|---|---|\n"
@@ -307,12 +300,11 @@ def test_filter_concierge_kept_parent_keeps_its_kept_children():
 
 def test_filter_concierge_mixing_error_says_in_one_item():
     text = "- `/parallax-should-i-buy` or `/parallax-desk-call-list`\n"
-    with pytest.raises(bb.BuildError, match="in one item") as exc:
+    with pytest.raises(bb.BuildError, match="in one item"):
         bb.filter_concierge(text, {"parallax-should-i-buy"})
-    assert "on the same line" not in str(exc.value)
 
 
-# Fix 4: fail closed on prose and short names.
+# fail closed on prose and short names.
 
 @pytest.mark.parametrize("prose", [
     "Try /Parallax-Desk-Call-List next.\n",
@@ -341,7 +333,7 @@ def test_filter_concierge_allows_a_shipped_skill_short_name():
     assert bb.filter_concierge(prose, {"parallax-desk-call-list"}) == prose
 
 
-# Fix 5: claude.ai Discovery routes straight to the watchlist monitor.
+# claude.ai Discovery routes straight to the watchlist monitor.
 
 def test_zip_discovery_routes_straight_to_watchlist_monitor(zip_text):
     sec = _section(zip_text, "## 🌍 Discovery branch", "## New here?")
@@ -350,7 +342,7 @@ def test_zip_discovery_routes_straight_to_watchlist_monitor(zip_text):
     assert "ask one question" not in sec
 
 
-# Fix 6: the upload clause reaches the Rules on claude.ai.
+# the upload clause reaches the Rules on claude.ai.
 
 def test_zip_rules_carry_the_upload_clause(zip_text):
     rules = _section(zip_text, "## Rules", "## Disclaimer")

@@ -219,3 +219,136 @@ what *this* skill's output must contain:
 2. Add task inputs at `evals/tasks/<skill>/core.jsonl`.
 3. For offline regression, drop golden + broken stream-json transcripts under
    `evals/fixtures/<skill>/` and assert against them in a `graders/test_*.py`.
+
+## Live concierge journeys
+
+Owner-run, pre-release checks for the concierge's New-here path (`skills/parallax-concierge/SKILL.md`,
+`## New here?`): role question, connect/integrator/uncovered-ticker states, and the
+scheduling-offer guard. Each journey is one fresh `claude -p` session against **this
+branch's built plugin copy** (`--plugin-dir <repo>/plugin --setting-sources project`), run
+from a fresh scratch directory so the repo's `CLAUDE.md` and source files are out of reach.
+Each run also gets a scratch `HOME` that holds only symlinks to `~/.claude`,
+`~/.claude.json` and, on macOS, `~/Library/Keychains` (where the Claude Code login is
+kept), so sign-in and the claude.ai connectors still load but local Parallax
+config under `~/.parallax` (white-label branding, an active house view) cannot shape the
+report. `PARALLAX_HOUSE_VIEW_DIR` points at an empty scratch directory and `TMPDIR` is
+inside the scratch tree. They are **not CI tests**: they call a real model and most of them call real Parallax MCP
+tools, which bills Parallax credits.
+
+```bash
+# Preview every command this would run (no model call, no credits spent)
+PARALLAX_E2E_DRY_RUN=1 bash evals/concierge_journeys.sh
+
+# Run only the free journeys
+PARALLAX_E2E_LIVE=1 PARALLAX_E2E_ONLY=J2,J3,J5,J8 bash evals/concierge_journeys.sh
+
+# Run all of them (bills Parallax credits)
+PARALLAX_E2E_LIVE=1 bash evals/concierge_journeys.sh
+```
+
+Journeys are defined in `evals/tasks/concierge/journeys.jsonl`, one JSON object per
+line: `id`, `prompt`, `expect` (substrings that must all appear, case-insensitive),
+`forbid` (substrings that must not appear), an optional `expect_any` (passes if any
+one substring appears), and an optional `needs`. `"needs": "no-connector"` runs with
+claude.ai connectors disabled, `--strict-mcp-config` and an empty `--mcp-config`, so no
+Parallax server loads. `"needs": "connector-optional"` runs like a connector journey
+but skips only the Parallax-server-presence check. Use it for a journey that calls no
+Parallax tool, because a claude.ai connector can be missing from the init message. An
+optional `skill` names the plugin skill the journey must run (`parallax:` prefix); it
+defaults to `parallax:parallax-concierge`. The runner validates every line before any
+model call and rejects unknown keys, a list field that is not a list of strings, and a
+`skill` without the `parallax:` prefix.
+
+Each run is captured as `--output-format stream-json --verbose` and fails closed. A
+journey FAILs when:
+
+- the result lists any `permission_denials`, or is missing or errored;
+- `claude` exits non-zero or hits the timeout;
+- no Skill call of the journey's required skill succeeds, no skill in the `parallax:`
+  plugin namespace runs, a Parallax skill is called without the `parallax:` prefix (a
+  copy outside this plugin answered), or the init message does not list this branch's
+  `plugin/` directory;
+- a connector journey shows no connected Parallax server in the init message and makes no
+  successful Parallax tool call (a claude.ai connector can finish loading after the
+  init message);
+- a no-connector journey shows a Parallax server or calls a Parallax tool.
+
+`expect` and `expect_any` run on the final answer. `forbid` runs on all assistant text
+in the run, so a forbidden phrase in an earlier turn also fails. Every connector
+journey forbids "To connect" and "No connection needed", phrases of the concierge's
+not-connected state, so a not-connected run cannot pass. `/mcp` itself is not
+forbidden: a correct connected run can mention it when a second, signed-out Parallax
+connector is loaded. The checker is `evals/concierge_journeys_check.py`, pytested on canned streams
+at `evals/graders/test_concierge_journeys_check.py`; that pytest runs in CI, the
+journeys do not. Results (gitignored) land in `evals/results/` as the raw stream
+(`.jsonl`), all assistant text (`.txt`) and stderr.
+
+| Env var | Required | Purpose |
+|---|---|---|
+| `PARALLAX_E2E_LIVE` | yes (unless dry-run) | Must be `1` to run for real. Unset or anything else prints a skip message and exits 0. |
+| `PARALLAX_E2E_DRY_RUN` | optional | `1` prints each `claude` command instead of running it. Takes effect even without `PARALLAX_E2E_LIVE=1`. |
+| `PARALLAX_E2E_ONLY` | optional | Comma-separated journey ids. Each entry matches a full id or the part before its first `_` (`J2` matches `J2_not_connected`). An entry that matches nothing prints a warning. |
+| `PARALLAX_E2E_CONNECTOR` | optional | `account` (default) or `plugin`. See below. |
+| `PARALLAX_E2E_ALLOWED_TOOLS` | optional | Overrides the Parallax tool patterns the connector mode picks (comma-separated). `--setting-sources project` drops user-level permissions, so the Parallax tools must be listed here or by the mode. The base permissions below are always allowed on top. |
+| `PARALLAX_E2E_TIMEOUT` | optional | Per-journey limit in seconds, default `600`. A timeout is a FAIL. |
+
+Permissions in every journey:
+
+- `Read`, `Grep` and `Glob`, not limited by path.
+- `Write` and `Edit` only inside the scratch tree (`Edit(//<scratch>/**)`, both the
+  `/var/folders` and `/private/var/folders` spellings). A write anywhere else is
+  denied, which fails the journey.
+- The Parallax MCP tools for the connector mode.
+- `Bash` has no allow rule. It runs only inside Claude Code's Bash sandbox
+  (Seatbelt on macOS), passed with `--settings`: `sandbox.enabled`,
+  `failIfUnavailable` (refuse to start rather than run unsandboxed),
+  `autoAllowBashIfSandboxed`, `allowUnsandboxedCommands: false` (no unsandboxed
+  retry), and `network.allowedDomains: []` with `strictAllowlist`. The OS confines each
+  command and its child processes: writes only to the scratch tree (the cwd, plus
+  the per-user temp dir that `CLAUDE_CODE_TMPDIR` puts inside it), and no network.
+  Claude Code's protected paths, such as `~/.claude` and `~/.claude.json`, stay
+  write-denied even through the scratch home's symlinks. There is no `--add-dir`,
+  because an added directory would become writable to sandboxed commands.
+
+The sandbox does not lift Claude Code's own command checks. A command that contains a
+shell expansion such as `$(…)` or `${VAR:-default}` is still denied with "Contains
+expansion", sandboxed or not. The render-gate command in `parallax-conventions.md`
+§10.3 starts with `DRAFT="$(mktemp "${TMPDIR:-/tmp}/….XXXXXX")"`, so in a journey
+that reaches the render gate (J1, J4, J6 and J7 when they render a report) the
+first gate attempt is a permission denial and the journey FAILs. A gate form that
+feeds the quoted heredoc straight to `render_gate.py` on stdin runs in the sandbox
+with no denial. Changing the gated skills to that form is a separate skills change.
+
+Remaining risk, stated plainly:
+
+- `Read`, `Grep`, `Glob` and sandboxed shell reads are not limited by path. A journey
+  can read most of the machine, including files under the real home through the
+  scratch home's symlinks (`~/.claude`, `~/.claude.json`, the keychain directory).
+- MCP tools run outside the sandbox. A connector journey can call any allowed
+  Parallax tool, and each billed call costs Parallax credits.
+- Built-in tools such as `Write`/`Edit` follow permission rules, not the sandbox; the
+  scratch-only `Edit` rule is what limits them.
+
+Connector modes:
+
+- **`account`** (default): the Parallax connector on your claude.ai account, or one added
+  with `claude mcp add`. Allows `mcp__claude_ai_Parallax__*` and `mcp__parallax__*`. When
+  the account has the Parallax connector, Claude Code loads it and drops the plugin's
+  bundled copy, so this mode does not exercise the bundled server.
+- **`plugin`**: the plugin's bundled server (`plugin/.mcp.json`). Sets
+  `ENABLE_CLAUDEAI_MCP_SERVERS=false` for the run and allows
+  `mcp__plugin_parallax_parallax__*`. It needs a one-time `/mcp` sign-in to that server,
+  and that sign-in from Claude Code needs the server-side loopback fix to be deployed.
+
+What each journey checks:
+
+| Journey | Checks |
+|---|---|
+| `J1_research_connected` | New-here research-analyst role runs `/parallax-peer-comparison` on NVDA without asking the role question (bills Parallax credits). |
+| `J2_not_connected` | No connector: the Check state shows the `/mcp` connect step instead of routing anywhere (no Parallax credits billed). |
+| `J3_integrator` | "Building on Parallax" role gets the integration pointer (the README "Forking and Customizing" link), not a skill run (`check_api_health` only, free). |
+| `J4_rm_support_schedule` | RM-support role with holdings runs `/parallax-morning-brief` (bills Parallax credits) and, because scheduling is currently unverified on every host, the concierge must not offer it; forbids the scheduling and delivery phrasing such an offer would use. |
+| `J5_returning` | A plain "Hi Parallax" (no "new here") gets the standard opener, including the "New here?" pointer, and no role label. It makes no Parallax call (free), so it uses `connector-optional`. |
+| `J6_uncovered_ticker` | An unknown ticker is reported as not covered or not resolved, not replaced by an invented symbol. Bills Parallax credits: the should-i-buy route resolves with `get_company_info` (1 credit per attempt). |
+| `J7_direct_task_bypass` | "I'm new here. Should I buy AAPL?" runs `parallax:parallax-should-i-buy` directly (`"skill"` field; bills Parallax credits) and shows no role label. |
+| `J8_role_asked_not_guessed` | A bare "I'm new here" (no payload) gets asked the role question with the role labels offered, not guessed, and no skill runs yet (`check_api_health` only, free). |

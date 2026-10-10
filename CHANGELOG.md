@@ -4,6 +4,15 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-10-09 (README install guidance and live concierge journeys)
+
+### Added
+- `evals/concierge_journeys.sh`: owner-run live journeys for the concierge's New-here path, defined in `evals/tasks/concierge/journeys.jsonl` and checked by `evals/concierge_journeys_check.py`. Each journey runs this branch's built plugin in a scratch home and inside the Claude Code Bash sandbox, and fails on a permission denial, a crash, a timeout, or a run where the expected plugin skill did not run. The fail rules live in `evals/README.md` § Live concierge journeys. Not run in CI; the checker's pytest is (`evals/graders/test_concierge_journeys_check.py`).
+
+### Changed
+- README: plugin-first install for claude.ai, the desktop and mobile apps, Cowork and Claude Code, with single-skill upload as the fallback. The "Who this is for" role list must match `render_who_for()` in `build_bundle.py`, which renders it from the `_parallax/manifest.json` roles. Test: `skills/_parallax/scripts/test_readme_contract.py`.
+- Concierge: the after-result step offers scheduling only when the host's `schedule-task` binding is present and not marked *verify*, and never asks where to deliver output.
+
 ## 2026-10-08 (plugin connector and welcome data)
 
 ### Added
