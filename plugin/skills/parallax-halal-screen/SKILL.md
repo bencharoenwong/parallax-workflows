@@ -103,14 +103,10 @@ Fill **Output Format** below in order: Branding Header per integration-pattern.m
 
 ### Step 6 — Render (deterministic gate, mandatory)
 
-`run-shell` the shared gate per conventions §10.3 with this skill's key:
+`write-artifact` the complete drafted report to a new `<draft-path>`, then `run-shell` the shared gate with this skill's key, both per conventions §10.3:
 
 ```
-DRAFT="$(mktemp "${TMPDIR:-/tmp}/halal.XXXXXX")"
-cat > "$DRAFT" <<'REPORT'
-<your complete drafted report goes here>
-REPORT
-python3 "<skill-dir>/../_parallax/render_gate.py" --skill halal-screen < "$DRAFT"; rm -f "$DRAFT"
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill halal-screen --input "<draft-path>"
 ```
 
 The entire final message is that command's stdout. The stderr `[render-gate] WARN:` line is diagnostics: never include it. If `run-shell` is absent, apply conventions §14.3 (render-gate row); the ratios themselves need no shell. No Step 7.

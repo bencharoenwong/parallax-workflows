@@ -104,14 +104,10 @@ Fill **Output Format** below in order: header via `build_header`, dashboard via 
 
 ### Step 6 — Render (deterministic gate, mandatory)
 
-`run-shell` the shared gate per conventions §10.3 with this skill's key:
+`write-artifact` the complete drafted report to a new `<draft-path>`, then `run-shell` the shared gate with this skill's key, both per conventions §10.3:
 
 ```
-DRAFT="$(mktemp "${TMPDIR:-/tmp}/creditlens.XXXXXX")"
-cat > "$DRAFT" <<'REPORT'
-<your complete drafted report goes here>
-REPORT
-python3 "<skill-dir>/../_parallax/render_gate.py" --skill credit-lens < "$DRAFT"; rm -f "$DRAFT"
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill credit-lens --input "<draft-path>"
 ```
 
 The entire final message is that command's stdout. The stderr `[render-gate] WARN:` line is diagnostics: never include it. If `run-shell` is absent, apply conventions §14.3: the render-gate row for the gate, and the gate-shaped-helper row for the flags — every leg is UNVERIFIED and the skill says so up front; never compute a flag in prose.

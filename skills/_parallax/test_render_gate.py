@@ -5,13 +5,15 @@ Run: python3 -m pytest skills/_parallax/test_render_gate.py -q
 
 from __future__ import annotations
 
+import os
 import re
 import pytest
+import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from render_gate import gate, SKILL_ANCHORS  # noqa: E402
+from render_gate import gate, main, SKILL_ANCHORS  # noqa: E402
 
 SCAFFOLD = "**Step A.5 → Batch C complete.** Verified-holdings aggregates...\n\n"
 
@@ -315,6 +317,188 @@ def test_anchor_keys_and_skill_gate_commands_are_bidirectional():
         )
 
 
+def test_gate_commands_pass_the_report_by_file(tmp_path):
+    """Every documented gate command is one short line that reads the draft with
+    --input, and running it through bash returns the gated report and deletes the
+    draft. Claude Code refuses a Bash command over 10,000 characters or containing
+    `$(`/`${`, so the report must never be part of the command."""
+    repo_root = Path(__file__).resolve().parents[2]
+    skills_root = repo_root / "skills"
+    literals = "literal $HOME ${HOME} $(echo x) `echo y`"
+    fence = re.compile(r"^```[a-z]*\n(.*?)^```$", re.S | re.M)
+    sources = sorted(skills_root.glob("parallax-*/SKILL.md"))
+    sources.append(skills_root / "_parallax" / "parallax-conventions.md")
+    ran = 0
+    for path in sources:
+        text = path.read_text(encoding="utf-8")
+        rel = path.relative_to(repo_root)
+        blocks = [b for b in fence.findall(text) if "render_gate.py" in b]
+        if path.name == "SKILL.md":
+            calls = text.count('render_gate.py" --skill')
+            assert len(blocks) == calls, f"{rel}: gate command outside a fenced block"
+        for block in blocks:
+            command = block.strip()
+            assert "\n" not in command, f"{rel}: gate command is not one line"
+            assert len(command) < 300, f"{rel}: gate command too long"
+            for banned in ("$(", "${", "<<", "|", "`"):
+                assert banned not in command, f"{rel}: {banned!r} in gate command"
+            assert command.endswith('--input "<draft-path>"'), f"{rel}: no --input"
+            command = command.replace("--skill <skill-key>", "--skill should-i-buy")
+            key = re.search(r"--skill (\S+)", command).group(1)
+            report = SCAFFOLD + FIRST_SECTION[key] + "\n" + literals + "\n"
+            draft = tmp_path / ".parallax-render" / f"{key}-0123abcd.md"
+            draft.parent.mkdir(exist_ok=True)
+            draft.write_text(report, encoding="utf-8")
+            script = command.replace(
+                "<skill-dir>", str(skills_root / f"parallax-{key}")
+            ).replace("<draft-path>", str(draft))
+            proc = subprocess.run(
+                ["bash", "-c", script], capture_output=True, text=True, timeout=30
+            )
+            assert proc.returncode == 0, f"{rel}: {proc.stderr}"
+            assert proc.stdout == gate(report, key), f"{rel}: gate output differs"
+            assert proc.stdout.startswith(FIRST_SECTION[key]), f"{rel}: scaffold kept"
+            assert literals in proc.stdout, f"{rel}: report text changed"
+            assert not draft.parent.exists(), f"{rel}: draft not cleaned up"
+            ran += 1
+    assert ran >= len(SKILL_ANCHORS)
+
+
+def test_documented_stdin_fallback_runs_in_bash():
+    """The §10.3 fallback for hosts without write-artifact, run as written."""
+    conv = Path(__file__).resolve().parent / "parallax-conventions.md"
+    text = conv.read_text(encoding="utf-8")
+    m = re.search(r"feed the report on stdin instead: `([^`]+)`", text)
+    assert m, "stdin fallback not documented"
+    literals = "literal $HOME ${HOME} $(echo x) `echo y`"
+    report = SCAFFOLD + FIRST_SECTION["should-i-buy"] + "\n" + literals + "\n"
+    script = (
+        m.group(1).replace("<skill-dir>", str(conv.parent.parent / "parallax-should-i-buy"))
+        .replace("<skill-key>", "should-i-buy")
+        + "\n" + report + "REPORT\n"
+    )
+    proc = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=30)
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout == gate(report, "should-i-buy")
+    assert literals in proc.stdout
+
+
+def _run_main(args, capsys):
+    rc = main(args)
+    out, err = capsys.readouterr()
+    return rc, out, err
+
+
+def _draft(tmp_path, skill="peer-comparison", suffix="0a1b2c3d"):
+    d = tmp_path / ".parallax-render"
+    d.mkdir(exist_ok=True)
+    return d / f"{skill}-{suffix}.md"
+
+
+def test_input_reads_then_deletes_draft_and_empty_dir(tmp_path, capsys):
+    draft = _draft(tmp_path)
+    report = SCAFFOLD + "# Peer Comparison: AAPL.O\r\nrow\r\n"
+    draft.write_bytes(report.encode("utf-8"))
+    rc, out, err = _run_main(["--skill", "peer-comparison", "--input", str(draft)], capsys)
+    assert rc == 0 and err == ""
+    assert out == gate(report, "peer-comparison")  # same text the stdin path sees
+    assert out.startswith("# Peer Comparison: AAPL.O")
+    assert not draft.exists() and not draft.parent.exists()
+
+
+def test_input_keeps_a_nonempty_draft_dir(tmp_path, capsys):
+    draft = _draft(tmp_path)
+    other = draft.parent / "peer-comparison-ffffffff.md"
+    other.write_text("another session's draft")
+    draft.write_text("# Peer Comparison: X\n")
+    assert _run_main(["--skill", "peer-comparison", "--input", str(draft)], capsys)[0] == 0
+    assert not draft.exists() and other.exists()
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        "portfolio.csv",
+        "draft.md",
+        ".parallax-render/notes.md",
+        ".parallax-render/should-i-buy-0a1b2c3d.md",  # another skill's draft
+        ".parallax-render/peer-comparison-0A1B2C3D.md",
+        "other/peer-comparison-0a1b2c3d.md",
+    ],
+)
+def test_input_refuses_any_path_but_this_skills_draft(tmp_path, capsys, rel):
+    path = tmp_path / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("# Peer Comparison: user data\n")
+    rc, out, err = _run_main(["--skill", "peer-comparison", "--input", str(path)], capsys)
+    assert rc == 2 and out == "" and "[render-gate] ERROR" in err
+    assert path.read_text() == "# Peer Comparison: user data\n"
+
+
+def test_input_refuses_symlinked_draft_and_keeps_target(tmp_path, capsys):
+    target = tmp_path / "secret.txt"
+    target.write_text("# Peer Comparison: not a draft\n")
+    link = _draft(tmp_path)
+    link.symlink_to(target)
+    rc, out, err = _run_main(["--skill", "peer-comparison", "--input", str(link)], capsys)
+    assert rc == 2 and out == "" and "[render-gate] ERROR" in err
+    assert target.exists() and link.is_symlink()
+
+
+def test_input_refuses_symlinked_draft_dir_and_keeps_target(tmp_path, capsys):
+    real = tmp_path / "elsewhere"
+    real.mkdir()
+    victim = real / "peer-comparison-0a1b2c3d.md"
+    victim.write_text("# Peer Comparison: not a draft\n")
+    (tmp_path / ".parallax-render").symlink_to(real, target_is_directory=True)
+    path = tmp_path / ".parallax-render" / victim.name
+    rc, out, err = _run_main(["--skill", "peer-comparison", "--input", str(path)], capsys)
+    assert rc == 2 and out == "" and "[render-gate] ERROR" in err
+    assert victim.exists()
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="no FIFOs on this platform")
+def test_input_refuses_fifo_without_hanging(tmp_path):
+    fifo = _draft(tmp_path)
+    os.mkfifo(fifo)
+    proc = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve().parent / "render_gate.py"),
+         "--skill", "peer-comparison", "--input", str(fifo)],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert proc.returncode == 2 and proc.stdout == "" and "[render-gate] ERROR" in proc.stderr
+
+
+@pytest.mark.parametrize("make", ["missing", "directory"])
+def test_input_unreadable_draft_fails_closed(tmp_path, capsys, make):
+    path = _draft(tmp_path)
+    if make == "directory":
+        path.mkdir()
+    rc, out, err = _run_main(["--skill", "peer-comparison", "--input", str(path)], capsys)
+    assert rc == 2 and out == "" and "[render-gate] ERROR" in err
+
+
+def test_input_not_utf8_fails_closed_and_deletes_draft(tmp_path, capsys):
+    draft = _draft(tmp_path)
+    draft.write_bytes(b"# Peer Comparison \xff\xfe\n")
+    rc, out, err = _run_main(["--skill", "peer-comparison", "--input", str(draft)], capsys)
+    assert rc == 2 and out == "" and "[render-gate] ERROR" in err
+    assert not draft.exists()
+
+
+def test_input_unlink_failure_still_renders(tmp_path, capsys, monkeypatch):
+    draft = _draft(tmp_path)
+    draft.write_text(SCAFFOLD + "# Peer Comparison: X\n")
+
+    def deny(*args, **kwargs):
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(os, "unlink", deny)
+    rc, out, err = _run_main(["--skill", "peer-comparison", "--input", str(draft)], capsys)
+    assert rc == 0 and out == "# Peer Comparison: X\n"
+    assert "[render-gate] WARN: draft not deleted" in err
+
+
 def test_should_i_buy_active_banner_survives_scaffold():
     draft = SCAFFOLD + REAL_BANNERS["active"] + "\n\n## The Company\nApple Inc.\n"
     out = gate(draft, "should-i-buy")
@@ -358,3 +542,76 @@ def test_desk_call_list_degraded_note_hoisted():
     assert out.lstrip().startswith("# Desk Call List")
     assert "Status note (preserved)" in out
     assert "news synthesis timed out" in out
+
+
+def test_input_without_dir_fd_still_refuses_symlinks(tmp_path, capsys, monkeypatch):
+    """The path-based branch used where os.open has no dir_fd (Windows)."""
+    monkeypatch.setattr(os, "supports_dir_fd", set())
+    monkeypatch.delattr(os, "O_NOFOLLOW", raising=False)
+    target = tmp_path / "secret.txt"
+    target.write_text("# Peer Comparison: not a draft\n")
+    link = _draft(tmp_path)
+    link.symlink_to(target)
+    rc, out, err = _run_main(["--skill", "peer-comparison", "--input", str(link)], capsys)
+    assert rc == 2 and out == "" and target.exists()
+    link.unlink()
+    link.write_text(SCAFFOLD + "# Peer Comparison: X\n")
+    rc, out, err = _run_main(["--skill", "peer-comparison", "--input", str(link)], capsys)
+    assert rc == 0 and out == "# Peer Comparison: X\n" and not link.exists()
+
+
+def test_input_without_dir_fd_refuses_symlinked_draft_dir(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(os, "supports_dir_fd", set())
+    monkeypatch.delattr(os, "O_NOFOLLOW", raising=False)
+    real = tmp_path / "elsewhere"
+    real.mkdir()
+    victim = real / "peer-comparison-0a1b2c3d.md"
+    victim.write_text("# Peer Comparison: not a draft\n")
+    (tmp_path / ".parallax-render").symlink_to(real, target_is_directory=True)
+    path = tmp_path / ".parallax-render" / victim.name
+    rc, out, err = _run_main(["--skill", "peer-comparison", "--input", str(path)], capsys)
+    assert rc == 2 and out == "" and victim.exists()
+
+
+def test_input_refuses_hard_linked_draft(tmp_path, capsys):
+    user_file = tmp_path / "holdings.md"
+    user_file.write_text("# Peer Comparison: user data\n")
+    link = _draft(tmp_path)
+    os.link(user_file, link)
+    rc, out, err = _run_main(["--skill", "peer-comparison", "--input", str(link)], capsys)
+    assert rc == 2 and out == "" and "hard links" in err
+    assert user_file.exists()
+
+
+def test_input_output_is_utf8_whatever_the_locale(tmp_path):
+    draft = _draft(tmp_path)
+    draft.write_text(SCAFFOLD + "# Peer Comparison: X\nscore 7 → 8, ≤ 5, 台積電\n", encoding="utf-8")
+    proc = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve().parent / "render_gate.py"),
+         "--skill", "peer-comparison", "--input", str(draft)],
+        capture_output=True, timeout=10, env={**os.environ, "PYTHONIOENCODING": "cp1252"},
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.decode("utf-8") == "# Peer Comparison: X\nscore 7 → 8, ≤ 5, 台積電\n"
+
+
+def test_stdin_output_is_utf8_whatever_the_locale():
+    report = "# Peer Comparison: X\nscore 7 → 8, ≤ 5, 台積電\n"
+    proc = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve().parent / "render_gate.py"),
+         "--skill", "peer-comparison"],
+        input=(SCAFFOLD + report).encode("utf-8"),
+        capture_output=True, timeout=10, env={**os.environ, "PYTHONIOENCODING": "cp1252"},
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.decode("utf-8") == report
+
+
+def test_stdin_not_utf8_fails_closed():
+    proc = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve().parent / "render_gate.py"),
+         "--skill", "peer-comparison"],
+        input=b"# Peer Comparison \xff\xfe\n", capture_output=True, timeout=10,
+    )
+    assert proc.returncode == 2 and proc.stdout == b""
+    assert b"[render-gate] ERROR" in proc.stderr

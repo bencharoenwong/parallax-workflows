@@ -70,14 +70,10 @@ Fill **Output Format** below in order; Verdict sensitivity per `parallax-convent
 
 ### Step 6 — Render (deterministic gate, mandatory)
 
-`run-shell` the shared gate per conventions §10.3 with this skill's key:
+`write-artifact` the complete drafted report to a new `<draft-path>`, then `run-shell` the shared gate with this skill's key, both per conventions §10.3:
 
 ```
-DRAFT="$(mktemp "${TMPDIR:-/tmp}/watchlist.XXXXXX")"
-cat > "$DRAFT" <<'REPORT'
-<your complete drafted report goes here>
-REPORT
-python3 "<skill-dir>/../_parallax/render_gate.py" --skill watchlist-monitor < "$DRAFT"; rm -f "$DRAFT"
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill watchlist-monitor --input "<draft-path>"
 ```
 
 The entire final message is that command's stdout. The stderr `[render-gate] WARN:` line is diagnostics: never include it. Degraded-state notes go inside their section. If `run-shell` is absent, apply conventions §14.3 (render-gate row). No Step 7.

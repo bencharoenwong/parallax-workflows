@@ -389,15 +389,18 @@ The gate (`_parallax/render_gate.py`) is a pure-stdlib Python script. It determi
 
 ### 10.3 Usage in SKILL.md
 
-Every gated skill carries a `### Render — deterministic gate` heading (spine form: `### Step 6 — Render (deterministic gate, mandatory)`, per the authoring conventions' "Canonical step spine" section; both forms carry the same gate command) before its **Output Format** section. The directive specifies the exact Bash one-liner to run:
+Every gated skill carries a `### Render — deterministic gate` heading (spine form: `### Step 6 — Render (deterministic gate, mandatory)`, per the authoring conventions' "Canonical step spine" section; both forms carry the same gate command) before its **Output Format** section. The step has two parts:
+
+1. `write-artifact` the complete drafted report to a new draft path: `<cwd>/.parallax-render/<skill-key>-<8 random hex>.md`, written as an absolute literal path (the session's working directory, resolved, with no `~`, `$VAR` or `${…}`). Use a fresh random suffix on every run. If that file already exists, pick another suffix; never read or overwrite an existing draft, which may belong to another session.
+2. `run-shell` exactly this one-line command, with `<draft-path>` replaced by that same literal path:
 
 ```bash
-DRAFT="$(mktemp "${TMPDIR:-/tmp}/skill.XXXXXX")"
-cat > "$DRAFT" <<'REPORT'
-<your complete drafted report goes here>
-REPORT
-python3 "<skill-dir>/../_parallax/render_gate.py" --skill <skill-key> < "$DRAFT"; rm -f "$DRAFT"
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill <skill-key> --input "<draft-path>"
 ```
+
+The gate accepts only a path of that shape and refuses any other file. It reads the draft, deletes it (and the `.parallax-render` directory once empty), and writes the cleaned report to stdout. The report never passes through the shell command. Keep the command to that one line: no heredoc, no pipe, no `$(…)` or `${…}`. Claude Code denies any command containing a shell expansion, and it refuses any command over 10,000 characters, heredoc body included, even in its sandbox; a report embedded in the command fails on both counts once it is long.
+
+If the host has `run-shell` but no `write-artifact`, or the draft write is denied, feed the report on stdin instead: `python3 "<skill-dir>/../_parallax/render_gate.py" --skill <skill-key> <<'REPORT'`, then the report, then a line containing only `REPORT`. On Claude Code this fallback works only for reports well under 10,000 characters. A gate error (`[render-gate] ERROR:` on stderr, nothing on stdout) means the draft was not usable: write it once more to a fresh path and re-run. If the second attempt also fails, follow the render-gate row of §14.3 but write `Render gate: not applied (gate error)` in About This Report. The draft holds the full report, client data included, until the gate deletes it. If the working directory is synced (Dropbox, iCloud) or a git work tree, the draft can be uploaded or committed in that window, and a draft left by an interrupted session stays there; a `.parallax-render/` directory is safe to delete.
 
 The skill's **entire final message** is exactly that command's stdout, or, when a conditional Translate step follows (§15), the sole input to that step; translated output is not re-gated. `render_gate.py` uses a fail-open design: if no anchor is found, the input is returned unchanged, ensuring the gate never destroys a report it cannot positively locate. The fail-open path also writes one `[render-gate] WARN: no anchor for skill='<key>'; returned unchanged` line to **stderr**; stdout is untouched. That line is diagnostics — never include it in the reply and never feed it to a downstream translate step. It means the drafted opening drifted from the skill's documented Output Format start: fix the opening and re-run the gate.
 
@@ -535,7 +538,7 @@ These skills run on more than one harness. A SKILL.md therefore names **host pri
 | `run-shell` | execute a documented helper command (`render_gate.py`, `adaptation.py`, `view_commit`, …) |
 | `invoke-skill` | hand a payload to a sibling skill (translate, concierge routing, the judge drift check) |
 | `load-reference` | read a shared `_parallax/...` or `references/...` file by path (§0.0 item 1) |
-| `write-artifact` | create a file at a named path WITHOUT passing its content through a shell. Document-derived text (CIO prose, client documents) must never reach an unquoted heredoc, which the shell subjects to parameter expansion and command substitution. A quoted-delimiter heredoc (`<<'REPORT'`, the form §10.3 mandates for the render gate) performs no expansion and is the sanctioned shell path for that step. Prefer `write-artifact` wherever the host has it. Never a substitute for an append through a helper that owns a hash chain (`audit_chain.append_entry`) |
+| `write-artifact` | create a file at a named path WITHOUT passing its content through a shell. Document-derived text (CIO prose, client documents) must never reach an unquoted heredoc, which the shell subjects to parameter expansion and command substitution. The render gate (§10.3) uses `write-artifact` for its draft; its stdin fallback is a quoted-delimiter heredoc (`<<'REPORT'`), which performs no expansion. Prefer `write-artifact` wherever the host has it. Never a substitute for an append through a helper that owns a hash chain (`audit_chain.append_entry`) |
 | `read-config` | read an environment switch (`PARALLAX_*`) or operator state under `~/.parallax/` |
 | `fetch-url` | retrieve a public URL as text. A skill that ships its own destination-validated fetcher (`download_public_url()` in white-label onboard) uses that fetcher for those URLs, never this primitive |
 | `schedule-task` | create a recurring run of a skill with fixed inputs |
@@ -575,7 +578,7 @@ Gates fail closed (§4.0); display sections degrade (§4). The rows below apply 
 | `invoke-skill` — concierge routing | Route by prose: name the target skill and its usage line. |
 | `invoke-skill` — judge drift check | Emit the existing line from `house-view/auto-on-load-judge-pattern.md` ("not installed; drift check skipped"). The check is never a gate. |
 | `load-reference` | §0.0 item 4. |
-| `write-artifact` | Stop. Every consumer is a persist step behind a confirmation gate; report that the artifact could not be written on this host. |
+| `write-artifact` | Render gate: use its stdin fallback (§10.3). Every other consumer is a persist step behind a confirmation gate: stop and report that the artifact could not be written on this host. |
 | `read-config` | No environment: every `PARALLAX_*` switch takes its documented default; say so in About This Report when the default changes behaviour. No state directory: no active view and no branding, per `house-view/loader.md` §1 and `white-label/integration-pattern.md` §4. |
 | `fetch-url` | Report the source as not fetched and ask for pasted text. Never guess content. |
 | `schedule-task` | Do not offer scheduling. Never describe a schedule the host cannot create. A *verify* binding counts as absent. |
