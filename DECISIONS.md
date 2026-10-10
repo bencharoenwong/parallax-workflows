@@ -4,6 +4,19 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-10-09: The concierge asks the role and shows only shipped skills; live journeys run sandboxed
+
+**Why:** A newcomer's role decides which skills fit, and wording alone is a poor signal, so the concierge asks the role and never guesses it. Users see only the skills shipped on their surface; a fail-closed build filter enforces this, so a skill missing from a package is never offered there. The role map lives in the manifest, so builds and the README "Who this is for" list generate from one source. Scheduling is not offered until a host's `schedule-task` binding is verified, because a live journey caught the concierge offering it where no host had been exercised. Live journeys run the built plugin in a scratch home inside the Claude Code Bash sandbox, so local branding never leaks into a run, writes stay in the scratch tree, and the shell has no network.
+
+**Impact:** The concierge's after-result step offers scheduling only when the host's `schedule-task` binding is present and not marked *verify*, and never asks where to deliver output. `evals/concierge_journeys.sh` runs each journey with a scratch `HOME`, an empty house-view directory, and sandbox settings that refuse to start unsandboxed; `evals/README.md` § Live concierge journeys owns the fail rules and the sandbox limits.
+
+**Alternatives:**
+- [DROP] Guess the role from the user's wording. A wrong guess shows the wrong skills with no chance to correct it.
+- [DROP] Journeys against mocked tools. They test the mock, not the model's behavior on the live connector.
+- [DROP] A command-approval hook to let the render-gate command through. The hook could be made to approve arbitrary code.
+
+**Flip conditions:** a host's `schedule-task` binding is exercised and unmarked → the concierge offers scheduling there. The render gate moves to a stdin form → drop the render-gate caveat in `evals/README.md` and rerun the remaining journeys.
+
 ## 2026-10-08: One verified release build for plugin and upload distributions
 
 **Why:** Users need downloadable artifacts with a version and a source record. Independently building each channel makes it easy to publish stale or mismatched packages.

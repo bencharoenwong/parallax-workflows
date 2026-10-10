@@ -274,7 +274,7 @@ def test_prepare_is_repeatable_and_updates_one_version_source(tmp_path, monkeypa
     script.write_text('PLUGIN_VERSION = "2026.10.7"  # old\n')
     (root / "CHANGELOG.md").write_text("# Changes\n\n## 2026-10-07\nPrevious changes.\n")
     (root / "README.md").write_text(
-        "<!-- roles:begin -->\n<!-- roles:end -->\n"
+        "<!-- who-for:begin -->\n<!-- who-for:end -->\n"
         "<!-- distributions:begin -->\n<!-- distributions:end -->\n")
     monkeypatch.setattr(release, "ROOT", root)
     monkeypatch.setattr(bb, "PLUGIN_VERSION", "2026.10.7")

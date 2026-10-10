@@ -2,6 +2,17 @@
 
 Equity research workflows for [Parallax](https://parallax.chicago.global), available through Claude plugins and standalone skill packages.
 
+**Who this is for:**
+<!-- who-for:begin -->
+- **Fund manager** — Runs portfolios; daily regime and book checks. Start with `/parallax-morning-brief`.
+- **Relationship manager** — Prepares client reviews and calls. Start with `/parallax-client-review`.
+- **RM support** — Prepares briefs and reviews for an RM. Start with `/parallax-morning-brief`.
+- **Research analyst** — Researches single names and peers. Start with `/parallax-peer-comparison`.
+- **Wealth advisor** — Reviews client portfolios in plain language. Start with `/parallax-client-review`.
+- **Individual investor** — Checks stocks and a personal portfolio. Start with `/parallax-should-i-buy`.
+<!-- who-for:end -->
+- **Building on Parallax** — embedding Parallax into internal research tools, B-CIO synthesis layers, white-label investment products. Workflows are reference implementations under MIT — fork them, modify the prompts, swap the inputs, ship in your own harness.
+
 ## Get started
 
 1. In Claude web or the desktop app, open **Customize → Plugins → Add → Add marketplace**.
@@ -18,20 +29,6 @@ Account-installed plugins are available in chat, Cowork and Claude Code when sig
 | Organization rollout | An Owner can distribute plugins through organization settings; see [organization plugin management](https://claude.com/docs/plugins/admin) |
 | Individual skill uploads | [ZIP fallback](#individual-skill-upload-fallback) |
 | Codex or another agent | [Integration](#integration) and [AGENTS.md](AGENTS.md) |
-
-### Who this is for
-
-<!-- roles:begin -->
-| Role | Start with |
-|---|---|
-| Fund manager | `/parallax-morning-brief` |
-| Relationship manager | `/parallax-client-review` |
-| RM support | `/parallax-morning-brief` |
-| Research analyst | `/parallax-peer-comparison` |
-| Wealth advisor | `/parallax-client-review` |
-| Individual investor | `/parallax-should-i-buy` |
-| Building on Parallax | [Integration guide](#integration) |
-<!-- roles:end -->
 
 ## Quick Start
 
@@ -78,6 +75,8 @@ To update a command-line installation:
 /plugin update parallax@parallax-workflows
 ```
 
+If a workflow reports "tool not found", the Parallax connector is not connected or not signed in.
+
 For an account installation, open the plugin in Customize → Plugins and check for updates. See [Claude's plugin documentation](https://claude.com/docs/plugins/overview). Plugin versions change at release, not at every source merge.
 
 ### Individual skill upload fallback
@@ -86,7 +85,15 @@ Use this path if your account cannot add a marketplace. When release assets are 
 
 Connect `https://mcp.chicago.global/api/mcp` under **Customize → Connectors**, then sign in. Installing a skill alone does not connect the data service.
 
-Maintainers can build packages locally; see [Building a release](docs/releases.md). Until a release is published, GitHub Releases may have no downloadable packages.
+Until a release is published, GitHub Releases may have no downloadable packages. To build the upload packages from a clone instead:
+
+```bash
+git clone https://github.com/bencharoenwong/parallax-workflows.git
+cd parallax-workflows
+python3 skills/_parallax/scripts/build_bundle.py web
+```
+
+The build ends with a leak-scan gate that expects a maintainer-local extra term list and fails closed without it; on a fresh clone, set `PARALLAX_ALLOW_PARTIAL_SCAN=1` to build with the built-in scan terms only. Upload the zips from `~/Downloads/claude-web-skills/`. Maintainers building a release should follow [Building a release](docs/releases.md).
 
 ### Integration
 
@@ -99,7 +106,7 @@ git clone https://github.com/bencharoenwong/parallax-workflows.git "$HOME/parall
 bash "$HOME/parallax-workflows/install.sh"
 ```
 
-The full clone includes operator and development workflows outside the released plugin. `install.sh` copies skills to `~/.claude/skills` and links the shared files. It is not a cross-host installer. Restart Claude Code after installation.
+The full clone includes operator and development workflows outside the released plugin. `install.sh` copies skills to `~/.claude/skills` and links the shared files. It is not a cross-host installer. Restart Claude Code after installation. The full clone does not bundle the connector: add it with `claude mcp add -s user --transport http parallax https://mcp.chicago.global/api/mcp` (user scope, so every project sees it), then run `/mcp` to sign in.
 
 ## Distribution catalog
 

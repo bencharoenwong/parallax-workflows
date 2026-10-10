@@ -624,6 +624,29 @@ def fill_new_here(text: str, block: str) -> str:
     return _NEW_HERE.sub(lambda m: m.group(1) + block + m.group(2), text)
 
 
+def render_who_for() -> str:
+    """The generated README "Who this is for" bullets: one line per role
+    except `integrator` (kept as the hand-written bullet below the block),
+    naming the role's first plugin start. Descriptions are the manifest's
+    verbatim. A non-integrator role with no plugin start would otherwise
+    render nothing, silently hiding a manifest/plugin-list mismatch instead
+    of failing the build."""
+    plugin_available = set(PLUGIN_SKILLS)
+    lines = []
+    for role in skill_manifest.roles():
+        if role["id"] == "integrator":
+            continue
+        starts = skill_manifest.starts_for(role["id"], plugin_available)
+        if not starts:
+            raise BuildError(
+                f"who-for: role {role['id']!r} has no plugin start — add a "
+                f"starts entry or ship one of its ranked skills")
+        first, _ = starts[0]
+        lines.append(f"- **{role['label']}** — {role['description']} "
+                     f"Start with `/{first}`.")
+    return "\n".join(lines) + "\n"
+
+
 def _keep_concierge_item(item: str, available: set[str]) -> bool:
     """True to keep a table row or bullet item unchanged, False to drop it
     entirely. Raises when the item mixes a shipped skill with an unshipped
