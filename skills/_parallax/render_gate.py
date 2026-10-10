@@ -226,11 +226,12 @@ def read_draft(path: str, skill: str) -> str:
     Only a gate draft is accepted: `<dir>/.parallax-render/<skill>-<8 hex>.md`. Any
     other path is refused before it is opened, so the gate prints and deletes only
     a draft-shaped file in a `.parallax-render` directory. Any directory of that
-    name qualifies; the gate does not check that it sits under the session's cwd. The `.parallax-render` directory and the draft are opened
-    without following symlinks, the read does not block on a FIFO, and the draft is
-    read and unlinked relative to the opened directory. Bytes are decoded as UTF-8
-    with newlines kept as written, the same as the stdin path. A failed unlink is a
-    warning, not an error: the report still renders.
+    name qualifies; the gate does not check that it sits under the session's cwd.
+    The `.parallax-render` directory and the draft are opened without following
+    symlinks, the read does not block on a FIFO, and the draft is read and unlinked
+    relative to the opened directory. Bytes are decoded as UTF-8 with newlines kept
+    as written, the same as the stdin path. A failed unlink is a warning, not an
+    error: the report still renders.
     """
     parent, name = os.path.split(os.path.abspath(path))
     if (
