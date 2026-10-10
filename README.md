@@ -1,6 +1,6 @@
 # Parallax Workflows
 
-AI-powered equity research workflows for [Parallax](https://parallax.chicago.global), for Claude: claude.ai, the desktop and mobile apps, Cowork, and [Claude Code](https://claude.ai/code).
+Equity research workflows for [Parallax](https://parallax.chicago.global), available through Claude plugins and standalone skill packages.
 
 **Who this is for:**
 <!-- who-for:begin -->
@@ -13,20 +13,34 @@ AI-powered equity research workflows for [Parallax](https://parallax.chicago.glo
 <!-- who-for:end -->
 - **Building on Parallax** — embedding Parallax into internal research tools, B-CIO synthesis layers, white-label investment products. Workflows are reference implementations under MIT — fork them, modify the prompts, swap the inputs, ship in your own harness.
 
-Run commands like `/parallax-should-i-buy AAPL` or `/parallax-client-review [holdings]` and get a structured research report. Each workflow orchestrates Parallax MCP tools in parallel — company data, factor scores, macro analysis, news — so you get comprehensive output from a single command.
+## Get started
+
+1. In Claude web or the desktop app, open **Customize → Plugins → Add → Add marketplace**.
+2. Enter `bencharoenwong/parallax-workflows` and add **Parallax**.
+3. Open **Parallax → Connectors**. Add or connect Parallax, then sign in with your Parallax account. Your organization may require an Owner to add the connector first.
+4. Start a new conversation: **Hi Parallax, I'm new here.** Choose your role and provide a ticker or holdings.
+
+Account-installed plugins are available in chat, Cowork and Claude Code when signed in to the same account. Claude Code command-line installs stay on that machine. See [Claude's plugin guide](https://claude.com/docs/plugins/overview).
+
+| Your setup | Installation path |
+|---|---|
+| Claude chat or Cowork | Marketplace steps above |
+| Claude Code only | Commands under [Setup](#setup) |
+| Organization rollout | An Owner can distribute plugins through organization settings; see [organization plugin management](https://claude.com/docs/plugins/admin) |
+| Individual skill uploads | [ZIP fallback](#individual-skill-upload-fallback) |
+| Codex or another agent | [Integration](#integration) and [AGENTS.md](AGENTS.md) |
 
 ## Quick Start
 
-If you have Parallax connected and want to try it now, these commands cover most usage:
+Once connected, try one of these:
 
-| If you want to… | Run |
+| Task | Prompt |
 |---|---|
-| Be guided to the right workflow | `Hi Parallax` (or `/parallax-concierge`) |
-| Evaluate a single stock | `/parallax-should-i-buy AAPL` |
-| Run a portfolio health check | `/parallax-portfolio-checkup [{"symbol":"AAPL.O","weight":0.4},{"symbol":"MSFT.O","weight":0.6}]` |
-| Find the workflow for your role | `Hi Parallax` → "New here?" |
+| Find a workflow for your role | `Hi Parallax, I'm new here` |
+| Evaluate a stock | `Should I buy AAPL?` |
+| Review a portfolio | `Check my portfolio: AAPL 40%, MSFT 60%` |
 
-Everything below is the full catalog. The concierge is the recommended entry point for first-time users — say you're new and it asks your role and starts a matching first run.
+You can also select a skill from Claude's `/` menu. In Claude Code, the explicit plugin command is `/parallax:parallax-should-i-buy AAPL`.
 
 ## What's in this repo
 
@@ -43,21 +57,35 @@ These workflows require an active Parallax subscription from [Chicago Global Cap
 
 ## Setup
 
-### 1. Install and connect
+### Claude Code
 
-**Claude.ai, desktop, mobile and Cowork:** Customize → Plugins → Add marketplace → `bencharoenwong/parallax-workflows` → Add. Then open the plugin's Connectors tab → Connect, and sign in. The plugin includes the Parallax connector (`https://mcp.chicago.global/api/mcp`), so no separate connector add is needed. Sign in with the account your firm bills. If Parallax is also added as a separate connector, the host may keep both; when both are signed in, skills ask which one to use, because each may bill a different account.
+Inside Claude Code:
 
-**Claude Code:**
-
-```bash
-claude plugin marketplace add bencharoenwong/parallax-workflows && claude plugin install parallax@parallax-workflows
+```text
+/plugin marketplace add bencharoenwong/parallax-workflows
+/plugin install parallax@parallax-workflows
 ```
 
-Then run `/mcp` to sign in. The plugin bundles the same Parallax connector. If the same Parallax connector is also on your claude.ai account, Claude Code keeps only one copy, so there is nothing to choose. The "skills ask" note above applies only when two different Parallax connectors stay loaded. Plugin skills work with or without the plugin prefix: `/parallax-should-i-buy` or `/parallax:parallax-should-i-buy`. Use the prefixed form only if another command already has the same name. To update, run `claude plugin marketplace update parallax-workflows` to refresh the catalog, then `claude plugin update parallax@parallax-workflows`, and restart Claude Code.
+Authenticate the bundled Parallax connector through `/mcp`. If you already installed the plugin on your Claude account, start a new Claude Code session or use `/reload-plugins` instead of installing it again.
 
-**For your organization:** a Team or Enterprise Owner can sync this repository once in organization settings, so members don't each add the marketplace by hand. Optional.
+To update a command-line installation:
 
-**Fallback: upload single skills.** This path is for an account or organization that cannot add plugin marketplaces. Such a host takes one uploaded skill at a time. Clone the repository, then build self-contained `.skill` zips (shared files vendored inside each zip, descriptions trimmed to the claude.ai limit):
+```text
+/plugin marketplace update parallax-workflows
+/plugin update parallax@parallax-workflows
+```
+
+If a workflow reports "tool not found", the Parallax connector is not connected or not signed in.
+
+For an account installation, open the plugin in Customize → Plugins and check for updates. See [Claude's plugin documentation](https://claude.com/docs/plugins/overview). Plugin versions change at release, not at every source merge.
+
+### Individual skill upload fallback
+
+Use this path if your account cannot add a marketplace. When release assets are available, download the `.skill` files from [GitHub Releases](https://github.com/bencharoenwong/parallax-workflows/releases). The collection ZIP contains individual packages: unzip it first, then upload the desired skills under **Customize → Skills**. The manifest-generated table below shows which workflows support skill upload. Held translators and private-beta workflows are excluded.
+
+Connect `https://mcp.chicago.global/api/mcp` under **Customize → Connectors**, then sign in. Installing a skill alone does not connect the data service.
+
+Until a release is published, GitHub Releases may have no downloadable packages. To build the upload packages from a clone instead:
 
 ```bash
 git clone https://github.com/bencharoenwong/parallax-workflows.git
@@ -65,35 +93,71 @@ cd parallax-workflows
 python3 skills/_parallax/scripts/build_bundle.py web
 ```
 
-The build ends with a leak-scan gate that expects a maintainer-local extra term list and fails closed without it; on a fresh clone, set `PARALLAX_ALLOW_PARTIAL_SCAN=1` to build with the built-in scan terms only.
+The build ends with a leak-scan gate that expects a maintainer-local extra term list and fails closed without it; on a fresh clone, set `PARALLAX_ALLOW_PARTIAL_SCAN=1` to build with the built-in scan terms only. Upload the zips from `~/Downloads/claude-web-skills/`. Maintainers building a release should follow [Building a release](docs/releases.md).
 
-Upload the zips from `~/Downloads/claude-web-skills/` under Customize → Skills. On Team/Enterprise plans an org admin can enable them workspace-wide instead of per-user. Then add the Parallax connector (`https://mcp.chicago.global/api/mcp`) under Customize → Connectors and sign in. The workflows need it to return data.
+### Integration
 
-**Development, or every workflow including the house-view operator tools:**
+Other agents can use this repository directly: read [AGENTS.md](AGENTS.md), then the requested `skills/<workflow>/SKILL.md`. Preserve references to `skills/_parallax/` and discover the Parallax MCP tools in the active host. Host features differ; follow the workflow's capability checks and report unavailable operations.
+
+For a full Claude Code development installation:
 
 ```bash
-git clone https://github.com/bencharoenwong/parallax-workflows.git
-cd parallax-workflows
-./install.sh
+git clone https://github.com/bencharoenwong/parallax-workflows.git "$HOME/parallax-workflows"
+bash "$HOME/parallax-workflows/install.sh"
 ```
 
-This copies each workflow into `~/.claude/skills/` and symlinks the shared `_parallax/` conventions there. Restart Claude Code after installing. Then add the Parallax MCP server: `claude mcp add -s user --transport http parallax https://mcp.chicago.global/api/mcp` (user scope, so every project sees it), and run `/mcp` to sign in.
+The full clone includes operator and development workflows outside the released plugin. `install.sh` copies skills to `~/.claude/skills` and links the shared files. It is not a cross-host installer. Restart Claude Code after installation. The full clone does not bundle the connector: add it with `claude mcp add -s user --transport http parallax https://mcp.chicago.global/api/mcp` (user scope, so every project sees it), then run `/mcp` to sign in.
 
-To install a single workflow:
-```bash
-cp -r skills/parallax-should-i-buy ~/.claude/skills/parallax-should-i-buy
-cp -r skills/_parallax ~/.claude/skills/_parallax
-```
+## Distribution catalog
 
-The `_parallax` directory contains shared conventions, token-cost reference, and the AI-profiles framework (required by the `parallax-ai-*` skills). Always copy it alongside any individual workflow.
+The plugin is the account-wide path. Skill upload packages are independent fallback installs. This table is generated from `skills/_parallax/manifest.json`; the workflow descriptions below cover the full source repository.
 
-### 2. Verify
-
-```
-/parallax-should-i-buy AAPL
-```
-
-(the plugin install also accepts `/parallax:parallax-should-i-buy AAPL`). If you see "tool not found" errors, the MCP server is not connected.
+<!-- distributions:begin -->
+| Workflow | Distribution |
+|---|---|
+| [parallax-ai-buffett](skills/parallax-ai-buffett/SKILL.md) | Full clone only |
+| [parallax-ai-consensus](skills/parallax-ai-consensus/SKILL.md) | Full clone only |
+| [parallax-ai-greenblatt](skills/parallax-ai-greenblatt/SKILL.md) | Full clone only |
+| [parallax-ai-klarman](skills/parallax-ai-klarman/SKILL.md) | Full clone only |
+| [parallax-ai-ptj](skills/parallax-ai-ptj/SKILL.md) | Full clone only |
+| [parallax-ai-soros](skills/parallax-ai-soros/SKILL.md) | Full clone only |
+| [parallax-cio-letter-prep](skills/parallax-cio-letter-prep/SKILL.md) | Private beta |
+| [parallax-client-review](skills/parallax-client-review/SKILL.md) | Plugin, Skill upload |
+| [parallax-concierge](skills/parallax-concierge/SKILL.md) | Plugin, Skill upload |
+| [parallax-country-deep-dive](skills/parallax-country-deep-dive/SKILL.md) | Plugin |
+| [parallax-credit-lens](skills/parallax-credit-lens/SKILL.md) | Plugin |
+| [parallax-deep-dive](skills/parallax-deep-dive/SKILL.md) | Plugin, Skill upload |
+| [parallax-desk-call-list](skills/parallax-desk-call-list/SKILL.md) | Plugin |
+| [parallax-due-diligence](skills/parallax-due-diligence/SKILL.md) | Plugin, Skill upload |
+| [parallax-earnings-quality](skills/parallax-earnings-quality/SKILL.md) | Plugin |
+| [parallax-explain-portfolio](skills/parallax-explain-portfolio/SKILL.md) | Plugin, Skill upload |
+| [parallax-halal-screen](skills/parallax-halal-screen/SKILL.md) | Plugin |
+| [parallax-house-view-attribution](skills/parallax-house-view-attribution/SKILL.md) | Full clone only |
+| [parallax-house-view-diff](skills/parallax-house-view-diff/SKILL.md) | Full clone only |
+| [parallax-judge-house-view](skills/parallax-judge-house-view/SKILL.md) | Full clone only |
+| [parallax-load-house-view](skills/parallax-load-house-view/SKILL.md) | Full clone only |
+| [parallax-macro-outlook](skills/parallax-macro-outlook/SKILL.md) | Plugin |
+| [parallax-make-house-view](skills/parallax-make-house-view/SKILL.md) | Full clone only |
+| [parallax-morning-brief](skills/parallax-morning-brief/SKILL.md) | Plugin, Skill upload |
+| [parallax-pair-finder](skills/parallax-pair-finder/SKILL.md) | Plugin |
+| [parallax-peer-comparison](skills/parallax-peer-comparison/SKILL.md) | Plugin, Skill upload |
+| [parallax-portfolio-builder](skills/parallax-portfolio-builder/SKILL.md) | Plugin |
+| [parallax-portfolio-checkup](skills/parallax-portfolio-checkup/SKILL.md) | Plugin, Skill upload |
+| [parallax-rebalance](skills/parallax-rebalance/SKILL.md) | Plugin, Skill upload |
+| [parallax-scenario-analysis](skills/parallax-scenario-analysis/SKILL.md) | Plugin, Skill upload |
+| [parallax-score-explainer](skills/parallax-score-explainer/SKILL.md) | Plugin, Skill upload |
+| [parallax-should-i-buy](skills/parallax-should-i-buy/SKILL.md) | Plugin, Skill upload |
+| [parallax-stress-house-view](skills/parallax-stress-house-view/SKILL.md) | Full clone only |
+| [parallax-stress-test-thesis](skills/parallax-stress-test-thesis/SKILL.md) | Full clone only |
+| [parallax-thematic-screen](skills/parallax-thematic-screen/SKILL.md) | Plugin |
+| [parallax-watchlist-monitor](skills/parallax-watchlist-monitor/SKILL.md) | Plugin, Skill upload |
+| [parallax-white-label-onboard](skills/parallax-white-label-onboard/SKILL.md) | Plugin |
+| [parallax-white-label-stock-report](skills/parallax-white-label-stock-report/SKILL.md) | Plugin |
+| [translate-arabic-finance](skills/translate-arabic-finance/SKILL.md) | Held: native review pending |
+| [translate-chinese-finance](skills/translate-chinese-finance/SKILL.md) | Plugin, Skill upload |
+| [translate-thai-finance](skills/translate-thai-finance/SKILL.md) | Plugin, Skill upload |
+| [translate-vietnamese-finance](skills/translate-vietnamese-finance/SKILL.md) | Held: native review pending |
+<!-- distributions:end -->
 
 ## Forking and Customizing
 
@@ -140,7 +204,7 @@ Implementation lives in `skills/_parallax/house-view/audit_chain.py`, `chain_emi
 
 | Command | What it does |
 |---|---|
-| `Hi Parallax` or `/parallax-concierge` | Friendly concierge that opens a four-branch menu (Stock / Portfolio / Discovery / Investor profile), asks at most one clarifying question, then routes you to the right `/parallax-*` workflow. First-time users can say they're new: it checks the connection, asks their role, and starts a role-matched first run. The magic front door for everyday users. Also triggers on "what can Parallax do" and similar exploratory phrasings. |
+| `Hi Parallax` or `/parallax-concierge` | Routes a direct request or offers a role-based first run. Menus contain only workflows shipped in the installed distribution. |
 
 ### Single Stock
 
