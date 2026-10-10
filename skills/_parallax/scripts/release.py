@@ -426,7 +426,9 @@ def prepare(version: str) -> None:
     rendered_readme = distribution_docs.render(readme.read_text())
     changelog = ROOT / "CHANGELOG.md"
     log = changelog.read_text()
-    if f"## {version}\n" not in log:
+    if "\n## Unreleased\n" in log:
+        log = log.replace("\n## Unreleased\n", f"\n## {version}\n", 1)
+    elif f"## {version}\n" not in log:
         at = log.index("\n## ")
         log = log[:at] + f"\n## {version}\n\nRelease packages for the changes listed below.\n" + log[at:]
     path.write_text(text)

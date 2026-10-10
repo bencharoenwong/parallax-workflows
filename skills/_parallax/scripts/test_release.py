@@ -290,6 +290,25 @@ def test_prepare_is_repeatable_and_updates_one_version_source(tmp_path, monkeypa
         release.prepare("2026.10.7")
 
 
+def test_prepare_turns_unreleased_heading_into_version(tmp_path, monkeypatch):
+    root = tmp_path / "repo"
+    script = root / "skills/_parallax/scripts/build_bundle.py"
+    script.parent.mkdir(parents=True)
+    script.write_text('PLUGIN_VERSION = "2026.10.7"  # old\n')
+    (root / "CHANGELOG.md").write_text(
+        "# Changes\n\n## Unreleased\nPending.\n\n## 2026-10-07\nPrevious changes.\n")
+    (root / "README.md").write_text(
+        "<!-- who-for:begin -->\n<!-- who-for:end -->\n"
+        "<!-- distributions:begin -->\n<!-- distributions:end -->\n")
+    monkeypatch.setattr(release, "ROOT", root)
+    monkeypatch.setattr(bb, "PLUGIN_VERSION", "2026.10.7")
+    monkeypatch.setattr(bb, "build_plugin", lambda: None)
+    release.prepare("2026.10.11")
+    release.prepare("2026.10.11")
+    assert (root / "CHANGELOG.md").read_text() == (
+        "# Changes\n\n## 2026.10.11\nPending.\n\n## 2026-10-07\nPrevious changes.\n")
+
+
 @pytest.mark.parametrize("field", ["schema_version", "source", "preview", "tag", "built_at",
                                   "mcp", "skills", "assets"])
 def test_missing_release_contract_fields_rejected(tmp_path, field):

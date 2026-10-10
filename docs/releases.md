@@ -17,18 +17,20 @@ Set `PARALLAX_ROOT` to the checkout's absolute path:
 
 ```bash
 export PARALLAX_ROOT="$HOME/parallax-workflows"
-python3 "$PARALLAX_ROOT/skills/_parallax/scripts/release.py" prepare 2026.10.8
+python3 "$PARALLAX_ROOT/skills/_parallax/scripts/release.py" prepare YYYY.M.D
 python3 "$PARALLAX_ROOT/skills/_parallax/scripts/distribution_docs.py"
 ```
 
-Choose a later calendar date for subsequent releases. Versions use `YYYY.M.D`,
+Replace `YYYY.M.D` with the release date, and use a later date for each
+subsequent release. Versions use `YYYY.M.D`,
 without leading zeroes, and must represent a valid calendar date. This format
 also satisfies semantic versioning. `prepare` rejects an earlier version;
 rerunning it with the current version repairs generated files for that version
 and does not create a new release. Once published, use a later version for
 changes instead of replacing the existing tag or assets. The version literal
-in `build_bundle.py` is the sole source. `prepare` updates it, adds the
-CHANGELOG heading and regenerates both plugin manifests. Review those changes
+in `build_bundle.py` is the sole source. `prepare` updates it, renames the
+CHANGELOG `## Unreleased` heading to the version, or adds a version heading
+when none exists, and regenerates both plugin manifests. Review those changes
 before committing through the repository's normal process. The command does
 not commit, tag, push or publish.
 
@@ -54,7 +56,7 @@ No term list is copied into the assets.
 
 ```bash
 python3 "$PARALLAX_ROOT/skills/_parallax/scripts/release.py" build
-python3 "$PARALLAX_ROOT/skills/_parallax/scripts/release.py" verify "$PARALLAX_ROOT/dist/2026.10.8"
+python3 "$PARALLAX_ROOT/skills/_parallax/scripts/release.py" verify "$PARALLAX_ROOT/dist/YYYY.M.D"
 ```
 
 Each build writes to a fresh directory. Existing output is never replaced.
