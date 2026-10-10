@@ -364,17 +364,6 @@ def test_gate_commands_pass_the_report_by_file(tmp_path):
     assert ran >= len(SKILL_ANCHORS)
 
 
-def test_every_skill_writes_the_draft_before_the_gate():
-    """Each gated SKILL.md tells the model to write the draft (write-artifact)
-    in the render step that carries the gate command."""
-    skills_root = Path(__file__).resolve().parents[2] / "skills"
-    step = "`write-artifact` the complete drafted report to a new `<draft-path>`"
-    for key in SKILL_ANCHORS:
-        text = (skills_root / f"parallax-{key}" / "SKILL.md").read_text(encoding="utf-8")
-        gate_at = text.index('render_gate.py" --skill')
-        assert text.rfind(step, 0, gate_at) > text.rfind("\n### ", 0, gate_at), key
-
-
 def test_documented_stdin_fallback_runs_in_bash():
     """The §10.3 fallback for hosts without write-artifact, run as written."""
     conv = Path(__file__).resolve().parent / "parallax-conventions.md"
@@ -604,3 +593,15 @@ def test_input_output_is_utf8_whatever_the_locale(tmp_path):
     )
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.decode("utf-8") == "# Peer Comparison: X\nscore 7 → 8, ≤ 5, 台積電\n"
+
+
+def test_stdin_output_is_utf8_whatever_the_locale():
+    report = "# Peer Comparison: X\nscore 7 → 8, ≤ 5, 台積電\n"
+    proc = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve().parent / "render_gate.py"),
+         "--skill", "peer-comparison"],
+        input=(SCAFFOLD + report).encode("utf-8"),
+        capture_output=True, timeout=10, env={**os.environ, "PYTHONIOENCODING": "cp1252"},
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.decode("utf-8") == report

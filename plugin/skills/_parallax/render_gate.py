@@ -289,7 +289,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = ap.parse_args(argv)
     if args.input is None:
-        draft = sys.stdin.read()
+        stdin = getattr(sys.stdin, "buffer", None)
+        draft = sys.stdin.read() if stdin is None else stdin.read().decode("utf-8")
     else:
         try:
             draft = read_draft(args.input, args.skill)
