@@ -4,6 +4,14 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## 2026-10-10 (render gate reads the report on stdin)
+
+### Fixed
+- The render gate (`parallax-conventions.md` §10.3) and every gated skill's render step now feed the report to `render_gate.py` on stdin through a quoted heredoc, with no temp file. The old `DRAFT="$(mktemp …)"` form was denied by Claude Code as a shell expansion, even in its sandbox, so the gate command failed or prompted for approval before the report rendered. Test: `skills/_parallax/test_render_gate.py` runs each documented gate block in bash.
+
+### Changed
+- Live concierge journeys: J4 expects the morning brief's section headings instead of the literal words "morning brief", and on macOS a live run keeps the machine awake for the runner's lifetime. See `evals/README.md` § Live concierge journeys.
+
 ## 2026-10-09 (README install guidance and live concierge journeys)
 
 ### Added
