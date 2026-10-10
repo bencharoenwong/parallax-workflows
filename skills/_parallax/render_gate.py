@@ -293,15 +293,16 @@ def main(argv: list[str] | None = None) -> int:
         help="read the draft from PATH and delete it (default: read stdin)",
     )
     args = ap.parse_args(argv)
-    if args.input is None:
-        stdin = getattr(sys.stdin, "buffer", None)
-        draft = sys.stdin.read() if stdin is None else stdin.read().decode("utf-8")
-    else:
-        try:
+    try:
+        if args.input is not None:
             draft = read_draft(args.input, args.skill)
-        except (OSError, ValueError) as exc:
-            sys.stderr.write(f"[render-gate] ERROR: cannot read draft: {exc}\n")
-            return 2
+        elif (stdin := getattr(sys.stdin, "buffer", None)) is not None:
+            draft = stdin.read().decode("utf-8")
+        else:
+            draft = sys.stdin.read()
+    except (OSError, ValueError) as exc:
+        sys.stderr.write(f"[render-gate] ERROR: cannot read draft: {exc}\n")
+        return 2
     out = gate(draft, args.skill)
     # UTF-8 bytes, not the locale's encoding: a cp1252 stdout would raise on
     # "→" after the draft is already deleted.

@@ -605,3 +605,13 @@ def test_stdin_output_is_utf8_whatever_the_locale():
     )
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.decode("utf-8") == report
+
+
+def test_stdin_not_utf8_fails_closed():
+    proc = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve().parent / "render_gate.py"),
+         "--skill", "peer-comparison"],
+        input=b"# Peer Comparison \xff\xfe\n", capture_output=True, timeout=10,
+    )
+    assert proc.returncode == 2 and proc.stdout == b""
+    assert b"[render-gate] ERROR" in proc.stderr
