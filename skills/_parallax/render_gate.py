@@ -243,7 +243,12 @@ def read_draft(path: str, skill: str) -> str:
             f"(expected .../{DRAFT_DIR_NAME}/{skill}-<8 hex>.md)"
         )
     nofollow = getattr(os, "O_NOFOLLOW", 0)
-    flags = os.O_RDONLY | nofollow | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
+    flags = (
+        os.O_RDONLY
+        | nofollow
+        | getattr(os, "O_NONBLOCK", 0)
+        | getattr(os, "O_BINARY", 0)
+    )
     use_dir_fd = os.open in os.supports_dir_fd and hasattr(os, "O_DIRECTORY")
     if use_dir_fd:
         dir_fd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY | nofollow)
