@@ -4,6 +4,18 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-10-10: The render gate reads the report on stdin
+
+**Why:** Claude Code denies any command that contains a shell expansion, even inside its sandbox. The old gate form opened with `DRAFT="$(mktemp "${TMPDIR:-/tmp}/….XXXXXX")"`, so the gate command was denied or prompted for approval before the report rendered. That blocked the live concierge journeys that reach the gate and put an approval prompt in front of real users. A quoted heredoc fed straight to `render_gate.py` on stdin has no expansion, needs no temp file and no cleanup, and still stops all shell expansion inside the report.
+
+**Impact:** `parallax-conventions.md` §10.3 owns the one gate form, and every gated skill's render step uses it. `test_render_gate.py` runs each documented gate block in bash and checks its stdout against the gate. The render-gate caveat in `evals/README.md` § Live concierge journeys now records that an expanded form would fail the journeys that reach the gate.
+
+**Alternatives:**
+- [DROP] Keep the temp-file form and approve it with a command-approval hook. Rejected on 2026-10-09: the hook could be made to approve arbitrary code.
+- [DROP] Write the draft to a fixed temp path to avoid `$(mktemp …)`. A predictable `/tmp` path is a symlink hazard.
+
+**Flip conditions:** Claude Code stops denying shell expansions in sandboxed commands, or the gate needs input that cannot pass through stdin → revisit the form in §10.3.
+
 ## 2026-10-09: The concierge asks the role and shows only shipped skills; live journeys run sandboxed
 
 **Why:** A newcomer's role decides which skills fit, and wording alone is a poor signal, so the concierge asks the role and never guesses it. Users see only the skills shipped on their surface; a fail-closed build filter enforces this, so a skill missing from a package is never offered there. The role map lives in the manifest, so builds and the README "Who this is for" list generate from one source. Scheduling is not offered until a host's `schedule-task` binding is verified, because a live journey caught the concierge offering it where no host had been exercised. Live journeys run the built plugin in a scratch home inside the Claude Code Bash sandbox, so local branding never leaks into a run, writes stay in the scratch tree, and the shell has no network.
