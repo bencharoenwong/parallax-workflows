@@ -75,6 +75,16 @@ def test_existing_output_preserved(tmp_path, monkeypatch):
     assert (out / "keep").read_text() == "previous release"
 
 
+@pytest.mark.parametrize("variant", ["demo/NOTES.md", "demo/note\u0301s.md"])
+def test_zip_case_or_unicode_variant_names_are_rejected(tmp_path, variant):
+    archive = tmp_path / "bad.skill"
+    with zipfile.ZipFile(archive, "w") as z:
+        z.writestr("demo/notes.md" if "NOTES" in variant else "demo/not\u00e9s.md", "a")
+        z.writestr(variant, "b")
+    with pytest.raises(bb.BuildError, match="duplicate"):
+        release.unpack(archive, tmp_path / "out")
+
+
 def refresh_checksums(out, index):
     for asset in index["assets"]:
         path = out / asset["name"]
@@ -146,6 +156,18 @@ def test_nested_collection_is_scanned(tmp_path):
     release.write_zip(outer, [(inner.name, inner)])
     with pytest.raises(bb.BuildError, match="term scan"):
         release.verify_asset(outer, "2026.10.8")
+
+
+def test_collection_with_different_skill_package_rejected(tmp_path):
+    out = make_release(tmp_path)
+    other = tmp_path / "other.md"
+    other.write_text("---\nname: demo\ndescription: A demo\n---\nChanged\n")
+    inner = tmp_path / "demo.skill"
+    release.write_zip(inner, [("demo/SKILL.md", other)])
+    release.write_zip(out / "parallax-claude-ai-skills.zip", [(inner.name, inner)])
+    refresh_checksums(out, json.loads((out / "index.json").read_text()))
+    with pytest.raises(bb.BuildError, match="different skill package"):
+        release.verify_release(out)
 
 
 def test_wrong_skill_root_rejected(tmp_path):
@@ -220,6 +242,16 @@ def test_build_records_provenance_and_download_urls(small_build, monkeypatch, pr
         assert (asset["url"] is None) == preview
         if not preview:
             assert f"/v{bb.PLUGIN_VERSION}/" in asset["url"]
+
+
+def test_build_refuses_skill_in_both_web_and_release_tiers(small_build, monkeypatch):
+    monkeypatch.setattr(release, "source_state",
+                        lambda: {"commit": "a" * 40, "dirty": True, "tree_sha256": "b" * 64})
+    monkeypatch.setattr(bb.skill_manifest, "standalone_skills", lambda tier: ["demo"])
+    output = small_build / "dist/output"
+    with pytest.raises(bb.BuildError, match="both a web and a release-tier"):
+        release.build(output, preview=True)
+    assert not output.exists()
 
 
 def test_source_change_during_build_exposes_no_output(small_build, monkeypatch):

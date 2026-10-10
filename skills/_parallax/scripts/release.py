@@ -16,6 +16,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import unicodedata
 import zipfile
 from datetime import date, datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -106,12 +107,14 @@ def unpack(archive: Path, target: Path) -> None:
             p = PurePosixPath(info.filename)
             mode = info.external_attr >> 16
             canonical = p.as_posix()
+            # Case-insensitive filesystems merge case or Unicode-form variants.
+            key = unicodedata.normalize("NFC", canonical).casefold()
             if (not p.parts or p.is_absolute() or ".." in p.parts
                     or "\\" in info.filename or ":" in info.filename
-                    or canonical in seen or stat.S_ISLNK(mode)
+                    or key in seen or stat.S_ISLNK(mode)
                     or (stat.S_IFMT(mode) not in (0, stat.S_IFREG, stat.S_IFDIR))):
                 raise bb.BuildError("unsafe or duplicate archive member")
-            seen.add(canonical)
+            seen.add(key)
             dest = target.joinpath(*p.parts)
             if info.is_dir():
                 dest.mkdir(parents=True, exist_ok=True)
@@ -361,6 +364,8 @@ def build(output: Path, preview: bool = False) -> Path:
             write_zip(assets / "parallax-plugin.zip", [
                 ("plugin/" + p.relative_to(bb.PLUGIN_DIR).as_posix(), p)
                 for p in bb.PLUGIN_DIR.rglob("*") if p.is_file()])
+            if set(bb.WEB_SKILLS) & set(bb.skill_manifest.standalone_skills("release")):
+                raise bb.BuildError("a skill cannot be both a web and a release-tier package")
             bb.build_web(bb.WEB_SKILLS)
             env = dict(os.environ, SKILL_BUILD_OUT_DIR=str(assets))
             subprocess.run(["bash", str(ROOT / "skills/build-skills.sh")],
