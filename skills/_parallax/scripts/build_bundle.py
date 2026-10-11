@@ -128,6 +128,8 @@ PARALLAX_INCLUDE = [
     "house-view/schema.yaml",
     "house-view/render_helpers.md",
     "house-view/view_status.py",
+    "house-view/audit_chain.py",
+    "house-view/audit_append.py",
     "house-view/gap_detect.py",
     "house-view/gap_suggest.py",
     "house-view/auto-on-load-judge-pattern.md",
@@ -1550,6 +1552,7 @@ _PLACEHOLDER = "\x00SKILLDIR\x00"
 # forgotten silently.
 RUNTIME_COMPANIONS = {
     "house-view/gap_suggest.py": ("house-view/gap_detect.py",),
+    "house-view/audit_append.py": ("house-view/audit_chain.py", "render_gate.py"),
     "white-label/rm_consumer.py": ("white-label/loader.py",),
     "white-label/loader.py": ("white-label/schema.yaml",),
     # loader.md runs `python -m view_status` from the house-view directory.

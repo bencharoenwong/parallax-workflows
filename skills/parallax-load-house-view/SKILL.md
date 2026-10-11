@@ -191,24 +191,23 @@ Every extraction attempt — including re-extracts and rejections that never bec
 
 **How to write it.** Append the row with `audit_chain.append_entry` — the append-only path that takes the view's `flock`, computes `prev_entry_hash`, and never replaces the file. It is the one sanctioned direct write to `audit.jsonl`; `write-artifact` is not (see Step 6 Stage 2). `view_commit` cannot produce this row: it derives `audit_entry["action"]` from `--mode`, and there is no `extraction_attempt` mode. Run exactly:
 
-```bash
-cd <repo>/skills/_parallax/house-view && python3 -c '
-import json, os, sys, audit_chain
-from pathlib import Path
-view_dir = Path(os.environ.get("PARALLAX_HOUSE_VIEW_DIR")
-                or Path.home() / ".parallax" / "active-house-view").expanduser()
-view_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
-print(json.dumps(audit_chain.append_entry(view_dir / "audit.jsonl", json.load(sys.stdin))))
-' <<'ROW'
-{"schema_version": 1, "ts": "...", "skill": "parallax-load-house-view",
- "action": "extraction_attempt", "applied": false, "query_summary": "...",
- "disposition": "confirmed", "draft_yaml_hash": "..."}
-ROW
-```
+1. `write-artifact` the row, as one JSON object, to `<cwd>/.parallax-render/audit-<8 random hex>.json` (absolute literal path), for example:
 
-Note `import audit_chain` and `audit_chain.append_entry(...)` — module-attribute access, not a `from`-import. The view directory resolves the same way `view_commit` resolves it (`$PARALLAX_HOUSE_VIEW_DIR`, else `~/.parallax/active-house-view/`), which is why the snippet does not hardcode a path. On a fresh install the directory is created `0700`; `append_entry` writes the file `0600` and mints the `chain_root` on the empty chain.
+   ```json
+   {"schema_version": 1, "ts": "...", "view_id": null, "version_id": null,
+    "skill": "parallax-load-house-view", "action": "extraction_attempt", "applied": false,
+    "query_summary": "...", "disposition": "confirmed", "draft_yaml_hash": "..."}
+   ```
 
-Required fields: `schema_version`, `ts`, `skill`, `action`, `applied=false`. Conditional: `query_summary` (source file basename or URL), `disposition` (one of: `confirmed`, `edited`, `re_extracted`, `rejected`), `draft_yaml_hash` (sha256 of the draft the uploader saw; lets us correlate with a later save's `view_hash`), `extraction_duration_ms` (optional, wall-clock from extraction start to disposition), `hint` (when disposition=re_extracted, the hint text truncated to 200 chars).
+2. `run-shell` the shared append helper on that file, as one literal command:
+
+   ```bash
+   python3 "<repo>/skills/_parallax/house-view/audit_append.py" --input "<draft-path>"
+   ```
+
+The helper calls `audit_chain.append_entry` after checking the log with `verify_chain`, and resolves the view directory the same way `view_commit` does (`PARALLAX_HOUSE_VIEW_DIR`, else `~/.parallax/active-house-view/`), so no path or variable appears in the command. Its exit codes and the never-fall-back rule are in loader.md §6.
+
+Required fields: `schema_version`, `ts`, `view_id=null`, `version_id=null`, `skill`, `action`, `applied=false`. Conditional: `query_summary` (source file basename or URL), `disposition` (one of: `confirmed`, `edited`, `re_extracted`, `rejected`), `draft_yaml_hash` (sha256 of the draft the uploader saw; lets us correlate with a later save's `view_hash`), `extraction_duration_ms` (optional, wall-clock from extraction start to disposition), `hint` (when disposition=re_extracted, the hint text truncated to 200 chars).
 
 A successful `save` after a confirmed draft still emits its own `action: "save"` entry per Step 6 — the two actions are independent. An `extraction_attempt` with `disposition=confirmed` tells you "the uploader confirmed this draft"; the subsequent `save` tells you "this draft was persisted." Rejected or re-extracted drafts have no matching save.
 
@@ -244,21 +243,19 @@ On `Confirm`:
 
      Stage 1's read happens outside the lock. The only thing that makes that safe is `expected_identity`, which `view_commit` re-checks under the lock and refuses to write past if it moved. Do not remove it as redundant.
    - **Stage 1b: Archive (non-blocking, best-effort):** After version-diff is computed, archive the current active `~/.parallax/active-house-view/view.yaml` and `prose.md` to `~/.parallax/active-house-view/.archive/<old_view_id>-<old_version_id>/` **asynchronously**. Archive failures are non-blocking — log a warning but do not abort the save. (The archive is a courtesy; it is not load-bearing for correctness.)
-   - **Stage 2 — Commit.** Use the staging directory `$HOME/.parallax/.staging` — create it with `mkdir -p "$staging" && chmod 700 "$staging"` (a bare `mkdir` inherits the shell's umask, typically `0755`; the `chmod 700` is what protects the source-extracted content in `provenance.yaml` while it sits outside the view directory, and a fixed path under `$HOME` avoids the world-writable-directory exposure `/tmp` carries). Write the three artifacts into `$staging` with `write-artifact` (`view.yaml` with frontmatter fields set per the earlier substeps, `prose.md` with frontmatter **four fields in this order** — `paired_yaml_hash`, `prose_body_hash`, `view_id`, `version_id` — frontmatter being the only part of the file NOT covered by `prose_body_hash`, and `provenance.yaml`), **and write the plan JSON itself into `$staging/plan.json` with `write-artifact` too** — never type the plan into a shell heredoc. The plan carries document-derived text (the `version_diff` values come from the CIO draft's `tilts`/`excludes`), and a heredoc would hand that text to the shell for command substitution; a file written by `write-artifact` never passes through a shell. Because the staging path is known, every `path` in the plan is a literal absolute path (no `~`, no variables — `view_commit` reads the file as-is). Never write into `~/.parallax/active-house-view/` yourself. Remove `$staging` unconditionally after the commit (shown in the block) — the contents are reconstructible, so leaving source-extracted output behind on a failed commit is the worse trade — and end the block with `exit "$status"` so `run-shell` reports `view_commit`'s own exit code rather than the cleanup's.
+   - **Stage 2 — Commit.** Use the staging directory `<home>/.parallax/.staging`, where `<home>` is the home directory written as a literal absolute path (no `$HOME`, no `~`; conventions §14.1) — create it with `mkdir -p` then `chmod 700` (a bare `mkdir` inherits the shell's umask, typically `0755`; the `chmod 700` is what protects the source-extracted content in `provenance.yaml` while it sits outside the view directory, and a fixed path under `$HOME` avoids the world-writable-directory exposure `/tmp` carries). Write the three artifacts into the staging directory with `write-artifact` (`view.yaml` with frontmatter fields set per the earlier substeps, `prose.md` with frontmatter **four fields in this order** — `paired_yaml_hash`, `prose_body_hash`, `view_id`, `version_id` — frontmatter being the only part of the file NOT covered by `prose_body_hash`, and `provenance.yaml`), **and write the plan JSON itself into `<home>/.parallax/.staging/plan.json` with `write-artifact` too** — never type the plan into a shell heredoc. The plan carries document-derived text (the `version_diff` values come from the CIO draft's `tilts`/`excludes`), and a heredoc would hand that text to the shell for command substitution; a file written by `write-artifact` never passes through a shell. Because the staging path is known, every `path` in the plan is a literal absolute path (no `~`, no variables — `view_commit` reads the file as-is). Never write into `~/.parallax/active-house-view/` yourself. Run `view_commit` as its own `run-shell` command, so the reported exit code is `view_commit`'s own. Then remove the staging directory with a separate command, whatever that exit code was — the contents are reconstructible, so leaving source-extracted output behind on a failed commit is the worse trade.
 
      **`audit.jsonl` is append vs replace, not touch vs don't-touch.** Never stage, rename, copy over, or overwrite it, and never write it with `write-artifact` — every one of those replaces the file, which swaps the inode out from under the append path and truncates the chain into something that still verifies green. Appending through `audit_chain.append_entry` is the one sanctioned direct write (that is how Step 5b's `extraction_attempt` row lands, and `view_commit` itself appends through the same call). Every commit of the canonical artifacts — `view.yaml`, `prose.md`, `provenance.yaml` — goes through `view_commit`, which appends its own witnessing row. Then run exactly:
 
      ```bash
-     staging="$HOME/.parallax/.staging"
-     mkdir -p "$staging" && chmod 700 "$staging"
-     # write view.yaml, prose.md, provenance.yaml, and plan.json into "$staging" via write-artifact, then:
-     cd <repo>/skills/_parallax/house-view && python3 -m view_commit --mode save --staging-dir "$staging" < "$staging/plan.json"
-     status=$?
-     rm -rf "$staging"
-     exit "$status"
+     mkdir -p "<home>/.parallax/.staging" && chmod 700 "<home>/.parallax/.staging"
+     # write view.yaml, prose.md, provenance.yaml, and plan.json into <home>/.parallax/.staging via write-artifact, then, as its own command:
+     cd <repo>/skills/_parallax/house-view && python3 -m view_commit --mode save --staging-dir "<home>/.parallax/.staging" < "<home>/.parallax/.staging/plan.json"
+     # then, whatever that exit code was, as a separate command:
+     rm -rf "<home>/.parallax/.staging"
      ```
 
-     `plan.json` (written with `write-artifact`; `<home>` is the literal expansion of `$HOME`):
+     `plan.json` (written with `write-artifact`; `<home>` is the home directory as a literal absolute path):
 
      ```json
      {"write": {"view.yaml": {"path": "<home>/.parallax/.staging/view.yaml"},
@@ -274,7 +271,7 @@ On `Confirm`:
 
      Do not pass `--dir`. `view_commit` resolves the view directory from `$PARALLAX_HOUSE_VIEW_DIR`, falling back to `~/.parallax/active-house-view/` — the same order `view_status.py` and loader.md use. Hardcoding `--dir` overrides a per-org directory the operator set deliberately.
 
-     `--staging-dir` is the same `$staging` directory the artifacts and `plan.json` were just written into, and it is a containment boundary, not a convenience. A `{"path": ...}` value is read **only** when it resolves to a file sitting directly in that directory; a path elsewhere, a `..` that climbs out, and a symlink inside the directory whose target resolves outside it are each refused before the file is opened. Omit the flag and every `path` ref is refused — so pass it whenever the plan uses one, and give it one directory rather than a parent that happens to contain several. The boundary exists because the plan is assembled after reading an untrusted CIO document: without it, text in that document could name any local file and have its contents committed into the 7-year record. A `path` must also resolve outside the view directory — `view_commit` rejects one that resolves inside it, since reading the file you are about to replace would silently no-op the change — and the staging directory itself may not be, contain, or sit inside the view directory. `view_commit` sets `audit_entry.action` from `--mode` itself; do not set `action` in the plan. `audit_entry.view_hash` is required whenever `view.yaml` is in the write set — a row that can't identify the view it witnesses defeats the row-vs-bytes check.
+     `--staging-dir` is the same staging directory the artifacts and `plan.json` were just written into, and it is a containment boundary, not a convenience. A `{"path": ...}` value is read **only** when it resolves to a file sitting directly in that directory; a path elsewhere, a `..` that climbs out, and a symlink inside the directory whose target resolves outside it are each refused before the file is opened. Omit the flag and every `path` ref is refused — so pass it whenever the plan uses one, and give it one directory rather than a parent that happens to contain several. The boundary exists because the plan is assembled after reading an untrusted CIO document: without it, text in that document could name any local file and have its contents committed into the 7-year record. A `path` must also resolve outside the view directory — `view_commit` rejects one that resolves inside it, since reading the file you are about to replace would silently no-op the change — and the staging directory itself may not be, contain, or sit inside the view directory. `view_commit` sets `audit_entry.action` from `--mode` itself; do not set `action` in the plan. `audit_entry.view_hash` is required whenever `view.yaml` is in the write set — a row that can't identify the view it witnesses defeats the row-vs-bytes check.
 
      Exit 0 prints the committed audit row as JSON on stdout — that row already carries `prev_entry_hash` linking and is authoritative; nothing further needs to append it. Exit 2 means the commit was refused and **nothing was written**; surface the message verbatim and do not retry blindly — read why first (a moved `expected_identity` means the active view changed since Stage 1's read). Exit 1 means something else went wrong, including the rare case where the artifacts were renamed into place but the audit row could not be appended — that failure is loud and names its own recovery in the message; follow it rather than hand-editing the chain.
 10. Not a separate item — `version_diff` computation happens in item 9's Stage 1, before archiving.
@@ -301,21 +298,19 @@ On `Confirm`:
 
 ### Commit invocations for `--extend`, `--re-pair`, `--clear`
 
-Same contract as Step 6 Stage 2: use the staging directory `$HOME/.parallax/.staging`, created with `mkdir -p "$staging" && chmod 700 "$staging"` (the `0700` mode is what protects source-extracted content outside the view directory, and a fixed path under `$HOME` avoids `/tmp`'s world-writable exposure), write every file to be committed **and the plan JSON itself** into it with `write-artifact` — never a shell heredoc — feed the plan via `< "$staging/plan.json"`, name that directory in `--staging-dir` (path refs are read only from there — see Stage 2), then remove it unconditionally and `exit "$status"` so the commit's exit code is what the block reports. Plan `path` values are literal absolute paths (no `~`, no variables). Omit `--dir` so `$PARALLAX_HOUSE_VIEW_DIR` (default `~/.parallax/active-house-view/`) resolves the target, `view_commit` sets `audit_entry.action` from `--mode` itself, exit 0 prints the committed row, exit 2 means refused and nothing was written, exit 1 is anything else (including the rare artifacts-committed-row-not-appended case, which names its own recovery). `audit.jsonl` stays append-only throughout — see the Stage 2 rule above.
+Same contract as Step 6 Stage 2: use the staging directory `<home>/.parallax/.staging` as a literal path, created with `mkdir -p` then `chmod 700` (the `0700` mode is what protects source-extracted content outside the view directory, and a fixed path under `$HOME` avoids `/tmp`'s world-writable exposure), write every file to be committed **and the plan JSON itself** into it with `write-artifact` — never a shell heredoc — feed the plan via `< "<home>/.parallax/.staging/plan.json"`, name that directory in `--staging-dir` (path refs are read only from there — see Stage 2), run the commit as its own command so its exit code is the one reported, then remove the staging directory with a separate command whatever that exit code was. Plan `path` values are literal absolute paths (no `~`, no variables). Omit `--dir` so `$PARALLAX_HOUSE_VIEW_DIR` (default `~/.parallax/active-house-view/`) resolves the target, `view_commit` sets `audit_entry.action` from `--mode` itself, exit 0 prints the committed row, exit 2 means refused and nothing was written, exit 1 is anything else (including the rare artifacts-committed-row-not-appended case, which names its own recovery). `audit.jsonl` stays append-only throughout — see the Stage 2 rule above.
 
 `--extend` (writes `view.yaml` + `prose.md`; `view_hash` is required in `audit_entry` because `view.yaml` is in the write set). Create the staging directory, write both files and `plan.json` into it with `write-artifact`, then commit:
 
 ```bash
-staging="$HOME/.parallax/.staging"
-mkdir -p "$staging" && chmod 700 "$staging"
-# write view.yaml, prose.md, and plan.json into "$staging" via write-artifact, then:
-cd <repo>/skills/_parallax/house-view && python3 -m view_commit --mode extend --staging-dir "$staging" < "$staging/plan.json"
-status=$?
-rm -rf "$staging"
-exit "$status"
+mkdir -p "<home>/.parallax/.staging" && chmod 700 "<home>/.parallax/.staging"
+# write view.yaml, prose.md, and plan.json into <home>/.parallax/.staging via write-artifact, then, as its own command:
+cd <repo>/skills/_parallax/house-view && python3 -m view_commit --mode extend --staging-dir "<home>/.parallax/.staging" < "<home>/.parallax/.staging/plan.json"
+# then, whatever that exit code was, as a separate command:
+rm -rf "<home>/.parallax/.staging"
 ```
 
-`plan.json` (`<home>` is the literal expansion of `$HOME`):
+`plan.json` (`<home>` is the home directory as a literal absolute path):
 
 ```json
 {"write": {"view.yaml": {"path": "<home>/.parallax/.staging/view.yaml"},
@@ -328,16 +323,14 @@ exit "$status"
 `--re-pair` (writes `prose.md` only — `view.yaml` is untouched). Create the staging directory, write the file and `plan.json` into it with `write-artifact`, then commit:
 
 ```bash
-staging="$HOME/.parallax/.staging"
-mkdir -p "$staging" && chmod 700 "$staging"
-# write prose.md and plan.json into "$staging" via write-artifact, then:
-cd <repo>/skills/_parallax/house-view && python3 -m view_commit --mode re-pair --staging-dir "$staging" < "$staging/plan.json"
-status=$?
-rm -rf "$staging"
-exit "$status"
+mkdir -p "<home>/.parallax/.staging" && chmod 700 "<home>/.parallax/.staging"
+# write prose.md and plan.json into <home>/.parallax/.staging via write-artifact, then, as its own command:
+cd <repo>/skills/_parallax/house-view && python3 -m view_commit --mode re-pair --staging-dir "<home>/.parallax/.staging" < "<home>/.parallax/.staging/plan.json"
+# then, whatever that exit code was, as a separate command:
+rm -rf "<home>/.parallax/.staging"
 ```
 
-`plan.json` (`<home>` is the literal expansion of `$HOME`):
+`plan.json` (`<home>` is the home directory as a literal absolute path):
 
 ```json
 {"write": {"prose.md": {"path": "<home>/.parallax/.staging/prose.md"}},
@@ -352,17 +345,25 @@ exit "$status"
 1. Read `metadata.view_id` and `metadata.version_id` from the current `view.yaml`.
 2. Resolve the view directory exactly as the command below does — `$PARALLAX_HOUSE_VIEW_DIR` if set, else `~/.parallax/active-house-view/` — and copy `view.yaml`, `prose.md`, and `provenance.yaml` (each one that exists) into `<view_dir>/.archive/<view_id>-<version_id>/`, creating the directory `0700`. Do not hardcode the default path: the command omits `--dir` and clears whichever directory that variable resolves to, so archiving out of a different one would again make `destination` name a location that does not hold what was deleted. Use `load-reference` + `write-artifact`, or `cp`; this is a copy, not a move — `view_commit` does the removal.
 3. Verify that every artifact **that existed** in step 2 landed in the archive — a legacy view carrying no `provenance.yaml` archives two files, not three, and that is not a failure. **If any artifact that did exist failed to copy, stop — do not run the clear.** Report the failure and leave the active view in place; an unrecoverable clear is worse than a clear that did not happen.
-4. Only then run the command below, passing that same directory as `destination`. Its write set is empty, so it takes no `--staging-dir` — nothing is read from disk.
+4. Only then commit, passing that same directory as `destination`. Create the staging directory, write the plan below to `<home>/.parallax/.staging/plan.json` with `write-artifact` (never a heredoc: the checker refuses a heredoc body holding a JSON object), and run the commit as its own command. Its write set is empty, so it takes no `--staging-dir`. Then remove the staging directory with a separate command, whatever the exit code was.
 
-```bash
-cd <repo>/skills/_parallax/house-view && python3 -m view_commit --mode clear <<'PLAN'
+`plan.json` (written with `write-artifact`):
+
+```json
 {"write": {},
  "audit_entry": {"schema_version": 1, "ts": "...", "view_id": "...", "version_id": "<current version_id>",
                  "skill": "parallax-load-house-view", "applied": true,
                  "destination": "<the .archive/<view_id>-<version_id>/ path written in step 2>",
                  "reason": "operator cleared"},
  "expected_identity": {"version_id": "<the version_id read before this call>"}}
-PLAN
+```
+
+```bash
+mkdir -p "<home>/.parallax/.staging" && chmod 700 "<home>/.parallax/.staging"
+# write plan.json into <home>/.parallax/.staging via write-artifact, then, as its own command:
+cd <repo>/skills/_parallax/house-view && python3 -m view_commit --mode clear < "<home>/.parallax/.staging/plan.json"
+# then, whatever that exit code was, as a separate command:
+rm -rf "<home>/.parallax/.staging"
 ```
 
 ### Status block (output of `--status`)
