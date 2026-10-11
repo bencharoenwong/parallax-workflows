@@ -4,6 +4,16 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary** — what landed and when. For the **reasoning** behind each decision (why this approach, what alternatives were rejected, when to revisit), see [DECISIONS.md](DECISIONS.md). Each shipping entry below has a corresponding decision-log entry under the same date.
 
+## Unreleased
+
+### Added
+- A release command prepares date versions and builds the plugin, upload skills, checksums and machine-readable asset index. Dirty checkouts require preview mode, which omits download URLs. Builds require the complete maintainer scan and verify the extracted archives before exposing output.
+- Manifest-generated role and distribution tables, a plugin-first installation guide, an agent entry point, and maintainer release instructions.
+
+### Changed
+- Plugin and marketplace versions are prepared together by `release.py prepare`. Release output remains local until explicit publication approval.
+- Release verification rejects non-text encodings and source symlinks in package inputs. Index descriptions match the mapped packaged skills after distribution transforms.
+
 ## 2026-10-09 (README install guidance and live concierge journeys)
 
 ### Added
@@ -12,6 +22,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 ### Changed
 - README: plugin-first install for claude.ai, the desktop and mobile apps, Cowork and Claude Code, with single-skill upload as the fallback. The "Who this is for" role list must match `render_who_for()` in `build_bundle.py`, which renders it from the `_parallax/manifest.json` roles. Test: `skills/_parallax/scripts/test_readme_contract.py`.
 - Concierge: the after-result step offers scheduling only when the host's `schedule-task` binding is present and not marked *verify*, and never asks where to deliver output.
+
 
 ## 2026-10-08 (plugin connector and welcome data)
 
