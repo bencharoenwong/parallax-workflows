@@ -7,7 +7,7 @@ built claude.ai zip. Each test checks something the build does to the text:
 the generated new-here block, the concierge filter, the claude.ai rewrites
 and their guards, and what each distribution names and ships. Prose the
 build copies through from source unchanged is not tested here; conversation
-behavior is covered by the live journeys (PR 3).
+behavior is covered by the live concierge journey evals.
 
 Presence of the "## New here?" heading, presence of both markers, and
 absence of the Investor-profile branch are already covered by
@@ -120,21 +120,25 @@ def test_zip_concierge_offers_only_what_it_ships(zip_text):
     assert not (bb.named_skills(text) - avail)
 
 
-def test_transform_concierge_web_fails_closed_if_a_rewritten_route_ships_on_web(monkeypatch):
-    """Follow-up fix: transform_concierge_web's rewrites hardcode today's
+def test_concierge_web_absent_routes_are_listed():
+    assert bb._CONCIERGE_WEB_ASSUMES_ABSENT  # else the parametrized guard test is vacuous
+
+
+@pytest.mark.parametrize("newly_shipped", bb._CONCIERGE_WEB_ASSUMES_ABSENT)
+def test_transform_concierge_web_fails_closed_if_a_rewritten_route_ships_on_web(
+        monkeypatch, newly_shipped):
+    """transform_concierge_web's rewrites hardcode today's
     web set into their wording. If manifest.json later ships one of the
     skills a rewrite assumes absent, the anchor still matches verbatim
     (nothing about it depends on the manifest), so _swap's own drift check
     would stay silent while the prose under-offers. Must raise instead."""
-    assert bb._CONCIERGE_WEB_ASSUMES_ABSENT  # non-empty, or this test is vacuous
-    newly_shipped = bb._CONCIERGE_WEB_ASSUMES_ABSENT[0]
     monkeypatch.setattr(bb, "WEB_SKILLS", [*bb.WEB_SKILLS, newly_shipped])
     with pytest.raises(bb.BuildError):
         bb.transform_concierge_web(SRC)
 
 
 def test_render_new_here_zip_states_the_upload_clause_applies_everywhere():
-    """spec §2 — every offer on the zip path carries the
+    """Every offer on the zip path carries the
     upload clause, not only the state-5 hand-off."""
     web_avail = set(bb.WEB_SKILLS) | set(bb.skill_manifest.standalone_skills("release"))
     zip_block = bb.render_new_here(web_avail, "zip")
@@ -146,7 +150,7 @@ def test_render_new_here_zip_states_the_upload_clause_applies_everywhere():
 
 
 def test_render_new_here_raises_when_a_real_role_has_no_shipped_start():
-    """a role with zero shipped starts silently rendered
+    """A role with zero shipped starts silently rendered
     the integrator row's wording ('see integration pointer'), masking what
     is really a manifest/distribution mismatch for a role that is not the
     integrator. Only the integrator role may legitimately have no starts."""
@@ -176,7 +180,7 @@ def test_filter_concierge_fails_on_an_unshipped_name_in_prose():
 
 
 def test_filter_concierge_raises_on_a_bullet_mixing_shipped_and_unshipped():
-    """silently dropping a bullet or row that names BOTH
+    """Silently dropping a bullet or row that names BOTH
     a shipped and an unshipped skill would take the shipped route down with
     it. Must raise so the author splits the line instead."""
     text = ("- Single ticker → `/parallax-should-i-buy`, then offer "
