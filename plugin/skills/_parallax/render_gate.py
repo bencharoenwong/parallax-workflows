@@ -217,13 +217,14 @@ def gate(draft: str, skill: str) -> str:
 
 
 DRAFT_DIR_NAME = ".parallax-render"
-_DRAFT_NAME = re.compile(r"[a-z0-9-]+-[0-9a-f]{8}\.md")
+_DRAFT_SUFFIXES = (".md", ".json")
 
 
-def read_draft(path: str, skill: str) -> str:
+def read_draft(path: str, skill: str, suffix: str = ".md") -> str:
     """Read the draft the skill wrote at `path`, then delete it.
 
-    Only a gate draft is accepted: `<dir>/.parallax-render/<skill>-<8 hex>.md`. Any
+    Only a draft is accepted: `<dir>/.parallax-render/<skill>-<8 hex><suffix>`, where
+    suffix is `.md` (reports) or `.json` (house-view audit rows, audit_append.py). Any
     other path is refused before it is opened, so the gate prints and deletes only
     a draft-shaped file in a `.parallax-render` directory. Any directory of that
     name qualifies; the gate does not check that it sits under the session's cwd.
@@ -234,14 +235,14 @@ def read_draft(path: str, skill: str) -> str:
     error: the report still renders.
     """
     parent, name = os.path.split(os.path.abspath(path))
-    if (
-        os.path.basename(parent) != DRAFT_DIR_NAME
-        or not _DRAFT_NAME.fullmatch(name)
-        or not name.startswith(skill + "-")
+    if suffix not in _DRAFT_SUFFIXES or not re.fullmatch(r"[a-z0-9-]+", skill):
+        raise ValueError(f"unsupported draft kind: {skill!r} {suffix!r}")
+    if os.path.basename(parent) != DRAFT_DIR_NAME or not re.fullmatch(
+        re.escape(skill) + r"-[0-9a-f]{8}" + re.escape(suffix), name
     ):
         raise ValueError(
-            f"not a render-gate draft path for skill {skill!r}: {path} "
-            f"(expected .../{DRAFT_DIR_NAME}/{skill}-<8 hex>.md)"
+            f"not a draft path for {skill!r}: {path} "
+            f"(expected .../{DRAFT_DIR_NAME}/{skill}-<8 hex>{suffix})"
         )
     nofollow = getattr(os, "O_NOFOLLOW", 0)
     flags = (

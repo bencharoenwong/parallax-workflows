@@ -234,7 +234,20 @@ When NO active view is loaded, skills run as today — standard output, no pream
 
 ## 6. Audit logging
 
-Every consume event appends one JSONL line to `~/.parallax/active-house-view/audit.jsonl`. The schema below is stable — the managed version promotes this to a Supabase `house_view_audit` table with identical field names and types, so any local audit file can be bulk-loaded without transformation.
+Every consume event appends one JSONL line to `audit.jsonl` in the view directory (§1). Append it in two steps, the same shape as the render gate (`parallax-conventions.md` §10.3):
+
+1. `write-artifact` the row, as one JSON object, to a new draft path: `<cwd>/.parallax-render/audit-<8 random hex>.json`, written as an absolute literal path. Use a fresh random suffix each time.
+2. `run-shell` exactly this one-line command, with `<draft-path>` replaced by that same literal path:
+
+```bash
+python3 "<skill-dir>/../_parallax/house-view/audit_append.py" --input "<draft-path>"
+```
+
+The helper reads and deletes the draft, resolves the view directory itself (`PARALLAX_HOUSE_VIEW_DIR`, else `~/.parallax/active-house-view/`), creates it if missing, checks the existing log with `verify_chain`, and chains the row to the previous one. The row never appears in the command, so quotes in a company name, `$(…)` in user text, or the `{"` that Claude Code's checker refuses inside a command cannot break it. Never put the row in the command line or a heredoc, never add `chain_root` or `prev_entry_hash` (the helper owns the chain), and never append with `printf`, `echo` or `>>`, which breaks the hash chain.
+
+Any nonzero exit prints one `[audit-append] ERROR:` line (2: unusable draft or malformed row; 3: the chain helper cannot run on this host; 4: the existing log fails verification, so nothing was appended; 1: any other failure). The report itself is unaffected: continue without the audit row and never fall back to a raw append. On exit 4, add `Audit log: not written (existing log fails verification)` to About This Report, so a broken log is visible.
+
+The schema below is stable — the managed version promotes this to a Supabase `house_view_audit` table with identical field names and types, so any local audit file can be bulk-loaded without transformation.
 
 ### 6.1 Required fields (every line)
 
@@ -305,7 +318,7 @@ Every consume event appends one JSONL line to `~/.parallax/active-house-view/aud
 ### 6.4 Minimal examples
 
 ```json
-{"schema_version":1,"ts":"2026-04-24T05:47:00Z","skill":"parallax-load-house-view","action":"extraction_attempt","applied":false,"query_summary":"ubs_hv_monthly_letter_19_March_en_2.pdf","disposition":"edited","draft_yaml_hash":"9b8c7a...","extraction_duration_ms":47213}
+{"schema_version":1,"ts":"2026-04-24T05:47:00Z","view_id":null,"version_id":null,"skill":"parallax-load-house-view","action":"extraction_attempt","applied":false,"query_summary":"ubs_hv_monthly_letter_19_March_en_2.pdf","disposition":"edited","draft_yaml_hash":"9b8c7a...","extraction_duration_ms":47213}
 {"schema_version":1,"ts":"2026-04-24T06:00:00Z","view_id":"d6c4...","version_id":"e8fb...","skill":"parallax-load-house-view","action":"save","applied":true,"parent_version_id":"54c2...","version_diff":{"tilts.factors.momentum":[null,-1],"tilts.sectors.health_care":[0,1]}}
 {"schema_version":1,"ts":"2026-04-24T06:01:00Z","view_id":"d6c4...","version_id":"e8fb...","skill":"parallax-portfolio-builder","action":"consume","applied":true,"query_summary":"Build me a defensive US equity portfolio, 20 holdings","conflicts_count":0,"output_summary_hash":"abc123...","ground_truth_mismatches":0}
 {"schema_version":1,"ts":"2026-04-24T06:02:00Z","view_id":"d6c4...","version_id":"e8fb...","skill":"parallax-should-i-buy","action":"consume","applied":false,"applied_reason":"single-stock consumer (loader.md §7.1/§7.2/§7.3)","query_summary":"/parallax-should-i-buy AAPL.O","conflicts_count":1,"conflicts_summary":"info_tech UW vs AAPL sector","output_summary_hash":"def456..."}
