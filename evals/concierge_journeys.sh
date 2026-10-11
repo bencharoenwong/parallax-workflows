@@ -25,6 +25,9 @@ fi
 command -v python3 >/dev/null || { echo "python3 not on PATH" >&2; exit 1; }
 if [ "$DRY_RUN" != "1" ]; then
   command -v claude >/dev/null || { echo "claude CLI not on PATH" >&2; exit 1; }
+  # A Mac that sleeps mid-run kills the run after its credits are billed.
+  # caffeinate (macOS only) holds off idle sleep until this runner exits.
+  if command -v caffeinate >/dev/null; then caffeinate -i -w $$ & fi
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -147,14 +147,10 @@ Then fill **Output Format** below in order, applying the §13 audience rules, th
 
 ### Step 6 — Render (deterministic gate, mandatory)
 
-Compose the complete report per **Output Format** below, then run it through the shared render gate in **one `run-shell` step** before replying. Use a private `mktemp` file (never a fixed/predictable path — `/tmp` symlink hazard). The shared gate is `_parallax/render_gate.py`, a sibling of the directory you loaded this SKILL.md from; pass this skill's key (use the loaded directory's absolute path as `<skill-dir>`):
+Compose the complete report per **Output Format** below. Then `write-artifact` the complete drafted report to a new `<draft-path>`, and `run-shell` the shared gate with this skill's key, both per conventions §10.3, before replying. The shared gate is `_parallax/render_gate.py`, a sibling of the directory you loaded this SKILL.md from; pass this skill's key (use the loaded directory's absolute path as `<skill-dir>`):
 
 ```
-DRAFT="$(mktemp "${TMPDIR:-/tmp}/rebal.XXXXXX")"
-cat > "$DRAFT" <<'REPORT'
-<your complete drafted report goes here>
-REPORT
-python3 "<skill-dir>/../_parallax/render_gate.py" --skill rebalance < "$DRAFT"; rm -f "$DRAFT"
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill rebalance --input "<draft-path>"
 ```
 
 **Your entire final message is exactly that command's stdout** — nothing before it (no step/batch-completion notes, no scratch computation, no "no active house view" / white-label config-probe narration), nothing after it.

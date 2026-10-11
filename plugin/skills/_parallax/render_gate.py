@@ -7,8 +7,13 @@ white-label config probes, "no active house view" narration). Pure stdlib; no ne
 
 Mirrors the _parallax/house-view/view_status.py pattern: a deterministic helper the
 skill shells out to as its final step, so behaviour is identical across operator LLMs
-and not a generation-under-prior trust assumption. The skill pipes its complete drafted
-report through this gate; the gate's stdout IS the response.
+and not a generation-under-prior trust assumption. The skill passes its complete drafted
+report to this gate; the gate's stdout IS the response.
+
+Skills write the draft to a file and pass `--input PATH`; the gate reads the file and
+deletes it. The report never appears in the shell command, so the host's command-length
+and command-content checks never see it (Claude Code refuses a Bash command over 10,000
+characters, heredoc body included). Stdin still works for direct use and tests.
 
 Design (one engine, per-skill allowlist):
 - COMMON_ANCHORS: blocks that legitimately precede the body for ANY skill and MUST
@@ -26,14 +31,16 @@ Design (one engine, per-skill allowlist):
   through. See parallax-conventions.md §10.3.
 
 Usage:
-    python3 render_gate.py --skill client-review < draft.md     # clean report -> stdout
-    echo "$DRAFT" | python3 render_gate.py --skill morning-brief
+    python3 render_gate.py --skill client-review --input /abs/.parallax-render/client-review-0a1b2c3d.md
+    python3 render_gate.py --skill client-review < draft.md     # stdin; file is kept
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import re
+import stat
 import sys
 
 # --- COMMON anchors: must survive the strip for every skill (C1, C4) ---------
@@ -209,11 +216,104 @@ def gate(draft: str, skill: str) -> str:
     return draft  # fail-open: no anchor -> never strip
 
 
+DRAFT_DIR_NAME = ".parallax-render"
+_DRAFT_NAME = re.compile(r"[a-z0-9-]+-[0-9a-f]{8}\.md")
+
+
+def read_draft(path: str, skill: str) -> str:
+    """Read the draft the skill wrote at `path`, then delete it.
+
+    Only a gate draft is accepted: `<dir>/.parallax-render/<skill>-<8 hex>.md`. Any
+    other path is refused before it is opened, so the gate prints and deletes only
+    a draft-shaped file in a `.parallax-render` directory. Any directory of that
+    name qualifies; the gate does not check that it sits under the session's cwd.
+    The `.parallax-render` directory and the draft are opened without following
+    symlinks, the read does not block on a FIFO, and the draft is read and unlinked
+    relative to the opened directory. Bytes are decoded as UTF-8 with newlines kept
+    as written, the same as the stdin path. A failed unlink is a warning, not an
+    error: the report still renders.
+    """
+    parent, name = os.path.split(os.path.abspath(path))
+    if (
+        os.path.basename(parent) != DRAFT_DIR_NAME
+        or not _DRAFT_NAME.fullmatch(name)
+        or not name.startswith(skill + "-")
+    ):
+        raise ValueError(
+            f"not a render-gate draft path for skill {skill!r}: {path} "
+            f"(expected .../{DRAFT_DIR_NAME}/{skill}-<8 hex>.md)"
+        )
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    flags = (
+        os.O_RDONLY
+        | nofollow
+        | getattr(os, "O_NONBLOCK", 0)
+        | getattr(os, "O_BINARY", 0)
+    )
+    use_dir_fd = os.open in os.supports_dir_fd and hasattr(os, "O_DIRECTORY")
+    if use_dir_fd:
+        dir_fd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY | nofollow)
+        target = name
+    else:  # no dir_fd (Windows): check for symlinks by path instead
+        if os.path.islink(parent) or os.path.islink(path):
+            raise ValueError(f"draft path goes through a symlink: {path}")
+        dir_fd, target = None, path
+    try:
+        fd = os.open(target, flags, dir_fd=dir_fd)
+        try:
+            st = os.fstat(fd)
+            if not stat.S_ISREG(st.st_mode):
+                raise ValueError(f"draft is not a regular file: {path}")
+            if st.st_nlink != 1:
+                raise ValueError(f"draft has other hard links: {path}")
+            chunks = []
+            while chunk := os.read(fd, 1 << 16):
+                chunks.append(chunk)
+        finally:
+            os.close(fd)
+        try:
+            os.unlink(target, dir_fd=dir_fd)
+        except OSError as exc:
+            sys.stderr.write(f"[render-gate] WARN: draft not deleted: {exc}\n")
+    finally:
+        if dir_fd is not None:
+            os.close(dir_fd)
+    try:
+        os.rmdir(parent)
+    except OSError:
+        pass  # not empty, or already gone
+    return b"".join(chunks).decode("utf-8")
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Shared Parallax render gate.")
     ap.add_argument("--skill", required=True, help="skill key, e.g. client-review")
+    ap.add_argument(
+        "--input",
+        metavar="PATH",
+        help="read the draft from PATH and delete it (default: read stdin)",
+    )
     args = ap.parse_args(argv)
-    sys.stdout.write(gate(sys.stdin.read(), args.skill))
+    try:
+        if args.input is not None:
+            draft = read_draft(args.input, args.skill)
+        elif (stdin := getattr(sys.stdin, "buffer", None)) is not None:
+            draft = stdin.read().decode("utf-8")
+        else:
+            draft = sys.stdin.read()
+    except (OSError, ValueError) as exc:
+        sys.stderr.write(f"[render-gate] ERROR: cannot read draft: {exc}\n")
+        return 2
+    out = gate(draft, args.skill)
+    # UTF-8 bytes, not the locale's encoding: a cp1252 stdout would raise on
+    # "→" after the draft is already deleted.
+    buffer = getattr(sys.stdout, "buffer", None)
+    if buffer is None:
+        sys.stdout.write(out)
+    else:
+        sys.stdout.flush()
+        buffer.write(out.encode("utf-8"))
+        buffer.flush()
     return 0
 
 

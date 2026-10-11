@@ -4,6 +4,20 @@ This file captures the *why* behind each shipping milestone — alternatives tha
 
 Conventions: each entry leads with **Why**, **Impact**, and **Alternatives**. `[DROP]` tags rejected alternatives. **Flip conditions** name the future state in which the decision should be revisited. Long entries are intentional — readers should be able to reconstruct the call without external context.
 
+## 2026-10-10: The render gate reads the report from a draft file
+
+**Why:** Claude Code checks every Bash command before it runs, sandboxed or not. It denies a command containing a shell expansion, and it refuses a command over 10,000 characters, because its parser gives up and the sandbox auto-allow does not apply. The old gate form opened with `DRAFT="$(mktemp "${TMPDIR:-/tmp}/….XXXXXX")"`, so it was always denied. A report fed to the gate through a quoted heredoc avoids the expansion but sits inside the command, so a long report (a client review runs to about 17,000 characters) is still refused, and a few characters such as a carriage return or a non-breaking space are rejected too. Writing the draft with `write-artifact` keeps the report out of the command entirely: a 28,600-character report passed sandboxed with no denial.
+
+**Impact:** `parallax-conventions.md` §10.3 owns the one gate form: `write-artifact` the draft to `<cwd>/.parallax-render/<key>-<8 random hex>.md`, then `python3 …/render_gate.py --skill <key> --input "<path>"`. `render_gate.py --input` accepts only `.parallax-render/<key>-<8 hex>.md` for the skill it is gating, so it never prints or deletes another file. It opens the directory and the draft without following symlinks, deletes the draft, and removes the directory once empty. A draft left by an interrupted session holds the full report until someone deletes it. In Claude Code's default permission mode the draft write shows one approval prompt; in accept-edits or auto mode and in the live journeys it does not. Hosts with a shell but no file write fall back to the stdin heredoc, which on Claude Code works only for short reports.
+
+**Alternatives:**
+- [DROP] Keep the temp-file form and approve it with a command-approval hook. Rejected on 2026-10-09: the hook could be made to approve arbitrary code.
+- [DROP] Feed the report on stdin through a quoted heredoc as the only form. Refused for reports over about 9,800 characters.
+- [DROP] Use the heredoc for short reports and the file for long ones. The model would have to measure each report, and two forms would need documenting and testing.
+- [DROP] Write the draft to a system temp path. A predictable `/tmp` path is a symlink hazard, and a path outside the working directory may be outside the sandbox's write area.
+
+**Flip conditions:** Claude Code lifts the command-length limit and stops denying shell expansions for sandboxed commands → the stdin heredoc could become the only form again, with no draft write and no write prompt.
+
 ## 2026-10-09: The concierge asks the role and shows only shipped skills; live journeys run sandboxed
 
 **Why:** A newcomer's role decides which skills fit, and wording alone is a poor signal, so the concierge asks the role and never guesses it. Users see only the skills shipped on their surface; a fail-closed build filter enforces this, so a skill missing from a package is never offered there. The role map lives in the manifest, so builds and the README "Who this is for" list generate from one source. Scheduling is not offered until a host's `schedule-task` binding is verified, because a live journey caught the concierge offering it where no host had been exercised. Live journeys run the built plugin in a scratch home inside the Claude Code Bash sandbox, so local branding never leaks into a run, writes stay in the scratch tree, and the shell has no network.
