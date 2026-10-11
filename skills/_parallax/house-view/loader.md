@@ -251,7 +251,14 @@ python3 "<skill-dir>/../_parallax/house-view/audit_append.py" --input "<draft-pa
 
 The helper reads and deletes the draft, resolves the view directory itself (`PARALLAX_HOUSE_VIEW_DIR`, else `~/.parallax/active-house-view/`), creates it if missing, checks the existing log with `verify_chain`, and chains the row to the previous one. The row never appears in the command, so quotes in a company name, `$(…)` in user text, or the `{"` that Claude Code's checker refuses inside a command cannot break it. Never put the row in the command line or a heredoc, never add `chain_root` or `prev_entry_hash` (the helper owns the chain), and never append with `printf`, `echo` or `>>`, which breaks the hash chain.
 
-Any nonzero exit prints one `[audit-append] ERROR:` line (2: unusable draft or malformed row; 3: the chain helper cannot run on this host; 4: the existing log fails verification, so nothing was appended; 1: any other failure). The report itself is unaffected: continue without the audit row and never fall back to a raw append. On exit 4, add `Audit log: not written (existing log fails verification)` to About This Report, so a broken log is visible.
+Any nonzero exit prints one `[audit-append] ERROR:` line (2: unusable draft or malformed row; 3: the chain helper cannot run on this host; 4: the existing log fails verification, so nothing was appended; 1: any other failure). The report itself is unaffected: continue without the audit row and never fall back to a raw append. When the row is not appended, add one line to About This Report so the gap is visible:
+
+- no `write-artifact`, or the draft write is denied: `Audit log: not written (no draft write on this host)`
+- exit 3: `Audit log: not written (audit chain cannot run on this host)`
+- exit 4: `Audit log: not written (existing log fails verification)`
+- exit 1 or 2: `Audit log: not written (append failed)`
+
+Exit 4 persists until the operator repairs the log once: rename `audit.jsonl` in the view directory to `audit.broken-<YYYYMMDD>.jsonl` and keep it as the record. The next append then starts a new chain. The skill never renames or edits the log itself.
 
 The schema below is stable — the managed version promotes this to a Supabase `house_view_audit` table with identical field names and types, so any local audit file can be bulk-loaded without transformation.
 
