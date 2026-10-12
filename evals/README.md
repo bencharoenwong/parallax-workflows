@@ -267,7 +267,7 @@ journey FAILs when:
   non-Bash tool (a Parallax tool, Write, Skill); a denied Bash command that cannot be
   read; the documented one-line helper command itself (`render_gate.py --input` or
   `audit_append.py --input`); or a denied command that ran a helper through `python3`
-  (a bare mention, such as a `sed` or `grep` of the helper's file, does not count) when no later
+  or `python` (a bare mention, such as a `sed` or `grep` of the helper's file, does not count) when no later
   Bash call ran that helper's documented command (the gate must succeed; the audit
   helper must run, since its exits 3 and 4 are documented non-fatal outcomes);
 - any Bash command, denied or not, names `audit.jsonl` (only `audit_append.py` may
