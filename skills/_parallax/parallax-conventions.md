@@ -23,6 +23,7 @@ Feature flags gate architectural changes in these skills. Read each flag via the
 
 Run this once at the top of any should-i-buy / two-lens / house-view / portfolio workflow, **before the first data call** — not as a mid-run recovery:
 
+0. **Read files, do not shell them.** Read every convention, reference and house-view file with `load-reference` (the Read tool on Claude Code), never `cd`, `cat`, `sed` or `grep` in the shell. Run each documented command exactly as written, one per `run-shell` call, with no `cd`, `;` or `&&` chain, or `echo $?` added; `run-shell` already reports the exit code.
 1. **Resolve paths.** Resolve every `_parallax/...` conventions and house-view path to the canonical `parallax-workflows` copy (see `_parallax/skill-structure-conventions.md` → "Canonical source & path resolution"). Do not assume the installed skill directory contains them.
 2. **Discover live capabilities.** Run the `discover-tools` host primitive (§14) once before the first data call; the per-host binding table in §14 says what that means on the current host. Inspect the returned callable names and input schemas, then bind each logical operation used by the workflow to the exact callable exposed in this session.
 3. **Let the live contract win.** Live capability discovery is authoritative for the callable namespace, tool availability, parameter names, required fields, types, and enums. Names and schemas in this repository are implementation notes, not permission to call an alias or argument shape that the runtime did not advertise.

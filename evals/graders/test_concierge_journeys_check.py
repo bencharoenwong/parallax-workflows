@@ -12,7 +12,10 @@ import pytest  # noqa: E402
 from concierge_journeys_check import (  # noqa: E402
     check_journey,
     check_run,
+    classify_denials,
+    documented_helper,
     main,
+    parse_stream,
     validate_journey,
 )
 
@@ -414,12 +417,13 @@ def test_validate_skill_field():
 
 
 def test_required_skill_from_journey_field():
-    j = {**J, "skill": "parallax:parallax-should-i-buy"}
-    ok, reasons, _, _ = check_run(_stream(skill="parallax:parallax-should-i-buy"), j, 0, False)
+    # An ungated skill, so this tests only the required-skill rule.
+    j = {**J, "skill": "parallax:parallax-ai-buffett"}
+    ok, reasons, _, _ = check_run(_stream(skill="parallax:parallax-ai-buffett"), j, 0, False)
     assert ok is True, reasons
     bad, reasons2, _, _ = check_run(_stream(), j, 0, False)  # concierge ran instead
     assert bad is False
-    assert any("parallax:parallax-should-i-buy did not run" in r for r in reasons2)
+    assert any("parallax:parallax-ai-buffett did not run" in r for r in reasons2)
 
 
 def test_unprefixed_parallax_skill_fails_even_with_required_skill():
@@ -446,3 +450,217 @@ def test_direct_task_journey_requires_should_i_buy():
     journeys = {j["id"]: j for j in map(json.loads, filter(str.strip, JOURNEYS.read_text().splitlines()))}
     assert journeys["J7_direct_task_bypass"]["skill"] == "parallax:parallax-should-i-buy"
     assert all("skill" not in j for jid, j in journeys.items() if jid != "J7_direct_task_bypass")
+
+
+# --- denial classes: documented-helper vs improvised commands ----------------
+
+_GATE = ('python3 "/p/skills/parallax-should-i-buy/../_parallax/render_gate.py" '
+         '--skill should-i-buy --input "/s/.parallax-render/should-i-buy-0a1b2c3d.md"')
+_APPEND = ('python3 "/p/skills/parallax-should-i-buy/../_parallax/house-view/audit_append.py" '
+           '--input "/s/.parallax-render/audit-0a1b2c3d.json"')
+
+
+def _bash_stream(calls, denied_ids):
+    """calls: list of (id, command, is_error); denied_ids: ids also listed as
+    permission denials in the result."""
+    base = _stream().rstrip("\n").split("\n")
+    result = json.loads(base.pop())
+    extra = []
+    for cid, cmd, err in calls:
+        extra.append(json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": cid, "name": "Bash", "input": {"command": cmd}}]}}))
+        extra.append(json.dumps({"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": cid, "is_error": err, "content": "x"}]}}))
+    result["permission_denials"] = [
+        {"tool_name": "Bash", "tool_use_id": cid, "tool_input": {"command": cmd}}
+        for cid, cmd, _ in calls if cid in denied_ids]
+    return "\n".join(base + extra + [json.dumps(result)]) + "\n"
+
+
+def test_improvised_doc_read_denial_warns_but_passes():
+    cmd = "cd /p/skills/_parallax; sed -n 1,80p parallax-conventions.md"
+    stream = _bash_stream([("b1", cmd, True), ("b2", _GATE, False)], {"b1"})
+    passed, reasons, _, _ = check_run(stream, J, 0, False)
+    assert passed is True, reasons
+    blocking, warnings = classify_denials(json.loads(stream.splitlines()[-1])["permission_denials"],
+                                          parse_stream(stream)["bash_calls"])
+    assert blocking == [] and "improvised" in warnings[0]
+
+
+def test_documented_helper_command_denied_fails():
+    stream = _bash_stream([("b1", _GATE, True)], {"b1"})
+    passed, reasons, _, _ = check_run(stream, J, 0, False)
+    assert passed is False
+    assert any("documented helper command denied" in r for r in reasons)
+
+
+def test_decorated_helper_denial_passes_only_if_helper_later_ran():
+    decorated = _APPEND + '; echo "exit=$?"'
+    recovered = _bash_stream([("b1", decorated, True), ("b2", _APPEND, False)], {"b1"})
+    assert check_run(recovered, J, 0, False)[0] is True
+    stranded = _bash_stream([("b1", decorated, True)], {"b1"})
+    passed, reasons, _, _ = check_run(stranded, J, 0, False)
+    assert passed is False
+    assert any("helper never ran" in r and "audit_append.py" in r for r in reasons)
+
+
+@pytest.mark.parametrize("cmd,denied", [
+    ("printf '%s\\n' '{\"a\":1}' >> \"/hv/audit.jsonl\"", False),
+    ("printf x >> \"$PARALLAX_HOUSE_VIEW_DIR/audit.jsonl\"", True),
+    ("echo x > /hv/audit.jsonl", False),
+    ("echo '{}' | tee -a /hv/audit.jsonl", False),
+    ("cp fake.json \"/hv/my dir/audit.jsonl\"", False),
+    ("python3 -c \"open('/hv/audit.jsonl','a').write('x')\"", False),
+    ("wc -l /hv/audit.jsonl", False),
+])
+def test_any_shell_command_naming_the_audit_log_fails(cmd, denied):
+    stream = _bash_stream([("b1", cmd, denied)], {"b1"} if denied else set())
+    passed, reasons, _, _ = check_run(stream, J, 0, False)
+    assert passed is False
+    assert any("names audit.jsonl" in r for r in reasons)
+
+
+def test_audit_log_lookalike_names_are_not_flagged():
+    stream = _bash_stream([("b1", "ls /hv/audit.jsonl.bak /hv/audit_jsonl", False)], set())
+    assert check_run(stream, J, 0, False)[0] is True
+
+
+@pytest.mark.parametrize("later", [
+    'cat "/p/skills/_parallax/render_gate.py"',
+    'python3 "/p/skills/_parallax/render_gate.py" --help',
+])
+def test_recovery_needs_the_documented_command_not_a_mention(later):
+    decorated = _GATE + '; echo "exit=$?"'
+    stream = _bash_stream([("b1", decorated, True), ("b2", later, False)], {"b1"})
+    passed, reasons, _, _ = check_run(stream, J, 0, False)
+    assert passed is False
+    assert any("helper never ran" in r for r in reasons)
+
+
+
+def test_non_dict_tool_input_in_a_denial_fails_closed_without_crashing():
+    stream = _bash_stream([("b1", "ls", False)], set())
+    lines = stream.rstrip("\n").split("\n")
+    result = json.loads(lines[-1])
+    result["permission_denials"] = [{"tool_name": "Bash", "tool_input": "not a dict"}]
+    lines[-1] = json.dumps(result)
+    passed, reasons, _, _ = check_run("\n".join(lines) + "\n", J, 0, False)
+    assert passed is False and any("permission denials" in r for r in reasons)
+
+
+def test_cli_prints_warn_lines_for_improvised_denials(tmp_path, capsys):
+    stream = tmp_path / "s.jsonl"
+    stream.write_text(_bash_stream([("b1", "cd /x; ls", True)], {"b1"}))
+    assert main([json.dumps(J), "--stream", str(stream)]) == 0
+    out = capsys.readouterr().out
+    assert "WARN: improvised Bash command denied" in out and "PASS" in out
+
+
+GATED = {**J, "skill": "parallax:parallax-should-i-buy"}
+
+
+def _with_skill(stream, skill="parallax:parallax-should-i-buy"):
+    lines = stream.rstrip("\n").split("\n")
+    lines[1:1] = [
+        json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "sk2", "name": "Skill", "input": {"skill": skill}}]}}),
+        json.dumps({"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "sk2", "is_error": False, "content": "ok"}]}}),
+    ]
+    return "\n".join(lines) + "\n"
+
+
+
+
+
+@pytest.mark.parametrize("tool", ["Write", "Edit"])
+def test_file_tool_writing_the_audit_log_fails(tool):
+    lines = _stream().rstrip("\n").split("\n")
+    lines.insert(-1, json.dumps({"type": "assistant", "message": {"content": [
+        {"type": "tool_use", "id": "w1", "name": tool,
+         "input": {"file_path": "/s/house-view/audit.jsonl", "content": "{}"}}]}}))
+    passed, reasons, _, _ = check_run("\n".join(lines) + "\n", J, 0, False)
+    assert passed is False and any("file tool wrote audit.jsonl" in r for r in reasons)
+
+
+_DRAFT = "/s/.parallax-render/should-i-buy-0a1b2c3d.md"
+
+
+def _with_write(stream, path=_DRAFT, at=1, wid="w1", error=False):
+    """Insert a Write call and its result at line ``at`` (after init by default)."""
+    lines = stream.rstrip("\n").split("\n")
+    lines[at:at] = [
+        json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": wid, "name": "Write",
+             "input": {"file_path": path, "content": "# report"}}]}}),
+        json.dumps({"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": wid, "is_error": error, "content": "ok"}]}}),
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def test_report_draft_gated_with_its_key_passes():
+    stream = _with_write(_bash_stream([("b1", _GATE, False)], set()))
+    assert check_run(stream, J, 0, False)[0] is True
+
+
+@pytest.mark.parametrize("calls", [
+    [],                                           # draft written, gate never run
+    [("b1", _GATE, True)],                        # gate run errored
+    [("b1", _GATE.replace("should-i-buy --input", "deep-dive --input"), False)],   # wrong key
+    [("b1", _GATE.replace("0a1b2c3d", "ffffffff"), False)],                         # other draft
+])
+def test_report_draft_not_properly_gated_fails(calls):
+    stream = _with_write(_bash_stream(calls, set()))
+    passed, reasons, _, _ = check_run(stream, J, 0, False)
+    assert passed is False and any("report draft never gated" in r for r in reasons)
+
+
+def test_gate_failing_once_then_succeeding_passes():
+    stream = _with_write(_bash_stream([("b1", _GATE, True), ("b2", _GATE, False)], set()))
+    assert check_run(stream, J, 0, False)[0] is True
+
+
+def test_gated_skill_that_stops_before_drafting_needs_no_gate():
+    """J6: should-i-buy cannot resolve the ticker and asks for a RIC (no draft)."""
+    stream = _with_skill(_bash_stream([], set()))
+    assert check_run(stream, GATED, 0, False)[0] is True
+
+
+@pytest.mark.parametrize("retry_error", [False, True])
+def test_audit_retry_counts_when_it_ran_even_with_a_documented_nonzero_exit(retry_error):
+    decorated = _APPEND + '; echo "exit=$?"'
+    stream = _bash_stream([("b1", decorated, True), ("b2", _APPEND, retry_error)], {"b1"})
+    assert check_run(stream, J, 0, False)[0] is True
+
+
+def test_helper_name_must_be_the_documented_one_not_a_path_mention():
+    fake = ('python3 "/s/render_gate.py.d/house-view/audit_append.py" '
+            '--input "/s/.parallax-render/audit-0a1b2c3d.json"')
+    assert documented_helper(fake) == "audit_append.py"
+    assert documented_helper(_GATE) == "render_gate.py"
+    assert documented_helper(_GATE + "; echo hi") is None
+
+
+def test_rewrite_after_the_gate_must_be_gated_again():
+    gated = _with_write(_bash_stream([("b1", _GATE, False)], set()))
+    rewritten = _with_write(gated, at=len(gated.rstrip("\n").split("\n")) - 1, wid="w2")
+    passed, reasons, _, _ = check_run(rewritten, J, 0, False)
+    assert passed is False and any("report draft never gated" in r for r in reasons)
+
+
+def test_path_spellings_of_the_same_draft_match():
+    var_gate = _GATE.replace('"/s/.parallax-render', '"/var/folders/x//.parallax-render')
+    stream = _with_write(_bash_stream([("b1", var_gate, False)], set()),
+                         path="/private/var/folders/x/.parallax-render/should-i-buy-0a1b2c3d.md")
+    assert check_run(stream, J, 0, False)[0] is True
+
+
+def test_a_failed_write_leaves_nothing_to_gate():
+    stream = _with_write(_bash_stream([], set()), error=True)
+    assert check_run(stream, J, 0, False)[0] is True
+
+
+def test_a_backup_named_like_a_draft_is_not_a_draft():
+    stream = _with_write(_bash_stream([], set()), path=_DRAFT + ".bak")
+    assert check_run(stream, J, 0, False)[0] is True

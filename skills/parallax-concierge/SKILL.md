@@ -19,6 +19,7 @@ description: "Friendly concierge that opens a four-branch menu (Stock / Portfoli
 - 'Never personalize the greeting — no "Hi Ivan" or similar (consistent UX for everyone)'
 - The branch tables are routing logic (input → skill), not menus shown to the user
 - JIT-load `_parallax/parallax-conventions.md` for §0.1 (two-connector handling), §9 (AI-interaction disclosure), and §14 (schedule-task host primitive) — cited by shorthand as "conventions §X" below
+- Read skill and reference files with `load-reference` (the Read tool on Claude Code), never `cd`, `cat`, `sed` or `grep` in the shell. Run each documented command exactly as written, one per `run-shell` call, with no `cd`, `;` or `&&` chain, or `echo $?` added (the exit code is already reported)
 
 When the magic phrase triggers ("Hi Parallax" or any variant, case-insensitive),
 open the Parallax concierge menu.
