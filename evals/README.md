@@ -263,7 +263,22 @@ model call and rejects unknown keys, a list field that is not a list of strings,
 Each run is captured as `--output-format stream-json --verbose` and fails closed. A
 journey FAILs when:
 
-- the result lists any `permission_denials`, or is missing or errored;
+- the result is missing or errored, or lists a blocking permission denial: any denied
+  non-Bash tool (a Parallax tool, Write, Skill); a denied Bash command that cannot be
+  read; the documented one-line helper command itself (`render_gate.py --input` or
+  `audit_append.py --input`); or a denied command that ran a helper through `python3`
+  or `python` (a bare mention, such as a `sed` or `grep` of the helper's file, does not count) when no later
+  Bash call ran that helper's documented command (the gate must succeed; the audit
+  helper must run, since its exits 3 and 4 are documented non-fatal outcomes);
+- any Bash command, denied or not, names `audit.jsonl` (only `audit_append.py` may
+  touch the log, and its command names a draft, never the log; a raw write bypasses
+  the hash chain, and §0.0 forbids reading files through the shell);
+- a report draft (`.parallax-render/<key>-<8 hex>.md`) was written and no documented
+  render-gate run with `--skill <key>` on that same draft succeeded after the last
+  successful write to it (paths compare after normalizing, so `/private/var` and `/var`
+  match; a failed write and a skill that stops before drafting, such as an unresolvable
+  ticker, need no gate run);
+- a Write, Edit, MultiEdit or NotebookEdit call targets `audit.jsonl`;
 - `claude` exits non-zero or hits the timeout;
 - no Skill call of the journey's required skill succeeds, no skill in the `parallax:`
   plugin namespace runs, a Parallax skill is called without the `parallax:` prefix (a
@@ -273,6 +288,11 @@ journey FAILs when:
   successful Parallax tool call (a claude.ai connector can finish loading after the
   init message);
 - a no-connector journey shows a Parallax server or calls a Parallax tool.
+
+Any other denied Bash command is one the model improvised, such as a doc-reading
+`cd …; sed …` chain or an `echo $?` suffix. Claude Code's checker refuses these
+inconsistently, even within one session, and the run recovers without them, so each
+prints a `WARN:` line with the command and the journey can still pass.
 
 `expect` and `expect_any` run on the final answer. `forbid` runs on all assistant text
 in the run, so a forbidden phrase in an earlier turn also fails. Every connector

@@ -13,6 +13,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 ### Changed
 - Plugin and marketplace versions are prepared together by `release.py prepare`. Release output remains local until explicit publication approval.
 - Release verification rejects non-text encodings and source symlinks in package inputs. Index descriptions match the mapped packaged skills after distribution transforms.
+- Live concierge journeys fail only on blocking permission denials; a denied Bash command the model improvised prints a `WARN:` line. Journeys also fail when a shell command names the house-view audit log or a report draft is never gated. Conventions §0.0 and the concierge tell the model to read files with `load-reference` and run documented commands as written. See `evals/README.md` § Live concierge journeys.
 
 ## 2026-10-10 (render gate reads the report from a draft file)
 

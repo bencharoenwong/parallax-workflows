@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import posixpath
 import re
 import sys
 
@@ -37,6 +38,42 @@ _UNPREFIXED = re.compile(r"(parallax|translate)-")
 # The only init-message status that proves a Parallax server is up. "pending"
 # does not: a pending claude.ai connector can still turn out signed out.
 CONNECTED_STATUS = "connected"
+# A shell segment that runs a shared helper a skill tells the model to run
+# (conventions §10.3, loader §6). A bare mention (``sed``, ``grep``) is not a run.
+_HELPER_RUN = re.compile(
+    r"\bpython3?\s[^;&|\n]*?(?<![\w.-])(?P<helper>render_gate\.py|audit_append\.py)(?![\w.-])"
+)
+# The house-view audit log is written only by audit_append.py, whose command
+# names a draft, never the log (loader §6). A shell command that names the log
+# is a raw write (which bypasses the hash chain) or a shell read (which §0.0
+# forbids); either fails, denied or not.
+_AUDIT_LOG = re.compile(r"audit\.jsonl(?![\w.])")
+# The documented one-line form of a helper command. A denial of exactly this
+# shape is a defect in the skill's own instructions; anything else the model
+# wrote is improvised.
+_DOCUMENTED_HELPER = re.compile(
+    r'python3 "[^"\n]+/(?P<helper>render_gate\.py|house-view/audit_append\.py)"'
+    r'(?: --skill (?P<key>[a-z0-9-]+))? --input "(?P<input>[^"\n]+)"'
+)
+# A report draft (conventions §10.3); its key is the gated skill's key.
+_REPORT_DRAFT = re.compile(r"/\.parallax-render/(?P<key>[a-z0-9-]+)-[0-9a-f]{8}\.md$")
+
+
+def _norm_path(path: str) -> str:
+    """One spelling per file: collapse ``//`` and ``..``, and drop macOS's
+    ``/private`` prefix (``/private/var`` and ``/var`` are the same dir)."""
+    norm = posixpath.normpath(path.strip())
+    for root in ("/private/var/", "/private/tmp/"):
+        if norm.startswith(root):
+            norm = norm[len("/private"):]
+    return norm
+
+
+def documented_helper(command: str) -> str | None:
+    """The helper name ("render_gate.py" / "audit_append.py") when
+    ``command`` is exactly a documented helper command, else None."""
+    m = _DOCUMENTED_HELPER.fullmatch(command.strip())
+    return m["helper"].rsplit("/", 1)[-1] if m else None
 
 
 def validate_journey(journey: object) -> list[str]:
@@ -106,12 +143,18 @@ def parse_stream(stream_text: str) -> dict:
     objects are ignored. ``parallax_calls`` maps each Parallax tool_use id to
     {"name", "ok"}; ok is True when its tool_result came back without is_error.
     ``skill_calls`` does the same for Skill tool calls, keyed by tool_use id,
-    with the requested skill name. ``assistant_texts`` lists every assistant
+    with the requested skill name. ``bash_calls`` lists every Bash tool call in
+    order as {"id", "command", "ok", "seq"}. ``file_writes`` lists every
+    Write/Edit call as {"id", "path", "ok", "seq"}. ``seq`` is the call's
+    position in the stream, shared by both lists. ``assistant_texts`` lists every assistant
     text block in order."""
     init = None
     result = None
     calls: dict[str, dict] = {}
     skills: dict[str, dict] = {}
+    bash: dict[str, dict] = {}
+    writes: dict[str, dict] = {}
+    seq = 0
     texts: list[str] = []
     for line in (stream_text or "").splitlines():
         line = line.strip()
@@ -140,13 +183,72 @@ def parse_stream(stream_text: str) -> dict:
                     skills[block.get("id", "")] = {"name": str(tool_input.get("skill", "")), "ok": False}
                 elif btype == "tool_use" and is_parallax_tool(block.get("name", "")):
                     calls[block.get("id", "")] = {"name": block["name"], "ok": False}
+                elif btype == "tool_use" and block.get("name") in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
+                    tool_input = block.get("input") if isinstance(block.get("input"), dict) else {}
+                    seq += 1
+                    writes[block.get("id", "")] = {
+                        "id": block.get("id", ""), "ok": False, "seq": seq,
+                        "path": str(tool_input.get("file_path") or tool_input.get("notebook_path") or "")}
+                elif btype == "tool_use" and block.get("name") == "Bash":
+                    tool_input = block.get("input") if isinstance(block.get("input"), dict) else {}
+                    seq += 1
+                    bash[block.get("id", "")] = {"id": block.get("id", ""), "ok": False, "seq": seq,
+                                                 "command": str(tool_input.get("command", ""))}
                 elif btype == "tool_result":
-                    for table in (calls, skills):
+                    for table in (calls, skills, bash, writes):
                         if block.get("tool_use_id") in table:
                             table[block["tool_use_id"]]["ok"] = not block.get("is_error", False)
     servers = (init or {}).get("mcp_servers") or []
     return {"init": init, "result": result, "mcp_servers": servers,
-            "parallax_calls": calls, "skill_calls": skills, "assistant_texts": texts}
+            "parallax_calls": calls, "skill_calls": skills,
+            "bash_calls": list(bash.values()), "file_writes": list(writes.values()),
+            "assistant_texts": texts}
+
+
+def classify_denials(denials: list, bash_calls: list[dict]) -> tuple[list[str], list[str]]:
+    """Split permission denials into (blocking, warnings).
+
+    Blocking: any non-Bash denial (an MCP tool, Write, Skill); a Bash denial
+    whose command cannot be read; the documented helper command itself
+    (``_DOCUMENTED_HELPER``); or an improvised command that used a helper when
+    no later Bash call ran that helper's documented command (the gate must
+    succeed; the audit helper must run, since its exits 3 and 4 are documented
+    non-fatal outcomes, loader §6). Everything else, including a command that
+    only mentions a helper without running it, is a
+    command the model improvised (a doc-reading ``cd``/``sed`` chain, an
+    ``echo $?`` suffix) and a warning: Claude Code's checker refuses such
+    commands inconsistently, and the run recovered without them.
+    """
+    blocking: list[str] = []
+    warnings: list[str] = []
+    order = [c["id"] for c in bash_calls]
+    denied_ids = {d.get("tool_use_id") for d in denials if isinstance(d, dict)}
+    for d in denials:
+        if not isinstance(d, dict):
+            blocking.append(f"permission denials: {d!r}")
+            continue
+        name = d.get("tool_name", "?")
+        tool_input = d.get("tool_input") if isinstance(d.get("tool_input"), dict) else {}
+        command = str(tool_input.get("command", "")).strip()
+        if name != "Bash" or not command:
+            blocking.append(f"permission denials: [{name!r}]")
+            continue
+        if _DOCUMENTED_HELPER.fullmatch(command):
+            blocking.append(f"documented helper command denied: {command[:120]}")
+            continue
+        used = sorted({m["helper"] for m in _HELPER_RUN.finditer(command)})
+        if used:
+            denied_at = order.index(d.get("tool_use_id")) if d.get("tool_use_id") in order else -1
+            later = bash_calls[denied_at + 1:] if denied_at >= 0 else []
+            missing = [h for h in used if not any(
+                documented_helper(c["command"]) == h
+                and (c["ok"] if h == "render_gate.py" else c["id"] not in denied_ids)
+                for c in later)]
+            if missing:
+                blocking.append(f"helper never ran after its command was denied: {missing}")
+                continue
+        warnings.append(f"improvised Bash command denied: {command[:120]}")
+    return blocking, warnings
 
 
 def is_parallax_tool(name: str) -> bool:
@@ -222,9 +324,38 @@ def check_run(
         if isinstance(result.get("result"), str):
             final_text = result["result"]
         denials = result.get("permission_denials") or []
-        if denials:
-            names = [d.get("tool_name", "?") if isinstance(d, dict) else str(d) for d in denials]
-            reasons.append(f"permission denials: {names}")
+        blocking, _ = classify_denials(denials, parsed["bash_calls"])
+        reasons.extend(blocking)
+        commands = [c["command"] for c in parsed["bash_calls"]]
+        for d in denials:
+            tool_input = d.get("tool_input") if isinstance(d, dict) else None
+            if isinstance(tool_input, dict):
+                commands.append(str(tool_input.get("command", "")))
+        if any(_AUDIT_LOG.search(cmd) for cmd in commands):
+            reasons.append("shell command names audit.jsonl (only audit_append.py may touch it; loader §6)")
+        if any(_AUDIT_LOG.search(w["path"]) for w in parsed["file_writes"]):
+            reasons.append("file tool wrote audit.jsonl (only audit_append.py may write it; loader §6)")
+        # Every report draft the model wrote must be gated: a successful
+        # documented gate run on that same draft, with the draft's own key,
+        # after the last successful write to it. A skill that stops before
+        # drafting (an unresolvable ticker) needs no gate.
+        gate_runs = []
+        for c in parsed["bash_calls"]:
+            m = _DOCUMENTED_HELPER.fullmatch(c["command"].strip())
+            if m and m["helper"] == "render_gate.py":
+                gate_runs.append({**c, "key": m["key"], "input": _norm_path(m["input"])})
+        last_write: dict[str, dict] = {}
+        for w in parsed["file_writes"]:
+            if w["ok"]:  # a failed write left nothing to gate
+                last_write[_norm_path(w["path"])] = w
+        for path, w in last_write.items():
+            draft = _REPORT_DRAFT.search(path)
+            if not draft:
+                continue
+            if not any(g["ok"] and g["seq"] > w["seq"] and g["input"] == path
+                       and g["key"] == draft["key"] for g in gate_runs):
+                reasons.append(f"report draft never gated: no successful documented render-gate run "
+                               f"with --skill {draft['key']} on {path}")
         if result.get("is_error"):
             reasons.append("result is_error")
         if result.get("subtype") != "success":
@@ -298,6 +429,8 @@ def main(argv: list[str] | None = None) -> int:
     denials = (parsed["result"] or {}).get("permission_denials") or []
     print(f"parallax servers at init: {_describe(parallax_servers(parsed['mcp_servers'])) or 'none'}")
     print(f"permission_denials: {len(denials)}")
+    for warning in classify_denials(denials, parsed["bash_calls"])[1]:
+        print(f"WARN: {warning}")
     calls = parsed["parallax_calls"].values()
     print("parallax tool calls: " + (", ".join(
         f"{c['name']} ({'ok' if c['ok'] else 'error'})" for c in calls) or "none"))
