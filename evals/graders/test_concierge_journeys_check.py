@@ -538,6 +538,29 @@ def test_recovery_needs_the_documented_command_not_a_mention(later):
 
 
 
+@pytest.mark.parametrize("cmd", [
+    "cd /p/skills/_parallax; grep -n render_gate.py parallax-conventions.md",
+    "sed -n 1,40p /p/skills/_parallax/render_gate.py",
+    "cat /p/skills/_parallax/house-view/audit_append.py",
+])
+def test_denied_command_that_only_mentions_a_helper_warns_but_passes(cmd):
+    stream = _bash_stream([("b1", cmd, True)], {"b1"})
+    passed, reasons, _, _ = check_run(stream, J, 0, False)
+    assert passed is True, reasons
+    blocking, warnings = classify_denials(json.loads(stream.splitlines()[-1])["permission_denials"],
+                                          parse_stream(stream)["bash_calls"])
+    assert blocking == [] and "improvised" in warnings[0]
+
+
+def test_a_helper_named_inside_another_path_segment_is_not_that_helper():
+    decorated = ('python3 "/s/render_gate.py.d/house-view/audit_append.py" '
+                 '--input "/s/.parallax-render/audit-0a1b2c3d.json"; echo "exit=$?"')
+    blocking, _ = classify_denials(
+        [{"tool_name": "Bash", "tool_use_id": "b1", "tool_input": {"command": decorated}}],
+        [{"id": "b1", "ok": False, "seq": 1, "command": decorated}])
+    assert blocking == ["helper never ran after its command was denied: ['audit_append.py']"]
+
+
 def test_non_dict_tool_input_in_a_denial_fails_closed_without_crashing():
     stream = _bash_stream([("b1", "ls", False)], set())
     lines = stream.rstrip("\n").split("\n")

@@ -38,8 +38,11 @@ _UNPREFIXED = re.compile(r"(parallax|translate)-")
 # The only init-message status that proves a Parallax server is up. "pending"
 # does not: a pending claude.ai connector can still turn out signed out.
 CONNECTED_STATUS = "connected"
-# Shared helpers a skill tells the model to run (conventions §10.3, loader §6).
-HELPERS = ("render_gate.py", "audit_append.py")
+# A shell segment that runs a shared helper a skill tells the model to run
+# (conventions §10.3, loader §6). A bare mention (``sed``, ``grep``) is not a run.
+_HELPER_RUN = re.compile(
+    r"\bpython3?\s[^;&|\n]*?(?<![\w.-])(?P<helper>render_gate\.py|audit_append\.py)(?![\w.-])"
+)
 # The house-view audit log is written only by audit_append.py, whose command
 # names a draft, never the log (loader §6). A shell command that names the log
 # is a raw write (which bypasses the hash chain) or a shell read (which §0.0
@@ -210,7 +213,8 @@ def classify_denials(denials: list, bash_calls: list[dict]) -> tuple[list[str], 
     (``_DOCUMENTED_HELPER``); or an improvised command that used a helper when
     no later Bash call ran that helper's documented command (the gate must
     succeed; the audit helper must run, since its exits 3 and 4 are documented
-    non-fatal outcomes, loader §6). Everything else is a
+    non-fatal outcomes, loader §6). Everything else, including a command that
+    only mentions a helper without running it, is a
     command the model improvised (a doc-reading ``cd``/``sed`` chain, an
     ``echo $?`` suffix) and a warning: Claude Code's checker refuses such
     commands inconsistently, and the run recovered without them.
@@ -232,7 +236,7 @@ def classify_denials(denials: list, bash_calls: list[dict]) -> tuple[list[str], 
         if _DOCUMENTED_HELPER.fullmatch(command):
             blocking.append(f"documented helper command denied: {command[:120]}")
             continue
-        used = [h for h in HELPERS if h in command]
+        used = sorted({m["helper"] for m in _HELPER_RUN.finditer(command)})
         if used:
             denied_at = order.index(d.get("tool_use_id")) if d.get("tool_use_id") in order else -1
             later = bash_calls[denied_at + 1:] if denied_at >= 0 else []
