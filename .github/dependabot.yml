@@ -10,8 +10,8 @@ updates:
       - "house-view"
     # Pinned exact versions are intentional for long-horizon replay determinism.
     # Dependabot raises PRs. Before merging a bump to rfc8785 or pynacl,
-    # regenerate the signed test fixtures and re-run the house-view tests on
-    # the new version.
+    # follow the bump procedure in skills/_parallax/house-view/requirements.txt
+    # (regenerate fixtures, test against both versions, document the cutover).
     commit-message:
       prefix: "deps"
       include: "scope"
