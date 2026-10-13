@@ -103,7 +103,7 @@ never a trade signal):
 | **Elevated** | 🟡 | Some unhedged conviction or narrative reliance, but a testable core remains. |
 | **High** | 🔴 | Heavy hype / superlatives, few falsifiable conditions, no bear case — conviction is doing the work evidence should. |
 
-**Name the bias, don't just rate it.** The reading is not only a colour — it names *which* cognitive
+**Name the bias, don't just rate it.** The reading is not only a color — it names *which* cognitive
 bias the language most exhibits, in a word or two, with a one-clause why. Map the signals above to the
 specific bias:
 

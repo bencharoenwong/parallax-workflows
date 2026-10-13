@@ -6,7 +6,7 @@ Loaded when the run needs any of: an estimated read time, a TL;DR, a depth/verbo
 **Standard-render vs. mode-gated — do not conflate.** The **read-time marker (§1) and the TL;DR
 (§2) are standard render** — they lead *every* report at every depth (they are bold-starred in
 `SKILL.md` Output Format), not opt-in features that only appear when this file is loaded. Depth and
-the expand/collapse toggle (§3–§4) are the genuinely mode-gated behaviours. Loading this file is
+the expand/collapse toggle (§3–§4) are the genuinely mode-gated behaviors. Loading this file is
 about picking up the detailed rules for all of them; it is not a signal that TL;DR/read-time were
 optional.
 

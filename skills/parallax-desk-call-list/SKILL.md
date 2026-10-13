@@ -99,7 +99,7 @@ The entire final message is that command's stdout. The stderr `[render-gate] WAR
 2. Branding Header, only if white-label active and `client_name != ""`: optional URL logo line, then `**<client_name>** desk call list`.
 3. `# Desk Call List` title with as-of date, session dates, threshold, clients scanned, and clients triggered.
 4. Book Staleness Warning, only for warn/stale/unknown tiers.
-5. Validation Warnings, whenever validation produced warnings, including renormalisation warnings for inline and saved books.
+5. Validation Warnings, whenever validation produced warnings, including renormalization warnings for inline and saved books.
 6. Ground-truth Integrity, only if any mismatch.
 7. Market Context: 2-3 sentences from telemetry.
 8. Priority Calls: render the informational preface per `_parallax/parallax-conventions.md §12`, then the full ranked table.
