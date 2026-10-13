@@ -708,11 +708,11 @@ def commit_view_locked(
     validate_audit_entry(audit_entry, write)
     if audit_entry["action"] == "re-pair":
         _reject_stale_staging(view_dir)
-    if audit_entry["action"] == "clear":
-        _check_clear_identity(view_dir, expected_identity)
-    else:
-        _check_identity(view_dir, expected_identity)
     try:
+        if audit_entry["action"] == "clear":
+            _check_clear_identity(view_dir, expected_identity)
+        else:
+            _check_identity(view_dir, expected_identity)
         if audit_entry["action"] == "re-pair":
             _validate_re_pair_against_disk(view_dir, audit_entry)
         _validate_row_matches_bytes(write, audit_entry)

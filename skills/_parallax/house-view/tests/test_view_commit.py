@@ -1486,6 +1486,19 @@ def test_an_unhashable_huge_int_in_written_content_is_a_clean_rejection(tmp_path
     assert not list(tmp_path.glob("*.tmp.*"))
 
 
+def test_an_unhashable_huge_int_in_the_view_on_disk_is_a_clean_rejection(tmp_path):
+    _seed(tmp_path)
+    (tmp_path / "view.yaml").write_text(
+        "metadata:\n  version_id: v1\n  view_id: vw\ntilts:\n  x: 0x" + "f" * 5000 + "\n",
+        encoding="utf-8")
+    with pytest.raises(view_commit.CommitRejected, match="cannot be hashed"):
+        view_commit.commit_view(
+            tmp_path, write={"view.yaml": _view_text("v2")}, remove=frozenset(),
+            audit_entry=_row(view_hash="0" * 64),
+            expected_identity={"parent_version_id": "v1", "view_hash": "0" * 64})
+    assert not list(tmp_path.glob("*.tmp.*"))
+
+
 def test_a_lone_surrogate_in_re_pair_prose_is_a_clean_rejection(tmp_path):
     _seed(tmp_path)
     kwargs = _repair_kwargs(tmp_path)
