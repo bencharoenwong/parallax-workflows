@@ -99,10 +99,13 @@ policy declaration order within each dimension.
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import math
+import os
 import re
+import stat
 import sys
 from dataclasses import asdict, dataclass, replace
 from datetime import date
@@ -1481,13 +1484,42 @@ def _collect_conflicts(policy: dict, exposures: dict, view_tilts: dict,
 # --------------------------------------------------------------------------
 
 def _load_yaml(path: str) -> dict:
-    with Path(path).open() as f:
-        return yaml.safe_load(f) or {}
+    return yaml.safe_load(_read_input_file(path)) or {}
 
 
 def _load_json(path: str) -> dict:
-    with Path(path).open() as f:
-        return json.load(f)
+    return json.loads(_read_input_file(path))
+
+
+def _read_input_file(path: str) -> str:
+    """Read one input file without hanging on a FIFO or following a planted draft link.
+
+    Paths come from documented commands, so they are usually drafts under a
+    `.parallax-policy/` directory in the operator's cwd. A symlink, FIFO or
+    hard link already sitting there would otherwise be read through (or block
+    the read forever). For a draft, the directory must not be a symlink, the
+    file is opened with O_NOFOLLOW and must have one link. Any input must be a
+    regular file. Failures raise OSError so the existing handlers report them.
+    """
+    p = Path(path)
+    in_draft_dir = p.parent.name == ".parallax-policy"
+    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
+    if in_draft_dir:
+        if p.parent.is_symlink():
+            raise OSError(errno.ELOOP, "draft directory is a symlink", str(p.parent))
+        flags |= getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(p, flags)
+    with os.fdopen(fd, "rb") as handle:
+        st = os.fstat(handle.fileno())
+        if not stat.S_ISREG(st.st_mode):
+            raise OSError(errno.EINVAL, "not a regular file", path)
+        if in_draft_dir and st.st_nlink > 1:
+            raise OSError(errno.EINVAL, "draft has more than one hard link", path)
+        data = handle.read()
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise OSError(errno.EINVAL, f"not UTF-8 ({exc.reason})", path) from exc
 
 
 def _render_text(result: AdaptationResult) -> str:
@@ -1540,7 +1572,12 @@ def main(argv: list[str] | None = None) -> int:
     # The policy is different: there a parseable non-mapping is a DATA problem
     # and stays exit 0 with a blocking validation error.
     exposures = None
-    if args.exposures:
+    if args.exposures == "":
+        # An empty value is what an unexpanded shell variable produces. Treating
+        # it as "flag absent" would silently drop the input and still exit 0.
+        print("error: --exposures was given an empty path", file=sys.stderr)
+        return 2
+    if args.exposures is not None:
         try:
             exposures = _load_json(args.exposures)
         except (OSError, ValueError) as e:
@@ -1573,7 +1610,12 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
     view_tilts = None
-    if args.view_tilts:
+    if args.view_tilts == "":
+        # An empty value is what an unexpanded shell variable produces. Treating
+        # it as "flag absent" would silently drop the input and still exit 0.
+        print("error: --view-tilts was given an empty path", file=sys.stderr)
+        return 2
+    if args.view_tilts is not None:
         try:
             view_tilts = _load_json(args.view_tilts)
         except (OSError, ValueError) as e:

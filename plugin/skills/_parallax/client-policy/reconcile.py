@@ -35,8 +35,11 @@ assumed); the caller converts sleeve results to total-portfolio terms visibly.
 from __future__ import annotations
 
 import argparse
+import errno
 import json
 import math
+import os
+import stat
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -547,6 +550,37 @@ _EXIT = {STATUS_OPTIMAL: 0, STATUS_INFEASIBLE: 4, STATUS_CONFLICT: 3,
          STATUS_SOLVER_ERROR: 5}
 
 
+def _read_input_file(path: str) -> str:
+    """Read one input file without hanging on a FIFO or following a planted draft link.
+
+    Paths come from documented commands, so they are usually drafts under a
+    `.parallax-policy/` directory in the operator's cwd. A symlink, FIFO or
+    hard link already sitting there would otherwise be read through (or block
+    the read forever). For a draft, the directory must not be a symlink, the
+    file is opened with O_NOFOLLOW and must have one link. Any input must be a
+    regular file. Failures raise OSError so the existing handlers report them.
+    """
+    p = Path(path)
+    in_draft_dir = p.parent.name == ".parallax-policy"
+    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
+    if in_draft_dir:
+        if p.parent.is_symlink():
+            raise OSError(errno.ELOOP, "draft directory is a symlink", str(p.parent))
+        flags |= getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(p, flags)
+    with os.fdopen(fd, "rb") as handle:
+        st = os.fstat(handle.fileno())
+        if not stat.S_ISREG(st.st_mode):
+            raise OSError(errno.EINVAL, "not a regular file", path)
+        if in_draft_dir and st.st_nlink > 1:
+            raise OSError(errno.EINVAL, "draft has more than one hard link", path)
+        data = handle.read()
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise OSError(errno.EINVAL, f"not UTF-8 ({exc.reason})", path) from exc
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="S3 reconciliation: policy-constrained rebalance targets")
@@ -554,7 +588,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="JSON payload file (see module docstring)")
     args = parser.parse_args(argv)
     try:
-        payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
+        payload = json.loads(_read_input_file(args.input))
     except (OSError, json.JSONDecodeError) as exc:
         print(json.dumps({"status": STATUS_INVALID_INPUT,
                           "errors": [{"path": "$", "reason": str(exc)}]}))
