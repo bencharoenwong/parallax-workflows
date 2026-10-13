@@ -36,7 +36,8 @@ def _seed(tmp_path, version_id="v1"):
 
 
 def _row(version_id="v2", **kw):
-    return {"action": "save", "version_id": version_id, "applied": True, **kw}
+    # view_id matches what _seed and _view_text write.
+    return {"action": "save", "version_id": version_id, "view_id": "vw", "applied": True, **kw}
 
 
 def test_audit_jsonl_is_rejected_with_its_own_message():
@@ -306,7 +307,7 @@ def test_two_threads_both_commit_and_the_chain_stays_valid(tmp_path):
                     tmp_path,
                     write={"view.yaml": _view_text("v1")},
                     remove=frozenset(),
-                    audit_entry={"action": "extend", "version_id": "v1",
+                    audit_entry={"action": "extend", "version_id": "v1", "view_id": "vw",
                                  "view_hash": view_commit.compute_view_hash({})},
                     expected_identity={"version_id": "v1"})
             else:
@@ -795,10 +796,11 @@ def _repair_kwargs(tmp_path):
     # must carry the on-disk view_hash and version_id.
     view_hash = view_commit.IDENTITY_RESOLVERS["view_hash"](tmp_path)
     version_id = view_commit.IDENTITY_RESOLVERS["version_id"](tmp_path)
+    view_id = view_commit.IDENTITY_RESOLVERS["view_id"](tmp_path)
     return dict(
         write={}, remove=frozenset(),
-        audit_entry={"action": "re-pair", "applied": True,
-                     "view_hash": view_hash, "version_id": version_id},
+        audit_entry={"action": "re-pair", "applied": True, "view_hash": view_hash,
+                     "version_id": version_id, "view_id": view_id},
         expected_identity={"view_hash": view_hash, "prose_body_hash": None},
     )
 
@@ -1241,7 +1243,7 @@ def test_no_on_disk_version_id_matches_a_null_parent(tmp_path, on_disk):
             remove=frozenset(),
             audit_entry=_row(view_hash=view_commit.compute_view_hash({})),
             expected_identity={"parent_version_id": None})
-    assert "parent_version_id: 'null'" in str(info.value)
+    assert "parent_version_id: null ->" in str(info.value)
 
 
 # --- hostile structure (BUG-002/003) --------------------------------------------
@@ -1339,3 +1341,104 @@ def test_a_list_expected_identity_on_clear_is_a_clean_rejection(tmp_path):
             audit_entry={"action": "clear", "version_id": "v1",
                          "destination": "/archive/x", "reason": "r"},
             expected_identity=["version_id"])
+
+
+# --- round 4: parser hardening, view_id, path refs, stdin -----------------------
+
+
+def _merge_bomb(levels: int) -> str:
+    lines = ["m0: &m0 {k0: 0}"]
+    for i in range(1, levels + 1):
+        lines.append(f"m{i}: &m{i} {{<<: [*m{i - 1}, *m{i - 1}], k{i}: {i}}}")
+    return "\n".join(lines) + "\nmetadata:\n  version_id: v1\n"
+
+
+def test_a_yaml_merge_key_is_refused_before_it_expands(tmp_path):
+    _seed(tmp_path)
+    (tmp_path / "view.yaml").write_text(_merge_bomb(30), encoding="utf-8")
+    result: dict = {}
+
+    def _read():
+        try:
+            view_commit.read_active_view(tmp_path)
+        except view_commit.CommitRejected as exc:
+            result["exc"] = exc
+
+    worker = threading.Thread(target=_read, daemon=True)
+    worker.start()
+    worker.join(timeout=10)
+    assert not worker.is_alive(), "a merge-key bomb was expanded"
+    assert "merge keys" in str(result.get("exc"))
+
+
+def test_a_merge_key_in_written_content_is_refused(tmp_path):
+    _seed(tmp_path)
+    with pytest.raises(view_commit.CommitRejected, match="merge keys"):
+        view_commit.commit_view(
+            tmp_path, write={"view.yaml": "base: &b {x: 1}\nmetadata:\n  <<: *b\n  version_id: v2\n"},
+            remove=frozenset(), audit_entry=_row(view_hash=view_commit.compute_view_hash({})),
+            expected_identity={"parent_version_id": "v1"})
+
+
+def test_deep_acyclic_nesting_is_a_clean_rejection(tmp_path):
+    _seed(tmp_path)
+    deep = "tilts: " + "[" * 400 + "]" * 400 + "\nmetadata:\n  version_id: v1\n"
+    (tmp_path / "view.yaml").write_text(deep, encoding="utf-8")
+    with pytest.raises(view_commit.CommitRejected, match="nests deeper"):
+        view_commit.read_active_view(tmp_path)
+
+
+def test_a_cycle_through_pairs_is_refused(tmp_path):
+    _seed(tmp_path)
+    (tmp_path / "view.yaml").write_text(
+        "metadata:\n  version_id: v1\ntilts: &t !!pairs [ {loop: *t} ]\n", encoding="utf-8")
+    with pytest.raises(view_commit.CommitRejected):
+        view_commit.read_active_view(tmp_path)
+
+
+def test_a_re_pair_row_for_another_view_family_is_refused(tmp_path):
+    _seed(tmp_path)
+    kwargs = _repair_kwargs(tmp_path)
+    kwargs["audit_entry"]["view_id"] = "SOME-OTHER-VIEW"
+    with pytest.raises(view_commit.CommitRejected, match="re-pair row view_id"):
+        view_commit.commit_view(tmp_path, **kwargs)
+
+
+def test_a_save_row_must_name_the_written_view_family(tmp_path):
+    _seed(tmp_path)
+    with pytest.raises(view_commit.CommitRejected, match="row view_id"):
+        view_commit.commit_view(
+            tmp_path, write={"view.yaml": _view_text("v2")}, remove=frozenset(),
+            audit_entry=_row(view_id="other", view_hash=view_commit.compute_view_hash({})),
+            expected_identity={"parent_version_id": "v1"})
+
+
+@pytest.mark.parametrize("path", [123, ["a"], "", "a\x00b", "~nosuchuser-zz9/x"])
+def test_a_malformed_path_ref_is_a_clean_rejection(tmp_path, path):
+    _seed(tmp_path)
+    staging = tmp_path.parent / "staging_badref"
+    staging.mkdir(exist_ok=True)
+    plan = {"write": {"view.yaml": {"path": path}},
+            "audit_entry": {"action": "save", "version_id": "v2"},
+            "expected_identity": {"parent_version_id": "v1"}}
+    with pytest.raises(view_commit.CommitRejected):
+        view_commit.build_commit_args("save", plan, tmp_path, staging_dir=staging)
+
+
+def test_cli_malformed_stdin_json_exits_2(tmp_path):
+    _seed(tmp_path)
+    proc = subprocess.run(
+        [sys.executable, "-m", "view_commit", "--mode", "save", "--dir", str(tmp_path)],
+        input="{not json", capture_output=True, text=True, cwd=str(HOUSE_VIEW_DIR))
+    assert proc.returncode == 2, proc.stderr
+    assert "not valid JSON" in proc.stderr
+
+
+def test_the_refusal_names_the_key_even_for_a_literal_null_string(tmp_path):
+    _seed(tmp_path, version_id="'null'")
+    with pytest.raises(audit_chain.ViewChangedMidRun) as info:
+        view_commit.commit_view(
+            tmp_path, write={"view.yaml": "metadata:\n  version_id: v2\n"},
+            remove=frozenset(), audit_entry=_row(view_hash=view_commit.compute_view_hash({})),
+            expected_identity={"parent_version_id": None})
+    assert "parent_version_id: null -> 'null'" in str(info.value)

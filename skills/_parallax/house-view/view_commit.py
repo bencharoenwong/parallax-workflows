@@ -73,6 +73,30 @@ _MAX_STAGED_BYTES = 16 * 1024 * 1024
 # few thousand nodes; a few hundred bytes of nested aliases can expand to
 # billions, which would hang the hash while the view lock is held.
 _MAX_YAML_NODES = 200_000
+# A real view nests a handful of levels; this keeps every later recursive walk
+# (the hash's _strip_empty, yaml dumps) far from Python's recursion limit.
+_MAX_YAML_DEPTH = 64
+
+
+class _ViewLoader(yaml.SafeLoader):
+    """SafeLoader that refuses YAML merge keys (``<<``).
+
+    PyYAML expands merges inside the parser, before any check of ours can run,
+    and a few hundred bytes of nested merges take seconds per level. Neither
+    ``yaml.safe_dump`` nor any writer here emits a merge key.
+    """
+
+    def flatten_mapping(self, node):  # noqa: D401 - PyYAML hook
+        for key_node, _ in node.value:
+            if key_node.tag == "tag:yaml.org,2002:merge":
+                raise yaml.constructor.ConstructorError(
+                    None, None, "YAML merge keys (<<) are not accepted", key_node.start_mark
+                )
+        return super().flatten_mapping(node)
+
+
+def _load_yaml(text: str) -> Any:
+    return yaml.load(text, Loader=_ViewLoader)  # noqa: S506 - SafeLoader subclass
 
 
 def _check_bounded(obj: Any, label: str) -> None:
@@ -91,9 +115,11 @@ def _check_bounded(obj: Any, label: str) -> None:
             raise CommitRejected(
                 f"{label} expands to more than {_MAX_YAML_NODES} nodes (YAML aliases?)"
             )
-        if isinstance(node, (dict, list)):
+        if isinstance(node, (dict, list, tuple, set, frozenset)):
             if id(node) in path:
                 raise CommitRejected(f"{label} refers to itself (a recursive YAML alias)")
+            if len(path) >= _MAX_YAML_DEPTH:
+                raise CommitRejected(f"{label} nests deeper than {_MAX_YAML_DEPTH} levels")
             inner = path | {id(node)}
             children = node.values() if isinstance(node, dict) else node
             stack.extend((child, inner) for child in children)
@@ -293,7 +319,7 @@ def read_active_view(view_dir: Path) -> dict[str, Any] | None:
         # OSError covers a directory or an unreadable file in view.yaml's place.
         raise CommitRejected(_unreadable_view_message(path, exc)) from exc
     try:
-        parsed = yaml.safe_load(text)
+        parsed = _load_yaml(text)
     except _YAML_PARSE_ERRORS as exc:
         raise CommitRejected(_unreadable_view_message(path, exc)) from exc
     if not isinstance(parsed, dict):
@@ -422,15 +448,14 @@ def _check_identity(
         return (v is None, "" if v is None else str(v))
 
     def _show(v: Any) -> str:
-        return "null" if v is None else str(v)
+        return "null" if v is None else repr(str(v))
 
     committed_raw = {k: resolvers[k](view_dir) for k in expected_identity}
     moved_keys = [k for k in expected_identity
                   if _key(expected_identity[k]) != _key(committed_raw[k])]
     if moved_keys:
-        moved = audit_chain.identity_diff(
-            {k: _show(expected_identity[k]) for k in moved_keys},
-            {k: _show(committed_raw[k]) for k in moved_keys},
+        moved = ", ".join(
+            f"{k}: {_show(expected_identity[k])} -> {_show(committed_raw[k])}" for k in moved_keys
         )
         raise audit_chain.ViewChangedMidRun(
             f"Active house view changed since it was read ({moved}); nothing was written."
@@ -442,7 +467,7 @@ def _parse_mapping(text: str, label: str) -> dict[str, Any]:
     never letting a ``yaml.YAMLError`` or a non-mapping document escape as an
     unhandled type that bypasses ``except AuditChainError`` callers."""
     try:
-        parsed = yaml.safe_load(text)
+        parsed = _load_yaml(text)
     except _YAML_PARSE_ERRORS as exc:
         raise CommitRejected(f"{label} is not valid YAML: {exc}") from exc
     if parsed is None:
@@ -472,6 +497,12 @@ def _validate_re_pair_against_disk(view_dir: Path, audit_entry: dict[str, Any]) 
             f"re-pair row view_hash {audit_entry.get('view_hash')!r} != "
             f"on-disk view.yaml {actual!r}"
         )
+    on_disk_view_id = view["metadata"].get("view_id")
+    if on_disk_view_id is not None and audit_entry.get("view_id") != on_disk_view_id:
+        raise CommitRejected(
+            f"re-pair row view_id {audit_entry.get('view_id')!r} != "
+            f"on-disk view.yaml {on_disk_view_id!r}"
+        )
     on_disk_version = view["metadata"]["version_id"]
     if audit_entry.get("version_id") != on_disk_version:
         raise CommitRejected(
@@ -498,6 +529,11 @@ def _validate_row_matches_bytes(write: dict[str, str], audit_entry: dict[str, An
                 raise CommitRejected(
                     f"row view_hash {audit_entry['view_hash']!r} != bytes {actual!r}"
                 )
+        if meta.get("view_id") is not None and meta.get("view_id") != audit_entry.get("view_id"):
+            raise CommitRejected(
+                f"row view_id {audit_entry.get('view_id')!r} != "
+                f"view.yaml metadata {meta.get('view_id')!r}"
+            )
         if meta.get("version_id") != audit_entry.get("version_id"):
             raise CommitRejected(
                 f"row version_id {audit_entry.get('version_id')!r} != "
@@ -566,7 +602,8 @@ def _reject_stale_staging(view_dir: Path) -> None:
         raise CommitRejected(
             f"leftover staging files {stale} in {view_dir} belong to the version "
             f"view.yaml holds ({current}): that commit did not finish, so the live "
-            "artifacts may be a mix of two versions. Inspect "
+            "artifacts may be a mix of two versions (or an interrupted earlier "
+            "re-pair left its staged prose behind). Inspect "
             "view.yaml, prose.md and provenance.yaml, remove the leftovers, then re-pair."
         )
 
@@ -779,6 +816,9 @@ def _resolve_content(
     # Every branch below rejects BEFORE opening the file. Order is the contract:
     # a plan that will be refused must not have caused a read on its way to the
     # refusal, or the refusal came too late to matter.
+    raw_path = ref["path"]
+    if not isinstance(raw_path, str) or not raw_path or "\x00" in raw_path:
+        raise CommitRejected(f"write[{name!r}] path must be a non-empty string without NUL")
     if staging_dir is None:
         raise CommitRejected(
             f"write[{name!r}] is a path ref but no staging directory was declared; "
@@ -791,7 +831,10 @@ def _resolve_content(
     # staging directory, so it is rejected rather than followed. `..` segments
     # are normalized by the same call, so a traversal out of the staging
     # directory fails the same comparison.
-    source = Path(ref["path"]).expanduser().resolve()
+    try:
+        source = Path(raw_path).expanduser().resolve()
+    except (RuntimeError, OSError, ValueError) as exc:  # e.g. ~nosuchuser
+        raise CommitRejected(f"write[{name!r}] path {raw_path!r} cannot be resolved: {exc}") from exc
     if source.parent == Path(view_dir).expanduser().resolve():
         # Unreachable while staging_dir is disjoint from view_dir (enforced
         # above), and kept anyway: it is the guard that still holds if a future
@@ -935,7 +978,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     view_dir = Path(args.dir).expanduser()
     try:
-        plan = json.loads(sys.stdin.read())
+        try:
+            plan = json.loads(sys.stdin.read())
+        except json.JSONDecodeError as exc:
+            raise CommitRejected(f"the plan on stdin is not valid JSON: {exc}") from exc
         kwargs = build_commit_args(args.mode, plan, view_dir, staging_dir=args.staging_dir)
         entry = commit_view(view_dir, **kwargs)
     except (CommitRejected, audit_chain.ViewChangedMidRun) as exc:
