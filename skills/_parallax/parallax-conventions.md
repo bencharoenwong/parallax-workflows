@@ -582,7 +582,7 @@ Gates fail closed (§4.0); display sections degrade (§4). The rows below apply 
 | `invoke-skill` — judge drift check | Emit the existing line from `house-view/auto-on-load-judge-pattern.md` ("not installed; drift check skipped"). The check is never a gate. |
 | `load-reference` | §0.0 item 4. |
 | `write-artifact` | Render gate: use its stdin fallback (§10.3). Every other consumer is a persist step behind a confirmation gate: stop and report that the artifact could not be written on this host. |
-| `read-config` | No environment: every `PARALLAX_*` switch takes its documented default; say so in About This Report when the default changes behaviour. No state directory: no active view and no branding, per `house-view/loader.md` §1 and `white-label/integration-pattern.md` §4. |
+| `read-config` | No environment: every `PARALLAX_*` switch takes its documented default; say so in About This Report when the default changes behavior. No state directory: no active view and no branding, per `house-view/loader.md` §1 and `white-label/integration-pattern.md` §4. |
 | `fetch-url` | Report the source as not fetched and ask for pasted text. Never guess content. |
 | `schedule-task` | Do not offer scheduling. Never describe a schedule the host cannot create. A *verify* binding counts as absent. |
 

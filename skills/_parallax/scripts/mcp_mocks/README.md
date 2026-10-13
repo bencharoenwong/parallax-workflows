@@ -64,7 +64,7 @@ python3 skills/_parallax/scripts/gen_mock_fixtures.py --write
 
 The generator derives every value from a seeded synthetic price path, so the arithmetic identities the live API satisfies hold by construction rather than by transcription. `../test_gen_mock_fixtures.py` asserts those identities independently of the generator, which is what stops a generator edit from quietly changing the contract while gate 1 still agrees with itself.
 
-Read the generator's module docstring before changing it. It documents the traps the fixture exists to keep exercised — the mean-vs-sum split inside `sector_contribution`, `invalid_fields` being `null` rather than `[]`, the calendar (not trading-day) grid, `top_5_share` exceeding 1, and above all that **`quantity × close_local` deliberately does not equal `ending_value`**, which is confirmed API behaviour and must never be asserted as an identity.
+Read the generator's module docstring before changing it. It documents the traps the fixture exists to keep exercised — the mean-vs-sum split inside `sector_contribution`, `invalid_fields` being `null` rather than `[]`, the calendar (not trading-day) grid, `top_5_share` exceeding 1, and above all that **`quantity × close_local` deliberately does not equal `ending_value`**, which is confirmed API behavior and must never be asserted as an identity.
 
 ## How to refresh when the live MCP server changes
 

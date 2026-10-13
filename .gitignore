@@ -53,6 +53,7 @@ skills/load-house-view/regression-corpus/baselines/2026-04-22/
 # Planning docs — private by default.
 docs/plans/
 PLANS.md
+deferred-debt.md
 
 # Internal QA artifacts
 skills/load-house-view/PHASE_0_TEST_REPORT.md

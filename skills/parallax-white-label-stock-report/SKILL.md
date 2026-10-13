@@ -80,7 +80,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
    Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
    <!-- /host-note -->
 2. Parse args: ticker, RIC, or a path to a saved report JSON; `--force`; `--full-white-label`; `--powered-by`.
-3. `read-config` `~/.parallax/client-branding/config.yaml`: confirm it exists and `metadata.client_name` names the intended client. Absent or wrong client → collect the brand guidelines (logo and colour palette at minimum; fonts optional) and run `/parallax-white-label-onboard` first; without a config the render falls back to the default Parallax palette and is not white-labeled.
+3. `read-config` `~/.parallax/client-branding/config.yaml`: confirm it exists and `metadata.client_name` names the intended client. Absent or wrong client → collect the brand guidelines (logo and color palette at minimum; fonts optional) and run `/parallax-white-label-onboard` first; without a config the render falls back to the default Parallax palette and is not white-labeled.
 
 ### Step 1 — Resolve inputs
 
