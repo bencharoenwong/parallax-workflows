@@ -341,6 +341,21 @@ CLEAR_RESOLVERS: dict[str, Callable[[Path], str | None]] = {
 }
 
 
+def _check_clear_identity(view_dir: Path, expected_identity: dict[str, Any]) -> None:
+    if expected_identity.get("version_id") is not None:
+        try:
+            read_active_view(view_dir)
+        except CommitRejected as exc:
+            raise CommitRejected(
+                f"the active {Path(view_dir) / 'view.yaml'} cannot be parsed as a view "
+                "with a usable metadata.version_id, so it cannot match the expected "
+                f"version_id {expected_identity['version_id']!r}; nothing was written. "
+                "A clear over an unreadable view passes version_id null in both the "
+                "row and expected_identity."
+            ) from exc
+    _check_identity(view_dir, expected_identity, CLEAR_RESOLVERS)
+
+
 def _check_identity(
     view_dir: Path,
     expected_identity: dict[str, Any],
@@ -550,10 +565,10 @@ def commit_view_locked(
     validate_audit_entry(audit_entry, write)
     if audit_entry["action"] == "re-pair":
         _reject_stale_staging(view_dir)
-    _check_identity(
-        view_dir, expected_identity,
-        CLEAR_RESOLVERS if audit_entry["action"] == "clear" else IDENTITY_RESOLVERS,
-    )
+    if audit_entry["action"] == "clear":
+        _check_clear_identity(view_dir, expected_identity)
+    else:
+        _check_identity(view_dir, expected_identity)
     _validate_row_matches_bytes(write, audit_entry)
     mutated = False
     if write:
@@ -764,16 +779,17 @@ def _read_staged_file(staging_dir: Path, filename: str, name: str) -> str:
             os.close(fd)
             raise
         with os.fdopen(fd, "rb") as handle:
-            if not stat.S_ISREG(st.st_mode):
-                raise CommitRejected(
-                    f"write[{name!r}] path {staging_dir / filename} is not a regular file"
-                )
             if st.st_nlink > 1:
                 raise CommitRejected(
                     f"write[{name!r}] path {staging_dir / filename} has "
                     f"{st.st_nlink} hard links; stage a fresh file with one name"
                 )
-            data = handle.read()
+            data = handle.read(_MAX_STAGED_BYTES + 1)
+            if len(data) > _MAX_STAGED_BYTES:
+                raise CommitRejected(
+                    f"write[{name!r}] path {staging_dir / filename} is over "
+                    f"{_MAX_STAGED_BYTES} bytes; the limit is {_MAX_STAGED_BYTES}"
+                )
     finally:
         os.close(dir_fd)
     try:

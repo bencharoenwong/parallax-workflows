@@ -943,6 +943,24 @@ def test_clear_still_works_over_a_damaged_view(tmp_path, damage):
     assert not (tmp_path / "view.yaml").exists()
 
 
+@pytest.mark.parametrize("damage", [
+    b"metadata:\n  version_id: v1\ntilts: [unclosed\n", TORN_METADATA, b"",
+])
+def test_clear_naming_a_version_over_an_unreadable_view_says_to_pass_null(tmp_path, damage):
+    _seed(tmp_path)
+    (tmp_path / "view.yaml").write_bytes(damage)
+    before = (tmp_path / AUDIT).read_bytes()
+    with pytest.raises(view_commit.CommitRejected,
+                       match="cannot be parsed.*passes version_id null"):
+        view_commit.commit_view(
+            tmp_path, write={}, remove=frozenset(WRITABLE_ALL),
+            audit_entry={"action": "clear", "version_id": "v1",
+                         "destination": "/archive/x", "reason": "damaged view"},
+            expected_identity={"version_id": "v1"})
+    assert (tmp_path / "view.yaml").read_bytes() == damage
+    assert (tmp_path / AUDIT).read_bytes() == before
+
+
 @pytest.mark.parametrize("damage", [b"", TORN_METADATA, b"metadata: [unclosed\n"])
 def test_extend_is_refused_over_a_damaged_view(tmp_path, damage):
     _seed(tmp_path)
@@ -1098,6 +1116,25 @@ def test_an_oversized_staged_draft_is_rejected(tmp_path, monkeypatch):
     staging.mkdir(exist_ok=True)
     src = staging / "view.yaml"
     src.write_text("metadata:\n  version_id: v2\n" + "#" * 200, encoding="utf-8")
+    monkeypatch.setattr(view_commit, "_MAX_STAGED_BYTES", 64)
+    with pytest.raises(view_commit.CommitRejected, match="the limit is 64"):
+        view_commit.build_commit_args("save", _unbounded_plan(src), tmp_path, staging_dir=staging)
+
+
+def test_a_staged_draft_that_grows_after_the_size_check_is_rejected(tmp_path, monkeypatch):
+    import os
+    _seed(tmp_path)
+    staging = tmp_path.parent / "staging_grow"
+    staging.mkdir(exist_ok=True)
+    src = staging / "view.yaml"
+    src.write_text("metadata:\n  version_id: v2\n" + "#" * 200, encoding="utf-8")
+    real_fstat = os.fstat
+
+    def _fstat_before_growth(fd):
+        st = real_fstat(fd)
+        return os.stat_result(st[:6] + (0,) + st[7:10])
+
+    monkeypatch.setattr(os, "fstat", _fstat_before_growth)
     monkeypatch.setattr(view_commit, "_MAX_STAGED_BYTES", 64)
     with pytest.raises(view_commit.CommitRejected, match="the limit is 64"):
         view_commit.build_commit_args("save", _unbounded_plan(src), tmp_path, staging_dir=staging)
