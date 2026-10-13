@@ -84,6 +84,24 @@ roots=$(
   done | sort -u
 )
 
+# The generated `plugin/` bundle lives outside skills/ and evals/, so the
+# auto-discovery above never reaches it -- a drift gate test on a file inside
+# the bundled white-label tests copy can pass in source and still fail once
+# redaction/copy transforms run (manifest.json ships unfiltered, but a
+# different file might not). Forced in as one extra root, the same way `evals`
+# is conditional above, rather than widening the find pipeline to `plugin/`
+# wholesale: that would duplicate every other shipped skill's own test suite
+# (already covered via its skills/ source) and risks conftest collisions
+# across the many dirs plugin/ carries. test_ci_root_parity.py's
+# `_ci_pytest_paths` accepts a `plugin/` prefix for the same reason this root
+# is named here rather than discovered, so a CI step naming a different path
+# still fails that gate.
+if [ -d "plugin/skills/_parallax/white-label/tests" ]; then
+  roots="$roots
+plugin/skills/_parallax/white-label/tests"
+  roots=$(printf '%s\n' "$roots" | sort -u)
+fi
+
 if [ -z "$roots" ]; then
   echo "run-gate-tests: no test roots discovered under skills/ or evals/" >&2
   exit 1

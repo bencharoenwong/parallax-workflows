@@ -148,7 +148,7 @@ def _ci_pytest_paths(workflow_text: str | None = None) -> list[Path]:
                             "_ci_pytest_paths to subtract them before using "
                             "this option here.")
                     for arg in _positional_args(argv):
-                        if arg.startswith(("skills/", "evals/")):
+                        if arg.startswith(("skills/", "evals/", "plugin/")):
                             paths.append(REPO_ROOT / arg.rstrip("/"))
     return paths
 
