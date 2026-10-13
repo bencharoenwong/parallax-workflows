@@ -48,10 +48,10 @@ suitability determination, or a price target.** It is read-only and persists not
      guardrailed — marked `illustrative, not a prediction`, built on round inputs, never implying a
      probability or a specific magnitude, and it still closes with the qualified-professional
      reminder (`references/client-conditioning.md` (d)). It is listed here **by name** because it
-     places a personalised, quantified net-worth-impact figure inside a suitability flag — exactly
-     the kind of statement a regulator scrutinises even when labelled illustrative — so the Pass-2
+     places a personalized, quantified net-worth-impact figure inside a suitability flag — exactly
+     the kind of statement a regulator scrutinizes even when labeled illustrative — so the Pass-2
      sign-off should approve it as a deliberate capability, not discover it in a rendered flag.
-3. **Live validation is limited — and the automated tests are *contract* tests, not live-behaviour
+3. **Live validation is limited — and the automated tests are *contract* tests, not live-behavior
    tests.** The two acceptance tests (`test_two_pass_acceptance.py`, `test_decomposition_golden.py`)
    grade **synthetic, hand-written transcripts**: they lock the grading logic and catch a regression
    in the grader or a malformed map shape — real value — but by construction they cannot prove the
@@ -61,7 +61,7 @@ suitability determination, or a price target.** It is read-only and persists not
    once the cold-session run produces real transcripts, point the same layer-coverage and
    Pass-1-stability assertions at those outputs as well as the fixtures — little new code, and it
    turns the contract tests into a live check. Treat "golden decomposition test" as "pins the grader
-   contract," not "live-behaviour validation," until then.
+   contract," not "live-behavior validation," until then.
 
 ## Fast reviewer checklist
 

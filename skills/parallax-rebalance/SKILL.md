@@ -191,10 +191,10 @@ If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwis
 ## Failure modes
 
 - `analyze_portfolio` schema error, oversized response, or non-empty `_meta.invalid_fields`: no retry; `check_portfolio_redundancy` plus per-holding score aggregation supply concentration and factor context, and every field they cannot supply is named as unavailable.
-- Scoring coverage gaps: profile-derived scores labelled as such and named in the report; a holding whose scores never arrive is evaluated on health flags alone and cannot be factor-ranked.
+- Scoring coverage gaps: profile-derived scores labeled as such and named in the report; a holding whose scores never arrive is evaluated on health flags alone and cannot be factor-ranked.
 - Identity mismatch: ⚠ MISMATCH holdings are excluded from aggregates and re-scored individually; name-check timeouts render ⚠ UNVERIFIED.
-- Coverage cross-check returns `coverage_limited`: redundancy figures are labelled coverage-limited, and `analyze_portfolio` sector weights are preferred for every concentration figure.
-- S3 solver unavailable or erroring: `solver_unavailable` / `invalid_input` / `solver_error` render UNVERIFIED per conventions §4.0, with the flag-based fallback labelled "not policy-checked"; `infeasible` and `conflict` render their own artifact and NO targets.
+- Coverage cross-check returns `coverage_limited`: redundancy figures are labeled coverage-limited, and `analyze_portfolio` sector weights are preferred for every concentration figure.
+- S3 solver unavailable or erroring: `solver_unavailable` / `invalid_input` / `solver_error` render UNVERIFIED per conventions §4.0, with the flag-based fallback labeled "not policy-checked"; `infeasible` and `conflict` render their own artifact and NO targets.
 - House-view banner states `malformed` / `expired` / `critical`: the banner renders verbatim (conventions §0.3 item 4).
 - Host lacks a primitive: conventions §14.3, per primitive.
 

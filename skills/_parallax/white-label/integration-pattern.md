@@ -36,8 +36,8 @@ from pathlib import Path
 
 # loader.py lives at _parallax/white-label/loader.py. <skill-dir> is the
 # calling skill's own directory, substituted literally at the call site
-# (conventions §14.1 run-shell: no $VAR, ${...} or __file__ magic — __file__
-# is undefined when this snippet runs via `python3 -c`).
+# (conventions §14 run-shell: write paths literally; __file__ is undefined
+# when this snippet runs via `python3 -c`).
 _WHITE_LABEL_DIR = Path("<skill-dir>/../_parallax/white-label")
 sys.path.insert(0, str(_WHITE_LABEL_DIR))
 from loader import load_visual_branding, is_white_label_active, safe_source_reference  # noqa: E402
