@@ -549,16 +549,25 @@ def test_save_commits_through_view_commit(tmp_view_dir: Path, monkeypatch):
         assert (tmp_view_dir / name).stat().st_mode & 0o777 == 0o600
 
 
-def test_save_over_an_empty_active_view_is_rejected(tmp_view_dir: Path):
-    """An empty view.yaml left by an interrupted in-place write must not be
-    replaced by a generate row that records no parent."""
+@pytest.mark.parametrize("damage", [b"excl", b"", b"excludes: []\nextraction: {}\n"])
+def test_an_unreadable_active_view_stops_synthesis_before_the_gate(tmp_view_dir: Path, damage):
+    """A torn view.yaml left by an interrupted in-place write must be refused
+    before the gate, never crash, and never be replaced by a generate row
+    that records no parent."""
     import view_commit
 
     tmp_view_dir.mkdir(parents=True, exist_ok=True)
-    (tmp_view_dir / "view.yaml").write_bytes(b"")
+    (tmp_view_dir / "view.yaml").write_bytes(damage)
+    disposed: list = []
+
+    def _dispose(prompt):
+        disposed.append(prompt)
+        return "confirm"
+
     orc = MakerOrchestrator(MakerOptions(view_dir=tmp_view_dir, market_filter=["us"]))
     with pytest.raises(view_commit.CommitRejected, match="cannot be read"):
-        orc.execute_synthesis(_FixtureRunner(), dispose_fn=_confirm_dispose)
-    assert (tmp_view_dir / "view.yaml").read_bytes() == b""
+        orc.execute_synthesis(_FixtureRunner(), dispose_fn=_dispose)
+    assert disposed == []
+    assert (tmp_view_dir / "view.yaml").read_bytes() == damage
     assert not (tmp_view_dir / "prose.md").exists()
     assert not list(tmp_view_dir.glob("*.tmp.*"))

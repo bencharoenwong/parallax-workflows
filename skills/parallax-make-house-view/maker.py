@@ -818,6 +818,8 @@ class MakerOrchestrator:
 
         Returns: MakerResult with the disposition + paths + pillars.
         """
+        view_commit.IDENTITY_RESOLVERS["parent_version_id"](Path(self.options.view_dir))
+
         # Step 1
         covered_markets, raw_lmc = self.resolve_covered_markets(mcp)
         if not covered_markets:
@@ -1113,9 +1115,10 @@ def _read_active_view(view_dir: Path) -> dict[str, Any] | None:
         return None
     try:
         with open(view_path, "r", encoding="utf-8") as f:
-            return yaml.safe_load(f)
+            parsed = yaml.safe_load(f)
     except Exception:
         return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 def _load_view_bundle(path: Path) -> dict[str, Any]:
