@@ -576,34 +576,44 @@ def test_an_unreadable_active_view_stops_synthesis_before_the_gate(tmp_view_dir:
     assert not list(tmp_view_dir.glob("*.tmp.*"))
 
 
-def test_every_truncation_of_a_saved_view_is_refused(tmp_view_dir: Path, tmp_path: Path):
-    """A torn in-place write can stop at any byte. Every prefix that is not
-    the whole file must be refused; the whole file must be accepted."""
+def test_no_truncation_of_a_saved_view_raises_anything_but_commit_rejected(
+    tmp_view_dir: Path, tmp_path: Path
+):
+    """A torn in-place write can stop at any byte. Every reader of the active
+    view either refuses the prefix with CommitRejected or reads it; none
+    raises any other exception. The whole file reads back unchanged."""
     import view_commit
-    from maker import _read_active_view
+    from maker import (
+        _read_active_view,
+        _read_parent_version_id,
+        _resolve_or_new_view_id,
+        render_status,
+    )
 
     orc = MakerOrchestrator(MakerOptions(view_dir=tmp_view_dir, market_filter=["us"]))
     orc.execute_synthesis(_FixtureRunner(), dispose_fn=_confirm_dispose)
     view = yaml.safe_load((tmp_view_dir / "view.yaml").read_text(encoding="utf-8"))
     view["excludes"] = [{"type": "sector", "value": "tobacco"}]
-    for key, value in view["tilts"].items():
-        if value == {}:
-            view["tilts"][key] = {"probe": 17}
     view["metadata"]["view_hash"] = view_commit.compute_view_hash(view)
-    assert view_commit.compute_view_hash({**view, "tilts": {}}) != view["metadata"]["view_hash"]
     saved = yaml.safe_dump(
         view, sort_keys=True, default_flow_style=False, allow_unicode=True
     ).encode("utf-8")
+    readers = (
+        _read_active_view,
+        _read_parent_version_id,
+        _resolve_or_new_view_id,
+        render_status,
+        *view_commit.IDENTITY_RESOLVERS.values(),
+    )
 
     torn_dir = tmp_path / "torn"
     torn_dir.mkdir()
     (torn_dir / "view.yaml").write_bytes(saved)
     assert _read_active_view(torn_dir) == view
     for n in range(len(saved)):
-        prefix = saved[:n]
-        (torn_dir / "view.yaml").write_bytes(prefix)
-        if prefix.rstrip() == saved.rstrip():
-            assert _read_active_view(torn_dir) == view
-            continue
-        with pytest.raises(view_commit.CommitRejected):
-            _read_active_view(torn_dir)
+        (torn_dir / "view.yaml").write_bytes(saved[:n])
+        for reader in readers:
+            try:
+                reader(torn_dir)
+            except view_commit.CommitRejected:
+                pass

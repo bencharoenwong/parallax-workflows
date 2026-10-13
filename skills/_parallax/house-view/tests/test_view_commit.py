@@ -89,16 +89,18 @@ def test_prose_body_hash_is_recomputed_not_read_from_frontmatter(tmp_path):
 
 def test_view_hash_is_recomputed_not_read_from_metadata(tmp_path):
     """SECURITY: --re-pair blesses whatever is on disk and keys on view_hash.
-    An edit to the tilts that leaves the stored field stale must not pass the
-    guard, and a consistent view resolves to the recomputed hash."""
-    expected = view_commit.compute_view_hash({"tilts": {"sectors": {"health_care": 2}}})
-    view = tmp_path / "view.yaml"
-    body = "metadata:\n  version_id: v1\n  view_id: vw\n  view_hash: {}\ntilts:\n  sectors:\n    health_care: 2\n"
-    view.write_text(body.format("0" * 64), encoding="utf-8")
-    with pytest.raises(view_commit.CommitRejected, match="view_hash does not match"):
-        view_commit.IDENTITY_RESOLVERS["view_hash"](tmp_path)
-    view.write_text(body.format(expected), encoding="utf-8")
-    assert view_commit.IDENTITY_RESOLVERS["view_hash"](tmp_path) == expected
+    Trusting metadata.view_hash lets an edit to the tilts pass the guard while
+    the stale stored field goes unchanged."""
+    (tmp_path / "view.yaml").write_text(
+        "metadata:\n  version_id: v1\n  view_hash: " + "0" * 64 + "\n"
+        "tilts:\n  sectors:\n    health_care: 2\n",
+        encoding="utf-8",
+    )
+    resolved = view_commit.IDENTITY_RESOLVERS["view_hash"](tmp_path)
+    assert resolved != "0" * 64
+    assert resolved == view_commit.compute_view_hash(
+        {"tilts": {"sectors": {"health_care": 2}}}
+    )
 
 
 def test_view_hash_resolver_returns_none_when_there_is_no_view(tmp_path):
@@ -815,6 +817,33 @@ def test_re_pair_proceeds_on_a_clean_directory(tmp_path):
     _seed(tmp_path)
     entry = view_commit.commit_view(tmp_path, **_repair_kwargs(tmp_path))
     assert entry["action"] == "re-pair"
+
+
+def test_a_hand_edited_view_with_a_stale_stored_hash_can_be_re_paired(tmp_path):
+    """--re-pair is the documented recovery after a manual YAML edit, and the
+    stored metadata.view_hash is stale by design at that point."""
+    _seed(tmp_path)
+    (tmp_path / "view.yaml").write_text(
+        _view_text("v1") + "tilts:\n  sectors:\n    health_care: 2\n", encoding="utf-8"
+    )
+    kwargs = _repair_kwargs(tmp_path)
+    assert kwargs["expected_identity"]["view_hash"] == view_commit.compute_view_hash(
+        {"tilts": {"sectors": {"health_care": 2}}}
+    )
+    entry = view_commit.commit_view(tmp_path, **kwargs)
+    assert entry["action"] == "re-pair"
+
+
+def test_a_written_view_with_non_mapping_metadata_is_rejected(tmp_path):
+    _seed(tmp_path)
+    before = (tmp_path / AUDIT).read_bytes()
+    with pytest.raises(view_commit.CommitRejected, match="metadata must be a mapping"):
+        view_commit.commit_view(
+            tmp_path, write={"view.yaml": "metadata: auth\n"}, remove=frozenset(),
+            audit_entry=_row(view_hash=EMPTY_VIEW_HASH),
+            expected_identity={"parent_version_id": "v1"})
+    assert (tmp_path / AUDIT).read_bytes() == before
+    assert (tmp_path / "view.yaml").read_text() == _view_text("v1")
 
 
 def test_a_save_is_not_blocked_by_a_leftover_from_another_version(tmp_path):

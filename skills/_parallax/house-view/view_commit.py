@@ -21,6 +21,9 @@ Known residue, deliberately not fixed here:
     detects it at load, and ``--re-pair`` refuses while leftover
     ``<artifact>.tmp.<version_id>`` files show a commit did not finish.
   * ``flock`` may silently no-op on some network filesystems.
+  * A view.yaml that the pre-migration maker truncated inside the
+    ``version_id`` or ``view_id`` value is read as a valid identity.
+    Truncation elsewhere is refused by ``read_active_view`` or is harmless.
 
 A plan may hand content over as ``{"inline": ...}`` or as ``{"path": ...}``.
 The path form exists so an operator LLM never has to escape multi-KB prose into
@@ -234,11 +237,8 @@ def validate_audit_entry(audit_entry: dict[str, Any], write: dict[str, Any]) -> 
 def read_active_view(view_dir: Path) -> dict[str, Any] | None:
     """The active view, or None when view.yaml does not exist.
 
-    Any view.yaml that exists must decode, parse to a mapping, carry a
-    ``metadata`` mapping with non-empty string ``version_id`` and ``view_id``,
-    and carry a ``metadata.view_hash`` equal to the recomputed hash. Keys dump
-    sorted with ``tilts`` last, so a file cut anywhere in or after
-    ``metadata`` loses a required field or fails the hash. Anything else
+    Any view.yaml that exists must decode, parse to a mapping, and carry a
+    ``metadata`` mapping with a non-empty string ``version_id``; anything else
     raises ``CommitRejected``.
     """
     path = Path(view_dir) / "view.yaml"
@@ -257,18 +257,9 @@ def read_active_view(view_dir: Path) -> dict[str, Any] | None:
     meta = parsed.get("metadata")
     if not isinstance(meta, dict):
         raise CommitRejected(_unreadable_view_message(path, "metadata is not a mapping"))
-    for field in ("version_id", "view_id"):
-        value = meta.get(field)
-        if not isinstance(value, str) or not value.strip():
-            raise CommitRejected(
-                _unreadable_view_message(path, f"no usable metadata.{field}")
-            )
-    if meta.get("view_hash") != compute_view_hash(parsed):
-        raise CommitRejected(
-            _unreadable_view_message(
-                path, "metadata.view_hash does not match the tilts and excludes"
-            )
-        )
+    version_id = meta.get("version_id")
+    if not isinstance(version_id, str) or not version_id.strip():
+        raise CommitRejected(_unreadable_view_message(path, "no usable metadata.version_id"))
     return parsed
 
 
@@ -327,19 +318,26 @@ IDENTITY_RESOLVERS: dict[str, Callable[[Path], str | None]] = {
 }
 
 
-def _resolve_identity(view_dir: Path, key: str, lenient: bool) -> str | None:
+def _resolve_clear_version_id(view_dir: Path) -> str | None:
     try:
-        return IDENTITY_RESOLVERS[key](view_dir)
+        return _metadata_field(view_dir, "version_id")
     except CommitRejected:
-        if lenient:
-            return None
-        raise
+        return None
+
+
+# --clear is the recovery mode and the caller archives first, so it alone may
+# run over a view.yaml that cannot be read. --extend and save stay strict.
+CLEAR_RESOLVERS: dict[str, Callable[[Path], str | None]] = {
+    "version_id": _resolve_clear_version_id,
+}
 
 
 def _check_identity(
-    view_dir: Path, expected_identity: dict[str, Any], *, lenient: bool = False
+    view_dir: Path,
+    expected_identity: dict[str, Any],
+    resolvers: dict[str, Callable[[Path], str | None]] = IDENTITY_RESOLVERS,
 ) -> None:
-    unknown = set(expected_identity) - set(IDENTITY_RESOLVERS)
+    unknown = set(expected_identity) - set(resolvers)
     if unknown:
         raise CommitRejected(f"unknown identity keys: {sorted(unknown)}")
     # Both sides go through str() deliberately, which is also what makes the
@@ -348,7 +346,7 @@ def _check_identity(
     # view.yaml, and "None" == "None". Do not "fix" this into an identity
     # comparison without giving the fresh-install path its own branch.
     captured = {k: str(v) for k, v in expected_identity.items()}
-    committed = {k: str(_resolve_identity(view_dir, k, lenient)) for k in expected_identity}
+    committed = {k: str(resolvers[k](view_dir)) for k in expected_identity}
     moved = audit_chain.identity_diff(captured, committed)
     if moved:
         raise audit_chain.ViewChangedMidRun(
@@ -377,6 +375,8 @@ def _validate_row_matches_bytes(write: dict[str, str], audit_entry: dict[str, An
     if "view.yaml" in write:
         parsed = _parse_mapping(write["view.yaml"], "view.yaml")
         meta = parsed.get("metadata") or {}
+        if not isinstance(meta, dict):
+            raise CommitRejected("view.yaml metadata must be a mapping")
         if "view_hash" in audit_entry:
             actual = compute_view_hash(parsed)
             if audit_entry["view_hash"] != actual:
@@ -532,7 +532,10 @@ def commit_view_locked(
     validate_audit_entry(audit_entry, write)
     if audit_entry["action"] == "re-pair":
         _reject_stale_staging(view_dir)
-    _check_identity(view_dir, expected_identity, lenient=audit_entry["action"] == "clear")
+    _check_identity(
+        view_dir, expected_identity,
+        CLEAR_RESOLVERS if audit_entry["action"] == "clear" else IDENTITY_RESOLVERS,
+    )
     _validate_row_matches_bytes(write, audit_entry)
     mutated = False
     if write:
