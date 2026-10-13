@@ -1447,13 +1447,25 @@ def test_the_refusal_names_the_key_even_for_a_literal_null_string(tmp_path):
 # --- final pass: base-60 scalars, unhashable content, deep stdin JSON -----------
 
 
-def test_a_long_base_60_scalar_parses_fast_as_a_string():
+@pytest.mark.parametrize("prefix", ["", "!!int ", "!!float ", "!<tag:yaml.org,2002:int> "])
+def test_a_long_base_60_number_is_refused_fast_in_every_spelling(prefix):
     import time
-    big = "a: " + ":".join(["1"] + ["0"] * 120000)
+    import yaml
+    big = "a: " + prefix + ":".join(["1"] + ["0"] * 120000)
     start = time.monotonic()
-    loaded = view_commit._load_yaml(big)
+    with pytest.raises(yaml.YAMLError, match="base-60"):
+        view_commit._load_yaml(big)
     assert time.monotonic() - start < 2
-    assert isinstance(loaded["a"], str)
+
+
+def test_a_base_60_value_cannot_be_planted_through_a_plan(tmp_path):
+    _seed(tmp_path)
+    content = "metadata:\n  version_id: v2\n  view_id: vw\n  note: 1:30\n"
+    with pytest.raises(view_commit.CommitRejected, match="base-60"):
+        view_commit.commit_view(
+            tmp_path, write={"view.yaml": content}, remove=frozenset(),
+            audit_entry=_row(view_hash=view_commit.compute_view_hash({})),
+            expected_identity={"parent_version_id": "v1"})
 
 
 @pytest.mark.parametrize("text,expected", [

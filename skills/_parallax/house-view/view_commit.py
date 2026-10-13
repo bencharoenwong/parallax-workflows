@@ -44,7 +44,6 @@ import argparse
 import hashlib
 import json
 import os
-import re
 import stat
 import sys
 from contextlib import suppress
@@ -66,7 +65,8 @@ WRITABLE = frozenset({"view.yaml", "prose.md", "provenance.yaml"})
 # What yaml.safe_load can raise on hostile or hand-edited text besides
 # YAMLError: an impossible date or a bad !!int/!!float tag (ValueError), a bad
 # !!timestamp (AttributeError/TypeError), very deep nesting (RecursionError).
-_YAML_PARSE_ERRORS = (yaml.YAMLError, ValueError, TypeError, AttributeError, RecursionError)
+_YAML_PARSE_ERRORS = (yaml.YAMLError, ValueError, TypeError, AttributeError, RecursionError,
+                      OverflowError)
 # Cap on a staged draft read through a path ref. A view, prose or provenance
 # file is tens of KB; this only stops a huge file from exhausting memory.
 _MAX_STAGED_BYTES = 16 * 1024 * 1024
@@ -96,33 +96,27 @@ class _ViewLoader(yaml.SafeLoader):
         return super().flatten_mapping(node)
 
 
-# YAML 1.1 reads a plain scalar like 1:0:0:...:0 as a base-60 int or float,
-# and PyYAML builds that value in quadratic time inside the parse, while the
-# view lock is held. No writer here emits base-60 numbers, so the int and float
-# resolvers are re-registered without their base-60 alternatives; such a
-# scalar now loads as a plain string.
-_INT = "tag:yaml.org,2002:int"
-_FLOAT = "tag:yaml.org,2002:float"
-_ViewLoader.yaml_implicit_resolvers = {
-    first: [(tag, rx) for tag, rx in resolvers if tag not in (_INT, _FLOAT)]
-    for first, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
-}
-_ViewLoader.add_implicit_resolver(
-    _INT,
-    re.compile(r"""^(?:[-+]?0b[0-1_]+
-                    |[-+]?0[0-7_]+
-                    |[-+]?(?:0|[1-9][0-9_]*)
-                    |[-+]?0x[0-9a-fA-F_]+)$""", re.X),
-    list("-+0123456789"),
-)
-_ViewLoader.add_implicit_resolver(
-    _FLOAT,
-    re.compile(r"""^(?:[-+]?(?:[0-9][0-9_]*)\.[0-9_]*(?:[eE][-+][0-9]+)?
-                    |\.[0-9][0-9_]*(?:[eE][-+][0-9]+)?
-                    |[-+]?\.(?:inf|Inf|INF)
-                    |\.(?:nan|NaN|NAN))$""", re.X),
-    list("-+0123456789."),
-)
+# YAML 1.1 reads a scalar like 1:0:0:...:0 (plain, or tagged !!int/!!float)
+# as a base-60 number, and PyYAML builds it in quadratic time inside the parse,
+# while the view lock is held. No writer here emits base-60 numbers, so they are
+# refused outright before any number is built. Refusing (rather than loading
+# them as strings) also keeps such a value out of view.yaml, where every other
+# reader would still parse it the slow way.
+def _refuse_base_60(constructor_name: str):
+    base = getattr(yaml.SafeLoader, constructor_name)
+
+    def construct(self, node):
+        if isinstance(node.value, str) and ":" in node.value:
+            raise yaml.constructor.ConstructorError(
+                None, None, "base-60 (sexagesimal) numbers are not accepted", node.start_mark
+            )
+        return base(self, node)
+
+    return construct
+
+
+_ViewLoader.add_constructor("tag:yaml.org,2002:int", _refuse_base_60("construct_yaml_int"))
+_ViewLoader.add_constructor("tag:yaml.org,2002:float", _refuse_base_60("construct_yaml_float"))
 
 
 def _load_yaml(text: str) -> Any:
