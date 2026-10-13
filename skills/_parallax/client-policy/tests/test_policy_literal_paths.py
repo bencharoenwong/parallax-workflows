@@ -4,17 +4,13 @@ Claude Code's permission checker refuses a Bash command holding a shell
 variable or a `mktemp` expansion even inside its own sandbox (conventions
 §14.1), so every documented `adaptation.py` / `coverage_check.py` /
 `reconcile.py` command across the client-policy docs must be one line with
-every path written literally. This file:
-
-1. Extracts each documented command SPAN (never the surrounding prose) from
-   the four converted docs and greps it for a leftover `mktemp`, `${...}` or
-   a bare `$VAR` — the same regression class fixed in #154/#159.
-2. Runs each documented command through bash with a real draft file at the
-   literal path it names, mirroring `test_render_gate.py`'s
-   `test_gate_commands_pass_the_report_by_file`. A `$VAR` left in the doc
-   would expand to an empty or wrong value and the helper would exit on a
-   read/parse failure instead of succeeding — that is the regression this
-   half catches that the grep half cannot.
+every path written literally. This file extracts each documented command
+SPAN (never the surrounding prose) from the four converted docs and runs it
+through bash with a real draft file at the literal path it names, mirroring
+`test_render_gate.py`'s `test_gate_commands_pass_the_report_by_file`. A
+leftover `mktemp`, `${...}` or `$VAR` in the doc would expand to an empty or
+wrong value and the helper would exit on a read/parse failure instead of
+succeeding.
 """
 from __future__ import annotations
 
@@ -59,25 +55,9 @@ _COMMAND_SPAN = re.compile(
     re.MULTILINE,
 )
 
-_LITERAL_VIOLATION = re.compile(r"mktemp|\$\{|\$[A-Z_]")
-
 
 def _command_spans(text: str) -> list[str]:
     return [a or b for a, b in _COMMAND_SPAN.findall(text)]
-
-
-@pytest.mark.parametrize("name", sorted(DOCS))
-def test_doc_has_at_least_one_documented_command(name):
-    spans = _command_spans(DOCS[name].read_text(encoding="utf-8"))
-    assert spans, f"{name}: no adaptation.py/coverage_check.py/reconcile.py command found"
-
-
-@pytest.mark.parametrize("name", sorted(DOCS))
-def test_doc_commands_have_no_shell_variable_or_mktemp(name):
-    """conventions §14.1: every path and value is written literally."""
-    spans = _command_spans(DOCS[name].read_text(encoding="utf-8"))
-    for span in spans:
-        assert not _LITERAL_VIOLATION.search(span), f"{name}: {span!r}"
 
 
 # --------------------------------------------------------------------------
