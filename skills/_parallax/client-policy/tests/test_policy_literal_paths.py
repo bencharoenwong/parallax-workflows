@@ -154,3 +154,16 @@ def test_documented_commands_run_against_a_real_literal_draft(name, tmp_path):
             payload = json.loads(proc.stdout)
             assert payload.get("status") != "invalid_input", f"{name}: {command!r}: {payload}"
     assert ran >= 1
+
+
+# Any invocation of a helper with flags, however it is quoted or prefixed.
+_ANY_INVOCATION = re.compile(r'(?:adaptation|coverage_check|reconcile)\.py"?\s+--')
+
+
+@pytest.mark.parametrize("name", sorted(DOCS))
+def test_every_documented_invocation_is_a_matched_span(name):
+    """The span regex requires a `python3 "` prefix. A command written any
+    other way would be skipped by the exec test above and could regress to
+    `$VAR` unnoticed, so every invocation in the doc must be a matched span."""
+    text = DOCS[name].read_text(encoding="utf-8")
+    assert len(_ANY_INVOCATION.findall(text)) == len(_command_spans(text)), name
