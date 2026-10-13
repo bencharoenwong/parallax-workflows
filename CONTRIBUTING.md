@@ -19,7 +19,7 @@ Thanks for the interest. A few notes on what fits and what doesn't.
 
 ## Before opening a PR
 
-1. **Check `DECISIONS.md`.** It's a long file, but a quick search for the area you're touching will surface prior reasoning. If your PR contradicts a `[DROP]` entry, explain why.
+1. **Check `CHANGELOG.md` and open issues.** A quick search for the area you're touching will surface prior work. If your PR reverses a shipped behavior, explain why.
 2. **Run the tests.** From the repo root, the full skill/eval suite — exactly what
    the no-mistakes gate runs — is one command:
    ```bash
