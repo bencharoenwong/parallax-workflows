@@ -14,6 +14,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 - Plugin and marketplace versions are prepared together by `release.py prepare`. Release output remains local until explicit publication approval.
 - Release verification rejects non-text encodings and source symlinks in package inputs, and a symlinked `index.json` or `SHA256SUMS` in the directory being verified. Index descriptions match the mapped packaged skills after distribution transforms.
 - Live concierge journeys fail only on blocking permission denials; a denied Bash command the model improvised prints a `WARN:` line. Journeys also fail when a shell command names the house-view audit log or a report draft is never gated. Conventions §0.0 and the concierge tell the model to read files with `load-reference` and run documented commands as written. See `evals/README.md` § Live concierge journeys.
+- `run-gate-tests.sh` and `evals.yml` also run the bundled `plugin/skills/_parallax/white-label/tests` copy, and `test_ci_root_parity.py` accepts `plugin/` paths. The white-label exempt-entry check now requires a SKILL.md only for exempt skills the manifest expects in the tree under test: every manifest skill in the source tree, only the plugin skills in a filtered distribution.
 
 ### Fixed
 - House-view attribution raises `AttributionError` when a NaN or infinite multiplier makes the weight total non-finite, instead of returning NaN weights. Test: `skills/parallax-house-view-attribution/tests/test_attribution.py`.

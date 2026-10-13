@@ -38,7 +38,7 @@ CI runs Python 3.13 (`.github/workflows/evals.yml`). The local commit gate's pyt
 ## Test topology (what a contributor cannot see from the tree)
 
 - One `conftest.py` per gate root. `skills/_parallax` spends its budget on `white-label/tests/conftest.py`; `scripts/` tests import `scripts/canary_fixture.py` instead. `run-gate-tests.sh` asserts this.
-- `run-gate-tests.sh` auto-discovers roots (`--list-roots`). `.github/workflows/evals.yml` does not: a new skill with tests needs a step added there. `scripts/test_ci_root_parity.py` catches the omission after the fact.
+- `run-gate-tests.sh` auto-discovers roots under `skills/` and `evals/` (`--list-roots`), plus one forced root, the bundled `plugin/skills/_parallax/white-label/tests` copy. `.github/workflows/evals.yml` does not: a new skill with tests needs a step added there. `scripts/test_ci_root_parity.py` catches the omission after the fact.
 - The full-strength term scan and the bundle build need `~/.claude/parallax-canary-extra.txt`, a local-only file. A fresh clone runs the partial scan only.
 
 ## Gate order before a push
