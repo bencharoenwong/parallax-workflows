@@ -1013,3 +1013,143 @@ def test_a_non_oserror_mid_staging_leaves_no_staging_files(tmp_path, monkeypatch
             audit_entry=_row(view_hash=view_commit.compute_view_hash({})),
             expected_identity={"parent_version_id": "v1"})
     assert not list(tmp_path.glob("*.tmp.*"))
+
+
+# --- ship-check round: hostile view.yaml content, writer/reader agreement ----
+
+HOSTILE_YAML = [
+    b"metadata:\n  version_id: v1\neffective_date: 2026-02-30\n",
+    b"metadata:\n  version_id: !!int abc\n",
+    b"metadata:\n  version_id: !!float x\n",
+    b"metadata:\n  version_id: !!timestamp nope\n",
+    b"x: " + b"[" * 3000 + b"]" * 3000 + b"\n",
+]
+
+
+@pytest.mark.parametrize("damage", HOSTILE_YAML, ids=["bad-date", "bad-int", "bad-float", "bad-ts", "deep"])
+def test_hostile_yaml_is_a_clean_rejection_and_clear_still_works(tmp_path, damage):
+    _seed(tmp_path)
+    (tmp_path / "view.yaml").write_bytes(damage)
+    with pytest.raises(view_commit.CommitRejected, match="cannot be read"):
+        view_commit.read_active_view(tmp_path)
+    view_commit.commit_view(
+        tmp_path, write={}, remove=frozenset(WRITABLE_ALL),
+        audit_entry={"action": "clear", "version_id": None,
+                     "destination": "/archive/x", "reason": "unreadable view"},
+        expected_identity={"version_id": None})
+    assert not (tmp_path / "view.yaml").exists()
+
+
+def test_a_directory_in_place_of_view_yaml_is_a_clean_rejection(tmp_path):
+    (tmp_path / "view.yaml").mkdir()
+    with pytest.raises(view_commit.CommitRejected, match="cannot be read"):
+        view_commit.read_active_view(tmp_path)
+
+
+@pytest.mark.parametrize("bad", ["5", "true", "1.5", "''"])
+def test_the_writer_refuses_a_view_the_reader_would_refuse(tmp_path, bad):
+    _seed(tmp_path)
+    content = f"metadata:\n  version_id: {bad}\n"
+    with pytest.raises(view_commit.CommitRejected, match="non-empty string"):
+        view_commit.commit_view(
+            tmp_path, write={"view.yaml": content}, remove=frozenset(),
+            audit_entry=_row(version_id="v2", view_hash=view_commit.compute_view_hash({})),
+            expected_identity={"parent_version_id": "v1"})
+
+
+def test_a_control_character_in_version_id_is_rejected(tmp_path):
+    _seed(tmp_path)
+    with pytest.raises(view_commit.CommitRejected, match="unsafe version_id"):
+        view_commit.commit_view(
+            tmp_path, write={"view.yaml": "metadata:\n  version_id: v2\n"},
+            remove=frozenset(),
+            audit_entry=_row(version_id="v\x002", view_hash=view_commit.compute_view_hash({})),
+            expected_identity={"parent_version_id": "v1"})
+
+
+def test_a_version_id_spelled_none_does_not_match_a_fresh_install(tmp_path):
+    _seed(tmp_path, version_id="'None'")
+    with pytest.raises(audit_chain.ViewChangedMidRun):
+        view_commit.commit_view(
+            tmp_path, write={"view.yaml": "metadata:\n  version_id: v2\n"},
+            remove=frozenset(),
+            audit_entry=_row(view_hash=view_commit.compute_view_hash({})),
+            expected_identity={"parent_version_id": None})
+
+
+def test_a_directory_path_ref_is_rejected_without_leaking_a_descriptor(tmp_path):
+    import os
+    _seed(tmp_path)
+    staging = tmp_path.parent / "staging_dirref"
+    staging.mkdir(exist_ok=True)
+    (staging / "view.yaml").mkdir(exist_ok=True)
+    fd_dir = "/dev/fd" if os.path.isdir("/dev/fd") else f"/proc/{os.getpid()}/fd"
+    before = len(os.listdir(fd_dir))
+    for _ in range(20):
+        with pytest.raises(view_commit.CommitRejected, match="not a regular file"):
+            view_commit.build_commit_args(
+                "save", _unbounded_plan(staging / "view.yaml"), tmp_path, staging_dir=staging)
+    assert len(os.listdir(fd_dir)) <= before + 1
+
+
+def test_an_oversized_staged_draft_is_rejected(tmp_path, monkeypatch):
+    _seed(tmp_path)
+    staging = tmp_path.parent / "staging_big"
+    staging.mkdir(exist_ok=True)
+    src = staging / "view.yaml"
+    src.write_text("metadata:\n  version_id: v2\n" + "#" * 200, encoding="utf-8")
+    monkeypatch.setattr(view_commit, "_MAX_STAGED_BYTES", 64)
+    with pytest.raises(view_commit.CommitRejected, match="the limit is 64"):
+        view_commit.build_commit_args("save", _unbounded_plan(src), tmp_path, staging_dir=staging)
+
+
+def test_a_non_oserror_after_a_rename_is_a_partial_apply(tmp_path, monkeypatch):
+    import os
+    _seed(tmp_path)
+    real_rename = os.rename
+    calls = {"n": 0}
+
+    def _rename(src, dst):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise RuntimeError("simulated failure after the first rename")
+        return real_rename(src, dst)
+
+    monkeypatch.setattr(os, "rename", _rename)
+    view_hash = view_commit.compute_view_hash({})
+    prose_body = "body\n"
+    prose = ("---\n" f"paired_yaml_hash: {view_hash}\n"
+             f"prose_body_hash: {view_commit.hash_prose_body(prose_body)}\n---\n" + prose_body)
+    with pytest.raises(view_commit.CommitPartiallyApplied):
+        view_commit.commit_view(
+            tmp_path, write={"view.yaml": "metadata:\n  version_id: v2\n", "prose.md": prose},
+            remove=frozenset(), audit_entry=_row(view_hash=view_hash),
+            expected_identity={"parent_version_id": "v1"})
+    assert not list(tmp_path.glob("*.tmp.*"))
+
+
+def test_a_clear_fsyncs_the_directory_after_removing_artifacts(tmp_path, monkeypatch):
+    import os
+    _seed(tmp_path)
+    synced: list = []
+    real_fsync = os.fsync
+    monkeypatch.setattr(os, "fsync", lambda fd: (synced.append(os.fstat(fd)), real_fsync(fd)))
+    view_commit.commit_view(
+        tmp_path, write={}, remove=frozenset(WRITABLE_ALL),
+        audit_entry={"action": "clear", "version_id": "v1",
+                     "destination": "/archive/x", "reason": "operator cleared"},
+        expected_identity={"version_id": "v1"})
+    dir_st = os.stat(tmp_path)
+    assert (dir_st.st_dev, dir_st.st_ino) in {(s.st_dev, s.st_ino) for s in synced}
+
+
+def test_cli_clear_over_an_unreadable_view_exits_0(tmp_path):
+    _seed(tmp_path)
+    (tmp_path / "view.yaml").write_bytes(b"metadata: [unclosed\n")
+    plan = {"write": {},
+            "audit_entry": {"version_id": None, "destination": "/archive/unreadable",
+                            "reason": "view was unreadable"},
+            "expected_identity": {"version_id": None}}
+    result = _run(plan, "clear", tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert not (tmp_path / "view.yaml").exists()

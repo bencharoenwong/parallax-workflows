@@ -617,3 +617,15 @@ def test_no_truncation_of_a_saved_view_raises_anything_but_commit_rejected(
                 reader(torn_dir)
             except view_commit.CommitRejected:
                 pass
+
+
+def test_a_non_string_extraction_method_does_not_crash_the_maker(tmp_path: Path):
+    import maker as maker_mod
+    view_dir = tmp_path / "v"
+    view_dir.mkdir()
+    (view_dir / "view.yaml").write_text(
+        "extraction:\n  extraction_method: 5\nmetadata:\n  version_id: v1\n  view_id: vw\n",
+        encoding="utf-8")
+    new_id = maker_mod._resolve_or_new_view_id(view_dir)
+    assert new_id != "vw"
+    assert "Method:         unknown" in maker_mod.render_status(view_dir)

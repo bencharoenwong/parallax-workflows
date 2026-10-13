@@ -703,7 +703,7 @@ class MakerOrchestrator:
             allow_unicode=True,
         )
 
-        # 11. Append audit entry (loader.md §6.1/§6.2 — generate row).
+        # 10. Build the audit row (loader.md §6.1/§6.2 — generate row).
         source_tools = _build_source_tools_list(mcp_responses, covered_markets)
         audit_entry_payload: dict[str, Any] = {
             "ts": datetime.now(timezone.utc)
@@ -735,7 +735,7 @@ class MakerOrchestrator:
                     "loader.md §6.2 generate-row constraint"
                 )
 
-        # 10. Stage, rename and witness in one step. view_commit re-checks the
+        # 11. Stage, rename and witness in one step. view_commit re-checks the
         # parent identity, checks the row against the bytes, and appends the
         # row (append_entry keeps audit.jsonl at 0600).
         final_audit_entry = view_commit.commit_view_locked(
@@ -748,7 +748,11 @@ class MakerOrchestrator:
             },
             remove=frozenset(),
             audit_entry=audit_entry_payload,
-            expected_identity=captured,
+            # The raw value, not the str() form used for the message above:
+            # view_commit keeps None distinct from the string "None".
+            expected_identity={
+                "parent_version_id": (view.get("metadata") or {}).get("parent_version_id")
+            },
         )
 
         # 11a. Emit reasoning chain (Phase-0 / no manifest, see chain_emit).
@@ -1174,8 +1178,8 @@ def _resolve_or_new_view_id(view_dir: Path) -> str:
     if v is None:
         return str(uuid.uuid4())
     extraction = v.get("extraction")
-    skill = (extraction.get("extraction_method") if isinstance(extraction, dict) else None) or ""
-    if skill.startswith("parallax-make-house-view"):
+    skill = extraction.get("extraction_method") if isinstance(extraction, dict) else None
+    if isinstance(skill, str) and skill.startswith("parallax-make-house-view"):
         return v["metadata"].get("view_id") or str(uuid.uuid4())
     # Existing view was ingested, not synthesized — start a new view family.
     return str(uuid.uuid4())
@@ -1199,7 +1203,9 @@ def render_status(view_dir: Path | None = None) -> str:
     extraction = v.get("extraction")
     if not isinstance(extraction, dict):
         extraction = {}
-    skill = extraction.get("extraction_method") or "unknown"
+    skill = extraction.get("extraction_method")
+    if not isinstance(skill, str) or not skill:
+        skill = "unknown"
     is_synth = skill.startswith("parallax-make-house-view")
 
     status_helper = view_status.compute_status(view_dir=view_dir)
