@@ -69,6 +69,34 @@ _YAML_PARSE_ERRORS = (yaml.YAMLError, ValueError, TypeError, AttributeError, Rec
 # Cap on a staged draft read through a path ref. A view, prose or provenance
 # file is tens of KB; this only stops a huge file from exhausting memory.
 _MAX_STAGED_BYTES = 16 * 1024 * 1024
+# Cap on parsed nodes visited, counting every alias expansion. A real view is a
+# few thousand nodes; a few hundred bytes of nested aliases can expand to
+# billions, which would hang the hash while the view lock is held.
+_MAX_YAML_NODES = 200_000
+
+
+def _check_bounded(obj: Any, label: str) -> None:
+    """Reject a parsed document that is cyclic or expands past the node cap.
+
+    Aliases are legal YAML and ``yaml.safe_dump`` can emit them, so they are
+    not refused outright; what is refused is a self-reference (which would
+    recurse forever in the hash) or an expansion too large to hash.
+    """
+    visited = 0
+    stack: list[tuple[Any, frozenset[int]]] = [(obj, frozenset())]
+    while stack:
+        node, path = stack.pop()
+        visited += 1
+        if visited > _MAX_YAML_NODES:
+            raise CommitRejected(
+                f"{label} expands to more than {_MAX_YAML_NODES} nodes (YAML aliases?)"
+            )
+        if isinstance(node, (dict, list)):
+            if id(node) in path:
+                raise CommitRejected(f"{label} refers to itself (a recursive YAML alias)")
+            inner = path | {id(node)}
+            children = node.values() if isinstance(node, dict) else node
+            stack.extend((child, inner) for child in children)
 _AUDIT_FILENAME = "audit.jsonl"
 _CLEAR_REQUIRED_FIELDS = ("destination", "reason")
 
@@ -227,8 +255,15 @@ def validate_audit_entry(audit_entry: dict[str, Any], write: dict[str, Any]) -> 
         )
     if write:
         vid = str(audit_entry["version_id"])
+        try:
+            vid.encode("utf-8")
+            encodable = True
+        except UnicodeEncodeError:
+            encodable = False
+        # isprintable() also refuses DEL, C1 controls, and format characters
+        # such as a BOM or a bidi override, not only C0 controls.
         if (any(bad in vid for bad in ("/", "\\", "..")) or vid != vid.strip()
-                or any(ord(ch) < 32 for ch in vid)):
+                or not encodable or not vid.isprintable()):
             raise CommitRejected(f"unsafe version_id for a staging filename: {vid!r}")
     if "view.yaml" in write and not audit_entry.get("view_hash"):
         raise CommitRejected(
@@ -263,6 +298,7 @@ def read_active_view(view_dir: Path) -> dict[str, Any] | None:
         raise CommitRejected(_unreadable_view_message(path, exc)) from exc
     if not isinstance(parsed, dict):
         raise CommitRejected(_unreadable_view_message(path, "not a mapping"))
+    _check_bounded(parsed, str(path))
     meta = parsed.get("metadata")
     if not isinstance(meta, dict):
         raise CommitRejected(_unreadable_view_message(path, "metadata is not a mapping"))
@@ -295,7 +331,11 @@ def _resolve_prose_body_hash(view_dir: Path) -> str | None:
     # SECURITY: recompute, never read prose_body_hash out of the frontmatter.
     # Trusting the stored field reopens the legacy-view downgrade attack that
     # loader.md §2 step 3a exists to catch.
-    return compute_prose_body_hash(path.read_text(encoding="utf-8"))
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise CommitRejected(f"the active {path} cannot be read ({exc}); nothing was written") from exc
+    return compute_prose_body_hash(text)
 
 
 def _resolve_view_hash(view_dir: Path) -> str | None:
@@ -342,6 +382,10 @@ CLEAR_RESOLVERS: dict[str, Callable[[Path], str | None]] = {
 
 
 def _check_clear_identity(view_dir: Path, expected_identity: dict[str, Any]) -> None:
+    if not isinstance(expected_identity, dict):
+        raise CommitRejected(
+            f"expected_identity must be a mapping, got {type(expected_identity).__name__}"
+        )
     if expected_identity.get("version_id") is not None:
         try:
             read_active_view(view_dir)
@@ -361,23 +405,33 @@ def _check_identity(
     expected_identity: dict[str, Any],
     resolvers: dict[str, Callable[[Path], str | None]] = IDENTITY_RESOLVERS,
 ) -> None:
+    if not isinstance(expected_identity, dict):
+        raise CommitRejected(
+            f"expected_identity must be a mapping, got {type(expected_identity).__name__}"
+        )
     unknown = set(expected_identity) - set(resolvers)
     if unknown:
         raise CommitRejected(f"unknown identity keys: {sorted(unknown)}")
-    # Non-None values go through str() deliberately, so an int and its string
-    # form compare equal. None is normalized to a sentinel instead of to the
-    # string "None": the caller passes `"parent_version_id": null` when no
-    # prior view was read, the resolver returns None for the absent view.yaml,
-    # and both map to the same sentinel -- making the fresh-install save work
-    # without matching a view whose version_id is literally the string
-    # "None". Do not fold None back into str() to "simplify" this.
-    def _norm(v: Any) -> str:
-        return "\x00absent" if v is None else str(v)
+    # Values compare as (is-None, str(value)). Non-None values go through str()
+    # deliberately, so an int and its string form compare equal. None compares
+    # equal only to None: the caller passes `"parent_version_id": null` when no
+    # prior view was read and the resolver returns None for an absent view.yaml,
+    # which is what makes a fresh-install save work, while no string on disk
+    # (not "None", not any sentinel) can stand in for "absent".
+    def _key(v: Any) -> tuple[bool, str]:
+        return (v is None, "" if v is None else str(v))
 
-    captured = {k: _norm(v) for k, v in expected_identity.items()}
-    committed = {k: _norm(resolvers[k](view_dir)) for k in expected_identity}
-    moved = audit_chain.identity_diff(captured, committed)
-    if moved:
+    def _show(v: Any) -> str:
+        return "null" if v is None else str(v)
+
+    committed_raw = {k: resolvers[k](view_dir) for k in expected_identity}
+    moved_keys = [k for k in expected_identity
+                  if _key(expected_identity[k]) != _key(committed_raw[k])]
+    if moved_keys:
+        moved = audit_chain.identity_diff(
+            {k: _show(expected_identity[k]) for k in moved_keys},
+            {k: _show(committed_raw[k]) for k in moved_keys},
+        )
         raise audit_chain.ViewChangedMidRun(
             f"Active house view changed since it was read ({moved}); nothing was written."
         )
@@ -395,7 +449,35 @@ def _parse_mapping(text: str, label: str) -> dict[str, Any]:
         return {}
     if not isinstance(parsed, dict):
         raise CommitRejected(f"{label} must be a mapping, got {type(parsed).__name__}")
+    _check_bounded(parsed, label)
     return parsed
+
+
+def _validate_re_pair_against_disk(view_dir: Path, audit_entry: dict[str, Any]) -> None:
+    """A re-pair row must describe the view.yaml it re-anchors.
+
+    --re-pair never writes view.yaml, so _validate_row_matches_bytes has no
+    view bytes to check the row against. Recompute from disk instead (never
+    the stored metadata.view_hash, which a hand edit leaves stale by design)
+    and require the row's view_hash and version_id to match. Requiring
+    view_hash also makes _validate_row_matches_bytes check the new prose's
+    paired_yaml_hash against that same on-disk hash.
+    """
+    view = read_active_view(view_dir)
+    if view is None:
+        raise CommitRejected("--re-pair needs an active view.yaml; there is none")
+    actual = compute_view_hash(view)
+    if audit_entry.get("view_hash") != actual:
+        raise CommitRejected(
+            f"re-pair row view_hash {audit_entry.get('view_hash')!r} != "
+            f"on-disk view.yaml {actual!r}"
+        )
+    on_disk_version = view["metadata"]["version_id"]
+    if audit_entry.get("version_id") != on_disk_version:
+        raise CommitRejected(
+            f"re-pair row version_id {audit_entry.get('version_id')!r} != "
+            f"on-disk view.yaml {on_disk_version!r}"
+        )
 
 
 def _validate_row_matches_bytes(write: dict[str, str], audit_entry: dict[str, Any]) -> None:
@@ -569,6 +651,8 @@ def commit_view_locked(
         _check_clear_identity(view_dir, expected_identity)
     else:
         _check_identity(view_dir, expected_identity)
+    if audit_entry["action"] == "re-pair":
+        _validate_re_pair_against_disk(view_dir, audit_entry)
     _validate_row_matches_bytes(write, audit_entry)
     mutated = False
     if write:
@@ -807,6 +891,13 @@ def build_commit_args(
     # Validated even when the plan turns out to hold no path refs: a staging
     # directory the operator got wrong should be a loud rejection, not a value
     # that silently never gets used.
+    if not isinstance(plan, dict):
+        raise CommitRejected(f"the plan must be a JSON object, got {type(plan).__name__}")
+    for field in ("write", "audit_entry", "expected_identity"):
+        if plan.get(field) is not None and not isinstance(plan[field], dict):
+            raise CommitRejected(
+                f"plan.{field} must be an object, got {type(plan[field]).__name__}"
+            )
     staging = resolve_staging_dir(staging_dir, view_dir)
     write = {n: _resolve_content(view_dir, n, r, staging)
              for n, r in (plan.get("write") or {}).items()}

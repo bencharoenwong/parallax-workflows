@@ -791,14 +791,15 @@ def test_a_fifo_in_the_staging_dir_is_rejected_without_blocking(tmp_path):
 
 
 def _repair_kwargs(tmp_path):
-    # _seed writes no prose.md, so its resolver returns None.
+    # _seed writes no prose.md, so its resolver returns None. A re-pair row
+    # must carry the on-disk view_hash and version_id.
+    view_hash = view_commit.IDENTITY_RESOLVERS["view_hash"](tmp_path)
+    version_id = view_commit.IDENTITY_RESOLVERS["version_id"](tmp_path)
     return dict(
         write={}, remove=frozenset(),
-        audit_entry={"action": "re-pair", "applied": True},
-        expected_identity={
-            "view_hash": view_commit.IDENTITY_RESOLVERS["view_hash"](tmp_path),
-            "prose_body_hash": None,
-        },
+        audit_entry={"action": "re-pair", "applied": True,
+                     "view_hash": view_hash, "version_id": version_id},
+        expected_identity={"view_hash": view_hash, "prose_body_hash": None},
     )
 
 
@@ -1190,3 +1191,151 @@ def test_cli_clear_over_an_unreadable_view_exits_0(tmp_path):
     result = _run(plan, "clear", tmp_path)
     assert result.returncode == 0, result.stderr
     assert not (tmp_path / "view.yaml").exists()
+
+
+
+# --- re-pair rows must describe the view on disk (M3) -------------------------
+
+
+@pytest.mark.parametrize("field,value", [
+    ("view_hash", "f" * 64),
+    ("version_id", "not-the-view"),
+    ("view_hash", None),
+])
+def test_a_re_pair_row_that_does_not_match_the_view_on_disk_is_refused(tmp_path, field, value):
+    _seed(tmp_path)
+    kwargs = _repair_kwargs(tmp_path)
+    if value is None:
+        kwargs["audit_entry"].pop(field)
+    else:
+        kwargs["audit_entry"][field] = value
+    before = (tmp_path / AUDIT).read_bytes()
+    with pytest.raises(view_commit.CommitRejected, match="re-pair row"):
+        view_commit.commit_view(tmp_path, **kwargs)
+    assert (tmp_path / AUDIT).read_bytes() == before
+
+
+def test_re_pair_prose_must_pair_with_the_view_on_disk(tmp_path):
+    _seed(tmp_path)
+    kwargs = _repair_kwargs(tmp_path)
+    body = "body\n"
+    kwargs["write"] = {"prose.md": (
+        "---\n" f"paired_yaml_hash: {'e' * 64}\n"
+        f"prose_body_hash: {view_commit.hash_prose_body(body)}\n---\n" + body)}
+    with pytest.raises(view_commit.CommitRejected, match="paired_yaml_hash"):
+        view_commit.commit_view(tmp_path, **kwargs)
+    assert not (tmp_path / "prose.md").exists()
+
+
+# --- identity: no on-disk string stands in for "absent" (BUG-001/008) ----------
+
+
+# The second value is YAML double-quoted, so it really holds a NUL byte: the
+# string the old sentinel used for "absent".
+@pytest.mark.parametrize("on_disk", ["'None'", '"\\0absent"'])
+def test_no_on_disk_version_id_matches_a_null_parent(tmp_path, on_disk):
+    _seed(tmp_path, version_id=on_disk)
+    with pytest.raises(audit_chain.ViewChangedMidRun) as info:
+        view_commit.commit_view(
+            tmp_path, write={"view.yaml": "metadata:\n  version_id: v2\n"},
+            remove=frozenset(),
+            audit_entry=_row(view_hash=view_commit.compute_view_hash({})),
+            expected_identity={"parent_version_id": None})
+    assert "parent_version_id: 'null'" in str(info.value)
+
+
+# --- hostile structure (BUG-002/003) --------------------------------------------
+
+
+def _alias_bomb() -> str:
+    lines = ["a0: &a0 [x, x, x, x, x, x, x, x, x]"]
+    for i in range(1, 9):
+        prev = f"*a{i - 1}"
+        lines.append(f"a{i}: &a{i} [{', '.join([prev] * 9)}]")
+    # Anchors are defined before use; tilts comes last and expands to 9**9 leaves.
+    return "\n".join(lines) + "\nmetadata:\n  version_id: v1\ntilts:\n  bomb: *a8\n"
+
+
+def test_an_alias_bomb_view_is_refused_quickly(tmp_path):
+    """The read runs in a daemon thread so a regression fails this test after
+    10 s instead of hanging the whole suite."""
+    _seed(tmp_path)
+    (tmp_path / "view.yaml").write_text(_alias_bomb(), encoding="utf-8")
+    result: dict = {}
+
+    def _read():
+        try:
+            view_commit.read_active_view(tmp_path)
+        except view_commit.CommitRejected as exc:
+            result["exc"] = exc
+
+    worker = threading.Thread(target=_read, daemon=True)
+    worker.start()
+    worker.join(timeout=10)
+    assert not worker.is_alive(), "reading an alias-bomb view.yaml did not finish"
+    assert "nodes" in str(result.get("exc"))
+
+
+def test_a_self_referencing_alias_is_a_clean_rejection(tmp_path):
+    _seed(tmp_path)
+    (tmp_path / "view.yaml").write_text(
+        "metadata:\n  version_id: v1\ntilts: &t\n  loop: *t\n", encoding="utf-8")
+    with pytest.raises(view_commit.CommitRejected, match="refers to itself"):
+        view_commit.read_active_view(tmp_path)
+
+
+def test_ordinary_aliases_written_by_safe_dump_are_still_accepted(tmp_path):
+    import yaml
+    shared = {"x": 1}
+    text = yaml.safe_dump({"metadata": {"version_id": "v1"}, "tilts": {"a": shared, "b": shared}})
+    assert "&" in text  # safe_dump really did emit an alias
+    _seed(tmp_path)
+    (tmp_path / "view.yaml").write_text(text, encoding="utf-8")
+    assert view_commit.read_active_view(tmp_path)["metadata"]["version_id"] == "v1"
+
+
+# --- version_id characters (BUG-004/010) ----------------------------------------
+
+
+@pytest.mark.parametrize("vid", ["v\x7f2", "v\x9b2", "\ufeffv2", "v\u202e2", "v\ud8002"])
+def test_unprintable_or_unencodable_version_ids_are_rejected(tmp_path, vid):
+    _seed(tmp_path)
+    with pytest.raises(view_commit.CommitRejected, match="unsafe version_id"):
+        view_commit.commit_view(
+            tmp_path, write={"view.yaml": "metadata:\n  version_id: v2\n"},
+            remove=frozenset(),
+            audit_entry=_row(version_id=vid, view_hash=view_commit.compute_view_hash({})),
+            expected_identity={"parent_version_id": "v1"})
+
+
+# --- other raw escapes (BUG-006/007) ----------------------------------------------
+
+
+def test_an_unreadable_prose_md_on_re_pair_is_a_clean_rejection(tmp_path):
+    _seed(tmp_path)
+    (tmp_path / "prose.md").write_bytes(b"\xff\xfe not utf-8")
+    kwargs = _repair_kwargs(tmp_path)
+    kwargs["expected_identity"]["prose_body_hash"] = "x"
+    with pytest.raises(view_commit.CommitRejected, match="cannot be read"):
+        view_commit.commit_view(tmp_path, **kwargs)
+
+
+@pytest.mark.parametrize("plan", [
+    [],
+    {"write": [], "audit_entry": {}, "expected_identity": {"parent_version_id": "v1"}},
+    {"write": {}, "audit_entry": {}, "expected_identity": ["parent_version_id"]},
+])
+def test_a_wrongly_shaped_plan_is_a_clean_rejection(tmp_path, plan):
+    _seed(tmp_path)
+    with pytest.raises(view_commit.CommitRejected, match="must be"):
+        view_commit.build_commit_args("save", plan, tmp_path)
+
+
+def test_a_list_expected_identity_on_clear_is_a_clean_rejection(tmp_path):
+    _seed(tmp_path)
+    with pytest.raises(view_commit.CommitRejected, match="must be a mapping"):
+        view_commit.commit_view(
+            tmp_path, write={}, remove=frozenset(WRITABLE_ALL),
+            audit_entry={"action": "clear", "version_id": "v1",
+                         "destination": "/archive/x", "reason": "r"},
+            expected_identity=["version_id"])
