@@ -322,7 +322,7 @@ def test_two_threads_both_commit_and_the_chain_stays_valid(tmp_path):
     # the most likely symptom.
     text = (tmp_path / "view.yaml").read_text(encoding="utf-8")
     assert text == "metadata:\n  version_id: v1\n"
-    assert view_commit._load_view(tmp_path) == {"metadata": {"version_id": "v1"}}
+    assert view_commit.read_active_view(tmp_path) == {"metadata": {"version_id": "v1"}}
 
 
 def test_staging_failure_cleans_up_and_commits_nothing(tmp_path, monkeypatch):
@@ -872,7 +872,13 @@ def test_an_unreadable_active_view_is_a_clean_rejection(tmp_path, damage):
     assert (tmp_path / "view.yaml").read_bytes() == damage
 
 
-@pytest.mark.parametrize("damage", [b"", b"excludes: []\nextraction: {}\n", b"metadata: {view_id: vw}\n"])
+TORN_METADATA = b"excludes: []\nextraction: {}\nmetadata:\n  auth\n"
+
+
+@pytest.mark.parametrize("damage", [
+    b"", b"excludes: []\nextraction: {}\n", b"metadata: {view_id: vw}\n", TORN_METADATA,
+    b"metadata:\n  version_id: ''\n", b"metadata:\n  version_id: 7\n",
+])
 def test_a_version_less_active_view_rejects_a_save(tmp_path, damage):
     """A torn or truncated view.yaml must not pass as a fresh install and
     be overwritten by a save that records no parent."""
@@ -890,9 +896,10 @@ def test_a_version_less_active_view_rejects_a_save(tmp_path, damage):
     assert not list(tmp_path.glob("*.tmp.*"))
 
 
-def test_clear_still_works_over_an_empty_view(tmp_path):
+@pytest.mark.parametrize("damage", [b"", TORN_METADATA, b"metadata: [unclosed\n"])
+def test_clear_still_works_over_a_damaged_view(tmp_path, damage):
     _seed(tmp_path)
-    (tmp_path / "view.yaml").write_bytes(b"")
+    (tmp_path / "view.yaml").write_bytes(damage)
     view_commit.commit_view(
         tmp_path, write={}, remove=frozenset(WRITABLE_ALL),
         audit_entry={"action": "clear", "version_id": "unknown",

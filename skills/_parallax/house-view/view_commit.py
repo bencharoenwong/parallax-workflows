@@ -231,10 +231,16 @@ def validate_audit_entry(audit_entry: dict[str, Any], write: dict[str, Any]) -> 
                 raise CommitRejected(f"a clear row requires `{field}` (loader.md §6.2)")
 
 
-def _load_view(view_dir: Path) -> dict[str, Any]:
-    path = view_dir / "view.yaml"
+def read_active_view(view_dir: Path) -> dict[str, Any] | None:
+    """The active view, or None when view.yaml does not exist.
+
+    Any view.yaml that exists must decode, parse to a mapping, carry a
+    ``metadata`` mapping, and name a non-empty string ``version_id`` (and
+    ``view_id`` when present); anything else raises ``CommitRejected``.
+    """
+    path = Path(view_dir) / "view.yaml"
     if not path.exists():
-        return {}
+        return None
     try:
         text = path.read_text(encoding="utf-8")
     except UnicodeDecodeError as exc:
@@ -243,10 +249,19 @@ def _load_view(view_dir: Path) -> dict[str, Any]:
         parsed = yaml.safe_load(text)
     except yaml.YAMLError as exc:
         raise CommitRejected(_unreadable_view_message(path, exc)) from exc
-    if parsed is None:
-        return {}
     if not isinstance(parsed, dict):
         raise CommitRejected(_unreadable_view_message(path, "not a mapping"))
+    meta = parsed.get("metadata")
+    if not isinstance(meta, dict):
+        raise CommitRejected(_unreadable_view_message(path, "metadata is not a mapping"))
+    for field in ("version_id", "view_id"):
+        value = meta.get(field)
+        if field == "view_id" and value is None:
+            continue
+        if not isinstance(value, str) or not value.strip():
+            raise CommitRejected(
+                _unreadable_view_message(path, f"no usable metadata.{field}")
+            )
     return parsed
 
 
@@ -262,15 +277,15 @@ def _unreadable_view_message(path: Path, cause: Any) -> str:
 
 
 def _metadata_field(view_dir: Path, field: str) -> str | None:
-    return ((_load_view(view_dir).get("metadata")) or {}).get(field)
+    view = read_active_view(view_dir)
+    return None if view is None else view["metadata"].get(field)
 
 
-def _resolve_parent_version_id(view_dir: Path) -> str | None:
-    version_id = _metadata_field(view_dir, "version_id")
-    path = view_dir / "view.yaml"
-    if version_id is None and path.exists():
-        raise CommitRejected(_unreadable_view_message(path, "no metadata.version_id"))
-    return version_id
+def _lenient_metadata_field(view_dir: Path, field: str) -> str | None:
+    try:
+        return _metadata_field(view_dir, field)
+    except CommitRejected:
+        return None
 
 
 def _resolve_prose_body_hash(view_dir: Path) -> str | None:
@@ -293,7 +308,7 @@ def _resolve_view_hash(view_dir: Path) -> str | None:
     # metadata.view_hash alone, and a guard that read the stored field would
     # pass -- blessing the modified view with a row attesting a review that
     # never covered it.
-    return compute_view_hash(_load_view(view_dir))
+    return compute_view_hash(read_active_view(view_dir))
 
 
 # Resolvers are lazy and per-key: only the keys actually present in
@@ -304,9 +319,9 @@ IDENTITY_RESOLVERS: dict[str, Callable[[Path], str | None]] = {
     # Not a typo. "parent_version_id" means "the version I expect to still be
     # current", so it resolves against the on-disk view's OWN version_id --
     # the asymmetry maker._read_parent_version_id already encodes.
-    "parent_version_id": _resolve_parent_version_id,
-    "version_id": lambda d: _metadata_field(d, "version_id"),
-    "view_id": lambda d: _metadata_field(d, "view_id"),
+    "parent_version_id": lambda d: _metadata_field(d, "version_id"),
+    "version_id": lambda d: _lenient_metadata_field(d, "version_id"),
+    "view_id": lambda d: _lenient_metadata_field(d, "view_id"),
     "view_hash": _resolve_view_hash,
     "prose_body_hash": _resolve_prose_body_hash,
 }

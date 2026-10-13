@@ -818,7 +818,7 @@ class MakerOrchestrator:
 
         Returns: MakerResult with the disposition + paths + pillars.
         """
-        view_commit.IDENTITY_RESOLVERS["parent_version_id"](Path(self.options.view_dir))
+        _read_active_view(self.options.view_dir)
 
         # Step 1
         covered_markets, raw_lmc = self.resolve_covered_markets(mcp)
@@ -1110,15 +1110,7 @@ def _build_source_tools_list(
 
 
 def _read_active_view(view_dir: Path) -> dict[str, Any] | None:
-    view_path = view_dir / "view.yaml"
-    if not view_path.exists():
-        return None
-    try:
-        with open(view_path, "r", encoding="utf-8") as f:
-            parsed = yaml.safe_load(f)
-    except Exception:
-        return None
-    return parsed if isinstance(parsed, dict) else None
+    return view_commit.read_active_view(Path(view_dir))
 
 
 def _load_view_bundle(path: Path) -> dict[str, Any]:
@@ -1173,7 +1165,7 @@ def _read_parent_version_id(view_dir: Path) -> str | None:
     v = _read_active_view(view_dir)
     if v is None:
         return None
-    return (v.get("metadata") or {}).get("version_id")
+    return v["metadata"]["version_id"]
 
 
 def _resolve_or_new_view_id(view_dir: Path) -> str:
@@ -1181,9 +1173,10 @@ def _resolve_or_new_view_id(view_dir: Path) -> str:
     v = _read_active_view(view_dir)
     if v is None:
         return str(uuid.uuid4())
-    skill = (v.get("extraction") or {}).get("extraction_method") or ""
+    extraction = v.get("extraction")
+    skill = (extraction.get("extraction_method") if isinstance(extraction, dict) else None) or ""
     if skill.startswith("parallax-make-house-view"):
-        return (v.get("metadata") or {}).get("view_id") or str(uuid.uuid4())
+        return v["metadata"].get("view_id") or str(uuid.uuid4())
     # Existing view was ingested, not synthesized — start a new view family.
     return str(uuid.uuid4())
 
@@ -1196,11 +1189,16 @@ def _resolve_or_new_view_id(view_dir: Path) -> str:
 def render_status(view_dir: Path | None = None) -> str:
     """Render `--status` output — last-generated view metadata."""
     view_dir = view_dir or DEFAULT_VIEW_DIR
-    v = _read_active_view(view_dir)
+    try:
+        v = _read_active_view(view_dir)
+    except view_commit.CommitRejected as exc:
+        return str(exc)
     if v is None:
         return "No active house view found at " + str(view_dir)
-    metadata = v.get("metadata") or {}
-    extraction = v.get("extraction") or {}
+    metadata = v["metadata"]
+    extraction = v.get("extraction")
+    if not isinstance(extraction, dict):
+        extraction = {}
     skill = extraction.get("extraction_method") or "unknown"
     is_synth = skill.startswith("parallax-make-house-view")
 
