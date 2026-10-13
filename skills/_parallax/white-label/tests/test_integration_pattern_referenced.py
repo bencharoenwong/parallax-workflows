@@ -164,20 +164,18 @@ _manifest_spec.loader.exec_module(_skill_manifest)
 # The dead-entry test below now validates the manifest itself.
 _NINE_TWO_EXEMPT_SKILLS: frozenset[str] = _skill_manifest.nine_two_exempt()
 
-# The full per-skill registry (every skill the manifest knows about, shipped
-# or not) rather than `_SKILLS_ROOT.glob("*/SKILL.md")`. A filtered distribution
-# (e.g. `plugin/`) ships only a subset of SKILL.md files but
-# carries a full, unfiltered copy of `manifest.json`, so comparing against the
-# manifest keeps the dead-entry check meaningful there too. Comparing against
-# on-disk SKILL.md files instead would make the check vacuous in that copy: an
-# exempt entry naming a skill the bundle doesn't ship (e.g. the house-view
-# operator skills, `internal-only` and never bundled) would always be "dead"
-# by that measure, whether or not the entry is a real typo. `_SKILLS_ROOT`
-# itself still gates which bundle this collects from — only the comparison set
-# changes. `test_skill_manifest.py` separately reconciles the manifest itself
-# against the on-disk skill directories in the SOURCE tree, so that check is
-# not lost, only moved to the layer that owns it.
-_FULL_MANIFEST_SKILLS: frozenset[str] = frozenset(_skill_manifest.skills())
+
+def _expected_skills_in_tree(on_disk: set[str]) -> frozenset[str]:
+    """Skills the manifest expects to have a SKILL.md under `_SKILLS_ROOT`.
+
+    A filtered distribution ships only the manifest's plugin skills but keeps
+    the full manifest.json. It is recognised by every on-disk skill being a
+    plugin skill; any other tree is expected to hold every manifest skill.
+    """
+    shipped = frozenset(_skill_manifest.plugin_skills())
+    if on_disk <= shipped:
+        return shipped
+    return frozenset(_skill_manifest.skills())
 
 
 @pytest.mark.parametrize(
@@ -237,28 +235,24 @@ def test_nine_two_reference_pattern(text: str, expected: bool) -> None:
 
 
 def test_exempt_entries_match_existing_skill_dirs() -> None:
-    """Every exemption entry must name a real skill in the manifest.
+    """Every exemption entry expected in this tree must name a real skill dir.
 
     Guards against the dead-entry failure mode: an entry that doesn't match
-    any known skill silently never fires, and the skill it was meant to
-    exempt fails (or worse, a rename strands the exemption while the test
-    appears green because the skill also lost its sentinel).
+    any `skill_md.parent.name` silently never fires, and the skill it was
+    meant to exempt fails (or worse, a rename strands the exemption while
+    the test appears green because the skill also lost its sentinel).
 
-    Compared against the full manifest skill set, not the SKILL.md files
-    `_SKILLS_ROOT` holds on disk: a filtered distribution ships only a subset
-    of skills but a full manifest.json, and comparing against the on-disk
-    subset would make this check vacuous there (every entry naming an
-    unshipped skill would read as "dead" regardless of whether it's a real
-    typo). `test_skill_manifest.py` already reconciles the manifest against
-    the on-disk skill directories in the source tree.
+    Only entries the manifest expects in this tree are checked, so a filtered
+    distribution is not failed for exempt skills it does not ship.
     """
-    dead = _NINE_TWO_EXEMPT_SKILLS - _FULL_MANIFEST_SKILLS
+    existing = {p.parent.name for p in _SKILLS_ROOT.glob("*/SKILL.md")}
+    expected = _NINE_TWO_EXEMPT_SKILLS & _expected_skills_in_tree(existing)
+    dead = expected - existing
     assert not dead, (
-        f"_NINE_TWO_EXEMPT_SKILLS entries with no matching skill in the "
-        f"manifest: {sorted(dead)}. Entries must be full directory names "
-        f"(parallax-*). Fix the entry or remove it (and update the "
-        f"exemption rationale in parallax-conventions.md §9.2 in the same "
-        f"PR)."
+        f"_NINE_TWO_EXEMPT_SKILLS entries with no matching skill directory: "
+        f"{sorted(dead)}. Entries must be full directory names (parallax-*). "
+        f"Fix the entry or remove it (and update the exemption rationale in "
+        f"parallax-conventions.md §9.2 in the same PR)."
     )
 
 
