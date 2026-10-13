@@ -18,7 +18,7 @@ Not part of the house view. The house view is firm-level and carries no client p
 
 The RM supplies the policy inline (YAML or JSON) or as a file path via `policy=` at invocation. There is no default on-disk location, no on-disk resolution, and no platform fetch. Absence means fallback tier `no_policy` and today's unchanged behavior — no policy sections render.
 
-Inline input is written to a private temp file, created with `mktemp "${TMPDIR:-/tmp}/..."`, before invoking the helper. Never a fixed or predictable path — `/tmp` symlink hazard.
+A `policy=` file path is passed to the helper literally — no draft, no write. Inline input (YAML or JSON) is written with `write-artifact` to a literal draft path per `_parallax/parallax-conventions.md` §14.4: `<cwd>/.parallax-policy/policy-<8 hex>.<yaml|json>`.
 
 ---
 
@@ -116,11 +116,16 @@ Binding behavior contract, applied per dimension:
 One Bash step, delegated entirely to `_parallax/client-policy/adaptation.py`. Never inline arithmetic. Cite the operator-agnostic-helper rationale by reference to `_parallax/house-view/loader.md` §2 ("Why the helper, not inline math") — the same argument applies here: allocation arithmetic and threshold comparisons must be identical across operator LLMs (Claude / GPT / Gemini).
 
 ```
-python3 "<skill-dir>/../_parallax/client-policy/adaptation.py" \
-  --policy "$POLICY" --exposures "$EXPOSURES" --view-tilts "$TILTS" --json
+python3 "<skill-dir>/../_parallax/client-policy/adaptation.py" --policy "<policy-path>" --exposures "<exposures-path>" --view-tilts "<tilts-path>" --json
 ```
 
-When only a policy is available (no exposures assembled yet), omit `--exposures`/`--view-tilts`; the tier still resolves from policy structure alone (`drift` and `taa` are empty). Capture the full JSON result. Every rendered number comes from it — do not recompute, round, or re-derive any figure inline.
+`<policy-path>`, `<exposures-path>`, `<tilts-path>` are each a literal path — the `policy=` file path, or a `.parallax-policy/` draft per §14.4 — never a shell variable. When only a policy is available (no exposures assembled yet), omit `--exposures`/`--view-tilts`; the tier still resolves from policy structure alone (`drift` and `taa` are empty):
+
+```
+python3 "<skill-dir>/../_parallax/client-policy/adaptation.py" --policy "<policy-path>" --json
+```
+
+Reuse the same `<policy-path>` across both calls in one run rather than re-writing the draft. Capture the full JSON result. Every rendered number comes from it — do not recompute, round, or re-derive any figure inline.
 
 ---
 

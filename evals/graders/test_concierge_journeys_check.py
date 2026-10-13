@@ -687,3 +687,113 @@ def test_a_failed_write_leaves_nothing_to_gate():
 def test_a_backup_named_like_a_draft_is_not_a_draft():
     stream = _with_write(_bash_stream([], set()), path=_DRAFT + ".bak")
     assert check_run(stream, J, 0, False)[0] is True
+
+
+# --- Literal draft paths for the policy and coverage helpers (#154/#159 pattern) --
+
+_ADAPT_FULL = ('python3 "/p/skills/parallax-client-review/../_parallax/client-policy/adaptation.py" '
+               '--policy "/s/.parallax-policy/policy-0a1b2c3d.yaml" '
+               '--exposures "/s/.parallax-policy/exposures-0a1b2c3d.json" '
+               '--view-tilts "/s/.parallax-policy/tilts-0a1b2c3d.json" --json')
+_ADAPT_POLICY_ONLY = ('python3 "/p/skills/parallax-client-review/../_parallax/client-policy/adaptation.py" '
+                      '--policy "/s/.parallax-policy/policy-0a1b2c3d.yaml" --json')
+_COVERAGE = ('python3 "/p/skills/parallax-client-review/../_parallax/coverage_check.py" '
+             '--portfolio-sectors "/s/.parallax-policy/portfolio-sectors-0a1b2c3d.json" '
+             '--redundancy-sectors "/s/.parallax-policy/redundancy-sectors-0a1b2c3d.json" '
+             '--holdings "/s/.parallax-policy/holdings-0a1b2c3d.json"')
+_RECONCILE = ('python3 "/p/skills/parallax-rebalance/../_parallax/client-policy/reconcile.py" '
+              '--input "/s/.parallax-policy/reconcile-0a1b2c3d.json"')
+
+
+@pytest.mark.parametrize("cmd,helper", [
+    (_ADAPT_FULL, "adaptation.py"),
+    (_ADAPT_POLICY_ONLY, "adaptation.py"),
+    (_COVERAGE, "coverage_check.py"),
+    (_RECONCILE, "reconcile.py"),
+    (_GATE, "render_gate.py"),
+    (_APPEND, "audit_append.py"),
+])
+def test_documented_helper_recognizes_every_helper_shape(cmd, helper):
+    assert documented_helper(cmd) == helper
+    assert documented_helper(cmd + "; echo hi") is None
+
+
+def test_documented_new_helper_command_denied_fails():
+    stream = _bash_stream([("b1", _ADAPT_FULL, True)], {"b1"})
+    passed, reasons, _, _ = check_run(stream, J, 0, False)
+    assert passed is False
+    assert any("documented helper command denied" in r for r in reasons)
+
+
+def test_decorated_adaptation_denial_passes_only_if_helper_later_ran():
+    decorated = _ADAPT_FULL + '; echo "exit=$?"'
+    recovered = _bash_stream([("b1", decorated, True), ("b2", _ADAPT_FULL, False)], {"b1"})
+    assert check_run(recovered, J, 0, False)[0] is True
+    stranded = _bash_stream([("b1", decorated, True)], {"b1"})
+    passed, reasons, _, _ = check_run(stranded, J, 0, False)
+    assert passed is False
+    assert any("helper never ran" in r and "adaptation.py" in r for r in reasons)
+
+
+def test_policy_draft_consumed_by_a_later_helper_run_passes():
+    stream = _with_write(
+        _bash_stream([("b1", _ADAPT_FULL, False)], set()),
+        path="/s/.parallax-policy/policy-0a1b2c3d.yaml",
+    )
+    assert check_run(stream, J, 0, False)[0] is True
+
+
+@pytest.mark.parametrize("calls", [
+    [],                                               # draft written, helper never run
+    [("b1", _ADAPT_FULL.replace("0a1b2c3d", "ffffffff"), False)],   # different draft suffix
+])
+def test_policy_draft_never_consumed_fails(calls):
+    stream = _with_write(
+        _bash_stream(calls, set()),
+        path="/s/.parallax-policy/policy-0a1b2c3d.yaml",
+    )
+    passed, reasons, _, _ = check_run(stream, J, 0, False)
+    assert passed is False
+    assert any("policy draft never consumed" in r for r in reasons)
+
+
+def test_coverage_check_draft_consumed_passes():
+    stream = _with_write(
+        _bash_stream([("b1", _COVERAGE, False)], set()),
+        path="/s/.parallax-policy/holdings-0a1b2c3d.json",
+    )
+    assert check_run(stream, J, 0, False)[0] is True
+
+
+def test_policy_gitignore_write_is_not_a_draft_and_needs_no_consumer():
+    stream = _with_write(_bash_stream([], set()), path="/s/.parallax-policy/.gitignore")
+    assert check_run(stream, J, 0, False)[0] is True
+
+
+def test_policy_draft_consumed_despite_a_documented_nonzero_exit():
+    """adaptation.py exit 2 (unparseable inline policy, policy-loader.md §2)
+    and reconcile.py exit 3/4/5 (conflict/infeasible/solver_unavailable,
+    policy-reconciliation.md step 3) are documented rendered outcomes, not
+    permission denials -- a nonzero exit alone must not orphan the draft.
+    Mirrors ``test_audit_retry_counts_when_it_ran_even_with_a_documented_nonzero_exit``."""
+    stream = _with_write(
+        _bash_stream([("b1", _RECONCILE, True)], set()),  # error=True, never denied
+        path="/s/.parallax-policy/reconcile-0a1b2c3d.json",
+    )
+    assert check_run(stream, J, 0, False)[0] is True
+
+
+@pytest.mark.parametrize("cmd", [
+    'python3 "/p/skills/parallax-client-review/../_parallax/client-policy/adaptation.py" '
+    '--policy "/s/.parallax-policy/policy-0a1b2c3d.yaml" '
+    '--exposures "/s/.parallax-policy/exposures-0a1b2c3d.json" --json',
+    'python3 "/p/skills/parallax-client-review/../_parallax/client-policy/adaptation.py" '
+    '--policy "/s/.parallax-policy/policy-0a1b2c3d.yaml" '
+    '--view-tilts "/s/.parallax-policy/tilts-0a1b2c3d.json" --json',
+])
+def test_adaptation_accepts_exposures_or_view_tilts_independently(cmd):
+    """adaptation.py's CLI defaults each of --exposures/--view-tilts to None
+    independently; client-review Step 4 item 2 only assembles tilts when a
+    house view is active, so an exposures-only call is a real, documented
+    shape and must not fall into the improvised bucket."""
+    assert documented_helper(cmd) == "adaptation.py"

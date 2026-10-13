@@ -6,7 +6,7 @@ JIT-load `_parallax/client-policy/policy-loader.md`. Run the S0–S2 adaptation
 first (`adaptation.py`, same contract as `parallax-client-review`), then the
 S3 optimizer — a real Bash tool call, never prose arithmetic:
 
-1. **Assemble the payload** (JSON file via a private `mktemp` path):
+1. **Assemble the payload**, then `write-artifact` it to a literal `.parallax-policy/reconcile-<8 hex>.json` draft per `_parallax/parallax-conventions.md` §14.4:
    - `basis`: the basis the adaptation result normalized to (`sleeve`); every
      weight and band edge in the payload must share it. Declared explicitly,
      never assumed.
@@ -48,8 +48,7 @@ S3 optimizer — a real Bash tool call, never prose arithmetic:
      mapping], min, max}`.
    - `turnover_penalty`: omit (the module's disclosed default) unless the
      mandate states one.
-2. **Solve**: `python3 "<skill-dir>/../_parallax/client-policy/reconcile.py"
-   --input "$PAYLOAD"` and parse the JSON result.
+2. **Solve**: `python3 "<skill-dir>/../_parallax/client-policy/reconcile.py" --input "<reconcile-payload-path>"` (the literal draft path from step 1) and parse the JSON result.
 3. **Route by `status` — the trade list is gate-shaped (conventions §4.0)**:
    - `optimal`: the result's `target_weights`/`trades` become the Target
      Weights in Trade Recommendations. Carry `binding`, `turnover_penalty` +

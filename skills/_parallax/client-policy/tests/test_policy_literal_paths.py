@@ -1,0 +1,175 @@
+"""Literal-path regression for the policy/coverage draft commands.
+
+Claude Code's permission checker refuses a Bash command holding a shell
+variable or a `mktemp` expansion even inside its own sandbox (conventions
+§14.1), so every documented `adaptation.py` / `coverage_check.py` /
+`reconcile.py` command across the client-policy docs must be one line with
+every path written literally. This file:
+
+1. Extracts each documented command SPAN (never the surrounding prose) from
+   the four converted docs and greps it for a leftover `mktemp`, `${...}` or
+   a bare `$VAR` — the same regression class fixed in #154/#159.
+2. Runs each documented command through bash with a real draft file at the
+   literal path it names, mirroring `test_render_gate.py`'s
+   `test_gate_commands_pass_the_report_by_file`. A `$VAR` left in the doc
+   would expand to an empty or wrong value and the helper would exit on a
+   read/parse failure instead of succeeding — that is the regression this
+   half catches that the grep half cannot.
+"""
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+from pathlib import Path
+
+import pytest
+
+HERE = Path(__file__).parent
+CLIENT_POLICY_DIR = HERE.parent
+SKILLS_ROOT = CLIENT_POLICY_DIR.parent.parent  # client-policy -> _parallax -> skills
+FIXTURES = HERE / "fixtures"
+
+CLIENT_REVIEW_DIR = SKILLS_ROOT / "parallax-client-review"
+REBALANCE_DIR = SKILLS_ROOT / "parallax-rebalance"
+
+DOCS = {
+    "policy-loader.md": CLIENT_POLICY_DIR / "policy-loader.md",
+    "client-review/SKILL.md": CLIENT_REVIEW_DIR / "SKILL.md",
+    "rebalance/SKILL.md": REBALANCE_DIR / "SKILL.md",
+    "policy-reconciliation.md": REBALANCE_DIR / "references" / "policy-reconciliation.md",
+}
+# policy-loader.md is JIT-loaded by both consumer skills; either skill-dir
+# resolves its relative `../_parallax/...` paths identically, so the test
+# picks one per doc rather than re-running the same command under both.
+SKILL_DIR_FOR_DOC = {
+    "policy-loader.md": CLIENT_REVIEW_DIR,
+    "client-review/SKILL.md": CLIENT_REVIEW_DIR,
+    "rebalance/SKILL.md": REBALANCE_DIR,
+    "policy-reconciliation.md": REBALANCE_DIR,
+}
+
+# A documented command SPAN: an inline backtick span, or (inside a fenced
+# ```-block) a bare line, that starts with `python3 "` and names one of the
+# three helpers. Deliberately requires the `python3 "` prefix so a bare
+# mention like "S1/S2 math via `adaptation.py` only" never matches.
+_COMMAND_SPAN = re.compile(
+    r'`(python3 "[^`\n]*(?:adaptation|coverage_check|reconcile)\.py"[^`\n]*)`'
+    r'|^(python3 "[^\n]*(?:adaptation|coverage_check|reconcile)\.py"[^\n]*)$',
+    re.MULTILINE,
+)
+
+_LITERAL_VIOLATION = re.compile(r"mktemp|\$\{|\$[A-Z_]")
+
+
+def _command_spans(text: str) -> list[str]:
+    return [a or b for a, b in _COMMAND_SPAN.findall(text)]
+
+
+@pytest.mark.parametrize("name", sorted(DOCS))
+def test_doc_has_at_least_one_documented_command(name):
+    spans = _command_spans(DOCS[name].read_text(encoding="utf-8"))
+    assert spans, f"{name}: no adaptation.py/coverage_check.py/reconcile.py command found"
+
+
+@pytest.mark.parametrize("name", sorted(DOCS))
+def test_doc_commands_have_no_shell_variable_or_mktemp(name):
+    """conventions §14.1: every path and value is written literally."""
+    spans = _command_spans(DOCS[name].read_text(encoding="utf-8"))
+    for span in spans:
+        assert not _LITERAL_VIOLATION.search(span), f"{name}: {span!r}"
+
+
+# --------------------------------------------------------------------------
+# Exec: run each documented command through bash with a real draft file.
+# --------------------------------------------------------------------------
+
+_HEX = "0a1b2c3d"
+
+
+def _draft(tmp_path: Path, label: str, ext: str, content: str) -> Path:
+    d = tmp_path / ".parallax-policy"
+    d.mkdir(exist_ok=True)
+    path = d / f"{label}-{_HEX}.{ext}"
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+_RECONCILE_PAYLOAD = {
+    "basis": "sleeve",
+    "holdings": [
+        {"symbol": "AAA.X", "weight": 0.5, "coefficient": 3.0},
+        {"symbol": "BBB.X", "weight": 0.3, "coefficient": 2.0},
+        {"symbol": "CCC.X", "weight": 0.2, "coefficient": 1.0},
+    ],
+    "position_cap": 0.6,
+    "bands": [{"dimension": "region", "key": "north", "symbols": ["AAA.X", "BBB.X"], "max": 0.7}],
+    "turnover_penalty": 0.0,
+}
+
+
+def _placeholders(tmp_path: Path) -> dict[str, str]:
+    policy = _draft(tmp_path, "policy", "yaml", (FIXTURES / "policy_full.yaml").read_text())
+    exposures = _draft(tmp_path, "exposures", "json", (FIXTURES / "exposures_sample.json").read_text())
+    tilts = _draft(tmp_path, "tilts", "json", (FIXTURES / "view_tilts_sample.json").read_text())
+    portfolio_sectors = _draft(tmp_path, "portfolio-sectors", "json", json.dumps({"Technology": 1.0}))
+    redundancy_sectors = _draft(tmp_path, "redundancy-sectors", "json", json.dumps({"Technology": 1.0}))
+    holdings = _draft(tmp_path, "holdings", "json", json.dumps(["AAPL.O"]))
+    reconcile_payload = _draft(tmp_path, "reconcile", "json", json.dumps(_RECONCILE_PAYLOAD))
+    return {
+        "<policy-path>": str(policy),
+        "<exposures-path>": str(exposures),
+        "<tilts-path>": str(tilts),
+        "<portfolio-sectors-path>": str(portfolio_sectors),
+        "<redundancy-sectors-path>": str(redundancy_sectors),
+        "<holdings-path>": str(holdings),
+        "<reconcile-payload-path>": str(reconcile_payload),
+    }
+
+
+def _which_helper(command: str) -> str:
+    for helper in ("adaptation.py", "coverage_check.py", "reconcile.py"):
+        if helper in command:
+            return helper
+    raise AssertionError(f"no known helper in command: {command!r}")
+
+
+def _run(command: str, skill_dir: Path, placeholders: dict[str, str]) -> subprocess.CompletedProcess:
+    script = command.replace("<skill-dir>", str(skill_dir))
+    for placeholder, path in placeholders.items():
+        script = script.replace(placeholder, path)
+    assert "<" not in script, f"unsubstituted placeholder remains: {script!r}"
+    return subprocess.run(
+        ["bash", "-c", script], capture_output=True, text=True, timeout=30,
+    )
+
+
+@pytest.mark.parametrize("name", sorted(DOCS))
+def test_documented_commands_run_against_a_real_literal_draft(name, tmp_path):
+    """Every documented command, run exactly as written with its placeholders
+    substituted for real draft files, succeeds -- proving no `$VAR` is left
+    for bash to expand into an empty or wrong path."""
+    doc = DOCS[name]
+    skill_dir = SKILL_DIR_FOR_DOC[name]
+    placeholders = _placeholders(tmp_path)
+    spans = _command_spans(doc.read_text(encoding="utf-8"))
+    assert spans
+    ran = 0
+    for command in spans:
+        helper = _which_helper(command)
+        proc = _run(command, skill_dir, placeholders)
+        ran += 1
+        if helper == "adaptation.py":
+            assert proc.returncode == 0, f"{name}: {command!r}: {proc.stderr}"
+            payload = json.loads(proc.stdout)
+            assert "fallback_tier" in payload, f"{name}: {command!r}: {payload}"
+        elif helper == "coverage_check.py":
+            assert proc.returncode == 0, f"{name}: {command!r}: {proc.stderr}"
+            payload = json.loads(proc.stdout)
+            assert "verdict" in payload, f"{name}: {command!r}: {payload}"
+        else:  # reconcile.py — status depends on scipy availability, but a
+            # broken literal path can only produce "invalid_input" (the one
+            # status reconcile.py's CLI emits on a read/parse failure).
+            payload = json.loads(proc.stdout)
+            assert payload.get("status") != "invalid_input", f"{name}: {command!r}: {payload}"
+    assert ran >= 1

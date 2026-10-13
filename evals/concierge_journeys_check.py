@@ -39,24 +39,53 @@ _UNPREFIXED = re.compile(r"(parallax|translate)-")
 # does not: a pending claude.ai connector can still turn out signed out.
 CONNECTED_STATUS = "connected"
 # A shell segment that runs a shared helper a skill tells the model to run
-# (conventions §10.3, loader §6). A bare mention (``sed``, ``grep``) is not a run.
+# (conventions §10.3/§14.4, loader §6). A bare mention (``sed``, ``grep``) is not a run.
 _HELPER_RUN = re.compile(
-    r"\bpython3?\s[^;&|\n]*?(?<![\w.-])(?P<helper>render_gate\.py|audit_append\.py)(?![\w.-])"
+    r"\bpython3?\s[^;&|\n]*?(?<![\w.-])(?P<helper>render_gate\.py|audit_append\.py|"
+    r"adaptation\.py|coverage_check\.py|reconcile\.py)(?![\w.-])"
 )
 # The house-view audit log is written only by audit_append.py, whose command
 # names a draft, never the log (loader §6). A shell command that names the log
 # is a raw write (which bypasses the hash chain) or a shell read (which §0.0
 # forbids); either fails, denied or not.
 _AUDIT_LOG = re.compile(r"audit\.jsonl(?![\w.])")
-# The documented one-line form of a helper command. A denial of exactly this
-# shape is a defect in the skill's own instructions; anything else the model
-# wrote is improvised.
-_DOCUMENTED_HELPER = re.compile(
-    r'python3 "[^"\n]+/(?P<helper>render_gate\.py|house-view/audit_append\.py)"'
-    r'(?: --skill (?P<key>[a-z0-9-]+))? --input "(?P<input>[^"\n]+)"'
-)
+# The documented one-line form of each helper command, keyed by bare helper
+# name. A denial of exactly one of these shapes is a defect in the skill's own
+# instructions; anything else the model wrote is improvised. Each pattern is
+# tried with ``fullmatch`` (one line, canonical flag order per conventions
+# §14.1/§14.4 — a doc that reorders flags would make the real command fall
+# into the "improvised" bucket below).
+_HELPER_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("render_gate.py", re.compile(
+        r'python3 "[^"\n]+/render_gate\.py" --skill (?P<key>[a-z0-9-]+) '
+        r'--input "(?P<input>[^"\n]+)"'
+    )),
+    ("audit_append.py", re.compile(
+        r'python3 "[^"\n]+/house-view/audit_append\.py" --input "(?P<input>[^"\n]+)"'
+    )),
+    ("adaptation.py", re.compile(
+        r'python3 "[^"\n]+/client-policy/adaptation\.py" --policy "(?P<policy>[^"\n]+)"'
+        r'(?: --exposures "(?P<exposures>[^"\n]+)")?'
+        r'(?: --view-tilts "(?P<view_tilts>[^"\n]+)")?'
+        r' --json'
+    )),
+    ("coverage_check.py", re.compile(
+        r'python3 "[^"\n]+/coverage_check\.py" '
+        r'--portfolio-sectors "(?P<portfolio_sectors>[^"\n]+)" '
+        r'--redundancy-sectors "(?P<redundancy_sectors>[^"\n]+)"'
+        r'(?: --holdings "(?P<holdings>[^"\n]+)")?'
+    )),
+    ("reconcile.py", re.compile(
+        r'python3 "[^"\n]+/client-policy/reconcile\.py" --input "(?P<input>[^"\n]+)"'
+    )),
+]
 # A report draft (conventions §10.3); its key is the gated skill's key.
 _REPORT_DRAFT = re.compile(r"/\.parallax-render/(?P<key>[a-z0-9-]+)-[0-9a-f]{8}\.md$")
+# A policy/coverage payload draft (conventions §14.4); its label names which
+# payload it is (``policy``, ``exposures``, ``tilts``, ``portfolio-sectors``,
+# ``redundancy-sectors``, ``holdings``, ``reconcile``). Requires the trailing
+# ``-<8 hex>.(json|yaml)`` shape, so a sibling ``.gitignore`` never matches.
+_POLICY_DRAFT = re.compile(r"/\.parallax-policy/(?P<label>[a-z0-9-]+)-[0-9a-f]{8}\.(?:json|yaml)$")
 
 
 def _norm_path(path: str) -> str:
@@ -69,11 +98,25 @@ def _norm_path(path: str) -> str:
     return norm
 
 
+def _match_documented_helper(command: str) -> dict[str, str] | None:
+    """Try each pattern in ``_HELPER_PATTERNS`` in turn; return
+    ``{"helper": <bare name>, **matched groups}`` for the first exact match
+    (one line, canonical flag order), else None. Missing optional groups are
+    present with value None (``re.Match.groupdict()``)."""
+    stripped = command.strip()
+    for helper, pattern in _HELPER_PATTERNS:
+        m = pattern.fullmatch(stripped)
+        if m:
+            return {"helper": helper, **m.groupdict()}
+    return None
+
+
 def documented_helper(command: str) -> str | None:
-    """The helper name ("render_gate.py" / "audit_append.py") when
-    ``command`` is exactly a documented helper command, else None."""
-    m = _DOCUMENTED_HELPER.fullmatch(command.strip())
-    return m["helper"].rsplit("/", 1)[-1] if m else None
+    """The helper name ("render_gate.py" / "audit_append.py" / "adaptation.py"
+    / "coverage_check.py" / "reconcile.py") when ``command`` is exactly a
+    documented helper command, else None."""
+    m = _match_documented_helper(command)
+    return m["helper"] if m else None
 
 
 def validate_journey(journey: object) -> list[str]:
@@ -210,11 +253,12 @@ def classify_denials(denials: list, bash_calls: list[dict]) -> tuple[list[str], 
 
     Blocking: any non-Bash denial (an MCP tool, Write, Skill); a Bash denial
     whose command cannot be read; the documented helper command itself
-    (``_DOCUMENTED_HELPER``); or an improvised command that used a helper when
+    (``_HELPER_PATTERNS``); or an improvised command that used a helper when
     no later Bash call ran that helper's documented command (the gate must
-    succeed; the audit helper must run, since its exits 3 and 4 are documented
-    non-fatal outcomes, loader §6). Everything else, including a command that
-    only mentions a helper without running it, is a
+    succeed; the audit, adaptation, coverage and reconcile helpers must run,
+    since their nonzero exits are documented outcomes, loader §6 /
+    policy-loader.md §2 / policy-reconciliation.md step 3). Everything else,
+    including a command that only mentions a helper without running it, is a
     command the model improvised (a doc-reading ``cd``/``sed`` chain, an
     ``echo $?`` suffix) and a warning: Claude Code's checker refuses such
     commands inconsistently, and the run recovered without them.
@@ -233,7 +277,7 @@ def classify_denials(denials: list, bash_calls: list[dict]) -> tuple[list[str], 
         if name != "Bash" or not command:
             blocking.append(f"permission denials: [{name!r}]")
             continue
-        if _DOCUMENTED_HELPER.fullmatch(command):
+        if _match_documented_helper(command):
             blocking.append(f"documented helper command denied: {command[:120]}")
             continue
         used = sorted({m["helper"] for m in _HELPER_RUN.finditer(command)})
@@ -324,6 +368,7 @@ def check_run(
         if isinstance(result.get("result"), str):
             final_text = result["result"]
         denials = result.get("permission_denials") or []
+        denied_ids = {d.get("tool_use_id") for d in denials if isinstance(d, dict)}
         blocking, _ = classify_denials(denials, parsed["bash_calls"])
         reasons.extend(blocking)
         commands = [c["command"] for c in parsed["bash_calls"]]
@@ -340,22 +385,40 @@ def check_run(
         # after the last successful write to it. A skill that stops before
         # drafting (an unresolvable ticker) needs no gate.
         gate_runs = []
+        policy_runs = []
         for c in parsed["bash_calls"]:
-            m = _DOCUMENTED_HELPER.fullmatch(c["command"].strip())
-            if m and m["helper"] == "render_gate.py":
+            m = _match_documented_helper(c["command"].strip())
+            if not m:
+                continue
+            if m["helper"] == "render_gate.py":
                 gate_runs.append({**c, "key": m["key"], "input": _norm_path(m["input"])})
+            elif m["helper"] in ("adaptation.py", "coverage_check.py", "reconcile.py"):
+                inputs = {_norm_path(v) for k, v in m.items() if k != "helper" and v}
+                policy_runs.append({**c, "inputs": inputs})
         last_write: dict[str, dict] = {}
         for w in parsed["file_writes"]:
-            if w["ok"]:  # a failed write left nothing to gate
+            if w["ok"]:  # a failed write left nothing to gate/consume
                 last_write[_norm_path(w["path"])] = w
         for path, w in last_write.items():
             draft = _REPORT_DRAFT.search(path)
-            if not draft:
+            if draft:
+                if not any(g["ok"] and g["seq"] > w["seq"] and g["input"] == path
+                           and g["key"] == draft["key"] for g in gate_runs):
+                    reasons.append(f"report draft never gated: no successful documented render-gate run "
+                                   f"with --skill {draft['key']} on {path}")
                 continue
-            if not any(g["ok"] and g["seq"] > w["seq"] and g["input"] == path
-                       and g["key"] == draft["key"] for g in gate_runs):
-                reasons.append(f"report draft never gated: no successful documented render-gate run "
-                               f"with --skill {draft['key']} on {path}")
+            # Every policy/coverage draft the model wrote (conventions §14.4)
+            # must be read by a later successful documented run of
+            # adaptation.py, coverage_check.py, or reconcile.py that names
+            # this same literal path. These helpers do not delete their input
+            # after reading it, so this is a consumption check, not a
+            # gating check — see policy-loader.md §1 / §5.
+            if _POLICY_DRAFT.search(path) and not any(
+                r["id"] not in denied_ids and r["seq"] > w["seq"] and path in r["inputs"]
+                for r in policy_runs
+            ):
+                reasons.append(f"policy draft never consumed: no successful documented helper run "
+                               f"reading {path}")
         if result.get("is_error"):
             reasons.append("result is_error")
         if result.get("subtype") != "success":

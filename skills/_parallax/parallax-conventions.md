@@ -581,10 +581,18 @@ Gates fail closed (§4.0); display sections degrade (§4). The rows below apply 
 | `invoke-skill` — concierge routing | Route by prose: name the target skill and its usage line. |
 | `invoke-skill` — judge drift check | Emit the existing line from `house-view/auto-on-load-judge-pattern.md` ("not installed; drift check skipped"). The check is never a gate. |
 | `load-reference` | §0.0 item 4. |
-| `write-artifact` | Render gate: use its stdin fallback (§10.3). Every other consumer is a persist step behind a confirmation gate: stop and report that the artifact could not be written on this host. |
+| `write-artifact` | Render gate: use its stdin fallback (§10.3). The §14.4 policy/coverage drafts follow §14.4's own no-host-absent-fallback rule instead. Every other consumer is a persist step behind a confirmation gate: stop and report that the artifact could not be written on this host. |
 | `read-config` | No environment: every `PARALLAX_*` switch takes its documented default; say so in About This Report when the default changes behavior. No state directory: no active view and no branding, per `house-view/loader.md` §1 and `white-label/integration-pattern.md` §4. |
 | `fetch-url` | Report the source as not fetched and ask for pasted text. Never guess content. |
 | `schedule-task` | Do not offer scheduling. Never describe a schedule the host cannot create. A *verify* binding counts as absent. |
+
+### §14.4 Policy and coverage JSON drafts
+
+Any skill assembling a payload for `_parallax/client-policy/adaptation.py`, `_parallax/client-policy/reconcile.py`, or `_parallax/coverage_check.py` writes it with `write-artifact` to a literal draft path, never a shell variable: `<cwd>/.parallax-policy/<label>-<8 random hex>.<ext>`, written as an absolute literal path (the session's working directory, resolved, with no `~`, `$VAR` or `${…}`). `<ext>` is `yaml` for an inline YAML policy document, `json` for inline JSON and for every other payload. Use a fresh random suffix on every run; if that file already exists, pick another. A `policy=` value that is already a file path is passed through to the helper literally instead — no draft, no write.
+
+On the session's first write to `.parallax-policy/`, also `write-artifact` `.parallax-policy/.gitignore` containing the single line `*`, idempotent (skip it once the directory already holds one this session). The directory lives in the operator's cwd, which may be a synced folder (Dropbox, iCloud) or a git work tree, and none of these three helpers deletes its input after reading it — §10.3's synced-directory caveat applies here the same way, and a `.parallax-policy/` directory left by an interrupted session is safe to delete.
+
+**No host-absent fallback.** `adaptation.py` and `reconcile.py` read their `--policy` / `--exposures` / `--view-tilts` / `--input` arguments as files only, with no inline-argument form — without `write-artifact` the call cannot be made at all, and every affected name renders per the `run-shell` — gate-shaped helper row above (`adaptation.py` is gate-shaped wherever its tier feeds a verdict; the S3 solver is always gate-shaped per §4.0). `coverage_check.py` accepts inline JSON in place of a file path, so without `write-artifact` the sector cross-check can pass its payload inline where the host's command checker allows it (never on Claude Code — see §14.1's heredoc / `{"` rule) and otherwise renders per the `run-shell` — display-shaped helper row above.
 
 ---
 

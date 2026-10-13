@@ -265,11 +265,14 @@ journey FAILs when:
 
 - the result is missing or errored, or lists a blocking permission denial: any denied
   non-Bash tool (a Parallax tool, Write, Skill); a denied Bash command that cannot be
-  read; the documented one-line helper command itself (`render_gate.py --input` or
-  `audit_append.py --input`); or a denied command that ran a helper through `python3`
-  or `python` (a bare mention, such as a `sed` or `grep` of the helper's file, does not count) when no later
-  Bash call ran that helper's documented command (the gate must succeed; the audit
-  helper must run, since its exits 3 and 4 are documented non-fatal outcomes);
+  read; the documented one-line helper command itself (`render_gate.py --input`,
+  `audit_append.py --input`, `adaptation.py --policy`, `coverage_check.py
+  --portfolio-sectors`, or `reconcile.py --input`); or a denied command that ran a
+  helper through `python3` or `python` (a bare mention, such as a `sed` or `grep` of
+  the helper's file, does not count) when no later Bash call ran that helper's
+  documented command (the gate must succeed; the audit, adaptation, coverage and
+  reconcile helpers only need to run, since their nonzero exits are documented
+  non-fatal outcomes);
 - any Bash command, denied or not, names `audit.jsonl` (only `audit_append.py` may
   touch the log, and its command names a draft, never the log; a raw write bypasses
   the hash chain, and §0.0 forbids reading files through the shell);
@@ -278,6 +281,11 @@ journey FAILs when:
   successful write to it (paths compare after normalizing, so `/private/var` and `/var`
   match; a failed write and a skill that stops before drafting, such as an unresolvable
   ticker, need no gate run);
+- a policy/coverage draft (`.parallax-policy/<label>-<8 hex>.json` or `.yaml`,
+  conventions §14.4) was written and no documented `adaptation.py` / `coverage_check.py`
+  / `reconcile.py` run that names that same literal path was issued (not denied) after
+  the last successful write to it — a consumption check, not a gating check, since
+  none of these three helpers deletes its input;
 - a Write, Edit, MultiEdit or NotebookEdit call targets `audit.jsonl`;
 - `claude` exits non-zero or hits the timeout;
 - no Skill call of the journey's required skill succeeds, no skill in the `parallax:`
