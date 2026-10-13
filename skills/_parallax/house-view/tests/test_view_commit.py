@@ -1,4 +1,5 @@
 import collections
+import io
 import json
 import subprocess
 import sys
@@ -645,3 +646,41 @@ def test_cli_partial_apply_does_not_exit_2(tmp_path, monkeypatch):
         view_commit.commit_view(tmp_path, **kwargs)
     # And confirm main() would not map this to 2.
     assert not issubclass(view_commit.CommitPartiallyApplied, view_commit.CommitRejected)
+
+
+def test_default_view_dir_empty_env_falls_back_to_home_default(monkeypatch):
+    """An empty-but-set PARALLAX_HOUSE_VIEW_DIR must behave like unset, not
+    resolve to the cwd (Path("").expanduser() == "."), matching
+    audit_append.resolve_view_dir and view_status._resolve_dir."""
+    monkeypatch.setenv("PARALLAX_HOUSE_VIEW_DIR", "")
+    monkeypatch.setattr(view_commit.Path, "home", classmethod(lambda cls: Path("/fake-home")))
+    assert view_commit._default_view_dir() == str(Path("/fake-home") / ".parallax" / "active-house-view")
+
+
+def test_cli_empty_env_var_falls_back_to_default_dir_not_cwd(tmp_path, monkeypatch, capsys):
+    """End-to-end: an empty PARALLAX_HOUSE_VIEW_DIR must not make main() read
+    or write the process cwd instead of the documented default.
+
+    Driven in-process (not subprocess) so Path.home() can be redirected to a
+    scratch dir without disturbing the real $HOME a subprocess would need to
+    resolve its own site-packages (user-installed deps live there)."""
+    fake_home = tmp_path / "home"
+    default_dir = fake_home / ".parallax" / "active-house-view"
+    default_dir.mkdir(parents=True)
+    _seed(default_dir)
+    cwd_dir = tmp_path / "cwd"
+    cwd_dir.mkdir()
+
+    monkeypatch.setenv("PARALLAX_HOUSE_VIEW_DIR", "")
+    monkeypatch.setattr(view_commit.Path, "home", classmethod(lambda cls: fake_home))
+    monkeypatch.chdir(cwd_dir)
+
+    plan = {"write": {}, "audit_entry": {"action": "extend", "version_id": "v1"},
+            "expected_identity": {"version_id": "v1"}}
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(plan)))
+
+    assert view_commit.main(["--mode", "extend"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["action"] == "extend"
+    assert not (cwd_dir / "audit.jsonl").exists()
+    assert (default_dir / "audit.jsonl").exists()

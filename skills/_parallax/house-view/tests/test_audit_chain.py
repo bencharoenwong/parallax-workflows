@@ -214,6 +214,22 @@ def test_view_transaction_still_works_without_binding_the_token(tmp_path):
     assert (tmp_path / audit_chain.VIEW_TRANSACTION_LOCK_FILENAME).exists()
 
 
+def test_view_transaction_leaves_a_symlinked_target_mode_alone(tmp_path):
+    """Matches audit_append.py's `if not view_dir.is_symlink(): os.chmod(...)`
+    guard -- a view dir pointing at a symlink must not have its target's mode
+    silently overwritten to 0o700."""
+    target = tmp_path / "real"
+    target.mkdir(mode=0o755)
+    target.chmod(0o755)
+    link = tmp_path / "link"
+    link.symlink_to(target, target_is_directory=True)
+
+    with audit_chain.view_transaction(link):
+        pass
+
+    assert target.stat().st_mode & 0o777 == 0o755
+
+
 if __name__ == "__main__":
     # Manual run support
     import pytest
