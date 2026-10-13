@@ -872,6 +872,35 @@ def test_an_unreadable_active_view_is_a_clean_rejection(tmp_path, damage):
     assert (tmp_path / "view.yaml").read_bytes() == damage
 
 
+@pytest.mark.parametrize("damage", [b"", b"excludes: []\nextraction: {}\n", b"metadata: {view_id: vw}\n"])
+def test_a_version_less_active_view_rejects_a_save(tmp_path, damage):
+    """A torn or truncated view.yaml must not pass as a fresh install and
+    be overwritten by a save that records no parent."""
+    _seed(tmp_path)
+    (tmp_path / "view.yaml").write_bytes(damage)
+    before = (tmp_path / AUDIT).read_bytes()
+    with pytest.raises(view_commit.CommitRejected, match="cannot be read"):
+        view_commit.commit_view(
+            tmp_path, write={"view.yaml": "metadata:\n  version_id: v2\n"},
+            remove=frozenset(),
+            audit_entry=_row(view_hash=view_commit.compute_view_hash({})),
+            expected_identity={"parent_version_id": None})
+    assert (tmp_path / "view.yaml").read_bytes() == damage
+    assert (tmp_path / AUDIT).read_bytes() == before
+    assert not list(tmp_path.glob("*.tmp.*"))
+
+
+def test_clear_still_works_over_an_empty_view(tmp_path):
+    _seed(tmp_path)
+    (tmp_path / "view.yaml").write_bytes(b"")
+    view_commit.commit_view(
+        tmp_path, write={}, remove=frozenset(WRITABLE_ALL),
+        audit_entry={"action": "clear", "version_id": "unknown",
+                     "destination": "/archive/x", "reason": "damaged view"},
+        expected_identity={"version_id": None})
+    assert not (tmp_path / "view.yaml").exists()
+
+
 def test_unencodable_content_is_rejected_before_any_staging_file(tmp_path):
     _seed(tmp_path)
     before = (tmp_path / AUDIT).read_bytes()

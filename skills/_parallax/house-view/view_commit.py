@@ -265,6 +265,14 @@ def _metadata_field(view_dir: Path, field: str) -> str | None:
     return ((_load_view(view_dir).get("metadata")) or {}).get(field)
 
 
+def _resolve_parent_version_id(view_dir: Path) -> str | None:
+    version_id = _metadata_field(view_dir, "version_id")
+    path = view_dir / "view.yaml"
+    if version_id is None and path.exists():
+        raise CommitRejected(_unreadable_view_message(path, "no metadata.version_id"))
+    return version_id
+
+
 def _resolve_prose_body_hash(view_dir: Path) -> str | None:
     path = view_dir / "prose.md"
     if not path.exists():
@@ -296,7 +304,7 @@ IDENTITY_RESOLVERS: dict[str, Callable[[Path], str | None]] = {
     # Not a typo. "parent_version_id" means "the version I expect to still be
     # current", so it resolves against the on-disk view's OWN version_id --
     # the asymmetry maker._read_parent_version_id already encodes.
-    "parent_version_id": lambda d: _metadata_field(d, "version_id"),
+    "parent_version_id": _resolve_parent_version_id,
     "version_id": lambda d: _metadata_field(d, "version_id"),
     "view_id": lambda d: _metadata_field(d, "view_id"),
     "view_hash": _resolve_view_hash,

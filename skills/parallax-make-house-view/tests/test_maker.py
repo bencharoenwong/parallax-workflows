@@ -547,3 +547,18 @@ def test_save_commits_through_view_commit(tmp_view_dir: Path, monkeypatch):
     assert not list(tmp_view_dir.glob("*.tmp.*"))
     for name in ("view.yaml", "prose.md", "provenance.yaml"):
         assert (tmp_view_dir / name).stat().st_mode & 0o777 == 0o600
+
+
+def test_save_over_an_empty_active_view_is_rejected(tmp_view_dir: Path):
+    """An empty view.yaml left by an interrupted in-place write must not be
+    replaced by a generate row that records no parent."""
+    import view_commit
+
+    tmp_view_dir.mkdir(parents=True, exist_ok=True)
+    (tmp_view_dir / "view.yaml").write_bytes(b"")
+    orc = MakerOrchestrator(MakerOptions(view_dir=tmp_view_dir, market_filter=["us"]))
+    with pytest.raises(view_commit.CommitRejected, match="cannot be read"):
+        orc.execute_synthesis(_FixtureRunner(), dispose_fn=_confirm_dispose)
+    assert (tmp_view_dir / "view.yaml").read_bytes() == b""
+    assert not (tmp_view_dir / "prose.md").exists()
+    assert not list(tmp_view_dir.glob("*.tmp.*"))
