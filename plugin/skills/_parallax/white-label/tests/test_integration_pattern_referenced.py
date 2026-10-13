@@ -165,16 +165,16 @@ _manifest_spec.loader.exec_module(_skill_manifest)
 _NINE_TWO_EXEMPT_SKILLS: frozenset[str] = _skill_manifest.nine_two_exempt()
 
 
-def _expected_skills_in_tree(on_disk: set[str]) -> frozenset[str]:
+def _expected_skills_in_tree() -> frozenset[str]:
     """Skills the manifest expects to have a SKILL.md under `_SKILLS_ROOT`.
 
-    A filtered distribution ships only the manifest's plugin skills but keeps
-    the full manifest.json. It is recognised by every on-disk skill being a
-    plugin skill; any other tree is expected to hold every manifest skill.
+    The plugin bundle (`plugin/skills`) ships only the manifest's plugin
+    skills but keeps the full manifest.json; the source tree holds every
+    manifest skill. The tree is identified by its location, never by the
+    skill dirs it holds, because those dirs are what this check validates.
     """
-    shipped = frozenset(_skill_manifest.plugin_skills())
-    if on_disk <= shipped:
-        return shipped
+    if _SKILLS_ROOT.parent.name == "plugin":
+        return frozenset(_skill_manifest.plugin_skills())
     return frozenset(_skill_manifest.skills())
 
 
@@ -246,7 +246,7 @@ def test_exempt_entries_match_existing_skill_dirs() -> None:
     distribution is not failed for exempt skills it does not ship.
     """
     existing = {p.parent.name for p in _SKILLS_ROOT.glob("*/SKILL.md")}
-    expected = _NINE_TWO_EXEMPT_SKILLS & _expected_skills_in_tree(existing)
+    expected = _NINE_TWO_EXEMPT_SKILLS & _expected_skills_in_tree()
     dead = expected - existing
     assert not dead, (
         f"_NINE_TWO_EXEMPT_SKILLS entries with no matching skill directory: "
