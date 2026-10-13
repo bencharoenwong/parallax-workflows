@@ -61,8 +61,15 @@ def _command_spans(text: str) -> list[str]:
     fenced_lines = [
         line for block in _FENCED_BLOCK.findall(text) for line in block.splitlines()
     ]
-    inline = _INLINE_SPAN.findall(_FENCED_BLOCK.sub("\n", text))
-    return [span.strip() for span in fenced_lines + inline if _INVOCATION.search(span.strip())]
+    # Outside fences, a bare line starting with `python3` is itself a command
+    # span; any other line contributes only its inline backtick spans.
+    unfenced = []
+    for line in _FENCED_BLOCK.sub("\n", text).splitlines():
+        if line.strip().startswith("python3"):
+            unfenced.append(line)
+        else:
+            unfenced.extend(_INLINE_SPAN.findall(line))
+    return [span.strip() for span in fenced_lines + unfenced if _INVOCATION.search(span.strip())]
 
 
 # --------------------------------------------------------------------------
