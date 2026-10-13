@@ -100,10 +100,11 @@ def view_transaction(view_dir: Path) -> Iterator[TransactionToken]:
     """
     directory = Path(view_dir)
     directory.mkdir(parents=True, exist_ok=True)
-    try:
-        os.chmod(directory, _VIEW_DIR_MODE)
-    except OSError:
-        pass
+    if not directory.is_symlink():  # never re-mode a symlink's target
+        try:
+            os.chmod(directory, _VIEW_DIR_MODE)
+        except OSError:
+            pass
     lock_path = directory / _VIEW_TRANSACTION_LOCK
     fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, _AUDIT_FILE_MODE)
     with os.fdopen(fd, "r+b") as lock_file:

@@ -593,11 +593,21 @@ def build_commit_args(
             "audit_entry": audit_entry, "expected_identity": expected}
 
 
+def _default_view_dir() -> str:
+    """$PARALLAX_HOUSE_VIEW_DIR if set and non-empty, else the home default.
+
+    An empty-but-set env var must behave like unset (matching
+    audit_append.resolve_view_dir and view_status._resolve_dir) rather than
+    resolving to the process cwd via ``Path("").expanduser()``.
+    """
+    env = os.environ.get("PARALLAX_HOUSE_VIEW_DIR")
+    return env if env else str(Path.home() / ".parallax" / "active-house-view")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="view_commit", description=__doc__)
     parser.add_argument("--mode", required=True, choices=sorted(MODE_SPECS))
-    parser.add_argument("--dir", default=os.environ.get(
-        "PARALLAX_HOUSE_VIEW_DIR", str(Path.home() / ".parallax" / "active-house-view")))
+    parser.add_argument("--dir", default=_default_view_dir())
     parser.add_argument(
         "--staging-dir",
         help="the ONLY directory a {'path': ...} write ref may resolve into. "

@@ -238,6 +238,25 @@ def test_end_to_end_save_produces_valid_audit_row(tmp_view_dir: Path):
         assert forbidden not in entry, f"forbidden key {forbidden!r} on audit row"
 
 
+def test_save_leaves_a_symlinked_view_dir_target_mode_alone(tmp_path: Path):
+    """Matches audit_append.py's `if not view_dir.is_symlink(): os.chmod(...)`
+    guard -- a view dir pointing at a symlink must not have its target's mode
+    silently overwritten to 0o700 by the maker's save path."""
+    target = tmp_path / "real-view"
+    target.mkdir(mode=0o755)
+    target.chmod(0o755)
+    view_dir = tmp_path / "view-link"
+    view_dir.symlink_to(target, target_is_directory=True)
+
+    orc = MakerOrchestrator(
+        MakerOptions(view_dir=view_dir, market_filter=["us", "japan", "china"])
+    )
+    runner = _FixtureRunner()
+    result = orc.execute_synthesis(runner, dispose_fn=_confirm_dispose)
+    assert result.saved_paths is not None
+    assert target.stat().st_mode & 0o777 == 0o755
+
+
 def test_provenance_yaml_has_generator_synthesis_entries(tmp_view_dir: Path):
     orc = MakerOrchestrator(
         MakerOptions(view_dir=tmp_view_dir, market_filter=["us", "japan", "china"])

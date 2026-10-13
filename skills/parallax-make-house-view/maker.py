@@ -648,10 +648,11 @@ class MakerOrchestrator:
             )
 
         view_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            os.chmod(view_dir, 0o700)
-        except OSError:
-            pass
+        if not view_dir.is_symlink():  # never re-mode a symlink's target
+            try:
+                os.chmod(view_dir, 0o700)
+            except OSError:
+                pass
 
         # 1. view_hash per schema.yaml.
         view_hash = _compute_view_hash(view)
