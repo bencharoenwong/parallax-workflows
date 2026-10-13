@@ -750,7 +750,7 @@ def test_a_symlink_swapped_in_after_the_path_check_is_not_followed(tmp_path, mon
         return real_read(staging_dir, filename, name)
 
     monkeypatch.setattr(view_commit, "_read_staged_file", _swap_then_read)
-    with pytest.raises(view_commit.CommitRejected, match="without following a link"):
+    with pytest.raises(view_commit.CommitRejected, match="symbolic links are not followed"):
         view_commit.build_commit_args(
             "save", _unbounded_plan(src), tmp_path, staging_dir=staging
         )
@@ -794,9 +794,11 @@ def _repair_kwargs(tmp_path):
     )
 
 
-def test_re_pair_refuses_while_staging_leftovers_exist(tmp_path):
+def test_re_pair_refuses_while_leftovers_of_the_current_version_exist(tmp_path):
+    """view.yaml holds v1 and prose for v1 is still staged: the v1 commit
+    renamed view.yaml and died before prose.md, so the set is mixed."""
     _seed(tmp_path)
-    (tmp_path / "prose.md.tmp.v9").write_text("half a commit", encoding="utf-8")
+    (tmp_path / "prose.md.tmp.v1").write_text("half a commit", encoding="utf-8")
     before = (tmp_path / AUDIT).read_bytes()
     with pytest.raises(view_commit.CommitRejected, match="leftover staging files"):
         view_commit.commit_view(tmp_path, **_repair_kwargs(tmp_path))
@@ -845,3 +847,84 @@ def test_hash_prose_body_matches_the_hash_of_the_assembled_file():
     body = "Line one\r\nLine two\n"
     assembled = "---\nprose_body_hash: x\n---\n" + body
     assert view_commit.hash_prose_body(body) == view_commit.compute_prose_body_hash(assembled)
+
+
+def test_re_pair_ignores_leftovers_from_another_version(tmp_path):
+    """Debris from a commit that renamed nothing, or one a later complete save
+    superseded, does not make the current set mixed."""
+    _seed(tmp_path)
+    (tmp_path / "prose.md.tmp.v0").write_text("old debris", encoding="utf-8")
+    entry = view_commit.commit_view(tmp_path, **_repair_kwargs(tmp_path))
+    assert entry["action"] == "re-pair"
+
+
+@pytest.mark.parametrize("damage", [b"metadata: [unclosed\n", b"\xff\xfe not utf-8", b"- a list\n"])
+def test_an_unreadable_active_view_is_a_clean_rejection(tmp_path, damage):
+    """Not a raw YAML or decode error escaping past `except AuditChainError`."""
+    _seed(tmp_path)
+    (tmp_path / "view.yaml").write_bytes(damage)
+    with pytest.raises(view_commit.CommitRejected, match="cannot be read"):
+        view_commit.commit_view(
+            tmp_path, write={"view.yaml": "metadata:\n  version_id: v2\n"},
+            remove=frozenset(),
+            audit_entry=_row(view_hash=view_commit.compute_view_hash({})),
+            expected_identity={"parent_version_id": "v1"})
+    assert (tmp_path / "view.yaml").read_bytes() == damage
+
+
+def test_unencodable_content_is_rejected_before_any_staging_file(tmp_path):
+    _seed(tmp_path)
+    before = (tmp_path / AUDIT).read_bytes()
+    with pytest.raises(view_commit.CommitRejected, match="UTF-8"):
+        view_commit.commit_view(
+            tmp_path,
+            write={"view.yaml": "metadata:\n  version_id: v2\n",
+                   "provenance.yaml": "bad: \ud800\n"},
+            remove=frozenset(),
+            audit_entry=_row(view_hash=view_commit.compute_view_hash({})),
+            expected_identity={"parent_version_id": "v1"})
+    assert not list(tmp_path.glob("*.tmp.*"))
+    assert (tmp_path / AUDIT).read_bytes() == before
+
+
+def test_a_failed_fsync_after_the_row_is_written_is_not_a_lost_witness(tmp_path, monkeypatch):
+    """The row is on disk; reporting CommitWitnessLost would invite a
+    duplicate hand-append."""
+    import os
+    _seed(tmp_path)
+    audit = tmp_path / AUDIT
+    real_fsync = os.fsync
+
+    def _fsync(fd):
+        if os.fstat(fd).st_ino == os.stat(audit).st_ino:
+            raise OSError(5, "simulated EIO")
+        return real_fsync(fd)
+
+    monkeypatch.setattr(os, "fsync", _fsync)
+    entry = view_commit.commit_view(
+        tmp_path, write={"view.yaml": "metadata:\n  version_id: v2\n"},
+        remove=frozenset(),
+        audit_entry=_row(view_hash=view_commit.compute_view_hash({})),
+        expected_identity={"parent_version_id": "v1"})
+    rows = [json.loads(line) for line in audit.read_text().splitlines() if line.strip()]
+    assert rows[-1]["version_id"] == entry["version_id"] == "v2"
+    assert sum(r.get("version_id") == "v2" for r in rows) == 1
+
+
+def test_a_non_oserror_mid_staging_leaves_no_staging_files(tmp_path, monkeypatch):
+    """A leaked .tmp.<version_id> wedges retries (O_EXCL), so cleanup must not
+    depend on the failure being an OSError."""
+    import os
+    _seed(tmp_path)
+
+    def _boom(fd):
+        raise RuntimeError("simulated non-OSError failure")
+
+    monkeypatch.setattr(os, "fsync", _boom)
+    with pytest.raises(RuntimeError):
+        view_commit.commit_view(
+            tmp_path, write={"view.yaml": "metadata:\n  version_id: v2\n"},
+            remove=frozenset(),
+            audit_entry=_row(view_hash=view_commit.compute_view_hash({})),
+            expected_identity={"parent_version_id": "v1"})
+    assert not list(tmp_path.glob("*.tmp.*"))

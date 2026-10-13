@@ -359,8 +359,14 @@ def append_entry(
             f.flush()
             # The row is the witness for artifacts that were already fsynced
             # and renamed; without this a power loss can keep the artifacts
-            # and drop the row that explains them.
-            os.fsync(f.fileno())
+            # and drop the row that explains them. Best effort: the row is
+            # already written, so raising here would tell the caller it was
+            # lost and invite a duplicate append. (On macOS fsync does not
+            # flush the drive cache either.)
+            try:
+                os.fsync(f.fileno())
+            except OSError as exc:
+                logger.warning("audit_entry_fsync_failed: %s (row was written)", exc)
             if created:
                 fsync_dir(audit_path.parent)
             # Warn AFTER successful flush — pre-write warns about phantom

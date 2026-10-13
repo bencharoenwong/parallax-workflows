@@ -12,6 +12,8 @@ flock, and the resulting truncated chain still verifies green because
 
 Durability: each staged file is fsynced before its rename, the view directory
 is fsynced after the renames, and ``audit_chain.append_entry`` fsyncs the row.
+On macOS ``os.fsync`` does not flush the drive's own cache, so this narrows
+the power-loss window there without closing it.
 
 Known residue, deliberately not fixed here:
   * The grouped renames are per-file atomic, not atomic as a group. A crash
@@ -233,7 +235,30 @@ def _load_view(view_dir: Path) -> dict[str, Any]:
     path = view_dir / "view.yaml"
     if not path.exists():
         return {}
-    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise CommitRejected(_unreadable_view_message(path, exc)) from exc
+    try:
+        parsed = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        raise CommitRejected(_unreadable_view_message(path, exc)) from exc
+    if parsed is None:
+        return {}
+    if not isinstance(parsed, dict):
+        raise CommitRejected(_unreadable_view_message(path, "not a mapping"))
+    return parsed
+
+
+def _unreadable_view_message(path: Path, cause: Any) -> str:
+    # Refusing is deliberate: the identity check cannot tell what version the
+    # damaged file holds, and overwriting it would record a new view with no
+    # parent, which breaks the lineage the audit chain exists to prove.
+    return (
+        f"the active {path} cannot be read ({cause}), so its identity cannot be "
+        "checked; nothing was written. Move the damaged file aside (keep it for "
+        "the record), then save again as a fresh view."
+    )
 
 
 def _metadata_field(view_dir: Path, field: str) -> str | None:
@@ -371,27 +396,39 @@ if frozenset(_STAGING_ORDER) != WRITABLE:
 def _reject_stale_staging(view_dir: Path) -> None:
     """Refuse to re-pair a directory that holds leftover staging files.
 
-    A leftover ``<artifact>.tmp.<version_id>`` means a commit died between
-    staging and its last rename, so the live artifacts may be a mix of two
-    versions. ``--re-pair`` exists to bless the artifacts as they stand; doing
-    that over a possibly mixed set would write a row attesting a view nobody
-    reviewed. Other modes replace the artifacts outright, so they are not
-    blocked by a leftover from a different version_id.
+    ``view.yaml`` is staged and renamed first, so a commit that died after at
+    least one rename left ``view.yaml`` carrying that commit's version_id and
+    left ``<artifact>.tmp.<that version_id>`` for the artifacts it never
+    renamed. That combination is the signature of a mixed set. A leftover for
+    any OTHER version_id is debris from a commit that renamed nothing, or one
+    a later complete save has since superseded, and does not block.
+    ``--re-pair`` blesses the artifacts as they stand; doing that over a mixed
+    set would write a row attesting a view nobody reviewed. Other modes
+    replace the artifacts outright, so they never consult this.
     """
-    stale = sorted(
-        entry.name
-        for entry in view_dir.iterdir()
-        if any(entry.name.startswith(f"{artifact}.tmp.") for artifact in WRITABLE)
-    ) if view_dir.is_dir() else []
+    if not view_dir.is_dir():
+        return
+    current = _metadata_field(view_dir, "version_id")
+    if current is None:
+        return
+    suffixes = {f"{artifact}.tmp.{current}" for artifact in WRITABLE}
+    stale = sorted(entry.name for entry in view_dir.iterdir() if entry.name in suffixes)
     if stale:
         raise CommitRejected(
-            f"leftover staging files {stale} in {view_dir}: an earlier commit did not "
-            "finish, so the live artifacts may be a mix of two versions. Inspect "
+            f"leftover staging files {stale} in {view_dir} belong to the version "
+            f"view.yaml holds ({current}): that commit did not finish, so the live "
+            "artifacts may be a mix of two versions. Inspect "
             "view.yaml, prose.md and provenance.yaml, remove the leftovers, then re-pair."
         )
 
 
 def _stage_and_rename(view_dir: Path, write: dict[str, str], version_id: str) -> None:
+    # Encode first, so content that cannot be written (a lone surrogate) is a
+    # clean rejection before any staging file exists.
+    try:
+        payloads = {name: write[name].encode("utf-8") for name in _STAGING_ORDER if name in write}
+    except UnicodeEncodeError as exc:
+        raise CommitRejected(f"artifact content is not encodable as UTF-8: {exc}") from exc
     staged: list[tuple[Path, Path]] = []
     renamed = 0
     try:
@@ -409,7 +446,7 @@ def _stage_and_rename(view_dir: Path, write: dict[str, str], version_id: str) ->
             # wedges every retry with this same version_id permanently.
             staged.append((tmp, view_dir / name))
             with os.fdopen(fd, "wb") as handle:
-                handle.write(write[name].encode("utf-8"))
+                handle.write(payloads[name])
                 handle.flush()
                 os.fsync(handle.fileno())
         for tmp, final in staged:
@@ -419,10 +456,14 @@ def _stage_and_rename(view_dir: Path, write: dict[str, str], version_id: str) ->
         # The renames live in the directory entry; persist it before the row
         # that witnesses them is appended.
         audit_chain.fsync_dir(view_dir)
-    except OSError as exc:
+    except BaseException as exc:
+        # Any failure, not just OSError: a leaked staging file wedges retries
+        # with this version_id (O_EXCL) and blocks --re-pair.
         for tmp, _ in staged:
             with suppress(OSError):
                 tmp.unlink()
+        if not isinstance(exc, OSError):
+            raise
         if renamed:
             raise CommitPartiallyApplied(
                 f"{renamed} artifact(s) were renamed into place before this failed "
@@ -645,8 +686,8 @@ def _read_staged_file(staging_dir: Path, filename: str, name: str) -> str:
             )
         except OSError as exc:
             raise CommitRejected(
-                f"write[{name!r}] path {staging_dir / filename} could not be opened "
-                f"without following a link: {exc}"
+                f"write[{name!r}] path {staging_dir / filename} could not be opened as a "
+                f"file (symbolic links are not followed): {exc}"
             ) from exc
         with os.fdopen(fd, "rb") as handle:
             st = os.fstat(handle.fileno())

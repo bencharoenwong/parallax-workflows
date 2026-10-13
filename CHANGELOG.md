@@ -6,6 +6,9 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 ## Unreleased
 
+### Security
+- House-view saves from `parallax-make-house-view` now go through `view_commit` like every other writer: staged `0600` files, fsync and rename, a row-vs-bytes check, and refusal of an unreadable active view instead of an overwrite with no parent. Path refs are read through a staging-directory descriptor with `O_NOFOLLOW`, refusing non-regular files and hard-linked files. Commit tokens are valid only while their `view_transaction` holds the lock. `--re-pair` refuses while staging leftovers show the current version's commit did not finish. The view directory and audit row are fsynced.
+
 ### Added
 - A release command prepares date versions and builds the plugin, upload skills, checksums and machine-readable asset index. Dirty checkouts require preview mode, which omits download URLs. Builds require the complete maintainer scan and verify the extracted archives before exposing output.
 - Manifest-generated role and distribution tables, a plugin-first installation guide, an agent entry point, and maintainer release instructions.
