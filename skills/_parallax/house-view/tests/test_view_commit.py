@@ -20,10 +20,18 @@ WRITABLE_ALL = ("view.yaml", "prose.md", "provenance.yaml")
 AUDIT = "audit.jsonl"
 
 
-def _seed(tmp_path, version_id="v1"):
-    (tmp_path / "view.yaml").write_text(
-        f"metadata:\n  version_id: {version_id}\n  view_id: vw\n", encoding="utf-8"
+EMPTY_VIEW_HASH = view_commit.compute_view_hash({})
+
+
+def _view_text(version_id, view_id="vw"):
+    return (
+        f"metadata:\n  version_id: {version_id}\n  view_id: {view_id}\n"
+        f"  view_hash: {EMPTY_VIEW_HASH}\n"
     )
+
+
+def _seed(tmp_path, version_id="v1"):
+    (tmp_path / "view.yaml").write_text(_view_text(version_id), encoding="utf-8")
     audit_chain.append_entry(tmp_path / AUDIT, {"action": "extraction_attempt", "applied": False})
 
 
@@ -81,18 +89,16 @@ def test_prose_body_hash_is_recomputed_not_read_from_frontmatter(tmp_path):
 
 def test_view_hash_is_recomputed_not_read_from_metadata(tmp_path):
     """SECURITY: --re-pair blesses whatever is on disk and keys on view_hash.
-    Trusting metadata.view_hash lets an edit to the tilts pass the guard while
-    the stale stored field goes unchanged."""
-    (tmp_path / "view.yaml").write_text(
-        "metadata:\n  version_id: v1\n  view_hash: " + "0" * 64 + "\n"
-        "tilts:\n  sectors:\n    health_care: 2\n",
-        encoding="utf-8",
-    )
-    resolved = view_commit.IDENTITY_RESOLVERS["view_hash"](tmp_path)
-    assert resolved != "0" * 64
-    assert resolved == view_commit.compute_view_hash(
-        {"tilts": {"sectors": {"health_care": 2}}}
-    )
+    An edit to the tilts that leaves the stored field stale must not pass the
+    guard, and a consistent view resolves to the recomputed hash."""
+    expected = view_commit.compute_view_hash({"tilts": {"sectors": {"health_care": 2}}})
+    view = tmp_path / "view.yaml"
+    body = "metadata:\n  version_id: v1\n  view_id: vw\n  view_hash: {}\ntilts:\n  sectors:\n    health_care: 2\n"
+    view.write_text(body.format("0" * 64), encoding="utf-8")
+    with pytest.raises(view_commit.CommitRejected, match="view_hash does not match"):
+        view_commit.IDENTITY_RESOLVERS["view_hash"](tmp_path)
+    view.write_text(body.format(expected), encoding="utf-8")
+    assert view_commit.IDENTITY_RESOLVERS["view_hash"](tmp_path) == expected
 
 
 def test_view_hash_resolver_returns_none_when_there_is_no_view(tmp_path):
@@ -100,13 +106,13 @@ def test_view_hash_resolver_returns_none_when_there_is_no_view(tmp_path):
 
 
 def test_parent_version_id_resolves_against_on_disk_version_id(tmp_path):
-    (tmp_path / "view.yaml").write_text("metadata:\n  version_id: v2\n", encoding="utf-8")
+    (tmp_path / "view.yaml").write_text(_view_text("v2"), encoding="utf-8")
     assert view_commit.IDENTITY_RESOLVERS["parent_version_id"](tmp_path) == "v2"
 
 
 def test_resolvers_only_read_what_is_asked_for(tmp_path):
     """--clear needs version_id only; a corrupt prose.md must not break it."""
-    (tmp_path / "view.yaml").write_text("metadata:\n  version_id: v2\n", encoding="utf-8")
+    (tmp_path / "view.yaml").write_text(_view_text("v2"), encoding="utf-8")
     (tmp_path / "prose.md").write_bytes(b"\xff\xfe not utf-8")
     assert view_commit.IDENTITY_RESOLVERS["version_id"](tmp_path) == "v2"
 
@@ -296,7 +302,7 @@ def test_two_threads_both_commit_and_the_chain_stays_valid(tmp_path):
             if n == 0:
                 view_commit.commit_view(
                     tmp_path,
-                    write={"view.yaml": "metadata:\n  version_id: v1\n"},
+                    write={"view.yaml": _view_text("v1")},
                     remove=frozenset(),
                     audit_entry={"action": "extend", "version_id": "v1",
                                  "view_hash": view_commit.compute_view_hash({})},
@@ -321,8 +327,10 @@ def test_two_threads_both_commit_and_the_chain_stays_valid(tmp_path):
     # failed to serialize the two commits, a torn/interleaved write here is
     # the most likely symptom.
     text = (tmp_path / "view.yaml").read_text(encoding="utf-8")
-    assert text == "metadata:\n  version_id: v1\n"
-    assert view_commit.read_active_view(tmp_path) == {"metadata": {"version_id": "v1"}}
+    assert text == _view_text("v1")
+    assert view_commit.read_active_view(tmp_path) == {
+        "metadata": {"version_id": "v1", "view_id": "vw", "view_hash": EMPTY_VIEW_HASH}
+    }
 
 
 def test_staging_failure_cleans_up_and_commits_nothing(tmp_path, monkeypatch):
@@ -392,7 +400,7 @@ def test_unsafe_version_id_is_rejected_and_writes_nothing(tmp_path):
             audit_entry=_row(version_id="../escape", view_hash=view_commit.compute_view_hash({})),
             expected_identity={"parent_version_id": "v1"})
     assert not list(tmp_path.glob("*.tmp.*"))
-    assert "metadata:\n  version_id: v1\n  view_id: vw\n" == (tmp_path / "view.yaml").read_text()
+    assert _view_text("v1") == (tmp_path / "view.yaml").read_text()
 
 
 def test_staged_files_are_created_0600_not_chmodded_after(tmp_path):
@@ -495,9 +503,7 @@ def _unbounded_plan(src):
 def _assert_untouched(tmp_path, before):
     assert not list(tmp_path.glob("*.tmp.*")), "staged files leaked"
     assert (tmp_path / AUDIT).read_bytes() == before, "audit chain was appended to"
-    assert (tmp_path / "view.yaml").read_text() == (
-        "metadata:\n  version_id: v1\n  view_id: vw\n"
-    ), "artifacts were mutated"
+    assert (tmp_path / "view.yaml").read_text() == _view_text("v1"), "artifacts were mutated"
 
 
 def test_path_ref_outside_the_staging_dir_is_rejected_unread(tmp_path):
@@ -906,6 +912,20 @@ def test_clear_still_works_over_a_damaged_view(tmp_path, damage):
                      "destination": "/archive/x", "reason": "damaged view"},
         expected_identity={"version_id": None})
     assert not (tmp_path / "view.yaml").exists()
+
+
+@pytest.mark.parametrize("damage", [b"", TORN_METADATA, b"metadata: [unclosed\n"])
+def test_extend_is_refused_over_a_damaged_view(tmp_path, damage):
+    _seed(tmp_path)
+    (tmp_path / "view.yaml").write_bytes(damage)
+    before = (tmp_path / AUDIT).read_bytes()
+    with pytest.raises(view_commit.CommitRejected, match="cannot be read"):
+        view_commit.commit_view(
+            tmp_path, write={"view.yaml": _view_text("v2")}, remove=frozenset(),
+            audit_entry={"action": "extend", "version_id": "v2", "view_hash": EMPTY_VIEW_HASH},
+            expected_identity={"version_id": None})
+    assert (tmp_path / "view.yaml").read_bytes() == damage
+    assert (tmp_path / AUDIT).read_bytes() == before
 
 
 def test_unencodable_content_is_rejected_before_any_staging_file(tmp_path):

@@ -235,8 +235,11 @@ def read_active_view(view_dir: Path) -> dict[str, Any] | None:
     """The active view, or None when view.yaml does not exist.
 
     Any view.yaml that exists must decode, parse to a mapping, carry a
-    ``metadata`` mapping, and name a non-empty string ``version_id`` (and
-    ``view_id`` when present); anything else raises ``CommitRejected``.
+    ``metadata`` mapping with non-empty string ``version_id`` and ``view_id``,
+    and carry a ``metadata.view_hash`` equal to the recomputed hash. Keys dump
+    sorted with ``tilts`` last, so a file cut anywhere in or after
+    ``metadata`` loses a required field or fails the hash. Anything else
+    raises ``CommitRejected``.
     """
     path = Path(view_dir) / "view.yaml"
     if not path.exists():
@@ -256,12 +259,16 @@ def read_active_view(view_dir: Path) -> dict[str, Any] | None:
         raise CommitRejected(_unreadable_view_message(path, "metadata is not a mapping"))
     for field in ("version_id", "view_id"):
         value = meta.get(field)
-        if field == "view_id" and value is None:
-            continue
         if not isinstance(value, str) or not value.strip():
             raise CommitRejected(
                 _unreadable_view_message(path, f"no usable metadata.{field}")
             )
+    if meta.get("view_hash") != compute_view_hash(parsed):
+        raise CommitRejected(
+            _unreadable_view_message(
+                path, "metadata.view_hash does not match the tilts and excludes"
+            )
+        )
     return parsed
 
 
@@ -279,13 +286,6 @@ def _unreadable_view_message(path: Path, cause: Any) -> str:
 def _metadata_field(view_dir: Path, field: str) -> str | None:
     view = read_active_view(view_dir)
     return None if view is None else view["metadata"].get(field)
-
-
-def _lenient_metadata_field(view_dir: Path, field: str) -> str | None:
-    try:
-        return _metadata_field(view_dir, field)
-    except CommitRejected:
-        return None
 
 
 def _resolve_prose_body_hash(view_dir: Path) -> str | None:
@@ -320,14 +320,25 @@ IDENTITY_RESOLVERS: dict[str, Callable[[Path], str | None]] = {
     # current", so it resolves against the on-disk view's OWN version_id --
     # the asymmetry maker._read_parent_version_id already encodes.
     "parent_version_id": lambda d: _metadata_field(d, "version_id"),
-    "version_id": lambda d: _lenient_metadata_field(d, "version_id"),
-    "view_id": lambda d: _lenient_metadata_field(d, "view_id"),
+    "version_id": lambda d: _metadata_field(d, "version_id"),
+    "view_id": lambda d: _metadata_field(d, "view_id"),
     "view_hash": _resolve_view_hash,
     "prose_body_hash": _resolve_prose_body_hash,
 }
 
 
-def _check_identity(view_dir: Path, expected_identity: dict[str, Any]) -> None:
+def _resolve_identity(view_dir: Path, key: str, lenient: bool) -> str | None:
+    try:
+        return IDENTITY_RESOLVERS[key](view_dir)
+    except CommitRejected:
+        if lenient:
+            return None
+        raise
+
+
+def _check_identity(
+    view_dir: Path, expected_identity: dict[str, Any], *, lenient: bool = False
+) -> None:
     unknown = set(expected_identity) - set(IDENTITY_RESOLVERS)
     if unknown:
         raise CommitRejected(f"unknown identity keys: {sorted(unknown)}")
@@ -337,7 +348,7 @@ def _check_identity(view_dir: Path, expected_identity: dict[str, Any]) -> None:
     # view.yaml, and "None" == "None". Do not "fix" this into an identity
     # comparison without giving the fresh-install path its own branch.
     captured = {k: str(v) for k, v in expected_identity.items()}
-    committed = {k: str(IDENTITY_RESOLVERS[k](view_dir)) for k in expected_identity}
+    committed = {k: str(_resolve_identity(view_dir, k, lenient)) for k in expected_identity}
     moved = audit_chain.identity_diff(captured, committed)
     if moved:
         raise audit_chain.ViewChangedMidRun(
@@ -521,7 +532,7 @@ def commit_view_locked(
     validate_audit_entry(audit_entry, write)
     if audit_entry["action"] == "re-pair":
         _reject_stale_staging(view_dir)
-    _check_identity(view_dir, expected_identity)
+    _check_identity(view_dir, expected_identity, lenient=audit_entry["action"] == "clear")
     _validate_row_matches_bytes(write, audit_entry)
     mutated = False
     if write:

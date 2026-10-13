@@ -576,27 +576,34 @@ def test_an_unreadable_active_view_stops_synthesis_before_the_gate(tmp_view_dir:
     assert not list(tmp_view_dir.glob("*.tmp.*"))
 
 
-def test_every_truncation_of_a_saved_view_is_a_clean_rejection_or_a_valid_view(
-    tmp_view_dir: Path, tmp_path: Path
-):
-    """A torn in-place write can stop at any byte. Each prefix must either
-    be refused with CommitRejected or read as a view with a usable identity."""
+def test_every_truncation_of_a_saved_view_is_refused(tmp_view_dir: Path, tmp_path: Path):
+    """A torn in-place write can stop at any byte. Every prefix that is not
+    the whole file must be refused; the whole file must be accepted."""
     import view_commit
-    from maker import _read_active_view, _read_parent_version_id, _resolve_or_new_view_id
+    from maker import _read_active_view
 
     orc = MakerOrchestrator(MakerOptions(view_dir=tmp_view_dir, market_filter=["us"]))
     orc.execute_synthesis(_FixtureRunner(), dispose_fn=_confirm_dispose)
-    saved = (tmp_view_dir / "view.yaml").read_bytes()
-    resolver = view_commit.IDENTITY_RESOLVERS["parent_version_id"]
+    view = yaml.safe_load((tmp_view_dir / "view.yaml").read_text(encoding="utf-8"))
+    view["excludes"] = [{"type": "sector", "value": "tobacco"}]
+    for key, value in view["tilts"].items():
+        if value == {}:
+            view["tilts"][key] = {"probe": 17}
+    view["metadata"]["view_hash"] = view_commit.compute_view_hash(view)
+    assert view_commit.compute_view_hash({**view, "tilts": {}}) != view["metadata"]["view_hash"]
+    saved = yaml.safe_dump(
+        view, sort_keys=True, default_flow_style=False, allow_unicode=True
+    ).encode("utf-8")
+
     torn_dir = tmp_path / "torn"
     torn_dir.mkdir()
+    (torn_dir / "view.yaml").write_bytes(saved)
+    assert _read_active_view(torn_dir) == view
     for n in range(len(saved)):
-        (torn_dir / "view.yaml").write_bytes(saved[:n])
-        try:
-            parent = resolver(torn_dir)
-            view = _read_active_view(torn_dir)
-        except view_commit.CommitRejected:
+        prefix = saved[:n]
+        (torn_dir / "view.yaml").write_bytes(prefix)
+        if prefix.rstrip() == saved.rstrip():
+            assert _read_active_view(torn_dir) == view
             continue
-        assert isinstance(parent, str) and parent, n
-        assert view["metadata"]["version_id"] == parent == _read_parent_version_id(torn_dir)
-        assert _resolve_or_new_view_id(torn_dir)
+        with pytest.raises(view_commit.CommitRejected):
+            _read_active_view(torn_dir)

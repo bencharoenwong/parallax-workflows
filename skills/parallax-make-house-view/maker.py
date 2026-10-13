@@ -1176,7 +1176,7 @@ def _resolve_or_new_view_id(view_dir: Path) -> str:
     extraction = v.get("extraction")
     skill = (extraction.get("extraction_method") if isinstance(extraction, dict) else None) or ""
     if skill.startswith("parallax-make-house-view"):
-        return v["metadata"].get("view_id") or str(uuid.uuid4())
+        return v["metadata"]["view_id"]
     # Existing view was ingested, not synthesized — start a new view family.
     return str(uuid.uuid4())
 
