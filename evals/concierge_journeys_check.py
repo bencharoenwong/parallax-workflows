@@ -23,8 +23,11 @@ import posixpath
 import re
 import sys
 
-ALLOWED_KEYS = frozenset({"id", "prompt", "expect", "forbid", "expect_any", "needs", "skill"})
-LIST_KEYS = ("expect", "forbid", "expect_any")
+ALLOWED_KEYS = frozenset({"id", "prompt", "expect", "forbid", "expect_any", "needs", "skill",
+                          "require_helpers"})
+LIST_KEYS = ("expect", "forbid", "expect_any", "require_helpers")
+# Helpers a journey may require via "require_helpers" (conventions §14.4).
+REQUIRABLE_HELPERS = frozenset({"adaptation.py", "coverage_check.py", "reconcile.py"})
 # no-connector: no Parallax server may load. connector-optional: skip only the
 # server-presence check (for a journey that makes no Parallax call, where a
 # claude.ai connector may not be listed in the init message yet).
@@ -141,6 +144,10 @@ def validate_journey(journey: object) -> list[str]:
         value = journey["skill"]
         if not isinstance(value, str) or not value.startswith(PLUGIN_PREFIX) or value == PLUGIN_PREFIX:
             problems.append(f"'skill' must be a string starting with {PLUGIN_PREFIX!r}")
+    if isinstance(journey.get("require_helpers"), list):
+        bad = sorted(set(journey["require_helpers"]) - REQUIRABLE_HELPERS)
+        if bad:
+            problems.append(f"'require_helpers' entries must be in {sorted(REQUIRABLE_HELPERS)}: {bad}")
     if "needs" in journey and journey["needs"] not in NEEDS_VALUES:
         problems.append(f"'needs' must be one of {sorted(NEEDS_VALUES)}")
     return problems
@@ -394,7 +401,7 @@ def check_run(
                 gate_runs.append({**c, "key": m["key"], "input": _norm_path(m["input"])})
             elif m["helper"] in ("adaptation.py", "coverage_check.py", "reconcile.py"):
                 inputs = {_norm_path(v) for k, v in m.items() if k != "helper" and v}
-                policy_runs.append({**c, "inputs": inputs})
+                policy_runs.append({**c, "inputs": inputs, "helper": m["helper"]})
         last_write: dict[str, dict] = {}
         for w in parsed["file_writes"]:
             if w["ok"]:  # a failed write left nothing to gate/consume
@@ -419,6 +426,22 @@ def check_run(
             ):
                 reasons.append(f"policy draft never consumed: no successful documented helper run "
                                f"reading {path}")
+        # A journey that names required helpers needs each one to have run as
+        # documented, not denied, exiting cleanly, on a .parallax-policy draft
+        # the Write tool created before the run. The consumption check above
+        # is deliberately lenient (a documented nonzero exit still consumes a
+        # draft); this one is not: a helper that errored, an improvised
+        # replacement, or a draft made by a heredoc or in /tmp does not count.
+        written_drafts = {path: w for path, w in last_write.items() if _POLICY_DRAFT.search(path)}
+        for helper in journey.get("require_helpers") or []:
+            if not any(
+                r["helper"] == helper and r["ok"] and r["id"] not in denied_ids
+                and any(path in written_drafts and written_drafts[path]["seq"] < r["seq"]
+                        for path in r["inputs"])
+                for r in policy_runs
+            ):
+                reasons.append(f"required helper {helper} never ran successfully on a "
+                               f"Write-tool .parallax-policy draft")
         if result.get("is_error"):
             reasons.append("result is_error")
         if result.get("subtype") != "success":

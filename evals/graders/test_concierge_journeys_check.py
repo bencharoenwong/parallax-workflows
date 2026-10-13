@@ -382,7 +382,8 @@ def test_validate_accepts_connector_optional():
 
 
 CONNECTOR_JOURNEYS = ("J1_research_connected", "J3_integrator", "J4_rm_support_schedule",
-                      "J6_uncovered_ticker", "J7_direct_task_bypass", "J8_role_asked_not_guessed")
+                      "J6_uncovered_ticker", "J7_direct_task_bypass", "J8_role_asked_not_guessed",
+                      "J9_client_review_policy")
 
 
 # Phrases of the concierge's not-connected state. "/mcp" itself is not one:
@@ -446,10 +447,21 @@ def test_no_plugin_namespace_skill_fails():
     assert any("plugin namespace" in r for r in reasons)
 
 
-def test_direct_task_journey_requires_should_i_buy():
+# Journeys that bypass the concierge and the skill each one must run.
+DIRECT_SKILL_JOURNEYS = {
+    "J7_direct_task_bypass": "parallax:parallax-should-i-buy",
+    "J9_client_review_policy": "parallax:parallax-client-review",
+}
+
+
+def test_direct_task_journeys_name_their_skill():
     journeys = {j["id"]: j for j in map(json.loads, filter(str.strip, JOURNEYS.read_text().splitlines()))}
-    assert journeys["J7_direct_task_bypass"]["skill"] == "parallax:parallax-should-i-buy"
-    assert all("skill" not in j for jid, j in journeys.items() if jid != "J7_direct_task_bypass")
+    assert {jid: j["skill"] for jid, j in journeys.items() if "skill" in j} == DIRECT_SKILL_JOURNEYS
+
+
+def test_the_policy_journey_requires_adaptation():
+    journeys = {j["id"]: j for j in map(json.loads, filter(str.strip, JOURNEYS.read_text().splitlines()))}
+    assert journeys["J9_client_review_policy"]["require_helpers"] == ["adaptation.py"]
 
 
 # --- denial classes: documented-helper vs improvised commands ----------------
@@ -797,3 +809,54 @@ def test_adaptation_accepts_exposures_or_view_tilts_independently(cmd):
     house view is active, so an exposures-only call is a real, documented
     shape and must not fall into the improvised bucket."""
     assert documented_helper(cmd) == "adaptation.py"
+
+
+# --- require_helpers: a policy journey needs its helper to really run --------
+
+_POLICY_PATH = "/s/.parallax-policy/policy-0a1b2c3d.yaml"
+_ADAPT_ON_DRAFT = ('python3 "/p/skills/parallax-client-review/../_parallax/client-policy/adaptation.py" '
+                   f'--policy "{_POLICY_PATH}" --json')
+JR = {**J, "require_helpers": ["adaptation.py"]}
+
+
+def test_a_required_helper_that_ran_on_a_written_draft_passes():
+    stream = _with_write(_bash_stream([("b1", _ADAPT_ON_DRAFT, False)], set()), path=_POLICY_PATH)
+    assert check_run(stream, JR, 0, False)[0] is True
+
+
+@pytest.mark.parametrize("calls,denied,write_path,why", [
+    ([], set(), _POLICY_PATH, "never ran"),
+    ([("b1", _ADAPT_ON_DRAFT, True)], set(), _POLICY_PATH, "errored"),
+    ([("b1", _ADAPT_ON_DRAFT, False)], {"b1"}, _POLICY_PATH, "denied"),
+    ([("b1", _ADAPT_ON_DRAFT, False)], set(), None, "no Write-tool draft (heredoc)"),
+    ([("b1", _ADAPT_ON_DRAFT.replace("/s/.parallax-policy/", "/tmp/"), False)], set(),
+     "/tmp/policy-0a1b2c3d.yaml", "draft outside .parallax-policy"),
+    ([("b1", 'cd /p && python3 adaptation.py --policy "' + _POLICY_PATH + '" --json', False)],
+     set(), _POLICY_PATH, "improvised command"),
+])
+def test_a_required_helper_fails_unless_it_really_ran(calls, denied, write_path, why):
+    stream = _bash_stream(calls, denied)
+    if write_path:
+        stream = _with_write(stream, path=write_path)
+    passed, reasons, _, _ = check_run(stream, JR, 0, False)
+    assert passed is False, why
+    assert any("required helper adaptation.py" in r for r in reasons), (why, reasons)
+
+
+def test_a_draft_written_after_the_run_does_not_satisfy_the_requirement():
+    stream = _bash_stream([("b1", _ADAPT_ON_DRAFT, False)], set())
+    stream = _with_write(stream, path=_POLICY_PATH, at=len(stream.rstrip("\n").split("\n")) - 1)
+    passed, reasons, _, _ = check_run(stream, JR, 0, False)
+    assert passed is False
+    assert any("required helper adaptation.py" in r for r in reasons)
+
+
+@pytest.mark.parametrize("value,ok", [
+    (["adaptation.py"], True),
+    (["coverage_check.py", "reconcile.py"], True),
+    (["render_gate.py"], False),
+    ("adaptation.py", False),
+])
+def test_require_helpers_is_validated(value, ok):
+    journey = {"id": "J", "prompt": "p", "require_helpers": value}
+    assert (validate_journey(journey) == []) is ok

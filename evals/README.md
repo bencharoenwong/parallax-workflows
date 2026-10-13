@@ -256,9 +256,12 @@ Parallax server loads. `"needs": "connector-optional"` runs like a connector jou
 but skips only the Parallax-server-presence check. Use it for a journey that calls no
 Parallax tool, because a claude.ai connector can be missing from the init message. An
 optional `skill` names the plugin skill the journey must run (`parallax:` prefix); it
-defaults to `parallax:parallax-concierge`. The runner validates every line before any
-model call and rejects unknown keys, a list field that is not a list of strings, and a
-`skill` without the `parallax:` prefix.
+defaults to `parallax:parallax-concierge`. An optional `require_helpers` lists policy
+helpers (`adaptation.py`, `coverage_check.py`, `reconcile.py`) that must each run as the
+documented command, not denied, exiting cleanly, on a `.parallax-policy/` draft the Write
+tool created earlier in the run (conventions §14.4). The runner validates every line before any
+model call and rejects unknown keys, a list field that is not a list of strings, a
+`skill` without the `parallax:` prefix, and a `require_helpers` entry outside that set.
 
 Each run is captured as `--output-format stream-json --verbose` and fails closed. A
 journey FAILs when:
@@ -383,3 +386,4 @@ What each journey checks:
 | `J6_uncovered_ticker` | An unknown ticker is reported as not covered or not resolved, not replaced by an invented symbol. Bills Parallax credits: the should-i-buy route resolves with `get_company_info` (1 credit per attempt). |
 | `J7_direct_task_bypass` | "I'm new here. Should I buy AAPL?" runs `parallax:parallax-should-i-buy` directly (`"skill"` field; bills Parallax credits) and shows no role label. |
 | `J8_role_asked_not_guessed` | A bare "I'm new here" (no payload) gets asked the role question with the role labels offered, not guessed, and no skill runs yet (`check_api_health` only, free). |
+| `J9_client_review_policy` | A wealth advisor's client review with an inline `policy=` runs `parallax:parallax-client-review`, writes the policy to a `.parallax-policy/` draft, runs `adaptation.py` on it as documented (`require_helpers`), and renders SAA Drift and Policy Data Quality. Bills Parallax credits. |
