@@ -119,8 +119,9 @@ def _run(command: str, skill_dir: Path, placeholders: dict[str, str]) -> subproc
     for placeholder, path in placeholders.items():
         script = script.replace(placeholder, path)
     assert "<" not in script, f"unsubstituted placeholder remains: {script!r}"
+    # reconcile.py imports scipy; a cold scipy import under full-suite load can exceed 30s.
     return subprocess.run(
-        ["bash", "-c", script], capture_output=True, text=True, timeout=30,
+        ["bash", "-c", script], capture_output=True, text=True, timeout=180,
     )
 
 
