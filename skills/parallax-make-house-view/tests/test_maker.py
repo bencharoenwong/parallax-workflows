@@ -523,3 +523,27 @@ def test_second_save_landing_during_the_gate_aborts_the_outer_run(tmp_view_dir: 
     surviving = yaml.safe_load((tmp_view_dir / "view.yaml").read_text(encoding="utf-8"))
     assert surviving["metadata"]["version_id"]
     audit_chain.verify_chain(tmp_view_dir / "audit.jsonl")
+
+
+def test_save_commits_through_view_commit(tmp_view_dir: Path, monkeypatch):
+    """The maker must not write canonical artifacts itself. Routing through
+    view_commit gives it staging, the row-vs-bytes check and fsync."""
+    import view_commit
+
+    calls: list[dict] = []
+    real = view_commit.commit_view_locked
+
+    def _spy(view_dir, **kwargs):
+        calls.append(kwargs)
+        return real(view_dir, **kwargs)
+
+    monkeypatch.setattr(view_commit, "commit_view_locked", _spy)
+    orc = MakerOrchestrator(MakerOptions(view_dir=tmp_view_dir, market_filter=["us"]))
+    result = orc.execute_synthesis(_FixtureRunner(), dispose_fn=_confirm_dispose)
+    assert result.disposition == "confirm"
+    assert len(calls) == 1
+    assert set(calls[0]["write"]) == {"view.yaml", "prose.md", "provenance.yaml"}
+    assert calls[0]["audit_entry"]["action"] == "generate"
+    assert not list(tmp_view_dir.glob("*.tmp.*"))
+    for name in ("view.yaml", "prose.md", "provenance.yaml"):
+        assert (tmp_view_dir / name).stat().st_mode & 0o777 == 0o600

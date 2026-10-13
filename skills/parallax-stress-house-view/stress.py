@@ -2,7 +2,6 @@
 Core logic for the House View Stress Test skill.
 """
 import datetime
-import hashlib
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,6 +15,7 @@ _HOUSE_VIEW_DIR = Path(__file__).resolve().parent.parent / "_parallax" / "house-
 if str(_HOUSE_VIEW_DIR) not in sys.path:
     sys.path.insert(0, str(_HOUSE_VIEW_DIR))
 import audit_chain  # noqa: E402
+import view_commit  # noqa: E402
 import mcp_meta  # noqa: E402
 
 # Data Classes
@@ -60,58 +60,11 @@ HOUSE_VIEW_DIR = Path(
 
 
 # --- Canonical view_hash (per schema.yaml §"view_hash computation") ---
-# Reference implementation lives in skills/_parallax/house-view/tests/test_view_hash.py;
-# inlined here because no public module currently exposes it and we MUST not drift
-# from the reference. Any change must coincide with a schema bump.
-def _is_empty(v):
-    # Guard required by schema.yaml §"view_hash computation" Rule 2:
-    # `False == 0` and `isinstance(False, int)` are both True in Python; without
-    # this guard a boolean tilt of False would be silently stripped from the
-    # canonical hash body — diverging from any conforming implementation.
-    if isinstance(v, bool):
-        return False
-    if v is None:
-        return True
-    if isinstance(v, (int, float)) and v == 0:
-        return True
-    return v == "" or v == [] or v == {}
-
-
-def _strip_empty(obj):
-    if isinstance(obj, dict):
-        out = {}
-        for k, v in obj.items():
-            v = _strip_empty(v)
-            if _is_empty(v):
-                continue
-            out[k] = v
-        return out
-    if isinstance(obj, list):
-        result = []
-        for x in obj:
-            y = _strip_empty(x)
-            if _is_empty(y):
-                continue
-            result.append(y)
-        return result
-    return obj
-
-
-def compute_view_hash(view_data: dict) -> str:
-    """sha256 of canonical YAML of (tilts + excludes), empties stripped recursively."""
-    body = {
-        "tilts": _strip_empty(view_data.get("tilts", {})),
-        "excludes": _strip_empty(view_data.get("excludes", []) or []),
-    }
-    canonical = yaml.safe_dump(
-        body,
-        sort_keys=True,
-        default_flow_style=False,
-        allow_unicode=True,
-        width=1_000_000,
-        indent=2,
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+# One implementation, shared with the writer (view_commit) and the maker. The
+# independent oracle in skills/_parallax/house-view/tests/test_view_hash.py
+# pins it. Exposed under this name because callers and tests use
+# stress.compute_view_hash.
+compute_view_hash = view_commit.compute_view_hash
 
 
 def _now_iso_z() -> str:

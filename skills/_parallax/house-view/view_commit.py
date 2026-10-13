@@ -7,18 +7,17 @@ exists to prevent: a rename swaps the inode out from under ``append_entry``'s
 flock, and the resulting truncated chain still verifies green because
 ``verify_chain`` raises only on MULTIPLE ``chain_root`` entries.
 
-Not repo-wide: ``parallax-make-house-view``'s ``maker.py`` still writes all
-three directly with ``write_text()``. It holds this same lock -- what it lacks
-is staging, writing each artifact in place and ``chmod``ing afterwards, so a
-crash mid-write can leave a torn ``view.yaml`` that a staged rename would not,
-and a lock-free reader can observe it. Its migration is deferred.
+``parallax-make-house-view``'s ``maker.py`` commits through
+``commit_view_locked`` too, so every canonical write goes through this module.
+
+Durability: each staged file is fsynced before its rename, the view directory
+is fsynced after the renames, and ``audit_chain.append_entry`` fsyncs the row.
 
 Known residue, deliberately not fixed here:
   * The grouped renames are per-file atomic, not atomic as a group. A crash
     mid-group leaves a new view beside stale prose; ``paired_yaml_hash``
-    detects it at load.
-  * Nothing is fsynced except each staged file before its rename --
-    ``audit.jsonl`` and the directory entry are not.
+    detects it at load, and ``--re-pair`` refuses while leftover
+    ``<artifact>.tmp.<version_id>`` files show a commit did not finish.
   * ``flock`` may silently no-op on some network filesystems.
 
 A plan may hand content over as ``{"inline": ...}`` or as ``{"path": ...}``.
@@ -40,6 +39,7 @@ import argparse
 import hashlib
 import json
 import os
+import stat
 import sys
 from contextlib import suppress
 from pathlib import Path
@@ -162,9 +162,22 @@ def compute_view_hash(view: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def _normalize_newlines(text: str) -> bytes:
+    return text.encode("utf-8").replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+
+
+def hash_prose_body(body: str) -> str:
+    """sha256 of a prose body that has no frontmatter yet.
+
+    For writers that must put the digest INTO the frontmatter they are about
+    to prepend. Equals ``compute_prose_body_hash`` of the assembled file.
+    """
+    return hashlib.sha256(_normalize_newlines(body)).hexdigest()
+
+
 def compute_prose_body_hash(prose_text: str) -> str:
     """sha256 of the prose body, per schema.yaml "prose_body_hash computation"."""
-    data = prose_text.encode("utf-8").replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    data = _normalize_newlines(prose_text)
     marker = b"---\n"
     if data.startswith(marker):
         end = data.find(marker, len(marker))
@@ -355,6 +368,29 @@ if frozenset(_STAGING_ORDER) != WRITABLE:
     )
 
 
+def _reject_stale_staging(view_dir: Path) -> None:
+    """Refuse to re-pair a directory that holds leftover staging files.
+
+    A leftover ``<artifact>.tmp.<version_id>`` means a commit died between
+    staging and its last rename, so the live artifacts may be a mix of two
+    versions. ``--re-pair`` exists to bless the artifacts as they stand; doing
+    that over a possibly mixed set would write a row attesting a view nobody
+    reviewed. Other modes replace the artifacts outright, so they are not
+    blocked by a leftover from a different version_id.
+    """
+    stale = sorted(
+        entry.name
+        for entry in view_dir.iterdir()
+        if any(entry.name.startswith(f"{artifact}.tmp.") for artifact in WRITABLE)
+    ) if view_dir.is_dir() else []
+    if stale:
+        raise CommitRejected(
+            f"leftover staging files {stale} in {view_dir}: an earlier commit did not "
+            "finish, so the live artifacts may be a mix of two versions. Inspect "
+            "view.yaml, prose.md and provenance.yaml, remove the leftovers, then re-pair."
+        )
+
+
 def _stage_and_rename(view_dir: Path, write: dict[str, str], version_id: str) -> None:
     staged: list[tuple[Path, Path]] = []
     renamed = 0
@@ -380,6 +416,9 @@ def _stage_and_rename(view_dir: Path, write: dict[str, str], version_id: str) ->
             os.rename(tmp, final)
             renamed += 1
             staged = staged[1:]
+        # The renames live in the directory entry; persist it before the row
+        # that witnesses them is appended.
+        audit_chain.fsync_dir(view_dir)
     except OSError as exc:
         for tmp, _ in staged:
             with suppress(OSError):
@@ -408,13 +447,16 @@ def commit_view_locked(
     validation has passed.
     """
     view_dir = Path(view_dir)
-    if not isinstance(token, audit_chain.TransactionToken) or token.view_dir != view_dir:
+    if not audit_chain.token_is_live(token, view_dir):
         raise CommitRejected(
-            "commit_view_locked requires a TransactionToken for this view_dir; "
-            "use commit_view() if you do not already hold the transaction"
+            "commit_view_locked requires a live TransactionToken from "
+            "view_transaction() on this view_dir; use commit_view() if you do "
+            "not already hold the transaction"
         )
     validate_write_remove_keys(write, remove)
     validate_audit_entry(audit_entry, write)
+    if audit_entry["action"] == "re-pair":
+        _reject_stale_staging(view_dir)
     _check_identity(view_dir, expected_identity)
     _validate_row_matches_bytes(write, audit_entry)
     mutated = False
@@ -566,9 +608,64 @@ def _resolve_content(
             f"write[{name!r}] path resolves to {source}, whose parent is not the "
             f"staging directory {staging_dir}; path refs are read only from there"
         )
-    if not source.is_file():
-        raise CommitRejected(f"write[{name!r}] path {source} is not a regular file")
-    return source.read_text(encoding="utf-8")
+    return _read_staged_file(staging_dir, source.name, name)
+
+
+def _read_staged_file(staging_dir: Path, filename: str, name: str) -> str:
+    """Read ``filename`` from ``staging_dir`` through file descriptors only.
+
+    The checks above are path checks, and a path can change between the check
+    and the read. So the read never goes back to a path: the staging directory
+    is opened once, the file is opened relative to that descriptor with
+    O_NOFOLLOW (a symlink swapped in after ``resolve()`` fails the open), and
+    type and link count come from ``fstat`` on the open descriptor, which is
+    the same file the bytes are read from. O_NONBLOCK keeps a FIFO from
+    hanging the open; it has no effect on reads of a regular file.
+
+    ``st_nlink > 1`` is refused because a hard link is a second name for a
+    file that lives elsewhere: ``resolve()`` cannot see through it, so a hard
+    link placed in the staging directory would otherwise pass every path
+    check and read the other file.
+    """
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    try:
+        dir_fd = os.open(
+            str(staging_dir), os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | nofollow
+        )
+    except OSError as exc:
+        raise CommitRejected(
+            f"write[{name!r}] staging directory {staging_dir} could not be opened: {exc}"
+        ) from exc
+    try:
+        try:
+            fd = os.open(
+                filename,
+                os.O_RDONLY | nofollow | getattr(os, "O_NONBLOCK", 0),
+                dir_fd=dir_fd,
+            )
+        except OSError as exc:
+            raise CommitRejected(
+                f"write[{name!r}] path {staging_dir / filename} could not be opened "
+                f"without following a link: {exc}"
+            ) from exc
+        with os.fdopen(fd, "rb") as handle:
+            st = os.fstat(handle.fileno())
+            if not stat.S_ISREG(st.st_mode):
+                raise CommitRejected(
+                    f"write[{name!r}] path {staging_dir / filename} is not a regular file"
+                )
+            if st.st_nlink > 1:
+                raise CommitRejected(
+                    f"write[{name!r}] path {staging_dir / filename} has "
+                    f"{st.st_nlink} hard links; stage a fresh file with one name"
+                )
+            data = handle.read()
+    finally:
+        os.close(dir_fd)
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise CommitRejected(f"write[{name!r}] is not valid UTF-8: {exc}") from exc
 
 
 def build_commit_args(

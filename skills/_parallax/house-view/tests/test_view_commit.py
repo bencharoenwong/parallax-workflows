@@ -684,3 +684,164 @@ def test_cli_empty_env_var_falls_back_to_default_dir_not_cwd(tmp_path, monkeypat
     assert out["action"] == "extend"
     assert not (cwd_dir / "audit.jsonl").exists()
     assert (default_dir / "audit.jsonl").exists()
+
+
+# --- live transaction tokens -------------------------------------------------
+
+
+def test_a_directly_constructed_token_is_rejected(tmp_path):
+    """Only view_transaction mints a live token. A token built by hand names
+    the right directory and the right type, and still proves no lock."""
+    _seed(tmp_path)
+    for forged in (audit_chain.TransactionToken(view_dir=tmp_path),
+                   audit_chain.TransactionToken(view_dir=tmp_path, nonce="0" * 32)):
+        with pytest.raises(view_commit.CommitRejected, match="live TransactionToken"):
+            view_commit.commit_view_locked(
+                tmp_path, token=forged, write={}, remove=frozenset(),
+                audit_entry=_row(), expected_identity={})
+
+
+def test_a_token_kept_past_its_transaction_is_rejected(tmp_path):
+    _seed(tmp_path)
+    with audit_chain.view_transaction(tmp_path) as token:
+        pass
+    with pytest.raises(view_commit.CommitRejected, match="live TransactionToken"):
+        view_commit.commit_view_locked(
+            tmp_path, token=token, write={}, remove=frozenset(),
+            audit_entry=_row(), expected_identity={})
+
+
+# --- staged reads go through descriptors -------------------------------------
+
+
+def test_a_hard_link_in_the_staging_dir_is_rejected_unread(tmp_path):
+    """resolve() cannot see through a hard link, so the path checks pass; the
+    link count on the opened descriptor is what refuses it."""
+    _seed(tmp_path)
+    before = (tmp_path / AUDIT).read_bytes()
+    staging = tmp_path.parent / "staging_hardlink"
+    staging.mkdir(exist_ok=True)
+    secret = tmp_path.parent / "hardlink_secret"
+    secret.write_text("PRIVATE KEY MATERIAL\n", encoding="utf-8")
+    link = staging / "view.yaml"
+    link.hardlink_to(secret)
+    with pytest.raises(view_commit.CommitRejected, match="hard links"):
+        view_commit.build_commit_args(
+            "save", _unbounded_plan(link), tmp_path, staging_dir=staging
+        )
+    _assert_untouched(tmp_path, before)
+
+
+def test_a_symlink_swapped_in_after_the_path_check_is_not_followed(tmp_path, monkeypatch):
+    """Simulates the race: the path check sees a regular file, then the name
+    is replaced by a symlink before the open. O_NOFOLLOW must refuse it."""
+    _seed(tmp_path)
+    staging = tmp_path.parent / "staging_swap"
+    staging.mkdir(exist_ok=True)
+    src = staging / "view.yaml"
+    src.write_text("metadata:\n  version_id: v2\n", encoding="utf-8")
+    secret = tmp_path.parent / "swap_secret"
+    secret.write_text("PRIVATE KEY MATERIAL\n", encoding="utf-8")
+    real_read = view_commit._read_staged_file
+
+    def _swap_then_read(staging_dir, filename, name):
+        src.unlink()
+        src.symlink_to(secret)
+        return real_read(staging_dir, filename, name)
+
+    monkeypatch.setattr(view_commit, "_read_staged_file", _swap_then_read)
+    with pytest.raises(view_commit.CommitRejected, match="without following a link"):
+        view_commit.build_commit_args(
+            "save", _unbounded_plan(src), tmp_path, staging_dir=staging
+        )
+
+
+def test_a_fifo_in_the_staging_dir_is_rejected_without_blocking(tmp_path):
+    import os
+    _seed(tmp_path)
+    staging = tmp_path.parent / "staging_fifo"
+    staging.mkdir(exist_ok=True)
+    fifo = staging / "view.yaml"
+    os.mkfifo(fifo)
+    result: dict = {}
+
+    def _attempt():
+        try:
+            view_commit.build_commit_args(
+                "save", _unbounded_plan(fifo), tmp_path, staging_dir=staging)
+        except view_commit.CommitRejected as exc:
+            result["exc"] = exc
+
+    worker = threading.Thread(target=_attempt, daemon=True)
+    worker.start()
+    worker.join(timeout=10)
+    assert not worker.is_alive(), "opening a FIFO blocked"
+    assert "not a regular file" in str(result.get("exc"))
+
+
+# --- re-pair refuses a directory a commit did not finish -------------------------
+
+
+def _repair_kwargs(tmp_path):
+    # _seed writes no prose.md, so its resolver returns None.
+    return dict(
+        write={}, remove=frozenset(),
+        audit_entry={"action": "re-pair", "applied": True},
+        expected_identity={
+            "view_hash": view_commit.IDENTITY_RESOLVERS["view_hash"](tmp_path),
+            "prose_body_hash": None,
+        },
+    )
+
+
+def test_re_pair_refuses_while_staging_leftovers_exist(tmp_path):
+    _seed(tmp_path)
+    (tmp_path / "prose.md.tmp.v9").write_text("half a commit", encoding="utf-8")
+    before = (tmp_path / AUDIT).read_bytes()
+    with pytest.raises(view_commit.CommitRejected, match="leftover staging files"):
+        view_commit.commit_view(tmp_path, **_repair_kwargs(tmp_path))
+    assert (tmp_path / AUDIT).read_bytes() == before
+
+
+def test_re_pair_proceeds_on_a_clean_directory(tmp_path):
+    _seed(tmp_path)
+    entry = view_commit.commit_view(tmp_path, **_repair_kwargs(tmp_path))
+    assert entry["action"] == "re-pair"
+
+
+def test_a_save_is_not_blocked_by_a_leftover_from_another_version(tmp_path):
+    _seed(tmp_path)
+    (tmp_path / "prose.md.tmp.v9").write_text("half a commit", encoding="utf-8")
+    content = "metadata:\n  version_id: v2\n"
+    view_commit.commit_view(
+        tmp_path, write={"view.yaml": content}, remove=frozenset(),
+        audit_entry=_row(view_hash=view_commit.compute_view_hash({})),
+        expected_identity={"parent_version_id": "v1"})
+    assert (tmp_path / "view.yaml").read_text() == content
+
+
+# --- durability --------------------------------------------------------------
+
+
+def test_a_commit_fsyncs_the_directory_and_the_audit_row(tmp_path, monkeypatch):
+    import os
+    _seed(tmp_path)
+    synced: list = []
+    real_fsync = os.fsync
+    monkeypatch.setattr(os, "fsync", lambda fd: (synced.append(os.fstat(fd)), real_fsync(fd)))
+    view_commit.commit_view(
+        tmp_path, write={"view.yaml": "metadata:\n  version_id: v2\n"},
+        remove=frozenset(),
+        audit_entry=_row(view_hash=view_commit.compute_view_hash({})),
+        expected_identity={"parent_version_id": "v1"})
+    inodes = {(st.st_dev, st.st_ino) for st in synced}
+    dir_st = os.stat(tmp_path)
+    audit_st = os.stat(tmp_path / AUDIT)
+    assert (dir_st.st_dev, dir_st.st_ino) in inodes, "view dir entry not fsynced"
+    assert (audit_st.st_dev, audit_st.st_ino) in inodes, "audit row not fsynced"
+
+
+def test_hash_prose_body_matches_the_hash_of_the_assembled_file():
+    body = "Line one\r\nLine two\n"
+    assembled = "---\nprose_body_hash: x\n---\n" + body
+    assert view_commit.hash_prose_body(body) == view_commit.compute_prose_body_hash(assembled)

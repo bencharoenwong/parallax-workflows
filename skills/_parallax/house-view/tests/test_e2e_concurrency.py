@@ -384,8 +384,9 @@ def test_e2e_concurrent_maker_save_and_judge_run_handled_safely(
     def _controlled_transaction(path):
         if getattr(roles, "name", None) == "judge":
             judge_lock_attempted.set()
-        with original_transaction(path):
-            yield
+        # Pass the live token through: the maker commits with it.
+        with original_transaction(path) as token:
+            yield token
 
     def _controlled_append(path, entry_data, ensure_chained=True):
         action = entry_data.get("action")

@@ -30,7 +30,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 import sys
 import time
 import uuid
@@ -55,6 +54,7 @@ import chain_emit  # noqa: E402
 import gate_present  # noqa: E402
 import mcp_meta  # noqa: E402
 import provenance_classes  # noqa: E402
+import view_commit  # noqa: E402
 import view_status  # noqa: E402
 
 import cross_country  # noqa: E402
@@ -601,13 +601,14 @@ class MakerOrchestrator:
         covered_markets: list[str],
     ) -> tuple[dict[str, Path], str, str, dict[str, Any], Path | None]:
         """Commit canonical artifacts and their audit row as one transaction."""
-        with audit_chain.view_transaction(Path(self.options.view_dir)):
+        with audit_chain.view_transaction(Path(self.options.view_dir)) as token:
             return self._save_view_locked(
-                view, pillars, aggregated, mcp_responses, covered_markets
+                token, view, pillars, aggregated, mcp_responses, covered_markets
             )
 
     def _save_view_locked(
         self,
+        token: audit_chain.TransactionToken,
         view: dict[str, Any],
         pillars: dict[str, PillarResult],
         aggregated: dict[str, Any],
@@ -647,15 +648,10 @@ class MakerOrchestrator:
                 "synthesise against the current view."
             )
 
-        view_dir.mkdir(parents=True, exist_ok=True)
-        if not view_dir.is_symlink():  # never re-mode a symlink's target
-            try:
-                os.chmod(view_dir, 0o700)
-            except OSError:
-                pass
+        # view_transaction already created view_dir and set it to 0700.
 
         # 1. view_hash per schema.yaml.
-        view_hash = _compute_view_hash(view)
+        view_hash = view_commit.compute_view_hash(view)
         view["metadata"]["view_hash"] = view_hash
 
         # 1b/1c. Provenance + provenance_hash.
@@ -678,10 +674,9 @@ class MakerOrchestrator:
                 "psychological_wavelength": pillars["psi"].missing_inputs,
             },
         )
-        prose_body_hash = hashlib.sha256(prose_body.encode("utf-8")).hexdigest()
+        prose_body_hash = view_commit.hash_prose_body(prose_body)
 
-        # 9. Write files (synchronous, simplified vs load-house-view's
-        # multi-stage async/atomic flow — same end state, single write step).
+        # 9. Serialize the artifacts. view_commit stages and renames them.
         version_id = view["metadata"]["version_id"]
 
         view_path = view_dir / "view.yaml"
@@ -693,12 +688,6 @@ class MakerOrchestrator:
         view_yaml = yaml.safe_dump(
             view, sort_keys=True, default_flow_style=False, allow_unicode=True
         )
-        view_path.write_text(view_yaml, encoding="utf-8")
-        try:
-            os.chmod(view_path, 0o600)
-        except OSError:
-            pass
-
         prose_frontmatter = (
             "---\n"
             f"paired_yaml_hash: {view_hash}\n"
@@ -707,23 +696,12 @@ class MakerOrchestrator:
             f"version_id: {version_id}\n"
             "---\n"
         )
-        prose_path.write_text(prose_frontmatter + prose_body, encoding="utf-8")
-        try:
-            os.chmod(prose_path, 0o600)
-        except OSError:
-            pass
-
         provenance_yaml = yaml.safe_dump(
             provenance_data,
             sort_keys=True,
             default_flow_style=False,
             allow_unicode=True,
         )
-        provenance_path.write_text(provenance_yaml, encoding="utf-8")
-        try:
-            os.chmod(provenance_path, 0o600)
-        except OSError:
-            pass
 
         # 11. Append audit entry (loader.md §6.1/§6.2 — generate row).
         source_tools = _build_source_tools_list(mcp_responses, covered_markets)
@@ -757,13 +735,21 @@ class MakerOrchestrator:
                     "loader.md §6.2 generate-row constraint"
                 )
 
-        final_audit_entry = audit_chain.append_entry(
-            audit_path, audit_entry_payload, ensure_chained=True
+        # 10. Stage, rename and witness in one step. view_commit re-checks the
+        # parent identity, checks the row against the bytes, and appends the
+        # row (append_entry keeps audit.jsonl at 0600).
+        final_audit_entry = view_commit.commit_view_locked(
+            view_dir,
+            token=token,
+            write={
+                "view.yaml": view_yaml,
+                "prose.md": prose_frontmatter + prose_body,
+                "provenance.yaml": provenance_yaml,
+            },
+            remove=frozenset(),
+            audit_entry=audit_entry_payload,
+            expected_identity=captured,
         )
-        try:
-            os.chmod(audit_path, 0o600)
-        except OSError:
-            pass
 
         # 11a. Emit reasoning chain (Phase-0 / no manifest, see chain_emit).
         chain_path: Path | None = None
@@ -949,53 +935,6 @@ class MakerOrchestrator:
 # ---------------------------------------------------------------------------
 # Hash / canonicalization helpers
 # ---------------------------------------------------------------------------
-
-
-def _is_empty(v: Any) -> bool:
-    if isinstance(v, bool):
-        return False
-    if v is None:
-        return True
-    if isinstance(v, (int, float)) and v == 0:
-        return True
-    return v == "" or v == [] or v == {}
-
-
-def _strip_empty(obj: Any) -> Any:
-    if isinstance(obj, dict):
-        out: dict[str, Any] = {}
-        for k, v in obj.items():
-            v = _strip_empty(v)
-            if _is_empty(v):
-                continue
-            out[k] = v
-        return out
-    if isinstance(obj, list):
-        result = []
-        for x in obj:
-            y = _strip_empty(x)
-            if _is_empty(y):
-                continue
-            result.append(y)
-        return result
-    return obj
-
-
-def _compute_view_hash(view: dict[str, Any]) -> str:
-    """Per schema.yaml §view_hash computation — Rule 1..4 pinned alg."""
-    body = {
-        "tilts": _strip_empty(view.get("tilts", {})),
-        "excludes": _strip_empty(view.get("excludes", []) or []),
-    }
-    canonical = yaml.safe_dump(
-        body,
-        sort_keys=True,
-        default_flow_style=False,
-        allow_unicode=True,
-        width=1_000_000,
-        indent=2,
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _jcs_dumps(data: Any) -> bytes:
