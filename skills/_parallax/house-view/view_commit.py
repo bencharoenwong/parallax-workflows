@@ -44,6 +44,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import stat
 import sys
 from contextlib import suppress
@@ -93,6 +94,35 @@ class _ViewLoader(yaml.SafeLoader):
                     None, None, "YAML merge keys (<<) are not accepted", key_node.start_mark
                 )
         return super().flatten_mapping(node)
+
+
+# YAML 1.1 reads a plain scalar like 1:0:0:...:0 as a base-60 int or float,
+# and PyYAML builds that value in quadratic time inside the parse, while the
+# view lock is held. No writer here emits base-60 numbers, so the int and float
+# resolvers are re-registered without their base-60 alternatives; such a
+# scalar now loads as a plain string.
+_INT = "tag:yaml.org,2002:int"
+_FLOAT = "tag:yaml.org,2002:float"
+_ViewLoader.yaml_implicit_resolvers = {
+    first: [(tag, rx) for tag, rx in resolvers if tag not in (_INT, _FLOAT)]
+    for first, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+_ViewLoader.add_implicit_resolver(
+    _INT,
+    re.compile(r"""^(?:[-+]?0b[0-1_]+
+                    |[-+]?0[0-7_]+
+                    |[-+]?(?:0|[1-9][0-9_]*)
+                    |[-+]?0x[0-9a-fA-F_]+)$""", re.X),
+    list("-+0123456789"),
+)
+_ViewLoader.add_implicit_resolver(
+    _FLOAT,
+    re.compile(r"""^(?:[-+]?(?:[0-9][0-9_]*)\.[0-9_]*(?:[eE][-+][0-9]+)?
+                    |\.[0-9][0-9_]*(?:[eE][-+][0-9]+)?
+                    |[-+]?\.(?:inf|Inf|INF)
+                    |\.(?:nan|NaN|NAN))$""", re.X),
+    list("-+0123456789."),
+)
 
 
 def _load_yaml(text: str) -> Any:
@@ -688,9 +718,14 @@ def commit_view_locked(
         _check_clear_identity(view_dir, expected_identity)
     else:
         _check_identity(view_dir, expected_identity)
-    if audit_entry["action"] == "re-pair":
-        _validate_re_pair_against_disk(view_dir, audit_entry)
-    _validate_row_matches_bytes(write, audit_entry)
+    try:
+        if audit_entry["action"] == "re-pair":
+            _validate_re_pair_against_disk(view_dir, audit_entry)
+        _validate_row_matches_bytes(write, audit_entry)
+    except (ValueError, RecursionError, UnicodeError) as exc:
+        # Hashing hostile content can still fail after parsing: an int too long
+        # to turn into a string, a lone surrogate. Nothing has been written yet.
+        raise CommitRejected(f"artifact content cannot be hashed: {exc!r}") from exc
     mutated = False
     if write:
         _stage_and_rename(view_dir, write, str(audit_entry["version_id"]))
@@ -980,7 +1015,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         try:
             plan = json.loads(sys.stdin.read())
-        except json.JSONDecodeError as exc:
+        except (json.JSONDecodeError, RecursionError) as exc:
             raise CommitRejected(f"the plan on stdin is not valid JSON: {exc}") from exc
         kwargs = build_commit_args(args.mode, plan, view_dir, staging_dir=args.staging_dir)
         entry = commit_view(view_dir, **kwargs)

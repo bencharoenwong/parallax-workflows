@@ -1442,3 +1442,49 @@ def test_the_refusal_names_the_key_even_for_a_literal_null_string(tmp_path):
             remove=frozenset(), audit_entry=_row(view_hash=view_commit.compute_view_hash({})),
             expected_identity={"parent_version_id": None})
     assert "parent_version_id: null -> 'null'" in str(info.value)
+
+
+# --- final pass: base-60 scalars, unhashable content, deep stdin JSON -----------
+
+
+def test_a_long_base_60_scalar_parses_fast_as_a_string():
+    import time
+    big = "a: " + ":".join(["1"] + ["0"] * 120000)
+    start = time.monotonic()
+    loaded = view_commit._load_yaml(big)
+    assert time.monotonic() - start < 2
+    assert isinstance(loaded["a"], str)
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("a: 12", 12), ("a: 0x1F", 31), ("a: 1.5", 1.5), ("a: 017", 15), ("a: 1_000", 1000),
+])
+def test_ordinary_numbers_still_parse_like_safe_load(text, expected):
+    assert view_commit._load_yaml(text)["a"] == expected
+
+
+def test_an_unhashable_huge_int_in_written_content_is_a_clean_rejection(tmp_path):
+    _seed(tmp_path)
+    content = "metadata:\n  version_id: v2\n  view_id: vw\ntilts:\n  x: 0x" + "f" * 5000 + "\n"
+    with pytest.raises(view_commit.CommitRejected):
+        view_commit.commit_view(
+            tmp_path, write={"view.yaml": content}, remove=frozenset(),
+            audit_entry=_row(view_hash="0" * 64),
+            expected_identity={"parent_version_id": "v1"})
+    assert not list(tmp_path.glob("*.tmp.*"))
+
+
+def test_a_lone_surrogate_in_re_pair_prose_is_a_clean_rejection(tmp_path):
+    _seed(tmp_path)
+    kwargs = _repair_kwargs(tmp_path)
+    kwargs["write"] = {"prose.md": "---\nprose_body_hash: x\n---\nbody \ud800\n"}
+    with pytest.raises(view_commit.CommitRejected):
+        view_commit.commit_view(tmp_path, **kwargs)
+
+
+def test_cli_deeply_nested_stdin_json_exits_2(tmp_path):
+    _seed(tmp_path)
+    proc = subprocess.run(
+        [sys.executable, "-m", "view_commit", "--mode", "save", "--dir", str(tmp_path)],
+        input="[" * 100000 + "]" * 100000, capture_output=True, text=True, cwd=str(HOUSE_VIEW_DIR))
+    assert proc.returncode == 2, proc.stderr[-300:]
