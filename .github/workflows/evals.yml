@@ -148,6 +148,13 @@ jobs:
       - name: White-label extraction and validation gates
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/_parallax/white-label/tests -q -m "not npx"
+      # The generated plugin/ bundle is outside skills/ and evals/, so it is
+      # not one of the auto-discovered roots above -- run-gate-tests.sh forces
+      # this one path in as an extra root for the same reason (see its
+      # comment), and test_ci_root_parity.py holds this step to that root.
+      - name: Bundled white-label plugin-copy gates
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: python -m pytest plugin/skills/_parallax/white-label/tests -q -m "not npx"
       - name: Make-house-view gates
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/parallax-make-house-view/tests -q

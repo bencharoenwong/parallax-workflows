@@ -148,7 +148,7 @@ def _ci_pytest_paths(workflow_text: str | None = None) -> list[Path]:
                             "_ci_pytest_paths to subtract them before using "
                             "this option here.")
                     for arg in _positional_args(argv):
-                        if arg.startswith(("skills/", "evals/")):
+                        if arg.startswith(("skills/", "evals/", "plugin/")):
                             paths.append(REPO_ROOT / arg.rstrip("/"))
     return paths
 
@@ -179,6 +179,22 @@ def test_ci_collects_every_test_file_the_local_gate_runs(ci_paths):
         f"{len(uncovered)} test file(s) run by run-gate-tests.sh are never "
         "collected by .github/workflows/evals.yml -- add a step there:\n"
         + "\n".join(str(f.relative_to(REPO_ROOT)) for f in uncovered[:10]))
+
+
+def test_the_local_gate_runs_every_path_ci_collects(ci_paths):
+    """The other direction. A root dropped from run-gate-tests.sh (its
+    discovery or a forced root) would still pass the check above, because
+    that check only asks whether CI covers what the local gate runs. Every
+    CI pytest path must overlap a root the local gate runs."""
+    roots = _discovered_roots()
+    unrun = [
+        p for p in ci_paths
+        if not any(p == r or p.is_relative_to(r) or r.is_relative_to(p) for r in roots)
+    ]
+    assert unrun == [], (
+        "evals.yml collects path(s) that run-gate-tests.sh never runs -- the "
+        "local gate would pass while CI fails:\n"
+        + "\n".join(str(p.relative_to(REPO_ROOT)) for p in unrun))
 
 
 def test_ci_pytest_paths_all_exist(ci_paths):

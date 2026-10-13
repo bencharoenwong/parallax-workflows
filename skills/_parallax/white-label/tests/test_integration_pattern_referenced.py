@@ -165,6 +165,19 @@ _manifest_spec.loader.exec_module(_skill_manifest)
 _NINE_TWO_EXEMPT_SKILLS: frozenset[str] = _skill_manifest.nine_two_exempt()
 
 
+def _expected_skills_in_tree() -> frozenset[str]:
+    """Skills the manifest expects to have a SKILL.md under `_SKILLS_ROOT`.
+
+    The plugin bundle (`plugin/skills`) ships only the manifest's plugin
+    skills but keeps the full manifest.json; the source tree holds every
+    manifest skill. The tree is identified by its location, never by the
+    skill dirs it holds, because those dirs are what this check validates.
+    """
+    if _SKILLS_ROOT.parent.name == "plugin":
+        return frozenset(_skill_manifest.plugin_skills())
+    return frozenset(_skill_manifest.skills())
+
+
 @pytest.mark.parametrize(
     "skill_md", _collect_wired_skills(), ids=lambda p: p.parent.name
 )
@@ -222,15 +235,19 @@ def test_nine_two_reference_pattern(text: str, expected: bool) -> None:
 
 
 def test_exempt_entries_match_existing_skill_dirs() -> None:
-    """Every exemption entry must name a real skill directory.
+    """Every exemption entry expected in this tree must name a real skill dir.
 
     Guards against the dead-entry failure mode: an entry that doesn't match
     any `skill_md.parent.name` silently never fires, and the skill it was
     meant to exempt fails (or worse, a rename strands the exemption while
     the test appears green because the skill also lost its sentinel).
+
+    Only entries the manifest expects in this tree are checked, so a filtered
+    distribution is not failed for exempt skills it does not ship.
     """
     existing = {p.parent.name for p in _SKILLS_ROOT.glob("*/SKILL.md")}
-    dead = _NINE_TWO_EXEMPT_SKILLS - existing
+    expected = _NINE_TWO_EXEMPT_SKILLS & _expected_skills_in_tree()
+    dead = expected - existing
     assert not dead, (
         f"_NINE_TWO_EXEMPT_SKILLS entries with no matching skill directory: "
         f"{sorted(dead)}. Entries must be full directory names (parallax-*). "
