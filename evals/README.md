@@ -288,7 +288,16 @@ journey FAILs when:
   conventions §14.4) was written and no documented `adaptation.py` / `coverage_check.py`
   / `reconcile.py` run that names that same literal path was issued (not denied) after
   the last successful write to it — a consumption check, not a gating check, since
-  none of these three helpers deletes its input;
+  none of these three helpers deletes its input. A helper argument may be a quoted
+  path or a bare token without shell metacharacters, absolute or relative to the
+  run's working directory (from the init message);
+- a journey's `require_helpers` helper did not run as above, exiting cleanly, on a
+  draft the Write tool created earlier in the run;
+- a Bash command that was not denied runs a file the model wrote in this run
+  (`python3 <file>`, `bash <file>`, `sh <file>`, `./<file>`): only the documented
+  helpers read drafts and only `render_gate.py` gates a report (conventions §14.4);
+- anything other than a policy draft or its `.gitignore` is written into
+  `.parallax-policy/`;
 - a Write, Edit, MultiEdit or NotebookEdit call targets `audit.jsonl`;
 - `claude` exits non-zero or hits the timeout;
 - no Skill call of the journey's required skill succeeds, no skill in the `parallax:`

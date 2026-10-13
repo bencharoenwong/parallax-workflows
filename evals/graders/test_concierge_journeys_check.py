@@ -860,3 +860,80 @@ def test_a_draft_written_after_the_run_does_not_satisfy_the_requirement():
 def test_require_helpers_is_validated(value, ok):
     journey = {"id": "J", "prompt": "p", "require_helpers": value}
     assert (validate_journey(journey) == []) is ok
+
+
+# --- relative and bare helper arguments; no model-written code ------------------
+
+_SCRATCH = "/s"
+
+
+def _with_cwd(stream, cwd=_SCRATCH):
+    lines = stream.rstrip("\n").split("\n")
+    init = json.loads(lines[0])
+    init["cwd"] = cwd
+    lines[0] = json.dumps(init)
+    return "\n".join(lines) + "\n"
+
+
+_ADAPT_RELATIVE = ("python3 /p/skills/parallax-client-review/../_parallax/client-policy/adaptation.py "
+                   "--policy .parallax-policy/policy-0a1b2c3d.json --json")
+
+
+def test_a_bare_relative_helper_command_is_documented_and_consumes_the_draft():
+    assert documented_helper(_ADAPT_RELATIVE) == "adaptation.py"
+    stream = _with_cwd(_with_write(_bash_stream([("b1", _ADAPT_RELATIVE, False)], set()),
+                                   path="/s/.parallax-policy/policy-0a1b2c3d.json"))
+    passed, reasons, _, _ = check_run(stream, {**J, "require_helpers": ["adaptation.py"]}, 0, False)
+    assert passed is True, reasons
+
+
+def test_without_the_run_cwd_a_relative_argument_does_not_match_the_draft():
+    stream = _with_write(_bash_stream([("b1", _ADAPT_RELATIVE, False)], set()),
+                         path="/s/.parallax-policy/policy-0a1b2c3d.json")
+    passed, reasons, _, _ = check_run(stream, J, 0, False)
+    assert passed is False
+    assert any("policy draft never consumed" in r for r in reasons)
+
+
+@pytest.mark.parametrize("cmd", [
+    "python3 /p/x/evil.py --policy .parallax-policy/policy-0a1b2c3d.json --json",
+    'python3 "/p/client-policy/adaptation.py" --policy $POLICY --json',
+    "python3 /p/client-policy/adaptation.py --policy .parallax-policy/p-0a1b2c3d.json;touch x --json",
+    "python3 /p/client-policy/adaptation.py --policy `x` --json",
+])
+def test_lookalike_or_expanding_commands_are_not_documented(cmd):
+    assert documented_helper(cmd) is None
+
+
+def test_running_a_script_the_model_wrote_fails():
+    stream = _with_cwd(_with_write(
+        _bash_stream([("b1", "python3 .parallax-policy/gate-0a1b2c3d.json", False)], set()),
+        path="/s/.parallax-policy/gate-0a1b2c3d.json"))
+    passed, reasons, _, _ = check_run(stream, J, 0, False)
+    assert passed is False
+    assert any("ran a script the model wrote" in r for r in reasons)
+
+
+@pytest.mark.parametrize("cmd", ["python3 /s/tools/gate.py", "bash /s/tools/gate.py", "./tools/gate.py"])
+def test_every_way_of_running_a_written_script_is_caught(cmd):
+    stream = _with_cwd(_with_write(_bash_stream([("b1", cmd, False)], set()), path="/s/tools/gate.py"))
+    passed, reasons, _, _ = check_run(stream, J, 0, False)
+    assert passed is False
+    assert any("ran a script the model wrote" in r for r in reasons), reasons
+
+
+def test_a_denied_run_of_a_written_script_is_not_counted_as_run():
+    stream = _with_cwd(_with_write(_bash_stream([("b1", "python3 /s/tools/gate.py", False)], {"b1"}),
+                                   path="/s/tools/gate.py"))
+    _, reasons, _, _ = check_run(stream, J, 0, False)
+    assert not any("ran a script the model wrote" in r for r in reasons)
+
+
+@pytest.mark.parametrize("path", [
+    "/s/.parallax-policy/gate.py", "/s/.parallax-policy/draft-0a1b2c3d.md", "/s/.parallax-policy/notes.txt",
+])
+def test_a_non_draft_file_in_parallax_policy_fails(path):
+    stream = _with_cwd(_with_write(_bash_stream([], set()), path=path))
+    passed, reasons, _, _ = check_run(stream, J, 0, False)
+    assert passed is False
+    assert any("non-draft file written into .parallax-policy" in r for r in reasons)

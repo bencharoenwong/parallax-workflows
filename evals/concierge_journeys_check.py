@@ -58,30 +58,52 @@ _AUDIT_LOG = re.compile(r"audit\.jsonl(?![\w.])")
 # tried with ``fullmatch`` (one line, canonical flag order per conventions
 # §14.1/§14.4 — a doc that reorders flags would make the real command fall
 # into the "improvised" bucket below).
+def _arg(name: str) -> str:
+    """One path argument: double-quoted, or a bare token with no whitespace,
+    quote or shell metacharacter (so a bare token cannot expand or chain).
+    A bare cwd-relative path such as ``.parallax-policy/policy-<hex>.json`` is
+    as literal as a quoted absolute one (conventions §14.4)."""
+    return (rf'(?:"(?P<{name}>[^"\n]+)"'
+            rf"|(?P<{name}__bare>[^\s\"'$`;&|<>(){{}}*?!~\\]+))")
+
+
 _HELPER_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("render_gate.py", re.compile(
-        r'python3 "[^"\n]+/render_gate\.py" --skill (?P<key>[a-z0-9-]+) '
-        r'--input "(?P<input>[^"\n]+)"'
+        r"python3 " + _arg("script_rg") + r" --skill (?P<key>[a-z0-9-]+) "
+        r"--input " + _arg("input")
     )),
     ("audit_append.py", re.compile(
-        r'python3 "[^"\n]+/house-view/audit_append\.py" --input "(?P<input>[^"\n]+)"'
+        r"python3 " + _arg("script_aa") + r" --input " + _arg("input")
     )),
     ("adaptation.py", re.compile(
-        r'python3 "[^"\n]+/client-policy/adaptation\.py" --policy "(?P<policy>[^"\n]+)"'
-        r'(?: --exposures "(?P<exposures>[^"\n]+)")?'
-        r'(?: --view-tilts "(?P<view_tilts>[^"\n]+)")?'
-        r' --json'
+        r"python3 " + _arg("script_ad") + r" --policy " + _arg("policy")
+        + r"(?: --exposures " + _arg("exposures") + r")?"
+        + r"(?: --view-tilts " + _arg("view_tilts") + r")?"
+        + r" --json"
     )),
     ("coverage_check.py", re.compile(
-        r'python3 "[^"\n]+/coverage_check\.py" '
-        r'--portfolio-sectors "(?P<portfolio_sectors>[^"\n]+)" '
-        r'--redundancy-sectors "(?P<redundancy_sectors>[^"\n]+)"'
-        r'(?: --holdings "(?P<holdings>[^"\n]+)")?'
+        r"python3 " + _arg("script_cc") + r" --portfolio-sectors " + _arg("portfolio_sectors")
+        + r" --redundancy-sectors " + _arg("redundancy_sectors")
+        + r"(?: --holdings " + _arg("holdings") + r")?"
     )),
     ("reconcile.py", re.compile(
-        r'python3 "[^"\n]+/client-policy/reconcile\.py" --input "(?P<input>[^"\n]+)"'
+        r"python3 " + _arg("script_rc") + r" --input " + _arg("input")
     )),
 ]
+# The helper script each pattern's first argument must name.
+_HELPER_SCRIPT_SUFFIX = {
+    "render_gate.py": "/render_gate.py",
+    "audit_append.py": "/house-view/audit_append.py",
+    "adaptation.py": "/client-policy/adaptation.py",
+    "coverage_check.py": "/coverage_check.py",
+    "reconcile.py": "/client-policy/reconcile.py",
+}
+# An interpreter or shell given a script path: ``python3 x.py``, ``bash x.sh``,
+# ``sh x``, ``./x``. Flags (``-c``, ``-m``) are not paths and are skipped.
+_SCRIPT_RUN = re.compile(
+    r"""(?:\bpython3?|\bbash|\bsh)\s+(["']?[^\s"';&|<>-][^\s"';&|<>]*["']?)"""
+    r"""|(?:^|[\s;&|])(\./[^\s"';&|<>]+)"""
+)
 # A report draft (conventions §10.3); its key is the gated skill's key.
 _REPORT_DRAFT = re.compile(r"/\.parallax-render/(?P<key>[a-z0-9-]+)-[0-9a-f]{8}\.md$")
 # A policy/coverage payload draft (conventions §14.4); its label names which
@@ -91,10 +113,15 @@ _REPORT_DRAFT = re.compile(r"/\.parallax-render/(?P<key>[a-z0-9-]+)-[0-9a-f]{8}\
 _POLICY_DRAFT = re.compile(r"/\.parallax-policy/(?P<label>[a-z0-9-]+)-[0-9a-f]{8}\.(?:json|yaml)$")
 
 
-def _norm_path(path: str) -> str:
-    """One spelling per file: collapse ``//`` and ``..``, and drop macOS's
-    ``/private`` prefix (``/private/var`` and ``/var`` are the same dir)."""
-    norm = posixpath.normpath(path.strip())
+def _norm_path(path: str, cwd: str | None = None) -> str:
+    """One spelling per file: resolve a relative path against ``cwd`` (the
+    run's working directory, from the init message), collapse ``//`` and
+    ``..``, and drop macOS's ``/private`` prefix (``/private/var`` and
+    ``/var`` are the same dir)."""
+    path = path.strip()
+    if cwd and not path.startswith("/"):
+        path = posixpath.join(cwd, path)
+    norm = posixpath.normpath(path)
     for root in ("/private/var/", "/private/tmp/"):
         if norm.startswith(root):
             norm = norm[len("/private"):]
@@ -109,8 +136,18 @@ def _match_documented_helper(command: str) -> dict[str, str] | None:
     stripped = command.strip()
     for helper, pattern in _HELPER_PATTERNS:
         m = pattern.fullmatch(stripped)
-        if m:
-            return {"helper": helper, **m.groupdict()}
+        if not m:
+            continue
+        groups: dict[str, str | None] = {}
+        for name, value in m.groupdict().items():
+            base = name[: -len("__bare")] if name.endswith("__bare") else name
+            if value is not None or base not in groups:
+                groups[base] = value
+        script = next((v for k, v in groups.items() if k.startswith("script_") and v), "")
+        if not script.endswith(_HELPER_SCRIPT_SUFFIX[helper]):
+            continue
+        return {"helper": helper,
+                **{k: v for k, v in groups.items() if not k.startswith("script_")}}
     return None
 
 
@@ -391,6 +428,10 @@ def check_run(
         # documented gate run on that same draft, with the draft's own key,
         # after the last successful write to it. A skill that stops before
         # drafting (an unresolvable ticker) needs no gate.
+        # The run's working directory, so a cwd-relative helper argument such as
+        # .parallax-policy/policy-<hex>.json names the same file the Write tool
+        # wrote under its absolute path.
+        cwd = (parsed["init"] or {}).get("cwd")
         gate_runs = []
         policy_runs = []
         for c in parsed["bash_calls"]:
@@ -398,14 +439,31 @@ def check_run(
             if not m:
                 continue
             if m["helper"] == "render_gate.py":
-                gate_runs.append({**c, "key": m["key"], "input": _norm_path(m["input"])})
+                gate_runs.append({**c, "key": m["key"], "input": _norm_path(m["input"], cwd)})
             elif m["helper"] in ("adaptation.py", "coverage_check.py", "reconcile.py"):
-                inputs = {_norm_path(v) for k, v in m.items() if k != "helper" and v}
+                inputs = {_norm_path(v, cwd) for k, v in m.items() if k != "helper" and v}
                 policy_runs.append({**c, "inputs": inputs, "helper": m["helper"]})
         last_write: dict[str, dict] = {}
         for w in parsed["file_writes"]:
             if w["ok"]:  # a failed write left nothing to gate/consume
-                last_write[_norm_path(w["path"])] = w
+                last_write[_norm_path(w["path"], cwd)] = w
+        # A skill never writes code and runs it (conventions §14.4): a run of a
+        # file the model wrote is an improvised helper, whatever it is named,
+        # and a gate.py that "checks" a report stands in for the real gate.
+        written = set(last_write)
+        for c in parsed["bash_calls"]:
+            if c["id"] in denied_ids:
+                continue
+            for groups in _SCRIPT_RUN.findall(c["command"]):
+                for tok in filter(None, groups):
+                    script = tok.strip("\"'")
+                    if _norm_path(script, cwd) in written:
+                        reasons.append(f"ran a script the model wrote: {script}")
+        # .parallax-policy/ holds payload drafts and its .gitignore only.
+        for path in written:
+            if "/.parallax-policy/" in path and not _POLICY_DRAFT.search(path) \
+                    and not path.endswith("/.parallax-policy/.gitignore"):
+                reasons.append(f"non-draft file written into .parallax-policy: {path}")
         for path, w in last_write.items():
             draft = _REPORT_DRAFT.search(path)
             if draft:
