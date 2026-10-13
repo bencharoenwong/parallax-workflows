@@ -87,8 +87,7 @@ roots=$(
 # The generated `plugin/` bundle lives outside skills/ and evals/, so the
 # auto-discovery above never reaches it -- a drift gate test on a file inside
 # the bundled white-label tests copy can pass in source and still fail once
-# redaction/copy transforms run (manifest.json ships unfiltered, but a
-# different file might not). Forced in as one extra root, the same way `evals`
+# the bundle's distribution transforms run. Forced in as one extra root, the same way `evals`
 # is conditional above, rather than widening the find pipeline to `plugin/`
 # wholesale: that would duplicate every other shipped skill's own test suite
 # (already covered via its skills/ source) and risks conftest collisions
