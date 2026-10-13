@@ -181,4 +181,3 @@ For high-stakes restructures (skills that affect compliance, money, or client-fa
 - Council session: `notes/2026-05-06-1023-council-white-label-restructure.md`
 - Reviewer A & B independent flag: "JIT-load is a directive to a model, not a guarantee"
 - Companion file: `skill-structure-conventions.md`
-- DECISIONS.md entry: 2026-05-06 (later) — white-label-onboard restructure, Phase 2 conditional

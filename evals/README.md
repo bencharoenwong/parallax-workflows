@@ -72,7 +72,7 @@ within normal variance for a single run. Median over 3+ runs filters most of it.
 `evals/results/` is gitignored. If you want to commit a notable finding (a
 significant regression, a confirmed improvement), copy the relevant `.time`
 file under `notes/archive/` (also gitignored — local-only) with a short
-description, or paste the key numbers into a `DECISIONS.md` entry if it
+description, or paste the key numbers into the PR description if it
 informs a strategic call.
 
 Don't commit raw results to the public repo — they leak server-load info and

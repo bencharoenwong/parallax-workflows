@@ -8,10 +8,10 @@ updates:
     labels:
       - "dependencies"
       - "house-view"
-    # Pinned exact versions are intentional for long-horizon replay determinism
-    # (see CONTRIBUTING.md and DECISIONS.md). Dependabot raises PRs; merge
-    # requires fixture regeneration if rfc8785 or pynacl changes — see the
-    # pin-bump procedure in DECISIONS.md before merging any PR here.
+    # Pinned exact versions are intentional for long-horizon replay determinism.
+    # Dependabot raises PRs. Before merging a bump to rfc8785 or pynacl,
+    # follow the bump procedure in skills/_parallax/house-view/requirements.txt
+    # (regenerate fixtures, test against both versions, document the cutover).
     commit-message:
       prefix: "deps"
       include: "scope"

@@ -11,4 +11,4 @@ python3 skills/_parallax/house-view/tests/golden/generate_golden.py
 ```
 
 ## Regeneration Policy
-This is treated as IMMUTABLE. Only regenerate this baseline when an INTENTIONAL change to ingest output shape or hashing logic is being landed. Any regeneration MUST be accompanied by a DECISIONS.md entry referencing the change in the audit chain or view formats.
+This is treated as IMMUTABLE. Only regenerate this baseline when an INTENTIONAL change to ingest output shape or hashing logic is being landed. Any regeneration MUST state its rationale in the PR description, referencing the change in the audit chain or view formats.

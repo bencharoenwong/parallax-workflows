@@ -60,7 +60,7 @@ Iterate `classified_files`, dispatching `.pptx`/`.docx`/`.pdf` to their extracto
 
 ## Background frameworks (cited inline so an LLM reading this skill has the grounding)
 
-The voice extraction in Step 2b follows three named patterns documented in `DECISIONS.md` 2026-05-06:
+The voice extraction in Step 2b follows three named patterns:
 
 - **Lago voice template** (`getlago/inside-lago-voice-skill`): 7 sections — Voice / Core Rules / Anti-Filler / Audience Adaptation / Channel Notes / Drafted-vs-Sent / Company Context. Calibration is via *Drafted vs Sent* example pairs.
 - **Rezvani brand audit** (`alirezarezvani/claude-skills/marketing-skill/brand-guidelines`): 7-dimension audit (colors, fonts, logo, body text, imagery, tone, prohibited uses) and Tone Matrix (voice × context).

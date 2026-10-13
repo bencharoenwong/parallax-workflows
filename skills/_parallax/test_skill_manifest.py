@@ -1,8 +1,8 @@
 """Gates for `_parallax/manifest.json` and its reader.
 
 Two jobs. First, prove the manifest still agrees with every consumer that has a
-literal left (only `render_gate.py`, deliberately — see the reader docstring and
-DECISIONS.md 2026-09-07). Second, stop the manifest rotting the way the literals
+literal left (only `render_gate.py`, deliberately — see the reader docstring).
+Second, stop the manifest rotting the way the literals
 it replaced did: its key set is reconciled against the filesystem in BOTH
 directions, so a new skill directory fails here until it has a row.
 """

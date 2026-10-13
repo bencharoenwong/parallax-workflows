@@ -19,8 +19,7 @@ smoke, run via a Claude Code session:
     /parallax-make-house-view --markets us
 
 then inspect ~/.parallax/active-house-view/ for the produced artifacts.
-The maker's B1 smoke run already validated this path against live MCP
-(see DECISIONS.md 2026-05-24).
+The maker's B1 smoke run already validated this path against live MCP.
 """
 
 from __future__ import annotations

@@ -278,8 +278,8 @@ def _assert_cap_satisfied(
     # No re-validation of neutral_w here, deliberately. _apply_exposure_cap's
     # precondition runs first and guarantees every key of `weights` has a
     # present, finite, non-negative neutral weight, so repeating those three
-    # checks would be a SECOND SOURCE OF TRUTH for the same rule -- the failure
-    # this module's decision log records as the one that keeps recurring. It
+    # checks would be a SECOND SOURCE OF TRUTH for the same rule -- a failure
+    # that has recurred in this module. It
     # also MASKED the precondition under mutation: with the checks duplicated,
     # deleting the precondition entirely still raised on three of the four bad
     # inputs, so the precondition was only partly pinned. One owner, one test.

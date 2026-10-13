@@ -12,7 +12,7 @@ Two things ARE derived, and `--check` asserts exactly those two:
 
   * every `skills/*/SKILL.md` directory has a row (and no row names a dead dir);
   * `anchors` matches `render_gate.py`'s `SKILL_ANCHORS`, which deliberately
-    keeps its literal (see `skill_manifest.py` and DECISIONS.md 2026-09-07).
+    keeps its literal (see `skill_manifest.py`).
     Anchors are regexes whose backslashes double under JSON escaping — that is
     why they are copied by this script and never typed by hand.
 
