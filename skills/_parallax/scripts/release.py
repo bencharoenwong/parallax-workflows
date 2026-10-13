@@ -305,7 +305,10 @@ def validate_index(index: dict) -> set[str]:
 def verify_release(directory: Path) -> dict:
     """Check every listed asset and reject extra or missing files."""
     require_full_scan()
-    index = json.loads((directory / "index.json").read_text())
+    index_path = directory / "index.json"
+    if index_path.is_symlink():
+        raise bb.BuildError("index.json must not be a symlink")
+    index = json.loads(index_path.read_text())
     plugin_skills = validate_index(index)
     names = [a["name"] for a in index["assets"]]
     expected = set(names) | {"index.json", "SHA256SUMS"}
@@ -329,7 +332,10 @@ def verify_release(directory: Path) -> dict:
                 if zf.read(name) != (directory / name).read_bytes():
                     raise bb.BuildError("collection contains a different skill package")
     sums = "".join(f"{digest(directory / n)}  {n}\n" for n in sorted(set(names) | {"index.json"}))
-    if (directory / "SHA256SUMS").read_text() != sums:
+    sums_path = directory / "SHA256SUMS"
+    if sums_path.is_symlink():
+        raise bb.BuildError("SHA256SUMS must not be a symlink")
+    if sums_path.read_text() != sums:
         raise bb.BuildError("SHA256SUMS does not match release assets")
     with tempfile.TemporaryDirectory() as tmp:
         metadata = Path(tmp) / "index.json"

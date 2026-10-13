@@ -147,6 +147,26 @@ def test_changed_index_fails_verification(tmp_path):
         release.verify_release(out)
 
 
+def test_symlinked_index_is_rejected(tmp_path):
+    out = make_release(tmp_path)
+    real = tmp_path / "real_index.json"
+    real.write_text((out / "index.json").read_text())
+    (out / "index.json").unlink()
+    (out / "index.json").symlink_to(real)
+    with pytest.raises(bb.BuildError, match="index.json must not be a symlink"):
+        release.verify_release(out)
+
+
+def test_symlinked_sha256sums_is_rejected(tmp_path):
+    out = make_release(tmp_path)
+    real = tmp_path / "real_sha256sums"
+    real.write_text((out / "SHA256SUMS").read_text())
+    (out / "SHA256SUMS").unlink()
+    (out / "SHA256SUMS").symlink_to(real)
+    with pytest.raises(bb.BuildError, match="SHA256SUMS must not be a symlink"):
+        release.verify_release(out)
+
+
 def test_nested_collection_is_scanned(tmp_path):
     source = tmp_path / "source.md"
     source.write_text(bb.CANARY_TERMS[0])

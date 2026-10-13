@@ -159,6 +159,13 @@ def test_empty_skills_object_is_rejected(tmp_path):
         mod.skills()
 
 
+def test_non_dict_top_level_json_is_rejected(sm):
+    """A manifest whose top-level JSON is a list (or any non-dict) used to
+    reach `data.get("skills")` and raise AttributeError instead of the
+    ValueError every other malformed-manifest case raises."""
+    with pytest.raises(ValueError, match="top-level JSON must be an object"):
+        sm._validate([])
+
 
 def _live_manifest() -> dict:
     return json.loads(MANIFEST.read_text(encoding="utf-8"))

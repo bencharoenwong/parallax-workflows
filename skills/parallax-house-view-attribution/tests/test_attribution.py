@@ -222,6 +222,22 @@ def test_compounded_exposure_is_capped_at_the_documented_2x():
     assert abs(ratio - attribution.EXPOSURE_CAP) < 1e-9, ratio
 
 
+@pytest.mark.parametrize("bad_multiplier", [float("nan"), float("inf")])
+def test_non_finite_multiplier_raises_instead_of_producing_nan_weights(
+        bad_multiplier):
+    """A NaN or inf multiplier makes ``total`` non-finite. ``total <= 0`` is
+    False for NaN (every comparison with NaN is False) and also False for
+    +inf, so the old guard let a non-finite ``total`` through to the
+    normalisation step, which then divided every weight by NaN/inf and
+    returned NaN-valued weights silently instead of raising.
+    """
+    neutral = {"A": 0.5, "B": 0.5}
+    mults = {"sectors": {"A": bad_multiplier, "B": 1.0}}
+
+    with pytest.raises(attribution.AttributionError):
+        attribution.weights_for_groups(neutral, mults, frozenset(mults))
+
+
 def test_no_holding_exceeds_the_cap_across_random_configurations():
     """One hand-built case cannot show the redistribution never pushes a second
     holding over the cap."""

@@ -30,10 +30,21 @@ def test_transform_applies_to_current_source(rel):
 
 
 @pytest.mark.parametrize("rel", sorted(bb.TRANSFORMS))
-def test_transform_output_is_canary_clean(rel):
+def test_transform_output_is_canary_clean(rel, tmp_path):
+    """Delegate to `bb.canary_scan` rather than a hand-rolled `t in out` loop.
+
+    The hand-rolled check was case-SENSITIVE, so a canary term surviving a
+    transform in a different case than `bb.CANARY_TERMS` would pass here and
+    only be caught later by the real (case-insensitive) scan at build time --
+    the gate this test exists to run early. Using the production scanner
+    keeps the two in lockstep by construction. `canary_scan` raises
+    `bb.BuildError` on a hit and prints the matched term to stderr itself
+    (existing production behaviour); this test never repeats the term in an
+    assertion message, so a failure here never prints or includes it twice.
+    """
     out = bb.TRANSFORMS[rel]((SKILLS / rel).read_text(encoding="utf-8"))
-    hits = [t for t in bb.CANARY_TERMS if t in out]
-    assert hits == []
+    (tmp_path / Path(rel).name).write_text(out, encoding="utf-8")
+    bb.canary_scan(tmp_path)
 
 
 def test_transform_fails_loudly_on_missing_anchor():

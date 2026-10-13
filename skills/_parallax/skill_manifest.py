@@ -57,6 +57,11 @@ def _data() -> dict:
 
 def _validate(data: dict) -> None:
     """Reject a manifest that cannot be trusted, rather than half-using it."""
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"{MANIFEST_PATH}: top-level JSON must be an object, got "
+            f"{type(data).__name__}"
+        )
     if not isinstance(data.get("skills"), dict) or not data["skills"]:
         raise ValueError(f"{MANIFEST_PATH}: 'skills' must be a non-empty object")
     for name, row in data["skills"].items():
