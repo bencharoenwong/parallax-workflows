@@ -2,7 +2,7 @@
 
 Context
 -------
-Per DECISIONS.md 2026-05-24, Phase D (managed backend) is cancelled — the
+Phase D (managed backend) is cancelled — the
 judge stays client-side per bank, so the system is effectively single-tenant
 per machine via ``~/.parallax/active-house-view/``. However, the
 ``PARALLAX_HOUSE_VIEW_DIR`` env var AND the explicit ``view_dir`` parameter

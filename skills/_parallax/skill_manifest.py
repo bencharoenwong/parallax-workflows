@@ -12,7 +12,7 @@ by a test. The gate is the last step of every skill on every host and has no
 other file dependency; a missing manifest there would fail every operator's
 final output, whereas a missing manifest at build time fails only a
 developer's terminal. Mechanical trust is the same either way, because the
-equality test fails on any drift. See DECISIONS.md 2026-09-07.
+equality test fails on any drift.
 
 Pure stdlib. Values are cached after the first read; call `reload()` in a test
 that rewrites the file.

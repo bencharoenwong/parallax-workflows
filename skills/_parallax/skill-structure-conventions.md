@@ -132,7 +132,7 @@ Splitting is reversible but costs reviewer attention. Follow this protocol so a 
 
 The following patterns have been considered and rejected:
 
-- **`INDEX.md` / `NAVIGATION.md` as a separate top-level file** — rejected by 4/5 advisors in council. A third source of truth competing with SKILL.md and DECISIONS.md drifts within months. The skills/ directory listing IS the navigation. Use README.md if you need a human-facing entry-point fork.
+- **`INDEX.md` / `NAVIGATION.md` as a separate top-level file** — rejected by 4/5 advisors in council. A third source of truth competing with SKILL.md drifts within months. The skills/ directory listing IS the navigation. Use README.md if you need a human-facing entry-point fork.
 
 - **TOC at the top of an unsplit SKILL.md** — provides 1% of the value of an actual split for 50% of the noise. Skip; either split or live with the monolith.
 
@@ -213,7 +213,6 @@ Forward-only, same scope statement as "Host portability". `## Output additions` 
 ## Provenance
 
 - Council session: `notes/2026-05-06-1023-council-white-label-restructure.md`
-- DECISIONS.md entry: 2026-05-06 (later) — white-label-onboard restructure, Phase 2 conditional
 - Companion file: `jit-load-compliance-audit.md`
 - Host portability, Canonical step spine, Authority header, and Failure modes / Done when sections added 2026-09-04 per the agent-ergonomics design pass (internal design note, local-only).
 - Description / Trigger Completeness rule added 2026-05-25 per tech-debt closeout audit covering AI-soros basket-mode invisibility and portfolio-builder --augment-silent undiscoverability.

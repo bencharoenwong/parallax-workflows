@@ -11,7 +11,7 @@ These tests sit alongside ``test_e2e.py`` and follow its helper conventions
 (duplicated inline rather than imported to dodge the pytest conftest
 collision pattern between make-house-view/ and judge-house-view/).
 
-KNOWN GAP DOCUMENTED HERE (see DECISIONS.md follow-up):
+KNOWN GAP DOCUMENTED HERE:
 The v2 plan §10 retention #3 claims "calibration_status passthrough requires
 zero code change." That is TRUE for the LLM-orchestrated
 ``load-house-view`` skill (Step 6 reads ``manifest_cache.load_manifest()``
