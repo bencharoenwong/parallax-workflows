@@ -2,6 +2,8 @@
 
 Transforms run against the real source files (they are anchor-asserted, so a
 drifted source fails here before it fails a distribution build)."""
+import contextlib
+import io
 import subprocess
 import sys
 import unicodedata
@@ -38,13 +40,17 @@ def test_transform_output_is_canary_clean(rel, tmp_path):
     only be caught later by the real (case-insensitive) scan at build time --
     the gate this test exists to run early. Using the production scanner
     keeps the two in lockstep by construction. `canary_scan` raises
-    `bb.BuildError` on a hit and prints the matched term to stderr itself
-    (existing production behaviour); this test never repeats the term in an
-    assertion message, so a failure here never prints or includes it twice.
+    `bb.BuildError` on a hit and prints each matched term to stderr; this
+    test discards that stderr so a matched term never reaches pytest output
+    or CI logs, and the failure message carries only the hit count.
     """
     out = bb.TRANSFORMS[rel]((SKILLS / rel).read_text(encoding="utf-8"))
     (tmp_path / Path(rel).name).write_text(out, encoding="utf-8")
-    bb.canary_scan(tmp_path)
+    try:
+        with contextlib.redirect_stderr(io.StringIO()):
+            bb.canary_scan(tmp_path)
+    except bb.BuildError as e:
+        pytest.fail(f"canary scan of transformed {rel}: {e}", pytrace=False)
 
 
 def test_transform_fails_loudly_on_missing_anchor():
