@@ -435,7 +435,7 @@ def weights_for_groups(
             m *= group_mults.get(g, {}).get(symbol, 1.0)
         raw[symbol] = w * m
     total = sum(raw.values())
-    if total <= 0:
+    if not math.isfinite(total) or total <= 0:
         raise AttributionError("degenerate weights: multipliers zeroed the portfolio")
     weights = {s: v / total for s, v in raw.items()}
 
