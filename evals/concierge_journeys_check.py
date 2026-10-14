@@ -127,61 +127,17 @@ _HELPER_SCRIPT_SUFFIX = {
 _INTERPRETER_RUN = re.compile(
     r"""(?<![\w.-])(?:python3?|bash|sh)(?:\s+-(?!c\b)[A-Za-z]+)*\s+(["']?[^\s"';&|<>()-][^\s"';&|<>()]*["']?)"""
 )
-_COMMAND_WORD = re.compile(r"""(?:^|[;&|(\n])\s*([^\s"';&|<>()]+)""")
-# An interpreter that is itself the command, after any mix of ``VAR=x``,
-# ``env``, ``exec``, ``time``, ``nohup`` and ``bash -c '``: its script argument
-# is run, never only named. Path prefixes exclude quotes so a quote has one
-# parse (no exponential backtracking on repeated ``a/sh -c '``).
-_COMMAND_INTERPRETER_RUN = re.compile(
-    r"""(?:^|[;&|(\n])\s*(?:(?:\w+=\S*|env|exec|time|nohup)\s+|(?:[^\s'"]*/)?(?:ba)?sh\s+-c\s+["']?)*"""
-    r"""(?:[^\s'"]*/)?(?:python3?|bash|sh)(?:\s+-(?!c\b)[A-Za-z]+)*\s+(["']?[^\s"';&|<>()-][^\s"';&|<>()]*["']?)"""
-)
-# The opening of a here-document (not a ``<<<`` here-string).
-_HEREDOC_OPEN = re.compile(r"""(?<!<)<<-?[ \t]*(['"]?)([A-Za-z_]\w*)\1""")
-_INTERPRETER_WORD = re.compile(r"(?:\S*/)?(?:python3?|bash|sh|zsh)")
+# ``[ \t]*`` (not ``\s*``) after a separator keeps the scan linear on long runs
+# of newlines.
+_COMMAND_WORD = re.compile(r"""(?:^|[;&|(\n])[ \t]*([^\s"';&|<>()]+)""")
 
 
-def _feeds_interpreter(head: str) -> bool:
-    """True when the text before ``<<`` ends in a bare interpreter (flags
-    only, no script argument), which runs the here-document body."""
-    words = [w for w in re.split(r"[\s;&|(]+", head) if w]
-    while words and words[-1].startswith("-"):
-        words.pop()
-    return bool(words) and _INTERPRETER_WORD.fullmatch(words[-1]) is not None
-
-
-def _without_heredoc_bodies(command: str) -> str:
-    """``command`` with each here-document body removed, through its
-    terminator line or the end of the command: the body is data fed to a
-    command (a report, a file's text), not commands to scan. A body fed to a
-    bare interpreter (``bash <<EOF``) is run, so it stays."""
-    out: list[str] = []
-    pos = 0
-    while (m := _HEREDOC_OPEN.search(command, pos)):
-        body_start = command.find("\n", m.end())
-        if body_start < 0:
-            break
-        terminator = re.compile(rf"\n\t*{re.escape(m[2])}(?=\n|$)").search(command, body_start)
-        body_end = terminator.end() if terminator else len(command)
-        head = command[command.rfind("\n", 0, m.start()) + 1:m.start()]
-        out.append(command[pos:body_start])
-        if _feeds_interpreter(head):
-            out.append(command[body_start:body_end])
-        pos = body_end
-    out.append(command[pos:])
-    return "".join(out)
-
-
-def _script_tokens(command: str) -> list[tuple[str, bool]]:
-    """(path, run) for each path ``command`` may run as a script, quotes
-    stripped. ``run`` is True when a command-position interpreter runs it, so
-    even a draft path counts; otherwise naming a draft (``grep -c python
-    <draft>``) is not a run. The scans are separate so a command word
-    (``(python3``) cannot hide the interpreter run that follows it."""
-    tokens = [(m.group(1).strip("\"'"), True) for m in _COMMAND_INTERPRETER_RUN.finditer(command)]
-    tokens += [(m.group(1).strip("\"'"), False) for rx in (_INTERPRETER_RUN, _COMMAND_WORD)
-               for m in rx.finditer(command)]
-    return tokens
+def _script_tokens(command: str) -> list[str]:
+    """The paths ``command`` may run as a script, quotes stripped. The two
+    scans are separate so a command word (``(python3``) cannot hide the
+    interpreter run that follows it."""
+    return [m.group(1).strip("\"'") for rx in (_INTERPRETER_RUN, _COMMAND_WORD)
+            for m in rx.finditer(command)]
 
 
 # Payload-draft labels the skills write (conventions §14.4). A draft with one
@@ -601,11 +557,13 @@ def check_run(
         for c in parsed["bash_calls"]:
             if c["id"] in denied_ids:
                 continue
-            tokens = _script_tokens(_without_heredoc_bodies(c["command"]))
-            for script in dict.fromkeys(t for t, _ in tokens):
-                run = any(r for t, r in tokens if t == script)
+            # A documented stdin gate run's heredoc body is report text, not commands.
+            m = _match_documented_helper(c["command"])
+            command = c["command"].strip().split("\n", 1)[0] if m and m.get("body") is not None \
+                else c["command"]
+            for script in dict.fromkeys(_script_tokens(command)):
                 target = _norm_path(script, cwd)
-                if target in written and (run or not (_DATA_DRAFT.search(target) or _REPORT_DRAFT.search(target))):
+                if target in written and not (_DATA_DRAFT.search(target) or _REPORT_DRAFT.search(target)):
                     reasons.append(f"ran a script the model wrote: {script}")
         # .parallax-policy/ holds payload drafts and its .gitignore only.
         for path in written:

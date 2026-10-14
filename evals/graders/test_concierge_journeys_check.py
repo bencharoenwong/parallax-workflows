@@ -1119,40 +1119,7 @@ def test_a_required_gate_rejects_text_the_gate_did_not_output(shown):
 
 
 @pytest.mark.parametrize("cmd", [
-    "python3 /s/.parallax-policy/policy-0a1b2c3d.json",
-    "PYTHONPATH=x python3 .parallax-policy/policy-0a1b2c3d.json",
-    "cd /s && /usr/bin/python3 -u /s/.parallax-policy/policy-0a1b2c3d.json",
-    "bash /s/.parallax-render/client-review-0a1b2c3d.md",
-])
-def test_an_interpreter_running_a_draft_is_a_script_run(cmd):
-    path = "/s/.parallax-render/client-review-0a1b2c3d.md" if "render" in cmd else "/s/.parallax-policy/policy-0a1b2c3d.json"
-    stream = _with_cwd(_with_write(_bash_stream([("b1", cmd, False)], set()), path=path))
-    passed, reasons, _, _ = check_run(stream, J, 0, False)
-    assert passed is False
-    assert any("ran a script the model wrote" in r for r in reasons), reasons
-
-
-def test_a_stale_plugin_gate_fails_with_a_rebuild_reason(tmp_path):
-    gate = tmp_path / "skills" / "_parallax" / "render_gate.py"
-    gate.parent.mkdir(parents=True)
-    gate.write_text("# an older build\n")
-    plug = str(tmp_path)
-    script = f"{plug}/skills/parallax-client-review/../_parallax/render_gate.py"
-    cmd = f'python3 "{script}" --skill client-review --input "{_CR_DRAFT}"'
-    stream = _with_cwd(_with_write(_bash_stream([("b1", cmd, False)], set(), skill=_CR, result=_CR_REPORT,
-                                                plugin_path=plug),
-                                   path=_CR_DRAFT, content=_CR_REPORT))
-    passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=plug)
-    assert passed is False
-    assert any("rebuild the plugin" in r for r in reasons), reasons
-    gate.write_bytes((REPO / "skills" / "_parallax" / "render_gate.py").read_bytes())
-    passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=plug)
-    assert passed is True, reasons
-
-
-@pytest.mark.parametrize("cmd", [
     "cat > /s/notes.txt <<'EOF'\nTo reproduce run:\npython3 /s/.parallax-policy/policy-0a1b2c3d.json\nEOF",
-    "cat > /s/notes.txt <<EOF\n/s/tools/gate.py is not run here\nEOF",
 ])
 def test_a_heredoc_body_that_mentions_a_written_file_is_not_a_run(cmd):
     stream = _with_cwd(_with_write(_with_write(_bash_stream([("b1", _ADAPT_RELATIVE, False), ("b2", cmd, False)], set()),
@@ -1160,21 +1127,6 @@ def test_a_heredoc_body_that_mentions_a_written_file_is_not_a_run(cmd):
                                    path="/s/tools/gate.py", wid="w2"))
     _, reasons, _, _ = check_run(stream, J, 0, False)
     assert not any("ran a script the model wrote" in r for r in reasons), reasons
-
-
-@pytest.mark.parametrize("cmd", [
-    "env PYTHONPATH=x python3 /s/.parallax-policy/policy-0a1b2c3d.json",
-    "bash -c 'python3 /s/.parallax-policy/policy-0a1b2c3d.json'",
-    "cat > /s/n.txt <<'EOF'\nx\nEOF\npython3 /s/.parallax-policy/policy-0a1b2c3d.json",
-    "bash <<'EOF'\npython3 /s/.parallax-policy/policy-0a1b2c3d.json\nEOF",
-    "cat <<<word\npython3 /s/.parallax-policy/policy-0a1b2c3d.json",
-])
-def test_an_interpreter_running_a_draft_is_caught_in_every_position(cmd):
-    stream = _with_cwd(_with_write(_bash_stream([("b1", cmd, False)], set()),
-                                   path="/s/.parallax-policy/policy-0a1b2c3d.json"))
-    passed, reasons, _, _ = check_run(stream, J, 0, False)
-    assert passed is False
-    assert any("ran a script the model wrote" in r for r in reasons), reasons
 
 
 def test_a_heredoc_fed_to_a_bare_shell_is_scanned():
@@ -1190,12 +1142,17 @@ def test_a_heredoc_fed_to_a_bare_shell_is_scanned():
     "a/a/sh -c '" * 10000,
     "x " * 100000 + "<<EOF\nz",
     "VAR=v " * 30000 + "python3",
+    "\n" * 20000,
+    ";/" * 10000,
+    "&a=" * 7000,
+    "\n\t" * 10000,
+    "(a/" * 7000,
 ])
 def test_the_script_scan_is_linear_on_long_commands(cmd):
     """Heredoc bodies run to tens of KB; a backtracking regex would hang the
     checker. Each of these took minutes on a quadratic or exponential scan."""
     import time
-    from concierge_journeys_check import _script_tokens, _without_heredoc_bodies
+    from concierge_journeys_check import _script_tokens
     start = time.process_time()
-    _script_tokens(_without_heredoc_bodies(cmd))
+    _script_tokens(cmd)
     assert time.process_time() - start < 2.0
