@@ -18,7 +18,7 @@ description: "Fund manager morning brief: market regime, macro outlook, portfoli
 
 ## Gotchas
 
-- Expected Parallax spend: ~50 tokens at 10 holdings (`_parallax/token-costs.md`): telemetry + macro (5) + 2× per-holding fan-out + 3 news (15).
+- Expected Parallax spend: ~50 tokens at 10 holdings (`_parallax/token-costs.md`): telemetry + macro (5) + 2× per-holding fan-out + 3 news (15), plus 5 when a mover qualifies (Step 2 pre-call).
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.2 (`macro_analyst` takes `market`, not `country`), §1 RIC resolution and coverage fallback, §2 identity cross-check, §3 parallel execution, §4/§5 fallbacks, §11 sensitivity, §14 host primitives, §15 translation.
 - JIT-load `_parallax/house-view/loader.md` FIRST; if a view is present follow §2, §3, §4, §5, §6. The brief uses the view to (a) frame the Macro Snapshot in view language, (b) flag holdings misaligned with tilts, (c) prioritize Action Items toward the view's rebalance direction.
 - The `macro_analyst` summary call returns every component inline including tactical — never make per-component calls.
@@ -44,7 +44,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 ### Step 0 — Pre-flight
 
 1. Resolve every `_parallax/...` path named in this file to the canonical copy (conventions §0.0 item 1).
-2. `discover-tools`: bind every logical tool named anywhere in this workflow (Step 2, including the V1 fallback) to the exact callable and schema exposed now.
+2. `discover-tools`: bind every logical tool named anywhere in this workflow (Step 2 and the Step 3 V1 fallback) to the exact callable and schema exposed now.
    <!-- host-note -->
    Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
    <!-- /host-note -->
@@ -54,9 +54,11 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 
 ### Step 1 — Resolve inputs
 
-Validate holdings: RIC format (plain tickers → conventions §1), weights ~1.0; fund/OEIC identifiers get the §1 not-covered message and are dropped with a note. Top-N news set = the N largest input weights (needs no tool output).
+Validate holdings: RIC format (plain tickers → conventions §1), weights ~1.0; fund/OEIC identifiers get the §1 not-covered message and are dropped with a note. Top-N news set = the N largest input weights (needs no tool output), plus at most one mover chosen in Step 2.
 
 ### Step 2 — Fetch (parallel batches)
+
+**Pre-call** — `call-tool` `get_company_info` once with all N symbols comma-separated (instant). It is the ground-truth oracle (loader.md §5 rule 3; conventions §2) and records `expected_name`. Mover rule: among holdings outside the top-N set, take the single largest absolute `changepercent`; if it is ≥ 3.0%, add that holding to the news set. Its Holding News paragraph states the move. On failure, retry once per §0.1; if it still fails, run Batch A with the top-N news set only; with no oracle, every holding is unverified, is excluded from aggregates, and is named in Ground-truth Integrity.
 
 **Batch A** — `call-tool` ALL rows in ONE turn; per-holding rows fan out N-wide inside the same turn so the 30–90 s news calls overlap everything else (a sequential loop is the largest latency leak in this skill):
 
@@ -65,14 +67,15 @@ Validate holdings: RIC format (plain tickers → conventions §1), weights ~1.0;
 | `get_telemetry` | fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences | Market regime |
 | `macro_analyst` | `market` (default United States), no component | Macro summary with tactical inline |
 | `get_peer_snapshot` | per holding, all N in parallel | **Primary scoring source** (V2); aggregated client-side per loader.md §3b |
-| `get_company_info` | per holding, all N in parallel | **Ground-truth oracle** (loader.md §5 rule 3; conventions §2); records `expected_name` |
-| `get_news_synthesis` | per top-N holding, all in parallel | Async 30–90 s; never blocks output (§5) |
+| `get_news_synthesis` | per news-set holding (top-N plus any mover), all in parallel | Async 30–90 s; never blocks output (§5) |
 | `check_portfolio_redundancy` | `holdings` | Overlap detection |
-| `quick_portfolio_scores` | `holdings` | **V1 path only**; not used when `PARALLAX_LOADER_V2=1` and a view is active |
+
+`quick_portfolio_scores` is NOT in Batch A; it is the Step 3 V1 fallback only.
 
 ### Step 3 — Verify
 
-- Cross-validation per conventions §2 / loader.md §5 rule 3: `get_peer_snapshot.target_company` vs `get_company_info.data.name` (nested under the response's `data` object, not a top-level field); V2 mismatches are ⚠ MISMATCH and excluded from aggregates; V1 mismatches are re-scored individually via `get_peer_snapshot`.
+- Cross-validation per conventions §2 / loader.md §5 rule 3: `get_peer_snapshot.target_company` vs `get_company_info.data.name` (nested under the response's `data` object, not a top-level field); mismatches are ⚠ MISMATCH and excluded from aggregates.
+- Scoring ladder, first tier whose precondition holds. V2 coverage = weight share of holdings with a non-empty snapshot that passed cross-validation. **V2** (coverage ≥ 50%) → aggregate per loader.md §3b, no V1 call. **V1** (coverage < 50%) → `call-tool` `quick_portfolio_scores` once, cross-validate its names against the cached `get_company_info` names, re-score mismatched holdings via `get_peer_snapshot`. **Split-and-merge** (V1 coverage also < 50%) → per `parallax-portfolio-checkup/references/health-flags.md` "Mixed-Exchange Fallback".
 - Failed or empty calls: §0.1 retry classification, then §4. News still pending at compose time: the pending note goes inside that holding's paragraph (§5), never above the report.
 
 ### Step 4 — Compute
@@ -91,7 +94,7 @@ Fill **Output Format** below in order, under 800 words: House View Preamble per 
 python3 "<skill-dir>/../_parallax/render_gate.py" --skill morning-brief --input "<draft-path>"
 ```
 
-The entire final English message is that command's stdout, or the sole input to Step 7. The stderr `[render-gate] WARN:` line is diagnostics: never include or translate it. Degraded-state notes go inside their section. If `run-shell` is absent, apply conventions §14.3 (render-gate row).
+The entire final English message is that command's stdout, or the sole input to Step 7. The stderr `[render-gate] WARN:` line is diagnostics: never include or translate it. If a no-anchor WARN appears, fix the opening first (conventions §10.3). A word-cap WARN alone means the brief body ran over 800 words: shorten the draft, write it to a fresh `<draft-path>`, and run the gate once more. Degraded-state notes go inside their section. If `run-shell` is absent, apply conventions §14.3 (render-gate row).
 
 ### Step 7 — Translate (conditional)
 
@@ -111,7 +114,7 @@ Present as a structured morning brief, under 800 words:
 - **Verdict sensitivity** (render when any numeric health flag sits near its published cutoff): the 1-2 nearest-boundary flags and their trigger/clear arithmetic per `parallax-portfolio-checkup/references/health-flags.md` "Verdict sensitivity" (§11 by reference). Morning-brief renders no Health Status badge — state flag-level conditions only; do not use the tier-ladder language.
 - **Holding News** (one paragraph per holding)
 - **Action Items** (what deserves attention today; if view active, prioritize toward view rebalance direction)
-- **About This Report** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse), plus the unconditional §7 currency line: `Currency: figures as reported by source data; no base-currency conversion applied.` If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a further About This Report line.
+- **About This Report** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse), plus the unconditional §7 currency line: `Currency: figures as reported by source data; no base-currency conversion applied.` When Step 3 left the V2 tier, add one line naming the scoring tier used (V1 or split-and-merge) and the weight coverage. If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a further About This Report line.
 
 Lead with what matters.
 
@@ -123,7 +126,7 @@ If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwis
 ## Failure modes
 
 - `get_telemetry` or `macro_analyst` unavailable: Market Regime & Signals / Macro Snapshot render the §4 unavailable note; the portfolio sections still render.
-- V2 scoring gaps: mismatched or unscored holdings are excluded from the Factor Tilt aggregate and named in Ground-truth Integrity.
+- V2 scoring gaps: mismatched or unscored holdings are excluded from the Factor Tilt aggregate and named in Ground-truth Integrity. Coverage below 50% moves down the Step 3 scoring ladder; About This Report names the tier used (Output Format).
 - News pending or timed out: pending note inside the holding's paragraph; the brief is not delayed.
 - House-view banner states `malformed` / `expired` / `critical`: the banner renders verbatim (conventions §0.3 item 4).
 - Host lacks a primitive: conventions §14.3, per primitive.
@@ -133,6 +136,6 @@ If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwis
 - Every Output Format section rendered or marked unavailable with its reason, under 800 words; first line is the House View Preamble, the Branding Header, or `## Market Regime & Signals`.
 - Factor Tilt is computed over trusted holdings only and says so when any were excluded.
 - When a view is active: the `view_status` banner appears verbatim; Action Items are ordered toward the view; audit entry appended per loader.md §6 (every consume event).
-- The render gate ran and the reply is its stdout (or the §14.3 note is present in About This Report).
+- The render gate ran with no word-cap WARN on its final run, and the reply is its stdout (or the §14.3 note is present in About This Report).
 - `parallax-conventions.md §9.2` disclosure and the §9.1 or view-aware disclaimer are present; expected spend stated (Gotchas).
 - Translation (if requested) completed per §15, or the §15.3 footer explains why not.

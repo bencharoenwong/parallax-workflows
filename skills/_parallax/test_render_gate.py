@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from render_gate import gate, main, SKILL_ANCHORS  # noqa: E402
+from render_gate import gate, main, word_cap_warning, SKILL_ANCHORS, WORD_CAPS  # noqa: E402
 
 SCAFFOLD = "**Step A.5 → Batch C complete.** Verified-holdings aggregates...\n\n"
 
@@ -615,3 +615,36 @@ def test_stdin_not_utf8_fails_closed():
     )
     assert proc.returncode == 2 and proc.stdout == b""
     assert b"[render-gate] ERROR" in proc.stderr
+
+
+def _brief(body_words: int) -> str:
+    return (
+        "## Market Regime & Signals\n\n" + " ".join(["word"] * body_words)
+        + "\n\n> *AI-assisted output. " + " ".join(["boiler"] * 200) + "*\n"
+    )
+
+
+def test_word_cap_counts_body_before_disclosure_only():
+    # 5 header + 870 body + 2 quote-marker tokens = 877 <= 880; boilerplate is excluded.
+    assert word_cap_warning(_brief(870), "morning-brief") is None
+
+
+def test_word_cap_overrun_warns():
+    warning = word_cap_warning(_brief(900), "morning-brief")
+    assert warning is not None and warning.startswith("[render-gate] WARN:")
+    assert "907 words" in warning  # 5 header + 900 body + 2 quote-marker tokens
+
+
+def test_word_cap_skips_uncapped_skill():
+    assert "peer-comparison" not in WORD_CAPS
+    assert word_cap_warning(_brief(5000), "peer-comparison") is None
+
+
+def test_word_cap_warn_goes_to_stderr_not_stdout(tmp_path, capsys):
+    report = _brief(900)
+    draft = _draft(tmp_path, skill="morning-brief")
+    draft.write_text(report, encoding="utf-8")
+    rc, out, err = _run_main(["--skill", "morning-brief", "--input", str(draft)], capsys)
+    assert rc == 0
+    assert out == report
+    assert "over the 800-word cap" in err

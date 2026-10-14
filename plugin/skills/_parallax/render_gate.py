@@ -216,6 +216,32 @@ def gate(draft: str, skill: str) -> str:
     return draft  # fail-open: no anchor -> never strip
 
 
+# Per-skill word caps on the brief body. The count mirrors the skill's eval check
+# (evals/skills/<skill>/eval_config.py): words before the first §9.2/§9.1 boilerplate
+# marker, allowed up to the cap plus 10% for headers and table cells. An overrun is a
+# stderr WARN only; stdout is unchanged and the exit code stays 0.
+WORD_CAPS: dict[str, int] = {"morning-brief": 800}
+_BOILERPLATE = re.compile(
+    r"(?i)AI-assisted output|AI-interaction disclosure|not investment advice"
+)
+
+
+def word_cap_warning(report: str, skill: str) -> str | None:
+    """Return a WARN line when ``report``'s body exceeds the skill's word cap
+    (with 10% tolerance), else None. Skills without a cap never warn."""
+    cap = WORD_CAPS.get(skill)
+    if cap is None:
+        return None
+    m = _BOILERPLATE.search(report)
+    words = len((report[: m.start()] if m else report).split())
+    if words <= cap + cap // 10:
+        return None
+    return (
+        f"[render-gate] WARN: body has {words} words, over the {cap}-word cap "
+        f"for skill={skill!r}; shorten and re-run\n"
+    )
+
+
 DRAFT_DIR_NAME = ".parallax-render"
 _DRAFT_SUFFIXES = (".md", ".json")
 
@@ -306,6 +332,8 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write(f"[render-gate] ERROR: cannot read draft: {exc}\n")
         return 2
     out = gate(draft, args.skill)
+    if (warning := word_cap_warning(out, args.skill)) is not None:
+        sys.stderr.write(warning)
     # UTF-8 bytes, not the locale's encoding: a cp1252 stdout would raise on
     # "→" after the draft is already deleted.
     buffer = getattr(sys.stdout, "buffer", None)
