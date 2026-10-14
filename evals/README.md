@@ -264,8 +264,9 @@ denied, exiting cleanly. A policy helper (`adaptation.py`, `coverage_check.py`,
 (conventions §14.4); a draft made or last changed by Edit or MultiEdit does not count.
 `render_gate.py` must run with `--skill` set to the journey skill's key, either on a
 `.parallax-render/` draft the Write tool created earlier or in the documented stdin form
-(conventions §10.3), and the final answer, whitespace collapsed, must appear in the text
-that run gated (the Write content or the heredoc body); it needs `skill`. The runner validates every line before any
+(conventions §10.3), and the final answer must equal that run's output, with whitespace
+collapsed. The checker replays `render_gate.gate()` from `skills/_parallax/` on the gated
+text (the Write content or the heredoc body). It needs `skill`. The runner validates every line before any
 model call and rejects unknown keys, a list field that is not a list of strings, a
 `skill` without the `parallax:` prefix, a `require_helpers` entry outside that set, and
 `render_gate.py` in `require_helpers` without `skill`.

@@ -1,7 +1,8 @@
 """evals/concierge_journeys_check.py — checker for the live concierge journeys
 (see evals/concierge_journeys.sh and evals/tasks/concierge/journeys.jsonl).
 
-Pure functions, no I/O:
+Pure functions; the only I/O is loading skills/_parallax/render_gate.py, whose
+pure ``gate()`` the render-gate requirement replays:
 
 - ``validate_journey(journey)`` rejects a journey line with unknown keys or
   with ``expect``/``forbid``/``expect_any`` that is not a list of strings.
@@ -18,10 +19,15 @@ pytests the pure functions on canned text (no model, no network — CI-safe).
 from __future__ import annotations
 
 import argparse
+import contextlib
+import functools
+import importlib.util
+import io
 import json
 import posixpath
 import re
 import sys
+from pathlib import Path
 
 ALLOWED_KEYS = frozenset({"id", "prompt", "expect", "forbid", "expect_any", "needs", "skill",
                           "require_helpers"})
@@ -144,6 +150,25 @@ _REPORT_DRAFT = re.compile(r"/\.parallax-render/(?P<key>[a-z0-9-]+)-[0-9a-f]{8}\
 # ``redundancy-sectors``, ``holdings``, ``reconcile``). Requires the trailing
 # ``-<8 hex>.(json|yaml)`` shape, so a sibling ``.gitignore`` never matches.
 _POLICY_DRAFT = re.compile(r"/\.parallax-policy/(?P<label>[a-z0-9-]+)-[0-9a-f]{8}\.(?:json|yaml)$")
+
+
+# The gate whose output a required render-gate run must reproduce. The plugin
+# copy is a byte-identical build of this file (build_bundle.py).
+_RENDER_GATE = Path(__file__).resolve().parent.parent / "skills" / "_parallax" / "render_gate.py"
+
+
+@functools.lru_cache(maxsize=1)
+def _gate_fn():
+    spec = importlib.util.spec_from_file_location("_journey_render_gate", _RENDER_GATE)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.gate
+
+
+def _render(text: str, key: str) -> str:
+    """``render_gate.gate(text, key)``, its fail-open warning discarded."""
+    with contextlib.redirect_stderr(io.StringIO()):
+        return _gate_fn()(text, key)
 
 
 def _norm_path(path: str, cwd: str | None = None) -> str:
@@ -565,9 +590,10 @@ def check_run(
         # helper that errored, an improvised replacement, or a draft made by a
         # heredoc, by Edit, or in /tmp does not count. render_gate.py needs the
         # journey skill's key, on a Write-tool report draft or by the stdin
-        # form (conventions §10.3), and the final answer must be text that run
-        # gated (the gate only strips a preamble, so the final text, whitespace
-        # collapsed, lies inside the gated text).
+        # form (conventions §10.3), and the final answer must be that run's
+        # output: render_gate.gate() replayed on the gated text, compared with
+        # whitespace collapsed. The gate also moves degraded-state notes from
+        # the stripped preamble to the end, so a substring test is not enough.
         def _write_draft_before(path: str | None, pattern: re.Pattern[str], seq: int) -> bool:
             w = last_write.get(path) if path else None
             return bool(w and w["tool"] == "Write" and pattern.search(path) and w["seq"] < seq)
@@ -588,10 +614,11 @@ def check_run(
             if helper == "render_gate.py":
                 met = bool(shown) and any(
                     g["ok"] and g["id"] not in denied_ids and g["key"] == gate_key
-                    and shown in _squash(_gated_text(g) or "")
+                    and _gated_text(g) is not None
+                    and shown == _squash(_render(_gated_text(g), gate_key))
                     for g in gate_runs)
-                where = ("a Write-tool .parallax-render draft or the stdin form whose text holds "
-                         "the final answer")
+                where = ("a Write-tool .parallax-render draft or the stdin form whose gate output "
+                         "is the final answer")
             else:
                 met = any(
                     r["helper"] == helper and r["ok"] and r["id"] not in denied_ids

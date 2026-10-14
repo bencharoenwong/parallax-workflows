@@ -959,8 +959,8 @@ _PLUG = "/repo/plugin"
 _CR_GATE_SCRIPT = f"{_PLUG}/skills/parallax-client-review/../_parallax/render_gate.py"
 _CR_DRAFT = "/s/.parallax-render/client-review-0a1b2c3d.md"
 _CR_GATE = f'python3 "{_CR_GATE_SCRIPT}" --skill client-review --input "{_CR_DRAFT}"'
-_CR_GATE_STDIN = f"python3 \"{_CR_GATE_SCRIPT}\" --skill client-review <<'REPORT'\n# Review\nREPORT"
-_CR_REPORT = "# Review"
+_CR_REPORT = "## Portfolio Summary\nok"
+_CR_GATE_STDIN = f"python3 \"{_CR_GATE_SCRIPT}\" --skill client-review <<'REPORT'\n{_CR_REPORT}\nREPORT"
 JG = {**J, "expect": [], "skill": _CR, "require_helpers": ["render_gate.py"]}
 
 
@@ -1069,7 +1069,7 @@ def test_naming_a_draft_is_not_running_a_script(extra):
 
 
 def test_a_stdin_gate_report_line_is_not_a_command():
-    stdin = _CR_GATE_STDIN.replace("# Review", "/s/notes.md was the source")
+    stdin = _CR_GATE_STDIN.replace(_CR_REPORT, "/s/notes.md was the source")
     stream = _with_write(_gate_run([("b1", stdin, False)], draft=None, shown="/s/notes.md was the source"),
                          path="/s/notes.md", wid="w2")
     passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=_PLUG)
@@ -1078,8 +1078,8 @@ def test_a_stdin_gate_report_line_is_not_a_command():
 
 @pytest.mark.parametrize("calls,draft,content", [
     # the full stdin report is denied; a stub goes through the gate instead
-    ([("b1", _CR_GATE_STDIN.replace("# Review", "# Review\n{\"a\": 1}"), False),
-      ("b2", _CR_GATE_STDIN.replace("# Review", "# x\nok"), False)], None, None),
+    ([("b1", _CR_GATE_STDIN.replace(_CR_REPORT, _CR_REPORT + "\n{\"a\": 1}"), False),
+      ("b2", _CR_GATE_STDIN.replace(_CR_REPORT, "# x\nok"), False)], None, None),
     # a stub draft is gated and the final answer is something else
     ([("b1", _CR_GATE, False)], _CR_DRAFT, "# x\nok"),
 ])
@@ -1093,7 +1093,26 @@ def test_a_required_gate_must_have_gated_the_final_answer(calls, draft, content)
 
 
 def test_a_denied_stdin_report_that_mentions_a_helper_is_not_a_helper_run():
-    body = _CR_GATE_STDIN.replace("# Review", "# Review\nran python3 adaptation.py ok")
+    body = _CR_GATE_STDIN.replace(_CR_REPORT, _CR_REPORT + "\nran python3 adaptation.py ok")
     stream = _gate_run([("b1", body, False), ("b2", _CR_GATE, False)], denied={"b1"})
     passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=_PLUG)
     assert passed is True, reasons
+
+
+def test_a_required_gate_accepts_the_degraded_note_the_gate_moves():
+    draft = "Batch 3 done; get_assessment unavailable for AAPL.O.\n" + _CR_REPORT
+    shown = _CR_REPORT + "\n\n> _Status note (preserved): Batch 3 done; get_assessment unavailable for AAPL.O._"
+    stream = _gate_run([("b1", _CR_GATE, False)], content=draft, shown=shown)
+    passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=_PLUG)
+    assert passed is True, reasons
+
+
+@pytest.mark.parametrize("shown", [
+    "Scaffold: batch 1 done.\n" + _CR_REPORT,   # the raw draft instead of the gate output
+    "ok",                                         # a piece of the gate output
+])
+def test_a_required_gate_rejects_text_the_gate_did_not_output(shown):
+    stream = _gate_run([("b1", _CR_GATE, False)], content="Scaffold: batch 1 done.\n" + _CR_REPORT, shown=shown)
+    passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=_PLUG)
+    assert passed is False
+    assert any("required helper render_gate.py" in r for r in reasons), reasons
