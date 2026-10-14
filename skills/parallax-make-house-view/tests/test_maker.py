@@ -523,3 +523,109 @@ def test_second_save_landing_during_the_gate_aborts_the_outer_run(tmp_view_dir: 
     surviving = yaml.safe_load((tmp_view_dir / "view.yaml").read_text(encoding="utf-8"))
     assert surviving["metadata"]["version_id"]
     audit_chain.verify_chain(tmp_view_dir / "audit.jsonl")
+
+
+def test_save_commits_through_view_commit(tmp_view_dir: Path, monkeypatch):
+    """The maker must not write canonical artifacts itself. Routing through
+    view_commit gives it staging, the row-vs-bytes check and fsync."""
+    import view_commit
+
+    calls: list[dict] = []
+    real = view_commit.commit_view_locked
+
+    def _spy(view_dir, **kwargs):
+        calls.append(kwargs)
+        return real(view_dir, **kwargs)
+
+    monkeypatch.setattr(view_commit, "commit_view_locked", _spy)
+    orc = MakerOrchestrator(MakerOptions(view_dir=tmp_view_dir, market_filter=["us"]))
+    result = orc.execute_synthesis(_FixtureRunner(), dispose_fn=_confirm_dispose)
+    assert result.disposition == "confirm"
+    assert len(calls) == 1
+    assert set(calls[0]["write"]) == {"view.yaml", "prose.md", "provenance.yaml"}
+    assert calls[0]["audit_entry"]["action"] == "generate"
+    assert not list(tmp_view_dir.glob("*.tmp.*"))
+    for name in ("view.yaml", "prose.md", "provenance.yaml"):
+        assert (tmp_view_dir / name).stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.parametrize("damage", [
+    b"excl", b"", b"excludes: []\nextraction: {}\n",
+    b"excludes: []\nextraction: {}\nmetadata:\n  auth\n",
+])
+def test_an_unreadable_active_view_stops_synthesis_before_the_gate(tmp_view_dir: Path, damage):
+    """A torn view.yaml left by an interrupted in-place write must be refused
+    before the gate, never crash, and never be replaced by a generate row
+    that records no parent."""
+    import view_commit
+
+    tmp_view_dir.mkdir(parents=True, exist_ok=True)
+    (tmp_view_dir / "view.yaml").write_bytes(damage)
+    disposed: list = []
+
+    def _dispose(prompt):
+        disposed.append(prompt)
+        return "confirm"
+
+    orc = MakerOrchestrator(MakerOptions(view_dir=tmp_view_dir, market_filter=["us"]))
+    with pytest.raises(view_commit.CommitRejected, match="cannot be read"):
+        orc.execute_synthesis(_FixtureRunner(), dispose_fn=_dispose)
+    assert disposed == []
+    assert (tmp_view_dir / "view.yaml").read_bytes() == damage
+    assert not (tmp_view_dir / "prose.md").exists()
+    assert not list(tmp_view_dir.glob("*.tmp.*"))
+
+
+def test_no_truncation_of_a_saved_view_raises_anything_but_commit_rejected(
+    tmp_view_dir: Path, tmp_path: Path
+):
+    """A torn in-place write can stop at any byte. Every reader of the active
+    view either refuses the prefix with CommitRejected or reads it; none
+    raises any other exception. The whole file reads back unchanged."""
+    import view_commit
+    from maker import (
+        _read_active_view,
+        _read_parent_version_id,
+        _resolve_or_new_view_id,
+        render_status,
+    )
+
+    orc = MakerOrchestrator(MakerOptions(view_dir=tmp_view_dir, market_filter=["us"]))
+    orc.execute_synthesis(_FixtureRunner(), dispose_fn=_confirm_dispose)
+    view = yaml.safe_load((tmp_view_dir / "view.yaml").read_text(encoding="utf-8"))
+    view["excludes"] = [{"type": "sector", "value": "tobacco"}]
+    view["metadata"]["view_hash"] = view_commit.compute_view_hash(view)
+    saved = yaml.safe_dump(
+        view, sort_keys=True, default_flow_style=False, allow_unicode=True
+    ).encode("utf-8")
+    readers = (
+        _read_active_view,
+        _read_parent_version_id,
+        _resolve_or_new_view_id,
+        render_status,
+        *view_commit.IDENTITY_RESOLVERS.values(),
+    )
+
+    torn_dir = tmp_path / "torn"
+    torn_dir.mkdir()
+    (torn_dir / "view.yaml").write_bytes(saved)
+    assert _read_active_view(torn_dir) == view
+    for n in range(len(saved)):
+        (torn_dir / "view.yaml").write_bytes(saved[:n])
+        for reader in readers:
+            try:
+                reader(torn_dir)
+            except view_commit.CommitRejected:
+                pass
+
+
+def test_a_non_string_extraction_method_does_not_crash_the_maker(tmp_path: Path):
+    import maker as maker_mod
+    view_dir = tmp_path / "v"
+    view_dir.mkdir()
+    (view_dir / "view.yaml").write_text(
+        "extraction:\n  extraction_method: 5\nmetadata:\n  version_id: v1\n  view_id: vw\n",
+        encoding="utf-8")
+    new_id = maker_mod._resolve_or_new_view_id(view_dir)
+    assert new_id != "vw"
+    assert "Method:         unknown" in maker_mod.render_status(view_dir)

@@ -149,8 +149,9 @@ Branch on `GateResult.disposition`:
 3. Computes `provenance_hash = sha256(JCS(provenance_data))`.
 4. Sets `extraction.uploader_confirmed = true`, `metadata.upload_timestamp`, `metadata.calibration_status = "heuristic_phase0"`.
 5. Renders `prose.md` via `prose_synth.render_prose` (deterministic, no LLM). Computes `prose_body_hash`.
-6. Writes `view.yaml`, `prose.md` (with frontmatter `paired_yaml_hash` / `prose_body_hash` / `view_id` / `version_id`), `provenance.yaml`. chmod 0600.
-7. Appends `action: "generate"` audit row via `audit_chain.append_entry` — fields per loader.md §6.1/§6.2:
+6. Serializes `view.yaml`, `prose.md` (with frontmatter `paired_yaml_hash` / `prose_body_hash` / `view_id` / `version_id`) and `provenance.yaml`, then commits them through `view_commit.commit_view_locked` under the view lock. That call re-checks that the active view's `version_id` still equals the draft's `parent_version_id`, stages each file as a 0600 `.tmp.<version_id>` file, renames it into place, and checks the audit row against the bytes.
+   - If the active `view.yaml` exists but cannot be read, is not a mapping, has a `metadata` value that is not a mapping, or has no non-empty string `metadata.version_id` (for example an empty file), the save stops with `CommitRejected` and nothing is written. Move the damaged file aside, keep it for the record, and save again as a fresh view.
+7. As part of the same commit, appends the `action: "generate"` audit row — fields per loader.md §6.1/§6.2:
 
    ```json
    {

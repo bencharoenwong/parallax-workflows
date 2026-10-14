@@ -39,6 +39,7 @@ import audit_chain  # noqa: E402
 import gate_present  # noqa: E402
 import judge  # noqa: E402
 import maker  # noqa: E402
+import view_commit  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -145,22 +146,19 @@ def _simulate_load_edit_save(
 
     Reads the active view.yaml, applies ``mutate_fn`` (if given) to the
     view dict, assigns a new version_id, sets parent_version_id to the
-    prior, recomputes view_hash + provenance_hash, writes view.yaml +
-    prose.md + provenance.yaml, and appends a chained "save" audit row.
+    prior, recomputes view_hash + provenance_hash, and commits view.yaml +
+    prose.md + provenance.yaml with a chained "save" audit row.
 
     Returns ``(new_view_id, new_version_id, audit_entry)``.
 
-    This intentionally calls the same low-level primitives the production
-    Step 4 save path uses (audit_chain.append_entry, rfc8785-canonical
-    hashing), so a regression in those primitives surfaces here. It does
-    NOT exercise the LLM-orchestrated workflow's sequencing of those
-    primitives — that's tested live in /parallax-load-house-view's own
-    samples corpus.
+    The commit goes through ``view_commit.commit_view`` -- the same writer
+    production uses -- so a regression in staging, the row-vs-bytes check or
+    the audit append surfaces here. It does NOT exercise the
+    LLM-orchestrated workflow's sequencing; that is tested live in
+    /parallax-load-house-view's own samples corpus.
     """
     view_yaml_path = view_dir / "view.yaml"
     provenance_yaml_path = view_dir / "provenance.yaml"
-    prose_md_path = view_dir / "prose.md"
-    audit_path = view_dir / "audit.jsonl"
 
     view_data = yaml.safe_load(view_yaml_path.read_text())
     provenance_data = (
@@ -184,20 +182,18 @@ def _simulate_load_edit_save(
     # Recompute structural hashes against the mutated content.
     prov_hash = hashlib.sha256(rfc8785.dumps(provenance_data)).hexdigest()
     view_data["metadata"]["provenance_hash"] = prov_hash
-    view_hash = hashlib.sha256(
-        rfc8785.dumps(view_data.get("tilts", {}))
-    ).hexdigest()
+    view_hash = view_commit.compute_view_hash(view_data)
     view_data["metadata"]["view_hash"] = view_hash
 
-    view_yaml_path.write_text(yaml.safe_dump(view_data, sort_keys=True))
-    provenance_yaml_path.write_text(yaml.safe_dump(provenance_data, sort_keys=True))
-    prose_md_path.write_text(
+    prose_body = "Edited prose body for version-chain evolution test."
+    prose_text = (
         "---\n"
         f"paired_yaml_hash: {view_hash}\n"
+        f"prose_body_hash: {view_commit.hash_prose_body(prose_body)}\n"
         f"view_id: {prior_view_id}\n"
         f"version_id: {new_version_id}\n"
         "---\n"
-        "Edited prose body for version-chain evolution test."
+        + prose_body
     )
 
     audit_entry_payload: dict[str, Any] = {
@@ -212,7 +208,17 @@ def _simulate_load_edit_save(
         "applied": True,
         "schema_version": 1,
     }
-    final_entry = audit_chain.append_entry(audit_path, audit_entry_payload)
+    final_entry = view_commit.commit_view(
+        view_dir,
+        write={
+            "view.yaml": yaml.safe_dump(view_data, sort_keys=True),
+            "prose.md": prose_text,
+            "provenance.yaml": yaml.safe_dump(provenance_data, sort_keys=True),
+        },
+        remove=frozenset(),
+        audit_entry=audit_entry_payload,
+        expected_identity={"parent_version_id": prior_version_id},
+    )
     return prior_view_id, new_version_id, final_entry
 
 

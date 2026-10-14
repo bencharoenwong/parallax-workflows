@@ -30,7 +30,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 import sys
 import time
 import uuid
@@ -55,6 +54,7 @@ import chain_emit  # noqa: E402
 import gate_present  # noqa: E402
 import mcp_meta  # noqa: E402
 import provenance_classes  # noqa: E402
+import view_commit  # noqa: E402
 import view_status  # noqa: E402
 
 import cross_country  # noqa: E402
@@ -601,13 +601,14 @@ class MakerOrchestrator:
         covered_markets: list[str],
     ) -> tuple[dict[str, Path], str, str, dict[str, Any], Path | None]:
         """Commit canonical artifacts and their audit row as one transaction."""
-        with audit_chain.view_transaction(Path(self.options.view_dir)):
+        with audit_chain.view_transaction(Path(self.options.view_dir)) as token:
             return self._save_view_locked(
-                view, pillars, aggregated, mcp_responses, covered_markets
+                token, view, pillars, aggregated, mcp_responses, covered_markets
             )
 
     def _save_view_locked(
         self,
+        token: audit_chain.TransactionToken,
         view: dict[str, Any],
         pillars: dict[str, PillarResult],
         aggregated: dict[str, Any],
@@ -647,15 +648,10 @@ class MakerOrchestrator:
                 "synthesise against the current view."
             )
 
-        view_dir.mkdir(parents=True, exist_ok=True)
-        if not view_dir.is_symlink():  # never re-mode a symlink's target
-            try:
-                os.chmod(view_dir, 0o700)
-            except OSError:
-                pass
+        # view_transaction already created view_dir and set it to 0700.
 
         # 1. view_hash per schema.yaml.
-        view_hash = _compute_view_hash(view)
+        view_hash = view_commit.compute_view_hash(view)
         view["metadata"]["view_hash"] = view_hash
 
         # 1b/1c. Provenance + provenance_hash.
@@ -678,10 +674,9 @@ class MakerOrchestrator:
                 "psychological_wavelength": pillars["psi"].missing_inputs,
             },
         )
-        prose_body_hash = hashlib.sha256(prose_body.encode("utf-8")).hexdigest()
+        prose_body_hash = view_commit.hash_prose_body(prose_body)
 
-        # 9. Write files (synchronous, simplified vs load-house-view's
-        # multi-stage async/atomic flow — same end state, single write step).
+        # 9. Serialize the artifacts. view_commit stages and renames them.
         version_id = view["metadata"]["version_id"]
 
         view_path = view_dir / "view.yaml"
@@ -693,12 +688,6 @@ class MakerOrchestrator:
         view_yaml = yaml.safe_dump(
             view, sort_keys=True, default_flow_style=False, allow_unicode=True
         )
-        view_path.write_text(view_yaml, encoding="utf-8")
-        try:
-            os.chmod(view_path, 0o600)
-        except OSError:
-            pass
-
         prose_frontmatter = (
             "---\n"
             f"paired_yaml_hash: {view_hash}\n"
@@ -707,25 +696,14 @@ class MakerOrchestrator:
             f"version_id: {version_id}\n"
             "---\n"
         )
-        prose_path.write_text(prose_frontmatter + prose_body, encoding="utf-8")
-        try:
-            os.chmod(prose_path, 0o600)
-        except OSError:
-            pass
-
         provenance_yaml = yaml.safe_dump(
             provenance_data,
             sort_keys=True,
             default_flow_style=False,
             allow_unicode=True,
         )
-        provenance_path.write_text(provenance_yaml, encoding="utf-8")
-        try:
-            os.chmod(provenance_path, 0o600)
-        except OSError:
-            pass
 
-        # 11. Append audit entry (loader.md §6.1/§6.2 — generate row).
+        # 10. Build the audit row (loader.md §6.1/§6.2 — generate row).
         source_tools = _build_source_tools_list(mcp_responses, covered_markets)
         audit_entry_payload: dict[str, Any] = {
             "ts": datetime.now(timezone.utc)
@@ -757,13 +735,25 @@ class MakerOrchestrator:
                     "loader.md §6.2 generate-row constraint"
                 )
 
-        final_audit_entry = audit_chain.append_entry(
-            audit_path, audit_entry_payload, ensure_chained=True
+        # 11. Stage, rename and witness in one step. view_commit re-checks the
+        # parent identity, checks the row against the bytes, and appends the
+        # row (append_entry keeps audit.jsonl at 0600).
+        final_audit_entry = view_commit.commit_view_locked(
+            view_dir,
+            token=token,
+            write={
+                "view.yaml": view_yaml,
+                "prose.md": prose_frontmatter + prose_body,
+                "provenance.yaml": provenance_yaml,
+            },
+            remove=frozenset(),
+            audit_entry=audit_entry_payload,
+            # The raw value, not the str() form used for the message above:
+            # view_commit keeps None distinct from the string "None".
+            expected_identity={
+                "parent_version_id": (view.get("metadata") or {}).get("parent_version_id")
+            },
         )
-        try:
-            os.chmod(audit_path, 0o600)
-        except OSError:
-            pass
 
         # 11a. Emit reasoning chain (Phase-0 / no manifest, see chain_emit).
         chain_path: Path | None = None
@@ -832,6 +822,8 @@ class MakerOrchestrator:
 
         Returns: MakerResult with the disposition + paths + pillars.
         """
+        _read_active_view(self.options.view_dir)
+
         # Step 1
         covered_markets, raw_lmc = self.resolve_covered_markets(mcp)
         if not covered_markets:
@@ -949,53 +941,6 @@ class MakerOrchestrator:
 # ---------------------------------------------------------------------------
 # Hash / canonicalization helpers
 # ---------------------------------------------------------------------------
-
-
-def _is_empty(v: Any) -> bool:
-    if isinstance(v, bool):
-        return False
-    if v is None:
-        return True
-    if isinstance(v, (int, float)) and v == 0:
-        return True
-    return v == "" or v == [] or v == {}
-
-
-def _strip_empty(obj: Any) -> Any:
-    if isinstance(obj, dict):
-        out: dict[str, Any] = {}
-        for k, v in obj.items():
-            v = _strip_empty(v)
-            if _is_empty(v):
-                continue
-            out[k] = v
-        return out
-    if isinstance(obj, list):
-        result = []
-        for x in obj:
-            y = _strip_empty(x)
-            if _is_empty(y):
-                continue
-            result.append(y)
-        return result
-    return obj
-
-
-def _compute_view_hash(view: dict[str, Any]) -> str:
-    """Per schema.yaml §view_hash computation — Rule 1..4 pinned alg."""
-    body = {
-        "tilts": _strip_empty(view.get("tilts", {})),
-        "excludes": _strip_empty(view.get("excludes", []) or []),
-    }
-    canonical = yaml.safe_dump(
-        body,
-        sort_keys=True,
-        default_flow_style=False,
-        allow_unicode=True,
-        width=1_000_000,
-        indent=2,
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _jcs_dumps(data: Any) -> bytes:
@@ -1169,14 +1114,7 @@ def _build_source_tools_list(
 
 
 def _read_active_view(view_dir: Path) -> dict[str, Any] | None:
-    view_path = view_dir / "view.yaml"
-    if not view_path.exists():
-        return None
-    try:
-        with open(view_path, "r", encoding="utf-8") as f:
-            return yaml.safe_load(f)
-    except Exception:
-        return None
+    return view_commit.read_active_view(Path(view_dir))
 
 
 def _load_view_bundle(path: Path) -> dict[str, Any]:
@@ -1231,7 +1169,7 @@ def _read_parent_version_id(view_dir: Path) -> str | None:
     v = _read_active_view(view_dir)
     if v is None:
         return None
-    return (v.get("metadata") or {}).get("version_id")
+    return v["metadata"]["version_id"]
 
 
 def _resolve_or_new_view_id(view_dir: Path) -> str:
@@ -1239,9 +1177,10 @@ def _resolve_or_new_view_id(view_dir: Path) -> str:
     v = _read_active_view(view_dir)
     if v is None:
         return str(uuid.uuid4())
-    skill = (v.get("extraction") or {}).get("extraction_method") or ""
-    if skill.startswith("parallax-make-house-view"):
-        return (v.get("metadata") or {}).get("view_id") or str(uuid.uuid4())
+    extraction = v.get("extraction")
+    skill = extraction.get("extraction_method") if isinstance(extraction, dict) else None
+    if isinstance(skill, str) and skill.startswith("parallax-make-house-view"):
+        return v["metadata"].get("view_id") or str(uuid.uuid4())
     # Existing view was ingested, not synthesized — start a new view family.
     return str(uuid.uuid4())
 
@@ -1254,12 +1193,19 @@ def _resolve_or_new_view_id(view_dir: Path) -> str:
 def render_status(view_dir: Path | None = None) -> str:
     """Render `--status` output — last-generated view metadata."""
     view_dir = view_dir or DEFAULT_VIEW_DIR
-    v = _read_active_view(view_dir)
+    try:
+        v = _read_active_view(view_dir)
+    except view_commit.CommitRejected as exc:
+        return str(exc)
     if v is None:
         return "No active house view found at " + str(view_dir)
-    metadata = v.get("metadata") or {}
-    extraction = v.get("extraction") or {}
-    skill = extraction.get("extraction_method") or "unknown"
+    metadata = v["metadata"]
+    extraction = v.get("extraction")
+    if not isinstance(extraction, dict):
+        extraction = {}
+    skill = extraction.get("extraction_method")
+    if not isinstance(skill, str) or not skill:
+        skill = "unknown"
     is_synth = skill.startswith("parallax-make-house-view")
 
     status_helper = view_status.compute_status(view_dir=view_dir)

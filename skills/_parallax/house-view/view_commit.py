@@ -7,19 +7,23 @@ exists to prevent: a rename swaps the inode out from under ``append_entry``'s
 flock, and the resulting truncated chain still verifies green because
 ``verify_chain`` raises only on MULTIPLE ``chain_root`` entries.
 
-Not repo-wide: ``parallax-make-house-view``'s ``maker.py`` still writes all
-three directly with ``write_text()``. It holds this same lock -- what it lacks
-is staging, writing each artifact in place and ``chmod``ing afterwards, so a
-crash mid-write can leave a torn ``view.yaml`` that a staged rename would not,
-and a lock-free reader can observe it. Its migration is deferred.
+``parallax-make-house-view``'s ``maker.py`` commits through
+``commit_view_locked`` too, so every canonical write goes through this module.
+
+Durability: each staged file is fsynced before its rename, the view directory
+is fsynced after the renames, and ``audit_chain.append_entry`` fsyncs the row.
+On macOS ``os.fsync`` does not flush the drive's own cache, so this narrows
+the power-loss window there without closing it.
 
 Known residue, deliberately not fixed here:
   * The grouped renames are per-file atomic, not atomic as a group. A crash
     mid-group leaves a new view beside stale prose; ``paired_yaml_hash``
-    detects it at load.
-  * Nothing is fsynced except each staged file before its rename --
-    ``audit.jsonl`` and the directory entry are not.
+    detects it at load, and ``--re-pair`` refuses while leftover
+    ``<artifact>.tmp.<version_id>`` files show a commit did not finish.
   * ``flock`` may silently no-op on some network filesystems.
+  * A view.yaml that the pre-migration maker truncated inside the
+    ``version_id`` or ``view_id`` value is read as a valid identity.
+    Truncation elsewhere is refused by ``read_active_view`` or is harmless.
 
 A plan may hand content over as ``{"inline": ...}`` or as ``{"path": ...}``.
 The path form exists so an operator LLM never has to escape multi-KB prose into
@@ -40,6 +44,7 @@ import argparse
 import hashlib
 import json
 import os
+import stat
 import sys
 from contextlib import suppress
 from pathlib import Path
@@ -57,6 +62,93 @@ if str(_HOUSE_VIEW_DIR) not in sys.path:
 import audit_chain  # noqa: E402
 
 WRITABLE = frozenset({"view.yaml", "prose.md", "provenance.yaml"})
+# What yaml.safe_load can raise on hostile or hand-edited text besides
+# YAMLError: an impossible date or a bad !!int/!!float tag (ValueError), a bad
+# !!timestamp (AttributeError/TypeError), very deep nesting (RecursionError).
+_YAML_PARSE_ERRORS = (yaml.YAMLError, ValueError, TypeError, AttributeError, RecursionError,
+                      OverflowError)
+# Cap on a staged draft read through a path ref. A view, prose or provenance
+# file is tens of KB; this only stops a huge file from exhausting memory.
+_MAX_STAGED_BYTES = 16 * 1024 * 1024
+# Cap on parsed nodes visited, counting every alias expansion. A real view is a
+# few thousand nodes; a few hundred bytes of nested aliases can expand to
+# billions, which would hang the hash while the view lock is held.
+_MAX_YAML_NODES = 200_000
+# A real view nests a handful of levels; this keeps every later recursive walk
+# (the hash's _strip_empty, yaml dumps) far from Python's recursion limit.
+_MAX_YAML_DEPTH = 64
+
+
+class _ViewLoader(yaml.SafeLoader):
+    """SafeLoader that refuses YAML merge keys (``<<``).
+
+    PyYAML expands merges inside the parser, before any check of ours can run,
+    and a few hundred bytes of nested merges take seconds per level. Neither
+    ``yaml.safe_dump`` nor any writer here emits a merge key.
+    """
+
+    def flatten_mapping(self, node):  # noqa: D401 - PyYAML hook
+        for key_node, _ in node.value:
+            if key_node.tag == "tag:yaml.org,2002:merge":
+                raise yaml.constructor.ConstructorError(
+                    None, None, "YAML merge keys (<<) are not accepted", key_node.start_mark
+                )
+        return super().flatten_mapping(node)
+
+
+# YAML 1.1 reads a scalar like 1:0:0:...:0 (plain, or tagged !!int/!!float)
+# as a base-60 number, and PyYAML builds it in quadratic time inside the parse,
+# while the view lock is held. No writer here emits base-60 numbers, so they are
+# refused outright before any number is built. Refusing (rather than loading
+# them as strings) also keeps such a value out of view.yaml, where every other
+# reader would still parse it the slow way.
+def _refuse_base_60(constructor_name: str):
+    base = getattr(yaml.SafeLoader, constructor_name)
+
+    def construct(self, node):
+        if isinstance(node.value, str) and ":" in node.value:
+            raise yaml.constructor.ConstructorError(
+                None, None, "base-60 (sexagesimal) numbers are not accepted", node.start_mark
+            )
+        return base(self, node)
+
+    return construct
+
+
+_ViewLoader.add_constructor("tag:yaml.org,2002:int", _refuse_base_60("construct_yaml_int"))
+_ViewLoader.add_constructor("tag:yaml.org,2002:float", _refuse_base_60("construct_yaml_float"))
+
+
+def _load_yaml(text: str) -> Any:
+    return yaml.load(text, Loader=_ViewLoader)  # noqa: S506 - SafeLoader subclass
+
+
+def _check_bounded(obj: Any, label: str) -> None:
+    """Reject a parsed document that is cyclic or expands past the node cap.
+
+    Aliases are legal YAML and ``yaml.safe_dump`` can emit them, so they are
+    not refused outright; what is refused is a self-reference (which would
+    recurse forever in the hash) or an expansion too large to hash.
+    """
+    visited = 0
+    stack: list[tuple[Any, frozenset[int]]] = [(obj, frozenset())]
+    while stack:
+        node, path = stack.pop()
+        visited += 1
+        if visited > _MAX_YAML_NODES:
+            raise CommitRejected(
+                f"{label} expands to more than {_MAX_YAML_NODES} nodes (YAML aliases?)"
+            )
+        if isinstance(node, (dict, list, tuple, set, frozenset)):
+            if id(node) in path:
+                raise CommitRejected(f"{label} refers to itself (a recursive YAML alias)")
+            if len(path) >= _MAX_YAML_DEPTH:
+                raise CommitRejected(f"{label} nests deeper than {_MAX_YAML_DEPTH} levels")
+            inner = path | {id(node)}
+            children = node.values() if isinstance(node, dict) else node
+            stack.extend((child, inner) for child in children)
+
+
 _AUDIT_FILENAME = "audit.jsonl"
 _CLEAR_REQUIRED_FIELDS = ("destination", "reason")
 
@@ -162,9 +254,22 @@ def compute_view_hash(view: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def _normalize_newlines(text: str) -> bytes:
+    return text.encode("utf-8").replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+
+
+def hash_prose_body(body: str) -> str:
+    """sha256 of a prose body that has no frontmatter yet.
+
+    For writers that must put the digest INTO the frontmatter they are about
+    to prepend. Equals ``compute_prose_body_hash`` of the assembled file.
+    """
+    return hashlib.sha256(_normalize_newlines(body)).hexdigest()
+
+
 def compute_prose_body_hash(prose_text: str) -> str:
     """sha256 of the prose body, per schema.yaml "prose_body_hash computation"."""
-    data = prose_text.encode("utf-8").replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    data = _normalize_newlines(prose_text)
     marker = b"---\n"
     if data.startswith(marker):
         end = data.find(marker, len(marker))
@@ -202,7 +307,15 @@ def validate_audit_entry(audit_entry: dict[str, Any], write: dict[str, Any]) -> 
         )
     if write:
         vid = str(audit_entry["version_id"])
-        if any(bad in vid for bad in ("/", "\\", "..")) or vid != vid.strip():
+        try:
+            vid.encode("utf-8")
+            encodable = True
+        except UnicodeEncodeError:
+            encodable = False
+        # isprintable() also refuses DEL, C1 controls, and format characters
+        # such as a BOM or a bidi override, not only C0 controls.
+        if (any(bad in vid for bad in ("/", "\\", "..")) or vid != vid.strip()
+                or not encodable or not vid.isprintable()):
             raise CommitRejected(f"unsafe version_id for a staging filename: {vid!r}")
     if "view.yaml" in write and not audit_entry.get("view_hash"):
         raise CommitRejected(
@@ -216,15 +329,51 @@ def validate_audit_entry(audit_entry: dict[str, Any], write: dict[str, Any]) -> 
                 raise CommitRejected(f"a clear row requires `{field}` (loader.md §6.2)")
 
 
-def _load_view(view_dir: Path) -> dict[str, Any]:
-    path = view_dir / "view.yaml"
+def read_active_view(view_dir: Path) -> dict[str, Any] | None:
+    """The active view, or None when view.yaml does not exist.
+
+    Any view.yaml that exists must decode, parse to a mapping, and carry a
+    ``metadata`` mapping with a non-empty string ``version_id``; anything else
+    raises ``CommitRejected``.
+    """
+    path = Path(view_dir) / "view.yaml"
     if not path.exists():
-        return {}
-    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        return None
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        # OSError covers a directory or an unreadable file in view.yaml's place.
+        raise CommitRejected(_unreadable_view_message(path, exc)) from exc
+    try:
+        parsed = _load_yaml(text)
+    except _YAML_PARSE_ERRORS as exc:
+        raise CommitRejected(_unreadable_view_message(path, exc)) from exc
+    if not isinstance(parsed, dict):
+        raise CommitRejected(_unreadable_view_message(path, "not a mapping"))
+    _check_bounded(parsed, str(path))
+    meta = parsed.get("metadata")
+    if not isinstance(meta, dict):
+        raise CommitRejected(_unreadable_view_message(path, "metadata is not a mapping"))
+    version_id = meta.get("version_id")
+    if not isinstance(version_id, str) or not version_id.strip():
+        raise CommitRejected(_unreadable_view_message(path, "no usable metadata.version_id"))
+    return parsed
+
+
+def _unreadable_view_message(path: Path, cause: Any) -> str:
+    # Refusing is deliberate: the identity check cannot tell what version the
+    # damaged file holds, and overwriting it would record a new view with no
+    # parent, which breaks the lineage the audit chain exists to prove.
+    return (
+        f"the active {path} cannot be read ({cause}), so its identity cannot be "
+        "checked; nothing was written. Move the damaged file aside (keep it for "
+        "the record), then save again as a fresh view."
+    )
 
 
 def _metadata_field(view_dir: Path, field: str) -> str | None:
-    return ((_load_view(view_dir).get("metadata")) or {}).get(field)
+    view = read_active_view(view_dir)
+    return None if view is None else view["metadata"].get(field)
 
 
 def _resolve_prose_body_hash(view_dir: Path) -> str | None:
@@ -234,7 +383,11 @@ def _resolve_prose_body_hash(view_dir: Path) -> str | None:
     # SECURITY: recompute, never read prose_body_hash out of the frontmatter.
     # Trusting the stored field reopens the legacy-view downgrade attack that
     # loader.md §2 step 3a exists to catch.
-    return compute_prose_body_hash(path.read_text(encoding="utf-8"))
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise CommitRejected(f"the active {path} cannot be read ({exc}); nothing was written") from exc
+    return compute_prose_body_hash(text)
 
 
 def _resolve_view_hash(view_dir: Path) -> str | None:
@@ -247,7 +400,7 @@ def _resolve_view_hash(view_dir: Path) -> str | None:
     # metadata.view_hash alone, and a guard that read the stored field would
     # pass -- blessing the modified view with a row attesting a review that
     # never covered it.
-    return compute_view_hash(_load_view(view_dir))
+    return compute_view_hash(read_active_view(view_dir))
 
 
 # Resolvers are lazy and per-key: only the keys actually present in
@@ -266,19 +419,70 @@ IDENTITY_RESOLVERS: dict[str, Callable[[Path], str | None]] = {
 }
 
 
-def _check_identity(view_dir: Path, expected_identity: dict[str, Any]) -> None:
-    unknown = set(expected_identity) - set(IDENTITY_RESOLVERS)
+def _resolve_clear_version_id(view_dir: Path) -> str | None:
+    try:
+        return _metadata_field(view_dir, "version_id")
+    except CommitRejected:
+        return None
+
+
+# --clear is the recovery mode and the caller archives first, so it alone may
+# run over a view.yaml that cannot be read. --extend and save stay strict.
+CLEAR_RESOLVERS: dict[str, Callable[[Path], str | None]] = {
+    "version_id": _resolve_clear_version_id,
+}
+
+
+def _check_clear_identity(view_dir: Path, expected_identity: dict[str, Any]) -> None:
+    if not isinstance(expected_identity, dict):
+        raise CommitRejected(
+            f"expected_identity must be a mapping, got {type(expected_identity).__name__}"
+        )
+    if expected_identity.get("version_id") is not None:
+        try:
+            read_active_view(view_dir)
+        except CommitRejected as exc:
+            raise CommitRejected(
+                f"the active {Path(view_dir) / 'view.yaml'} cannot be parsed as a view "
+                "with a usable metadata.version_id, so it cannot match the expected "
+                f"version_id {expected_identity['version_id']!r}; nothing was written. "
+                "A clear over an unreadable view passes version_id null in both the "
+                "row and expected_identity."
+            ) from exc
+    _check_identity(view_dir, expected_identity, CLEAR_RESOLVERS)
+
+
+def _check_identity(
+    view_dir: Path,
+    expected_identity: dict[str, Any],
+    resolvers: dict[str, Callable[[Path], str | None]] = IDENTITY_RESOLVERS,
+) -> None:
+    if not isinstance(expected_identity, dict):
+        raise CommitRejected(
+            f"expected_identity must be a mapping, got {type(expected_identity).__name__}"
+        )
+    unknown = set(expected_identity) - set(resolvers)
     if unknown:
         raise CommitRejected(f"unknown identity keys: {sorted(unknown)}")
-    # Both sides go through str() deliberately, which is also what makes the
-    # fresh-install save work: the caller passes `"parent_version_id": null`
-    # when no prior view was read, the resolver returns None for the absent
-    # view.yaml, and "None" == "None". Do not "fix" this into an identity
-    # comparison without giving the fresh-install path its own branch.
-    captured = {k: str(v) for k, v in expected_identity.items()}
-    committed = {k: str(IDENTITY_RESOLVERS[k](view_dir)) for k in expected_identity}
-    moved = audit_chain.identity_diff(captured, committed)
-    if moved:
+    # Values compare as (is-None, str(value)). Non-None values go through str()
+    # deliberately, so an int and its string form compare equal. None compares
+    # equal only to None: the caller passes `"parent_version_id": null` when no
+    # prior view was read and the resolver returns None for an absent view.yaml,
+    # which is what makes a fresh-install save work, while no string on disk
+    # (not "None", not any sentinel) can stand in for "absent".
+    def _key(v: Any) -> tuple[bool, str]:
+        return (v is None, "" if v is None else str(v))
+
+    def _show(v: Any) -> str:
+        return "null" if v is None else repr(str(v))
+
+    committed_raw = {k: resolvers[k](view_dir) for k in expected_identity}
+    moved_keys = [k for k in expected_identity
+                  if _key(expected_identity[k]) != _key(committed_raw[k])]
+    if moved_keys:
+        moved = ", ".join(
+            f"{k}: {_show(expected_identity[k])} -> {_show(committed_raw[k])}" for k in moved_keys
+        )
         raise audit_chain.ViewChangedMidRun(
             f"Active house view changed since it was read ({moved}); nothing was written."
         )
@@ -289,14 +493,48 @@ def _parse_mapping(text: str, label: str) -> dict[str, Any]:
     never letting a ``yaml.YAMLError`` or a non-mapping document escape as an
     unhandled type that bypasses ``except AuditChainError`` callers."""
     try:
-        parsed = yaml.safe_load(text)
-    except yaml.YAMLError as exc:
+        parsed = _load_yaml(text)
+    except _YAML_PARSE_ERRORS as exc:
         raise CommitRejected(f"{label} is not valid YAML: {exc}") from exc
     if parsed is None:
         return {}
     if not isinstance(parsed, dict):
         raise CommitRejected(f"{label} must be a mapping, got {type(parsed).__name__}")
+    _check_bounded(parsed, label)
     return parsed
+
+
+def _validate_re_pair_against_disk(view_dir: Path, audit_entry: dict[str, Any]) -> None:
+    """A re-pair row must describe the view.yaml it re-anchors.
+
+    --re-pair never writes view.yaml, so _validate_row_matches_bytes has no
+    view bytes to check the row against. Recompute from disk instead (never
+    the stored metadata.view_hash, which a hand edit leaves stale by design)
+    and require the row's view_hash and version_id to match. Requiring
+    view_hash also makes _validate_row_matches_bytes check the new prose's
+    paired_yaml_hash against that same on-disk hash.
+    """
+    view = read_active_view(view_dir)
+    if view is None:
+        raise CommitRejected("--re-pair needs an active view.yaml; there is none")
+    actual = compute_view_hash(view)
+    if audit_entry.get("view_hash") != actual:
+        raise CommitRejected(
+            f"re-pair row view_hash {audit_entry.get('view_hash')!r} != "
+            f"on-disk view.yaml {actual!r}"
+        )
+    on_disk_view_id = view["metadata"].get("view_id")
+    if on_disk_view_id is not None and audit_entry.get("view_id") != on_disk_view_id:
+        raise CommitRejected(
+            f"re-pair row view_id {audit_entry.get('view_id')!r} != "
+            f"on-disk view.yaml {on_disk_view_id!r}"
+        )
+    on_disk_version = view["metadata"]["version_id"]
+    if audit_entry.get("version_id") != on_disk_version:
+        raise CommitRejected(
+            f"re-pair row version_id {audit_entry.get('version_id')!r} != "
+            f"on-disk view.yaml {on_disk_version!r}"
+        )
 
 
 def _validate_row_matches_bytes(write: dict[str, str], audit_entry: dict[str, Any]) -> None:
@@ -304,13 +542,24 @@ def _validate_row_matches_bytes(write: dict[str, str], audit_entry: dict[str, An
     with the artifacts it witnesses and the chain still verifies green."""
     if "view.yaml" in write:
         parsed = _parse_mapping(write["view.yaml"], "view.yaml")
-        meta = parsed.get("metadata") or {}
+        meta = parsed.get("metadata")
+        if not isinstance(meta, dict):
+            raise CommitRejected("view.yaml metadata must be a mapping")
+        if not isinstance(meta.get("version_id"), str) or not meta["version_id"].strip():
+            # The reader refuses a view without a non-empty string version_id,
+            # so the writer must not commit one.
+            raise CommitRejected("view.yaml metadata.version_id must be a non-empty string")
         if "view_hash" in audit_entry:
             actual = compute_view_hash(parsed)
             if audit_entry["view_hash"] != actual:
                 raise CommitRejected(
                     f"row view_hash {audit_entry['view_hash']!r} != bytes {actual!r}"
                 )
+        if meta.get("view_id") is not None and meta.get("view_id") != audit_entry.get("view_id"):
+            raise CommitRejected(
+                f"row view_id {audit_entry.get('view_id')!r} != "
+                f"view.yaml metadata {meta.get('view_id')!r}"
+            )
         if meta.get("version_id") != audit_entry.get("version_id"):
             raise CommitRejected(
                 f"row version_id {audit_entry.get('version_id')!r} != "
@@ -355,7 +604,43 @@ if frozenset(_STAGING_ORDER) != WRITABLE:
     )
 
 
+def _reject_stale_staging(view_dir: Path) -> None:
+    """Refuse to re-pair a directory that holds leftover staging files.
+
+    ``view.yaml`` is staged and renamed first, so a commit that died after at
+    least one rename left ``view.yaml`` carrying that commit's version_id and
+    left ``<artifact>.tmp.<that version_id>`` for the artifacts it never
+    renamed. That combination is the signature of a mixed set. A leftover for
+    any OTHER version_id is debris from a commit that renamed nothing, or one
+    a later complete save has since superseded, and does not block.
+    ``--re-pair`` blesses the artifacts as they stand; doing that over a mixed
+    set would write a row attesting a view nobody reviewed. Other modes
+    replace the artifacts outright, so they never consult this.
+    """
+    if not view_dir.is_dir():
+        return
+    current = _metadata_field(view_dir, "version_id")
+    if current is None:
+        return
+    suffixes = {f"{artifact}.tmp.{current}" for artifact in WRITABLE}
+    stale = sorted(entry.name for entry in view_dir.iterdir() if entry.name in suffixes)
+    if stale:
+        raise CommitRejected(
+            f"leftover staging files {stale} in {view_dir} belong to the version "
+            f"view.yaml holds ({current}): that commit did not finish, so the live "
+            "artifacts may be a mix of two versions (or an interrupted earlier "
+            "re-pair left its staged prose behind). Inspect "
+            "view.yaml, prose.md and provenance.yaml, remove the leftovers, then re-pair."
+        )
+
+
 def _stage_and_rename(view_dir: Path, write: dict[str, str], version_id: str) -> None:
+    # Encode first, so content that cannot be written (a lone surrogate) is a
+    # clean rejection before any staging file exists.
+    try:
+        payloads = {name: write[name].encode("utf-8") for name in _STAGING_ORDER if name in write}
+    except UnicodeEncodeError as exc:
+        raise CommitRejected(f"artifact content is not encodable as UTF-8: {exc}") from exc
     staged: list[tuple[Path, Path]] = []
     renamed = 0
     try:
@@ -373,23 +658,30 @@ def _stage_and_rename(view_dir: Path, write: dict[str, str], version_id: str) ->
             # wedges every retry with this same version_id permanently.
             staged.append((tmp, view_dir / name))
             with os.fdopen(fd, "wb") as handle:
-                handle.write(write[name].encode("utf-8"))
+                handle.write(payloads[name])
                 handle.flush()
                 os.fsync(handle.fileno())
         for tmp, final in staged:
             os.rename(tmp, final)
             renamed += 1
             staged = staged[1:]
-    except OSError as exc:
+        # The renames live in the directory entry; persist it before the row
+        # that witnesses them is appended.
+        audit_chain.fsync_dir(view_dir)
+    except BaseException as exc:
+        # Any failure, not just OSError: a leaked staging file wedges retries
+        # with this version_id (O_EXCL) and blocks --re-pair.
         for tmp, _ in staged:
             with suppress(OSError):
                 tmp.unlink()
-        if renamed:
+        if renamed and isinstance(exc, Exception):
             raise CommitPartiallyApplied(
                 f"{renamed} artifact(s) were renamed into place before this failed "
-                f"({exc}). The completed rename(s) cannot be undone and no audit row "
+                f"({exc!r}). The completed rename(s) cannot be undone and no audit row "
                 "was appended. Inspect the view directory before retrying."
             ) from exc
+        if not isinstance(exc, OSError):
+            raise
         raise CommitRejected(f"staging failed, nothing committed: {exc}") from exc
 
 
@@ -408,15 +700,28 @@ def commit_view_locked(
     validation has passed.
     """
     view_dir = Path(view_dir)
-    if not isinstance(token, audit_chain.TransactionToken) or token.view_dir != view_dir:
+    if not audit_chain.token_is_live(token, view_dir):
         raise CommitRejected(
-            "commit_view_locked requires a TransactionToken for this view_dir; "
-            "use commit_view() if you do not already hold the transaction"
+            "commit_view_locked requires a live TransactionToken from "
+            "view_transaction() on this view_dir; use commit_view() if you do "
+            "not already hold the transaction"
         )
     validate_write_remove_keys(write, remove)
     validate_audit_entry(audit_entry, write)
-    _check_identity(view_dir, expected_identity)
-    _validate_row_matches_bytes(write, audit_entry)
+    if audit_entry["action"] == "re-pair":
+        _reject_stale_staging(view_dir)
+    try:
+        if audit_entry["action"] == "clear":
+            _check_clear_identity(view_dir, expected_identity)
+        else:
+            _check_identity(view_dir, expected_identity)
+        if audit_entry["action"] == "re-pair":
+            _validate_re_pair_against_disk(view_dir, audit_entry)
+        _validate_row_matches_bytes(write, audit_entry)
+    except (ValueError, RecursionError, UnicodeError) as exc:
+        # Hashing hostile content can still fail after parsing: an int too long
+        # to turn into a string, a lone surrogate. Nothing has been written yet.
+        raise CommitRejected(f"artifact content cannot be hashed: {exc!r}") from exc
     mutated = False
     if write:
         _stage_and_rename(view_dir, write, str(audit_entry["version_id"]))
@@ -444,6 +749,9 @@ def commit_view_locked(
                 + ". No audit row was appended. Inspect the view directory "
                 "before retrying."
             ) from exc
+    if removed:
+        # Persist the unlinks before the row that witnesses them.
+        audit_chain.fsync_dir(view_dir)
     try:
         return audit_chain.append_entry(view_dir / _AUDIT_FILENAME, audit_entry)
     except Exception as exc:  # noqa: BLE001
@@ -539,6 +847,9 @@ def _resolve_content(
     # Every branch below rejects BEFORE opening the file. Order is the contract:
     # a plan that will be refused must not have caused a read on its way to the
     # refusal, or the refusal came too late to matter.
+    raw_path = ref["path"]
+    if not isinstance(raw_path, str) or not raw_path or "\x00" in raw_path:
+        raise CommitRejected(f"write[{name!r}] path must be a non-empty string without NUL")
     if staging_dir is None:
         raise CommitRejected(
             f"write[{name!r}] is a path ref but no staging directory was declared; "
@@ -551,7 +862,10 @@ def _resolve_content(
     # staging directory, so it is rejected rather than followed. `..` segments
     # are normalized by the same call, so a traversal out of the staging
     # directory fails the same comparison.
-    source = Path(ref["path"]).expanduser().resolve()
+    try:
+        source = Path(raw_path).expanduser().resolve()
+    except (RuntimeError, OSError, ValueError) as exc:  # e.g. ~nosuchuser
+        raise CommitRejected(f"write[{name!r}] path {raw_path!r} cannot be resolved: {exc}") from exc
     if source.parent == Path(view_dir).expanduser().resolve():
         # Unreachable while staging_dir is disjoint from view_dir (enforced
         # above), and kept anyway: it is the guard that still holds if a future
@@ -566,9 +880,80 @@ def _resolve_content(
             f"write[{name!r}] path resolves to {source}, whose parent is not the "
             f"staging directory {staging_dir}; path refs are read only from there"
         )
-    if not source.is_file():
-        raise CommitRejected(f"write[{name!r}] path {source} is not a regular file")
-    return source.read_text(encoding="utf-8")
+    return _read_staged_file(staging_dir, source.name, name)
+
+
+def _read_staged_file(staging_dir: Path, filename: str, name: str) -> str:
+    """Read ``filename`` from ``staging_dir`` through file descriptors only.
+
+    The checks above are path checks, and a path can change between the check
+    and the read. So the read never goes back to a path: the staging directory
+    is opened once, the file is opened relative to that descriptor with
+    O_NOFOLLOW (a symlink swapped in after ``resolve()`` fails the open), and
+    type and link count come from ``fstat`` on the open descriptor, which is
+    the same file the bytes are read from. O_NONBLOCK keeps a FIFO from
+    hanging the open; it has no effect on reads of a regular file.
+
+    ``st_nlink > 1`` is refused because a hard link is a second name for a
+    file that lives elsewhere: ``resolve()`` cannot see through it, so a hard
+    link placed in the staging directory would otherwise pass every path
+    check and read the other file.
+    """
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    try:
+        dir_fd = os.open(
+            str(staging_dir), os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | nofollow
+        )
+    except OSError as exc:
+        raise CommitRejected(
+            f"write[{name!r}] staging directory {staging_dir} could not be opened: {exc}"
+        ) from exc
+    try:
+        try:
+            fd = os.open(
+                filename,
+                os.O_RDONLY | nofollow | getattr(os, "O_NONBLOCK", 0),
+                dir_fd=dir_fd,
+            )
+        except OSError as exc:
+            raise CommitRejected(
+                f"write[{name!r}] path {staging_dir / filename} could not be opened as a "
+                f"file (symbolic links are not followed): {exc}"
+            ) from exc
+        # Check the raw descriptor before wrapping it: os.fdopen raises on a
+        # directory, and a raise before the wrap would leak the descriptor.
+        try:
+            st = os.fstat(fd)
+            if not stat.S_ISREG(st.st_mode):
+                raise CommitRejected(
+                    f"write[{name!r}] path {staging_dir / filename} is not a regular file"
+                )
+            if st.st_size > _MAX_STAGED_BYTES:
+                raise CommitRejected(
+                    f"write[{name!r}] path {staging_dir / filename} is {st.st_size} bytes; "
+                    f"the limit is {_MAX_STAGED_BYTES}"
+                )
+        except BaseException:
+            os.close(fd)
+            raise
+        with os.fdopen(fd, "rb") as handle:
+            if st.st_nlink > 1:
+                raise CommitRejected(
+                    f"write[{name!r}] path {staging_dir / filename} has "
+                    f"{st.st_nlink} hard links; stage a fresh file with one name"
+                )
+            data = handle.read(_MAX_STAGED_BYTES + 1)
+            if len(data) > _MAX_STAGED_BYTES:
+                raise CommitRejected(
+                    f"write[{name!r}] path {staging_dir / filename} is over "
+                    f"{_MAX_STAGED_BYTES} bytes; the limit is {_MAX_STAGED_BYTES}"
+                )
+    finally:
+        os.close(dir_fd)
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise CommitRejected(f"write[{name!r}] is not valid UTF-8: {exc}") from exc
 
 
 def build_commit_args(
@@ -580,6 +965,13 @@ def build_commit_args(
     # Validated even when the plan turns out to hold no path refs: a staging
     # directory the operator got wrong should be a loud rejection, not a value
     # that silently never gets used.
+    if not isinstance(plan, dict):
+        raise CommitRejected(f"the plan must be a JSON object, got {type(plan).__name__}")
+    for field in ("write", "audit_entry", "expected_identity"):
+        if plan.get(field) is not None and not isinstance(plan[field], dict):
+            raise CommitRejected(
+                f"plan.{field} must be an object, got {type(plan[field]).__name__}"
+            )
     staging = resolve_staging_dir(staging_dir, view_dir)
     write = {n: _resolve_content(view_dir, n, r, staging)
              for n, r in (plan.get("write") or {}).items()}
@@ -617,7 +1009,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     view_dir = Path(args.dir).expanduser()
     try:
-        plan = json.loads(sys.stdin.read())
+        try:
+            plan = json.loads(sys.stdin.read())
+        except (json.JSONDecodeError, RecursionError) as exc:
+            raise CommitRejected(f"the plan on stdin is not valid JSON: {exc}") from exc
         kwargs = build_commit_args(args.mode, plan, view_dir, staging_dir=args.staging_dir)
         entry = commit_view(view_dir, **kwargs)
     except (CommitRejected, audit_chain.ViewChangedMidRun) as exc:

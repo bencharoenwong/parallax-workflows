@@ -10,6 +10,8 @@ import hashlib
 import json
 import logging
 import os
+import secrets
+import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,9 +41,31 @@ class TransactionToken:
     file description holds the lock, so a probe cannot distinguish "I hold it"
     from "another process holds it and I do not" -- it passes in exactly the
     contended case that matters.
+
+    Only ``view_transaction`` mints a live token. It registers the token's
+    nonce while the lock is held and retires it on exit, so a token built by
+    direct construction, or kept past the end of its ``with`` block, fails
+    ``token_is_live``. This is a guard against misuse inside this process,
+    not a security boundary against code that can import this module.
     """
 
     view_dir: Path
+    nonce: str = ""
+
+
+# nonce -> view_dir for every transaction currently holding its lock.
+_LIVE_TOKENS: dict[str, Path] = {}
+_LIVE_TOKENS_GUARD = threading.Lock()
+
+
+def token_is_live(token: Any, view_dir: Path) -> bool:
+    """True only for a token minted by a ``view_transaction`` on ``view_dir``
+    that has not exited yet."""
+    if not isinstance(token, TransactionToken) or not token.nonce:
+        return False
+    with _LIVE_TOKENS_GUARD:
+        held = _LIVE_TOKENS.get(token.nonce)
+    return held is not None and held == Path(view_dir) == token.view_dir
 
 
 class AuditChainError(Exception):
@@ -114,9 +138,34 @@ def view_transaction(view_dir: Path) -> Iterator[TransactionToken]:
                 lock_path.chmod(_AUDIT_FILE_MODE)
             except OSError:
                 pass
-            yield TransactionToken(view_dir=directory)
+            token = TransactionToken(view_dir=directory, nonce=secrets.token_hex(16))
+            with _LIVE_TOKENS_GUARD:
+                _LIVE_TOKENS[token.nonce] = directory
+            try:
+                yield token
+            finally:
+                with _LIVE_TOKENS_GUARD:
+                    _LIVE_TOKENS.pop(token.nonce, None)
         finally:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def fsync_dir(directory: Path) -> None:
+    """Persist a directory's entries (a create or a rename) to disk.
+
+    Best effort: some platforms and filesystems refuse to open or fsync a
+    directory, and losing durability there is not worth failing a commit.
+    """
+    try:
+        dir_fd = os.open(str(directory), os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    except OSError:
+        return
+    try:
+        os.fsync(dir_fd)
+    except OSError:
+        pass
+    finally:
+        os.close(dir_fd)
 
 
 def compute_entry_hash(entry: dict[str, Any]) -> str:
@@ -266,6 +315,7 @@ def append_entry(
     # between exists() and open(): two concurrent first-writers both saw
     # not-exists, both opened "wb+", and the second open truncated the
     # first writer's just-flushed entry (silent audit-log loss).
+    created = not audit_path.exists()  # only decides whether to fsync the dir
     fd = os.open(str(audit_path), os.O_CREAT | os.O_RDWR, _AUDIT_FILE_MODE)
     with os.fdopen(fd, "r+b") as f:
         # Acquire exclusive lock
@@ -307,6 +357,18 @@ def append_entry(
             f.seek(0, 2) # Ensure at end
             f.write(line_bytes)
             f.flush()
+            # The row is the witness for artifacts that were already fsynced
+            # and renamed; without this a power loss can keep the artifacts
+            # and drop the row that explains them. Best effort: the row is
+            # already written, so raising here would tell the caller it was
+            # lost and invite a duplicate append. (On macOS fsync does not
+            # flush the drive cache either.)
+            try:
+                os.fsync(f.fileno())
+            except OSError as exc:
+                logger.warning("audit_entry_fsync_failed: %s (row was written)", exc)
+            if created:
+                fsync_dir(audit_path.parent)
             # Warn AFTER successful flush — pre-write warns about phantom
             # entries if the write fails (disk full, EINTR), which would
             # weaken the audit trail's evidentiary value.
