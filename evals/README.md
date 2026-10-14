@@ -256,12 +256,18 @@ Parallax server loads. `"needs": "connector-optional"` runs like a connector jou
 but skips only the Parallax-server-presence check. Use it for a journey that calls no
 Parallax tool, because a claude.ai connector can be missing from the init message. An
 optional `skill` names the plugin skill the journey must run (`parallax:` prefix); it
-defaults to `parallax:parallax-concierge`. An optional `require_helpers` lists policy
-helpers (`adaptation.py`, `coverage_check.py`, `reconcile.py`) that must each run as the
-documented command, not denied, exiting cleanly, on a `.parallax-policy/` draft the Write
-tool created earlier in the run (conventions §14.4). The runner validates every line before any
+defaults to `parallax:parallax-concierge`. An optional `require_helpers` lists helpers
+that must each run as the documented command from this branch's `plugin/` directory, not
+denied, exiting cleanly. A policy helper (`adaptation.py`, `coverage_check.py`,
+`reconcile.py`) must run with its primary argument (`--policy`, `--portfolio-sectors`,
+`--input`) naming a `.parallax-policy/` draft the Write tool created earlier in the run
+(conventions §14.4); a draft made or last changed by Edit or MultiEdit does not count.
+`render_gate.py` must run with `--skill` set to the journey skill's key, either on a
+`.parallax-render/` draft the Write tool created earlier or in the documented stdin form
+(conventions §10.3); it needs `skill`. The runner validates every line before any
 model call and rejects unknown keys, a list field that is not a list of strings, a
-`skill` without the `parallax:` prefix, and a `require_helpers` entry outside that set.
+`skill` without the `parallax:` prefix, a `require_helpers` entry outside that set, and
+`render_gate.py` in `require_helpers` without `skill`.
 
 Each run is captured as `--output-format stream-json --verbose` and fails closed. A
 journey FAILs when:
@@ -273,7 +279,7 @@ journey FAILs when:
   --portfolio-sectors`, or `reconcile.py --input`); or a denied command that ran a
   helper through `python3` or `python` (a bare mention, such as a `sed` or `grep` of
   the helper's file, does not count) when no later Bash call ran that helper's
-  documented command (the gate must succeed; the audit, adaptation, coverage and
+  documented command from `plugin/` (the gate must succeed; the audit, adaptation, coverage and
   reconcile helpers only need to run, since their nonzero exits are documented
   non-fatal outcomes);
 - any Bash command, denied or not, names `audit.jsonl` (only `audit_append.py` may
@@ -289,13 +295,18 @@ journey FAILs when:
   / `reconcile.py` run that names that same literal path was issued (not denied) after
   the last successful write to it — a consumption check, not a gating check, since
   none of these three helpers deletes its input. A helper argument may be a quoted
-  path or a bare token without shell metacharacters, absolute or relative to the
-  run's working directory (from the init message);
+  path or a bare token, absolute or relative to the run's working directory (from the
+  init message). Neither form may contain `$`, a backtick or `\`, so it cannot expand.
+  A helper run counts only when its script resolves under this branch's `plugin/`;
 - a journey's `require_helpers` helper did not run as above, exiting cleanly, on a
   draft the Write tool created earlier in the run;
 - a Bash command that was not denied runs a file the model wrote in this run
-  (`python3 <file>`, `bash <file>`, `sh <file>`, `./<file>`): only the documented
-  helpers read drafts and only `render_gate.py` gates a report (conventions §14.4);
+  (`python3 <file>`, `bash <file>`, `sh <file>`, interpreter flags such as `-u`
+  skipped, or the file as a command word, `./<file>`): only the documented helpers
+  read drafts and only `render_gate.py` gates a report (conventions §14.4). Naming a
+  payload or report draft is not a run. This rule is best-effort: it matches shell
+  text, so other spellings (`python3 - < <file>`, `source <file>`, a path built from
+  `$PWD`, a `cd` before a relative path) are not caught;
 - anything other than a policy draft or its `.gitignore` is written into
   `.parallax-policy/`;
 - a Write, Edit, MultiEdit or NotebookEdit call targets `audit.jsonl`;
@@ -395,4 +406,4 @@ What each journey checks:
 | `J6_uncovered_ticker` | An unknown ticker is reported as not covered or not resolved, not replaced by an invented symbol. Bills Parallax credits: the should-i-buy route resolves with `get_company_info` (1 credit per attempt). |
 | `J7_direct_task_bypass` | "I'm new here. Should I buy AAPL?" runs `parallax:parallax-should-i-buy` directly (`"skill"` field; bills Parallax credits) and shows no role label. |
 | `J8_role_asked_not_guessed` | A bare "I'm new here" (no payload) gets asked the role question with the role labels offered, not guessed, and no skill runs yet (`check_api_health` only, free). |
-| `J9_client_review_policy` | A wealth advisor's client review with an inline `policy=` runs `parallax:parallax-client-review`, writes the policy to a `.parallax-policy/` draft, runs `adaptation.py` on it as documented (`require_helpers`), and renders SAA Drift and Policy Data Quality. Bills Parallax credits. **Known failing (2026-10-13):** in two live runs the report rendered correctly, but the model wrote the policy through a heredoc first, ran `adaptation.py` through a shell variable, and put the report draft in `.parallax-policy/`; client-review's helper instructions need a redesign before this journey can pass. |
+| `J9_client_review_policy` | A wealth advisor's client review with an inline `policy=` runs `parallax:parallax-client-review`, writes the policy to a `.parallax-policy/` draft, runs `adaptation.py` on it as documented, gates the report with `render_gate.py` (both `require_helpers`), and renders SAA Drift and Policy Data Quality. Bills Parallax credits. **Known failing (2026-10-13):** in two live runs the report rendered correctly, but the model wrote the policy through a heredoc first, ran `adaptation.py` through a shell variable, and put the report draft in `.parallax-policy/`; client-review's helper instructions need a redesign before this journey can pass. |

@@ -26,8 +26,14 @@ import sys
 ALLOWED_KEYS = frozenset({"id", "prompt", "expect", "forbid", "expect_any", "needs", "skill",
                           "require_helpers"})
 LIST_KEYS = ("expect", "forbid", "expect_any", "require_helpers")
-# Helpers a journey may require via "require_helpers" (conventions §14.4).
-REQUIRABLE_HELPERS = frozenset({"adaptation.py", "coverage_check.py", "reconcile.py"})
+# Helpers a journey may require via "require_helpers" (conventions §10.3/§14.4).
+# render_gate.py needs the journey's "skill", whose key the gate run must name.
+REQUIRABLE_HELPERS = frozenset({"adaptation.py", "coverage_check.py", "reconcile.py",
+                                "render_gate.py"})
+# The argument that names each required helper's payload draft. A run counts
+# for "require_helpers" only when this argument is a Write-tool draft.
+_PRIMARY_ARG = {"adaptation.py": "policy", "coverage_check.py": "portfolio_sectors",
+                "reconcile.py": "input", "render_gate.py": "input"}
 # no-connector: no Parallax server may load. connector-optional: skip only the
 # server-presence check (for a journey that makes no Parallax call, where a
 # claude.ai connector may not be listed in the init message yet).
@@ -60,10 +66,12 @@ _AUDIT_LOG = re.compile(r"audit\.jsonl(?![\w.])")
 # into the "improvised" bucket below).
 def _arg(name: str) -> str:
     """One path argument: double-quoted, or a bare token with no whitespace,
-    quote or shell metacharacter (so a bare token cannot expand or chain).
-    A bare cwd-relative path such as ``.parallax-policy/policy-<hex>.json`` is
-    as literal as a quoted absolute one (conventions §14.4)."""
-    return (rf'(?:"(?P<{name}>[^"\n]+)"'
+    quote or shell metacharacter. Neither form may hold ``$``, a backtick or
+    ``\\``, so the argument cannot expand (``"$PWD/x"``, ``"$(cmd)"``) and
+    names the file the shell reads. A bare cwd-relative path such as
+    ``.parallax-policy/policy-<hex>.json`` is as literal as a quoted absolute
+    one (conventions §14.4)."""
+    return (rf'(?:"(?P<{name}>[^"\n$`\\]+)"'
             rf"|(?P<{name}__bare>[^\s\"'$`;&|<>(){{}}*?!~\\]+))")
 
 
@@ -71,6 +79,12 @@ _HELPER_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("render_gate.py", re.compile(
         r"python3 " + _arg("script_rg") + r" --skill (?P<key>[a-z0-9-]+) "
         r"--input " + _arg("input")
+    )),
+    # The stdin fallback (conventions §10.3): the report in a quoted heredoc.
+    # _match_documented_helper also rejects a body that ends the heredoc early.
+    ("render_gate.py", re.compile(
+        r"python3 " + _arg("script_rg") + r" --skill (?P<key>[a-z0-9-]+) "
+        r"<<'REPORT'\n(?P<body>.*)\nREPORT", re.DOTALL
     )),
     ("audit_append.py", re.compile(
         r"python3 " + _arg("script_aa") + r" --input " + _arg("input")
@@ -98,11 +112,30 @@ _HELPER_SCRIPT_SUFFIX = {
     "coverage_check.py": "/coverage_check.py",
     "reconcile.py": "/client-policy/reconcile.py",
 }
-# An interpreter or shell given a script path: ``python3 x.py``, ``bash x.sh``,
-# ``sh x``, ``./x``. Flags (``-c``, ``-m``) are not paths and are skipped.
-_SCRIPT_RUN = re.compile(
-    r"""(?:\bpython3?|\bbash|\bsh)\s+(["']?[^\s"';&|<>-][^\s"';&|<>]*["']?)"""
-    r"""|(?:^|[\s;&|])(\./[^\s"';&|<>]+)"""
+# An interpreter or shell given a script path (``python3 x.py``, ``bash x.sh``,
+# ``sh x``), or any path in command position (``./x``, ``tools/x.py``).
+# Interpreter flags (``-u``, ``-x``) are skipped; ``-c`` is not, so
+# ``bash -c 'python3 x'`` matches the inner run. Best-effort: other spellings
+# (``python3 - < x``, ``source x``) are not caught (evals/README.md).
+_INTERPRETER_RUN = re.compile(
+    r"""(?<![\w.-])(?:python3?|bash|sh)(?:\s+-(?!c\b)[A-Za-z]+)*\s+(["']?[^\s"';&|<>()-][^\s"';&|<>()]*["']?)"""
+)
+_COMMAND_WORD = re.compile(r"""(?:^|[;&|(\n])\s*([^\s"';&|<>()]+)""")
+
+
+def _script_tokens(command: str) -> list[str]:
+    """The paths ``command`` may run as a script, quotes stripped. The two
+    scans are separate so a command word (``(python3``) cannot hide the
+    interpreter run that follows it."""
+    return [m.group(1).strip("\"'") for rx in (_INTERPRETER_RUN, _COMMAND_WORD)
+            for m in rx.finditer(command)]
+
+
+# Payload-draft labels the skills write (conventions §14.4). A draft with one
+# of these labels is data: a command that names it is not running a script.
+_DATA_DRAFT = re.compile(
+    r"/\.parallax-policy/(?:policy|exposures|tilts|portfolio-sectors|redundancy-sectors|holdings|"
+    r"reconcile)-[0-9a-f]{8}\.(?:json|yaml)$"
 )
 # A report draft (conventions §10.3); its key is the gated skill's key.
 _REPORT_DRAFT = re.compile(r"/\.parallax-render/(?P<key>[a-z0-9-]+)-[0-9a-f]{8}\.md$")
@@ -130,13 +163,17 @@ def _norm_path(path: str, cwd: str | None = None) -> str:
 
 def _match_documented_helper(command: str) -> dict[str, str] | None:
     """Try each pattern in ``_HELPER_PATTERNS`` in turn; return
-    ``{"helper": <bare name>, **matched groups}`` for the first exact match
-    (one line, canonical flag order), else None. Missing optional groups are
+    ``{"helper": <bare name>, "script": <script path>, **matched groups}`` for
+    the first exact match (one line, canonical flag order; the render-gate
+    stdin form also has ``body``), else None. Missing optional groups are
     present with value None (``re.Match.groupdict()``)."""
     stripped = command.strip()
     for helper, pattern in _HELPER_PATTERNS:
         m = pattern.fullmatch(stripped)
         if not m:
+            continue
+        # A heredoc ends at its first terminator line; text after it would run.
+        if m.groupdict().get("body") is not None and "REPORT" in m["body"].split("\n"):
             continue
         groups: dict[str, str | None] = {}
         for name, value in m.groupdict().items():
@@ -146,9 +183,22 @@ def _match_documented_helper(command: str) -> dict[str, str] | None:
         script = next((v for k, v in groups.items() if k.startswith("script_") and v), "")
         if not script.endswith(_HELPER_SCRIPT_SUFFIX[helper]):
             continue
-        return {"helper": helper,
+        return {"helper": helper, "script": script,
                 **{k: v for k, v in groups.items() if not k.startswith("script_")}}
     return None
+
+
+def _helper_args(m: dict) -> dict[str, str]:
+    """The path arguments of a ``_match_documented_helper`` result."""
+    return {k: v for k, v in m.items() if k not in ("helper", "script", "key", "body") and v}
+
+
+def _in_plugin(script: str, cwd: str | None, plugin_dir: str | None) -> bool:
+    """True when ``plugin_dir`` is None or ``script`` resolves under it, so a
+    command that names a file the model wrote is never credited as a helper run."""
+    if plugin_dir is None:
+        return True
+    return _norm_path(script, cwd).startswith(_norm_path(plugin_dir).rstrip("/") + "/")
 
 
 def documented_helper(command: str) -> str | None:
@@ -185,6 +235,8 @@ def validate_journey(journey: object) -> list[str]:
         bad = sorted(set(journey["require_helpers"]) - REQUIRABLE_HELPERS)
         if bad:
             problems.append(f"'require_helpers' entries must be in {sorted(REQUIRABLE_HELPERS)}: {bad}")
+        if "render_gate.py" in journey["require_helpers"] and "skill" not in journey:
+            problems.append("'require_helpers' with render_gate.py needs 'skill' (the gate's --skill key)")
     if "needs" in journey and journey["needs"] not in NEEDS_VALUES:
         problems.append(f"'needs' must be one of {sorted(NEEDS_VALUES)}")
     return problems
@@ -232,7 +284,7 @@ def parse_stream(stream_text: str) -> dict:
     ``skill_calls`` does the same for Skill tool calls, keyed by tool_use id,
     with the requested skill name. ``bash_calls`` lists every Bash tool call in
     order as {"id", "command", "ok", "seq"}. ``file_writes`` lists every
-    Write/Edit call as {"id", "path", "ok", "seq"}. ``seq`` is the call's
+    Write/Edit/MultiEdit/NotebookEdit call as {"id", "tool", "path", "ok", "seq"}. ``seq`` is the call's
     position in the stream, shared by both lists. ``assistant_texts`` lists every assistant
     text block in order."""
     init = None
@@ -274,7 +326,7 @@ def parse_stream(stream_text: str) -> dict:
                     tool_input = block.get("input") if isinstance(block.get("input"), dict) else {}
                     seq += 1
                     writes[block.get("id", "")] = {
-                        "id": block.get("id", ""), "ok": False, "seq": seq,
+                        "id": block.get("id", ""), "tool": block["name"], "ok": False, "seq": seq,
                         "path": str(tool_input.get("file_path") or tool_input.get("notebook_path") or "")}
                 elif btype == "tool_use" and block.get("name") == "Bash":
                     tool_input = block.get("input") if isinstance(block.get("input"), dict) else {}
@@ -292,13 +344,17 @@ def parse_stream(stream_text: str) -> dict:
             "assistant_texts": texts}
 
 
-def classify_denials(denials: list, bash_calls: list[dict]) -> tuple[list[str], list[str]]:
+def classify_denials(denials: list, bash_calls: list[dict], cwd: str | None = None,
+                     plugin_dir: str | None = None) -> tuple[list[str], list[str]]:
     """Split permission denials into (blocking, warnings).
 
     Blocking: any non-Bash denial (an MCP tool, Write, Skill); a Bash denial
     whose command cannot be read; the documented helper command itself
-    (``_HELPER_PATTERNS``); or an improvised command that used a helper when
-    no later Bash call ran that helper's documented command (the gate must
+    (``_HELPER_PATTERNS``), except the render gate's stdin fallback, which
+    Claude Code refuses for some report text (conventions §10.3) and is
+    treated as below; or an improvised command that used a helper when
+    no later Bash call ran that helper's documented command, from
+    ``plugin_dir`` when given (the gate must
     succeed; the audit, adaptation, coverage and reconcile helpers must run,
     since their nonzero exits are documented outcomes, loader §6 /
     policy-loader.md §2 / policy-reconciliation.md step 3). Everything else,
@@ -321,17 +377,21 @@ def classify_denials(denials: list, bash_calls: list[dict]) -> tuple[list[str], 
         if name != "Bash" or not command:
             blocking.append(f"permission denials: [{name!r}]")
             continue
-        if _match_documented_helper(command):
+        documented = _match_documented_helper(command)
+        if documented and documented.get("body") is None:
             blocking.append(f"documented helper command denied: {command[:120]}")
             continue
         used = sorted({m["helper"] for m in _HELPER_RUN.finditer(command)})
+        if documented:
+            used = sorted(set(used) | {documented["helper"]})
         if used:
             denied_at = order.index(d.get("tool_use_id")) if d.get("tool_use_id") in order else -1
             later = bash_calls[denied_at + 1:] if denied_at >= 0 else []
+            runs = [(c, _match_documented_helper(c["command"])) for c in later]
             missing = [h for h in used if not any(
-                documented_helper(c["command"]) == h
+                m is not None and m["helper"] == h and _in_plugin(m["script"], cwd, plugin_dir)
                 and (c["ok"] if h == "render_gate.py" else c["id"] not in denied_ids)
-                for c in later)]
+                for c, m in runs)]
             if missing:
                 blocking.append(f"helper never ran after its command was denied: {missing}")
                 continue
@@ -413,7 +473,11 @@ def check_run(
             final_text = result["result"]
         denials = result.get("permission_denials") or []
         denied_ids = {d.get("tool_use_id") for d in denials if isinstance(d, dict)}
-        blocking, _ = classify_denials(denials, parsed["bash_calls"])
+        # The run's working directory, so a cwd-relative helper argument such as
+        # .parallax-policy/policy-<hex>.json names the same file the Write tool
+        # wrote under its absolute path.
+        cwd = (parsed["init"] or {}).get("cwd")
+        blocking, _ = classify_denials(denials, parsed["bash_calls"], cwd=cwd, plugin_dir=plugin_dir)
         reasons.extend(blocking)
         commands = [c["command"] for c in parsed["bash_calls"]]
         for d in denials:
@@ -428,21 +492,21 @@ def check_run(
         # documented gate run on that same draft, with the draft's own key,
         # after the last successful write to it. A skill that stops before
         # drafting (an unresolvable ticker) needs no gate.
-        # The run's working directory, so a cwd-relative helper argument such as
-        # .parallax-policy/policy-<hex>.json names the same file the Write tool
-        # wrote under its absolute path.
-        cwd = (parsed["init"] or {}).get("cwd")
+        # A helper run counts only when its script is this run's plugin copy
+        # (plugin_dir), never a same-named file the model wrote.
         gate_runs = []
         policy_runs = []
         for c in parsed["bash_calls"]:
             m = _match_documented_helper(c["command"].strip())
-            if not m:
+            if not m or not _in_plugin(m["script"], cwd, plugin_dir):
                 continue
+            args = {k: _norm_path(v, cwd) for k, v in _helper_args(m).items()}
             if m["helper"] == "render_gate.py":
-                gate_runs.append({**c, "key": m["key"], "input": _norm_path(m["input"], cwd)})
+                gate_runs.append({**c, "key": m["key"], "input": args.get("input"),
+                                  "stdin": m.get("body") is not None})
             elif m["helper"] in ("adaptation.py", "coverage_check.py", "reconcile.py"):
-                inputs = {_norm_path(v, cwd) for k, v in m.items() if k != "helper" and v}
-                policy_runs.append({**c, "inputs": inputs, "helper": m["helper"]})
+                policy_runs.append({**c, "inputs": set(args.values()), "helper": m["helper"],
+                                    "primary": args.get(_PRIMARY_ARG[m["helper"]])})
         last_write: dict[str, dict] = {}
         for w in parsed["file_writes"]:
             if w["ok"]:  # a failed write left nothing to gate/consume
@@ -450,15 +514,16 @@ def check_run(
         # A skill never writes code and runs it (conventions §14.4): a run of a
         # file the model wrote is an improvised helper, whatever it is named,
         # and a gate.py that "checks" a report stands in for the real gate.
+        # Payload and report drafts are data, so a command that names one
+        # (``grep -c python <draft>``) is not a script run.
         written = set(last_write)
         for c in parsed["bash_calls"]:
             if c["id"] in denied_ids:
                 continue
-            for groups in _SCRIPT_RUN.findall(c["command"]):
-                for tok in filter(None, groups):
-                    script = tok.strip("\"'")
-                    if _norm_path(script, cwd) in written:
-                        reasons.append(f"ran a script the model wrote: {script}")
+            for script in _script_tokens(c["command"]):
+                target = _norm_path(script, cwd)
+                if target in written and not (_DATA_DRAFT.search(target) or _REPORT_DRAFT.search(target)):
+                    reasons.append(f"ran a script the model wrote: {script}")
         # .parallax-policy/ holds payload drafts and its .gitignore only.
         for path in written:
             if "/.parallax-policy/" in path and not _POLICY_DRAFT.search(path) \
@@ -485,21 +550,34 @@ def check_run(
                 reasons.append(f"policy draft never consumed: no successful documented helper run "
                                f"reading {path}")
         # A journey that names required helpers needs each one to have run as
-        # documented, not denied, exiting cleanly, on a .parallax-policy draft
-        # the Write tool created before the run. The consumption check above
-        # is deliberately lenient (a documented nonzero exit still consumes a
-        # draft); this one is not: a helper that errored, an improvised
-        # replacement, or a draft made by a heredoc or in /tmp does not count.
-        written_drafts = {path: w for path, w in last_write.items() if _POLICY_DRAFT.search(path)}
+        # documented, from the plugin, not denied, exiting cleanly, with its
+        # primary argument (_PRIMARY_ARG) a draft the Write tool created before
+        # the run. The consumption check above is deliberately lenient (a
+        # documented nonzero exit still consumes a draft); this one is not: a
+        # helper that errored, an improvised replacement, or a draft made by a
+        # heredoc, by Edit, or in /tmp does not count. render_gate.py needs the
+        # journey skill's key, on a Write-tool report draft or by the stdin
+        # form (conventions §10.3).
+        def _write_draft_before(path: str | None, pattern: re.Pattern[str], seq: int) -> bool:
+            w = last_write.get(path) if path else None
+            return bool(w and w["tool"] == "Write" and pattern.search(path) and w["seq"] < seq)
+
+        gate_key = (journey.get("skill") or "")[len(PLUGIN_PREFIX):].removeprefix("parallax-")
         for helper in journey.get("require_helpers") or []:
-            if not any(
-                r["helper"] == helper and r["ok"] and r["id"] not in denied_ids
-                and any(path in written_drafts and written_drafts[path]["seq"] < r["seq"]
-                        for path in r["inputs"])
-                for r in policy_runs
-            ):
-                reasons.append(f"required helper {helper} never ran successfully on a "
-                               f"Write-tool .parallax-policy draft")
+            if helper == "render_gate.py":
+                met = any(
+                    g["ok"] and g["id"] not in denied_ids and g["key"] == gate_key
+                    and (g["stdin"] or _write_draft_before(g["input"], _REPORT_DRAFT, g["seq"]))
+                    for g in gate_runs)
+                where = "a Write-tool .parallax-render draft or the stdin form"
+            else:
+                met = any(
+                    r["helper"] == helper and r["ok"] and r["id"] not in denied_ids
+                    and _write_draft_before(r["primary"], _POLICY_DRAFT, r["seq"])
+                    for r in policy_runs)
+                where = "a Write-tool .parallax-policy draft"
+            if not met:
+                reasons.append(f"required helper {helper} never ran successfully on {where}")
         if result.get("is_error"):
             reasons.append("result is_error")
         if result.get("subtype") != "success":
@@ -573,7 +651,8 @@ def main(argv: list[str] | None = None) -> int:
     denials = (parsed["result"] or {}).get("permission_denials") or []
     print(f"parallax servers at init: {_describe(parallax_servers(parsed['mcp_servers'])) or 'none'}")
     print(f"permission_denials: {len(denials)}")
-    for warning in classify_denials(denials, parsed["bash_calls"])[1]:
+    cwd = (parsed["init"] or {}).get("cwd")
+    for warning in classify_denials(denials, parsed["bash_calls"], cwd=cwd, plugin_dir=args.plugin_dir)[1]:
         print(f"WARN: {warning}")
     calls = parsed["parallax_calls"].values()
     print("parallax tool calls: " + (", ".join(
