@@ -925,8 +925,7 @@ def test_running_a_script_the_model_wrote_fails():
 @pytest.mark.parametrize("cmd", [
     "python3 /s/tools/gate.py", "bash /s/tools/gate.py", "./tools/gate.py",
     "python3 -u /s/tools/gate.py", "bash -x /s/tools/gate.py", "(python3 /s/tools/gate.py)",
-    "bash -c 'python3 /s/tools/gate.py'", "tools/gate.py", "/s/tools/gate.py",
-    "cd /s && tools/gate.py",
+    "bash -c 'python3 /s/tools/gate.py'", "cd /s && ./tools/gate.py",
 ])
 def test_every_way_of_running_a_written_script_is_caught(cmd):
     stream = _with_cwd(_with_write(_bash_stream([("b1", cmd, False)], set()), path="/s/tools/gate.py"))
@@ -1130,7 +1129,7 @@ def test_a_heredoc_body_that_mentions_a_written_file_is_not_a_run(cmd):
 
 
 def test_a_heredoc_fed_to_a_bare_shell_is_scanned():
-    stream = _with_cwd(_with_write(_bash_stream([("b1", "sh <<EOF\n/s/tools/gate.py\nEOF", False)], set()),
+    stream = _with_cwd(_with_write(_bash_stream([("b1", "sh <<EOF\n./tools/gate.py\nEOF", False)], set()),
                                    path="/s/tools/gate.py"))
     passed, reasons, _, _ = check_run(stream, J, 0, False)
     assert passed is False
@@ -1156,3 +1155,17 @@ def test_the_script_scan_is_linear_on_long_commands(cmd):
     start = time.process_time()
     _script_tokens(cmd)
     assert time.process_time() - start < 2.0
+
+
+@pytest.mark.parametrize("cmd", [
+    # white-label-stock-report Step 6: a Write-tool cache file on a continuation line
+    "python3 /p/skills/parallax-white-label-stock-report/render_stock_report.py \\\n"
+    "  /s/cache/AAPL.O-en-2026-10-14.json \\\n  --branding x",
+    "cat > /s/out.txt <<'EOF'\n/s/cache/AAPL.O-en-2026-10-14.json\nEOF",
+    'echo "saved; /s/cache/AAPL.O-en-2026-10-14.json"',
+])
+def test_a_written_data_file_after_a_separator_is_not_a_run(cmd):
+    stream = _with_cwd(_with_write(_bash_stream([("b1", cmd, False)], set()),
+                                   path="/s/cache/AAPL.O-en-2026-10-14.json"))
+    _, reasons, _, _ = check_run(stream, J, 0, False)
+    assert not any("ran a script the model wrote" in r for r in reasons), reasons

@@ -120,7 +120,7 @@ _HELPER_SCRIPT_SUFFIX = {
     "reconcile.py": "/client-policy/reconcile.py",
 }
 # An interpreter or shell given a script path (``python3 x.py``, ``bash x.sh``,
-# ``sh x``), or any path in command position (``./x``, ``tools/x.py``).
+# ``sh x``), or a ``./`` path in command position (``./x``).
 # Interpreter flags (``-u``, ``-x``) are skipped; ``-c`` is not, so
 # ``bash -c 'python3 x'`` matches the inner run. Best-effort: other spellings
 # (``python3 - < x``, ``source x``) are not caught (evals/README.md).
@@ -129,7 +129,7 @@ _INTERPRETER_RUN = re.compile(
 )
 # ``[ \t]*`` (not ``\s*``) after a separator keeps the scan linear on long runs
 # of newlines.
-_COMMAND_WORD = re.compile(r"""(?:^|[;&|(\n])[ \t]*([^\s"';&|<>()]+)""")
+_COMMAND_WORD = re.compile(r"""(?:^|[;&|(\n])[ \t]*(\./[^\s"';&|<>()]+)""")
 
 
 def _script_tokens(command: str) -> list[str]:
