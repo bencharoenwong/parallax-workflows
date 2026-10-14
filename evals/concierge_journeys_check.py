@@ -65,12 +65,6 @@ _HELPER_RUN = re.compile(
 # is a raw write (which bypasses the hash chain) or a shell read (which §0.0
 # forbids); either fails, denied or not.
 _AUDIT_LOG = re.compile(r"audit\.jsonl(?![\w.])")
-# The documented one-line form of each helper command, keyed by bare helper
-# name. A denial of exactly one of these shapes is a defect in the skill's own
-# instructions; anything else the model wrote is improvised. Each pattern is
-# tried with ``fullmatch`` (one line except the render gate's stdin heredoc,
-# canonical flag order per conventions §14.1/§14.4 — a doc that reorders flags
-# would make the real command fall into the "improvised" bucket below).
 def _arg(name: str) -> str:
     """One path argument: double-quoted, or a bare token with no whitespace,
     quote or shell metacharacter. Neither form may hold ``$``, a backtick or
@@ -82,6 +76,12 @@ def _arg(name: str) -> str:
             rf"|(?P<{name}__bare>[^\s\"'$`;&|<>(){{}}*?!~\\]+))")
 
 
+# The documented one-line form of each helper command, keyed by bare helper
+# name. A denial of exactly one of these shapes is a defect in the skill's own
+# instructions; anything else the model wrote is improvised. Each pattern is
+# tried with ``fullmatch`` (one line except the render gate's stdin heredoc,
+# canonical flag order per conventions §14.1/§14.4 — a doc that reorders flags
+# would make the real command fall into the "improvised" bucket below).
 _HELPER_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("render_gate.py", re.compile(
         r"python3 " + _arg("script_rg") + r" --skill (?P<key>[a-z0-9-]+) "
@@ -573,10 +573,6 @@ def check_run(
             reasons.append("shell command names audit.jsonl (only audit_append.py may touch it; loader §6)")
         if any(_AUDIT_LOG.search(w["path"]) for w in parsed["file_writes"]):
             reasons.append("file tool wrote audit.jsonl (only audit_append.py may write it; loader §6)")
-        # Every report draft the model wrote must be gated: a successful
-        # documented gate run on that same draft, with the draft's own key,
-        # after the last successful write to it. A skill that stops before
-        # drafting (an unresolvable ticker) needs no gate.
         # A helper run counts only when its script is this run's plugin copy
         # (plugin_dir), never a same-named file the model wrote.
         gate_runs = []
@@ -616,6 +612,10 @@ def check_run(
             if "/.parallax-policy/" in path and not _POLICY_DRAFT.search(path) \
                     and not path.endswith("/.parallax-policy/.gitignore"):
                 reasons.append(f"non-draft file written into .parallax-policy: {path}")
+        # Every report draft the model wrote must be gated: a successful
+        # documented gate run on that same draft, with the draft's own key,
+        # after the last successful write to it. A skill that stops before
+        # drafting (an unresolvable ticker) needs no gate.
         for path, w in last_write.items():
             draft = _REPORT_DRAFT.search(path)
             if draft:
