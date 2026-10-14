@@ -1117,6 +1117,24 @@ def test_a_required_gate_rejects_text_the_gate_did_not_output(shown):
     assert any("required helper render_gate.py" in r for r in reasons), reasons
 
 
+def test_a_stale_plugin_gate_fails_with_a_rebuild_reason(tmp_path):
+    gate = tmp_path / "skills" / "_parallax" / "render_gate.py"
+    gate.parent.mkdir(parents=True)
+    gate.write_text("# an older build\n")
+    plug = str(tmp_path)
+    script = f"{plug}/skills/parallax-client-review/../_parallax/render_gate.py"
+    cmd = f'python3 "{script}" --skill client-review --input "{_CR_DRAFT}"'
+    stream = _with_cwd(_with_write(_bash_stream([("b1", cmd, False)], set(), skill=_CR, result=_CR_REPORT,
+                                                plugin_path=plug),
+                                   path=_CR_DRAFT, content=_CR_REPORT))
+    passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=plug)
+    assert passed is False
+    assert any("rebuild the plugin" in r for r in reasons), reasons
+    gate.write_bytes((REPO / "skills" / "_parallax" / "render_gate.py").read_bytes())
+    passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=plug)
+    assert passed is True, reasons
+
+
 @pytest.mark.parametrize("cmd", [
     "cat > /s/notes.txt <<'EOF'\nTo reproduce run:\npython3 /s/.parallax-policy/policy-0a1b2c3d.json\nEOF",
 ])
