@@ -1062,3 +1062,10 @@ def test_naming_a_draft_is_not_running_a_script(extra):
     stream = _with_cwd(_with_write(_bash_stream(calls, set()), path="/s/.parallax-policy/policy-0a1b2c3d.json"))
     passed, reasons, _, _ = check_run(stream, {**J, "require_helpers": ["adaptation.py"]}, 0, False)
     assert passed is True, reasons
+
+
+def test_a_stdin_gate_report_line_is_not_a_command():
+    stdin = _CR_GATE_STDIN.replace("# Review", "/s/notes.md was the source")
+    stream = _with_write(_gate_run([("b1", stdin, False)], draft=None), path="/s/notes.md", wid="w2")
+    passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=_PLUG)
+    assert passed is True, reasons

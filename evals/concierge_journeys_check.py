@@ -61,9 +61,9 @@ _AUDIT_LOG = re.compile(r"audit\.jsonl(?![\w.])")
 # The documented one-line form of each helper command, keyed by bare helper
 # name. A denial of exactly one of these shapes is a defect in the skill's own
 # instructions; anything else the model wrote is improvised. Each pattern is
-# tried with ``fullmatch`` (one line, canonical flag order per conventions
-# §14.1/§14.4 — a doc that reorders flags would make the real command fall
-# into the "improvised" bucket below).
+# tried with ``fullmatch`` (one line except the render gate's stdin heredoc,
+# canonical flag order per conventions §14.1/§14.4 — a doc that reorders flags
+# would make the real command fall into the "improvised" bucket below).
 def _arg(name: str) -> str:
     """One path argument: double-quoted, or a bare token with no whitespace,
     quote or shell metacharacter. Neither form may hold ``$``, a backtick or
@@ -520,7 +520,11 @@ def check_run(
         for c in parsed["bash_calls"]:
             if c["id"] in denied_ids:
                 continue
-            for script in _script_tokens(c["command"]):
+            # A documented stdin gate run's heredoc body is report text, not commands.
+            m = _match_documented_helper(c["command"])
+            command = c["command"].strip().split("\n", 1)[0] if m and m.get("body") is not None \
+                else c["command"]
+            for script in _script_tokens(command):
                 target = _norm_path(script, cwd)
                 if target in written and not (_DATA_DRAFT.search(target) or _REPORT_DRAFT.search(target)):
                     reasons.append(f"ran a script the model wrote: {script}")
