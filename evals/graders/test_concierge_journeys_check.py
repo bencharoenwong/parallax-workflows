@@ -1166,6 +1166,8 @@ def test_a_heredoc_body_that_mentions_a_written_file_is_not_a_run(cmd):
     "env PYTHONPATH=x python3 /s/.parallax-policy/policy-0a1b2c3d.json",
     "bash -c 'python3 /s/.parallax-policy/policy-0a1b2c3d.json'",
     "cat > /s/n.txt <<'EOF'\nx\nEOF\npython3 /s/.parallax-policy/policy-0a1b2c3d.json",
+    "bash <<'EOF'\npython3 /s/.parallax-policy/policy-0a1b2c3d.json\nEOF",
+    "cat <<<word\npython3 /s/.parallax-policy/policy-0a1b2c3d.json",
 ])
 def test_an_interpreter_running_a_draft_is_caught_in_every_position(cmd):
     stream = _with_cwd(_with_write(_bash_stream([("b1", cmd, False)], set()),
@@ -1173,3 +1175,27 @@ def test_an_interpreter_running_a_draft_is_caught_in_every_position(cmd):
     passed, reasons, _, _ = check_run(stream, J, 0, False)
     assert passed is False
     assert any("ran a script the model wrote" in r for r in reasons), reasons
+
+
+def test_a_heredoc_fed_to_a_bare_shell_is_scanned():
+    stream = _with_cwd(_with_write(_bash_stream([("b1", "sh <<EOF\n/s/tools/gate.py\nEOF", False)], set()),
+                                   path="/s/tools/gate.py"))
+    passed, reasons, _, _ = check_run(stream, J, 0, False)
+    assert passed is False
+    assert any("ran a script the model wrote" in r for r in reasons), reasons
+
+
+@pytest.mark.parametrize("cmd", [
+    "a/" * 100000 + "sh -c ",
+    "a/a/sh -c '" * 10000,
+    "x " * 100000 + "<<EOF\nz",
+    "VAR=v " * 30000 + "python3",
+])
+def test_the_script_scan_is_linear_on_long_commands(cmd):
+    """Heredoc bodies run to tens of KB; a backtracking regex would hang the
+    checker. Each of these took minutes on a quadratic or exponential scan."""
+    import time
+    from concierge_journeys_check import _script_tokens, _without_heredoc_bodies
+    start = time.process_time()
+    _script_tokens(_without_heredoc_bodies(cmd))
+    assert time.process_time() - start < 2.0

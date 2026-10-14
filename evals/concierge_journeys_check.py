@@ -130,22 +130,46 @@ _INTERPRETER_RUN = re.compile(
 _COMMAND_WORD = re.compile(r"""(?:^|[;&|(\n])\s*([^\s"';&|<>()]+)""")
 # An interpreter that is itself the command, after any mix of ``VAR=x``,
 # ``env``, ``exec``, ``time``, ``nohup`` and ``bash -c '``: its script argument
-# is run, never only named.
+# is run, never only named. Path prefixes exclude quotes so a quote has one
+# parse (no exponential backtracking on repeated ``a/sh -c '``).
 _COMMAND_INTERPRETER_RUN = re.compile(
-    r"""(?:^|[;&|(\n])\s*(?:(?:\w+=\S*|env|exec|time|nohup)\s+|(?:\S*/)?(?:ba)?sh\s+-c\s+["']?)*"""
-    r"""(?:\S*/)?(?:python3?|bash|sh)(?:\s+-(?!c\b)[A-Za-z]+)*\s+(["']?[^\s"';&|<>()-][^\s"';&|<>()]*["']?)"""
+    r"""(?:^|[;&|(\n])\s*(?:(?:\w+=\S*|env|exec|time|nohup)\s+|(?:[^\s'"]*/)?(?:ba)?sh\s+-c\s+["']?)*"""
+    r"""(?:[^\s'"]*/)?(?:python3?|bash|sh)(?:\s+-(?!c\b)[A-Za-z]+)*\s+(["']?[^\s"';&|<>()-][^\s"';&|<>()]*["']?)"""
 )
-# A here-document: the opening line (kept) and the body through its terminator
-# (dropped), or through the end of the command when the terminator is missing.
-_HEREDOC = re.compile(
-    r"""(<<-?[ \t]*(['"]?)([A-Za-z_]\w*)\2[^\n]*)\n.*?(?:\n\t*\3(?=\n|$)|\Z)""", re.DOTALL
-)
+# The opening of a here-document (not a ``<<<`` here-string).
+_HEREDOC_OPEN = re.compile(r"""(?<!<)<<-?[ \t]*(['"]?)([A-Za-z_]\w*)\1""")
+_INTERPRETER_WORD = re.compile(r"(?:\S*/)?(?:python3?|bash|sh|zsh)")
+
+
+def _feeds_interpreter(head: str) -> bool:
+    """True when the text before ``<<`` ends in a bare interpreter (flags
+    only, no script argument), which runs the here-document body."""
+    words = [w for w in re.split(r"[\s;&|(]+", head) if w]
+    while words and words[-1].startswith("-"):
+        words.pop()
+    return bool(words) and _INTERPRETER_WORD.fullmatch(words[-1]) is not None
 
 
 def _without_heredoc_bodies(command: str) -> str:
-    """``command`` with each here-document body removed: the body is data fed
-    to a command (a report, a file's text), not commands to scan."""
-    return _HEREDOC.sub(r"\1", command)
+    """``command`` with each here-document body removed, through its
+    terminator line or the end of the command: the body is data fed to a
+    command (a report, a file's text), not commands to scan. A body fed to a
+    bare interpreter (``bash <<EOF``) is run, so it stays."""
+    out: list[str] = []
+    pos = 0
+    while (m := _HEREDOC_OPEN.search(command, pos)):
+        body_start = command.find("\n", m.end())
+        if body_start < 0:
+            break
+        terminator = re.compile(rf"\n\t*{re.escape(m[2])}(?=\n|$)").search(command, body_start)
+        body_end = terminator.end() if terminator else len(command)
+        head = command[command.rfind("\n", 0, m.start()) + 1:m.start()]
+        out.append(command[pos:body_start])
+        if _feeds_interpreter(head):
+            out.append(command[body_start:body_end])
+        pos = body_end
+    out.append(command[pos:])
+    return "".join(out)
 
 
 def _script_tokens(command: str) -> list[tuple[str, bool]]:
