@@ -127,14 +127,24 @@ _INTERPRETER_RUN = re.compile(
     r"""(?<![\w.-])(?:python3?|bash|sh)(?:\s+-(?!c\b)[A-Za-z]+)*\s+(["']?[^\s"';&|<>()-][^\s"';&|<>()]*["']?)"""
 )
 _COMMAND_WORD = re.compile(r"""(?:^|[;&|(\n])\s*([^\s"';&|<>()]+)""")
+# An interpreter that is itself the command (after ``VAR=x``, ``env``,
+# ``exec``, ``time`` or ``nohup``): its script argument is run, never only named.
+_COMMAND_INTERPRETER_RUN = re.compile(
+    r"""(?:^|[;&|(\n])\s*(?:\w+=\S*\s+)*(?:(?:env|exec|time|nohup)\s+)*(?:\S*/)?(?:python3?|bash|sh)"""
+    r"""(?:\s+-(?!c\b)[A-Za-z]+)*\s+(["']?[^\s"';&|<>()-][^\s"';&|<>()]*["']?)"""
+)
 
 
-def _script_tokens(command: str) -> list[str]:
-    """The paths ``command`` may run as a script, quotes stripped. The two
-    scans are separate so a command word (``(python3``) cannot hide the
-    interpreter run that follows it."""
-    return [m.group(1).strip("\"'") for rx in (_INTERPRETER_RUN, _COMMAND_WORD)
-            for m in rx.finditer(command)]
+def _script_tokens(command: str) -> list[tuple[str, bool]]:
+    """(path, run) for each path ``command`` may run as a script, quotes
+    stripped. ``run`` is True when a command-position interpreter runs it, so
+    even a draft path counts; otherwise naming a draft (``grep -c python
+    <draft>``) is not a run. The scans are separate so a command word
+    (``(python3``) cannot hide the interpreter run that follows it."""
+    tokens = [(m.group(1).strip("\"'"), True) for m in _COMMAND_INTERPRETER_RUN.finditer(command)]
+    tokens += [(m.group(1).strip("\"'"), False) for rx in (_INTERPRETER_RUN, _COMMAND_WORD)
+               for m in rx.finditer(command)]
+    return tokens
 
 
 # Payload-draft labels the skills write (conventions §14.4). A draft with one
@@ -553,9 +563,11 @@ def check_run(
             m = _match_documented_helper(c["command"])
             command = c["command"].strip().split("\n", 1)[0] if m and m.get("body") is not None \
                 else c["command"]
-            for script in _script_tokens(command):
+            tokens = _script_tokens(command)
+            for script in dict.fromkeys(t for t, _ in tokens):
+                run = any(r for t, r in tokens if t == script)
                 target = _norm_path(script, cwd)
-                if target in written and not (_DATA_DRAFT.search(target) or _REPORT_DRAFT.search(target)):
+                if target in written and (run or not (_DATA_DRAFT.search(target) or _REPORT_DRAFT.search(target))):
                     reasons.append(f"ran a script the model wrote: {script}")
         # .parallax-policy/ holds payload drafts and its .gitignore only.
         for path in written:

@@ -1116,3 +1116,17 @@ def test_a_required_gate_rejects_text_the_gate_did_not_output(shown):
     passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=_PLUG)
     assert passed is False
     assert any("required helper render_gate.py" in r for r in reasons), reasons
+
+
+@pytest.mark.parametrize("cmd", [
+    "python3 /s/.parallax-policy/policy-0a1b2c3d.json",
+    "PYTHONPATH=x python3 .parallax-policy/policy-0a1b2c3d.json",
+    "cd /s && /usr/bin/python3 -u /s/.parallax-policy/policy-0a1b2c3d.json",
+    "bash /s/.parallax-render/client-review-0a1b2c3d.md",
+])
+def test_an_interpreter_running_a_draft_is_a_script_run(cmd):
+    path = "/s/.parallax-render/client-review-0a1b2c3d.md" if "render" in cmd else "/s/.parallax-policy/policy-0a1b2c3d.json"
+    stream = _with_cwd(_with_write(_bash_stream([("b1", cmd, False)], set()), path=path))
+    passed, reasons, _, _ = check_run(stream, J, 0, False)
+    assert passed is False
+    assert any("ran a script the model wrote" in r for r in reasons), reasons
