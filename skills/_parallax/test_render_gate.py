@@ -648,3 +648,15 @@ def test_word_cap_warn_goes_to_stderr_not_stdout(tmp_path, capsys):
     assert rc == 0
     assert out == report
     assert "over the 800-word cap" in err
+
+
+def test_word_cap_boundary_matches_eval_gate():
+    # 5 header + 873 body + 2 quote-marker tokens = 880 (passes); one more word warns.
+    assert word_cap_warning(_brief(873), "morning-brief") is None
+    assert word_cap_warning(_brief(874), "morning-brief") is not None
+
+
+def test_word_cap_counts_whole_report_without_marker():
+    report = "## Market Regime & Signals\n\n" + " ".join(["word"] * 900) + "\n"
+    warning = word_cap_warning(report, "morning-brief")
+    assert warning is not None and "905 words" in warning
