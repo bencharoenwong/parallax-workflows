@@ -1148,3 +1148,28 @@ def test_a_stale_plugin_gate_fails_with_a_rebuild_reason(tmp_path):
     gate.write_bytes((REPO / "skills" / "_parallax" / "render_gate.py").read_bytes())
     passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=plug)
     assert passed is True, reasons
+
+
+@pytest.mark.parametrize("cmd", [
+    "cat > /s/notes.txt <<'EOF'\nTo reproduce run:\npython3 /s/.parallax-policy/policy-0a1b2c3d.json\nEOF",
+    "cat > /s/notes.txt <<EOF\n/s/tools/gate.py is not run here\nEOF",
+])
+def test_a_heredoc_body_that_mentions_a_written_file_is_not_a_run(cmd):
+    stream = _with_cwd(_with_write(_with_write(_bash_stream([("b1", _ADAPT_RELATIVE, False), ("b2", cmd, False)], set()),
+                                               path="/s/.parallax-policy/policy-0a1b2c3d.json"),
+                                   path="/s/tools/gate.py", wid="w2"))
+    _, reasons, _, _ = check_run(stream, J, 0, False)
+    assert not any("ran a script the model wrote" in r for r in reasons), reasons
+
+
+@pytest.mark.parametrize("cmd", [
+    "env PYTHONPATH=x python3 /s/.parallax-policy/policy-0a1b2c3d.json",
+    "bash -c 'python3 /s/.parallax-policy/policy-0a1b2c3d.json'",
+    "cat > /s/n.txt <<'EOF'\nx\nEOF\npython3 /s/.parallax-policy/policy-0a1b2c3d.json",
+])
+def test_an_interpreter_running_a_draft_is_caught_in_every_position(cmd):
+    stream = _with_cwd(_with_write(_bash_stream([("b1", cmd, False)], set()),
+                                   path="/s/.parallax-policy/policy-0a1b2c3d.json"))
+    passed, reasons, _, _ = check_run(stream, J, 0, False)
+    assert passed is False
+    assert any("ran a script the model wrote" in r for r in reasons), reasons

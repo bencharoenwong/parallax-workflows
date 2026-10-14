@@ -128,12 +128,24 @@ _INTERPRETER_RUN = re.compile(
     r"""(?<![\w.-])(?:python3?|bash|sh)(?:\s+-(?!c\b)[A-Za-z]+)*\s+(["']?[^\s"';&|<>()-][^\s"';&|<>()]*["']?)"""
 )
 _COMMAND_WORD = re.compile(r"""(?:^|[;&|(\n])\s*([^\s"';&|<>()]+)""")
-# An interpreter that is itself the command (after ``VAR=x``, ``env``,
-# ``exec``, ``time`` or ``nohup``): its script argument is run, never only named.
+# An interpreter that is itself the command, after any mix of ``VAR=x``,
+# ``env``, ``exec``, ``time``, ``nohup`` and ``bash -c '``: its script argument
+# is run, never only named.
 _COMMAND_INTERPRETER_RUN = re.compile(
-    r"""(?:^|[;&|(\n])\s*(?:\w+=\S*\s+)*(?:(?:env|exec|time|nohup)\s+)*(?:\S*/)?(?:python3?|bash|sh)"""
-    r"""(?:\s+-(?!c\b)[A-Za-z]+)*\s+(["']?[^\s"';&|<>()-][^\s"';&|<>()]*["']?)"""
+    r"""(?:^|[;&|(\n])\s*(?:(?:\w+=\S*|env|exec|time|nohup)\s+|(?:\S*/)?(?:ba)?sh\s+-c\s+["']?)*"""
+    r"""(?:\S*/)?(?:python3?|bash|sh)(?:\s+-(?!c\b)[A-Za-z]+)*\s+(["']?[^\s"';&|<>()-][^\s"';&|<>()]*["']?)"""
 )
+# A here-document: the opening line (kept) and the body through its terminator
+# (dropped), or through the end of the command when the terminator is missing.
+_HEREDOC = re.compile(
+    r"""(<<-?[ \t]*(['"]?)([A-Za-z_]\w*)\2[^\n]*)\n.*?(?:\n\t*\3(?=\n|$)|\Z)""", re.DOTALL
+)
+
+
+def _without_heredoc_bodies(command: str) -> str:
+    """``command`` with each here-document body removed: the body is data fed
+    to a command (a report, a file's text), not commands to scan."""
+    return _HEREDOC.sub(r"\1", command)
 
 
 def _script_tokens(command: str) -> list[tuple[str, bool]]:
@@ -569,11 +581,7 @@ def check_run(
         for c in parsed["bash_calls"]:
             if c["id"] in denied_ids:
                 continue
-            # A documented stdin gate run's heredoc body is report text, not commands.
-            m = _match_documented_helper(c["command"])
-            command = c["command"].strip().split("\n", 1)[0] if m and m.get("body") is not None \
-                else c["command"]
-            tokens = _script_tokens(command)
+            tokens = _script_tokens(_without_heredoc_bodies(c["command"]))
             for script in dict.fromkeys(t for t, _ in tokens):
                 run = any(r for t, r in tokens if t == script)
                 target = _norm_path(script, cwd)
