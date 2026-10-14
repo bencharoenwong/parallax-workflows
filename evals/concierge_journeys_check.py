@@ -551,8 +551,9 @@ def check_run(
         # A skill never writes code and runs it (conventions §14.4): a run of a
         # file the model wrote is an improvised helper, whatever it is named,
         # and a gate.py that "checks" a report stands in for the real gate.
-        # Payload and report drafts are data, so a command that names one
-        # (``grep -c python <draft>``) is not a script run.
+        # Payload and report drafts are data and never count here, whether a
+        # command names one (``grep -c python <draft>``) or runs one (a known
+        # gap, evals/README.md).
         written = set(last_write)
         for c in parsed["bash_calls"]:
             if c["id"] in denied_ids:

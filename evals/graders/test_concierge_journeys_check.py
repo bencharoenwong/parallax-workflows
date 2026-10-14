@@ -1138,7 +1138,7 @@ def test_a_stale_plugin_gate_fails_with_a_rebuild_reason(tmp_path):
 @pytest.mark.parametrize("cmd", [
     "cat > /s/notes.txt <<'EOF'\nTo reproduce run:\npython3 /s/.parallax-policy/policy-0a1b2c3d.json\nEOF",
 ])
-def test_a_heredoc_body_that_mentions_a_written_file_is_not_a_run(cmd):
+def test_a_draft_named_on_any_line_is_not_a_run(cmd):
     stream = _with_cwd(_with_write(_with_write(_bash_stream([("b1", _ADAPT_RELATIVE, False), ("b2", cmd, False)], set()),
                                                path="/s/.parallax-policy/policy-0a1b2c3d.json"),
                                    path="/s/tools/gate.py", wid="w2"))
@@ -1146,7 +1146,7 @@ def test_a_heredoc_body_that_mentions_a_written_file_is_not_a_run(cmd):
     assert not any("ran a script the model wrote" in r for r in reasons), reasons
 
 
-def test_a_heredoc_fed_to_a_bare_shell_is_scanned():
+def test_a_dot_slash_path_on_its_own_line_is_a_run():
     stream = _with_cwd(_with_write(_bash_stream([("b1", "sh <<EOF\n./tools/gate.py\nEOF", False)], set()),
                                    path="/s/tools/gate.py"))
     passed, reasons, _, _ = check_run(stream, J, 0, False)

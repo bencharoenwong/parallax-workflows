@@ -313,7 +313,8 @@ journey FAILs when:
   payload or report draft is never a run, and the heredoc body of a documented stdin
   gate run is report text, not commands. This rule is best-effort: it matches shell
   text, so other spellings (`python3 - < <file>`, `source <file>`, a path built from
-  `$PWD`, a `cd` before a relative path) are not caught;
+  `$PWD`, a `cd` before a relative path, a draft run as a script) are not caught, and a
+  `./<file>` line inside a here-document body counts as a run even when it is only text;
 - anything other than a policy draft or its `.gitignore` is written into
   `.parallax-policy/`;
 - a Write, Edit, MultiEdit or NotebookEdit call targets `audit.jsonl`;
