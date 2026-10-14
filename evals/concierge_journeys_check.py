@@ -1,8 +1,9 @@
 """evals/concierge_journeys_check.py — checker for the live concierge journeys
 (see evals/concierge_journeys.sh and evals/tasks/concierge/journeys.jsonl).
 
-Pure functions; the only I/O is loading skills/_parallax/render_gate.py, whose
-pure ``gate()`` the render-gate requirement replays:
+Pure functions; the only I/O is reading skills/_parallax/render_gate.py, whose
+pure ``gate()`` the render-gate requirement replays, and comparing it with the
+plugin's copy:
 
 - ``validate_journey(journey)`` rejects a journey line with unknown keys or
   with ``expect``/``forbid``/``expect_any`` that is not a list of strings.
@@ -173,6 +174,15 @@ def _gate_fn():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module.gate
+
+
+def _stale_plugin_gate(plugin_dir: str | None) -> bool:
+    """True when ``plugin_dir`` holds a render_gate.py that differs from the
+    one this checker replays (the plugin was not rebuilt after an edit)."""
+    if plugin_dir is None:
+        return False
+    built = Path(plugin_dir) / "skills" / "_parallax" / "render_gate.py"
+    return built.is_file() and built.read_bytes() != _RENDER_GATE.read_bytes()
 
 
 def _render(text: str, key: str) -> str:
@@ -623,6 +633,10 @@ def check_run(
         gate_key = (journey.get("skill") or "")[len(PLUGIN_PREFIX):].removeprefix("parallax-")
         shown = _squash(final_text)
         for helper in journey.get("require_helpers") or []:
+            if helper == "render_gate.py" and _stale_plugin_gate(plugin_dir):
+                reasons.append("plugin render_gate.py differs from skills/_parallax/render_gate.py; "
+                               "rebuild the plugin (build_bundle.py plugin) and re-run")
+                continue
             if helper == "render_gate.py":
                 met = bool(shown) and any(
                     g["ok"] and g["id"] not in denied_ids and g["key"] == gate_key

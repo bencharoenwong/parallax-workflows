@@ -266,7 +266,10 @@ denied, exiting cleanly. A policy helper (`adaptation.py`, `coverage_check.py`,
 `.parallax-render/` draft the Write tool created earlier or in the documented stdin form
 (conventions §10.3), and the final answer must equal that run's output, with whitespace
 collapsed. The checker replays `render_gate.gate()` from `skills/_parallax/` on the gated
-text (the Write content or the heredoc body). It needs `skill`. The runner validates every line before any
+text (the Write content or the heredoc body). It needs `skill`. It assumes an
+untranslated answer: a journey with `lang=` (conventions §15) would FAIL it. If the
+plugin's `render_gate.py` differs from `skills/_parallax/render_gate.py`, the journey
+FAILs with a rebuild reason instead. The runner validates every line before any
 model call and rejects unknown keys, a list field that is not a list of strings, a
 `skill` without the `parallax:` prefix, a `require_helpers` entry outside that set, and
 `render_gate.py` in `require_helpers` without `skill`.

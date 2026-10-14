@@ -1130,3 +1130,21 @@ def test_an_interpreter_running_a_draft_is_a_script_run(cmd):
     passed, reasons, _, _ = check_run(stream, J, 0, False)
     assert passed is False
     assert any("ran a script the model wrote" in r for r in reasons), reasons
+
+
+def test_a_stale_plugin_gate_fails_with_a_rebuild_reason(tmp_path):
+    gate = tmp_path / "skills" / "_parallax" / "render_gate.py"
+    gate.parent.mkdir(parents=True)
+    gate.write_text("# an older build\n")
+    plug = str(tmp_path)
+    script = f"{plug}/skills/parallax-client-review/../_parallax/render_gate.py"
+    cmd = f'python3 "{script}" --skill client-review --input "{_CR_DRAFT}"'
+    stream = _with_cwd(_with_write(_bash_stream([("b1", cmd, False)], set(), skill=_CR, result=_CR_REPORT,
+                                                plugin_path=plug),
+                                   path=_CR_DRAFT, content=_CR_REPORT))
+    passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=plug)
+    assert passed is False
+    assert any("rebuild the plugin" in r for r in reasons), reasons
+    gate.write_bytes((REPO / "skills" / "_parallax" / "render_gate.py").read_bytes())
+    passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=plug)
+    assert passed is True, reasons
