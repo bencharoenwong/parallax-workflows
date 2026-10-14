@@ -1195,7 +1195,6 @@ def test_cli_clear_over_an_unreadable_view_exits_0(tmp_path):
     assert not (tmp_path / "view.yaml").exists()
 
 
-
 # --- re-pair rows must describe the view on disk (M3) -------------------------
 
 

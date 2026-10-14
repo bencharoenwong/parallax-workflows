@@ -147,6 +147,8 @@ def _check_bounded(obj: Any, label: str) -> None:
             inner = path | {id(node)}
             children = node.values() if isinstance(node, dict) else node
             stack.extend((child, inner) for child in children)
+
+
 _AUDIT_FILENAME = "audit.jsonl"
 _CLEAR_REQUIRED_FIELDS = ("destination", "reason")
 
