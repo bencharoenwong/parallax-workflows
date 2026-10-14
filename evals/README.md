@@ -308,8 +308,8 @@ journey FAILs when:
 - a Bash command that was not denied runs a file the model wrote in this run
   (`python3 <file>`, `bash <file>`, `sh <file>`, interpreter flags such as `-u`
   skipped, or the file as a command word, `./<file>`): only the documented helpers
-  read drafts and only `render_gate.py` gates a report (conventions §14.4). A path in
-  command position counts as run; interpreter flags such as `-u` are skipped. Naming a
+  read drafts and only `render_gate.py` gates a report (conventions §14.4). Only a `./`
+  path counts as a command word; a bare path after a separator is not a run. Naming a
   payload or report draft is never a run, and the heredoc body of a documented stdin
   gate run is report text, not commands. This rule is best-effort: it matches shell
   text, so other spellings (`python3 - < <file>`, `source <file>`, a path built from
