@@ -382,7 +382,8 @@ def test_validate_accepts_connector_optional():
 
 
 CONNECTOR_JOURNEYS = ("J1_research_connected", "J3_integrator", "J4_rm_support_schedule",
-                      "J6_uncovered_ticker", "J7_direct_task_bypass", "J8_role_asked_not_guessed")
+                      "J6_uncovered_ticker", "J7_direct_task_bypass", "J8_role_asked_not_guessed",
+                      "J9_client_review_policy")
 
 
 # Phrases of the concierge's not-connected state. "/mcp" itself is not one:
@@ -446,10 +447,21 @@ def test_no_plugin_namespace_skill_fails():
     assert any("plugin namespace" in r for r in reasons)
 
 
-def test_direct_task_journey_requires_should_i_buy():
+# Journeys that bypass the concierge and the skill each one must run.
+DIRECT_SKILL_JOURNEYS = {
+    "J7_direct_task_bypass": "parallax:parallax-should-i-buy",
+    "J9_client_review_policy": "parallax:parallax-client-review",
+}
+
+
+def test_direct_task_journeys_name_their_skill():
     journeys = {j["id"]: j for j in map(json.loads, filter(str.strip, JOURNEYS.read_text().splitlines()))}
-    assert journeys["J7_direct_task_bypass"]["skill"] == "parallax:parallax-should-i-buy"
-    assert all("skill" not in j for jid, j in journeys.items() if jid != "J7_direct_task_bypass")
+    assert {jid: j["skill"] for jid, j in journeys.items() if "skill" in j} == DIRECT_SKILL_JOURNEYS
+
+
+def test_the_policy_journey_requires_adaptation():
+    journeys = {j["id"]: j for j in map(json.loads, filter(str.strip, JOURNEYS.read_text().splitlines()))}
+    assert journeys["J9_client_review_policy"]["require_helpers"] == ["adaptation.py", "render_gate.py"]
 
 
 # --- denial classes: documented-helper vs improvised commands ----------------
@@ -460,10 +472,10 @@ _APPEND = ('python3 "/p/skills/parallax-should-i-buy/../_parallax/house-view/aud
            '--input "/s/.parallax-render/audit-0a1b2c3d.json"')
 
 
-def _bash_stream(calls, denied_ids):
+def _bash_stream(calls, denied_ids, **stream_kw):
     """calls: list of (id, command, is_error); denied_ids: ids also listed as
-    permission denials in the result."""
-    base = _stream().rstrip("\n").split("\n")
+    permission denials in the result. stream_kw goes to _stream."""
+    base = _stream(**stream_kw).rstrip("\n").split("\n")
     result = json.loads(base.pop())
     extra = []
     for cid, cmd, err in calls:
@@ -609,13 +621,14 @@ def test_file_tool_writing_the_audit_log_fails(tool):
 _DRAFT = "/s/.parallax-render/should-i-buy-0a1b2c3d.md"
 
 
-def _with_write(stream, path=_DRAFT, at=1, wid="w1", error=False):
-    """Insert a Write call and its result at line ``at`` (after init by default)."""
+def _with_write(stream, path=_DRAFT, at=1, wid="w1", error=False, tool="Write", content="# report"):
+    """Insert a file-tool call (Write by default) and its result at line ``at``
+    (after init by default)."""
     lines = stream.rstrip("\n").split("\n")
     lines[at:at] = [
         json.dumps({"type": "assistant", "message": {"content": [
-            {"type": "tool_use", "id": wid, "name": "Write",
-             "input": {"file_path": path, "content": "# report"}}]}}),
+            {"type": "tool_use", "id": wid, "name": tool,
+             "input": {"file_path": path, "content": content}}]}}),
         json.dumps({"type": "user", "message": {"content": [
             {"type": "tool_result", "tool_use_id": wid, "is_error": error, "content": "ok"}]}}),
     ]
@@ -797,3 +810,380 @@ def test_adaptation_accepts_exposures_or_view_tilts_independently(cmd):
     house view is active, so an exposures-only call is a real, documented
     shape and must not fall into the improvised bucket."""
     assert documented_helper(cmd) == "adaptation.py"
+
+
+# --- require_helpers: a policy journey needs its helper to really run --------
+
+_POLICY_PATH = "/s/.parallax-policy/policy-0a1b2c3d.yaml"
+_ADAPT_ON_DRAFT = ('python3 "/p/skills/parallax-client-review/../_parallax/client-policy/adaptation.py" '
+                   f'--policy "{_POLICY_PATH}" --json')
+JR = {**J, "require_helpers": ["adaptation.py"]}
+
+
+def test_a_required_helper_that_ran_on_a_written_draft_passes():
+    stream = _with_write(_bash_stream([("b1", _ADAPT_ON_DRAFT, False)], set()), path=_POLICY_PATH)
+    assert check_run(stream, JR, 0, False)[0] is True
+
+
+@pytest.mark.parametrize("calls,denied,write_path,why", [
+    ([], set(), _POLICY_PATH, "never ran"),
+    ([("b1", _ADAPT_ON_DRAFT, True)], set(), _POLICY_PATH, "errored"),
+    ([("b1", _ADAPT_ON_DRAFT, False)], {"b1"}, _POLICY_PATH, "denied"),
+    ([("b1", _ADAPT_ON_DRAFT, False)], set(), None, "no Write-tool draft (heredoc)"),
+    ([("b1", _ADAPT_ON_DRAFT.replace("/s/.parallax-policy/", "/tmp/"), False)], set(),
+     "/tmp/policy-0a1b2c3d.yaml", "draft outside .parallax-policy"),
+    ([("b1", 'cd /p && python3 adaptation.py --policy "' + _POLICY_PATH + '" --json', False)],
+     set(), _POLICY_PATH, "improvised command"),
+])
+def test_a_required_helper_fails_unless_it_really_ran(calls, denied, write_path, why):
+    stream = _bash_stream(calls, denied)
+    if write_path:
+        stream = _with_write(stream, path=write_path)
+    passed, reasons, _, _ = check_run(stream, JR, 0, False)
+    assert passed is False, why
+    assert any("required helper adaptation.py" in r for r in reasons), (why, reasons)
+
+
+def test_a_draft_written_after_the_run_does_not_satisfy_the_requirement():
+    stream = _bash_stream([("b1", _ADAPT_ON_DRAFT, False)], set())
+    stream = _with_write(stream, path=_POLICY_PATH, at=len(stream.rstrip("\n").split("\n")) - 1)
+    passed, reasons, _, _ = check_run(stream, JR, 0, False)
+    assert passed is False
+    assert any("required helper adaptation.py" in r for r in reasons)
+
+
+@pytest.mark.parametrize("value,ok", [
+    (["adaptation.py"], True),
+    (["coverage_check.py", "reconcile.py"], True),
+    (["render_gate.py"], False),
+    (["audit_append.py"], False),
+    ("adaptation.py", False),
+])
+def test_require_helpers_is_validated(value, ok):
+    journey = {"id": "J", "prompt": "p", "require_helpers": value}
+    assert (validate_journey(journey) == []) is ok
+
+
+def test_require_render_gate_needs_a_skill_key():
+    journey = {"id": "J", "prompt": "p", "skill": "parallax:parallax-client-review",
+               "require_helpers": ["render_gate.py"]}
+    assert validate_journey(journey) == []
+
+
+# --- relative and bare helper arguments; no model-written code ------------------
+
+_SCRATCH = "/s"
+
+
+def _with_cwd(stream, cwd=_SCRATCH):
+    lines = stream.rstrip("\n").split("\n")
+    init = json.loads(lines[0])
+    init["cwd"] = cwd
+    lines[0] = json.dumps(init)
+    return "\n".join(lines) + "\n"
+
+
+_ADAPT_RELATIVE = ("python3 /p/skills/parallax-client-review/../_parallax/client-policy/adaptation.py "
+                   "--policy .parallax-policy/policy-0a1b2c3d.json --json")
+
+
+def test_a_bare_relative_helper_command_is_documented_and_consumes_the_draft():
+    assert documented_helper(_ADAPT_RELATIVE) == "adaptation.py"
+    stream = _with_cwd(_with_write(_bash_stream([("b1", _ADAPT_RELATIVE, False)], set()),
+                                   path="/s/.parallax-policy/policy-0a1b2c3d.json"))
+    passed, reasons, _, _ = check_run(stream, {**J, "require_helpers": ["adaptation.py"]}, 0, False)
+    assert passed is True, reasons
+
+
+def test_without_the_run_cwd_a_relative_argument_does_not_match_the_draft():
+    stream = _with_write(_bash_stream([("b1", _ADAPT_RELATIVE, False)], set()),
+                         path="/s/.parallax-policy/policy-0a1b2c3d.json")
+    passed, reasons, _, _ = check_run(stream, J, 0, False)
+    assert passed is False
+    assert any("policy draft never consumed" in r for r in reasons)
+
+
+@pytest.mark.parametrize("cmd", [
+    "python3 /p/x/evil.py --policy .parallax-policy/policy-0a1b2c3d.json --json",
+    'python3 "/p/client-policy/adaptation.py" --policy $POLICY --json',
+    "python3 /p/client-policy/adaptation.py --policy .parallax-policy/p-0a1b2c3d.json;touch x --json",
+    "python3 /p/client-policy/adaptation.py --policy `x` --json",
+])
+def test_lookalike_or_expanding_commands_are_not_documented(cmd):
+    assert documented_helper(cmd) is None
+
+
+def test_running_a_script_the_model_wrote_fails():
+    stream = _with_cwd(_with_write(
+        _bash_stream([("b1", "python3 .parallax-policy/gate-0a1b2c3d.json", False)], set()),
+        path="/s/.parallax-policy/gate-0a1b2c3d.json"))
+    passed, reasons, _, _ = check_run(stream, J, 0, False)
+    assert passed is False
+    assert any("ran a script the model wrote" in r for r in reasons)
+
+
+@pytest.mark.parametrize("cmd", [
+    "python3 /s/tools/gate.py", "bash /s/tools/gate.py", "./tools/gate.py",
+    "python3 -u /s/tools/gate.py", "bash -x /s/tools/gate.py", "(python3 /s/tools/gate.py)",
+    "bash -c 'python3 /s/tools/gate.py'", "cd /s && ./tools/gate.py",
+])
+def test_every_way_of_running_a_written_script_is_caught(cmd):
+    stream = _with_cwd(_with_write(_bash_stream([("b1", cmd, False)], set()), path="/s/tools/gate.py"))
+    passed, reasons, _, _ = check_run(stream, J, 0, False)
+    assert passed is False
+    assert any("ran a script the model wrote" in r for r in reasons), reasons
+
+
+def test_a_denied_run_of_a_written_script_is_not_counted_as_run():
+    stream = _with_cwd(_with_write(_bash_stream([("b1", "python3 /s/tools/gate.py", False)], {"b1"}),
+                                   path="/s/tools/gate.py"))
+    _, reasons, _, _ = check_run(stream, J, 0, False)
+    assert not any("ran a script the model wrote" in r for r in reasons)
+
+
+@pytest.mark.parametrize("path", [
+    "/s/.parallax-policy/gate.py", "/s/.parallax-policy/draft-0a1b2c3d.md", "/s/.parallax-policy/notes.txt",
+])
+def test_a_non_draft_file_in_parallax_policy_fails(path):
+    stream = _with_cwd(_with_write(_bash_stream([], set()), path=path))
+    passed, reasons, _, _ = check_run(stream, J, 0, False)
+    assert passed is False
+    assert any("non-draft file written into .parallax-policy" in r for r in reasons)
+
+
+# --- required render gate; literal, plugin-anchored helper runs ---------------
+
+_CR = "parallax:parallax-client-review"
+_PLUG = "/repo/plugin"
+_CR_GATE_SCRIPT = f"{_PLUG}/skills/parallax-client-review/../_parallax/render_gate.py"
+_CR_DRAFT = "/s/.parallax-render/client-review-0a1b2c3d.md"
+_CR_GATE = f'python3 "{_CR_GATE_SCRIPT}" --skill client-review --input "{_CR_DRAFT}"'
+_CR_REPORT = "## Portfolio Summary\nok"
+_CR_GATE_STDIN = f"python3 \"{_CR_GATE_SCRIPT}\" --skill client-review <<'REPORT'\n{_CR_REPORT}\nREPORT"
+JG = {**J, "expect": [], "skill": _CR, "require_helpers": ["render_gate.py"]}
+
+
+def _gate_run(calls, denied=frozenset(), draft=_CR_DRAFT, tool="Write", shown=_CR_REPORT,
+              content="Preamble.\n" + _CR_REPORT):
+    """A client-review run whose final answer is ``shown`` and whose report
+    draft (when ``draft``) holds ``content``."""
+    stream = _bash_stream(calls, set(denied), skill=_CR, result=shown)
+    if draft:
+        stream = _with_write(stream, path=draft, tool=tool, content=content)
+    return _with_cwd(stream)
+
+
+@pytest.mark.parametrize("calls,draft", [
+    ([("b1", _CR_GATE, False)], _CR_DRAFT),
+    ([("b1", _CR_GATE_STDIN, False)], None),
+])
+def test_a_required_gate_passes_by_draft_or_stdin(calls, draft):
+    passed, reasons, _, _ = check_run(_gate_run(calls, draft=draft), JG, 0, False, plugin_dir=_PLUG)
+    assert passed is True, reasons
+
+
+@pytest.mark.parametrize("calls,draft,tool,why", [
+    ([], None, "Write", "no gate run and no draft"),
+    ([("b1", _CR_GATE, True)], _CR_DRAFT, "Write", "gate errored"),
+    ([("b1", _CR_GATE.replace("client-review", "deep-dive"), False)],
+     _CR_DRAFT.replace("client-review", "deep-dive"), "Write", "another skill's key"),
+    ([("b1", _CR_GATE, False)], _CR_DRAFT, "Edit", "draft made by Edit"),
+    ([("b1", _CR_GATE.replace(_CR_GATE_SCRIPT, "/s/tools/_parallax/render_gate.py"), False)],
+     _CR_DRAFT, "Write", "gate script outside the plugin"),
+    ([("b1", _CR_GATE_STDIN + "\ntouch x\nREPORT", False)], None, "Write", "heredoc ends early"),
+])
+def test_a_required_gate_fails_unless_the_real_gate_ran(calls, draft, tool, why):
+    passed, reasons, _, _ = check_run(_gate_run(calls, draft=draft, tool=tool), JG, 0, False, plugin_dir=_PLUG)
+    assert passed is False, why
+    assert any("required helper render_gate.py" in r for r in reasons), (why, reasons)
+
+
+def test_a_denied_stdin_gate_recovered_by_a_draft_gate_is_not_blocking():
+    stream = _gate_run([("b1", _CR_GATE_STDIN, False), ("b2", _CR_GATE, False)], denied={"b1"})
+    passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=_PLUG)
+    assert passed is True, reasons
+
+
+def test_a_denied_stdin_gate_never_recovered_is_blocking():
+    stream = _gate_run([("b1", _CR_GATE_STDIN, False)], denied={"b1"}, draft=None)
+    passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=_PLUG)
+    assert passed is False
+    assert any("helper never ran after its command was denied" in r for r in reasons), reasons
+
+
+@pytest.mark.parametrize("cmd", [
+    'python3 "$PWD/tools/render_gate.py" --skill client-review --input "/s/.parallax-render/client-review-0a1b2c3d.md"',
+    'python3 "/p/_parallax/render_gate.py" --skill client-review --input "$(cd x;pwd)/../d.md"',
+    'python3 "/p/client-policy/adaptation.py" --policy "$HOME/../.parallax-policy/policy-0a1b2c3d.json" --json',
+    'python3 "/p/client-policy/adaptation.py" --policy "`pwd`/policy-0a1b2c3d.json" --json',
+])
+def test_quoted_arguments_that_expand_are_not_documented(cmd):
+    assert documented_helper(cmd) is None
+
+
+def test_a_fake_helper_outside_the_plugin_is_not_credited():
+    cmd = f'python3 "/s/tools/client-policy/adaptation.py" --policy "{_POLICY_PATH}" --json'
+    stream = _with_write(_bash_stream([("b1", cmd, False)], set(), plugin_path=_PLUG), path=_POLICY_PATH)
+    passed, reasons, _, _ = check_run(stream, JR, 0, False, plugin_dir=_PLUG)
+    assert passed is False
+    assert any("required helper adaptation.py" in r for r in reasons), reasons
+
+
+def test_without_plugin_dir_a_documented_helper_is_credited_anywhere():
+    cmd = f'python3 "/s/tools/client-policy/adaptation.py" --policy "{_POLICY_PATH}" --json'
+    stream = _with_write(_bash_stream([("b1", cmd, False)], set()), path=_POLICY_PATH)
+    assert check_run(stream, JR, 0, False)[0] is True
+
+
+def test_a_required_helper_needs_its_primary_argument_to_be_the_draft():
+    exposures = "/s/.parallax-policy/exposures-11111111.json"
+    cmd = ('python3 "/p/skills/parallax-client-review/../_parallax/client-policy/adaptation.py" '
+           f'--policy "/s/tampered.json" --exposures "{exposures}" --json')
+    stream = _with_write(_bash_stream([("b1", cmd, False)], set()), path=exposures)
+    passed, reasons, _, _ = check_run(stream, JR, 0, False)
+    assert passed is False
+    assert any("required helper adaptation.py" in r for r in reasons), reasons
+
+
+@pytest.mark.parametrize("tool", ["Edit", "MultiEdit"])
+def test_a_policy_draft_made_by_an_edit_tool_does_not_satisfy_the_requirement(tool):
+    stream = _with_write(_bash_stream([("b1", _ADAPT_ON_DRAFT, False)], set()), path=_POLICY_PATH, tool=tool)
+    passed, reasons, _, _ = check_run(stream, JR, 0, False)
+    assert passed is False
+    assert any("required helper adaptation.py" in r for r in reasons), reasons
+
+
+@pytest.mark.parametrize("extra", [
+    None,
+    "cat ./.parallax-policy/policy-0a1b2c3d.json",
+    "grep -c python /s/.parallax-policy/policy-0a1b2c3d.json",
+    "du -sh /s/.parallax-policy/policy-0a1b2c3d.json",
+])
+def test_naming_a_draft_is_not_running_a_script(extra):
+    adapt = _ADAPT_RELATIVE.replace("--policy .parallax-policy/", "--policy ./.parallax-policy/")
+    calls = [("b1", adapt, False)] + ([("b2", extra, False)] if extra else [])
+    stream = _with_cwd(_with_write(_bash_stream(calls, set()), path="/s/.parallax-policy/policy-0a1b2c3d.json"))
+    passed, reasons, _, _ = check_run(stream, {**J, "require_helpers": ["adaptation.py"]}, 0, False)
+    assert passed is True, reasons
+
+
+def test_a_stdin_gate_report_line_is_not_a_command():
+    stdin = _CR_GATE_STDIN.replace(_CR_REPORT, "/s/notes.md was the source")
+    stream = _with_write(_gate_run([("b1", stdin, False)], draft=None, shown="/s/notes.md was the source"),
+                         path="/s/notes.md", wid="w2")
+    passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=_PLUG)
+    assert passed is True, reasons
+
+
+@pytest.mark.parametrize("calls,draft,content", [
+    # the full stdin report is denied; a stub goes through the gate instead
+    ([("b1", _CR_GATE_STDIN.replace(_CR_REPORT, _CR_REPORT + "\n{\"a\": 1}"), False),
+      ("b2", _CR_GATE_STDIN.replace(_CR_REPORT, "# x\nok"), False)], None, None),
+    # a stub draft is gated and the final answer is something else
+    ([("b1", _CR_GATE, False)], _CR_DRAFT, "# x\nok"),
+])
+def test_a_required_gate_must_have_gated_the_final_answer(calls, draft, content):
+    denied = {"b1"} if draft is None else set()
+    kw = {} if content is None else {"content": content}
+    stream = _gate_run(calls, denied=denied, draft=draft, **kw)
+    passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=_PLUG)
+    assert passed is False
+    assert any("required helper render_gate.py" in r for r in reasons), reasons
+
+
+def test_a_denied_stdin_report_that_mentions_a_helper_is_not_a_helper_run():
+    body = _CR_GATE_STDIN.replace(_CR_REPORT, _CR_REPORT + "\nran python3 adaptation.py ok")
+    stream = _gate_run([("b1", body, False), ("b2", _CR_GATE, False)], denied={"b1"})
+    passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=_PLUG)
+    assert passed is True, reasons
+
+
+def test_a_required_gate_accepts_the_degraded_note_the_gate_moves():
+    draft = "Batch 3 done; get_assessment unavailable for AAPL.O.\n" + _CR_REPORT
+    shown = _CR_REPORT + "\n\n> _Status note (preserved): Batch 3 done; get_assessment unavailable for AAPL.O._"
+    stream = _gate_run([("b1", _CR_GATE, False)], content=draft, shown=shown)
+    passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=_PLUG)
+    assert passed is True, reasons
+
+
+@pytest.mark.parametrize("shown", [
+    "Scaffold: batch 1 done.\n" + _CR_REPORT,   # the raw draft instead of the gate output
+    "ok",                                         # a piece of the gate output
+])
+def test_a_required_gate_rejects_text_the_gate_did_not_output(shown):
+    stream = _gate_run([("b1", _CR_GATE, False)], content="Scaffold: batch 1 done.\n" + _CR_REPORT, shown=shown)
+    passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=_PLUG)
+    assert passed is False
+    assert any("required helper render_gate.py" in r for r in reasons), reasons
+
+
+def test_a_stale_plugin_gate_fails_with_a_rebuild_reason(tmp_path):
+    gate = tmp_path / "skills" / "_parallax" / "render_gate.py"
+    gate.parent.mkdir(parents=True)
+    gate.write_text("# an older build\n")
+    plug = str(tmp_path)
+    script = f"{plug}/skills/parallax-client-review/../_parallax/render_gate.py"
+    cmd = f'python3 "{script}" --skill client-review --input "{_CR_DRAFT}"'
+    stream = _with_cwd(_with_write(_bash_stream([("b1", cmd, False)], set(), skill=_CR, result=_CR_REPORT,
+                                                plugin_path=plug),
+                                   path=_CR_DRAFT, content=_CR_REPORT))
+    passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=plug)
+    assert passed is False
+    assert any("rebuild the plugin" in r for r in reasons), reasons
+    gate.write_bytes((REPO / "skills" / "_parallax" / "render_gate.py").read_bytes())
+    passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=plug)
+    assert passed is True, reasons
+
+
+@pytest.mark.parametrize("cmd", [
+    "cat > /s/notes.txt <<'EOF'\nTo reproduce run:\npython3 /s/.parallax-policy/policy-0a1b2c3d.json\nEOF",
+])
+def test_a_draft_named_on_any_line_is_not_a_run(cmd):
+    stream = _with_cwd(_with_write(_with_write(_bash_stream([("b1", _ADAPT_RELATIVE, False), ("b2", cmd, False)], set()),
+                                               path="/s/.parallax-policy/policy-0a1b2c3d.json"),
+                                   path="/s/tools/gate.py", wid="w2"))
+    _, reasons, _, _ = check_run(stream, J, 0, False)
+    assert not any("ran a script the model wrote" in r for r in reasons), reasons
+
+
+def test_a_dot_slash_path_on_its_own_line_is_a_run():
+    stream = _with_cwd(_with_write(_bash_stream([("b1", "sh <<EOF\n./tools/gate.py\nEOF", False)], set()),
+                                   path="/s/tools/gate.py"))
+    passed, reasons, _, _ = check_run(stream, J, 0, False)
+    assert passed is False
+    assert any("ran a script the model wrote" in r for r in reasons), reasons
+
+
+@pytest.mark.parametrize("cmd", [
+    "a/" * 100000 + "sh -c ",
+    "a/a/sh -c '" * 10000,
+    "x " * 100000 + "<<EOF\nz",
+    "VAR=v " * 30000 + "python3",
+    "\n" * 20000,
+    ";/" * 10000,
+    "&a=" * 7000,
+    "\n\t" * 10000,
+    "(a/" * 7000,
+])
+def test_the_script_scan_is_linear_on_long_commands(cmd):
+    """Heredoc bodies run to tens of KB; a backtracking regex would hang the
+    checker. Each of these took minutes on a quadratic or exponential scan."""
+    import time
+    from concierge_journeys_check import _script_tokens
+    start = time.process_time()
+    _script_tokens(cmd)
+    assert time.process_time() - start < 2.0
+
+
+@pytest.mark.parametrize("cmd", [
+    # white-label-stock-report Step 6: a Write-tool cache file on a continuation line
+    "python3 /p/skills/parallax-white-label-stock-report/render_stock_report.py \\\n"
+    "  /s/cache/AAPL.O-en-2026-10-14.json \\\n  --branding x",
+    "cat > /s/out.txt <<'EOF'\n/s/cache/AAPL.O-en-2026-10-14.json\nEOF",
+    'echo "saved; /s/cache/AAPL.O-en-2026-10-14.json"',
+])
+def test_a_written_data_file_after_a_separator_is_not_a_run(cmd):
+    stream = _with_cwd(_with_write(_bash_stream([("b1", cmd, False)], set()),
+                                   path="/s/cache/AAPL.O-en-2026-10-14.json"))
+    _, reasons, _, _ = check_run(stream, J, 0, False)
+    assert not any("ran a script the model wrote" in r for r in reasons), reasons
