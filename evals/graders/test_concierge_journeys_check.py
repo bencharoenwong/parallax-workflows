@@ -621,14 +621,14 @@ def test_file_tool_writing_the_audit_log_fails(tool):
 _DRAFT = "/s/.parallax-render/should-i-buy-0a1b2c3d.md"
 
 
-def _with_write(stream, path=_DRAFT, at=1, wid="w1", error=False, tool="Write"):
+def _with_write(stream, path=_DRAFT, at=1, wid="w1", error=False, tool="Write", content="# report"):
     """Insert a file-tool call (Write by default) and its result at line ``at``
     (after init by default)."""
     lines = stream.rstrip("\n").split("\n")
     lines[at:at] = [
         json.dumps({"type": "assistant", "message": {"content": [
             {"type": "tool_use", "id": wid, "name": tool,
-             "input": {"file_path": path, "content": "# report"}}]}}),
+             "input": {"file_path": path, "content": content}}]}}),
         json.dumps({"type": "user", "message": {"content": [
             {"type": "tool_result", "tool_use_id": wid, "is_error": error, "content": "ok"}]}}),
     ]
@@ -960,13 +960,17 @@ _CR_GATE_SCRIPT = f"{_PLUG}/skills/parallax-client-review/../_parallax/render_ga
 _CR_DRAFT = "/s/.parallax-render/client-review-0a1b2c3d.md"
 _CR_GATE = f'python3 "{_CR_GATE_SCRIPT}" --skill client-review --input "{_CR_DRAFT}"'
 _CR_GATE_STDIN = f"python3 \"{_CR_GATE_SCRIPT}\" --skill client-review <<'REPORT'\n# Review\nREPORT"
-JG = {**J, "skill": _CR, "require_helpers": ["render_gate.py"]}
+_CR_REPORT = "# Review"
+JG = {**J, "expect": [], "skill": _CR, "require_helpers": ["render_gate.py"]}
 
 
-def _gate_run(calls, denied=frozenset(), draft=_CR_DRAFT, tool="Write"):
-    stream = _bash_stream(calls, set(denied), skill=_CR)
+def _gate_run(calls, denied=frozenset(), draft=_CR_DRAFT, tool="Write", shown=_CR_REPORT,
+              content="Preamble.\n" + _CR_REPORT):
+    """A client-review run whose final answer is ``shown`` and whose report
+    draft (when ``draft``) holds ``content``."""
+    stream = _bash_stream(calls, set(denied), skill=_CR, result=shown)
     if draft:
-        stream = _with_write(stream, path=draft, tool=tool)
+        stream = _with_write(stream, path=draft, tool=tool, content=content)
     return _with_cwd(stream)
 
 
@@ -1066,6 +1070,30 @@ def test_naming_a_draft_is_not_running_a_script(extra):
 
 def test_a_stdin_gate_report_line_is_not_a_command():
     stdin = _CR_GATE_STDIN.replace("# Review", "/s/notes.md was the source")
-    stream = _with_write(_gate_run([("b1", stdin, False)], draft=None), path="/s/notes.md", wid="w2")
+    stream = _with_write(_gate_run([("b1", stdin, False)], draft=None, shown="/s/notes.md was the source"),
+                         path="/s/notes.md", wid="w2")
+    passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=_PLUG)
+    assert passed is True, reasons
+
+
+@pytest.mark.parametrize("calls,draft,content", [
+    # the full stdin report is denied; a stub goes through the gate instead
+    ([("b1", _CR_GATE_STDIN.replace("# Review", "# Review\n{\"a\": 1}"), False),
+      ("b2", _CR_GATE_STDIN.replace("# Review", "# x\nok"), False)], None, None),
+    # a stub draft is gated and the final answer is something else
+    ([("b1", _CR_GATE, False)], _CR_DRAFT, "# x\nok"),
+])
+def test_a_required_gate_must_have_gated_the_final_answer(calls, draft, content):
+    denied = {"b1"} if draft is None else set()
+    kw = {} if content is None else {"content": content}
+    stream = _gate_run(calls, denied=denied, draft=draft, **kw)
+    passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=_PLUG)
+    assert passed is False
+    assert any("required helper render_gate.py" in r for r in reasons), reasons
+
+
+def test_a_denied_stdin_report_that_mentions_a_helper_is_not_a_helper_run():
+    body = _CR_GATE_STDIN.replace("# Review", "# Review\nran python3 adaptation.py ok")
+    stream = _gate_run([("b1", body, False), ("b2", _CR_GATE, False)], denied={"b1"})
     passed, reasons, _, _ = check_run(stream, JG, 0, False, plugin_dir=_PLUG)
     assert passed is True, reasons

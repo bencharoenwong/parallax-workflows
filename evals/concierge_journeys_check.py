@@ -284,7 +284,8 @@ def parse_stream(stream_text: str) -> dict:
     ``skill_calls`` does the same for Skill tool calls, keyed by tool_use id,
     with the requested skill name. ``bash_calls`` lists every Bash tool call in
     order as {"id", "command", "ok", "seq"}. ``file_writes`` lists every
-    Write/Edit/MultiEdit/NotebookEdit call as {"id", "tool", "path", "ok", "seq"}. ``seq`` is the call's
+    Write/Edit/MultiEdit/NotebookEdit call as {"id", "tool", "path", "content",
+    "ok", "seq"} (content is None except for Write). ``seq`` is the call's
     position in the stream, shared by both lists. ``assistant_texts`` lists every assistant
     text block in order."""
     init = None
@@ -327,7 +328,8 @@ def parse_stream(stream_text: str) -> dict:
                     seq += 1
                     writes[block.get("id", "")] = {
                         "id": block.get("id", ""), "tool": block["name"], "ok": False, "seq": seq,
-                        "path": str(tool_input.get("file_path") or tool_input.get("notebook_path") or "")}
+                        "path": str(tool_input.get("file_path") or tool_input.get("notebook_path") or ""),
+                        "content": str(tool_input.get("content", "")) if block["name"] == "Write" else None}
                 elif btype == "tool_use" and block.get("name") == "Bash":
                     tool_input = block.get("input") if isinstance(block.get("input"), dict) else {}
                     seq += 1
@@ -381,7 +383,9 @@ def classify_denials(denials: list, bash_calls: list[dict], cwd: str | None = No
         if documented and documented.get("body") is None:
             blocking.append(f"documented helper command denied: {command[:120]}")
             continue
-        used = sorted({m["helper"] for m in _HELPER_RUN.finditer(command)})
+        # A stdin gate's heredoc body is report text; only its first line runs.
+        scanned = command.split("\n", 1)[0] if documented else command
+        used = sorted({m["helper"] for m in _HELPER_RUN.finditer(scanned)})
         if documented:
             used = sorted(set(used) | {documented["helper"]})
         if used:
@@ -561,19 +565,33 @@ def check_run(
         # helper that errored, an improvised replacement, or a draft made by a
         # heredoc, by Edit, or in /tmp does not count. render_gate.py needs the
         # journey skill's key, on a Write-tool report draft or by the stdin
-        # form (conventions §10.3).
+        # form (conventions §10.3), and the final answer must be text that run
+        # gated (the gate only strips a preamble, so the final text, whitespace
+        # collapsed, lies inside the gated text).
         def _write_draft_before(path: str | None, pattern: re.Pattern[str], seq: int) -> bool:
             w = last_write.get(path) if path else None
             return bool(w and w["tool"] == "Write" and pattern.search(path) and w["seq"] < seq)
 
+        def _gated_text(g: dict) -> str | None:
+            if g["stdin"]:
+                return _match_documented_helper(g["command"])["body"]
+            if _write_draft_before(g["input"], _REPORT_DRAFT, g["seq"]):
+                return last_write[g["input"]]["content"]
+            return None
+
+        def _squash(text: str) -> str:
+            return " ".join(text.split())
+
         gate_key = (journey.get("skill") or "")[len(PLUGIN_PREFIX):].removeprefix("parallax-")
+        shown = _squash(final_text)
         for helper in journey.get("require_helpers") or []:
             if helper == "render_gate.py":
-                met = any(
+                met = bool(shown) and any(
                     g["ok"] and g["id"] not in denied_ids and g["key"] == gate_key
-                    and (g["stdin"] or _write_draft_before(g["input"], _REPORT_DRAFT, g["seq"]))
+                    and shown in _squash(_gated_text(g) or "")
                     for g in gate_runs)
-                where = "a Write-tool .parallax-render draft or the stdin form"
+                where = ("a Write-tool .parallax-render draft or the stdin form whose text holds "
+                         "the final answer")
             else:
                 met = any(
                     r["helper"] == helper and r["ok"] and r["id"] not in denied_ids

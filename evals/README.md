@@ -264,7 +264,8 @@ denied, exiting cleanly. A policy helper (`adaptation.py`, `coverage_check.py`,
 (conventions §14.4); a draft made or last changed by Edit or MultiEdit does not count.
 `render_gate.py` must run with `--skill` set to the journey skill's key, either on a
 `.parallax-render/` draft the Write tool created earlier or in the documented stdin form
-(conventions §10.3); it needs `skill`. The runner validates every line before any
+(conventions §10.3), and the final answer, whitespace collapsed, must appear in the text
+that run gated (the Write content or the heredoc body); it needs `skill`. The runner validates every line before any
 model call and rejects unknown keys, a list field that is not a list of strings, a
 `skill` without the `parallax:` prefix, a `require_helpers` entry outside that set, and
 `render_gate.py` in `require_helpers` without `skill`.
@@ -304,7 +305,8 @@ journey FAILs when:
   (`python3 <file>`, `bash <file>`, `sh <file>`, interpreter flags such as `-u`
   skipped, or the file as a command word, `./<file>`): only the documented helpers
   read drafts and only `render_gate.py` gates a report (conventions §14.4). Naming a
-  payload or report draft is not a run. This rule is best-effort: it matches shell
+  payload or report draft is not a run, and the heredoc body of a documented stdin
+  gate run is report text, not commands. This rule is best-effort: it matches shell
   text, so other spellings (`python3 - < <file>`, `source <file>`, a path built from
   `$PWD`, a `cd` before a relative path) are not caught;
 - anything other than a policy draft or its `.gitignore` is written into
