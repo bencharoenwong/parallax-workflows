@@ -435,8 +435,9 @@ Remaining risk, stated plainly:
   Parallax tool, and each billed call costs Parallax credits.
 - Built-in tools such as `Write`/`Edit` follow permission rules, not the sandbox; the
   scratch-only `Edit` rule is what limits them.
-- The ground-truth checks do not see: Python run by absolute path
-  (`/usr/bin/python3 x`) or after the model changes `PATH`; inline code (`python3 -c`,
+- The ground-truth checks do not see: Python other than a traced helper run by
+  absolute path (`/usr/bin/python3 x`) or after the model changes `PATH` (a traced
+  helper run that way fails the run); inline code (`python3 -c`,
   only a warning, since a documented step uses it); a non-Python script written by Bash,
   run, and deleted; code placed in a draft-named file and run with `-c`; and deliberate
   forgery of the trace.
