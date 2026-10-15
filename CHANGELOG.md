@@ -109,7 +109,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 - Shared source-fidelity validator `skills/_parallax/translation_validate.py` used by all four translators: compares section coverage, numbers, currency codes and symbols (a source that spells a currency out in words gets a manual-review warning), magnitude units, protected tokens, HTML structure, and identifiers against the source.
 
 ### Changed
-- Chinese, Thai, Arabic: instructions consolidated into lean entry files with detailed rules in `references/language-style.md`; end-to-end receipt in `docs/analysis/2026-10-02-translation-skills-e2e-receipt.md`.
+- Chinese, Thai, Arabic: instructions consolidated into lean entry files with detailed rules in `references/language-style.md`.
 - Vietnamese numbers follow a hybrid rule: prose uses Vietnamese separators and magnitude words without rescaling; tables and data keep the source form. The shared check accepts a separator-swapped number for `vi-VN` only.
 - Arabic corrected against Saudi broker research and CMA/SAMA documents (`references/sources.md`): dual-label ratings with محايد for HOLD, Arabic ratio terms with the English identifier beside them, riyal written as number then ريال سعودي, benchmark المؤشر الاسترشادي, dates by document type.
 - `build_bundle.py`: held translators are stripped from the plugin through a language registry, so `ar-SA` and `vi-VN` can share lists in any order.
