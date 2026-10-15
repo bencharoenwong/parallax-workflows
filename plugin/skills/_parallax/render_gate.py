@@ -147,6 +147,10 @@ SKILL_ANCHORS: dict[str, list[str]] = {
         r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:theme|thematic screen|universe built)\b",
         _branding("thematic screen"),
     ],
+    "weekly-themes": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:weekly themes|themes of the week)\b",
+        _branding("weekly themes"),
+    ],
     "macro-outlook": [
         r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:regime status|macro outlook)\b",
         _branding("macro outlook"),

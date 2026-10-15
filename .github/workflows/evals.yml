@@ -173,6 +173,9 @@ jobs:
       - name: Credit-lens gates
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/parallax-credit-lens/ -q
+      - name: Weekly-themes gates
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: python -m pytest skills/parallax-weekly-themes/ -q
       # The translate suites keep their tests beside the validator they
       # exercise, under references/ rather than tests/. run-gate-tests.sh
       # discovers them by test-file glob, so the root is named here rather

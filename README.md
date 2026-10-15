@@ -151,6 +151,7 @@ The plugin is the account-wide path. Skill upload packages are independent fallb
 | [parallax-stress-test-thesis](skills/parallax-stress-test-thesis/SKILL.md) | Full clone only |
 | [parallax-thematic-screen](skills/parallax-thematic-screen/SKILL.md) | Plugin |
 | [parallax-watchlist-monitor](skills/parallax-watchlist-monitor/SKILL.md) | Plugin, Skill upload |
+| [parallax-weekly-themes](skills/parallax-weekly-themes/SKILL.md) | Plugin |
 | [parallax-white-label-onboard](skills/parallax-white-label-onboard/SKILL.md) | Plugin |
 | [parallax-white-label-stock-report](skills/parallax-white-label-stock-report/SKILL.md) | Plugin |
 | [translate-arabic-finance](skills/translate-arabic-finance/SKILL.md) | Held: native review pending |
