@@ -1,6 +1,6 @@
 # Parallax Workflows — Cumulative Learnings
 
-Methodology and process insights distilled from feature work and post-implementation audits. Each entry is a one-line claim plus the trigger that produced it. Entries graduate here from `docs/analysis/*-analysis.md` files after explicit user approval.
+Methodology and process insights distilled from feature work and post-implementation audits. Each entry is a one-line claim plus the trigger that produced it. Entries graduate here from post-implementation analysis notes after explicit user approval.
 
 ---
 
@@ -10,7 +10,7 @@ Write one drift gate per Non-Negotiable that can be tested with a regex over fil
 
 **Trigger:** Post-implementation audit of `feat/wire-branding-houseview-skills` — both structural gates passed mechanically; the unverified invariants (manual scenarios) were the audit gaps.
 
-**Source:** `docs/analysis/2026-05-17-wire-branding-houseview-skills-analysis.md`.
+**Source:** post-implementation analysis of `feat/wire-branding-houseview-skills` (2026-05-17).
 
 ---
 
@@ -22,7 +22,7 @@ Write one drift gate per Non-Negotiable that can be tested with a regex over fil
 
 **Trigger:** Dogfood run of `/analyze-implementation` on `feat/wire-branding-houseview-skills` — the audit ran but required user authorization to override the skill's "no retroactive Constitution" guardrail because the feature was wrapped without a requirements doc.
 
-**Source:** `docs/analysis/2026-05-17-wire-branding-houseview-skills-analysis.md`.
+**Source:** post-implementation analysis of `feat/wire-branding-houseview-skills` (2026-05-17).
 
 ---
 
@@ -31,13 +31,13 @@ Write one drift gate per Non-Negotiable that can be tested with a regex over fil
 A gate that has never run is not a gate. The `compare_docx.py` e2e test for the cio-letter-prep retrofit (REQ-12) is well-designed — four checks (styles, palette, header image ±5% EMU, section/table counts), runnable on demand, fixture in place. But it has never demonstrably fired green because the cio-letter-prep retrofit has not been exercised against `golden_pack_2026-04.docx` post-commit. The right ceremony for any new gate that ships:
 
 1. Run it once.
-2. Capture exit code 0 (and the relevant output snippet) in a one-line log under `docs/analysis/` or alongside the gate script.
+2. Capture exit code 0 (and the relevant output snippet) in a one-line log alongside the gate script.
 3. Reference that receipt from the gate's docstring or SKILL.md.
 
 If steps 1–3 cannot happen (e.g., LLM-output gate that has no automatable trigger), explicitly downgrade to "documented manual check" — don't ship the claim that it's an automated gate.
 
 **Trigger:** REQ-12 in the wire-branding audit classified as "Built but Done-When not runnable" because the gate's automation surface is real but the gate has no firing history.
 
-**Source:** `docs/analysis/2026-05-17-wire-branding-houseview-skills-analysis.md`.
+**Source:** post-implementation analysis of `feat/wire-branding-houseview-skills` (2026-05-17).
 
 ---
