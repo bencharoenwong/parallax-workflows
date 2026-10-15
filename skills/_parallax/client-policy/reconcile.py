@@ -575,10 +575,32 @@ def _read_input_file(path: str) -> str:
         if in_draft_dir and st.st_nlink > 1:
             raise OSError(errno.EINVAL, "draft has more than one hard link", path)
         data = handle.read()
+    if (trace := _run_trace()) is not None:
+        trace.note_input(data, path=path)
     try:
         return data.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise OSError(errno.EINVAL, f"not UTF-8 ({exc.reason})", path) from exc
+
+
+def _run_trace():
+    """The live-journey run trace (``_parallax/run_trace.py``) when
+    PARALLAX_E2E_TRACE is set, else None. Loaded by path, so an ordinary run
+    imports nothing new (evals/README.md § Live concierge journeys)."""
+    if not os.environ.get("PARALLAX_E2E_TRACE"):
+        return None
+    module = sys.modules.get("_parallax_run_trace")
+    if module is None:
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location(
+                "_parallax_run_trace", os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "run_trace.py"))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            sys.modules["_parallax_run_trace"] = module
+        except Exception:
+            return None
+    return module
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -587,6 +609,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--input", required=True,
                         help="JSON payload file (see module docstring)")
     args = parser.parse_args(argv)
+    if (trace := _run_trace()) is not None:
+        trace.note_roles({"input": args.input})
     try:
         payload = json.loads(_read_input_file(args.input))
     except (OSError, json.JSONDecodeError) as exc:
@@ -599,4 +623,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    _trace = _run_trace()
+    sys.exit(_trace.run("reconcile.py", __file__, main) if _trace else main())

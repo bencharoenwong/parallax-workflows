@@ -2,8 +2,8 @@
 (see evals/concierge_journeys.sh and evals/tasks/concierge/journeys.jsonl).
 
 Pure functions; the only I/O is reading skills/_parallax/render_gate.py, whose
-pure ``gate()`` the render-gate requirement replays, and comparing it with the
-plugin's copy:
+pure ``gate()`` the render-gate requirement replays, and resolving the plugin
+directory's real path:
 
 - ``validate_journey(journey)`` rejects a journey line with unknown keys or
   with ``expect``/``forbid``/``expect_any`` that is not a list of strings.
@@ -11,8 +11,12 @@ plugin's copy:
   substring checks to the final assistant text.
 - ``check_run(stream_text, journey, exit_code, timed_out)`` parses a
   ``claude -p --output-format stream-json --verbose`` stream and fails the
-  journey closed. The full list of fail conditions is in evals/README.md
-  "Live concierge journeys"; this function is the implementation.
+  journey closed. Helper and gate runs are credited only from the run's
+  ground truth: the run trace the plugin helpers write
+  (skills/_parallax/run_trace.py), the Python starts the runner's shims log,
+  and a listing of the scratch tree taken before it is deleted. The full list
+  of fail conditions is in evals/README.md "Live concierge journeys"; this
+  function is the implementation.
 
 The shell runner calls this file's CLI; evals/graders/test_concierge_journeys_check.py
 pytests the pure functions on canned text (no model, no network — CI-safe).
@@ -24,7 +28,9 @@ import contextlib
 import functools
 import importlib.util
 import io
+import hashlib
 import json
+import os
 import posixpath
 import re
 import sys
@@ -35,12 +41,20 @@ ALLOWED_KEYS = frozenset({"id", "prompt", "expect", "forbid", "expect_any", "nee
 LIST_KEYS = ("expect", "forbid", "expect_any", "require_helpers")
 # Helpers a journey may require via "require_helpers" (conventions §10.3/§14.4).
 # render_gate.py needs the journey's "skill", whose key the gate run must name.
-REQUIRABLE_HELPERS = frozenset({"adaptation.py", "coverage_check.py", "reconcile.py",
-                                "render_gate.py"})
-# The argument that names each required helper's payload draft. A run counts
-# for "require_helpers" only when this argument is a Write-tool draft.
-_PRIMARY_ARG = {"adaptation.py": "policy", "coverage_check.py": "portfolio_sectors",
-                "reconcile.py": "input", "render_gate.py": "input"}
+REQUIRABLE_HELPERS = frozenset({"adaptation.py", "audit_append.py", "coverage_check.py",
+                                "reconcile.py", "render_gate.py"})
+# The argument that names each required helper's payload draft: the group name
+# in its documented command (_HELPER_PATTERNS) and the role its run trace
+# records. A run counts for "require_helpers" only when this input is a
+# Write-tool draft of the kind in _PRIMARY_DRAFT.
+_PRIMARY_ARG = {"adaptation.py": "policy", "audit_append.py": "input",
+                "coverage_check.py": "portfolio_sectors", "reconcile.py": "input",
+                "render_gate.py": "input"}
+_PRIMARY_DRAFT = {"adaptation.py": "policy", "audit_append.py": "audit",
+                  "coverage_check.py": "policy", "reconcile.py": "policy",
+                  "render_gate.py": "report"}
+# Helpers that read .parallax-policy drafts (conventions §14.4).
+_POLICY_HELPERS = frozenset({"adaptation.py", "coverage_check.py", "reconcile.py"})
 # no-connector: no Parallax server may load. connector-optional: skip only the
 # server-presence check (for a journey that makes no Parallax call, where a
 # claude.ai connector may not be listed in the init message yet).
@@ -119,40 +133,82 @@ _HELPER_SCRIPT_SUFFIX = {
     "coverage_check.py": "/coverage_check.py",
     "reconcile.py": "/client-policy/reconcile.py",
 }
-# An interpreter or shell given a script path (``python3 x.py``, ``bash x.sh``,
-# ``sh x``), or a ``./`` path in command position (``./x``).
-# Interpreter flags (``-u``, ``-x``) are skipped; ``-c`` is not, so
-# ``bash -c 'python3 x'`` matches the inner run. Best-effort: other spellings
-# (``python3 - < x``, ``source x``) are not caught (evals/README.md).
-_INTERPRETER_RUN = re.compile(
-    r"""(?<![\w.-])(?:python3?|bash|sh)(?:\s+-(?!c\b)[A-Za-z]+)*\s+(["']?[^\s"';&|<>()-][^\s"';&|<>()]*["']?)"""
-)
-# ``[ \t]*`` (not ``\s*``) after a separator keeps the scan linear on long runs
-# of newlines.
-_COMMAND_WORD = re.compile(r"""(?:^|[;&|(\n])[ \t]*(\./[^\s"';&|<>()]+)""")
+# Files a skill may leave in its working directory, relative to it: payload
+# drafts and their .gitignore (conventions §14.4), report drafts (§10.3) and
+# house-view audit row drafts (loader §6). Each must be a Write-tool draft.
+_REL_POLICY = re.compile(r"\.parallax-policy/[a-z0-9-]+-[0-9a-f]{8}\.(?:json|yaml)")
+_REL_POLICY_IGNORE = ".parallax-policy/.gitignore"
+_REL_AUDIT = re.compile(r"\.parallax-render/audit-[0-9a-f]{8}\.json")
+_REL_REPORT = re.compile(r"\.parallax-render/(?P<key>[a-z0-9-]+)-[0-9a-f]{8}\.md")
+# Top-level scratch entries the runner owns: home/, tmp/ (TMPDIR and
+# CLAUDE_CODE_TMPDIR), house-view/ (PARALLAX_HOUSE_VIEW_DIR) and e2e-trace/
+# (the trace files and the Python start shims).
+_RUNNER_DIRS = frozenset({"home", "tmp", "house-view", "e2e-trace"})
+# A command or file tool that names the ground-truth files touches the harness,
+# not the task.
+_TRACE_NAMES = re.compile(r"e2e-trace|journey-trace|python-starts|PARALLAX_E2E_TRACE")
+# A draft directory anywhere in a path; only <cwd>/.parallax-policy/ and
+# <cwd>/.parallax-render/ hold drafts.
+_DRAFT_DIR = re.compile(r"(?:^|/)\.parallax-(?:policy|render)/", re.IGNORECASE)  # APFS folds case
+# Code files: a model-written script. A failure in the working directory; a
+# warning in the runner's tmp/ and home/, where tools write code of their own
+# (npx installs .js files under home/.npm/_npx).
+_SCRIPT_SUFFIX = re.compile(r"\.(?:py|sh|bash|zsh|js|mjs|cjs|ts|rb|pl|php|lua)$")
 
 
-def _script_tokens(command: str) -> list[str]:
-    """The paths ``command`` may run as a script, quotes stripped. The two
-    scans are separate so a command word (``(python3``) cannot hide the
-    interpreter run that follows it."""
-    return [m.group(1).strip("\"'") for rx in (_INTERPRETER_RUN, _COMMAND_WORD)
-            for m in rx.finditer(command)]
+def _sha(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-# Payload-draft labels the skills write (conventions §14.4). A draft with one
-# of these labels is data: a command that names it is not running a script.
-_DATA_DRAFT = re.compile(
-    r"/\.parallax-policy/(?:policy|exposures|tilts|portfolio-sectors|redundancy-sectors|holdings|"
-    r"reconcile)-[0-9a-f]{8}\.(?:json|yaml)$"
-)
-# A report draft (conventions §10.3); its key is the gated skill's key.
-_REPORT_DRAFT = re.compile(r"/\.parallax-render/(?P<key>[a-z0-9-]+)-[0-9a-f]{8}\.md$")
-# A policy/coverage payload draft (conventions §14.4); its label names which
-# payload it is (``policy``, ``exposures``, ``tilts``, ``portfolio-sectors``,
-# ``redundancy-sectors``, ``holdings``, ``reconcile``). Requires the trailing
-# ``-<8 hex>.(json|yaml)`` shape, so a sibling ``.gitignore`` never matches.
-_POLICY_DRAFT = re.compile(r"/\.parallax-policy/(?P<label>[a-z0-9-]+)-[0-9a-f]{8}\.(?:json|yaml)$")
+def _draft_kind(rel: str | None) -> tuple[str | None, str | None]:
+    """(kind, key) for a working-directory-relative path: ``policy``,
+    ``ignore``, ``audit`` or ``report`` (with its skill key), else (None, None)."""
+    if rel is None:
+        return None, None
+    if _REL_POLICY.fullmatch(rel):
+        return "policy", None
+    if rel == _REL_POLICY_IGNORE:
+        return "ignore", None
+    if _REL_AUDIT.fullmatch(rel):
+        return "audit", None
+    m = _REL_REPORT.fullmatch(rel)
+    if m:
+        return "report", m["key"]
+    return None, None
+
+
+def _python_run(argv: list) -> tuple[str, str, int]:
+    """How one Python start runs code, from its arguments: ("inline", code) for
+    ``-c``, ("module", name) for ``-m``, ("script", path), ("stdin", "") for
+    ``-`` or no program, or ("info", "") for ``--version``/``--help``; with the
+    index of the script argument (-1 when there is none)."""
+    args = [str(a) for a in argv]
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a in ("-V", "--version", "-h", "--help", "-?"):
+            return "info", "", -1
+        if a in ("-c", "-m"):
+            return ("inline" if a == "-c" else "module"), (args[i + 1] if i + 1 < len(args) else ""), -1
+        if a == "-":
+            return "stdin", "", -1
+        if a in ("-W", "-X", "--check-hash-based-pycs"):
+            i += 2
+            continue
+        if a.startswith("-") and len(a) > 1:
+            flags = a[1:]
+            for j, ch in enumerate(flags):
+                if ch in "cm":  # -Ic CODE, -cCODE
+                    rest = flags[j + 1:] or (args[i + 1] if i + 1 < len(args) else "")
+                    return ("inline" if ch == "c" else "module"), rest, -1
+                if ch in "WX":
+                    if not flags[j + 1:]:
+                        i += 1  # -uW ignore: the next argument is the option's value
+                    break
+            i += 1
+            continue
+        return "script", a, i
+    return "stdin", "", -1
 
 
 # The gate whose output a required render-gate run must reproduce. The plugin
@@ -166,15 +222,6 @@ def _gate_fn():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module.gate
-
-
-def _stale_plugin_gate(plugin_dir: str | None) -> bool:
-    """True when ``plugin_dir`` holds a render_gate.py that differs from the
-    one this checker replays (the plugin was not rebuilt after an edit)."""
-    if plugin_dir is None:
-        return False
-    built = Path(plugin_dir) / "skills" / "_parallax" / "render_gate.py"
-    return built.is_file() and built.read_bytes() != _RENDER_GATE.read_bytes()
 
 
 def _render(text: str, key: str) -> str:
@@ -457,14 +504,236 @@ def _describe(servers: list[dict]) -> str:
     return ", ".join(f"{s.get('name')} ({s.get('status')})" for s in servers)
 
 
+def _ground_truth_reasons(
+    parsed: dict, journey: dict, final_text: str, commands: list[str], denied_ids: set,
+    cwd: str | None, plugin_dir: str | None, trace: list | None,
+    python_starts: list | None, snapshot: dict | None,
+) -> list[str]:
+    """The fail reasons that come from the run's ground truth (evals/README.md
+    "Live concierge journeys"). Credit for a helper run comes only from a run
+    trace line written by this run's plugin copy of the helper, matched to the
+    drafts the model wrote by content hash. Shell text decides only whether
+    the model used the documented command form (_HELPER_PATTERNS)."""
+    reasons: list[str] = []
+    plugin_real = os.path.realpath(plugin_dir).rstrip("/") + "/" if plugin_dir else None
+
+    # The model's tool-side drafts: the last successful write to each path.
+    # Only a Write carries the full content, so only a Write has a hash.
+    last_write: dict[str, dict] = {}
+    for w in parsed["file_writes"]:
+        if w["ok"]:
+            last_write[_norm_path(w["path"], cwd)] = w
+    root = _norm_path(cwd).rstrip("/") + "/" if cwd else None
+    drafts: dict[str, dict] = {}
+    for path, w in last_write.items():
+        rel = path[len(root):] if root and path.startswith(root) else None
+        kind, key = _draft_kind(rel)
+        # Code is never a skill's output (conventions §14.4), and the draft
+        # directories hold drafts only. Other data files (a skill's cache or
+        # output) are allowed.
+        if (w["content"] or "").startswith("#!") or (kind is None and _SCRIPT_SUFFIX.search(path)):
+            reasons.append(f"file tool wrote code (conventions §14.4): {w['path']}")
+            continue
+        if kind is None:
+            if _DRAFT_DIR.search(path):
+                reasons.append(f"file tool wrote a non-draft file into a draft directory: {w['path']}")
+            continue
+        content = w["content"] if w["tool"] == "Write" else None
+        drafts[rel] = {"kind": kind, "key": key, "path": w["path"], "tool": w["tool"],
+                       "content": content, "sha": _sha(content) if content is not None else None}
+    by_sha = {d["sha"]: d for d in drafts.values() if d["sha"]}
+
+    # A command or file tool that names the ground-truth files.
+    if any(_TRACE_NAMES.search(t) for t in commands + [w["path"] for w in parsed["file_writes"]]):
+        reasons.append("a command or file tool named the run's ground-truth files "
+                       "(e2e-trace / PARALLAX_E2E_TRACE)")
+
+    # Trace lines from this run's plugin. A helper of the same name elsewhere
+    # (a copy the model made and ran) is a failure, never a credit.
+    counted: list[dict] = []
+    for e in trace or []:
+        if not isinstance(e, dict) or e.get("helper") not in _HELPER_SCRIPT_SUFFIX:
+            continue
+        script = str(e.get("script") or "")
+        if not script.endswith(_HELPER_SCRIPT_SUFFIX[e["helper"]]) or (
+                plugin_real and not script.startswith(plugin_real)):
+            reasons.append(f"helper {e['helper']} ran from outside the plugin: {script}")
+            continue
+        counted.append(e)
+
+    def _ins(e: dict) -> list[dict]:
+        return [i for i in e.get("inputs") or [] if isinstance(i, dict)]
+
+    for e in counted:
+        if any(i.get("source") == "inline" for i in _ins(e)):
+            reasons.append(f"{e['helper']} was given a payload inline; conventions §14.4 "
+                           "require a .parallax-policy draft")
+
+    # Every draft the model wrote must be used: a payload draft read by a
+    # plugin helper (any exit: documented nonzero exits still consume it), a
+    # report draft read by a successful render-gate run with its key, an audit
+    # row draft read by audit_append.py.
+    for rel, d in sorted(drafts.items()):
+        if d["kind"] == "ignore":
+            continue
+        if d["sha"] is None:
+            reasons.append(f"draft {d['path']} was last changed by {d['tool']}, so its content "
+                           "is unknown; a draft is written once, with Write")
+            continue
+        read_by = [e for e in counted if any(i.get("sha256") == d["sha"] for i in _ins(e))]
+        if d["kind"] == "policy" and not any(e["helper"] in _POLICY_HELPERS for e in read_by):
+            reasons.append(f"policy draft never consumed: no plugin helper read {d['path']}")
+        elif d["kind"] == "report" and not any(
+                e["helper"] == "render_gate.py" and e.get("exit") == 0 and e.get("skill") == d["key"]
+                for e in read_by):
+            reasons.append(f"report draft never gated: no successful plugin render-gate run "
+                           f"with --skill {d['key']} read {d['path']}")
+        elif d["kind"] == "audit" and not any(e["helper"] == "audit_append.py" for e in read_by):
+            reasons.append(f"audit row draft never appended: audit_append.py never read {d['path']}")
+
+    # Required helpers: a successful plugin run whose every file input is a
+    # Write-tool draft and whose primary input is the right kind of draft, plus
+    # a successful documented command for the same draft (owner decision A,
+    # 2026-10-15: the literal form is what real users' Claude Code allows).
+    documented = []
+    for c in parsed["bash_calls"]:
+        if c["ok"] and c["id"] not in denied_ids:
+            m = _match_documented_helper(c["command"])
+            if m and _in_plugin(m["script"], cwd, plugin_dir):
+                documented.append(m)
+    gate_key = (journey.get("skill") or "")[len(PLUGIN_PREFIX):].removeprefix("parallax-")
+    shown = " ".join(final_text.split())
+    replay_differs = False
+    for helper in journey.get("require_helpers") or []:
+        role = _PRIMARY_ARG[helper]
+        met = False
+        for e in counted:
+            if e["helper"] != helper or e.get("exit") != 0:
+                continue
+            ins = _ins(e)
+            if any(i.get("source") == "inline" for i in ins) or any(
+                    i.get("sha256") not in by_sha for i in ins if i.get("source") == "file"):
+                continue
+            primary = next((i for i in ins if i.get("role") == role and i.get("source") == "file"), None)
+            draft = by_sha.get(primary.get("sha256")) if primary else None
+            calls = [m for m in documented if m["helper"] == helper]
+            if helper == "render_gate.py":
+                if e.get("skill") != gate_key:
+                    continue
+                text = None
+                if draft is not None and draft["kind"] == "report":
+                    if any(m.get("body") is None
+                           and posixpath.basename(m.get("input") or "") == primary.get("name")
+                           for m in calls):
+                        text = draft["content"]
+                else:
+                    stdin = next((i for i in ins if i.get("source") == "stdin"), None)
+                    if stdin is not None:
+                        # A heredoc sends its body plus one newline: the bytes the gate read.
+                        text = next((m["body"] + "\n" for m in calls if m.get("body") is not None
+                                     and _sha(m["body"] + "\n") == stdin.get("sha256")), None)
+                if text is None:
+                    continue
+                rendered = _render(text, gate_key)
+                if (e.get("output") or {}).get("sha256") != _sha(rendered):
+                    replay_differs = True
+                    continue
+                met = bool(shown) and shown == " ".join(rendered.split())
+            else:
+                met = draft is not None and draft["kind"] == _PRIMARY_DRAFT[helper] and any(
+                    posixpath.basename(m.get(role) or "") == primary.get("name") for m in calls)
+            if met:
+                break
+        if not met:
+            if helper == "render_gate.py" and replay_differs:
+                reasons.append("plugin render_gate.py output differs from the "
+                               "skills/_parallax/render_gate.py replay; rebuild the plugin "
+                               "(build_bundle.py plugin) and re-run")
+            where = ("a Write-tool .parallax-render draft or the stdin form, as the documented "
+                     "command, whose gate output is the final answer"
+                     if helper == "render_gate.py" else
+                     f"a Write-tool {_PRIMARY_DRAFT[helper]} draft, as the documented command")
+            reasons.append(f"required helper {helper} never ran successfully from the plugin on {where}")
+
+    # Python starts: code the model wrote and ran. A plugin script is a
+    # documented helper; -c (the white-label loader snippet, integration-pattern
+    # §2) and -m are warnings (ground_truth_warnings).
+    for start in python_starts or []:
+        if not isinstance(start, dict):
+            continue
+        kind, detail, index = _python_run(start.get("argv") or [])
+        if kind == "stdin":
+            reasons.append("ran Python code from stdin (code the model wrote): "
+                           f"{' '.join(map(str, start.get('argv') or []))[:120] or 'python'}")
+        elif kind == "script" and plugin_real:
+            files = start.get("files") or []
+            script = files[index] if 0 <= index < len(files) else None
+            if script is None:
+                continue  # no such file: nothing ran (ground_truth_warnings)
+            if not _norm_path(str(script)).startswith(_norm_path(plugin_real).rstrip("/") + "/"):
+                reasons.append(f"ran a Python script outside the plugin: {script}")
+
+    # The working directory after the run: the draft directories hold only
+    # Write-tool drafts, byte for byte as written; no code anywhere.
+    for ent in (snapshot or {}).get("entries") or []:
+        rel = str(ent.get("path", ""))
+        if rel.split("/", 1)[0] in _RUNNER_DIRS or ent.get("type") == "dir":
+            continue
+        if ent.get("type") != "file":
+            reasons.append(f"{ent.get('type')} left in the working directory: {rel}")
+            continue
+        kind, _ = _draft_kind(rel)
+        if kind is not None:
+            d = drafts.get(rel)
+            if d is None or d["sha"] != ent.get("sha256"):
+                reasons.append(f"draft left in the working directory differs from what the Write "
+                               f"tool wrote (or the Write tool never wrote it): {rel}")
+        elif _DRAFT_DIR.search(rel):
+            reasons.append(f"non-draft file left in a draft directory: {rel}")
+        elif _SCRIPT_SUFFIX.search(rel) or (ent.get("mode", 0) & 0o111):
+            reasons.append(f"script left in the working directory: {rel}")
+    return reasons
+
+
+def ground_truth_warnings(python_starts: list | None, snapshot: dict | None) -> list[str]:
+    """Warnings from the ground truth: inline (-c) and module (-m) Python
+    starts, a Python start whose script did not exist (nothing ran), and
+    script-like files in the runner's tmp/ and home/, where tools write code of
+    their own."""
+    warnings = []
+    for start in python_starts or []:
+        if isinstance(start, dict):
+            kind, detail, index = _python_run(start.get("argv") or [])
+            files = start.get("files") or []
+            if kind == "inline":
+                warnings.append(f"inline Python (-c): {detail.strip().splitlines()[0][:100] if detail.strip() else ''}")
+            elif kind == "module":
+                warnings.append(f"python -m {detail}")
+            elif kind == "script" and not (0 <= index < len(files) and files[index]):
+                warnings.append(f"Python script not found, nothing ran: {detail}")
+    for ent in (snapshot or {}).get("entries") or []:
+        rel = str(ent.get("path", ""))
+        top = rel.split("/", 1)[0]
+        if top in ("tmp", "home") and ent.get("type") == "file" and (
+                _SCRIPT_SUFFIX.search(rel) or (ent.get("mode", 0) & 0o111)):
+            warnings.append(f"script-like file in {top}/: {rel}")
+    return warnings
+
+
 def check_run(
     stream_text: str, journey: dict, exit_code: int, timed_out: bool,
-    plugin_dir: str | None = None,
+    plugin_dir: str | None = None, trace: list | None = None,
+    python_starts: list | None = None, snapshot: dict | None = None,
 ) -> tuple[bool, list[str], str, str]:
     """Fail-closed check of one live journey run.
 
     ``plugin_dir``, when given, must be the path of a plugin listed in the
     init message, so the run used this branch's built plugin.
+
+    ``trace`` (run_trace.py lines), ``python_starts`` (shim lines) and
+    ``snapshot`` (scratch_snapshot.py output) are the run's ground truth. A
+    None skips the checks that need it, except that no helper is ever credited
+    without a trace; the CLI fails a run whose ground truth is missing.
 
     Returns (passed, reasons, final_text, all_text). final_text is the result
     message's text ("" when there is none); expect/expect_any run on it.
@@ -529,121 +798,9 @@ def check_run(
             reasons.append("shell command names audit.jsonl (only audit_append.py may touch it; loader §6)")
         if any(_AUDIT_LOG.search(w["path"]) for w in parsed["file_writes"]):
             reasons.append("file tool wrote audit.jsonl (only audit_append.py may write it; loader §6)")
-        # A helper run counts only when its script is this run's plugin copy
-        # (plugin_dir), never a same-named file the model wrote.
-        gate_runs = []
-        policy_runs = []
-        for c in parsed["bash_calls"]:
-            m = _match_documented_helper(c["command"].strip())
-            if not m or not _in_plugin(m["script"], cwd, plugin_dir):
-                continue
-            args = {k: _norm_path(v, cwd) for k, v in _helper_args(m).items()}
-            if m["helper"] == "render_gate.py":
-                gate_runs.append({**c, "key": m["key"], "input": args.get("input"),
-                                  "stdin": m.get("body") is not None})
-            elif m["helper"] in ("adaptation.py", "coverage_check.py", "reconcile.py"):
-                policy_runs.append({**c, "inputs": set(args.values()), "helper": m["helper"],
-                                    "primary": args.get(_PRIMARY_ARG[m["helper"]])})
-        last_write: dict[str, dict] = {}
-        for w in parsed["file_writes"]:
-            if w["ok"]:  # a failed write left nothing to gate/consume
-                last_write[_norm_path(w["path"], cwd)] = w
-        # A skill never writes code and runs it (conventions §14.4): a run of a
-        # file the model wrote is an improvised helper, whatever it is named,
-        # and a gate.py that "checks" a report stands in for the real gate.
-        # Payload and report drafts are data and never count here, whether a
-        # command names one (``grep -c python <draft>``) or runs one (a known
-        # gap, evals/README.md).
-        written = set(last_write)
-        for c in parsed["bash_calls"]:
-            if c["id"] in denied_ids:
-                continue
-            # A documented stdin gate run's heredoc body is report text, not commands.
-            m = _match_documented_helper(c["command"])
-            command = c["command"].strip().split("\n", 1)[0] if m and m.get("body") is not None \
-                else c["command"]
-            for script in dict.fromkeys(_script_tokens(command)):
-                target = _norm_path(script, cwd)
-                if target in written and not (_DATA_DRAFT.search(target) or _REPORT_DRAFT.search(target)):
-                    reasons.append(f"ran a script the model wrote: {script}")
-        # .parallax-policy/ holds payload drafts and its .gitignore only.
-        for path in written:
-            if "/.parallax-policy/" in path and not _POLICY_DRAFT.search(path) \
-                    and not path.endswith("/.parallax-policy/.gitignore"):
-                reasons.append(f"non-draft file written into .parallax-policy: {path}")
-        # Every report draft the model wrote must be gated: a successful
-        # documented gate run on that same draft, with the draft's own key,
-        # after the last successful write to it. A skill that stops before
-        # drafting (an unresolvable ticker) needs no gate.
-        for path, w in last_write.items():
-            draft = _REPORT_DRAFT.search(path)
-            if draft:
-                if not any(g["ok"] and g["seq"] > w["seq"] and g["input"] == path
-                           and g["key"] == draft["key"] for g in gate_runs):
-                    reasons.append(f"report draft never gated: no successful documented render-gate run "
-                                   f"with --skill {draft['key']} on {path}")
-                continue
-            # Every policy/coverage draft the model wrote (conventions §14.4)
-            # must be read by a later successful documented run of
-            # adaptation.py, coverage_check.py, or reconcile.py that names
-            # this same literal path. These helpers do not delete their input
-            # after reading it, so this is a consumption check, not a
-            # gating check — see policy-loader.md §1 / §5.
-            if _POLICY_DRAFT.search(path) and not any(
-                r["id"] not in denied_ids and r["seq"] > w["seq"] and path in r["inputs"]
-                for r in policy_runs
-            ):
-                reasons.append(f"policy draft never consumed: no successful documented helper run "
-                               f"reading {path}")
-        # A journey that names required helpers needs each one to have run as
-        # documented, from the plugin, not denied, exiting cleanly, with its
-        # primary argument (_PRIMARY_ARG) a draft the Write tool created before
-        # the run. The consumption check above is deliberately lenient (a
-        # documented nonzero exit still consumes a draft); this one is not: a
-        # helper that errored, an improvised replacement, or a draft made by a
-        # heredoc, by Edit, or in /tmp does not count. render_gate.py needs the
-        # journey skill's key, on a Write-tool report draft or by the stdin
-        # form (conventions §10.3), and the final answer must be that run's
-        # output: render_gate.gate() replayed on the gated text, compared with
-        # whitespace collapsed. The gate also moves degraded-state notes from
-        # the stripped preamble to the end, so a substring test is not enough.
-        def _write_draft_before(path: str | None, pattern: re.Pattern[str], seq: int) -> bool:
-            w = last_write.get(path) if path else None
-            return bool(w and w["tool"] == "Write" and pattern.search(path) and w["seq"] < seq)
-
-        def _gated_text(g: dict) -> str | None:
-            if g["stdin"]:
-                return _match_documented_helper(g["command"])["body"]
-            if _write_draft_before(g["input"], _REPORT_DRAFT, g["seq"]):
-                return last_write[g["input"]]["content"]
-            return None
-
-        def _squash(text: str) -> str:
-            return " ".join(text.split())
-
-        gate_key = (journey.get("skill") or "")[len(PLUGIN_PREFIX):].removeprefix("parallax-")
-        shown = _squash(final_text)
-        for helper in journey.get("require_helpers") or []:
-            if helper == "render_gate.py" and _stale_plugin_gate(plugin_dir):
-                reasons.append("plugin render_gate.py differs from skills/_parallax/render_gate.py; "
-                               "rebuild the plugin (build_bundle.py plugin) and re-run")
-                continue
-            if helper == "render_gate.py":
-                met = bool(shown) and any(
-                    g["ok"] and g["id"] not in denied_ids and g["key"] == gate_key
-                    and _gated_text(g) is not None
-                    and shown == _squash(_render(_gated_text(g), gate_key))
-                    for g in gate_runs)
-                where = ("a Write-tool .parallax-render draft or the stdin form whose gate output "
-                         "is the final answer")
-            else:
-                met = any(
-                    r["helper"] == helper and r["ok"] and r["id"] not in denied_ids
-                    and _write_draft_before(r["primary"], _POLICY_DRAFT, r["seq"])
-                    for r in policy_runs)
-                where = "a Write-tool .parallax-policy draft"
-            if not met:
-                reasons.append(f"required helper {helper} never ran successfully on {where}")
+        reasons.extend(_ground_truth_reasons(
+            parsed, journey, final_text, commands, denied_ids, cwd, plugin_dir,
+            trace, python_starts, snapshot))
         if result.get("is_error"):
             reasons.append("result is_error")
         if result.get("subtype") != "success":
@@ -668,16 +825,39 @@ def check_run(
     return (len(reasons) == 0, reasons, final_text, all_text)
 
 
+def _read_jsonl(path: str | None, label: str, missing: list[str]) -> list | None:
+    """The JSON lines in ``path`` (non-JSON lines skipped), or None with a
+    note in ``missing`` when the file was not given or cannot be read."""
+    if path is None:
+        missing.append(f"no {label}")
+        return None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+    except OSError as exc:
+        missing.append(f"unreadable {label}: {exc}")
+        return None
+    out = []
+    for line in lines:
+        try:
+            out.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI.
 
     ``concierge_journeys_check.py --validate '<journey-json-line>'``
         exit 0 if the line is a valid journey, 2 with the problems otherwise.
     ``concierge_journeys_check.py '<journey-json-line>' --stream FILE
-        --exit-code N [--timed-out] [--plugin-dir DIR] [--text-out FILE]``
+        --exit-code N [--timed-out] [--plugin-dir DIR] [--text-out FILE]
+        --trace FILE --python-starts FILE --fs-snapshot FILE``
         run the fail-closed check, print the Parallax servers seen at init,
-        the denials and tool calls, then PASS or one FAIL line per reason;
-        write all assistant text to --text-out; exit 0 on pass, 1 on fail.
+        the denials, warnings and tool calls, then PASS or one FAIL line per
+        reason; write all assistant text to --text-out; exit 0 on pass, 1 on
+        fail. A missing ground-truth file is a FAIL.
     """
     ap = argparse.ArgumentParser()
     ap.add_argument("journey")
@@ -687,6 +867,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--timed-out", action="store_true")
     ap.add_argument("--plugin-dir")
     ap.add_argument("--text-out")
+    ap.add_argument("--trace")
+    ap.add_argument("--python-starts")
+    ap.add_argument("--fs-snapshot")
     args = ap.parse_args(sys.argv[1:] if argv is None else argv)
 
     try:
@@ -707,9 +890,26 @@ def main(argv: list[str] | None = None) -> int:
 
     with open(args.stream, encoding="utf-8", errors="replace") as fh:
         stream_text = fh.read()
+    missing: list[str] = []
+    trace = _read_jsonl(args.trace, "run trace", missing)
+    python_starts = _read_jsonl(args.python_starts, "Python start log", missing)
+    snapshot = None
+    if args.fs_snapshot is None:
+        missing.append("no scratch-tree listing (--fs-snapshot)")
+    else:
+        try:
+            with open(args.fs_snapshot, encoding="utf-8") as fh:
+                snapshot = json.load(fh)
+        except (OSError, json.JSONDecodeError) as exc:
+            missing.append(f"unreadable scratch-tree listing: {exc}")
     passed, reasons, _, all_text = check_run(
-        stream_text, journey, args.exit_code, args.timed_out, plugin_dir=args.plugin_dir
+        stream_text, journey, args.exit_code, args.timed_out, plugin_dir=args.plugin_dir,
+        trace=trace, python_starts=python_starts, snapshot=snapshot,
     )
+    if missing:
+        passed = False
+        reasons = [f"{m} (the run predates ground-truth checks, or the run removed the file)"
+                   for m in missing] + reasons
     if args.text_out:
         with open(args.text_out, "w", encoding="utf-8") as fh:
             fh.write(all_text)
@@ -719,6 +919,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"permission_denials: {len(denials)}")
     cwd = (parsed["init"] or {}).get("cwd")
     for warning in classify_denials(denials, parsed["bash_calls"], cwd=cwd, plugin_dir=args.plugin_dir)[1]:
+        print(f"WARN: {warning}")
+    for warning in ground_truth_warnings(python_starts, snapshot):
         print(f"WARN: {warning}")
     calls = parsed["parallax_calls"].values()
     print("parallax tool calls: " + (", ".join(
