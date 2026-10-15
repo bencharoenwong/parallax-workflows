@@ -41,3 +41,30 @@ def test_the_shim_logs_each_argument_file_and_passes_stdin_through(tmp_path):
     (line,) = [json.loads(x) for x in log.read_text().splitlines()]
     assert line["argv"] == ["-W", "ignore", str(script), "missing.py"]
     assert line["files"] == [None, None, os.path.realpath(script), None]
+
+
+def test_the_shim_records_directories_and_dev_paths_that_exist(tmp_path):
+    """A directory with __main__.py and /dev/stdin both run code; only a path
+    that does not exist ran nothing."""
+    bin_dir, _, log = _setup(tmp_path)
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    (pkg / "__main__.py").write_text("print('pkg')")
+    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
+    subprocess.run(["python3", "pkg"], capture_output=True, env=env, cwd=tmp_path, timeout=60)
+    subprocess.run(["python3", "/dev/stdin"], input="print(1)", capture_output=True, text=True,
+                   env=env, cwd=tmp_path, timeout=60)
+    lines = [json.loads(x) for x in log.read_text().splitlines()]
+    assert lines[0]["files"] == [os.path.realpath(pkg)]
+    assert lines[1]["files"][0] is not None
+
+
+def test_the_snapshot_records_a_shebang_and_does_not_follow_links(tmp_path):
+    from scratch_snapshot import snapshot
+    (tmp_path / "helper").write_text("#!/bin/sh\necho hi\n")
+    (tmp_path / "data.txt").write_text("plain")
+    (tmp_path / "link").symlink_to("/etc")
+    by_path = {e["path"]: e for e in snapshot(str(tmp_path))}
+    assert by_path["helper"]["shebang"] is True and by_path["data.txt"]["shebang"] is False
+    assert by_path["link"] == {"path": "link", "mode": by_path["link"]["mode"], "type": "link",
+                               "target": "/etc"}

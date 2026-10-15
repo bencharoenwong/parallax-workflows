@@ -153,7 +153,7 @@ _DRAFT_DIR = re.compile(r"(?:^|/)\.parallax-(?:policy|render)/", re.IGNORECASE) 
 # Code files: a model-written script. A failure in the working directory; a
 # warning in the runner's tmp/ and home/, where tools write code of their own
 # (npx installs .js files under home/.npm/_npx).
-_SCRIPT_SUFFIX = re.compile(r"\.(?:py|sh|bash|zsh|js|mjs|cjs|ts|rb|pl|php|lua)$")
+_SCRIPT_SUFFIX = re.compile(r"\.(?:py|sh|bash|zsh|js|mjs|cjs|ts|rb|pl|php|lua)$", re.IGNORECASE)
 
 
 def _sha(text: str) -> str:
@@ -186,7 +186,8 @@ def _python_run(argv: list) -> tuple[str, str, int]:
     i = 0
     while i < len(args):
         a = args[i]
-        if a in ("-V", "--version", "-h", "--help", "-?"):
+        if a in ("-h", "-?") or a.startswith("--help") or a.startswith("--version") or (
+                len(a) > 1 and set(a[1:]) == {"V"}):
             return "info", "", -1
         if a in ("-c", "-m"):
             return ("inline" if a == "-c" else "module"), (args[i + 1] if i + 1 < len(args) else ""), -1
@@ -690,7 +691,7 @@ def _ground_truth_reasons(
                                f"tool wrote (or the Write tool never wrote it): {rel}")
         elif _DRAFT_DIR.search(rel):
             reasons.append(f"non-draft file left in a draft directory: {rel}")
-        elif _SCRIPT_SUFFIX.search(rel) or (ent.get("mode", 0) & 0o111):
+        elif _SCRIPT_SUFFIX.search(rel) or (ent.get("mode", 0) & 0o111) or ent.get("shebang"):
             reasons.append(f"script left in the working directory: {rel}")
     return reasons
 
@@ -710,10 +711,11 @@ def ground_truth_warnings(python_starts: list | None, snapshot: dict | None) -> 
             elif kind == "module":
                 warnings.append(f"python -m {detail}")
             elif kind == "script" and not (0 <= index < len(files) and files[index]):
-                warnings.append(f"Python script not found, nothing ran: {detail}")
+                warnings.append(f"Python script path does not exist, nothing ran: {detail}")
     for ent in (snapshot or {}).get("entries") or []:
         rel = str(ent.get("path", ""))
         top = rel.split("/", 1)[0]
+        # No shebang test here: npx stubs under home/.npm/_npx start with #!.
         if top in ("tmp", "home") and ent.get("type") == "file" and (
                 _SCRIPT_SUFFIX.search(rel) or (ent.get("mode", 0) & 0o111)):
             warnings.append(f"script-like file in {top}/: {rel}")

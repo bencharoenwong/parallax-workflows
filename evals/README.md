@@ -251,11 +251,12 @@ deletes the scratch tree:
   nothing.
 - **Python starts** (`.python-starts.jsonl`). `python`, `python3` and `python3.N` shims
   (`evals/make_python_shims.py`) lead the run's `PATH`. Each logs its arguments, working
-  directory and, for each argument that names a file, its resolved path, then runs the
+  directory and, for each argument that names anything that exists (a file, a directory,
+  a `/dev` path), its resolved path, then runs the
   interpreter `PATH` gave it, unresolved, so an active virtual environment stays active.
 - **Scratch listing** (`.fs.json`, `evals/scratch_snapshot.py`): every entry's path,
-  type, mode, and for a file its size and sha256. Symbolic links are listed, not
-  followed.
+  type, mode, and for a file its size, sha256 and whether it starts with `#!`. Symbolic
+  links are listed, not followed.
 
 The model under test is assumed to improvise, not to attack the harness. The helpers and
 the model's shell share one sandbox, so the trace is not tamper-proof; deliberate forgery
@@ -346,7 +347,7 @@ journey FAILs when:
 - the scratch listing shows, outside the runner's `home/`, `tmp/`, `house-view/` and
   `e2e-trace/`: a symbolic link or other non-regular file; a file in a draft directory
   that is not a draft or that differs from the bytes the Write tool wrote (a Bash-made
-  or Bash-changed draft); or a script (script suffix or execute bit). A script-like file
+  or Bash-changed draft); or a script (script suffix, execute bit, or `#!` first line). A script-like file
   in the runner's `tmp/` or `home/` is a `WARN:` line: tools write code of their own
   there (`npx` installs `.js` files under `home/.npm/_npx`);
 - a Bash command or file-tool call names the ground-truth files (`e2e-trace`,

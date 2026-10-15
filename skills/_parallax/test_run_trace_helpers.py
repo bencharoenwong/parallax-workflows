@@ -119,7 +119,8 @@ def test_reconcile_records_its_input(work):
     payload = _draft(root, ".parallax-policy/reconcile-22222222.json", "{}")
     proc = _run([RECONCILE, "--input", payload], root, env)
     (entry,) = _entries(trace)
-    assert entry["helper"] == "reconcile.py" and entry["exit"] == proc.returncode
+    assert proc.returncode == 3  # an empty payload is invalid_input (documented exit 3)
+    assert entry["helper"] == "reconcile.py" and entry["exit"] == 3
     assert [(i["role"], i["sha256"]) for i in entry["inputs"]] == [("input", _sha(b"{}"))]
 
 
@@ -145,7 +146,8 @@ def test_audit_append_records_one_entry_for_itself(work):
     draft = _draft(root, ".parallax-render/audit-44444444.json", row)
     proc = _run([AUDIT_APPEND, "--input", draft], root, env)
     (entry,) = _entries(trace)
-    assert entry["helper"] == "audit_append.py" and entry["exit"] == proc.returncode
+    assert proc.returncode == 0, proc.stderr
+    assert entry["helper"] == "audit_append.py" and entry["exit"] == 0
     assert [(i["role"], i["sha256"]) for i in entry["inputs"]] == [("input", _sha(row.encode()))]
 
 

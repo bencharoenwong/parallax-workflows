@@ -8,7 +8,8 @@ execs that interpreter, by the path PATH gave (symlinks kept, so an active
 virtual environment stays active), with the same arguments. The runner puts
 ``<bin-dir>`` first on the run's PATH, so the checker sees every Python start
 the model's shell commands make: argv, working directory, and for each
-argument its resolved path when it names an existing file (``files``; the
+argument its resolved path when it names anything that exists, a file, a
+directory or a /dev path (``files``; the
 checker decides which argument is the program, evals/README.md § Live
 concierge journeys).
 
@@ -31,7 +32,7 @@ name, log, args = sys.argv[1], sys.argv[2], sys.argv[3:]
 files = []
 for a in args:
     try:
-        files.append(os.path.realpath(a) if os.path.isfile(a) else None)
+        files.append(os.path.realpath(a) if os.path.exists(a) else None)
     except (OSError, ValueError):
         files.append(None)
 line = json.dumps({"v": 1, "shim": name, "argv": args, "cwd": os.getcwd(), "files": files})

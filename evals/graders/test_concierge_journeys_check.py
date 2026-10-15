@@ -1051,6 +1051,9 @@ def _start(*argv, cwd="/s", script=None, at=None):
     (_start("x.py", script="/s/x.py"), "a relative script outside the plugin"),
     (_start("-W", "ignore", "/s/x.py", script="/s/x.py"), "a flag argument does not hide the script"),
     (_start("-Wignore", "/s/x.py", script="/s/x.py"), "an attached flag value does not hide the script"),
+    (_start("/dev/stdin", script="/dev/fd/0"), "code from /dev/stdin"),
+    (_start("/dev/fd/63", script="/dev/fd/63"), "code from a process substitution"),
+    (_start("pkg", script="/s/pkg"), "a directory with __main__.py"),
     (_start("/s/.parallax-policy/policy-0a1b2c3d.json", script="/s/.parallax-policy/policy-0a1b2c3d.json"),
      "a draft run as a script"),
     (_start("-I", "/repo/pluginx/render_gate.py", script="/repo/pluginx/render_gate.py"),
@@ -1071,6 +1074,8 @@ def test_python_code_the_model_ran_fails(start, why):
     _start("-c", "import rm_consumer"),
     _start("-m", "view_status"),
     _start("--version"),
+    _start("-VV"),
+    _start("--help-all"),
 ])
 def test_plugin_scripts_inline_snippets_and_modules_do_not_fail(start):
     passed, reasons, _, _ = check_run(_with_cwd(_bash_stream([], set())), J, 0, False, plugin_dir=_PLUG,
@@ -1084,7 +1089,7 @@ def test_inline_module_and_missing_script_starts_and_tmp_scripts_are_warnings():
                  ("tmp/node-compile-cache/v22/03ba72c0", "x"))
     assert ground_truth_warnings(starts, snap) == [
         "inline Python (-c): import json", "python -m json.tool",
-        "Python script not found, nothing ran: typo.py",
+        "Python script path does not exist, nothing ran: typo.py",
         "script-like file in tmp/: tmp/x.py",
         "script-like file in home/: home/.npm/_npx/a/node_modules/b/index.js"]
     passed, reasons, _, _ = check_run(_with_cwd(_bash_stream([], set())), J, 0, False, plugin_dir=_PLUG,
@@ -1117,6 +1122,7 @@ def test_a_draft_left_as_written_passes():
     ([(".parallax-policy/gate.py", "print(1)")], "non-draft file left in a draft directory"),
     ([("a/.parallax-render/client-review-0a1b2c3d.md", "x")], "non-draft file left in a draft directory"),
     ([("tools/gate.py", "print(1)")], "script left in the working directory"),
+    ([("tools/GATE.PY", "print(1)")], "script left in the working directory"),
     ([("linked", "link")], "link left in the working directory"),
 ])
 def test_the_working_directory_holds_only_drafts_as_written_and_no_code(entries, needle):

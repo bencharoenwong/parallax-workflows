@@ -4,8 +4,8 @@ Usage: python3 evals/scratch_snapshot.py <scratch-dir>  (JSON on stdout)
 
 Lists every entry under the scratch directory with its path relative to that
 directory, its type ("file", "dir", "link" or "other"), its mode, and for a
-regular file its size and sha256. Symbolic links are recorded with their
-target text and never followed: the scratch home/ holds links to the real
+regular file its size, sha256, and whether it starts with ``#!``. Symbolic
+links are recorded with their target text and never followed: the scratch home/ holds links to the real
 ~/.claude. The checker (concierge_journeys_check.py) compares this listing
 with the files the model wrote through the Write tool (evals/README.md
 § Live concierge journeys).
@@ -19,13 +19,17 @@ import stat
 import sys
 
 
-def _sha256(path: str) -> str:
+def _sha256(path: str) -> tuple[str, bool]:
+    """The file's sha256 and whether it starts with ``#!``."""
     digest = hashlib.sha256()
     fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+    first = b""
     with os.fdopen(fd, "rb") as handle:
         while chunk := handle.read(1 << 16):
+            if not first:
+                first = chunk[:2]
             digest.update(chunk)
-    return digest.hexdigest()
+    return digest.hexdigest(), first == b"#!"
 
 
 def snapshot(root: str) -> list[dict]:
@@ -43,7 +47,7 @@ def snapshot(root: str) -> list[dict]:
             elif stat.S_ISREG(st.st_mode):
                 entry.update(type="file", size=st.st_size)
                 try:
-                    entry["sha256"] = _sha256(full)
+                    entry["sha256"], entry["shebang"] = _sha256(full)
                 except OSError as exc:
                     entry["error"] = type(exc).__name__
             else:
