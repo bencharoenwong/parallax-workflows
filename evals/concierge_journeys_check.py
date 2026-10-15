@@ -674,6 +674,21 @@ def _ground_truth_reasons(
             if not _norm_path(str(script)).startswith(_norm_path(plugin_real).rstrip("/") + "/"):
                 reasons.append(f"ran a Python script outside the plugin: {script}")
 
+    # Every counted helper run must also appear as a shim-logged start, or the
+    # Python start checks above saw nothing and would pass by default.
+    if python_starts is not None and plugin_real:
+        started = set()
+        for start in python_starts:
+            if not isinstance(start, dict):
+                continue
+            kind, _, index = _python_run(start.get("argv") or [])
+            files = start.get("files") or []
+            if kind == "script" and 0 <= index < len(files) and files[index] is not None:
+                started.add(_norm_path(str(files[index])))
+        if any(_norm_path(str(e.get("script") or "")) not in started for e in counted):
+            reasons.append("Python start shims did not see the helper runs (PATH did not lead "
+                           "with the shims, or a helper ran by an absolute interpreter path)")
+
     # The working directory after the run: the draft directories hold only
     # Write-tool drafts, byte for byte as written; no code anywhere.
     for ent in (snapshot or {}).get("entries") or []:

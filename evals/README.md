@@ -344,6 +344,8 @@ journey FAILs when:
   Python script outside `plugin/`. `python3 -c` (the white-label loader snippet,
   integration-pattern.md §2), `python3 -m`, and a script path that named no file (a
   typo; nothing ran) print `WARN:` lines instead;
+- a counted trace line has no shim-logged Python start of the same helper script (the
+  shims were not first on `PATH`, or the helper ran by an absolute interpreter path);
 - the scratch listing shows, outside the runner's `home/`, `tmp/`, `house-view/` and
   `e2e-trace/`: a symbolic link or other non-regular file; a file in a draft directory
   that is not a draft or that differs from the bytes the Write tool wrote (a Bash-made

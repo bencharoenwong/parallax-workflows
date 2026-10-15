@@ -1097,6 +1097,33 @@ def test_inline_module_and_missing_script_starts_and_tmp_scripts_are_warnings():
     assert passed is True, reasons
 
 
+_SHIM_REASON = "Python start shims did not see the helper runs"
+
+
+def _helper_start_run(starts):
+    stream = _with_cwd(_with_write(_bash_stream([("b1", _ADAPT_FULL, False)], set()), path=_POLICY_PATH,
+                                   content=_POLICY_TEXT))
+    return check_run(stream, J, 0, False, plugin_dir=_PLUG, trace=[_adapt()], python_starts=starts)
+
+
+def test_a_helper_run_the_shims_saw_passes():
+    script = _adapt()["script"]
+    passed, reasons, _, _ = _helper_start_run([_start(script, "--policy", _POLICY_PATH,
+                                                      script=script, at=0)])
+    assert passed is True, reasons
+
+
+def test_a_helper_run_the_shims_did_not_see_fails():
+    passed, reasons, _, _ = _helper_start_run([])
+    assert passed is False
+    assert any(_SHIM_REASON in r for r in reasons), reasons
+
+
+def test_without_a_start_log_the_shim_coverage_rule_is_skipped():
+    passed, reasons, _, _ = _helper_start_run(None)
+    assert not any(_SHIM_REASON in r for r in reasons), reasons
+
+
 def test_without_plugin_dir_no_script_start_fails():
     start = _start("/s/tools/x.py", script="/s/tools/x.py")
     assert check_run(_with_cwd(_bash_stream([], set())), J, 0, False, trace=[],

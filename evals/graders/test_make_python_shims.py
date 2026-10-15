@@ -23,11 +23,18 @@ def _setup(tmp_path):
     return bin_dir, real_dir, log
 
 
-def test_the_shim_execs_the_interpreter_by_the_path_path_gave(tmp_path):
+def test_the_shim_keeps_a_virtual_environment_active(tmp_path):
     """A virtual environment's python3 is a symlink; resolving it would drop the venv."""
-    bin_dir, real_dir, _ = _setup(tmp_path)
-    text = (bin_dir / "python3").read_text()
-    assert f"exec {real_dir / 'python3'} " in text
+    venv = tmp_path / "v"
+    subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(venv)], check=True, timeout=120)
+    log = tmp_path / "starts.jsonl"
+    log.touch()
+    bin_dir = tmp_path / "shims"
+    assert "python3" in write_shims(str(bin_dir), str(log), path=str(venv / "bin"))
+    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
+    proc = subprocess.run(["python3", "-c", "import sys; print(sys.prefix)"], capture_output=True,
+                          text=True, env=env, cwd=tmp_path, timeout=60, check=True)
+    assert proc.stdout.strip() == os.path.realpath(venv)
 
 
 def test_the_shim_logs_each_argument_file_and_passes_stdin_through(tmp_path):
