@@ -5,13 +5,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import hashlib  # noqa: E402
 import json  # noqa: E402
 
 import pytest  # noqa: E402
 
 from concierge_journeys_check import (  # noqa: E402
     _render,
+    _sha,
     check_journey,
     check_run,
     classify_denials,
@@ -641,10 +641,6 @@ def _with_cwd(stream, cwd=_SCRATCH):
 
 # --- ground truth: the run trace, Python starts, the scratch listing ----------
 
-def _sha(text):
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
 _PLUG = "/repo/plugin"
 _SUBPATH = {"render_gate.py": "render_gate.py", "audit_append.py": "house-view/audit_append.py",
             "adaptation.py": "client-policy/adaptation.py",
@@ -936,8 +932,7 @@ _APPEND_ROW = '{"action": "applied"}'
 def test_a_required_audit_append_passes_and_an_unappended_row_fails():
     jr = {**J, "require_helpers": ["audit_append.py"]}
     path = "/s/.parallax-render/audit-0a1b2c3d.json"
-    stream = _with_cwd(_with_write(_bash_stream([("b1", _APPEND.replace("/s/.parallax-render/audit-0a1b2c3d.json",
-                                                                         path), False)], set()),
+    stream = _with_cwd(_with_write(_bash_stream([("b1", _APPEND, False)], set()),
                                    path=path, content=_APPEND_ROW))
     good = [_tl("audit_append.py", [("input", _APPEND_ROW, "audit-0a1b2c3d.json", "file")])]
     passed, reasons, _, _ = check_run(stream, jr, 0, False, trace=good)
