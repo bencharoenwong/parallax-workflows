@@ -236,6 +236,33 @@ inside the scratch tree. They are **not CI tests**: they call a real model and m
 tools, which bills Parallax credits. On macOS a live run starts `caffeinate -i` for the
 runner's lifetime, so idle sleep cannot cut off a run that has already billed credits.
 
+The checker credits helper runs from ground truth, not from shell text. The runner
+records three things for each run and copies them to the results directory before it
+deletes the scratch tree:
+
+- **Run trace** (`.trace.jsonl`). The runner sets `PARALLAX_E2E_TRACE` to a file it
+  creates at mode 0600. Each traced plugin helper (`render_gate.py`, `adaptation.py`,
+  `reconcile.py`, `coverage_check.py`, `audit_append.py`) then appends one line through
+  `skills/_parallax/run_trace.py`: the helper, the resolved path of the script that ran,
+  its exit code, and for each input its role (the argument it came from), its source
+  (file, stdin or inline), the file's base name, and the sha256 of the bytes read. The
+  render gate also records its skill key and the sha256 of its output. Lines hold digests
+  only, never payload text. Without the variable the helpers load nothing new and write
+  nothing.
+- **Python starts** (`.python-starts.jsonl`). `python`, `python3` and `python3.N` shims
+  (`evals/make_python_shims.py`) lead the run's `PATH`. Each logs its arguments, working
+  directory and, for each argument that names anything that exists (a file, a directory,
+  a `/dev` path), its resolved path, then runs the
+  interpreter `PATH` gave it, unresolved, so an active virtual environment stays active.
+- **Scratch listing** (`.fs.json`, `evals/scratch_snapshot.py`): every entry's path,
+  type, mode, and for a file its size, sha256 and whether it starts with `#!`. Symbolic
+  links are listed, not followed.
+
+The model under test is assumed to improvise, not to attack the harness. The helpers and
+the model's shell share one sandbox, so the trace is not tamper-proof; deliberate forgery
+is out of scope. A command or file-tool call that names the ground-truth files fails the
+run.
+
 ```bash
 # Preview every command this would run (no model call, no credits spent)
 PARALLAX_E2E_DRY_RUN=1 bash evals/concierge_journeys.sh
@@ -257,22 +284,28 @@ but skips only the Parallax-server-presence check. Use it for a journey that cal
 Parallax tool, because a claude.ai connector can be missing from the init message. An
 optional `skill` names the plugin skill the journey must run (`parallax:` prefix); it
 defaults to `parallax:parallax-concierge`. An optional `require_helpers` lists helpers
-that must each run as the documented command from this branch's `plugin/` directory, not
-denied, exiting cleanly. A policy helper (`adaptation.py`, `coverage_check.py`,
-`reconcile.py`) must run with its primary argument (`--policy`, `--portfolio-sectors`,
-`--input`) naming a `.parallax-policy/` draft the Write tool created earlier in the run
-(conventions §14.4); a draft made or last changed by Edit or MultiEdit does not count.
-`render_gate.py` must run with `--skill` set to the journey skill's key, either on a
-`.parallax-render/` draft the Write tool created earlier or in the documented stdin form
-(conventions §10.3), and the final answer must equal that run's output, with whitespace
-collapsed. The checker replays `render_gate.gate()` from `skills/_parallax/` on the gated
-text (the Write content or the heredoc body). It needs `skill`. It assumes an
-untranslated answer: a journey with `lang=` (conventions §15) would FAIL it. If the
-plugin's `render_gate.py` differs from `skills/_parallax/render_gate.py`, the journey
-FAILs with a rebuild reason instead. The runner validates every line before any
-model call and rejects unknown keys, a list field that is not a list of strings, a
-`skill` without the `parallax:` prefix, a `require_helpers` entry outside that set, and
-`render_gate.py` in `require_helpers` without `skill`.
+(`adaptation.py`, `audit_append.py`, `coverage_check.py`, `reconcile.py`,
+`render_gate.py`) that must each have run successfully from this branch's `plugin/`
+directory. A required run counts when its trace line shows exit 0, every file input it
+read hashes to a draft the Write tool wrote, no input was passed inline, and its primary
+input (`--policy`, `--input`, `--portfolio-sectors`) is the right kind of draft: a
+`.parallax-policy/` draft (conventions §14.4) for the policy helpers, a
+`.parallax-render/audit-<8 hex>.json` row draft for `audit_append.py` (loader §6). A
+successful, not denied Bash call must also match the helper's documented command and
+name a draft with that same base name: a real helper run through a shell variable does
+not count, because real users' Claude Code refuses that form. A draft last changed by
+Edit or MultiEdit has no known content and never counts. `render_gate.py` must run with
+`--skill` set to the journey skill's key, on a Write-tool `.parallax-render/` draft or in
+the documented stdin form (conventions §10.3, matched by the hash of the heredoc body
+plus its newline), and the final answer must equal the gate's output with whitespace
+collapsed. The checker replays `render_gate.gate()` from `skills/_parallax/` on the bytes
+the gate read. When the replay's hash differs from the output hash in the trace, the
+plugin was not rebuilt and the journey FAILs with a rebuild reason. The render-gate
+requirement needs `skill`. It assumes an untranslated answer: a journey with `lang=`
+(conventions §15) would FAIL it. The runner validates every line before any model call
+and rejects unknown keys, a list field that is not a list of strings, a `skill` without
+the `parallax:` prefix, a `require_helpers` entry outside that set, and `render_gate.py`
+in `require_helpers` without `skill`.
 
 Each run is captured as `--output-format stream-json --verbose` and fails closed. A
 journey FAILs when:
@@ -290,33 +323,37 @@ journey FAILs when:
 - any Bash command, denied or not, names `audit.jsonl` (only `audit_append.py` may
   touch the log, and its command names a draft, never the log; a raw write bypasses
   the hash chain, and §0.0 forbids reading files through the shell);
-- a report draft (`.parallax-render/<key>-<8 hex>.md`) was written and no documented
-  render-gate run with `--skill <key>` on that same draft succeeded after the last
-  successful write to it (paths compare after normalizing, so `/private/var` and `/var`
-  match; a failed write and a skill that stops before drafting, such as an unresolvable
-  ticker, need no gate run);
-- a policy/coverage draft (`.parallax-policy/<label>-<8 hex>.json` or `.yaml`,
-  conventions §14.4) was written and no documented `adaptation.py` / `coverage_check.py`
-  / `reconcile.py` run that names that same literal path was issued (not denied) after
-  the last successful write to it — a consumption check, not a gating check, since
-  none of these three helpers deletes its input. A helper argument may be a quoted
-  path or a bare token, absolute or relative to the run's working directory (from the
-  init message). Neither form may contain `$`, a backtick or `\`, so it cannot expand.
-  A helper run counts only when its script resolves under this branch's `plugin/`;
-- a journey's `require_helpers` helper did not run as above, exiting cleanly, on a
-  draft the Write tool created earlier in the run;
-- a Bash command that was not denied runs a file the model wrote in this run
-  (`python3 <file>`, `bash <file>`, `sh <file>`, interpreter flags such as `-u`
-  skipped, or the file as a command word, `./<file>`): only the documented helpers
-  read drafts and only `render_gate.py` gates a report (conventions §14.4). Only a `./`
-  path counts as a command word; a bare path after a separator is not a run. Naming a
-  payload or report draft is never a run, and the heredoc body of a documented stdin
-  gate run is report text, not commands. This rule is best-effort: it matches shell
-  text, so other spellings (`python3 - < <file>`, `source <file>`, a path built from
-  `$PWD`, a `cd` before a relative path, a draft run as a script) are not caught, and a
-  `./<file>` line inside a here-document body counts as a run even when it is only text;
-- anything other than a policy draft or its `.gitignore` is written into
-  `.parallax-policy/`;
+- the run trace, the Python start log or the scratch listing is missing (the run
+  predates these checks, or the run removed the file);
+- a trace line comes from a helper script outside this branch's `plugin/` (a copy the
+  model made and ran), or a helper was given a payload inline instead of a draft
+  (conventions §14.4);
+- a report draft (`.parallax-render/<key>-<8 hex>.md`) the Write tool wrote was never
+  read by a successful plugin `render_gate.py` run with `--skill <key>` (matched by
+  content hash, so a rewritten draft must be gated again; a failed write and a skill
+  that stops before drafting, such as an unresolvable ticker, need no gate run);
+- a `.parallax-policy/<label>-<8 hex>.json` or `.yaml` draft the Write tool wrote was
+  never read by a plugin `adaptation.py`, `coverage_check.py` or `reconcile.py` run
+  (any exit: their nonzero exits are documented outcomes), or an audit row draft was
+  never read by `audit_append.py`;
+- a journey's `require_helpers` helper did not run as above;
+- a file tool wrote code (a script suffix such as `.py` or `.sh`, or content starting
+  with `#!`; conventions §14.4), or wrote a file into a draft directory that is not a
+  documented draft name directly under the working directory;
+- the shims logged Python code read from stdin (`python3 -`, `python3 < file`) or a
+  Python script outside `plugin/`. `python3 -c` (the white-label loader snippet,
+  integration-pattern.md §2), `python3 -m`, and a script path that named no file (a
+  typo; nothing ran) print `WARN:` lines instead;
+- a counted trace line has no shim-logged Python start of the same helper script (the
+  shims were not first on `PATH`, or the helper ran by an absolute interpreter path);
+- the scratch listing shows, outside the runner's `home/`, `tmp/`, `house-view/` and
+  `e2e-trace/`: a symbolic link or other non-regular file; a file in a draft directory
+  that is not a draft or that differs from the bytes the Write tool wrote (a Bash-made
+  or Bash-changed draft); or a script (script suffix, execute bit, or `#!` first line). A script-like file
+  in the runner's `tmp/` or `home/` is a `WARN:` line: tools write code of their own
+  there (`npx` installs `.js` files under `home/.npm/_npx`);
+- a Bash command or file-tool call names the ground-truth files (`e2e-trace`,
+  `journey-trace`, `python-starts`, `PARALLAX_E2E_TRACE`);
 - a Write, Edit, MultiEdit or NotebookEdit call targets `audit.jsonl`;
 - `claude` exits non-zero or hits the timeout;
 - no Skill call of the journey's required skill succeeds, no skill in the `parallax:`
@@ -339,9 +376,12 @@ journey forbids "To connect" and "No connection needed", phrases of the concierg
 not-connected state, so a not-connected run cannot pass. `/mcp` itself is not
 forbidden: a correct connected run can mention it when a second, signed-out Parallax
 connector is loaded. The checker is `evals/concierge_journeys_check.py`, pytested on canned streams
-at `evals/graders/test_concierge_journeys_check.py`; that pytest runs in CI, the
-journeys do not. Results (gitignored) land in `evals/results/` as the raw stream
-(`.jsonl`), all assistant text (`.txt`) and stderr.
+at `evals/graders/test_concierge_journeys_check.py`. `evals/graders/test_concierge_journeys_runner.py`
+runs the real runner with a stub `claude` that plays J9 (no model, no credits) to check
+the trace, shim and listing plumbing end to end. Both run in CI; the journeys do not.
+Results (gitignored) land in `evals/results/` as the raw stream (`.jsonl`), all
+assistant text (`.txt`), stderr, and the ground truth (`.trace.jsonl`,
+`.python-starts.jsonl`, `.fs.json`).
 
 | Env var | Required | Purpose |
 |---|---|---|
@@ -351,6 +391,11 @@ journeys do not. Results (gitignored) land in `evals/results/` as the raw stream
 | `PARALLAX_E2E_CONNECTOR` | optional | `account` (default) or `plugin`. See below. |
 | `PARALLAX_E2E_ALLOWED_TOOLS` | optional | Overrides the Parallax tool patterns the connector mode picks (comma-separated). `--setting-sources project` drops user-level permissions, so the Parallax tools must be listed here or by the mode. The base permissions below are always allowed on top. |
 | `PARALLAX_E2E_TIMEOUT` | optional | Per-journey limit in seconds, default `600`. A timeout is a FAIL. |
+| `PARALLAX_E2E_RESULTS_DIR` | optional | Where results land, default `evals/results/`. |
+| `PARALLAX_E2E_JOURNEYS` | optional | Journey file, default `evals/tasks/concierge/journeys.jsonl` (for a one-off calibration journey). |
+
+The runner itself sets `PARALLAX_E2E_TRACE` (the run trace file) and puts the Python
+start shims first on `PATH` for each run; do not set them by hand.
 
 Permissions in every journey:
 
@@ -390,6 +435,12 @@ Remaining risk, stated plainly:
   Parallax tool, and each billed call costs Parallax credits.
 - Built-in tools such as `Write`/`Edit` follow permission rules, not the sandbox; the
   scratch-only `Edit` rule is what limits them.
+- The ground-truth checks do not see: Python other than a traced helper run by
+  absolute path (`/usr/bin/python3 x`) or after the model changes `PATH` (a traced
+  helper run that way fails the run); inline code (`python3 -c`,
+  only a warning, since a documented step uses it); a non-Python script written by Bash,
+  run, and deleted; code placed in a draft-named file and run with `-c`; and deliberate
+  forgery of the trace.
 
 Connector modes:
 

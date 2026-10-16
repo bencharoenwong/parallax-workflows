@@ -119,6 +119,8 @@ PARALLAX_INCLUDE = [
     "jit-load-compliance-audit.md",
     "render_gate.py",
     "coverage_check.py",
+    # Loaded by path by the helpers below when the live-journey trace is on.
+    "run_trace.py",
     # The bundled white-label test imports skill_manifest.py, which reads
     # manifest.json; both must ship or that test tree breaks at import time.
     "skill_manifest.py",
@@ -1552,7 +1554,12 @@ _PLACEHOLDER = "\x00SKILLDIR\x00"
 # forgotten silently.
 RUNTIME_COMPANIONS = {
     "house-view/gap_suggest.py": ("house-view/gap_detect.py",),
-    "house-view/audit_append.py": ("house-view/audit_chain.py", "render_gate.py"),
+    "house-view/audit_append.py": ("house-view/audit_chain.py", "render_gate.py", "run_trace.py"),
+    # Each traced helper loads run_trace.py by path (evals/README.md § Live concierge journeys).
+    "render_gate.py": ("run_trace.py",),
+    "coverage_check.py": ("run_trace.py",),
+    "client-policy/adaptation.py": ("run_trace.py",),
+    "client-policy/reconcile.py": ("run_trace.py",),
     "white-label/rm_consumer.py": ("white-label/loader.py",),
     "white-label/loader.py": ("white-label/schema.yaml",),
     # loader.md runs `python -m view_status` from the house-view directory.

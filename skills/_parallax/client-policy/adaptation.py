@@ -1516,6 +1516,8 @@ def _read_input_file(path: str) -> str:
         if in_draft_dir and st.st_nlink > 1:
             raise OSError(errno.EINVAL, "draft has more than one hard link", path)
         data = handle.read()
+    if (trace := _run_trace()) is not None:
+        trace.note_input(data, path=path)
     try:
         return data.decode("utf-8")
     except UnicodeDecodeError as exc:
@@ -1547,6 +1549,26 @@ def _render_text(result: AdaptationResult) -> str:
     return "\n".join(lines)
 
 
+def _run_trace():
+    """The live-journey run trace (``_parallax/run_trace.py``) when
+    PARALLAX_E2E_TRACE is set, else None. Loaded by path, so an ordinary run
+    imports nothing new (evals/README.md § Live concierge journeys)."""
+    if not os.environ.get("PARALLAX_E2E_TRACE"):
+        return None
+    module = sys.modules.get("_parallax_run_trace")
+    if module is None:
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location(
+                "_parallax_run_trace", os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "run_trace.py"))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            sys.modules["_parallax_run_trace"] = module
+        except Exception:
+            return None
+    return module
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI: --policy <file> [--exposures <json>] [--view-tilts <json>] [--today ISO] [--json]"""
     parser = argparse.ArgumentParser(
@@ -1560,6 +1582,9 @@ def main(argv: list[str] | None = None) -> int:
                         help="ISO date override; makes staleness deterministic.")
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of text.")
     args = parser.parse_args(argv)
+    if (trace := _run_trace()) is not None:
+        trace.note_roles({"policy": args.policy, "exposures": args.exposures,
+                          "view_tilts": args.view_tilts})
 
     try:
         policy = _load_yaml(args.policy)
@@ -1643,4 +1668,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    _trace = _run_trace()
+    sys.exit(_trace.run("adaptation.py", __file__, main) if _trace else main())

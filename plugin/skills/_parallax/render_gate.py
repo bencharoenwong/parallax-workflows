@@ -286,6 +286,26 @@ def read_draft(path: str, skill: str, suffix: str = ".md") -> str:
     return b"".join(chunks).decode("utf-8")
 
 
+def _run_trace():
+    """The live-journey run trace (``_parallax/run_trace.py``) when
+    PARALLAX_E2E_TRACE is set, else None. Loaded by path, so an ordinary run
+    imports nothing new (evals/README.md § Live concierge journeys)."""
+    if not os.environ.get("PARALLAX_E2E_TRACE"):
+        return None
+    module = sys.modules.get("_parallax_run_trace")
+    if module is None:
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location(
+                "_parallax_run_trace", os.path.join(os.path.dirname(os.path.realpath(__file__)), "run_trace.py"))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            sys.modules["_parallax_run_trace"] = module
+        except Exception:
+            return None
+    return module
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Shared Parallax render gate.")
     ap.add_argument("--skill", required=True, help="skill key, e.g. client-review")
@@ -305,7 +325,16 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError) as exc:
         sys.stderr.write(f"[render-gate] ERROR: cannot read draft: {exc}\n")
         return 2
+    trace = _run_trace()
+    if trace is not None:
+        trace.note_skill(args.skill)
+        if args.input is not None:
+            trace.note_input(draft.encode("utf-8"), role="input", path=args.input)
+        else:
+            trace.note_input(draft.encode("utf-8"), role="stdin", source="stdin")
     out = gate(draft, args.skill)
+    if trace is not None:
+        trace.note_output(out.encode("utf-8"))
     # UTF-8 bytes, not the locale's encoding: a cp1252 stdout would raise on
     # "→" after the draft is already deleted.
     buffer = getattr(sys.stdout, "buffer", None)
@@ -319,4 +348,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    _trace = _run_trace()
+    raise SystemExit(_trace.run("render_gate.py", __file__, main) if _trace else main())
