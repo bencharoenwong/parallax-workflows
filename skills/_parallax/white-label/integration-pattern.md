@@ -28,26 +28,23 @@ The structural guardrail enforcing this scope is `load_visual_branding()` in `lo
 
 ## §2 — Loading the branding
 
-Every consumer skill calls `load_visual_branding()` (not `load_client_branding()`) and `is_white_label_active()` from the same module:
+Every consumer skill loads branding with one `run-shell` call of exactly this line, with `<skill-dir>` written as the calling skill's literal directory (conventions §14: no variables, no `cd`, no inline `python3 -c` code):
 
-```python
-import sys
-from pathlib import Path
-
-# loader.py lives at _parallax/white-label/loader.py. <skill-dir> is the
-# calling skill's own directory, substituted literally at the call site
-# (conventions §14 run-shell: write paths literally; __file__ is undefined
-# when this snippet runs via `python3 -c`).
-_WHITE_LABEL_DIR = Path("<skill-dir>/../_parallax/white-label")
-sys.path.insert(0, str(_WHITE_LABEL_DIR))
-from loader import load_visual_branding, is_white_label_active, safe_source_reference  # noqa: E402
-
-branding = load_visual_branding()
-white_label_active = is_white_label_active(branding)
-client_name = branding.get("client_name", "")
+```
+python3 "<skill-dir>/../_parallax/white-label/loader.py" --json
 ```
 
-RM markdown consumers use the executable wrapper in `rm_consumer.py` instead. Call `load_rm_branding_context(<deliverable label>)`, then place its `header_lines` and `about_lines` in the locations defined by §5 and §7. The wrapper calls `load_visual_branding()` internally. It centralizes source redaction, voice isolation, and default-brand fallback for client-review and desk-call-list.
+It prints one JSON object: `colors` (hex values only), `fonts` (plain names only), `logos` (the absolute local path the loader resolved, or empty), `render` (only `audience_default`), each keeping only the entries of that shape (§3); `client_name`, already made inert markdown text; `error`, reduced to its class (§4: `config_not_found`, `schema_invalid`, `yaml_parse_error`, `yaml_read_error`, `schema_unavailable`, `logo_missing`, `schema_unavailable; logo_missing`, or `config_error`); `white_label_active` (from `is_white_label_active()`); and `source_reference` (from `safe_source_reference()`, §7). The raw `source` and raw error detail are not printed, because both can carry config content. Use `white_label_active` and `source_reference` as given; never recompute them.
+
+RM markdown consumers use `rm_consumer.py` instead, which renders the header and About This Report lines for them:
+
+```
+python3 "<skill-dir>/../_parallax/white-label/rm_consumer.py" --label "<deliverable label>" --audience <flag>
+```
+
+`--audience` takes only a fixed value, never the user's text: write `--audience client_safe` or `--audience internal_analyst` when the invocation's `audience=` value is exactly one of those, write `--audience unrecognized` for any other non-empty value (the command then adds the unrecognized-value notice), and leave `--audience` out when no `audience=` flag was given. It prints `header_lines`, `about_lines` and `resolved_audience`; place the lines in the locations defined by §5 and §7. The command calls `load_rm_branding_context()`, which calls `load_visual_branding()` internally. It centralizes source redaction, voice isolation, and default-brand fallback for client-review and desk-call-list. A skill that does not use the RM seam but needs the §13.1 audience mode runs `python3 "<skill-dir>/../_parallax/white-label/rm_consumer.py" --resolve-audience --audience <flag>` (same `--audience` rule), which prints `mode` and `notice`.
+
+If the command runs and fails, render default Parallax branding with `Branding: default Parallax (config error)` (§7), and use audience mode `client_safe` or `internal_analyst` only when the `audience=` value is exactly that, else `internal_analyst`. If the host has no shell, do not read `config.yaml` yourself (that bypasses every check above): render default Parallax branding with `Branding: default Parallax (not loaded: no shell)` (§7), with the same audience rule. `parallax-conventions.md` §14.3 `read-config` (no state directory, no branding) covers hosts that have no state directory at all. Python callers (tests, other helpers) import the same functions: `load_visual_branding`, `is_white_label_active` and `safe_source_reference` from `loader.py`, `load_rm_branding_context` and `resolve_audience` from `rm_consumer.py`.
 
 `white_label_active` is the rendering flag. The predicate is centralized in `loader.py` — do NOT re-implement it inline (the `schema_unavailable` branch is easy to miss; see §4 and §8). `client_name` is safe to read with `.get(..., "")` because legacy configs predating the field return `""` rather than `KeyError`.
 
@@ -57,7 +54,7 @@ RM markdown consumers use the executable wrapper in `rm_consumer.py` instead. Ca
 
 ## §3 — Safe key access
 
-`load_visual_branding()` returns exactly seven keys: `client_name`, `colors`, `logos`, `fonts`, `source`, `error`, `render`. `render` carries deployment render defaults; audience semantics live in `parallax-conventions.md` §13 and this doc only carries the key. Voice and v2-only token-tree fields (`typography`, `rounded`, `spacing`, `components`, `multi_source`, `confidence_scores`) are absent.
+`load_visual_branding()` returns exactly seven keys: `client_name`, `colors`, `logos`, `fonts`, `source`, `error`, `render`. (The §2 command prints a display-safe form of these: no `source`, and `source_reference` and `white_label_active` added.) `render` carries deployment render defaults; audience semantics live in `parallax-conventions.md` §13 and this doc only carries the key. Voice and v2-only token-tree fields (`typography`, `rounded`, `spacing`, `components`, `multi_source`, `confidence_scores`) are absent.
 
 This is enforced by the loader at code level (a dict-comprehension over the `_VISUAL_BRANDING_KEYS` constant in `loader.py`). Accidental `branding["voice"]` access raises `KeyError`. **The constant in `loader.py` is the machine-enforced source of truth; the seven-key list above is its human-readable declaration. If the two ever diverge during a PR, the constant wins — and `tests/test_loader.py::test_visual_branding_keys_are_subset_of_load_client_branding` will fail.** Update both together (see §9).
 
@@ -67,15 +64,15 @@ If a future visual key (e.g. `branding["icons"]`) is added, the allowlist must b
 
 ## §4 — Error handling
 
-`branding["error"]` is one of:
+`branding["error"]` (in the §2 command's output, its class only) is one of the values below. In Python, the loader's raw string carries detail after the class; never put that detail in a deliverable, because parse and schema messages can quote config content.
 
 | Value | Meaning | What the skill does |
 |---|---|---|
 | `None` | Clean load | Apply white-label substitution. |
 | `"config_not_found"` | No client onboarded | Silent default-Parallax path. No warning. About This Report reads `Branding: default Parallax`. |
-| `"logo_missing: <path>"` | Logo file referenced but absent on disk | Palette + fonts usable; cover-page / header logo skipped. About This Report reads `Branding: white-label (source: <ref>) (logo unavailable, omitted)`. |
-| `"schema_invalid: <details>"` | Schema validation failed | Fall back to defaults. About This Report reads `Branding: default Parallax (config invalid: <details>)`. |
-| `"yaml_parse_error: <details>"` | YAML corrupt | Fall back to defaults. About This Report reads `Branding: default Parallax (config unreadable)`. |
+| `"logo_missing"` | Logo file referenced but rejected or absent on disk | Palette + fonts usable; cover-page / header logo skipped. About This Report reads `Branding: white-label (source: <ref>) (logo unavailable, omitted)`. |
+| `"schema_invalid"` | Schema validation failed | Fall back to defaults. About This Report reads `Branding: default Parallax (config error)`. |
+| `"yaml_parse_error"` / `"yaml_read_error"` / `"config_error"` | YAML corrupt or unreadable | Fall back to defaults. About This Report reads `Branding: default Parallax (config error)`. |
 | `"schema_unavailable"` | Loader's own schema file missing, or the `jsonschema` package is not installed | Best-effort branding apply; About This Report reads `Branding: white-label (best-effort, schema unavailable)`. |
 
 The `is_white_label_active()` helper in §2 collapses these to a binary: clean, `logo_missing`, or `schema_unavailable` → render the brand (palette/fonts usable, with best-effort caveat for `schema_unavailable`); anything else → default Parallax.
@@ -130,17 +127,18 @@ Future writing-pipeline skills (newsletter, content) that DO want voice will cal
 
 ## §7 — About This Report footer line template
 
-Every wired skill renders a Branding line in its About This Report footer. The line is unconditional — it appears whether or not `white_label_active`. Format:
+Every wired skill renders a Branding line in its About This Report footer. The line is unconditional — it appears whether or not `white_label_active`. Pick the row from the §2 command's `error` class; when `white_label_active` is false, use a default-Parallax row whatever the class. Format:
 
-In every row below, `<ref>` is `safe_source_reference(branding)` from `loader.py` — URLs collapse to `scheme://hostname`, filesystem paths to basename. Never embed `branding["source"]["reference"]` directly; pre-signed URLs and internal paths must not reach end-client output.
+In every row below, `<ref>` is the §2 command's `source_reference` (`safe_source_reference(branding)` from `loader.py`) — URLs collapse to `scheme://hostname`, filesystem paths to basename. Never embed `branding["source"]["reference"]` directly; pre-signed URLs and internal paths must not reach end-client output.
 
 | Condition | Markdown skills | Docx skills (cio-letter-prep) |
 |---|---|---|
 | Clean load | `Branding: white-label (source: <ref>)` | same |
 | `logo_missing` | `Branding: white-label (source: <ref>) (logo unavailable, omitted)` | `Branding: white-label (source: <ref>) (logo unavailable, omitted from cover)` |
 | `config_not_found` | `Branding: default Parallax` | same |
-| `schema_invalid` / `yaml_parse_error` | `Branding: default Parallax (config error)` | same |
-| `schema_unavailable` | `Branding: white-label (best-effort, schema unavailable)` | same |
+| `schema_invalid` / `yaml_parse_error` / `yaml_read_error` / `config_error`, or the §2 command failed | `Branding: default Parallax (config error)` | same |
+| `schema_unavailable`, or `schema_unavailable; logo_missing` | `Branding: white-label (best-effort, schema unavailable)` | same |
+| Host has no shell (§2) | `Branding: default Parallax (not loaded: no shell)` | same |
 | Markdown skill, abs-local logo skipped per §5 | Append `Logo on file: <basename>` as a second About This Report line | N/A (docx embeds the logo directly) |
 | Resolved audience is `client_safe` | Append `Audience mode: client-safe` per `parallax-conventions.md` §13.4 | same |
 

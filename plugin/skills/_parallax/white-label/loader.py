@@ -41,6 +41,8 @@ Return shape (always 14 top-level keys, identical on success and error paths)
 from __future__ import annotations
 
 import logging
+import re
+import unicodedata
 from pathlib import Path, PurePath
 from typing import Any
 
@@ -307,7 +309,7 @@ def _read_yaml(path: Path) -> tuple[dict[str, Any] | None, str | None]:
     """
     try:
         raw = path.read_text(encoding="utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         return None, f"yaml_read_error: {exc}"
 
     try:
@@ -384,7 +386,7 @@ def _resolve_logo_paths(
 
         try:
             expanded = Path(raw_path).expanduser().resolve()
-        except (TypeError, ValueError, OSError):
+        except (TypeError, ValueError, OSError, RuntimeError):  # RuntimeError: ~unknownuser
             _reject(key, "invalid path value")
             continue
 
@@ -980,17 +982,21 @@ def is_white_label_active(branding: dict[str, Any]) -> bool:
     """Return True when the loader produced palette/font data the consumer
     should apply, False when the consumer should render default Parallax.
 
-    Active: error is None, or contains "logo_missing", or contains
-    "schema_unavailable" (best-effort branch). Everything else (config_not_found,
-    schema_invalid, yaml_parse_error) falls back to default Parallax.
+    Active: error is None, or its classes (:func:`error_class`) are only
+    "logo_missing" and/or "schema_unavailable" (best-effort branch). Everything
+    else (config_not_found, schema_invalid, yaml_parse_error) falls back to
+    default Parallax. Classes, not substrings: parse and schema messages quote
+    config text, so a config value reading "logo_missing" must not count.
 
     Single source of truth for the rendering flag; consumer SKILL.md files
     call this rather than re-implementing the predicate.
     """
     err = branding.get("error")
-    if err is None:
+    if not err:  # None or "": no error, as in error_class
         return True
-    return any(token in err for token in _ACTIVE_ERROR_TOKENS)
+    if not isinstance(err, str):
+        return False
+    return all(token in _ACTIVE_ERROR_TOKENS for token in error_class(err).split("; "))
 
 
 def safe_source_reference(branding: dict[str, Any]) -> str:
@@ -1007,10 +1013,6 @@ def safe_source_reference(branding: dict[str, Any]) -> str:
     ref = ref.strip()
     if not ref:
         return ""
-    if ref.startswith(("http://", "https://")):
-        from urllib.parse import urlparse
-        parsed = urlparse(ref)
-        return f"{parsed.scheme}://{parsed.hostname}" if parsed.hostname else ""
     # Multi-source references are joined with "; ". Redact each component
     # independently, otherwise Path(ref).name collapses the whole list to the
     # last basename and silently drops the other components' provenance.
@@ -1022,6 +1024,19 @@ def safe_source_reference(branding: dict[str, Any]) -> str:
             if safe and safe not in seen:
                 seen.append(safe)
         return "; ".join(seen)
+    # A query string or fragment is where a pre-signed URL carries its token,
+    # in any scheme and in bare file names alike.
+    ref = re.split(r"[?#]", ref, maxsplit=1)[0].strip()
+    if "://" in ref:
+        from urllib.parse import urlsplit
+        if "\\" in ref:  # browsers read "\\" as "/", urlsplit does not: hosts would differ
+            return ""
+        try:
+            parsed = urlsplit(ref)
+            host = parsed.hostname
+        except ValueError:
+            return ""
+        return f"{parsed.scheme.lower()}://{host}" if host and parsed.scheme else ""
     # Any path-like reference collapses to its basename. Matching only on a
     # leading "/" or "~" left RELATIVE paths ("client-collateral/acme-deck.pptx")
     # to pass through with their directory component intact, putting a raw
@@ -1029,3 +1044,184 @@ def safe_source_reference(branding: dict[str, Any]) -> str:
     if "/" in ref or "\\" in ref:
         return PurePath(ref.replace("\\", "/")).name
     return ref
+
+
+# Error classes the loader can produce. The CLI prints only these tokens:
+# the text after each class comes from PyYAML / jsonschema messages or config
+# keys, and can quote config content (a pre-signed URL in a bad enum value).
+_ERROR_CLASSES: tuple[str, ...] = (
+    "config_not_found",
+    "yaml_read_error",
+    "yaml_parse_error",
+    "schema_invalid",
+    "schema_unavailable",
+    "logo_missing",
+)
+
+
+def error_class(error: str | None) -> str | None:
+    """Reduce a loader ``error`` string to its class tokens, with no detail.
+
+    ``"schema_unavailable; logo_missing: primary file not found"`` becomes
+    ``"schema_unavailable; logo_missing"``. An error that starts with no known
+    class becomes ``"config_error"``.
+    """
+    if not error:
+        return None
+    lead = next((c for c in _ERROR_CLASSES if error.startswith(c)), None)
+    if lead is None:
+        return "config_error"
+    classes = [lead]
+    # schema_unavailable is the one class the loader prefixes to its own
+    # logo warnings; no other error is followed by a further class.
+    if lead == "schema_unavailable" and any(
+            seg.startswith("logo_missing") for seg in error.split("; ")[1:]):
+        classes.append("logo_missing")
+    return "; ".join(classes)
+
+
+_MAX_CLIENT_NAME_CHARS = 120
+
+# Characters that let an extracted client name break out of the markdown
+# constructs it is interpolated into: "]" and "(" escape the image label and
+# destination, "<" and ">" open raw HTML, "*" "_" "`" "#" "!" "[" ")" carry
+# markdown meaning, "|" breaks table cells, and "\" escapes the next character.
+_MARKDOWN_META = "[]()<>*_`#!|\\"
+
+#: Unicode general categories with no printable width. Cc and Cf carry the
+#: terminal escapes (ESC, BEL) and bidi overrides that ``str.split`` leaves
+#: alone, because they are not whitespace; Cs and Co have no defined rendering.
+_INVISIBLE_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Co"})
+
+
+def _safe_markdown_text(value: Any, meta: str = _MARKDOWN_META) -> str:
+    """Flatten untrusted config text into inert single-line markdown content.
+
+    Every string interpolated into a report from client-supplied collateral
+    (the client name, the redacted source reference, the logo filename) takes
+    this pass. Control and format characters are replaced before the markdown
+    pass: ``str.split`` collapses whitespace only, so ESC and BEL used to
+    survive into a rendered deliverable and rewrite what an RM sees in a
+    terminal.
+    """
+    if not isinstance(value, str):
+        return ""
+    printable = "".join(
+        " " if unicodedata.category(ch) in _INVISIBLE_CATEGORIES else ch
+        for ch in value
+    )
+    inert = "".join(" " if ch in meta else ch for ch in printable)
+    return " ".join(inert.split())
+
+
+def _safe_display_name(value: Any, meta: str = _MARKDOWN_META) -> str:
+    """Flatten an extracted client name into inert markdown link/label text.
+
+    The name originates in client-supplied collateral, so it is untrusted.
+    Interpolating it raw into ``![{name}]({url})`` and ``**{name}**`` let a
+    crafted name close the image, inject HTML, and open new report sections.
+    """
+    collapsed = _safe_markdown_text(value, meta)
+    # Renderers autolink "scheme://", "www." and "a@b"; "~~" strikes through.
+    collapsed = " ".join(re.sub(r"(?i)\bwww\.", "www ",
+                                collapsed.replace("://", " ").replace("@", " ")
+                                .replace("~", " ")).split())
+    if len(collapsed) > _MAX_CLIENT_NAME_CHARS:
+        collapsed = collapsed[:_MAX_CLIENT_NAME_CHARS].rstrip() + "…"
+    return collapsed
+
+
+def visual_branding_summary() -> dict[str, Any]:
+    """What a visual consumer skill needs, as JSON-safe data: the visual keys
+    with ``source`` replaced by its display-safe ``source_reference``,
+    ``client_name`` made inert markdown text, ``error`` reduced to its class
+    (:func:`error_class`), plus the ``white_label_active`` rendering flag.
+    Neither the raw source nor raw error detail leaves this function."""
+    branding = load_visual_branding()
+    return {
+        "client_name": _safe_display_name(branding.get("client_name"), _NAME_META),
+        "colors": _named_values(branding.get("colors"), _HEX_COLOR.fullmatch),
+        "fonts": {k: v for k, v in _named_values(
+            branding.get("fonts"), lambda v: len(v) <= 64).items()
+            if v == _safe_markdown_text(v)},
+        "logos": _named_values(branding.get("logos"), _safe_logo_location, keep_empty=True),
+        "render": _render_defaults(branding.get("render")),
+        "error": error_class(branding.get("error")),
+        "source_reference": _safe_markdown_text(safe_source_reference(branding)),
+        "white_label_active": is_white_label_active(branding),
+    }
+
+
+# What the --json command passes through, and nothing else: config values
+# reach the model, so each field is checked against the shape a consumer uses.
+_FIELD_NAME = re.compile(r"[a-z][a-z0-9_]{0,31}")
+_HEX_COLOR = re.compile(r"#[0-9A-Fa-f]{3,8}")
+# Parentheses are kept in the printed client name: legal names carry them
+# ("XYZ Capital (Hong Kong) Ltd"), the docx cover prints the name as is, and
+# with "[" and "]" removed no "](" link can form.
+_NAME_META = _MARKDOWN_META.replace("(", "").replace(")", "")
+_RENDER_AUDIENCES = frozenset({"client_safe", "internal_analyst"})
+
+
+def _named_values(value: Any, ok: Any, keep_empty: bool = False) -> dict[str, str]:
+    """Keep string entries with a plain field name whose value passes ``ok``
+    (or is empty, when ``keep_empty``)."""
+    if not isinstance(value, dict):
+        return {}
+    return {k: v for k, v in value.items()
+            if isinstance(k, str) and _FIELD_NAME.fullmatch(k)
+            and isinstance(v, str) and ((keep_empty and not v) or (v and ok(v)))}
+
+
+def _safe_logo_location(value: str) -> bool:
+    """A logo is the absolute path the loader resolved, extension-checked and
+    confirmed to be a file (``_resolve_logo_paths``). Spaces, parentheses and
+    quotes are normal in such paths ("Dropbox (Personal)"); markdown consumers
+    print only the escaped basename (§5). Control characters are refused."""
+    return (value.startswith("/") and len(value) <= 1024
+            and not any(unicodedata.category(ch) in _INVISIBLE_CATEGORIES for ch in value))
+
+
+def _render_defaults(value: Any) -> dict[str, str]:
+    """Only the one render default skills read (conventions §13.1)."""
+    if isinstance(value, dict) and value.get("audience_default") in _RENDER_AUDIENCES:
+        return {"audience_default": value["audience_default"]}
+    return {}
+
+
+def silence_warnings() -> None:
+    """Stop this module's warnings from reaching stderr. The CLIs call it:
+    the warnings quote parse and schema messages, which can carry config
+    content, and the calling model reads stderr."""
+    logger.disabled = True
+
+
+def main(argv: list[str] | None = None) -> int:
+    """``python3 loader.py --json``: print :func:`visual_branding_summary`.
+
+    The one-line form integration-pattern.md §2 documents, so a skill loads
+    branding with a literal command rather than inline ``python3 -c`` code.
+    """
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser(
+        description="Print the visual white-label branding summary as JSON.")
+    parser.add_argument("--json", action="store_true", required=True,
+                        help="print JSON (the only output format)")
+    parser.parse_args(argv)
+    silence_warnings()
+    try:
+        out = json.dumps(visual_branding_summary(), sort_keys=True, allow_nan=False)
+    except Exception:
+        # A traceback would quote config-adjacent detail and break the JSON
+        # contract; degrade to default branding, as rm_consumer.py does.
+        out = json.dumps({"client_name": "", "colors": {}, "logos": {}, "fonts": {},
+                          "render": {}, "error": "config_error", "source_reference": "",
+                          "white_label_active": False}, sort_keys=True)
+    print(out)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

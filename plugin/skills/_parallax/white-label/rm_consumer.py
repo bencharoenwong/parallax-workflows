@@ -58,52 +58,13 @@ load_visual_branding = _loader.load_visual_branding
 safe_source_reference = _loader.safe_source_reference
 
 
-_MAX_CLIENT_NAME_CHARS = 120
-
-# Characters that let an extracted client name break out of the markdown
-# constructs it is interpolated into: "]" and "(" escape the image label and
-# destination, "<" and ">" open raw HTML, "*" "_" "`" "#" "!" "[" ")" carry
-# markdown meaning, "|" breaks table cells, and "\" escapes the next character.
-_MARKDOWN_META = "[]()<>*_`#!|\\"
-
-
-#: Unicode general categories with no printable width. Cc and Cf carry the
-#: terminal escapes (ESC, BEL) and bidi overrides that ``str.split`` leaves
-#: alone, because they are not whitespace; Cs and Co have no defined rendering.
-_INVISIBLE_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Co"})
-
-
-def _safe_markdown_text(value: Any) -> str:
-    """Flatten untrusted config text into inert single-line markdown content.
-
-    Every string this module interpolates into a report — the client name, the
-    redacted source reference, the logo filename — reaches it from
-    client-supplied collateral, so all three take the same pass. Control and
-    format characters are replaced before the markdown pass: ``str.split``
-    collapses whitespace only, so ESC and BEL used to survive into a rendered
-    deliverable and rewrite what an RM sees in a terminal.
-    """
-    if not isinstance(value, str):
-        return ""
-    printable = "".join(
-        " " if unicodedata.category(ch) in _INVISIBLE_CATEGORIES else ch
-        for ch in value
-    )
-    inert = "".join(" " if ch in _MARKDOWN_META else ch for ch in printable)
-    return " ".join(inert.split())
-
-
-def _safe_display_name(value: Any) -> str:
-    """Flatten an extracted client name into inert markdown link/label text.
-
-    The name originates in client-supplied collateral, so it is untrusted.
-    Interpolating it raw into ``![{name}]({url})`` and ``**{name}**`` let a
-    crafted name close the image, inject HTML, and open new report sections.
-    """
-    collapsed = _safe_markdown_text(value)
-    if len(collapsed) > _MAX_CLIENT_NAME_CHARS:
-        collapsed = collapsed[:_MAX_CLIENT_NAME_CHARS].rstrip() + "…"
-    return collapsed
+# The sanitizers live in loader.py so its --json command applies the same
+# pass to client_name; these names stay importable from this module.
+_MAX_CLIENT_NAME_CHARS = _loader._MAX_CLIENT_NAME_CHARS
+_MARKDOWN_META = _loader._MARKDOWN_META
+_INVISIBLE_CATEGORIES = _loader._INVISIBLE_CATEGORIES
+_safe_markdown_text = _loader._safe_markdown_text
+_safe_display_name = _loader._safe_display_name
 
 
 #: Characters that end, reopen, or escape a markdown link destination. A URL is
@@ -165,8 +126,8 @@ def resolve_audience(
     """Resolve the §13.1 audience precedence. Returns ``(mode, notice)``.
 
     Pure function, no I/O — importable and callable without side effects, so
-    both the RM seam (client-review, via `load_rm_branding_context`) and a
-    direct Bash `python3 -c` call (rebalance, which does not use the RM seam)
+    both the RM seam (client-review, via `load_rm_branding_context`) and the
+    ``--resolve-audience`` command (rebalance, which does not use the RM seam)
     share exactly one implementation of the precedence order:
 
     1. A recognized per-invocation ``audience`` flag wins silently.
@@ -315,6 +276,8 @@ def load_rm_branding_context(
         )
 
     error = str(branding.get("error") or "")
+    # Class tokens only: the raw error quotes config text (loader.error_class).
+    error_classes = (_loader.error_class(error) or "").split("; ")
     active = is_white_label_active(branding)  # type: ignore[arg-type]
     if active and not _has_renderable_branding(branding):
         # Active state with nothing to render: fall back rather than print an
@@ -338,9 +301,9 @@ def load_rm_branding_context(
         if safe_logo:
             header_lines.append(f"![{client_name}]({safe_logo})")
         if client_name:
-            header_lines.append(f"**{client_name}** {deliverable_label}")
+            header_lines.append(f"**{client_name}** {_safe_markdown_text(deliverable_label)}")
 
-        if "schema_unavailable" in error:
+        if "schema_unavailable" in error_classes:
             about_lines.append(
                 "Branding: white-label (best-effort, schema unavailable)"
             )
@@ -349,7 +312,7 @@ def load_rm_branding_context(
                 safe_source_reference(branding)  # type: ignore[arg-type]
             )
             line = f"Branding: white-label (source: {safe_reference})"
-            if "logo_missing" in error:
+            if "logo_missing" in error_classes:
                 line += " (logo unavailable, omitted)"
             about_lines.append(line)
 
@@ -385,3 +348,52 @@ def render_rm_markdown(
     )
     blocks = [*context.header_lines, body, "## About This Report", *context.about_lines]
     return "\n\n".join(block for block in blocks if block)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """One-line command forms for skills (integration-pattern.md §2):
+
+    ``python3 rm_consumer.py --label "portfolio review" [--audience <flag>]``
+    prints ``{"header_lines", "about_lines", "resolved_audience"}``.
+
+    ``python3 rm_consumer.py --resolve-audience [--audience <flag>]`` prints
+    ``{"mode", "notice"}`` from :func:`resolve_audience` over the loaded
+    visual branding, for a skill that does not use the RM seam.
+    """
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser(
+        description="Print the RM branding context or the resolved audience mode as JSON.")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--label", help="deliverable label, e.g. 'portfolio review'")
+    mode.add_argument("--resolve-audience", action="store_true",
+                      help="print only the §13.1 audience mode and notice")
+    # Never the user's text (integration-pattern.md §2): the skill maps any
+    # value other than the two modes to "unrecognized", which resolve_audience
+    # treats as an unrecognized flag and notices.
+    parser.add_argument("--audience", default=None,
+                        choices=sorted(_AUDIENCE_MODES | {"unrecognized"}),
+                        help="client_safe, internal_analyst or unrecognized; omit when "
+                             "the invocation gave no audience= flag")
+    args = parser.parse_args(argv)
+    _loader.silence_warnings()
+
+    if args.resolve_audience:
+        try:
+            branding: Any = load_visual_branding()
+        except Exception:
+            branding = None
+        resolved, notice = resolve_audience(branding, args.audience)
+        print(json.dumps({"mode": resolved, "notice": notice}))
+        return 0
+
+    context = load_rm_branding_context(args.label, audience=args.audience)
+    print(json.dumps({"header_lines": list(context.header_lines),
+                      "about_lines": list(context.about_lines),
+                      "resolved_audience": context.resolved_audience}))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

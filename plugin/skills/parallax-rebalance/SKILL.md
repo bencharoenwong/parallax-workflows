@@ -25,7 +25,7 @@ description: "Portfolio rebalancing with health flags and macro context: analyze
 - Output must include specific candidate weight changes, framed per conventions §12 (analysis, not instructions), not just vague suggestions
 - For portfolios with 10+ holdings, prioritize score trend scans for top/bottom 5 by weight to manage latency
 - When `policy=` is supplied, JIT-load `_parallax/client-policy/policy-loader.md` and run Batch C2 (Step 4). The S3 solver (`_parallax/client-policy/reconcile.py`) needs scipy and **fails closed** without it — `solver_unavailable` renders UNVERIFIED per conventions §4.0, never a partial trade list. Deterministic math lives in the helper; never reproduce the LP in prose.
-- JIT-load `_parallax/white-label/integration-pattern.md` before the Step 5 Pre-Render block. Loader call is `load_visual_branding()` (7-key visual subset; voice structurally excluded — `branding["voice"]` raises `KeyError`). Apply §5 (Branding Header) and §7 (About This Report) in Output Format. Audience mode resolution (§13.1) is a separate seam call, not a dict read of `branding["render"]`: this skill does not use the RM seam (`rm_consumer.py::load_rm_branding_context`) for branding, but it DOES call that module's `resolve_audience()` function directly, via the one `run-shell` step documented under Step 5 Pre-Render — never re-derive the §13.1 precedence in prose.
+- JIT-load `_parallax/white-label/integration-pattern.md` before the Step 5 Pre-Render block. Branding loads with §2's `loader.py --json` command (visual keys only; voice structurally excluded). Apply §5 (Branding Header) and §7 (About This Report) in Output Format. Audience mode resolution (§13.1) is a separate seam call, not a dict read of `branding["render"]`: this skill does not use the RM seam (`rm_consumer.py::load_rm_branding_context`) for branding, but it DOES run that module's `resolve_audience()` through `rm_consumer.py --resolve-audience`, the one `run-shell` step documented under Step 5 Pre-Render — never re-derive the §13.1 precedence in prose.
 
 Generate prioritized trade recommendations using health flags, macro context, and Parallax scores.
 
@@ -123,22 +123,20 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 
 ### Step 5 — Compose
 
-**Pre-Render — load white-label branding.** `load-reference` `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+**Pre-Render — load white-label branding.** `load-reference` `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader command prints only the visual keys plus `white_label_active` and `source_reference`; voice is structurally excluded by `loader.py`.
 
 Resolve the §13.1 audience mode in the same step, via one `run-shell` call into the
-same seam function `parallax-client-review` uses (`_parallax/white-label/rm_consumer.py`,
-which loads `_parallax/white-label/loader.py`) — never a prose read of
-`branding["render"]`:
+same seam function `parallax-client-review` uses (`resolve_audience` in
+`_parallax/white-label/rm_consumer.py`, which loads `_parallax/white-label/loader.py`)
+— never a prose read of `branding["render"]`:
 
 ```
-python3 -c "import sys; sys.path.insert(0, '<skill-dir>/../_parallax/white-label'); \
-  from loader import load_visual_branding; from rm_consumer import resolve_audience; \
-  import json; b = load_visual_branding(); mode, notice = resolve_audience(b, <flag or None>); \
-  print(json.dumps({'mode': mode, 'notice': notice}))"
+python3 "<skill-dir>/../_parallax/white-label/rm_consumer.py" --resolve-audience --audience <flag>
 ```
 
-Substitute the parsed `audience=` flag (or `None` if none was supplied) for
-`<flag or None>`. Record the returned `mode` for the Output Format branches
+Set `--audience` per integration-pattern.md §2: `client_safe` or
+`internal_analyst` when the `audience=` value is exactly that, `unrecognized`
+for any other value, omitted when no flag was given. Record the returned `mode` for the Output Format branches
 below, and if `notice` is non-null, append it verbatim to About This Report.
 `resolve_audience` is a pure function — this is a real `run-shell` call, never
 prose arithmetic reproducing its precedence logic.
