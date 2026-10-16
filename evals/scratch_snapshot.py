@@ -5,10 +5,10 @@ Usage: python3 evals/scratch_snapshot.py <scratch-dir>  (JSON on stdout)
 Lists every entry under the scratch directory with its path relative to that
 directory, its type ("file", "dir", "link" or "other"), its mode, and for a
 regular file its size, sha256, and whether it starts with ``#!``. Symbolic
-links are recorded with their target text and never followed: the scratch home/ holds links to the real
-~/.claude. The checker (concierge_journeys_check.py) compares this listing
-with the files the model wrote through the Write tool (evals/README.md
-§ Live concierge journeys).
+links are recorded with their target text and never followed: the scratch
+home/ holds links to the real ~/.claude. The checker
+(concierge_journeys_check.py) compares this listing with the files the model
+wrote through the Write tool (evals/README.md § Live concierge journeys).
 """
 from __future__ import annotations
 

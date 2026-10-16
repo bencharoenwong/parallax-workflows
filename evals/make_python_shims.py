@@ -9,9 +9,8 @@ virtual environment stays active), with the same arguments. The runner puts
 ``<bin-dir>`` first on the run's PATH, so the checker sees every Python start
 the model's shell commands make: argv, working directory, and for each
 argument its resolved path when it names anything that exists, a file, a
-directory or a /dev path (``files``; the
-checker decides which argument is the program, evals/README.md § Live
-concierge journeys).
+directory or a /dev path (``files``; the checker decides which argument is the
+program, evals/README.md § Live concierge journeys).
 
 The logger runs the real interpreter by absolute path in isolated mode with
 stdin from /dev/null, so it never reads the caller's stdin, and a logging
