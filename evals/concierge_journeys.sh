@@ -8,7 +8,7 @@
 #   PARALLAX_E2E_LIVE=1 PARALLAX_E2E_ONLY=J2,J3,J5,J8 bash evals/concierge_journeys.sh
 #
 # Env vars (PARALLAX_E2E_LIVE, _DRY_RUN, _ONLY, _CONNECTOR, _ALLOWED_TOOLS,
-# _TIMEOUT), the journey file format, the isolation and sandbox boundary, and
+# _TIMEOUT, _RESULTS_DIR, _JOURNEYS), the journey file format, the isolation and sandbox boundary, and
 # the fail-closed conditions are documented once, in evals/README.md
 # "Live concierge journeys". The checks themselves live in
 # evals/concierge_journeys_check.py.
@@ -32,9 +32,11 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-JOURNEYS="$REPO_ROOT/evals/tasks/concierge/journeys.jsonl"
+JOURNEYS="${PARALLAX_E2E_JOURNEYS:-$REPO_ROOT/evals/tasks/concierge/journeys.jsonl}"
 CHECK="$REPO_ROOT/evals/concierge_journeys_check.py"
-RESULTS="$REPO_ROOT/evals/results"
+SNAPSHOT="$REPO_ROOT/evals/scratch_snapshot.py"
+MAKE_SHIMS="$REPO_ROOT/evals/make_python_shims.py"
+RESULTS="${PARALLAX_E2E_RESULTS_DIR:-$REPO_ROOT/evals/results}"
 PLUGIN_DIR="$REPO_ROOT/plugin"
 TIMEOUT="${PARALLAX_E2E_TIMEOUT:-600}"
 ONLY="${PARALLAX_E2E_ONLY:-}"
@@ -81,9 +83,19 @@ BASE_TOOLS="Read,Grep,Glob"
 # commands, and the plugin must stay read-only.
 SANDBOX_SETTINGS='{"sandbox":{"enabled":true,"failIfUnavailable":true,"autoAllowBashIfSandboxed":true,"allowUnsandboxedCommands":false,"network":{"allowedDomains":[],"strictAllowlist":true}}}'
 REAL_HOME="$HOME"
+# Ground truth for the checker (evals/README.md "Live concierge journeys"),
+# all under <scratch>/e2e-trace/, copied to $RESULTS with a listing of the
+# scratch tree before the tree is deleted:
+# - journey-trace.jsonl: one line per run of a traced plugin helper
+#   (skills/_parallax/run_trace.py), written when PARALLAX_E2E_TRACE names it;
+# - python-starts.jsonl: one line per Python start, from the shims in bin/,
+#   which lead the run's PATH (evals/make_python_shims.py).
+REAL_PYTHON="$(command -v python3)"
 
 [ -f "$JOURNEYS" ] || { echo "journeys file not found: $JOURNEYS" >&2; exit 1; }
 [ -f "$CHECK" ] || { echo "checker not found: $CHECK" >&2; exit 1; }
+[ -f "$SNAPSHOT" ] || { echo "snapshot script not found: $SNAPSHOT" >&2; exit 1; }
+[ -f "$MAKE_SHIMS" ] || { echo "shim maker not found: $MAKE_SHIMS" >&2; exit 1; }
 [ -d "$PLUGIN_DIR" ] || { echo "plugin dir not found: $PLUGIN_DIR" >&2; exit 1; }
 mkdir -p "$RESULTS"
 
@@ -185,7 +197,12 @@ while IFS= read -r LINE || [ -n "$LINE" ]; do
     [ -n "$SCRATCH" ] && [ -d "$SCRATCH" ] || { echo "mktemp -d failed" >&2; exit 1; }
     SCR="$SCRATCH"
     SCR_REAL=$(cd "$SCRATCH" && pwd -P)
-    mkdir -p "$SCRATCH/home" "$SCRATCH/house-view" "$SCRATCH/tmp"
+    mkdir -p "$SCRATCH/home" "$SCRATCH/house-view" "$SCRATCH/tmp" "$SCRATCH/e2e-trace"
+    : > "$SCRATCH/e2e-trace/journey-trace.jsonl"
+    : > "$SCRATCH/e2e-trace/python-starts.jsonl"
+    chmod 600 "$SCRATCH/e2e-trace/journey-trace.jsonl" "$SCRATCH/e2e-trace/python-starts.jsonl"
+    "$REAL_PYTHON" "$MAKE_SHIMS" "$SCRATCH/e2e-trace/bin" "$SCRATCH/e2e-trace/python-starts.jsonl" \
+      || { echo "could not write the Python start shims" >&2; exit 1; }
     ln -s "$REAL_HOME/.claude" "$SCRATCH/home/.claude"
     [ -e "$REAL_HOME/.claude.json" ] && ln -s "$REAL_HOME/.claude.json" "$SCRATCH/home/.claude.json"
     # macOS keeps the Claude Code login in the login keychain, which is found
@@ -200,7 +217,9 @@ while IFS= read -r LINE || [ -n "$LINE" ]; do
   EDIT_RULES="Edit(/$SCR/**)"
   [ "$SCR_REAL" != "$SCR" ] && EDIT_RULES="$EDIT_RULES,Edit(/$SCR_REAL/**)"
   ISO_ENV=(HOME="$SCR/home" TMPDIR="$SCR/tmp" CLAUDE_CODE_TMPDIR="$SCR/tmp"
-           PARALLAX_HOUSE_VIEW_DIR="$SCR/house-view")
+           PARALLAX_HOUSE_VIEW_DIR="$SCR/house-view"
+           PARALLAX_E2E_TRACE="$SCR/e2e-trace/journey-trace.jsonl"
+           PATH="$SCR/e2e-trace/bin:$PATH")
 
   if [ "$NEEDS" = "no-connector" ]; then
     RUN_ENV=(ENABLE_CLAUDEAI_MCP_SERVERS=false)
@@ -250,10 +269,21 @@ while IFS= read -r LINE || [ -n "$LINE" ]; do
   wait "$PID" 2>/dev/null
   RC=$?
   PID=""
+  # Ground truth leaves the scratch tree before it is deleted. A file the run
+  # removed is not copied; the checker then fails with a named reason.
+  GT_ARGS=()
+  GT="$RESULTS/concierge_${ID}_${TS}"
+  cp "$SCRATCH/e2e-trace/journey-trace.jsonl" "$GT.trace.jsonl" 2>/dev/null \
+    && GT_ARGS+=(--trace "$GT.trace.jsonl")
+  cp "$SCRATCH/e2e-trace/python-starts.jsonl" "$GT.python-starts.jsonl" 2>/dev/null \
+    && GT_ARGS+=(--python-starts "$GT.python-starts.jsonl")
+  "$REAL_PYTHON" "$SNAPSHOT" "$SCRATCH" > "$GT.fs.json" 2>/dev/null \
+    && GT_ARGS+=(--fs-snapshot "$GT.fs.json")
   rm -rf "$SCRATCH"
   SCRATCH=""
 
-  CHECK_ARGS=("$LINE" --stream "$RAW" --exit-code "$RC" --plugin-dir "$PLUGIN_DIR" --text-out "$TXT")
+  CHECK_ARGS=("$LINE" --stream "$RAW" --exit-code "$RC" --plugin-dir "$PLUGIN_DIR" --text-out "$TXT"
+              ${GT_ARGS[@]+"${GT_ARGS[@]}"})
   [ "$TIMED_OUT" -eq 1 ] && CHECK_ARGS+=(--timed-out)
 
   if CHECK_OUT=$(python3 "$CHECK" "${CHECK_ARGS[@]}" 2>&1); then

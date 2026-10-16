@@ -360,6 +360,8 @@ def _read_input_file(path: str) -> str:
         if in_draft_dir and st.st_nlink > 1:
             raise OSError(errno.EINVAL, "draft has more than one hard link", path)
         data = handle.read()
+    if (trace := _run_trace()) is not None:
+        trace.note_input(data, path=path)
     try:
         return data.decode("utf-8")
     except UnicodeDecodeError as exc:
@@ -375,9 +377,13 @@ def _load_json_arg(value: str, flag: str) -> Any:
     that is neither.
     """
     try:
-        return json.loads(value)
+        parsed = json.loads(value)
     except json.JSONDecodeError:
         pass
+    else:
+        if (trace := _run_trace()) is not None:
+            trace.note_input(value.encode("utf-8"), path=value, source="inline")
+        return parsed
     try:
         text = _read_input_file(value)
     except OSError as exc:
@@ -391,6 +397,26 @@ def _load_json_arg(value: str, flag: str) -> Any:
         raise CoverageInputError(
             f"{flag}: file {value!r} does not contain valid JSON ({exc})"
         ) from exc
+
+
+def _run_trace():
+    """The live-journey run trace (``_parallax/run_trace.py``) when
+    PARALLAX_E2E_TRACE is set, else None. Loaded by path, so an ordinary run
+    imports nothing new (evals/README.md § Live concierge journeys)."""
+    if not os.environ.get("PARALLAX_E2E_TRACE"):
+        return None
+    module = sys.modules.get("_parallax_run_trace")
+    if module is None:
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location(
+                "_parallax_run_trace", os.path.join(os.path.dirname(os.path.realpath(__file__)), "run_trace.py"))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            sys.modules["_parallax_run_trace"] = module
+        except Exception:
+            return None
+    return module
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -409,6 +435,10 @@ def main(argv: list[str] | None = None) -> int:
                              "{\"symbol\": ..., \"sector\": ...} objects. "
                              "Enables absent_holdings detection.")
     args = parser.parse_args(argv)
+    if (trace := _run_trace()) is not None:
+        trace.note_roles({"portfolio_sectors": args.portfolio_sectors,
+                          "redundancy_sectors": args.redundancy_sectors,
+                          "holdings": args.holdings})
 
     try:
         portfolio_sectors = _load_json_arg(args.portfolio_sectors, "--portfolio-sectors")
@@ -435,4 +465,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    _trace = _run_trace()
+    sys.exit(_trace.run("coverage_check.py", __file__, main) if _trace else main())

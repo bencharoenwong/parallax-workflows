@@ -47,6 +47,26 @@ def resolve_view_dir() -> Path:
     return Path(env).expanduser() if env else DEFAULT_VIEW_DIR
 
 
+def _run_trace():
+    """The live-journey run trace (``_parallax/run_trace.py``) when
+    PARALLAX_E2E_TRACE is set, else None. Loaded by path, so an ordinary run
+    imports nothing new (evals/README.md § Live concierge journeys)."""
+    if not os.environ.get("PARALLAX_E2E_TRACE"):
+        return None
+    module = sys.modules.get("_parallax_run_trace")
+    if module is None:
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location(
+                "_parallax_run_trace", os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "run_trace.py"))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            sys.modules["_parallax_run_trace"] = module
+        except Exception:
+            return None
+    return module
+
+
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
     if len(args) != 2 or args[0] != "--input":
@@ -58,6 +78,8 @@ def main(argv: list[str] | None = None) -> int:
         text = read_draft(args[1], "audit", ".json")
     except (OSError, ValueError) as exc:
         return _fail(2, f"cannot read the row draft: {exc}")
+    if (trace := _run_trace()) is not None:
+        trace.note_input(text.encode("utf-8"), role="input", path=args[1])
     if len(text.encode("utf-8")) > MAX_ROW_BYTES:
         return _fail(2, f"row is over {MAX_ROW_BYTES} bytes")
     try:
@@ -97,4 +119,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    _trace = _run_trace()
+    sys.exit(_trace.run("audit_append.py", __file__, main) if _trace else main())

@@ -100,6 +100,11 @@ jobs:
       - name: Redundancy coverage-check gates
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/_parallax/test_coverage_check.py -q
+      # run_trace.py (the live-journey run trace the helpers write) and its
+      # per-helper tests sit beside render_gate.py the same way.
+      - name: Live-journey run trace
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: python -m pytest skills/_parallax/test_run_trace.py skills/_parallax/test_run_trace_helpers.py -q
       # A separate process per top-level test root, not a second path appended
       # to the line above: three skills ship a `tests/conftest.py` and pytest
       # names every one `tests.conftest`, so collecting two roots in one process
@@ -173,6 +178,9 @@ jobs:
       - name: Credit-lens gates
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/parallax-credit-lens/ -q
+      - name: Weekly-themes gates
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: python -m pytest skills/parallax-weekly-themes/ -q
       # The translate suites keep their tests beside the validator they
       # exercise, under references/ rather than tests/. run-gate-tests.sh
       # discovers them by test-file glob, so the root is named here rather
