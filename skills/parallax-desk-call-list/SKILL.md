@@ -91,6 +91,8 @@ Zero tool calls. `run-shell` `desk_call_list_logic.py` for triggered exposure, s
 python3 "<skill-dir>/../_parallax/render_gate.py" --skill desk-call-list --input "<draft-path>"
 ```
 
+Write the draft once and never modify it in place, not even to fix one word. If the report needs a change after the draft is written, run the command above on that draft unchanged (ignore that output), then write the corrected report to a fresh path and run the command on it (conventions §10.3).
+
 The entire final message is that command's stdout. The stderr `[render-gate] WARN:` line is diagnostics: never include it. Degraded notes go inside their section. If `run-shell` is absent, apply conventions §14.3: the render-gate row, and the gate-shaped-helper row for the ranking (the call list is UNVERIFIED; render the no-calls short form with that reason rather than a hand-ranked list). No Step 7.
 
 ## Output Format

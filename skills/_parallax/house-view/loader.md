@@ -242,7 +242,7 @@ When NO active view is loaded, skills run as today — standard output, no pream
 
 Every consume event appends one JSONL line to `audit.jsonl` in the view directory (§1). Append it in two steps, the same shape as the render gate (`parallax-conventions.md` §10.3):
 
-1. `write-artifact` the row, as one JSON object, to a new draft path: `<cwd>/.parallax-render/audit-<8 random hex>.json`, written as an absolute literal path. Use a fresh random suffix each time.
+1. `write-artifact` the row, as one JSON object, to a new draft path: `<cwd>/.parallax-render/audit-<8 random hex>.json`, written as an absolute literal path. Use a fresh random suffix each time. Write the row once and never modify it in place; a row with a mistake is not repaired by editing the draft, because appending it would put a wrong row in the hash chain. Report the mistake instead and do not append that row.
 2. `run-shell` exactly this one-line command, with `<draft-path>` replaced by that same literal path:
 
 ```bash
