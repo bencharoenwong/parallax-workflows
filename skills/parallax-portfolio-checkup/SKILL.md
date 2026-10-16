@@ -51,7 +51,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
    <!-- /host-note -->
 3. Parse args: holdings JSON; optional `audience=`.
 4. `load-reference` `_parallax/house-view/loader.md`; run §1–§2. If a view is present, capture the load preamble, tilt vector and excludes for Step 4. On §2 failure run without the view.
-5. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name` (seven-key loader; `branding["voice"]` raises `KeyError` by design).
+5. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name` (the §2 command prints visual keys only; voice is excluded by design).
 6. `load-reference` `references/health-flags.md`.
 
 ### Step 1 — Resolve inputs

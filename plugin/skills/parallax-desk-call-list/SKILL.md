@@ -21,7 +21,7 @@ description: "Desk-level morning call list for relationship managers covering mu
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.1 discovery, §0.2 typed integer params, §3 parallel execution, §3.1 annotation/rank separation, §9.1/§9.2 disclosures, §10 render gate, §11 verdict sensitivity, §12 information framing, §13 audience mode, and §14 host primitives.
 - JIT-load `_parallax/coverage-matrix.md` before Batch A. `export_price_series` is equity-only and billed 1 credit per call (not FREE), and its `success:false` response classifies ETFs; ETFs then price via `etf_daily_price` (also 1 credit per call). This skill does not call `etf_profile`.
 - JIT-load `_parallax/house-view/loader.md` §1-§2, §5, and §6. The house view annotates movers but never changes rank order or membership.
-- JIT-load `_parallax/white-label/integration-pattern.md` before Pre-Render. Run `_parallax/white-label/rm_consumer.py --label "desk call list"` (it calls `load_rm_branding_context`), passing the parsed `audience=` invocation flag as `--audience` when one was given. This visual-only seam blocks voice access and redacts source references.
+- JIT-load `_parallax/white-label/integration-pattern.md` before Pre-Render. Run `_parallax/white-label/rm_consumer.py --label "desk call list"` (it calls `load_rm_branding_context`), with `--audience` set per integration-pattern.md §2. This visual-only seam blocks voice access and redacts source references.
 - JIT-load `references/desk-book-format.md` before loading/validating any desk book.
 - JIT-load `references/ranking-and-bounding.md` before thresholding, ranking, or rendering bounded sections.
 - JIT-load `references/talk-tracks.md` before drafting per-client talk tracks.
@@ -58,8 +58,8 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
    Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
    <!-- /host-note -->
 3. Parse args: `threshold=`, `min_impact=`, `detail_cap=`, `news_cap=`, `subset=`, `redact_names=`, `audience=`, or an inline book array.
-4. `load-reference` `_parallax/house-view/loader.md` §1–§2; `run-shell` `view_status` (never recompute expiry math). Absent or invalid → run without view; the view annotates movers and never changes rank order or membership.
-5. `load-reference` `_parallax/white-label/integration-pattern.md` §2 and `run-shell` once `python3 "<skill-dir>/../_parallax/white-label/rm_consumer.py" --label "desk call list" --audience <flag>` (leave out `--audience <flag>` when no `audience=` flag was given); keep `header_lines`, `about_lines`, `resolved_audience` for Step 5.
+4. `load-reference` `_parallax/house-view/loader.md` §1–§2; `run-shell` exactly `python3 "<skill-dir>/../_parallax/house-view/view_status.py" --json`, `<skill-dir>` written literally (never recompute expiry math). Absent or invalid → run without view; the view annotates movers and never changes rank order or membership.
+5. `load-reference` `_parallax/white-label/integration-pattern.md` §2 and `run-shell` once `python3 "<skill-dir>/../_parallax/white-label/rm_consumer.py" --label "desk call list" --audience <flag>` (set `--audience` per integration-pattern.md §2: `client_safe` or `internal_analyst` when the `audience=` value is exactly that, `unrecognized` for any other value, omitted when no flag was given); keep `header_lines`, `about_lines`, `resolved_audience` for Step 5.
 
 ### Step 1 — Resolve inputs
 

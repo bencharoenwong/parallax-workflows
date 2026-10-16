@@ -41,6 +41,7 @@ Return shape (always 14 top-level keys, identical on success and error paths)
 from __future__ import annotations
 
 import logging
+import unicodedata
 from pathlib import Path, PurePath
 from typing import Any
 
@@ -1031,16 +1032,107 @@ def safe_source_reference(branding: dict[str, Any]) -> str:
     return ref
 
 
+# Error classes the loader can produce. The CLI prints only these tokens:
+# the text after each class comes from PyYAML / jsonschema messages or config
+# keys, and can quote config content (a pre-signed URL in a bad enum value).
+_ERROR_CLASSES: tuple[str, ...] = (
+    "config_not_found",
+    "yaml_read_error",
+    "yaml_parse_error",
+    "schema_invalid",
+    "schema_unavailable",
+    "logo_missing",
+)
+
+
+def error_class(error: str | None) -> str | None:
+    """Reduce a loader ``error`` string to its class tokens, with no detail.
+
+    ``"schema_unavailable; logo_missing: primary file not found"`` becomes
+    ``"schema_unavailable; logo_missing"``. An error that starts with no known
+    class becomes ``"config_error"``.
+    """
+    if error is None:
+        return None
+    lead = next((c for c in _ERROR_CLASSES if error.startswith(c)), None)
+    if lead is None:
+        return "config_error"
+    classes = [lead]
+    # schema_unavailable is the one class the loader prefixes to its own
+    # logo warnings; no other error is followed by a further class.
+    if lead == "schema_unavailable" and any(
+            seg.startswith("logo_missing") for seg in error.split("; ")[1:]):
+        classes.append("logo_missing")
+    return "; ".join(classes)
+
+
+_MAX_CLIENT_NAME_CHARS = 120
+
+# Characters that let an extracted client name break out of the markdown
+# constructs it is interpolated into: "]" and "(" escape the image label and
+# destination, "<" and ">" open raw HTML, "*" "_" "`" "#" "!" "[" ")" carry
+# markdown meaning, "|" breaks table cells, and "\" escapes the next character.
+_MARKDOWN_META = "[]()<>*_`#!|\\"
+
+#: Unicode general categories with no printable width. Cc and Cf carry the
+#: terminal escapes (ESC, BEL) and bidi overrides that ``str.split`` leaves
+#: alone, because they are not whitespace; Cs and Co have no defined rendering.
+_INVISIBLE_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Co"})
+
+
+def _safe_markdown_text(value: Any) -> str:
+    """Flatten untrusted config text into inert single-line markdown content.
+
+    Every string interpolated into a report from client-supplied collateral
+    (the client name, the redacted source reference, the logo filename) takes
+    this pass. Control and format characters are replaced before the markdown
+    pass: ``str.split`` collapses whitespace only, so ESC and BEL used to
+    survive into a rendered deliverable and rewrite what an RM sees in a
+    terminal.
+    """
+    if not isinstance(value, str):
+        return ""
+    printable = "".join(
+        " " if unicodedata.category(ch) in _INVISIBLE_CATEGORIES else ch
+        for ch in value
+    )
+    inert = "".join(" " if ch in _MARKDOWN_META else ch for ch in printable)
+    return " ".join(inert.split())
+
+
+def _safe_display_name(value: Any) -> str:
+    """Flatten an extracted client name into inert markdown link/label text.
+
+    The name originates in client-supplied collateral, so it is untrusted.
+    Interpolating it raw into ``![{name}]({url})`` and ``**{name}**`` let a
+    crafted name close the image, inject HTML, and open new report sections.
+    """
+    collapsed = _safe_markdown_text(value)
+    if len(collapsed) > _MAX_CLIENT_NAME_CHARS:
+        collapsed = collapsed[:_MAX_CLIENT_NAME_CHARS].rstrip() + "…"
+    return collapsed
+
+
 def visual_branding_summary() -> dict[str, Any]:
-    """What a visual consumer skill needs, as JSON-safe data: the seven visual
-    keys with ``source`` replaced by its display-safe ``source_reference``,
-    plus the ``white_label_active`` rendering flag. The raw source never
-    leaves this function."""
+    """What a visual consumer skill needs, as JSON-safe data: the visual keys
+    with ``source`` replaced by its display-safe ``source_reference``,
+    ``client_name`` made inert markdown text, ``error`` reduced to its class
+    (:func:`error_class`), plus the ``white_label_active`` rendering flag.
+    Neither the raw source nor raw error detail leaves this function."""
     branding = load_visual_branding()
     summary = {key: branding[key] for key in _VISUAL_BRANDING_KEYS if key != "source"}
-    summary["source_reference"] = safe_source_reference(branding)
+    summary["client_name"] = _safe_display_name(branding.get("client_name"))
+    summary["error"] = error_class(branding.get("error"))
+    summary["source_reference"] = _safe_markdown_text(safe_source_reference(branding))
     summary["white_label_active"] = is_white_label_active(branding)
     return summary
+
+
+def silence_warnings() -> None:
+    """Stop this module's warnings from reaching stderr. The CLIs call it:
+    the warnings quote parse and schema messages, which can carry config
+    content, and the calling model reads stderr."""
+    logger.disabled = True
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1057,6 +1149,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", required=True,
                         help="print JSON (the only output format)")
     parser.parse_args(argv)
+    silence_warnings()
     print(json.dumps(visual_branding_summary(), default=str, sort_keys=True))
     return 0
 

@@ -58,7 +58,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
    <!-- /host-note -->
 3. Parse args: holdings; `client=`; `lang=`; `register=`; `audience=`; `policy=`.
 4. `load-reference` `_parallax/house-view/loader.md`; run §1–§2. If a view is present, capture tilt vector, excludes and basis_statement (frames Suitability). On §2 failure run without the view.
-5. `load-reference` `_parallax/white-label/integration-pattern.md` §2; `run-shell` once `python3 "<skill-dir>/../_parallax/white-label/rm_consumer.py" --label "portfolio review" --audience <flag>` (leave out `--audience <flag>` when no `audience=` flag was given) and keep `header_lines`, `about_lines`, `resolved_audience`.
+5. `load-reference` `_parallax/white-label/integration-pattern.md` §2; `run-shell` once `python3 "<skill-dir>/../_parallax/white-label/rm_consumer.py" --label "portfolio review" --audience <flag>` (set `--audience` per integration-pattern.md §2: `client_safe` or `internal_analyst` when the `audience=` value is exactly that, `unrecognized` for any other value, omitted when no flag was given) and keep `header_lines`, `about_lines`, `resolved_audience`.
 6. `load-reference` `references/recommendation-matrix.md`.
 7. **Policy load (only with `policy=`).** `load-reference` `_parallax/client-policy/policy-loader.md`.
    - `policy=` is a file path → use it literally as `<policy-path>`; write no draft.

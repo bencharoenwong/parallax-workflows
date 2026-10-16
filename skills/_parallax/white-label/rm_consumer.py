@@ -58,52 +58,13 @@ load_visual_branding = _loader.load_visual_branding
 safe_source_reference = _loader.safe_source_reference
 
 
-_MAX_CLIENT_NAME_CHARS = 120
-
-# Characters that let an extracted client name break out of the markdown
-# constructs it is interpolated into: "]" and "(" escape the image label and
-# destination, "<" and ">" open raw HTML, "*" "_" "`" "#" "!" "[" ")" carry
-# markdown meaning, "|" breaks table cells, and "\" escapes the next character.
-_MARKDOWN_META = "[]()<>*_`#!|\\"
-
-
-#: Unicode general categories with no printable width. Cc and Cf carry the
-#: terminal escapes (ESC, BEL) and bidi overrides that ``str.split`` leaves
-#: alone, because they are not whitespace; Cs and Co have no defined rendering.
-_INVISIBLE_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Co"})
-
-
-def _safe_markdown_text(value: Any) -> str:
-    """Flatten untrusted config text into inert single-line markdown content.
-
-    Every string this module interpolates into a report — the client name, the
-    redacted source reference, the logo filename — reaches it from
-    client-supplied collateral, so all three take the same pass. Control and
-    format characters are replaced before the markdown pass: ``str.split``
-    collapses whitespace only, so ESC and BEL used to survive into a rendered
-    deliverable and rewrite what an RM sees in a terminal.
-    """
-    if not isinstance(value, str):
-        return ""
-    printable = "".join(
-        " " if unicodedata.category(ch) in _INVISIBLE_CATEGORIES else ch
-        for ch in value
-    )
-    inert = "".join(" " if ch in _MARKDOWN_META else ch for ch in printable)
-    return " ".join(inert.split())
-
-
-def _safe_display_name(value: Any) -> str:
-    """Flatten an extracted client name into inert markdown link/label text.
-
-    The name originates in client-supplied collateral, so it is untrusted.
-    Interpolating it raw into ``![{name}]({url})`` and ``**{name}**`` let a
-    crafted name close the image, inject HTML, and open new report sections.
-    """
-    collapsed = _safe_markdown_text(value)
-    if len(collapsed) > _MAX_CLIENT_NAME_CHARS:
-        collapsed = collapsed[:_MAX_CLIENT_NAME_CHARS].rstrip() + "…"
-    return collapsed
+# The sanitizers live in loader.py so its --json command applies the same
+# pass to client_name; these names stay importable from this module.
+_MAX_CLIENT_NAME_CHARS = _loader._MAX_CLIENT_NAME_CHARS
+_MARKDOWN_META = _loader._MARKDOWN_META
+_INVISIBLE_CATEGORIES = _loader._INVISIBLE_CATEGORIES
+_safe_markdown_text = _loader._safe_markdown_text
+_safe_display_name = _loader._safe_display_name
 
 
 #: Characters that end, reopen, or escape a markdown link destination. A URL is
@@ -409,6 +370,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--audience", default=None,
                         help="the invocation's audience= flag; omit when none was given")
     args = parser.parse_args(argv)
+    _loader.silence_warnings()
 
     if args.resolve_audience:
         try:

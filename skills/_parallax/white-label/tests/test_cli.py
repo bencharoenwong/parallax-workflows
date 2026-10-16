@@ -138,3 +138,67 @@ def test_rm_consumer_needs_exactly_one_mode(home: Path) -> None:
                               env={**os.environ, "HOME": str(home)},
                               capture_output=True, text=True, timeout=60)
         assert proc.returncode == 2, args
+
+
+SECRET = "https://acme.example.com/presigned?sig=TOPSECRET"
+
+
+def _malformed_configs() -> dict[str, str]:
+    bad_enum = _config()
+    bad_enum["metadata"]["source"]["type"] = SECRET  # schema_invalid quotes the value
+    bad_type = _config()
+    bad_type["metadata"]["source"]["confidence"] = SECRET
+    return {
+        "schema_invalid_enum": yaml.safe_dump(bad_enum),
+        "schema_invalid_type": yaml.safe_dump(bad_type),
+        # PyYAML quotes the offending line in its message
+        "yaml_parse_error": f"metadata:\n  source:\n    reference: {SECRET}: [unterminated\n",
+    }
+
+
+@pytest.mark.parametrize("case", sorted(_malformed_configs()))
+@pytest.mark.parametrize("command", [
+    (LOADER, "--json"),
+    (RM_CONSUMER, "--label", "portfolio review"),
+    (RM_CONSUMER, "--resolve-audience"),
+], ids=["loader", "rm_label", "rm_audience"])
+def test_malformed_config_text_never_reaches_stdout_or_stderr(home: Path, case: str,
+                                                              command: tuple) -> None:
+    path = home / ".parallax" / "client-branding" / "config.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(_malformed_configs()[case], encoding="utf-8")
+    script, *args = command
+    proc = subprocess.run([sys.executable, str(script), *args],
+                          env={**os.environ, "HOME": str(home)},
+                          capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, proc.stderr
+    assert "TOPSECRET" not in proc.stdout
+    assert "TOPSECRET" not in proc.stderr
+    if script == LOADER:
+        out = json.loads(proc.stdout)
+        assert out["error"] in {"schema_invalid", "yaml_parse_error"}
+        assert out["white_label_active"] is False
+
+
+def test_loader_json_client_name_is_inert_markdown(home: Path) -> None:
+    cfg = _config()
+    cfg["metadata"]["client_name"] = "Acme](https://evil.example)\x1b[2J **x**"
+    _onboard(home, cfg)
+    name = _run(home, LOADER, "--json")["client_name"]
+    assert not set(name) & set("[]()<>*_`#!|\\")
+    assert "\x1b" not in name
+
+
+def test_error_class_keeps_only_known_class_tokens(home: Path) -> None:
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("wl_loader_cli_test", LOADER)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.error_class(None) is None
+    assert mod.error_class("config_not_found") == "config_not_found"
+    assert mod.error_class(f"schema_invalid: '{SECRET}' is not one of") == "schema_invalid"
+    assert mod.error_class("schema_unavailable; logo_missing: primary file not found") == (
+        "schema_unavailable; logo_missing")
+    assert mod.error_class("logo_missing: a x; logo_missing: b y") == "logo_missing"
+    assert mod.error_class(f"yaml_parse_error: ...; logo_missing {SECRET}") == "yaml_parse_error"
+    assert mod.error_class(f"something else {SECRET}") == "config_error"

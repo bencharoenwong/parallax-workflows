@@ -47,7 +47,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
    Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
    <!-- /host-note -->
 3. Parse args: symbol; optional context text.
-4. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name` (seven-key loader; `branding["voice"]` raises `KeyError` by design).
+4. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name` (the §2 command prints visual keys only; voice is excluded by design).
 
 ### Step 1 — Resolve inputs
 
