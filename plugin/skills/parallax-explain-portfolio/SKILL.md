@@ -96,6 +96,8 @@ Fill **Output Format** below in order; conditional advice by verdict: transient 
 python3 "<skill-dir>/../_parallax/render_gate.py" --skill explain-portfolio --input "<draft-path>"
 ```
 
+Write the draft once and never modify it in place, not even to fix one word. If the report needs a change after the draft is written, run the command above on that draft unchanged (ignore that output), then write the corrected report to a fresh path and run the command on it (conventions §10.3).
+
 The entire final message is that command's stdout. The stderr `[render-gate] WARN:` line is diagnostics: never include it. Degraded-state notes go inside their section. If `run-shell` is absent, apply conventions §14.3 (render-gate row). No Step 7.
 
 ## Output Format

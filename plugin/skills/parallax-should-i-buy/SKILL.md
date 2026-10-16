@@ -101,7 +101,9 @@ Fill **Output Format** below, in order. Branding Header and About This Report pe
 python3 "<skill-dir>/../_parallax/render_gate.py" --skill should-i-buy --input "<draft-path>"
 ```
 
-The entire final English message is exactly that command's stdout, or the sole input to Step 7. The stderr `[render-gate] WARN:` line is diagnostics: never include it, never translate it; it means the opening drifted from the Output Format start — fix and re-run. If `run-shell` is absent on this host, apply conventions §14.3 (render-gate row).
+Write the draft once and never modify it in place, not even to fix one word. If the report needs a change after the draft is written, run the command above on that draft unchanged (ignore that output), then write the corrected report to a fresh path and run the command on it (conventions §10.3).
+
+The entire final English message is exactly that command's stdout, or the sole input to Step 7. The stderr `[render-gate] WARN:` line is diagnostics: never include it, never translate it; it means the opening drifted from the Output Format start — the gate already deleted that draft, so write the corrected report to a fresh path and run the gate on it. If `run-shell` is absent on this host, apply conventions §14.3 (render-gate row).
 
 ### Step 7 — Translate (conditional)
 

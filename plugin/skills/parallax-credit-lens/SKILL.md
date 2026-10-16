@@ -110,6 +110,8 @@ Fill **Output Format** below in order: header via `build_header`, dashboard via 
 python3 "<skill-dir>/../_parallax/render_gate.py" --skill credit-lens --input "<draft-path>"
 ```
 
+Write the draft once and never modify it in place, not even to fix one word. If the report needs a change after the draft is written, run the command above on that draft unchanged (ignore that output), then write the corrected report to a fresh path and run the command on it (conventions §10.3).
+
 The entire final message is that command's stdout. The stderr `[render-gate] WARN:` line is diagnostics: never include it. If `run-shell` is absent, apply conventions §14.3: the render-gate row for the gate, and the gate-shaped-helper row for the flags — every leg is UNVERIFIED and the skill says so up front; never compute a flag in prose.
 
 ## Output Format

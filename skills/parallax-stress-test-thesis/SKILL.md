@@ -128,6 +128,8 @@ Fill **Output Format** below per the selected depth/role/mode (`references/outpu
 python3 "<skill-dir>/../_parallax/render_gate.py" --skill stress-test-thesis --input "<draft-path>"
 ```
 
+Write the draft once and never modify it in place, not even to fix one word. If the report needs a change after the draft is written, run the command above on that draft unchanged (ignore that output), then write the corrected report to a fresh path and run the command on it (conventions §10.3).
+
 The entire final message is that command's stdout (`--json` output is a fenced block inside it). The stderr `[render-gate] WARN:` line is diagnostics: never include it. If `run-shell` is absent, apply conventions §14.3 (render-gate row). No Step 7.
 
 

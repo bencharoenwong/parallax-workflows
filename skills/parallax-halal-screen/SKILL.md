@@ -109,6 +109,8 @@ Fill **Output Format** below in order: Branding Header per integration-pattern.m
 python3 "<skill-dir>/../_parallax/render_gate.py" --skill halal-screen --input "<draft-path>"
 ```
 
+Write the draft once and never modify it in place, not even to fix one word. If the report needs a change after the draft is written, run the command above on that draft unchanged (ignore that output), then write the corrected report to a fresh path and run the command on it (conventions §10.3).
+
 The entire final message is that command's stdout. The stderr `[render-gate] WARN:` line is diagnostics: never include it. If `run-shell` is absent, apply conventions §14.3 (render-gate row); the ratios themselves need no shell. No Step 7.
 
 ## Output Format
