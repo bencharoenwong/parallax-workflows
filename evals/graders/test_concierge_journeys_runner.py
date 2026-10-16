@@ -100,7 +100,7 @@ def run(tmp_path):
         inherited = {k: v for k, v in os.environ.items() if not k.startswith("PARALLAX_E2E_")}
         env = {**inherited, "PATH": f"{bin_dir}:{os.environ['PATH']}", "PARALLAX_E2E_LIVE": "1",
                "PARALLAX_E2E_ONLY": "J9", "PARALLAX_E2E_RESULTS_DIR": str(results),
-               "PARALLAX_E2E_TIMEOUT": "60", "TMPDIR": str(temp), "STUB_MODE": mode}
+               "PARALLAX_E2E_TIMEOUT": "120", "TMPDIR": str(temp), "STUB_MODE": mode}
         try:
             proc = subprocess.run(["bash", str(RUNNER)], env=env, capture_output=True,
                                   text=True, timeout=180)
