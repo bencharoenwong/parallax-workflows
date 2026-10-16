@@ -273,11 +273,6 @@ def _match_documented_helper(command: str) -> dict[str, str] | None:
     return None
 
 
-def _helper_args(m: dict) -> dict[str, str]:
-    """The path arguments of a ``_match_documented_helper`` result."""
-    return {k: v for k, v in m.items() if k not in ("helper", "script", "key", "body") and v}
-
-
 def _in_plugin(script: str, cwd: str | None, plugin_dir: str | None) -> bool:
     """True when ``plugin_dir`` is None or ``script`` resolves under it, so a
     command that names a file the model wrote is never credited as a helper run."""
@@ -662,7 +657,7 @@ def _ground_truth_reasons(
     for start in python_starts or []:
         if not isinstance(start, dict):
             continue
-        kind, detail, index = _python_run(start.get("argv") or [])
+        kind, _, index = _python_run(start.get("argv") or [])
         if kind == "stdin":
             reasons.append("ran Python code from stdin (code the model wrote): "
                            f"{' '.join(map(str, start.get('argv') or []))[:120] or 'python'}")
