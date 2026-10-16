@@ -141,7 +141,7 @@ Field names above were confirmed against live tool responses on 2026-08-11. Two 
 
 **For portfolio workflows (`PARALLAX_LOADER_V2=1`):** Use per-holding `get_peer_snapshot` aggregation in parallel with `get_company_info` cross-validation. This is the **primary robust path**. Do NOT rely on `quick_portfolio_scores` for portfolio factor profiling when a house view is active.
 
-**For portfolio workflows (Legacy/V1):** Cross-check company names for each holding in the `quick_portfolio_scores` response. If any holding maps to the wrong company, re-score that holding individually via `get_peer_snapshot` and note the discrepancy.
+**For portfolio workflows (Legacy/V1):** Cross-check company names for each holding in the `quick_portfolio_scores` response. If any holding maps to the wrong company, re-derive its score from that holding's cached `get_peer_snapshot` `comparison[]` row (no new call): the `is_target: true` row when that snapshot passed cross-validation, otherwise mark its scores unavailable; a snapshot that failed cross-validation is never a score source. Note the discrepancy.
 
 **Hong Kong / numeric codes require extra caution:** HK uses numeric codes that can collide across H-shares, red chips, and local listings. Always cross-validate `.HK`, `.T`, `.TW`, `.KS` symbols.
 
