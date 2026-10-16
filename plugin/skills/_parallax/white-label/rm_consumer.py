@@ -276,6 +276,8 @@ def load_rm_branding_context(
         )
 
     error = str(branding.get("error") or "")
+    # Class tokens only: the raw error quotes config text (loader.error_class).
+    error_classes = (_loader.error_class(error) or "").split("; ")
     active = is_white_label_active(branding)  # type: ignore[arg-type]
     if active and not _has_renderable_branding(branding):
         # Active state with nothing to render: fall back rather than print an
@@ -299,9 +301,9 @@ def load_rm_branding_context(
         if safe_logo:
             header_lines.append(f"![{client_name}]({safe_logo})")
         if client_name:
-            header_lines.append(f"**{client_name}** {deliverable_label}")
+            header_lines.append(f"**{client_name}** {_safe_markdown_text(deliverable_label)}")
 
-        if "schema_unavailable" in error:
+        if "schema_unavailable" in error_classes:
             about_lines.append(
                 "Branding: white-label (best-effort, schema unavailable)"
             )
@@ -310,7 +312,7 @@ def load_rm_branding_context(
                 safe_source_reference(branding)  # type: ignore[arg-type]
             )
             line = f"Branding: white-label (source: {safe_reference})"
-            if "logo_missing" in error:
+            if "logo_missing" in error_classes:
                 line += " (logo unavailable, omitted)"
             about_lines.append(line)
 
@@ -367,8 +369,13 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--label", help="deliverable label, e.g. 'portfolio review'")
     mode.add_argument("--resolve-audience", action="store_true",
                       help="print only the §13.1 audience mode and notice")
+    # Never the user's text (integration-pattern.md §2): the skill maps any
+    # value other than the two modes to "unrecognized", which resolve_audience
+    # treats as an unrecognized flag and notices.
     parser.add_argument("--audience", default=None,
-                        help="the invocation's audience= flag; omit when none was given")
+                        choices=sorted(_AUDIENCE_MODES | {"unrecognized"}),
+                        help="client_safe, internal_analyst or unrecognized; omit when "
+                             "the invocation gave no audience= flag")
     args = parser.parse_args(argv)
     _loader.silence_warnings()
 
