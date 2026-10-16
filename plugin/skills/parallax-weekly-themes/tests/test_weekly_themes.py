@@ -62,6 +62,20 @@ class TestCompute:
         out = compute(payload)
         assert out.stale == ["DD"]
 
+    def test_stale_market_not_ranked(self, payload):
+        payload = json.loads(json.dumps(payload))
+        payload["markets"]["EE"] = {
+            "as_of": "2026-01-01", "market_name": "EE", "n_baskets": 5,
+            "top_wtd": {"name": "old leader", "value": 0.5},
+            "bottom_wtd": {"name": "old laggard", "value": -0.1},
+            "distribution_wtd": [-0.1, 0.0, 0.01, 0.02, 0.5],
+            "n_positive_wtd": 4,
+        }
+        out = compute(payload)
+        assert "EE" in out.stale
+        assert "EE" in [r.code for r in out.markets]
+        assert [r.code for r in out.themes_of_week] == ["BB", "AA"]
+
     def test_missing_markets_raises(self):
         with pytest.raises(ValueError):
             compute({"report_date": "2026-01-02"})

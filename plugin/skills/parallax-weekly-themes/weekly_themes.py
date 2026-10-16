@@ -128,7 +128,8 @@ def compute(
         top: how many themes to rank across markets.
 
     Ranking: each market contributes its leader once; markets with fewer than
-    ``MIN_THEMES_FOR_RANKING`` themes are excluded; order is leader_vs_median
+    ``MIN_THEMES_FOR_RANKING`` themes and stale markets (``as_of`` differs from
+    ``report_date``) are excluded; order is leader_vs_median
     descending, ties broken by market code. A market's leader is never ranked
     without a median to compare against.
     """
@@ -151,7 +152,9 @@ def compute(
             out.stale.append(code)
     rankable = [
         r for r in out.markets
-        if r.n_themes >= MIN_THEMES_FOR_RANKING and r.leader_vs_median is not None
+        if r.n_themes >= MIN_THEMES_FOR_RANKING
+        and r.leader_vs_median is not None
+        and r.code not in out.stale
     ]
     rankable.sort(key=lambda r: (-r.leader_vs_median, r.code))
     out.themes_of_week = rankable[:top]

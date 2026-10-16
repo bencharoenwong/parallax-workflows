@@ -48,7 +48,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
    <!-- host-note -->
    Claude Code: `ToolSearch` with query `"+Parallax telemetry"` before the first Parallax call.
    <!-- /host-note -->
-3. Parse args: `markets=`, `date=`, `top=`, `audience=`, `lang=`. Reject a `date=` that does not match `YYYY-MM-DD` before any call.
+3. Parse args: `markets=`, `date=`, `top=`, `audience=`, `lang=`. Reject a `date=` that does not match `YYYY-MM-DD`, or a `top=` that is not a positive integer, before any call.
 4. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`.
 
 ### Step 1 — Resolve inputs
@@ -79,7 +79,7 @@ get_telemetry(date=<date if given>, fields=["report_date", "regime_tag", "market
 python3 "<skill-dir>/weekly_themes.py" --input "<run-dir>/telemetry.json" --markets "<codes or empty>" --top <top>
 ```
 
-It returns per-market rows (leader, laggard, each one's week-to-date return and distance from the market's median theme, median, breadth = share of themes up on the week) plus `themes_of_week`, `not_covered` and `stale`. Themes of the Week ranks each market's leader by distance from its own market median, one entry per market, markets with fewer than 3 themes excluded. The helper exits 2 on a malformed payload: treat that as the Step 3 stop.
+It returns per-market rows (leader, laggard, each one's week-to-date return and distance from the market's median theme, median, breadth = share of themes up on the week) plus `themes_of_week`, `not_covered` and `stale`. Themes of the Week ranks each market's leader by distance from its own market median, one entry per market, markets with fewer than 3 themes or with data older than `report_date` excluded. The helper exits 2 on a malformed payload: treat that as the Step 3 stop.
 
 ### Step 5 — Compose
 
@@ -105,7 +105,7 @@ Only when `lang=` was supplied: route the rendered note per conventions §15, in
 
 - **Branding Header** (only if `white_label_active` AND `client_name != ""`) — `**<client_name>** weekly themes`, logo handling per integration-pattern.md §5.
 - **Weekly Themes: week to date through <report_date>** — one line: `regime_tag` verbatim, then `commentary.headline` verbatim. When `report_date` is not the week's last trading day, say "week to date", never "this week's close".
-- **Themes of the Week** — table: market, theme, week-to-date return, vs market median, breadth. Up to `top` rows from `themes_of_week`. Preface: "Each market's strongest theme, ranked by distance from that market's median theme."
+- **Themes of the Week** — table: market, theme, week-to-date return, vs market median, breadth. Up to `top` rows from `themes_of_week`; stale markets are not ranked and appear only in the Market Table. Preface: "Each market's strongest theme, ranked by distance from that market's median theme."
 - **Market Table** — one row per market in `markets`: market, themes (n), leader + return, laggard + return, median theme return, breadth, note. Single-theme and stale markets keep their helper note.
 - **Divergences** — up to 3 entries from `divergences`: market, theme name, type, daily and month-to-date return, as returned.
 - **Commentary** — `commentary.paragraphs` verbatim, at most 3 paragraphs. Do not add narrative of your own.
@@ -119,7 +119,7 @@ Only when `lang=` was supplied: route the rendered note per conventions §15, in
 
 - Telemetry call fails or returns no `markets`: the Step 3 stop. No tables, no invented themes.
 - Every requested code absent: Market Table is replaced by "No requested market is covered on <date>", listing the codes.
-- Fewer than 1 market with 3+ themes: Themes of the Week reads "No market has enough themes to rank"; the Market Table still renders.
+- No current market with 3+ themes: Themes of the Week reads "No market has enough themes to rank"; the Market Table still renders.
 - `commentary.*` missing: the header line carries `regime_tag` only and the Commentary section is omitted with its reason in About This Report.
 - Host lacks `run-shell`: conventions §14.3. The helper cannot run, so state that the figures are unavailable rather than computing them in prose.
 
