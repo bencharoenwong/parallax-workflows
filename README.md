@@ -151,6 +151,7 @@ The plugin is the account-wide path. Skill upload packages are independent fallb
 | [parallax-stress-test-thesis](skills/parallax-stress-test-thesis/SKILL.md) | Full clone only |
 | [parallax-thematic-screen](skills/parallax-thematic-screen/SKILL.md) | Plugin |
 | [parallax-watchlist-monitor](skills/parallax-watchlist-monitor/SKILL.md) | Plugin, Skill upload |
+| [parallax-weekly-themes](skills/parallax-weekly-themes/SKILL.md) | Plugin |
 | [parallax-white-label-onboard](skills/parallax-white-label-onboard/SKILL.md) | Plugin |
 | [parallax-white-label-stock-report](skills/parallax-white-label-stock-report/SKILL.md) | Plugin |
 | [translate-arabic-finance](skills/translate-arabic-finance/SKILL.md) | Held: native review pending |
@@ -281,6 +282,7 @@ Active view is consumed by: `parallax-portfolio-builder`, `parallax-rebalance`, 
 | `/parallax-macro-outlook "United States"` | Regime, macro analysis, factor implications |
 | `/parallax-country-deep-dive Japan` | Macro environment and equity opportunities |
 | `/parallax-thematic-screen "AI infrastructure"` (or `"trade ideas around energy transition"`, optionally with `--no-macro`) | Discover stocks by theme; optional macro + regime-signal overlay for trade ideas |
+| `/parallax-weekly-themes markets=US,JP,TW` | Leading and lagging theme per market this week, cross-market themes of the week, divergences |
 | `/parallax-portfolio-builder "defensive dividend Asian equities"` | Build allocation from thesis |
 | `/parallax-watchlist-monitor AAPL.O MSFT.O NVDA.O` | Flag score changes across a list |
 | `/parallax-halal-screen AAPL.O` | Shariah compliance check |
