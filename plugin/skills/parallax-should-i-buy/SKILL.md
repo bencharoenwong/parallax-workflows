@@ -55,7 +55,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
    <!-- /host-note -->
 3. Parse args: symbol; optional language (`en` default); optional `register=`; optional `audience=` (conventions §13.1 precedence).
 4. `load-reference` `_parallax/house-view/loader.md`; run §1–§2. If a view is present, capture the tilt vector and excludes for §7.1/§7.2/§7.3 surfacing in Step 5. Do NOT apply tilts.
-5. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`. The loader returns exactly seven keys (`load_visual_branding()`); `branding["voice"]` raises `KeyError` by design.
+5. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`. The loader command prints only the visual keys plus `white_label_active` and `source_reference`; voice is excluded by design.
 
 ### Step 1 — Resolve inputs
 

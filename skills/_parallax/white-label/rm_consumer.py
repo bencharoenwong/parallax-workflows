@@ -165,8 +165,8 @@ def resolve_audience(
     """Resolve the §13.1 audience precedence. Returns ``(mode, notice)``.
 
     Pure function, no I/O — importable and callable without side effects, so
-    both the RM seam (client-review, via `load_rm_branding_context`) and a
-    direct Bash `python3 -c` call (rebalance, which does not use the RM seam)
+    both the RM seam (client-review, via `load_rm_branding_context`) and the
+    ``--resolve-audience`` command (rebalance, which does not use the RM seam)
     share exactly one implementation of the precedence order:
 
     1. A recognized per-invocation ``audience`` flag wins silently.
@@ -385,3 +385,46 @@ def render_rm_markdown(
     )
     blocks = [*context.header_lines, body, "## About This Report", *context.about_lines]
     return "\n\n".join(block for block in blocks if block)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """One-line command forms for skills (integration-pattern.md §2):
+
+    ``python3 rm_consumer.py --label "portfolio review" [--audience <flag>]``
+    prints ``{"header_lines", "about_lines", "resolved_audience"}``.
+
+    ``python3 rm_consumer.py --resolve-audience [--audience <flag>]`` prints
+    ``{"mode", "notice"}`` from :func:`resolve_audience` over the loaded
+    visual branding, for a skill that does not use the RM seam.
+    """
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser(
+        description="Print the RM branding context or the resolved audience mode as JSON.")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--label", help="deliverable label, e.g. 'portfolio review'")
+    mode.add_argument("--resolve-audience", action="store_true",
+                      help="print only the §13.1 audience mode and notice")
+    parser.add_argument("--audience", default=None,
+                        help="the invocation's audience= flag; omit when none was given")
+    args = parser.parse_args(argv)
+
+    if args.resolve_audience:
+        try:
+            branding: Any = load_visual_branding()
+        except Exception:
+            branding = None
+        resolved, notice = resolve_audience(branding, args.audience)
+        print(json.dumps({"mode": resolved, "notice": notice}))
+        return 0
+
+    context = load_rm_branding_context(args.label, audience=args.audience)
+    print(json.dumps({"header_lines": list(context.header_lines),
+                      "about_lines": list(context.about_lines),
+                      "resolved_audience": context.resolved_audience}))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

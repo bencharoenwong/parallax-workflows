@@ -39,7 +39,7 @@ Run these checks in order. On any failure, behave per "Failure handling" below �
 4. **Verify** `metadata.version_id == prose.md frontmatter version_id`.
 5. **Verify** `extraction.uploader_confirmed == true`.
 6. **Check expiry (delegate to `view_status` helper — operator-agnostic):**
-   - Shell out to `python -m view_status --json` (cwd `_parallax/house-view/`, or import `view_status.compute_status()`). The helper is the single source of truth for date math; do NOT recompute days-remaining inline. This keeps the banner identical across operator LLMs (Claude / GPT / Gemini).
+   - `run-shell` exactly `python3 "<skill-dir>/../_parallax/house-view/view_status.py" --json`, with `<skill-dir>` written literally (no `cd`; Python callers import `view_status.compute_status()`). It reads `PARALLAX_HOUSE_VIEW_DIR` itself. The helper is the single source of truth for date math; do NOT recompute days-remaining inline. This keeps the banner identical across operator LLMs (Claude / GPT / Gemini).
    - The helper returns one of: `none | malformed | not_yet_effective | expired | critical | warning | active`. It also returns `banner` (the exact string to surface) and `tilts_apply` (whether downstream multipliers should run).
    - **Hard-block states** (`tilts_apply == false`): `none`, `malformed`, `expired`, `not_yet_effective`. Emit the helper's `banner` verbatim and skip §3-§5 multiplier application.
    - **Soft states** (`tilts_apply == true`): `active`, `warning`, `critical`. Emit the helper's `banner` in the load preamble, then continue with §3.

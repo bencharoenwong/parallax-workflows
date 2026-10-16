@@ -28,26 +28,23 @@ The structural guardrail enforcing this scope is `load_visual_branding()` in `lo
 
 ## §2 — Loading the branding
 
-Every consumer skill calls `load_visual_branding()` (not `load_client_branding()`) and `is_white_label_active()` from the same module:
+Every consumer skill loads branding with one `run-shell` call of exactly this line, with `<skill-dir>` written as the calling skill's literal directory (conventions §14: no variables, no `cd`, no inline `python3 -c` code):
 
-```python
-import sys
-from pathlib import Path
-
-# loader.py lives at _parallax/white-label/loader.py. <skill-dir> is the
-# calling skill's own directory, substituted literally at the call site
-# (conventions §14 run-shell: write paths literally; __file__ is undefined
-# when this snippet runs via `python3 -c`).
-_WHITE_LABEL_DIR = Path("<skill-dir>/../_parallax/white-label")
-sys.path.insert(0, str(_WHITE_LABEL_DIR))
-from loader import load_visual_branding, is_white_label_active, safe_source_reference  # noqa: E402
-
-branding = load_visual_branding()
-white_label_active = is_white_label_active(branding)
-client_name = branding.get("client_name", "")
+```
+python3 "<skill-dir>/../_parallax/white-label/loader.py" --json
 ```
 
-RM markdown consumers use the executable wrapper in `rm_consumer.py` instead. Call `load_rm_branding_context(<deliverable label>)`, then place its `header_lines` and `about_lines` in the locations defined by §5 and §7. The wrapper calls `load_visual_branding()` internally. It centralizes source redaction, voice isolation, and default-brand fallback for client-review and desk-call-list.
+It prints one JSON object: the visual keys `client_name`, `colors`, `logos`, `fonts`, `error`, `render` (§3), plus `white_label_active` (from `is_white_label_active()`) and `source_reference` (from `safe_source_reference()`, §7). The raw `source` is not printed. Use those two fields as given; never recompute them.
+
+RM markdown consumers use `rm_consumer.py` instead, which renders the header and About This Report lines for them:
+
+```
+python3 "<skill-dir>/../_parallax/white-label/rm_consumer.py" --label "<deliverable label>" --audience <flag>
+```
+
+Leave out `--audience <flag>` when the invocation gave no `audience=` flag. It prints `header_lines`, `about_lines` and `resolved_audience`; place the lines in the locations defined by §5 and §7. The command calls `load_rm_branding_context()`, which calls `load_visual_branding()` internally. It centralizes source redaction, voice isolation, and default-brand fallback for client-review and desk-call-list. A skill that does not use the RM seam but needs the §13.1 audience mode runs `python3 "<skill-dir>/../_parallax/white-label/rm_consumer.py" --resolve-audience --audience <flag>` (same rule for `--audience`), which prints `mode` and `notice`.
+
+If the command fails or the host has no shell, render default Parallax branding with `Branding: default Parallax (config error)` per §7. Python callers (tests, other helpers) import the same functions: `load_visual_branding`, `is_white_label_active` and `safe_source_reference` from `loader.py`, `load_rm_branding_context` and `resolve_audience` from `rm_consumer.py`.
 
 `white_label_active` is the rendering flag. The predicate is centralized in `loader.py` — do NOT re-implement it inline (the `schema_unavailable` branch is easy to miss; see §4 and §8). `client_name` is safe to read with `.get(..., "")` because legacy configs predating the field return `""` rather than `KeyError`.
 

@@ -43,8 +43,8 @@ Run the `loader.md` §2 validation chain **read-only** — do not apply tilts, d
   `uploader_confirmed == true`. On any drift / unconfirmed failure → **do not flag against a broken
   view**; render the one-line `loader.md` "Failure handling" message and continue the report with no
   house-view section.
-- Resolve expiry via the `view_status` helper (`python -m view_status --json`, cwd
-  `_parallax/house-view/`). Hard-block states (`none`/`malformed`/`expired`/`not_yet_effective`) →
+- Resolve expiry via the `view_status` helper: `run-shell` exactly
+  `python3 "<skill-dir>/../_parallax/house-view/view_status.py" --json`, with `<skill-dir>` written literally. Hard-block states (`none`/`malformed`/`expired`/`not_yet_effective`) →
   surface the helper's `banner` verbatim and render no conflict flags. Soft states
   (`active`/`warning`/`critical`) → surface the `banner` in the load preamble and proceed.
 - Surface any `extraction_confidence[field] < 0.6` and any legacy-view prose-integrity warning in the

@@ -123,22 +123,19 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 
 ### Step 5 — Compose
 
-**Pre-Render — load white-label branding.** `load-reference` `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader returns exactly seven keys; any other access (e.g. `branding["voice"]`) raises `KeyError` — structurally enforced by `loader.py`.
+**Pre-Render — load white-label branding.** `load-reference` `_parallax/white-label/integration-pattern.md` §2 and compute `white_label_active` + `client_name` per that section. Apply §5 (Branding Header) and §7 (About This Report) when composing the Output Format. The loader command prints only the visual keys plus `white_label_active` and `source_reference`; voice is structurally excluded by `loader.py`.
 
 Resolve the §13.1 audience mode in the same step, via one `run-shell` call into the
-same seam function `parallax-client-review` uses (`_parallax/white-label/rm_consumer.py`,
-which loads `_parallax/white-label/loader.py`) — never a prose read of
-`branding["render"]`:
+same seam function `parallax-client-review` uses (`resolve_audience` in
+`_parallax/white-label/rm_consumer.py`, which loads `_parallax/white-label/loader.py`)
+— never a prose read of `branding["render"]`:
 
 ```
-python3 -c "import sys; sys.path.insert(0, '<skill-dir>/../_parallax/white-label'); \
-  from loader import load_visual_branding; from rm_consumer import resolve_audience; \
-  import json; b = load_visual_branding(); mode, notice = resolve_audience(b, <flag or None>); \
-  print(json.dumps({'mode': mode, 'notice': notice}))"
+python3 "<skill-dir>/../_parallax/white-label/rm_consumer.py" --resolve-audience --audience <flag>
 ```
 
-Substitute the parsed `audience=` flag (or `None` if none was supplied) for
-`<flag or None>`. Record the returned `mode` for the Output Format branches
+Write `<flag>` as the parsed `audience=` flag; leave out `--audience <flag>`
+when none was supplied. Record the returned `mode` for the Output Format branches
 below, and if `notice` is non-null, append it verbatim to About This Report.
 `resolve_audience` is a pure function — this is a real `run-shell` call, never
 prose arithmetic reproducing its precedence logic.

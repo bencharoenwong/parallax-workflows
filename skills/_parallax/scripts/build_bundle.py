@@ -1562,7 +1562,7 @@ RUNTIME_COMPANIONS = {
     "client-policy/reconcile.py": ("run_trace.py",),
     "white-label/rm_consumer.py": ("white-label/loader.py",),
     "white-label/loader.py": ("white-label/schema.yaml",),
-    # loader.md runs `python -m view_status` from the house-view directory.
+    # loader.md runs view_status.py --json by its path.
     "house-view/loader.md": ("house-view/view_status.py",),
 }
 

@@ -1029,3 +1029,37 @@ def safe_source_reference(branding: dict[str, Any]) -> str:
     if "/" in ref or "\\" in ref:
         return PurePath(ref.replace("\\", "/")).name
     return ref
+
+
+def visual_branding_summary() -> dict[str, Any]:
+    """What a visual consumer skill needs, as JSON-safe data: the seven visual
+    keys with ``source`` replaced by its display-safe ``source_reference``,
+    plus the ``white_label_active`` rendering flag. The raw source never
+    leaves this function."""
+    branding = load_visual_branding()
+    summary = {key: branding[key] for key in _VISUAL_BRANDING_KEYS if key != "source"}
+    summary["source_reference"] = safe_source_reference(branding)
+    summary["white_label_active"] = is_white_label_active(branding)
+    return summary
+
+
+def main(argv: list[str] | None = None) -> int:
+    """``python3 loader.py --json``: print :func:`visual_branding_summary`.
+
+    The one-line form integration-pattern.md §2 documents, so a skill loads
+    branding with a literal command rather than inline ``python3 -c`` code.
+    """
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser(
+        description="Print the visual white-label branding summary as JSON.")
+    parser.add_argument("--json", action="store_true", required=True,
+                        help="print JSON (the only output format)")
+    parser.parse_args(argv)
+    print(json.dumps(visual_branding_summary(), default=str, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
