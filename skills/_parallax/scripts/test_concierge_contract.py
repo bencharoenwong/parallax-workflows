@@ -39,7 +39,7 @@ def _block(text):
 
 
 def test_built_concierge_new_here_markers_appear_exactly_once():
-    sec = BUILT[BUILT.index("## New here?"):BUILT.index("## Nudging after each skill runs")]
+    sec = BUILT[BUILT.index("## New here?"):BUILT.index("## Optional next steps")]
     assert sec.count("<!-- new-here:begin -->") == 1
     assert sec.count("<!-- new-here:end -->") == 1
     assert sec.index("<!-- new-here:begin -->") < sec.index("<!-- new-here:end -->")

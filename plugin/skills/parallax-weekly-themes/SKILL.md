@@ -17,7 +17,7 @@ description: "Weekly market-themes note from Parallax telemetry: the leading and
 ## Gotchas
 
 - Expected Parallax spend: **1 credit**. `get_telemetry` is global (`date`/`fields` only, no per-market parameter). Call it once per run, never once per market.
-- `fields` is a passthrough parameter. An unknown name fails silently, so request exactly the names in Step 2. Never request `baskets` or `factor_view`: both are very large and this skill uses neither.
+- `fields` uses selectable telemetry roots/subfields: request exactly the names in Step 2 and handle explicit rejected-field errors. `report_date` is returned automatically but is not a valid selectable root; request `metadata` rather than `report_date`. Use the returned `report_date` as the report data date, not `metadata.run_date` (which can be later). Never request `baskets` or `factor_view`: both are very large and this skill uses neither.
 - Returns are decimals (`0.0213` is +2.13%). Format as percentages with two decimals at Compose; never round before Step 4.
 - `markets.<code>` carries the top and bottom theme by **name** only, per window (`daily`, `wtd`, `mtd`, `ytd`), with `n_baskets`, `n_positive_*` and a 5-point `distribution_*` (min, lower quartile, median, upper quartile, max). It has no stable theme id and no members. Never claim that a theme with the same name in two weeks is the same group, and never state how many of this week's themes are new.
 - A market with one theme has no leader/laggard spread. The helper marks it; render it in the Market Table and keep it out of Themes of the Week.
@@ -48,7 +48,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
    <!-- host-note -->
    Claude Code: `ToolSearch` with query `"+Parallax telemetry"` before the first Parallax call.
    <!-- /host-note -->
-3. Parse args: `markets=`, `date=`, `top=`, `audience=`, `lang=`. Reject a `date=` that does not match `YYYY-MM-DD`, or a `top=` that is not a positive integer, before any call.
+3. Parse args: `markets=`, `date=`, `top=`, `audience=`, `lang=`. Reject a `date=` that is not a valid calendar date in `YYYY-MM-DD` form, or a `top=` that is not a positive integer, before any call.
 4. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`.
 
 ### Step 1 — Resolve inputs
@@ -60,7 +60,7 @@ Upper-case each `markets=` code. Do not validate codes against a fixed list: the
 **Batch A** — one `call-tool`:
 
 ```
-get_telemetry(date=<date if given>, fields=["report_date", "regime_tag", "markets", "divergences", "commentary.headline", "commentary.paragraphs"])
+get_telemetry(date=<date if given>, fields=["metadata", "markets", "regime_tag", "divergences", "commentary.headline", "commentary.paragraphs"])
 ```
 
 `write-artifact` the raw response to `<run-dir>/telemetry.json` for Step 4. There is no Batch B.
@@ -79,7 +79,7 @@ get_telemetry(date=<date if given>, fields=["report_date", "regime_tag", "market
 python3 "<skill-dir>/weekly_themes.py" --input "<run-dir>/telemetry.json" --markets "<codes or empty>" --top <top>
 ```
 
-It returns per-market rows (leader, laggard, each one's week-to-date return and distance from the market's median theme, median, breadth = share of themes up on the week) plus `themes_of_week`, `not_covered` and `stale`. Themes of the Week ranks each market's leader by distance from its own market median, one entry per market, markets with fewer than 3 themes or with data older than `report_date` excluded. The helper exits 2 on a malformed payload: treat that as the Step 3 stop.
+It returns per-market rows (leader, laggard, each one's week-to-date return and distance from the market's median theme, median, breadth = share of themes up on the week) plus `themes_of_week`, `not_covered`, `stale` and `unknown_freshness`. Themes of the Week ranks each market's leader by distance from its own market median, one entry per market, markets with fewer than 3 themes, stale dates or unknown freshness excluded. Malformed nested entries, non-finite values and impossible theme counts exit 2. The helper exits 2 on a malformed payload: treat that as the Step 3 stop.
 
 ### Step 5 — Compose
 
@@ -113,7 +113,7 @@ Only when `lang=` was supplied: route the rendered note per conventions §15, in
 - **Commentary** — `commentary.paragraphs` verbatim, at most 3 paragraphs. Do not add narrative of your own.
 - **Plain-Language Summary** (under `audience=client_safe` only) — 2-3 sentences on which markets and themes moved most, with no directives.
 - **What This Note Does Not Show** — one line: member companies and theme-fit rankings are not exposed by the public telemetry tool; theme names are labels from a periodic regrouping and are not stable across weeks.
-- **About This Report** (always present) — data date; requested codes in `not_covered`; stale markets; dropped fields; branding state per integration-pattern.md §7.
+- **About This Report** (always present) — data date; requested codes in `not_covered`; stale markets; unknown freshness; dropped fields; branding state per integration-pattern.md §7.
 
 **AI-interaction disclosure (required):** render `parallax-conventions.md §9.2` immediately above the disclaimer. Then render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 

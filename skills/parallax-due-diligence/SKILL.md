@@ -17,12 +17,12 @@ description: "Full research analyst due diligence: all financial statements, Pal
 
 ## Gotchas
 
-- Expected Parallax spend: ~31 tokens (`_parallax/token-costs.md`): four financial statements, Palepu 5, full report 10 (paid), plus the 1-token calls. The most expensive single-stock workflow — serious research only.
+- Expected Parallax spend: ~31 tokens (`_parallax/token-costs.md`): four financial statements, Palepu 5, full report 10 (paid), plus the 1-token calls. A statement-level research workflow; do not run it merely as a prerequisite for a narrower question.
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §2 identity cross-check, §3 parallel execution, §4 fallbacks, §14 host primitives.
 - JIT-load `_parallax/house-view/loader.md`; this is a single-stock consumer per §7: tilts are NOT applied to scores or to any prompt. Surface §7.1 (House View Note after Factor Score Trajectory) and §7.3 (tension banner) via `render_view_conflict()` per `_parallax/house-view/render_helpers.md`; §7.2 is N/A (this skill does not surface `get_peer_snapshot.suggestion`). Audit per §6 with `applied_reason` `"single-stock consumer (loader.md §7.1/§7.2/§7.3)"`.
 - Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
 - `get_financial_analysis` (Palepu) is async ~2–5 min; `get_stock_report` is async ~1–2 min and PAID. Begin composing from the instant tools while they resolve (conventions §5).
-- No `audience=client_safe` mode: if invoked with it, render one line — "This skill produces an internal analyst working document and has no client-safe mode; for a client-facing deliverable use /parallax-client-review or /parallax-white-label-stock-report." — then proceed in internal_analyst mode.
+- No `audience=client_safe` mode: if invoked with it, render one line — "This skill produces an internal analyst working document and has no client-safe mode; for a client-facing deliverable use /parallax-client-review or /parallax-white-label-stock-report." — then stop before billed calls. Ask whether to use an available client-facing workflow or explicitly continue with this internal working document. Prior approval for internal analysis can be reused when it covers this request.
 
 Comprehensive analyst-grade due diligence using all available Parallax tools.
 
@@ -43,7 +43,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
    <!-- host-note -->
    Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
    <!-- /host-note -->
-3. Parse args: symbol; reject `audience=client_safe` with the Gotchas line.
+3. Parse args: symbol; unsupported `audience=client_safe` follows the Gotchas stop-and-choice rule before analysis. Do not silently change the requested audience.
 4. `load-reference` `_parallax/house-view/loader.md`; run §1–§2. If a view is present, capture the load preamble, the sector tilt vector and excludes for §7.1/§7.3 in Step 5. Tilts are NOT applied. On §2 validation failure, run without the view and use the standard disclaimer.
 5. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name` (the §2 command prints visual keys only; voice is excluded by design).
 

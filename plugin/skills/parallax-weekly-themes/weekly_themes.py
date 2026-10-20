@@ -19,6 +19,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import re
+from datetime import date
 import sys
 from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
@@ -55,12 +58,15 @@ class WeeklyThemes:
     themes_of_week: list[MarketRow] = field(default_factory=list)
     not_covered: list[str] = field(default_factory=list)
     stale: list[str] = field(default_factory=list)
+    unknown_freshness: list[str] = field(default_factory=list)
 
 
 def _num(value: Any) -> Optional[float]:
     """Return value as float, or None when absent or non-numeric."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
+    if not math.isfinite(value):
+        raise ValueError("return/distribution value must be finite")
     return float(value)
 
 
@@ -77,16 +83,39 @@ def _diff(a: Optional[float], b: Optional[float]) -> Optional[float]:
     return round(a - b, 6)
 
 
+def _date(value: Any, field_name: str) -> str:
+    """Return a validated calendar date, or empty for explicitly missing data."""
+    if value is None or value == "":
+        return ""
+    if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        raise ValueError(f"{field_name} must be YYYY-MM-DD")
+    try:
+        date.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} is not a calendar date") from exc
+    return value
+
+
 def market_row(code: str, m: dict[str, Any], report_date: str) -> MarketRow:
     """Build one market's row from its ``markets`` entry."""
+    report_date = _date(report_date, "report_date")
+    as_of = _date(m.get("as_of"), f"{code}.as_of")
     n = m.get("n_baskets")
+    if n is not None and (isinstance(n, bool) or not isinstance(n, int) or n < 0):
+        raise ValueError(f"{code}.n_baskets must be a nonnegative integer")
     n_themes = n if isinstance(n, int) and not isinstance(n, bool) else 0
-    top = m.get("top_wtd") or {}
-    bottom = m.get("bottom_wtd") or {}
+    top = m.get("top_wtd")
+    bottom = m.get("bottom_wtd")
+    top = {} if top is None else top
+    bottom = {} if bottom is None else bottom
+    if not isinstance(top, dict) or not isinstance(bottom, dict):
+        raise ValueError(f"{code} leader/laggard must be objects")
     median = _median(m.get("distribution_wtd"))
     leader_wtd = _num(top.get("value"))
     laggard_wtd = _num(bottom.get("value"))
     pos = m.get("n_positive_wtd")
+    if pos is not None and (isinstance(pos, bool) or not isinstance(pos, int) or not 0 <= pos <= n_themes):
+        raise ValueError(f"{code}.n_positive_wtd must lie between 0 and n_baskets")
     breadth = (
         round(pos / n_themes, 4)
         if n_themes > 0 and isinstance(pos, int) and not isinstance(pos, bool)
@@ -97,11 +126,13 @@ def market_row(code: str, m: dict[str, Any], report_date: str) -> MarketRow:
         notes.append("single theme; no leader/laggard spread")
     if report_date and m.get("as_of") and m.get("as_of") != report_date:
         notes.append(f"data as of {m.get('as_of')}")
+    if not report_date or not as_of:
+        notes.append("freshness unknown; excluded from ranking")
     single = n_themes == 1
     return MarketRow(
         code=code,
         market_name=str(m.get("market_name") or code),
-        as_of=str(m.get("as_of") or ""),
+        as_of=as_of,
         n_themes=n_themes,
         leader=top.get("name"),
         leader_wtd=leader_wtd,
@@ -133,12 +164,12 @@ def compute(
     descending, ties broken by market code. A market's leader is never ranked
     without a median to compare against.
     """
-    if top < 1:
+    if isinstance(top, bool) or not isinstance(top, int) or top < 1:
         raise ValueError("top must be >= 1")
     data = payload.get("markets")
     if not isinstance(data, dict):
         raise ValueError("payload has no 'markets' object")
-    report_date = str(payload.get("report_date") or "")
+    report_date = _date(payload.get("report_date"), "report_date")
     wanted = list(dict.fromkeys(c.upper() for c in markets)) if markets else sorted(data)
     out = WeeklyThemes(report_date=report_date)
     for code in wanted:
@@ -148,6 +179,8 @@ def compute(
             continue
         row = market_row(code, entry, report_date)
         out.markets.append(row)
+        if not report_date or not row.as_of:
+            out.unknown_freshness.append(code)
         if report_date and row.as_of and row.as_of != report_date:
             out.stale.append(code)
     rankable = [
@@ -155,6 +188,7 @@ def compute(
         if r.n_themes >= MIN_THEMES_FOR_RANKING
         and r.leader_vs_median is not None
         and r.code not in out.stale
+        and r.code not in out.unknown_freshness
     ]
     rankable.sort(key=lambda r: (-r.leader_vs_median, r.code))
     out.themes_of_week = rankable[:top]
@@ -178,7 +212,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     except (OSError, ValueError) as exc:
         print(f"weekly_themes: {exc}", file=sys.stderr)
         return 2
-    json.dump(asdict(result), sys.stdout, indent=2)
+    json.dump(asdict(result), sys.stdout, indent=2, allow_nan=False)
     sys.stdout.write("\n")
     return 0
 

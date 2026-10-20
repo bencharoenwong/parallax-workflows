@@ -53,18 +53,18 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
    <!-- host-note -->
    Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
    <!-- /host-note -->
-3. Parse args: theme; `top_n=`; `--no-macro`; `--skip-drift-check`; `audience=`.
+3. Parse args: nonempty theme (query 2–500 characters); `top_n=` integer 1–20 (default 5); `--no-macro`; `--skip-drift-check`; `audience=`. Reject invalid count/query before calls.
 4. `load-reference` `_parallax/house-view/loader.md`; run §1–§2. If a view is present, capture tilt vector + excludes and resolve the theme against it per §4 (theme sovereign; conflict banner, e.g. theme "AI infrastructure" with `tech: -2` → "House view is UW tech; screen run per your explicit theme"). Then the drift pre-flight: `load-reference` `_parallax/house-view/auto-on-load-judge-pattern.md` and follow it; a surfaced banner renders before the report. Skip this pre-flight if invoked with `--skip-drift-check` or if no active house view exists.
 5. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`.
 
 ### Step 1 — Resolve inputs
 
-Apply the macro-self-confirming test to the theme (Gotchas). Infer up to 3 relevant markets from the theme for Batch A step 3b (geo-agnostic themes → United States plus one other relevant covered market).
+Apply the macro-self-confirming test to the theme (Gotchas). Infer up to 3 relevant markets from the theme for Batch A step 3b (geo-agnostic themes → one relevant covered market, default United States unless the request supplies a different scope).
 
 ### Step 2 — Fetch (parallel batches)
 
 **Batch A — setup.** `call-tool` steps 1, 2 and 3a together; 3b fires when 3a returns:
-1. **Universe** — with a view and `PARALLAX_LOADER_V2=1`, follow loader.md §3 "Application (V2)": parallel per-sector calls, merge, dedupe; V1: prepend tilt context and call `build_stock_universe` once. Filter against `tilts.excludes`. **Timeout:** retry once with a narrower query; then `universe = []`, `universe_status = "unavailable"`, continue and flag it under Universe Built; never call `check_portfolio_redundancy` as a placeholder.
+1. **Universe** — with a view and `PARALLAX_LOADER_V2=1`, follow loader.md §3 "Application (V2)": parallel per-sector calls, merge, dedupe; V1: prepend tilt context and call `build_stock_universe` once. Filter against `tilts.excludes`. **Failure/timeout/pending:** retain any job identifier/status; do not launch a replacement universe job or silently narrow the theme. Set `universe = []`, `universe_status = "pending"` (or the specific failure), continue and disclose it under Universe Built. A replacement with changed scope needs an explicit new user request; never call `check_portfolio_redundancy` as a placeholder.
 2. **Telemetry** — `get_telemetry` (basket-level; failure → `telemetry = None`).
 3. **Macro** (skip with `--no-macro`) — 3a `list_macro_countries`; 3b `macro_analyst(market=<m>, component="tactical")` per inferred market whose name matches the 3a list verbatim ("United States", not "US"); unmatched inferences are dropped silently; none left, or all unavailable → `macro_context = None`. Cap 3.
 
@@ -82,7 +82,7 @@ Apply the macro-self-confirming test to the theme (Gotchas). Infer up to 3 relev
 
 **C1 rank:** composite-driven; with a view, re-rank trusted rows by `composite × multiplier(sector)` per loader.md §3.
 
-**C1.5 — Annotation (Phase C1.5; reference implementation of conventions §3.1, concurrent with C2/C3):** if `macro_context` is present, tag each trusted row `macro_tag ∈ {with-regime, against-regime, orthogonal}` from the row's primary market — read `get_company_info.data.market` (there is no `country` field anywhere in the response; every identity field, including `market`, lives under `data` — only `success`, `symbol`, and `score_scale` are top-level), normalize to the canonical market name from `list_macro_countries`; missing or unmatched → `orthogonal`, never inferred from sector or judgement. Tags annotate the Output Format only: **they MUST NOT change rank order, alter membership, or override the composite score**, and downstream consumers must preserve every annotated row (Macro Tag is never a filter predicate).
+**C1.5 — Annotation (Phase C1.5; reference implementation of conventions §3.1, concurrent with C2/C3):** if `macro_context` is present, tag each trusted row `macro_tag ∈ {with-regime, against-regime, orthogonal, not-assessed}` from the row's primary market — read `get_company_info.data.market` (there is no `country` field anywhere in the response; every identity field, including `market`, lives under `data` — only `success`, `symbol`, and `score_scale` are top-level), normalize to the canonical market name from `list_macro_countries`; missing, unmatched or not queried → `not-assessed`, with the missing-evidence reason; never infer regime alignment from sector or judgement. Use `orthogonal` only when assessed evidence supports no material relationship. Tags annotate the Output Format only: **they MUST NOT change rank order, alter membership, or override the composite score**, and downstream consumers must preserve every annotated row (Macro Tag is never a filter predicate).
 
 ### Step 5 — Compose
 
@@ -110,7 +110,7 @@ The entire final message is that command's stdout. The stderr `[render-gate] WAR
 - **Macro Context** (rendered if `macro_context` OR `telemetry` is present from Phase A) — one line per covered market (max 3) from macro_analyst: `<market>: <tactical takeaway from macro_analyst>`. State explicitly whether this is supplementary (house view active, view is sovereign) or primary (no view active). If `telemetry` is present, append a "Regime Signal" sub-line: `<regime_tag> | top divergence baskets: <basket names with sign, max 3> | <commentary.headline>`. Do NOT extend beyond what the tools returned — no LLM-confabulated narrative bridging the macro view to the theme.
 - **Plain-Language Summary** (under `audience=client_safe` only): 2-3 sentences describing the theme read and top-pick rationale for a non-specialist reader; factor names carry the §13.3 gloss, no cutoff arithmetic, framed per §12 as informational with no directives.
 - **Universe Built** (how many stocks found, key sectors; note any exclusions applied; surface divergence-assertion result per loader.md §5 rule 4)
-- **Top Picks** (table: `input_ticker`, `returned_name` (from scoring tool), `expected_name` (from get_company_info), sector, overall score, key factor strengths; under `audience=client_safe`, factor-strength cells carry the §13.3 gloss; if view active, add "Tilt Effect" column; if `macro_context` present, add "Macro Tag" column showing `with-regime / against-regime / orthogonal`. **Flag any row where `returned_name ≠ expected_name` after normalizing both per conventions §2 step 2 with ⚠ MISMATCH and exclude its scores from ranking** — per loader.md §5 rule 3. **Rank is composite-driven regardless of Macro Tag** — that column annotates, not sorts. Do NOT add a per-name Confidence column — telemetry is basket-level only and any per-row confidence would be hallucinated.)
+- **Top Picks** (table: `input_ticker`, `returned_name` (from scoring tool), `expected_name` (from get_company_info), sector, overall score, key factor strengths; under `audience=client_safe`, factor-strength cells carry the §13.3 gloss; if view active, add "Tilt Effect" column; if `macro_context` present, add "Macro Tag" column showing `with-regime / against-regime / orthogonal / not-assessed`. **Flag any row where `returned_name ≠ expected_name` after normalizing both per conventions §2 step 2 with ⚠ MISMATCH and exclude its scores from ranking** — per loader.md §5 rule 3. **Rank is composite-driven regardless of Macro Tag** — that column annotates, not sorts. Do NOT add a per-name Confidence column — telemetry is basket-level only and any per-row confidence would be hallucinated.)
 - **Comparison Matrix** (peer comparison for lead candidate)
 - **Financial Snapshot** (revenue, margins, growth for top 3 trusted picks)
 - **Implementation Notes** (liquidity considerations, concentration/threshold arithmetic per conventions §12 — no position-sizing instructions; concentration/threshold arithmetic renders in internal_analyst mode only per §13.2)
@@ -123,7 +123,7 @@ If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwis
 
 ## Failure modes
 
-- Universe unavailable after the retry: Universe Built states it; no Top Picks table; audit row notes the abort.
+- Universe unavailable or pending after its one job: Universe Built states it; no Top Picks table; audit row notes the abort.
 - Universe collapsed to one sector: the divergence warning renders; the screen still runs on what returned.
 - Macro or telemetry unavailable: Macro Context degrades or is omitted per the rules above; the screen never aborts on either.
 - ⚠ MISMATCH rows: kept in the table, unranked, scores excluded.

@@ -2634,3 +2634,13 @@ def test_skill_md_published_cutoffs_match_module():
     assert "0.5" in q and "1.5" in q
     assert flag_quality_change(-0.5) is Flag.AMBER and flag_quality_change(-1.5) is Flag.RED
     assert flag_quality_change(-0.4) is Flag.GREEN
+
+
+@pytest.mark.parametrize("field", ["total_assets", "total_liabilities"])
+@pytest.mark.parametrize("value", [-1.0, -100.0])
+def test_negative_accounting_denominators_are_unavailable(field, value):
+    values = dict(working_capital=20, retained_earnings=30, ebit=10,
+                  total_assets=100, total_liabilities=40, revenue=120, market_cap=150)
+    values[field] = value
+    with pytest.raises(ValueError, match="positive"):
+        compute_altman_z(AltmanInputs(**values))

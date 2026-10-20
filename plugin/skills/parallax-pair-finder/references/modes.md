@@ -2,6 +2,10 @@
 
 JIT-loaded by `parallax-pair-finder/SKILL.md` Step 2. Suggestion mode (one leg given) and evaluate mode (both legs given) share the same asset-class routing (equities via `export_price_series`, the benchmark ETF via `etf_daily_price`) and the same HARD HALT output gate, which stays in SKILL.md Step 3.
 
+## Flag overrides (both modes)
+
+`--no-beta` skips benchmark discovery, benchmark price requests and benchmark gates entirely (also skip leg price fetches unless history was requested); compute no beta and report dollar-neutral/factor evidence only. `--benchmark=<ticker>` replaces automatic mapping with that explicitly resolved ETF; if it fails the gate, do not substitute another fund without user selection. `--candidates=N` is 1–5, default 3, suggestion mode only; no truncation of explicit pair inputs. These are request controls, not permission to skip identity checks. `--with-history` remains optional. All price arithmetic runs through `pair_math.py` as wired in SKILL Step 4.
+
 ### Mode 1 / Mode 2 — Suggestion mode (one leg given)
 
 Inputs: primary RIC + side (`long` | `short`). Optional: `--candidates=N` (default 3), `--with-history`.
@@ -22,14 +26,14 @@ If `get_company_info` returns empty: apply RIC resolution per `_parallax/paralla
 
 #### Step A.5 — In-process candidate selection (no MCP calls)
 
-From the `export_peer_comparison.data` array, exclude the row where `is_target == true` (that's the primary leg). For the remaining peers:
+From the `export_peer_comparison.data` array, exclude the row where `is_target == true` (that's the primary leg). For the remaining peers, require finite target and candidate total scores and the same reported sector as the primary; if sector is absent, exclude with a named unavailable reason rather than infer it. Resolve chosen identities and obtain `get_company_info` per chosen candidate to validate `company_name`, sector, market and listing currency before rendering a score or residual. A mismatch excludes that scored candidate with a visible note; no automatic identity substitution. Preserve any thin-set count. Then:
 
 - **`long` side given** → user wants a SHORT candidate. Sort peers ascending by `total` score. Take the bottom N (default 3). These are the lowest-scoring peers — the v1 mode-B candidates.
 - **`short` side given** → user wants a LONG candidate. Sort peers descending by `total` score. Take the top N.
 
 Record each candidate's: ric, company_name, sector, industry, market, all 5 factor scores, total, market cap, recommendation, ytd return.
 
-#### Batch C — Beta computation (parallel, default path — NOT gated by --with-history)
+#### Batch C — Beta computation (parallel, unless --no-beta; NOT gated by --with-history)
 
 Per spec scope-cut: beta-neutral sizing is in the default path because PMs act on beta-neutral, not dollar-neutral.
 
@@ -72,7 +76,7 @@ Fire all in parallel:
 - `export_price_series(symbol=candidate_ric, days=180, format="json")` × N candidates
 - `etf_daily_price(symbol=<benchmark_ticker>, start_date=<start_date>, end_date=<end_date>)` — **NOT `export_price_series`**
 
-Compute beta inline per `references/residual-math.md` §"Beta computation". Beta-neutral hedge ratio = `beta_long / beta_short` (dollars short per dollar long).
+Compute beta with the deterministic `pair_math.py` helper per SKILL Step 4 and `references/residual-math.md` §"Beta computation". Beta-neutral hedge ratio = `beta_long / beta_short` (dollars short per dollar long).
 
 **Fallbacks (in order):**
 1. If `etf_daily_price` returns no data, or fewer than 60 observations, for the chosen benchmark:
@@ -88,7 +92,7 @@ After Batch C completes and BEFORE rendering any beta-neutral hedge ratios, run 
 
 ```
 HARD GATE — refuse, do not degrade:
-  if benchmark_series is null OR len(benchmark_series.observations) < 60:
+  if NOT no_beta AND (benchmark_series is null OR len(validated_benchmark_prices) < 60):
     ABORT skill output. Render exactly:
 
       ⚠ Cannot produce beta-neutral hedge ratios.
@@ -113,15 +117,15 @@ The pair-relative regression formula in `references/residual-math.md` §3a is NO
 
 #### Batch D — Macro residual (parallel, after Batch A confirms primary's market)
 
-Both legs are within-sector in suggestion mode → both legs share the same primary `market`. So one `macro_analyst` call covers both:
+Same sector does not establish the same market. Use the verified company-info market for each selected leg and make one call per distinct covered market:
 
-- `macro_analyst(market=<primary_market>, component="tactical")`
+- `macro_analyst(market=<exact distinct covered leg market>, component="tactical")`
 
 If `list_macro_countries` does not include `<primary_market>`: skip macro and render "macro context unavailable for this market" in output.
 
 #### Batch E — (Optional, with `--with-history`)
 
-If `--with-history` flag passed, extend Batch C: re-call `export_price_series` with `days=365` for primary + each candidate (skip benchmark — already have it from Batch C). Compute realized correlation, pair vol, max drawdown of the spread, hit rate per `references/residual-math.md` §"Realized pair stats".
+If `--with-history` flag passed, extend Batch C: re-call `export_price_series` with `days=365` for primary + each candidate (skip benchmark — already have it from Batch C). Compute the labeled synthetic spread correlation, volatility, peak-relative drawdown and positive-month fraction with `pair_math.py`; use the definition in `references/residual-math.md` §"Realized pair stats".
 
 (If skill latency is a concern, do this as a single 365-day call per leg in Batch C and slice; revisit if a future audit shows it matters.)
 
@@ -143,10 +147,10 @@ Fire all in parallel:
 
 Inspect the long's peer-comparison `data` array:
 
-- **If `short_ric` IS in the peer set** (`peer.ric == short_ric` for some peer) → use the long's and short's scores directly from the peer-comparison response. Both scores are in the same universe; net subtraction is safe. Set `score_comparability_flag = "same_universe"`.
-- **If `short_ric` is NOT in the peer set** (cross-sector or distant peer) → fire one fallback call: `get_peer_snapshot(short_ric)` to retrieve the short's scores. Set `score_comparability_flag = "cross_universe — best-effort comparable"`. The output MUST surface this flag prominently. Per spec: "Evaluate mode accepts cross-sector pairs but flags them."
+- **If `short_ric` IS in the peer set and its row identity matches its separately verified company-info identity** (`peer.ric == short_ric` for some peer) → use the long's and short's scores directly from the peer-comparison response. Both scores are from the same response; net subtraction is a descriptive difference of scores, not a return hedge or guarantee of economic comparability. Set `score_comparability_flag = "same_universe"`.
+- **If `short_ric` is NOT in the peer set** (cross-sector or distant peer) → fire one fallback call: `get_peer_snapshot(short_ric)` to retrieve the short's own target scores; verify `target_company` against the short company-info identity and select its matching target row. Missing/mismatched scores stay unavailable, never zero. The long export target must likewise match the long company-info identity. Set `score_comparability_flag = "cross_universe — best-effort comparable"`. The output MUST surface this flag prominently. Per spec: "Evaluate mode accepts cross-sector pairs but flags them."
 
-#### Batch B — Beta computation (parallel, default path)
+#### Batch B — Beta computation (parallel, unless --no-beta)
 
 Same tool-split as suggestion mode Batch C: equity legs use `export_price_series`, the benchmark ETF uses `etf_daily_price`. 3 calls:
 
@@ -167,7 +171,7 @@ Same gate as suggestion-mode Batch C.5. If benchmark is genuinely unavailable af
 #### Batch C — Macro residual (parallel)
 
 - `macro_analyst(market=<long_market>, component="tactical")`
-- `macro_analyst(market=<short_market>, component="tactical")` (only fire if `short_market != long_market`)
+- `macro_analyst(market=<short_market>, component="tactical")` (only fire if `short_market != long_market` and covered by `list_macro_countries`; uncovered markets are named as unavailable)
 
 The macro residual = long's tactical regime stance MINUS short's tactical regime stance (qualitative — render as "long-leg market regime is X; short-leg market regime is Y; the pair carries a cross-market regime tilt" if different).
 

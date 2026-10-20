@@ -67,7 +67,7 @@ def test_concierge_removes_excluded_routes():
         assert gone not in out
     # surviving branches intact
     for kept in ("parallax-should-i-buy", "parallax-portfolio-checkup",
-                 "parallax-macro-outlook", "Three buckets"):
+                 "parallax-macro-outlook", "At most four buckets"):
         assert kept in out
 
 

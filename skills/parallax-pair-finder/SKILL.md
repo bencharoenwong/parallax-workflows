@@ -16,12 +16,12 @@ description: "Long/short equity pair builder: given one leg, suggest top-3 count
 
 ## Gotchas
 
-- Expected Parallax spend: ~8 tokens single-pair evaluate, ~15 for a 3-candidate suggestion run — both figures predate a cost correction, and neither has a row in `_parallax/token-costs.md` (none exists for this skill): `export_price_series` and `etf_daily_price` are billed 1 credit per call, not free, so add 1 credit per equity leg priced in Batch B/C (2 legs in evaluate mode; 1 + N candidates in suggestion mode) and 1 credit for the benchmark `etf_daily_price` call, plus 1 credit per leg re-priced under `--with-history` (the primary leg plus each candidate, re-called at `days=365`). The "(other)" market benchmark fallback, and the canonical-market fallback-of-last-resort that fires when the fixed ticker's `etf_daily_price` call returns empty or < 60 observations (both in `references/modes.md`), each add up to 7 credits on top in the worst case: one `search_etfs` call, up to three `etf_profile` calls, and up to three retry `etf_daily_price` calls, 1 credit each. In evaluate mode, each leg that matches no `get_company_info` row by exact or base-ticker `ric` (`references/modes.md` Batch A) costs 1 extra `get_company_info` credit for the per-leg fallback call; the base-ticker match keeps a `.N` leg returned with a suffix-less `ric` from triggering it.
+- Expected Parallax spend: scales with selected legs, distinct covered markets, benchmark discovery and history. Typical three-candidate, one-market suggestion is ~16 credits including candidate identity checks; evaluate is ~11–12 before resolution/recovery. Each price/history call is billed 1 credit. `--no-beta` skips benchmark discovery/pricing. Current discovered costs win; disclose extra benchmark searches/probes and per-market macro calls.
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §3 parallel execution, §4/§4.0 fallbacks, §14 host primitives. JIT-load `references/residual-math.md` for factor-net, beta and hedge-ratio formulas; `references/modes.md` for the per-mode batch tables.
 - JIT-load `_parallax/coverage-matrix.md`: equities price via `export_price_series`, the benchmark ETF via `etf_daily_price` — separate endpoints; `etf_daily_price` returns `[]` for a multi-symbol call if any symbol is uncovered, so always one call per benchmark.
 - Suggestion mode uses a single `export_peer_comparison` call so factor scores are cross-sectionally comparable; evaluate mode MUST flag score comparability when the short is not in the long's peer set.
 - v1 scope: domicile/listing-currency only (no revenue geography), dollar- and beta-neutral ratios only (no share counts), within-sector suggestions only; evaluate mode accepts cross-sector pairs but flags them.
-- **Output gate (HARD HALT):** no hedge ratios when the benchmark series is null or has < 60 observations; never substitute pair-relative regression beta with a caveat — that pattern is banned for primary deliverables (Step 3).
+- **Output gate (HARD HALT):** in beta-enabled mode, no hedge ratios when the benchmark series is null or has < 60 observations; never substitute pair-relative regression beta with a caveat — that pattern is banned for primary deliverables (Step 3). Explicit `--no-beta` skips this benchmark requirement and permits only the dollar-neutral 1:1 convention; beta exposure remains unassessed.
 - Liquidity disclaimer is mandatory in every output: ADV / borrow / float are not validated by Parallax.
 - JIT-load `_parallax/house-view/loader.md` if a view is present: dual-single-stock consumer per §7 — tilts are NOT applied; §7.3 tension banner per leg, §7.1 note once per pair, §6 audit once per invocation; §7.2 is N/A (the candidate set comes from `export_peer_comparison`).
 - Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
@@ -45,7 +45,7 @@ Three invocation modes:
 /parallax-pair-finder long=NVDA.O short=AMD.O --with-history
 ```
 
-**Flags:** `--candidates=N` (default 3, suggestion modes only); `--with-history` (adds 60d→180d realized correlation, pair vol, max drawdown, hit rate); `--benchmark=<ticker>` (explicit benchmark after a HALT); `--no-beta` (dollar-neutral only).
+**Flags:** `--candidates=N` (default 3, suggestion modes only); `--with-history` (adds a 365-calendar-day synthetic spread history with correlation, volatility, peak-relative drawdown and positive-month fraction); `--benchmark=<ticker>` (explicit benchmark after a HALT); `--no-beta` (dollar-neutral only).
 
 **Default selection criterion (v1):** closest peer with worst total score for short candidates; closest peer with best total score for long candidates (same-sector relative-value framing).
 
@@ -60,14 +60,14 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
    <!-- host-note -->
    Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
    <!-- /host-note -->
-3. Parse args and detect the mode: `<symbol> long` → Mode 1; `<symbol> short` → Mode 2; `long=<symbol> short=<symbol>` → Mode 3; anything else → ask the operator which mode (`ask-operator`).
+3. Parse `--no-beta` (default false), `--benchmark=<ticker>` (optional nonempty explicit ETF symbol), `--candidates=N` integer 1–5, and `--with-history`; reject invalid/duplicate identities, both legs the same, unknown flags or conflicting selections before billed analysis. Then detect the mode: `<symbol> long` → Mode 1; `<symbol> short` → Mode 2; `long=<symbol> short=<symbol>` → Mode 3; anything else → ask the operator which mode (`ask-operator`).
 4. `load-reference` `_parallax/house-view/loader.md`; run §1–§2. If a view is present, capture the load preamble and the sector tilt vector for the Step 5 per-leg §7 surfacing.
 5. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`.
 6. `load-reference` `references/residual-math.md` and `references/modes.md`.
 
 ### Step 1 — Resolve inputs
 
-RICs per conventions §1 (`get_company_info` empty → try `.O`, then `.N`, then ask). Benchmark from the primary leg's `get_company_info.data.market` via the canonical mapping in `references/modes.md` (other markets: `search_etfs(query="MSCI <country name>", market="UNITED STATES")`, where `<country name>` is the `get_company_info.data.market` field value as-is — known alias: `United States` → `USA`; this is the only alias; do not invent others — keep only broad matches per `references/modes.md`'s definition, profile at most 3 via `etf_profile`, pick highest market cap; keep the ordered shortlist for Step 3's fallback). 180-day window: `end_date = today`, `start_date = today − 180 days`.
+RICs per conventions §1 (`get_company_info` empty → try `.O`, then `.N`, then ask). With `--no-beta`, skip all benchmark selection/profile/price calls and both benchmark gates; skip leg price fetches too unless `--with-history` was requested; retain dollar-neutral/factor residual output only. With `--benchmark=`, resolve the explicitly supplied ETF and use it instead of automatic mapping; report its identity and do not silently replace an unavailable explicit benchmark. Otherwise benchmark from the primary leg's `get_company_info.data.market` via the canonical mapping in `references/modes.md` (other markets: `search_etfs(query="MSCI <country name>", market="UNITED STATES")`, where `<country name>` is the `get_company_info.data.market` field value as-is — known alias: `United States` → `USA`; this is the only alias; do not invent others — keep only broad matches per `references/modes.md`'s definition, profile at most 3 via `etf_profile`, pick highest market cap; keep the ordered shortlist for Step 3's fallback). 180-day window: `end_date = today`, `start_date = today − 180 days`.
 
 ### Step 2 — Fetch (parallel batches)
 
@@ -81,7 +81,7 @@ Per `references/modes.md`: **Batch A** identification + peer set + macro coverag
 
 ```
 HARD GATE — refuse, do not degrade:
-  if benchmark_series is null OR len(benchmark_series.observations) < 60:
+  if NOT no_beta AND (benchmark_series is null OR len(validated_benchmark_prices) < 60):
     ABORT skill output. Render exactly:
 
       ⚠ Cannot produce beta-neutral hedge ratios.
@@ -104,7 +104,15 @@ Rationale: a hedge ratio computed against the wrong benchmark is a confidence-bu
 
 ### Step 4 — Compute
 
-Per `references/residual-math.md`: net factor scores (long − short per pillar), sector and domicile residuals, beta per leg over the 180-day window against the benchmark, beta-neutral ratio = `β_long / β_short`, dollar-neutral 1:1; macro residual as the qualitative difference of the legs' tactical stances; realized stats under `--with-history`. Every number comes from the series and the formulas, never from memory.
+Use `pair_math.py` for all price-derived beta/history values (never inline model arithmetic). `write-artifact` a JSON input with decoded tool payloads under `long_prices`, `short_prices`, and `benchmark_prices` (omit benchmark in no-beta mode; use `{}` when no-beta was requested without history). Optional `history_long_prices` and `history_short_prices` hold 365-day history, while beta inputs retain the 180-day window. Then `run-shell`:
+
+```bash
+python3 "<skill-dir>/pair_math.py" --input "<run-dir>/pair-input.json"
+```
+
+Append `--no-beta` and/or `--history` only for the corresponding requested modes. Exit 2 means malformed/insufficient benchmark evidence: follow the benchmark gate or name the invalid input; no ratio. Successful JSON may still have `beta_neutral_ratio: null` with a per-pair reason; preserve that state and emit dollar-neutral-only evidence. The helper aligns both endpoints of dated return intervals, requires at least 89 common intervals, rejects zero benchmark variance, near-zero short beta and nonpositive/nonfinite ratios. Use its actual dates/counts. History with disjoint common intervals or any interval longer than four calendar days is unavailable with the reason; do not annualize sparse observations as daily. This conservative frequency check can exclude longer legitimate exchange closures. History is a raw-price daily-reset synthetic spread index per dollar long, not realized client P&L; it excludes dividends, borrow, fees and FX conversion.
+
+Per `references/residual-math.md`: net factor scores (long − short per pillar), sector and domicile residuals, beta per leg over the 180-day window against the benchmark, beta-neutral ratio = `β_long / β_short`, dollar-neutral 1:1; macro residual as the qualitative difference of the legs' tactical stances; synthetic historical stats under `--with-history`. Price-derived numbers come only from helper output; factor differences follow the documented subtraction of verified scores. Sector and domicile labels do not establish currency or economic neutrality: report each leg's verified listing currency separately and mark absent currency unknown.
 
 ### Step 5 — Compose
 
@@ -120,7 +128,7 @@ python3 "<skill-dir>/../_parallax/render_gate.py" --skill pair-finder --input "<
 
 Write the draft once and never modify it in place, not even to fix one word. If the report needs a change after the draft is written, run the command above on that draft unchanged (ignore that output), then write the corrected report to a fresh path and run the command on it (conventions §10.3).
 
-The entire final message is that command's stdout (or, on a HALT, exactly the gate message). The stderr `[render-gate] WARN:` line is diagnostics: never include it. If `run-shell` is absent, apply conventions §14.3 (render-gate row; beta math is arithmetic over fetched series and needs no shell). No Step 7.
+The entire final message is that command's stdout (or, on a HALT, exactly the gate message). The stderr `[render-gate] WARN:` line is diagnostics: never include it. If `run-shell` is absent, apply conventions §14.3 (render-gate row; without the arithmetic helper, beta/history are UNVERIFIED and no beta-neutral ratio is emitted). No Step 7.
 
 ## Output Format
 
@@ -138,7 +146,7 @@ Tiered: verdict → comparison table → per-pair detail.
 
 One-line ranked recommendation:
 
-> **Top pair: `<long>` / `<short>` (rank 1 of N).** Cleanest residual: `<one-line idiosyncratic thesis>`. Sector-neutral within `<sector>`; net factor tilt: `<top-2 factor residuals>`.
+> **Top pair: `<long>` / `<short>` (rank 1 of N).** Cleanest residual: `<one-line idiosyncratic thesis>`. Same reported sector `<sector>` (economic/portfolio neutrality not established); net factor tilt: `<top-2 factor residuals>`.
 
 If only one candidate viable (e.g., others lacked beta history): say so explicitly.
 
@@ -157,19 +165,19 @@ For each candidate, render:
 
 - **Pair identification**: long ric + name + sector/industry; short ric + name + sector/industry; market cap ratio
 - **Net factor scores**: 5-pillar table (long − short for each)
-- **Sector / domicile residual**: "Both legs are `<sector>` / `<industry>` / `<market>`" if neutral, else explicit description
-- **Macro residual**: from `macro_analyst` — primary market regime stance
+- **Sector / domicile residual**: "Both legs report `<sector>` / `<industry>` / `<market>`" when verified labels match; matching labels do not establish economic neutrality.
+- **Macro residual**: from `macro_analyst` — primary market regime stance. A shared country stance does not prove that market or macro exposure cancels. Dollar-neutral 1:1 is not market-neutral: under `--no-beta`, market-beta exposure is unassessed; never claim it is hedged or largely nets out.
 - **Sizing**:
   - Dollar-neutral: 1:1 notional
   - Beta-neutral: `<ratio>` dollars short per dollar long (β_long / β_short = `<num>`)
 - **Idiosyncratic thesis residual**: 1-2 sentence narrative — "After this pair, you are net long `<top factor>` and `<sector/macro>`; the bet is `<plain English>`."
-- **(`--with-history` only)** Realized correlation `<corr>`, pair vol `<vol>` annualized, max drawdown `<dd>`, hit rate `<hr>`.
+- **(`--with-history` only)** Historical price-return correlation `<corr>`, synthetic spread vol `<vol>` annualized, peak-relative max drawdown `<dd>`, positive-month fraction `<hr>` (including partial months), with the helper basis/cost exclusions.
 
 #### 4. Mandatory disclaimers (bottom)
 
 - *Liquidity caveat: hedge ratios assume executable liquidity. Average daily volume, short borrow, and float are not validated by Parallax — verify externally before sizing.*
 - *Score comparability flag* (suggestion mode: always "same_universe — single peer-comparison call"; evaluate mode: render the flag from Step A.5).
-- Standard Parallax informational-not-investment-advice disclaimer (see `_parallax/parallax-conventions.md` §7).
+- Standard Parallax informational-not-investment-advice disclaimer (see `_parallax/parallax-conventions.md` §9.1).
 
 ### Evaluate mode (Mode 3)
 
@@ -178,11 +186,11 @@ Single-pair report — no comparison table:
 - **Pair**: `<long>` / `<short>` — sector / industry / market for each
 - **Net factor scores** (5-pillar table)
 - **Sector residual** (== 0 if same sector, else "cross-sector exposure: `<long_sector>` long / `<short_sector>` short")
-- **Domicile / currency residual** (== 0 if same market, else "cross-currency exposure: `<long_market>` long / `<short_market>` short")
+- **Domicile / currency residual** (same domicile only when verified markets agree; list verified currencies separately, marking unknowns; same market never proves currency-neutrality)
 - **Macro residual** (per-leg regime stance + delta if cross-market)
 - **Sizing**: dollar-neutral and beta-neutral
 - **Idiosyncratic thesis residual** (1-2 sentences)
-- **(`--with-history`)** Realized stats
+- **(`--with-history`)** Synthetic spread history (helper basis and actual dates)
 - **Score comparability flag** (always render — same_universe or cross_universe)
 - Liquidity disclaimer + standard disclaimer
 
