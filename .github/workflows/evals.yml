@@ -148,8 +148,8 @@ jobs:
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/_parallax/client-policy/tests -q
       # -m "not npx" matches run-gate-tests.sh's offline default: one test in
-      # this root shells out to `npx -y`, which can download and execute a
-      # package. That is opt-in network behavior, not something CI should run.
+      # this root uses a separately configured external CLI. Keep that
+      # opt-in integration outside the default CI dependency set.
       - name: White-label extraction and validation gates
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/_parallax/white-label/tests -q -m "not npx"

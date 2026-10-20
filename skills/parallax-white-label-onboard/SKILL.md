@@ -86,9 +86,9 @@ deployment.
 
 ## Optional prerequisites
 
-The DESIGN.md emit path is in-process and pure Python. The optional **DESIGN.md linter** wraps `npx @google/design.md` (Google Labs CLI, published to npm). When Node 18+ is on PATH, the validator runs the linter at save time and surfaces findings in the confirmation gate. When Node is absent, the validator returns `status: "skipped"` and the save proceeds — nothing breaks; the operator just doesn't get inline lint feedback.
+The DESIGN.md emit path is in-process and pure Python. The optional **DESIGN.md linter** uses a separately installed local CLI. It never installs a package or invokes `npx`. Without explicit executable configuration, lint returns `status: "skipped"` and the save proceeds. Lint findings remain informational in the confirmation gate.
 
-If you want the inline lint feedback, install Node 18+ (e.g., `brew install node@20`) and run `/parallax-white-label-onboard <source>` once to warm the npm cache. To pin the version for reproducibility, run `npm install -g @google/design.md@<version>` before invoking the skill. The validator passes `-y` so first-call invocation does not block on the npm install prompt; this also means npx will silently fetch whatever the registry resolves for `@google/design.md` on a clean machine — pin the version in regulated environments.
+To enable lint, install a reviewed version of the Google Labs `@google/design.md` CLI separately using a locked dependency tree. Set `PARALLAX_DESIGN_MD_CLI` to the executable's absolute path and `PARALLAX_DESIGN_MD_SHA256` to the SHA-256 digest of its resolved file. The validator checks the executable and digest on every invocation. A missing, non-executable or changed file skips lint. The digest pins the entrypoint; retain the installation lockfile to reproduce its dependencies. No executable availability result is cached.
 
 ## Integration with Downstream Skills
 

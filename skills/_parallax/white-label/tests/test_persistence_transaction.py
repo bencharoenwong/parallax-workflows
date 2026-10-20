@@ -172,11 +172,10 @@ def test_legacy_audit_without_final_newline_remains_valid_jsonl(tmp_path):
 
 
 def test_design_md_lint_timeout_cleans_tempdir_even_if_path_unlink_fails(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, design_md_cli
 ):
     import validator
 
-    monkeypatch.setattr(validator.DesignMdValidator, "is_available", lambda: True)
     monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
 
     def timeout(*args, **kwargs):
@@ -189,7 +188,7 @@ def test_design_md_lint_timeout_cleans_tempdir_even_if_path_unlink_fails(
 
     assert result["status"] == "skipped"
     assert "timed out" in result["note"]
-    assert list(tmp_path.iterdir()) == []
+    assert list(tmp_path.iterdir()) == [design_md_cli.parent]
 
 
 # --- Regressions from the 2026-08-29 live RM brand-ingest exercise ----------
