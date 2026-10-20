@@ -22,7 +22,7 @@ description: "Deep dive on a single position: company profile, peer comparison, 
 - JIT-load `_parallax/house-view/loader.md` FIRST; if an active view is present follow §2 (validation), §7.1/§7.2/§7.3 (single-stock conflict surfacing), §6 (audit). Do NOT apply tilts. The `get_assessment` prompt carries the active view (basis_statement + relevant tilts) so the assessment addresses alignment in prose — that is this skill's primary alignment surface; the §7 inline flags are additive. Route every §7 token through `render_view_conflict()` per `_parallax/house-view/render_helpers.md`.
 - Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
 - `get_assessment` is async (30–90 s) and LLM-backed; its section carries its own contextual AI disclosure in addition to `parallax-conventions.md §9.2`.
-- Technical Stance always renders: on `get_technical_analysis` failure use the Momentum factor proxy with the documented prefix.
+- Technical Stance always renders as a section: on `get_technical_analysis` failure use a verified Momentum factor proxy with the documented prefix; absent verified history, state the stance is unavailable without inventing a direction.
 - A `lang=` value other than `en` makes Step 7 mandatory (conventions §15).
 
 Thorough single-position analysis for fund managers using Parallax MCP tools.
@@ -77,7 +77,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 
 ### Step 3 — Verify
 
-- Identity cross-check per conventions §2 (`get_peer_snapshot.target_company` vs `get_company_info.name` after normalization; `get_score_analysis` `data[0].symbol` vs the requested RIC). On divergence, warn and treat `get_company_info` as truth.
+- Identity cross-check per conventions §2 (`get_peer_snapshot.target_company` vs `get_company_info.data.name` after normalization; `get_score_analysis` `data[0].symbol` vs the requested RIC). On divergence, warn and treat `get_company_info` as truth.
 - Outlook coverage per conventions §4; failed or empty calls per §0.1 retry classification then §4. No gate is rendered, so §4.0 does not apply.
 
 ### Step 4 — Compute
@@ -86,7 +86,7 @@ No deterministic helper. The computed conditions are the house-view flags (§7.3
 
 Then `call-tool` `get_assessment` (async, after Batches A and B) with a prompt carrying **all** findings — factor scores, score trends, key ratios, technical stance, macro context, dividend profile, risk/return vs peers, the user's question if any — AND the active view when present (basis_statement + tilts on this stock's sector/region/themes).
 
-**When a view is active the assessor MUST end with three bullet lists**, not a free-form alignment paragraph: (1) tilts that support this position, one line each; (2) tilts that contradict it, one line each; (3) active tilts NOT incorporated, with the reason in one clause each. This decomposition is mandatory (MAS FEAT P13/14, SR 11-7 traceability — the assessor's influence on a CIO decision must be auditable from the prose). Prose without the three lists → re-run with a stricter prompt before rendering.
+**When a view is active a usable completed assessment MUST end with three bullet lists**, not a free-form alignment paragraph: (1) tilts that support this position, one line each; (2) tilts that contradict it, one line each; (3) active tilts NOT incorporated, with the reason in one clause each. This decomposition is mandatory (MAS FEAT P13/14, SR 11-7 traceability — the assessor's influence on a CIO decision must be auditable from the prose). A completed response without the lists is unavailable for this section: state `Assessment unavailable — required house-view decomposition missing`. Do not invent the lists or launch another assessment job. Timeout/pending handling is separate, per Failure modes.
 
 ### Step 5 — Compose
 
@@ -123,7 +123,7 @@ Only when `lang=` is present and not `en`. Translate per `parallax-conventions.m
   - *If view active AND `get_peer_snapshot.suggestion` returned a peer:* check §7.2 condition (peer's sector tilt ≤ -1 in view, or peer ticker on excludes). If true, render inline token via `render_view_conflict(kind="peer_suggest", ...)` under the Risk/Return section. Flag, do not filter — the peer stays in the table.
 - **Technical Stance** (trend, key levels, momentum)
 - **News Catalyst Watch** (material items only)
-- **Assessment** *(AI-generated — Perplexity deep-research synthesis)* — includes macro + trend data; if view active, MUST end with the three-bullet tilt decomposition per Batch C contract. This is deep-dive's primary alignment surface. Render the section header with the italic parenthetical verbatim — it's the contextual-proximity AI disclosure per HKMA/SFC Nov 2024 Circular; the document-level banner (§5 rule 6) is not sufficient for the Perplexity-backed non-deterministic content in this specific section.
+- **Assessment** *(AI-generated — Perplexity deep-research synthesis)* — includes macro + trend data; if view active, a usable completed assessment MUST end with the three-bullet tilt decomposition per Step 4 contract, otherwise render its unavailability reason. This is deep-dive's primary alignment surface. Render the section header with the italic parenthetical verbatim — it's the contextual-proximity AI disclosure per HKMA/SFC Nov 2024 Circular; the document-level banner (§5 rule 6) is not sufficient for the Perplexity-backed non-deterministic content in this specific section.
 - **Risk Factors** (what could go wrong)
 - **About This Report** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second About This Report line.
 
@@ -136,8 +136,9 @@ If active view: use the view-aware disclaimer per loader.md §5. Otherwise: rend
 
 ## Failure modes
 
-- `get_technical_analysis` unavailable: Technical Stance renders from the Momentum factor proxy with the prefix `Technical analysis unavailable — Momentum factor proxy:`; the lens never disappears.
-- `get_assessment` timeout or missing the three-list decomposition under an active view: re-run once with a stricter prompt; if still absent, render the Assessment section as `Analysis pending — service temporarily unavailable` (conventions §4 async rule); never substitute model prose for the assessor's decomposition.
+- `get_technical_analysis` unavailable: Technical Stance renders from the Momentum factor proxy with the prefix `Technical analysis unavailable — Momentum factor proxy:`. If verified Momentum history is also missing, render `Technical stance unavailable — technical analysis and Momentum history unavailable` with no directional read.
+- `get_assessment` failure, timeout or pending: render `Analysis pending — service temporarily unavailable` in Assessment and continue (conventions §4 async rule). At most one assessment job per invocation; no replacement or automatic repair call.
+- Completed `get_assessment` response missing the three-list decomposition under an active view: render `Assessment unavailable — required house-view decomposition missing`. Keep other verified sections; never substitute model prose for the assessor's decomposition.
 - News or macro pending: placeholders per conventions §5 / §6; output is not blocked.
 - House-view banner states `malformed` / `expired` / `critical`: the banner renders verbatim (conventions §0.3 item 4).
 - Host lacks a primitive: conventions §14.3, per primitive.
@@ -145,7 +146,7 @@ If active view: use the view-aware disclaimer per loader.md §5. Otherwise: rend
 ## Done when
 
 - Every Output Format section rendered or marked unavailable with its reason; first line is the House View Preamble, the Branding Header, or `## Company Overview`.
-- When a view is active: the `view_status` banner appears verbatim; the Assessment ends with the three tilt lists.
+- When a view is active: the `view_status` banner appears verbatim; Assessment ends with the three tilt lists or states its pending/unavailability reason.
 - The render gate ran and the reply is its stdout (or the §14.3 note is present in About This Report).
 - `parallax-conventions.md §9.2` disclosure and the §9.1 or view-aware disclaimer are present; the Assessment header carries its italic AI-disclosure parenthetical.
 - Audit log entry appended per loader.md §6 (every consume event, including the no-view case).

@@ -1335,3 +1335,27 @@ def test_cli_passes_a_clean_run_with_ground_truth(tmp_path, capsys):
     stream = tmp_path / "s.jsonl"
     stream.write_text(_stream())
     assert main([json.dumps(J), "--stream", str(stream), *_gt_files(tmp_path)]) == 0
+
+
+@pytest.mark.parametrize("stamp", ['"2026-10-16"', '2026-10-16', '"2024-02-29"'])
+def test_coverage_snapshot_date_is_a_literal_scalar_not_a_draft_path(stamp):
+    cmd = _COVERAGE + " --snapshot-date " + stamp
+    assert documented_helper(cmd) == "coverage_check.py"
+    # Correctly shaped dated commands retain denial accounting.
+    stream = _bash_stream([("b1", cmd, True)], {"b1"})
+    passed, reasons, _, _ = check_run(stream, J, 0, False)
+    assert passed is False
+    assert any("documented helper command denied" in r for r in reasons)
+
+
+@pytest.mark.parametrize("stamp", ['"2026-02-30"', '"2026-13-01"', '"20261016"',
+    '"$TODAY"', '"$(date)"', '"2026-10-16; echo x"', '2026-10-16; echo x',
+    '"2026-10-16" --unknown-flag yes'])
+def test_coverage_snapshot_date_rejects_invalid_or_shell_derived_values(stamp):
+    assert documented_helper(_COVERAGE + " --snapshot-date " + stamp) is None
+
+
+def test_dated_coverage_command_consumes_literal_holdings_draft():
+    trace = [_tl("coverage_check.py", [("holdings", "[]", "holdings-0a1b2c3d.json", "file")])]
+    assert _policy_run([("b1", _COVERAGE + ' --snapshot-date "2026-10-16"', False)], trace,
+                       path="/s/.parallax-policy/holdings-0a1b2c3d.json", content="[]")[0] is True

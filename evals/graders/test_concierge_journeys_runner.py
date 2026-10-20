@@ -12,7 +12,10 @@ from __future__ import annotations
 
 import json
 import os
+import select
+import signal
 import shutil
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -23,6 +26,122 @@ pytest.importorskip("yaml")  # adaptation.py needs PyYAML
 
 REPO = Path(__file__).resolve().parents[2]
 RUNNER = REPO / "evals" / "concierge_journeys.sh"
+CHECK = REPO / "evals" / "concierge_journeys_check.py"
+
+
+def _communicate(proc: subprocess.Popen, timeout: float) -> tuple[str, str]:
+    """Collect output; on timeout kill the isolated group, then reap the runner."""
+    try:
+        return proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        # Killing only bash leaves its stub and helper children alive, holding
+        # the output pipes open. The caller must use start_new_session=True.
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        exc.stdout, exc.stderr = proc.communicate(timeout=10)
+        raise
+
+
+def _wait_for_ready(proc: subprocess.Popen, timeout: float) -> None:
+    """Bound startup before the deliberate communicate-timeout check."""
+    if not select.select([proc.stdout], [], [], timeout)[0]:
+        raise TimeoutError("child did not signal readiness")
+    assert os.read(proc.stdout.fileno(), 6) == b"ready\n"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="runner uses POSIX process groups")
+@pytest.mark.parametrize("signals_ready", [True, False])
+def test_timeout_kills_descendants_and_keeps_diagnostics(signals_ready):
+    parent = (
+        "import subprocess, sys, time\n"
+        "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+        "print('timeout diagnostic', file=sys.stderr, flush=True)\n"
+        f"if {signals_ready!r}: print('ready', flush=True)\n"
+        "time.sleep(60)\n"
+    )
+    with subprocess.Popen([sys.executable, "-c", parent], start_new_session=True,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) as proc:
+        try:
+            if signals_ready:
+                _wait_for_ready(proc, timeout=30)
+                with pytest.raises(subprocess.TimeoutExpired) as caught:
+                    _communicate(proc, timeout=0.1)
+                assert proc.returncode == -signal.SIGKILL
+                assert "timeout diagnostic" in caught.value.stderr
+            else:
+                with pytest.raises(TimeoutError, match="did not signal readiness"):
+                    _wait_for_ready(proc, timeout=0.1)
+        finally:
+            if proc.returncode is None:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            # On either timeout, group cleanup must also close the output
+            # pipes inherited by the descendant so collection can finish.
+            proc.communicate(timeout=10)
+            assert proc.returncode == -signal.SIGKILL
+
+
+def test_preflight_preserves_prompt_and_selects_full_or_short_ids(tmp_path):
+    prompt = "  Unicode 日本語 🙂\n\tquotes ' \" $HOME `pwd` \\ tail  "
+    journeys = tmp_path / "journeys.jsonl"
+    rows = [{"id": "J1_first", "prompt": prompt},
+            {"id": "J2_second", "prompt": "second", "needs": "no-connector"},
+            {"id": "J3_third", "prompt": "third"}]
+    # Comments, blank lines and a final line without a newline are supported.
+    lines = [json.dumps(row) for row in rows]
+    journeys.write_text("# comment\n\n" + "\n".join(lines), encoding="utf-8")
+    proc = subprocess.run([sys.executable, str(CHECK), "--prepare", str(journeys),
+                           "--only", "J1,J2_second,missing"], capture_output=True, timeout=10)
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.decode("utf-8").split("\0") == [
+        lines[0], "J1_first", prompt, "", lines[1], "J2_second", "second", "no-connector", ""]
+    assert b"entry matched no journey: missing" in proc.stderr
+
+
+@pytest.mark.parametrize("bad_line", [
+    "not json", json.dumps({"id": "J2_bad", "prompt": "bad", "unknown": True}),
+    json.dumps({"id": "J2_bad", "prompt": "nul\0prompt"}),
+    json.dumps({"id": "J2_bad", "prompt": "bad\ud800prompt"}),
+    json.dumps({"id": "J2_\udfff", "prompt": "bad"}),
+    json.dumps({"id": "J2_bad", "prompt": "bad", "needs": []}),
+    json.dumps({"id": "J2_bad", "prompt": "bad", "require_helpers": [{}]}),
+])
+@pytest.mark.parametrize("only", ["J1", ""])
+def test_preflight_rejects_unselected_invalid_line_without_partial_output(tmp_path, bad_line, only):
+    journeys = tmp_path / "journeys.jsonl"
+    journeys.write_text(json.dumps({"id": "J1_good", "prompt": "good"}) + "\n" + bad_line)
+    proc = subprocess.run([sys.executable, str(CHECK), "--prepare", str(journeys),
+                           "--only", only], capture_output=True, text=True, timeout=10)
+    assert proc.returncode == 2
+    assert proc.stdout == ""
+    assert "invalid journey line 2" in proc.stderr
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
+def test_dry_run_preflights_all_journeys_with_one_python_start(tmp_path):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    starts = tmp_path / "starts"
+    wrapper = bin_dir / "python3"
+    wrapper.write_text("#!/bin/sh\n"
+                       f"printf 'start\\n' >> {shlex.quote(str(starts))}\n"
+                       f"exec {shlex.quote(sys.executable)} \"$@\"\n")
+    wrapper.chmod(0o755)
+    inherited = {k: v for k, v in os.environ.items() if not k.startswith("PARALLAX_E2E_")}
+    env = {**inherited, "PATH": f"{bin_dir}:{os.environ['PATH']}",
+           "PARALLAX_E2E_DRY_RUN": "1", "PARALLAX_E2E_ONLY": "J2,J9_client_review_policy",
+           "PARALLAX_E2E_RESULTS_DIR": str(tmp_path / "results"), "TMPDIR": str(tmp_path)}
+    proc = subprocess.run(["bash", str(RUNNER)], env=env, capture_output=True, text=True, timeout=30)
+    assert proc.returncode == 0, proc.stderr
+    assert starts.read_text().splitlines() == ["start"]
+    assert proc.stdout.count("DRY RUN") == 2
+    assert "[J2_not_connected]" in proc.stdout
+    assert "[J9_client_review_policy]" in proc.stdout
+    assert not list(tmp_path.glob("concierge_preflight.*"))
 
 STUB = r'''
 import json, os, subprocess, sys
@@ -101,11 +220,13 @@ def run(tmp_path):
         env = {**inherited, "PATH": f"{bin_dir}:{os.environ['PATH']}", "PARALLAX_E2E_LIVE": "1",
                "PARALLAX_E2E_ONLY": "J9", "PARALLAX_E2E_RESULTS_DIR": str(results),
                "PARALLAX_E2E_TIMEOUT": "120", "TMPDIR": str(temp), "STUB_MODE": mode}
-        try:
-            proc = subprocess.run(["bash", str(RUNNER)], env=env, capture_output=True,
-                                  text=True, timeout=180)
-        except subprocess.TimeoutExpired as exc:
-            pytest.fail(f"runner timed out after 180 s\n{_diagnostics(exc, results, temp)}")
+        with subprocess.Popen(["bash", str(RUNNER)], env=env, start_new_session=True,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) as child:
+            try:
+                stdout, stderr = _communicate(child, timeout=180)
+            except subprocess.TimeoutExpired as exc:
+                pytest.fail(f"runner timed out after 180 s\n{_diagnostics(exc, results, temp)}")
+            proc = subprocess.CompletedProcess(child.args, child.returncode, stdout, stderr)
         return proc, results, temp
 
     return _run

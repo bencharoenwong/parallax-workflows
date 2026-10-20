@@ -42,7 +42,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
    <!-- host-note -->
    Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
    <!-- /host-note -->
-3. Parse args: symbol list; optional `weeks=N` (default 8).
+3. Parse args: nonempty symbol list; optional `weeks=N` integer 1–200 (default 8). Reject invalid windows and clarify a weighted holdings payload instead of discarding weights.
 4. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`.
 
 ### Step 1 — Resolve inputs
@@ -58,7 +58,7 @@ Symbols in RIC form (plain tickers → conventions §1); fund/OEIC identifiers g
 ### Step 3 — Verify
 
 - Identity: each `get_score_analysis` `data[0].symbol` against the RIC sent (conventions §2).
-- Movers: total score change > 1 point, or any single factor moving > 2 points over the window. A symbol with no score history is reported as `no data`, never as stable.
+- Movers: absolute total score change > 1 point, or any single factor changing by an absolute > 2 points over the window. A symbol with no score history is reported as `no data`, never as stable. Change requires at least two verified dated observations with comparable score fields; otherwise report `insufficient history` and do not rank or mark stable. State the actual first/last dates and observation count; a shorter available window is not the full requested lookback. Missing factor endpoints remain unavailable; they do not become zero change.
 
 ### Step 4 — Compute
 
@@ -90,7 +90,7 @@ The entire final message is that command's stdout. The stderr `[render-gate] WAR
 - **Recommended Actions** (which names warrant a deeper look via /parallax-deep-dive)
 - **About This Report** (always present, even when branding is default):
   - Use a real markdown heading: `## About This Report`
-  - First line inside the section: `Branding: default Parallax`
+  - First line inside the section: render the loaded branding-state line from integration-pattern.md §7 (default Parallax only when the loader reports default; preserve custom/suppressed state).
   - Unconditional second line, per integration-pattern.md §7: `Currency: figures as reported by source data; no base-currency conversion applied.`
   - If a logo was skipped under white-label, add `Logo on file: <basename>`
 

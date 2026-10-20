@@ -15,7 +15,7 @@ description: "Explain Parallax scores, factors, and methodology in plain languag
 
 ## Gotchas
 
-- Expected Parallax spend: 0–2 tokens (`_parallax/token-costs.md`): methodology-only questions are free; score data adds 1–2. `get_stock_report` (10, paid) only when a comprehensive explanation is explicitly needed.
+- Expected Parallax spend: methodology-only is free; symbol-specific branch (a) is ~3 credits (identity + history + snapshot); change/catalyst branch (c) is ~7 (identity + history + news synthesis at 5). Resolution/recovery adds cost; current discovered prices win. `get_stock_report` (10, paid) only when a comprehensive explanation is explicitly needed.
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §4 fallbacks, §11 (this skill's "What Would Change It" line is the grandfathered form), §13 audience mode, §14 host primitives, §15 translation.
 - `explain_methodology` takes a `concept` parameter validated at runtime, case-insensitive, against eight keys — `value`, `quality`, `momentum`, `defensive`, `tactical`, `overall`, `scoring`, `factor_weighting` (plus aliases `total`→overall, `composite`→overall, `scores`→scoring, `weights`→factor_weighting). Pick one of those keys, not a free-text phrase like "quality score" — an unmatched string returns `{success:false, error:"Unknown concept...", available_concepts:[...]}`, not a fuzzy match. `get_docs` / `list_docs` reach the full methodology documentation. `get_score_analysis` shows the trajectory — the tool for "why did this change".
 - Output must be readable by non-technical clients and compliance teams; this is the likeliest `register=retail` consumer.
@@ -59,11 +59,11 @@ Classify the question: **(a) why does X score this way**, **(b) what does factor
 
 - **(a) why does X score this way:** `call-tool` `get_score_analysis` (52 weeks) and `get_peer_snapshot` together; then `explain_methodology` for each notably high or low factor; `get_docs` / `list_docs` if deeper methodology is needed.
 - **(b) what does factor X mean:** `explain_methodology` for the concept; `list_docs` then `get_docs` for the relevant page.
-- **(c) why did the score change:** `get_score_analysis` with `weeks` covering the change period (typed int — conventions §0.2) and `get_news_synthesis` together; then `explain_methodology` for the changed factor; `get_stock_report` only when a comprehensive explanation is needed (paid — say so).
+- **(c) why did the score change:** `get_score_analysis` with `weeks` covering the change period (typed int — conventions §0.2) and `get_news_synthesis` together; then `explain_methodology` for the changed factor; `get_stock_report` only when a comprehensive explanation is explicitly requested (10 extra credits — say so and preserve prior authorization). A coincident news event is a possible explanation, not identified causality; state dates, alternative explanations and unresolved causes.
 
 ### Step 3 — Verify
 
-- Branch (a) and (c): `get_score_analysis` `data[0].symbol` against the requested RIC; `get_peer_snapshot.target_company` against `get_company_info.name` (conventions §2).
+- Branch (a) and (c): `get_score_analysis` `data[0].symbol` against the requested RIC; `get_peer_snapshot.target_company` against `get_company_info.data.name` (conventions §2).
 - Failed or empty calls: §0.1 retry classification, then §4. No gate is rendered.
 
 ### Step 4 — Compute

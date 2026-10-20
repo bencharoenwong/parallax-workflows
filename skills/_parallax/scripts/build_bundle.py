@@ -518,41 +518,32 @@ def transform_conventions(text: str) -> str:
 
 def transform_concierge(text: str) -> str:
     text = _swap(text,
-                 "four-branch menu (Stock / Portfolio / Discovery / Investor profiles)",
-                 "three-branch menu (Stock / Portfolio / Discovery)",
+                 " and optional installed investor profiles",
+                 "",
                  "concierge description")
-    text = _swap(text,
-                 "- Opening = **4 branches** (never the full skill list at once)",
-                 "- Opening = **3 branches** (never the full skill list at once)",
-                 "concierge opening count")
     text = _drop_line(
         text,
-        "**\U0001f3a9 Investor profile** — Buffett / Greenblatt / Klarman / Soros / PTJ style read",
+        "**\U0001f3a9 Investor profile** — optional style lenses, only when source-authorized and installed",
         "concierge menu item")
-    text = _swap(text, "Four buckets. No long list.", "Three buckets. No long list.",
-                 "concierge buckets")
+    text = _swap(
+        text,
+        " Omit the Investor profile branch in general-release plugin and upload distributions.",
+        "",
+        "concierge source-only branch instruction")
     text = _drop_line(
         text, "| Investor-style read | route to \U0001f3a9 Investor profile branch |",
         "concierge stock-branch row")
     text = _drop_line(
         text, "| CIO / quarterly letter prep | `/parallax-cio-letter-prep` |",
         "concierge letter row")
-    text = _cut(text, "**House-view operations** (internal routing",
+    text = _cut(text, "**House-view operations** (source-authorized operators only",
                 "## \U0001f30d Discovery branch", "concierge house-view block")
     text = _cut(text, "## \U0001f3a9 Investor profile branch",
                 "## New here?", "concierge profile branch")
-    text = _drop_line(text, '- "Run a Buffett-style read on this, or pause?"',
-                      "concierge stock nudge")
-    text = _cut(text, "**After an Investor-profile skill:**",
-                "Always 2-3 options. Never 6.", "concierge profile nudges")
-    text = _swap(
+    text = _drop_line(
         text,
-        "  - Investor-lens keyword + ticker (Buffett / Greenblatt / Klarman / Soros / PTJ) →\n"
-        "    matching `/parallax-ai-<name> <ticker>`, then nudges\n",
-        "",
-        "concierge payload shortcut")
-    text = _swap(text, "- **Open with exactly 4 branches.**",
-                 "- **Open with exactly 3 branches.**", "concierge rule count")
+        "  - Investor-style intent → the requested lens only if available. Never silently replace an unavailable lens with another analysis.",
+        "concierge source-only lens shortcut")
     return text
 
 
@@ -567,12 +558,12 @@ _CONNECT = {
              f"`{PARALLAX_MCP_URL}`)."),
 }
 _HANDOFF = {
-    "plugin": ('Say "Running /<skill> now." and run it. If the host does not load it, '
+    "plugin": ('After availability and input checks pass, say "Running /<skill> now." and invoke it. If the host does not load it, '
                'give the one line to send, e.g. "run should-i-buy on AAPL". Never suggest '
                'installing it manually — the plugin already ships it.'),
     "zip": ('Give the one line to send, e.g. "run should-i-buy on AAPL", plus: '
             '"if that workflow isn\'t uploaded yet, add it under Customize → Skills."'),
-    "repo": 'Say "Running /<skill> now." and run it.',
+    "repo": 'After availability and input checks pass, say "Running /<skill> now." and invoke it.',
 }
 
 
@@ -919,10 +910,10 @@ def transform_concierge_web(text: str) -> str:
         "concierge web stock question")
     text = _swap(
         text,
-        "User picks Discovery → ask one question:\n\n"
+        "User picks Discovery → ask only for missing task/input details:\n\n"
         '> "Country/regime read, a theme, a thesis to build from, or a watchlist to monitor?"\n',
-        "User picks Discovery → run `/parallax-watchlist-monitor` straight away. "
-        "Ask only for the names to watch, e.g. `AAPL.O, MSFT.O, 7203.T`.\n",
+        "User picks Discovery → the available task is `/parallax-watchlist-monitor`. "
+        "Check availability and ask only for missing names, e.g. `AAPL.O, MSFT.O, 7203.T`, before invoking.\n",
         "concierge web discovery question")
     text = _swap(
         text,
@@ -931,15 +922,8 @@ def transform_concierge_web(text: str) -> str:
         "concierge web recurring-shaped list")
     text = _swap(
         text,
-        '- "Want to build a portfolio from these names, or deep dive the top pick?"\n'
-        '- "Check how your current book looks in this regime?"\n',
-        '- "Deep dive one of these names, or check your portfolio\'s exposure to it?"\n'
-        '- "Keep monitoring, or add another name to the watchlist?"\n',
-        "concierge web discovery nudges")
-    text = _swap(
-        text,
-        "- **If they name a skill directly**, skip routing and run it.\n",
-        "- **If they name a skill directly**, skip routing and run it.\n"
+        "- **Direct commands skip menus and role selection.** Check availability and required inputs, then `invoke-skill` directly; no new confirmation when the request is clear.\n",
+        "- **Direct commands skip menus and role selection.** Check availability and required inputs, then `invoke-skill` directly; no new confirmation when the request is clear.\n"
         f"- **If a routed skill does not load**, {_HANDOFF['zip'][0].lower()}{_HANDOFF['zip'][1:]}\n",
         "concierge web upload rule")
     return text

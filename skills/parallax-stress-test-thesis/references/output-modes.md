@@ -203,10 +203,9 @@ Hard rules — the JSON is bound by the same invariants as the prose:
   data-contract, not a compliance-exempt channel.
 - **No new derivation.** Every value is copied from a record the prose already reported; the JSON and
   the prose can never disagree. If the prose said Unconfirmed, the JSON says Unconfirmed.
-- **Still read-only.** Emitting JSON writes nothing to disk — it is rendered in-chat like every other
-  output. (A caller that wants to persist it does so on their side, outside this skill.)
-- A caller can request **JSON only** (suppress prose) for pure programmatic use; the disclaimer +
-  `not_a_recommendation` flag still travel inside the payload.
+- **Still read-only.** JSON is rendered in-chat; the mandatory local render gate still consumes a temporary draft, as for prose. No persistent analysis state is written. (A caller that wants to persist it does so on their side, outside this skill.)
+- A caller can request **JSON only** (suppress prose) for pure programmatic use; the full applicable disclaimer text, AI disclosure and
+  `not_a_recommendation` flag still travel inside the payload. Include `disclaimer` and `ai_disclosure` string fields; `disclaimer_variant` alone is not the disclaimer. The JSON opening replaces the prose read-time/TLDR opening.
 
 ## 8. Decay-compare — re-running a thesis over time (no persistence)
 
@@ -222,7 +221,7 @@ re-runs Pass 1 against *today's* reads and diffs.
   break condition newly fired or cleared, and the net move in Assumption Strength (e.g. `Mixed → Weak`
   because macro-1 flipped Supported → Contradicted). Everything else renders as normal.
 - Invariants hold: the skill **reads today's data live** (it never trusts the pasted prior reads as
-  current — they are only the comparison baseline), writes nothing, and issues no recommendation about
+  current — they are only the comparison baseline), creates no persistent analysis state, and issues no recommendation about
   what to do about the change. It reports the drift; the reader decides.
 - Pairs with §7: the JSON a run emits today is exactly the artifact you feed back next week. That is
   the intended, no-persistence "monitoring" loop — state lives with the caller, never in the skill.
@@ -292,7 +291,7 @@ rules:
   "is this a good position for me?" — gets the same no-recommendation framing as the report, not a
   softened answer because the exchange is now conversational. The Pass-1/Pass-2 boundary, the "rates
   the argument, not the security" framing, and the disclaimer all still hold in a follow-up.
-- **Nothing persists.** Follow-ups live in the current session only; the skill writes nothing and
+- **Nothing persists.** Follow-ups live in the current session only; the skill creates no persistent analysis state and
   remembers nothing across sessions. A "compare to last week" follow-up routes through the §8
   decay-compare input path (the caller supplies the prior JSON) — it is not a stored state the skill
   reaches for.

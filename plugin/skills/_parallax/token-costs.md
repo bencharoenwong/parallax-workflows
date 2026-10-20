@@ -77,15 +77,15 @@ Based on a **10-holding portfolio** baseline. Actual cost depends on the number 
 
 | Workflow | Tokens (typical) | Key cost drivers |
 |---|---|---|
-| `/parallax-score-explainer` | **0-2** | Free if methodology-only; 2 if score data needed |
-| `/parallax-peer-comparison` | **~12** | `get_company_info` (1) + peer snapshot (1) + peer comparison export (1) + 3 score histories (3) + 3 `etf_profile` probes (3) + 3 price-series calls (`export_price_series` or `etf_daily_price`, 1 credit each per leg — billed, not free) (3) |
+| `/parallax-score-explainer` | **0 / ~3 / ~7** | Methodology-only: free. Current-score explanation: company-info + score history + snapshot (3). Score-change explanation: company-info + history + news synthesis (1 + 1 + 5 = 7). A comprehensive stock report adds 10 only when explicitly needed. Resolution/recovery adds calls. |
+| `/parallax-peer-comparison` | **~14 automatic; ~5 per explicit leg** | Automatic three-name set: 3 company-info identities + 1 anchor snapshot + 1 automatic export + 3 histories + 3 `etf_profile` probes + 3 price calls. Explicit set: each resolved leg uses its own company-info, snapshot, history, asset probe and price call; no automatic export. Resolution/recovery costs extra; unsupported or unavailable legs reduce analysis calls. |
 | `/parallax-halal-screen` | **4** single stock (~4-5/holding portfolio) | company_info + balance_sheet (merged debt + interest-bearing check) + income + score_analysis = 4; +5 optional Palepu; portfolio mode adds redundancy fan-out + alternatives |
 | `/parallax-should-i-buy` | **29** | 4 outlook aspects + 2 macro markets + news + technicals (5) |
 | `/parallax-earnings-quality` | **24** | Palepu (5) + assessment (10) + news (5) |
 | `/parallax-due-diligence` | **31** | 4 financials + Palepu + stock report (10) |
-| `/parallax-country-deep-dive` | **29** | 1 macro summary call (SKILL.md mandates summary mode, not per-component) + universe build + 5 peer snapshots + 5 company-info ground-truth checks + 3 score trends |
+| `/parallax-country-deep-dive` | **scales with markets and top_n** | Coverage + telemetry + universe + one summary per selected covered market + snapshot/company-info per selected name + up to 3 score histories. A region is multiple covered markets, not one scalar macro query. Resolution/recovery adds calls. |
 | `/parallax-deep-dive` | **45** | Assessment (10) + technicals (5) + 3 macro markets |
-| `/parallax-macro-outlook` | **46** | 4 macro calls + telemetry (1) + 5 company-info ground-truth checks in equities mode; without equities (28) |
+| `/parallax-macro-outlook` | **~7 one market; ~25 with equities** | Coverage (1) + telemetry (1) + one macro summary (5). Optional equities: universe (5) + 5 snapshots + 5 company-info + 3 histories (18 extra). No unused bellwether series. Each additional selected covered market adds a summary and any separately requested census. |
 
 ### Portfolio Workflows (10 holdings)
 

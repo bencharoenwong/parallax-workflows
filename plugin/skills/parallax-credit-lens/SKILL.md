@@ -75,8 +75,8 @@ get_telemetry()                        # Market regime tag (no symbol parameter)
 
 ### Step 3 — Verify
 
-- Identity per conventions §2: `get_peer_snapshot.target_company` vs `get_company_info.name`; `get_score_analysis` `data[0].symbol` vs the RIC.
-- Input completeness for the helper: zero `total_assets` or `total_liabilities`, or a non-finite value, makes the Altman leg UNAVAILABLE (the module raises; do not substitute zero). A missing `peer_median`/`peer_p75` pair on a peer-relative-only metric makes that row UNAVAILABLE, never GREEN.
+- Identity per conventions §2: `get_peer_snapshot.target_company` vs `get_company_info.data.name`; `get_score_analysis` `data[0].symbol` vs the RIC.
+- Input completeness for the helper: non-positive `total_assets` or `total_liabilities`, or a non-finite value, makes the Altman leg UNAVAILABLE (the module raises; do not substitute zero). A missing `peer_median`/`peer_p75` pair on a peer-relative-only metric makes that row UNAVAILABLE, never GREEN.
 - Interest Coverage: `compute_interest_coverage` returns `None` — render UNAVAILABLE, never divide by hand — when `income.operating_income` is absent/non-finite, or `income.interest_expense_net_non_operating` is absent, non-finite, or non-negative (a non-negative value is net non-operating interest *income*, not a usable expense figure; it is never treated as a zero denominator).
 - The traffic-light is gate-shaped for its legs (conventions §4.0): an unjudgeable leg is UNAVAILABLE and excluded from the vote; the coverage clause in the header states it.
 
