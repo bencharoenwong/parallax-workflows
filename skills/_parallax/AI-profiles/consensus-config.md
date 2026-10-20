@@ -16,7 +16,7 @@ rounding: ceiling                   # required_matches = ceil(threshold * applic
 
 ## How the math works
 
-Let `A` = number of applicable profiles (profiles that successfully ran their tool_sequence and returned a verdict of `match`, `partial_match`, or `no_match`; excludes `skipped`).
+Let `A` = number of applicable profiles (profiles with verified identity and all required criteria evaluated, which returned a verdict of `match`, `partial_match`, or `no_match`; excludes `skipped`).
 
 Let `M` = number of applicable profiles that returned `match` (NOT `partial_match`).
 
@@ -36,8 +36,8 @@ If `A < minimum_applicable_count`, the signal is `INSUFFICIENT_PROFILES` (not `N
 | 4 | 1 | 3 | NO |
 | 3 | 3 | 3 | YES (effectively unanimous for 3-profile case) |
 | 3 | 2 | 3 | NO |
-| 2 | 2 | 3 | INSUFFICIENT_PROFILES |
-| 1 | 1 | 3 | INSUFFICIENT_PROFILES |
+| 2 | 2 | 2 | INSUFFICIENT_PROFILES |
+| 1 | 1 | 1 | INSUFFICIENT_PROFILES |
 
 ## Worked examples (v2: 5 profiles with PTJ)
 
@@ -56,8 +56,8 @@ If `A < minimum_applicable_count`, the signal is `INSUFFICIENT_PROFILES` (not `N
 
 ## Why these defaults
 
-- **75% super-majority** — High enough to be informative (random-chance consensus is ~19% with 5 independent binary verdicts; P(4+ out of 5 at p=0.5) = 6/32 ≈ 19%), low enough to survive one profile disagreeing in a structurally different way.
-- **Minimum 3 applicable** — With only 2 profiles returning verdicts, "consensus" is just agreement between 2 sources, which is not informative. 3 is the lowest count where structural diversity can meaningfully be observed.
+- **75% super-majority** — A configured heuristic agreement threshold, not a probability or independent corroboration guarantee. Profiles reuse scores, financials, macro and Momentum inputs; no random-chance probability, statistical significance or investment-quality assurance follows from agreement.
+- **Minimum 3 applicable** — The configured eligibility floor remains 3. A smaller evaluated set yields `INSUFFICIENT_PROFILES`; three related rubrics do not establish independent evidence.
 - **Ceiling rounding** — Rounds UP the required matches. This makes the threshold strictly conservative: 75% of 3 = 2.25 rounds to 3 (unanimity), not 2. Prevents the threshold from silently weakening when the applicable count is small.
 
 ## Partial matches
@@ -68,7 +68,7 @@ This is intentional: if a stock is "partially Buffett-like and partially Klarman
 
 ## Factor-level agreement surfacing
 
-Separately from the super-majority math, the meta-skill surfaces a "shared factor signal" section listing factors/criteria that were flagged by multiple profiles (match OR partial_match). See design spec §3.5.1. The shared factor signal is informative regardless of whether the super-majority threshold is met.
+Separately from the super-majority math, the meta-skill surfaces a "shared factor signal" section listing factors/criteria that were flagged by multiple profiles (match OR partial_match). See design spec §3.5.1. For each criterion, show the denominator of eligible matching/partial profiles that actually evaluated that criterion, and name excluded/unavailable profiles. Separate shared flags (≥2), single-profile flags (1), evaluated but not flagged, and unavailable/not applicable. Untested or missing criteria are not negative observations or demonstrated blind spots. The full-consensus denominator A includes only profiles with all required criteria evaluated; optional-context gaps do not exclude an otherwise complete profile. This is an agreement summary regardless of whether the super-majority threshold is met.
 
 ## Tuning notes
 

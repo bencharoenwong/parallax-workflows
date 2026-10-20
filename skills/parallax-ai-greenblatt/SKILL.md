@@ -1,6 +1,6 @@
 ---
 name: parallax-ai-greenblatt
-description: "Applies Joel Greenblatt's Magic Formula (per 'The Little Book That Beats the Market', 2006; academic replication Gray & Carlisle 2012) to Parallax data. Two modes: universe mode returns a top-decile ranked basket; ticker-check mode reports whether a single stock falls in the top decile of its peer universe by combined ROC + earnings yield rank. Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized. Accepts no args (universe mode) or a single ticker. NOT for portfolio-level health check (use /parallax-portfolio-checkup). Other lenses: /parallax-ai-buffett, /parallax-ai-klarman, /parallax-ai-soros, /parallax-ai-ptj. For all five profiles simultaneously use /parallax-ai-consensus."
+description: "Applies Joel Greenblatt's Magic Formula (per 'The Little Book That Beats the Market', 2006; academic replication Gray & Carlisle 2012) to Parallax data. Two modes: universe mode returns a top-decile ranked basket; ticker-check mode reports whether a single stock falls in the top decile of the sampled query/composite-selected peer cohort by combined ROC + earnings yield rank. Third-person framing, book citation, AI-inferred from public information. NOT financial advice. NOT personalized. Accepts no args (universe mode) or a single ticker. NOT for portfolio-level health check (use /parallax-portfolio-checkup). Other lenses: /parallax-ai-buffett, /parallax-ai-klarman, /parallax-ai-soros, /parallax-ai-ptj. For all five profiles simultaneously use /parallax-ai-consensus."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -19,6 +19,8 @@ description: "Applies Joel Greenblatt's Magic Formula (per 'The Little Book That
 
 ## Gotchas
 
+- Preserve the requested RIC(s), each observation’s source as-of date and unavailable fields. Generation time is not a substitute for a missing data date. Any handoff carries this provenance; a prior rendered profile is not a fresh or independent observation.
+
 - Expected Parallax spend: ~35–40 tokens in BOTH modes — `build_stock_universe` (5) + `get_company_info` (1, comma-separated sector-filter batch — Step 2.2) + `get_financials(statement=ratios)` × up to 30 candidates (1 credit each; the tool has no multi-symbol support, so this is per-candidate) + `get_peer_snapshot`; plus, if the batched `get_company_info` call fails, +1 credit per candidate returned by `build_stock_universe` for the single-symbol re-queries (they run before the top-30 cap, so the worst case is +N where N is the number of candidates returned; Step 2.2).
 - JIT-load `_parallax/parallax-conventions.md`, `_parallax/AI-profiles/profile-schema.md`, `_parallax/AI-profiles/output-template.md`, `_parallax/AI-profiles/profiles/greenblatt.md` — Step 0.
 - Universe mode is the default with no ticker; ticker-check mode with exactly one. `build_stock_universe` is a free-text relevance search with no sector-exclusion parameter — it does NOT enforce Greenblatt's financials/utilities exclusion itself. Step 2.2 enforces it instead: a `get_company_info` batch call reads each candidate's `sector` and drops Financials and Utilities names before the top-30 cap.
@@ -31,7 +33,7 @@ Applies Joel Greenblatt's Magic Formula (ROC rank + earnings yield rank, combine
 ## Usage
 
 ```
-/parallax-ai-greenblatt                    # universe mode — default US equity universe
+/parallax-ai-greenblatt                    # universe mode — default US large-cap consumer-staples sample
 /parallax-ai-greenblatt AAPL               # ticker-check mode — is AAPL in the top decile?
 /parallax-ai-greenblatt AAPL.O             # RIC format also accepted
 ```
@@ -58,17 +60,17 @@ Mode: no ticker → **universe mode**; exactly one → **ticker-check mode**; mo
 
 1. `call-tool` `build_stock_universe` with a sector-scoped query — universe mode: the default or `--universe "<theme>"`; ticker-check: a peer universe derived from the ticker's sector (e.g. Technology Hardware → `"US large-cap technology hardware"`). Timeout → retry ONCE narrower; second timeout → `INSUFFICIENT_UNIVERSE`, no verdict.
 2. `call-tool` `get_company_info` once with every returned candidate as a comma-separated batch; read each hit's `sector` and drop any candidate whose sector is Financials or Utilities (Greenblatt's own exclusion rule — `build_stock_universe` has no sector parameter, so this step is what enforces it). The batch either returns a row per symbol or fails as a whole (one unresolvable symbol returns `success: false`, status 400); if it fails, re-query each candidate individually with a single-symbol `get_company_info` and apply the same rule — drop Financials/Utilities and drop any candidate whose `sector` cannot be read (fail closed). Note both dropped counts (excluded sector, unreadable sector) for the methodology footer.
-3. Cap the filtered universe at the top 30 by `composite_score`.
-4. `call-tool` `get_financials(statement=ratios)` for each of the 30 together (ROC via `return_on_invested_capital` when direct ROC is absent; earnings yield = `1 / enterprise_value_ebit`).
+3. Cap the filtered universe at the top 30 by `composite_score`. In ticker-check mode, explicitly retain the resolved target: if absent from that sample, use the top 29 eligible other names plus the target. Deduplicate by verified RIC. Fetch target financials even when the search did not return it. The target counts once in the ranking denominator. This is a sampled cohort selected by search/composite score, not a complete sector or US universe; state the query, exclusions, selection rule and actual N.
+4. `call-tool` `get_financials(statement=ratios)` for every selected name, including the target, together (ROC via `return_on_invested_capital` when direct ROC is absent; label that proxy). Earnings yield = `1 / enterprise_value_ebit` only for a finite positive denominator. Missing/nonfinite ROC or missing/nonfinite/nonpositive EV/EBIT makes the name unrankable in this screen, not an attractive positive-yield pass. Drop unrankable peers with reasons; an unrankable target returns `skipped` with `Target rank unavailable`, never `no_match`.
 5. Universe mode: `get_peer_snapshot` for the top-3 basket members (pedagogy). Ticker-check: `get_peer_snapshot` on the target.
 
 ### Step 3 — Verify
 
-Cross-validation gate per `profile-schema.md §2 Step 2`: `target_company` (top level; no `name` field — peers are `comparison[].company`) against `get_company_info.name`; refuse to render on mismatch (ticker-check: the target; universe: each top-3 member). Names whose `get_financials(ratios)` failed are dropped from the ranking and the coverage loss noted in the methodology footer. A universe under 10 names is expanded once, else `INSUFFICIENT_UNIVERSE`.
+Cross-validation gate per `profile-schema.md §2 Step 2`: `target_company` (top level; no `name` field — peers are `comparison[].company`) against `get_company_info.data.name`; refuse to render on mismatch (ticker-check: the target; universe: each top-3 member). Names whose `get_financials(ratios)` failed are dropped from the ranking and the coverage loss noted in the methodology footer. A universe under 10 names is expanded once, else `INSUFFICIENT_UNIVERSE`.
 
 ### Step 4 — Compute
 
-Rank each candidate on ROC and on earnings yield independently; sum the ranks; sort ascending. Universe mode: the top 10% (3 of 30) is the Magic Formula basket. Ticker-check verdict: top 10% → `match`; top 25% → `partial_match`; below → `no_match`.
+Rank each eligible candidate on ROC and earnings yield independently; sum ranks and sort ascending. Report the tie convention and final sampled N. Universe mode: top 10% of this cohort (3 of 30 when N=30), not the entire market. Ticker-check: use the target's rank within that same cohort; top 10% → `match`, top 25% → `partial_match`, below → `no_match`. Do not compute a target percentile when its metrics or the minimum cohort are unavailable; return `skipped` instead. Thresholds are unchanged.
 
 ### Step 5 — Compose (render through the output template)
 
@@ -107,7 +109,7 @@ This output is an AI-inferred interpretation of Joel Greenblatt's approach, deri
 Greenblatt-style profile applied to <ticker>
 Source: Greenblatt, J. (2006). The Little Book That Beats the Market.
 
-Peer universe: <sector peers>
+Sampled peer cohort: <query, composite-score selection, target inclusion and exclusions>
 Universe size: <N>
 
 <Ticker> ranking:

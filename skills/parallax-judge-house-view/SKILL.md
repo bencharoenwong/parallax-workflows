@@ -110,6 +110,8 @@ For each non-zero cell in the active view (enumerated via `stress.enumerate_dime
 
 Run `drift_classify.classify_severity(resolutions, view_age_days, denominator)`. Tiers:
 
+- Zero evaluable cells → `unverified`, never an OK/minor-drift conclusion. Report evaluated/total non-zero cells in both markdown and JSON. For partial coverage, the existing thresholds retain the full-view denominator and describe a lower bound on observed drift only; report the divergent share among evaluated cells separately. No recommendation does not establish alignment.
+
 - `drift_minor`: < 20% of non-zero cells in `DIVERGENT_*`
 - `drift_moderate`: 20-50%
 - `drift_material`: > 50%, OR any `DIVERGENT_*` on a pillar, OR sign-flip on `tilts.macro_regime.*`
@@ -193,6 +195,7 @@ The chain artifact lands in `~/.parallax/reasoning-chains/<YYYY-MM>/<run_id>.yam
 - View directory missing: the standard "no active view" message; no row. Chain broken: propagate the `audit_chain` error.
 - `unreachable_share > 30%`: the maker raises; the judge records it in `diagnostics` and every cell falls back to `PARALLAX_SILENT`.
 - Maker modules not importable: `PARALLAX_SILENT` for every cell and the gap noted in diagnostics.
+- Zero evaluable comparisons: report `unverified`; audit existing silent/uncovered counts and `applied=false`, without inventing aligned evidence or changing the audit schema. Recommendations remain empty.
 - Citation check fails on a recommendation: dropped and replaced with the decline placeholder; never bypassed.
 - Host lacks `run-shell`: the orchestrator cannot run; the skill declares itself unavailable on this host (conventions §14.3).
 

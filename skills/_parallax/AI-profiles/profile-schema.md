@@ -30,7 +30,7 @@ factor_tilts:                               # REQUIRED for factor-driven profile
   <factor>: positive_strong | positive | neutral | negative | negative_strong
 leverage_overlay: <float or null>           # REQUIRED. null if not applicable. Disclosed, not applied per-stock.
 output_shape: single_stock_verdict | ranked_basket | trade_ideas | inferred_exposure_verdict  # REQUIRED.
-tool_sequence:                              # REQUIRED. List of Parallax tools to call, in order. Use `tool:param=value` format for parameters.
+tool_sequence:                              # REQUIRED unless mode-specific tool_sequence_* lists are supplied. Use `tool:param=value`.
   - <tool_name>
   - <tool_name>:<param>=<value>
 required_factors_present: [<list>]          # REQUIRED for factor-driven profiles. Empty [] otherwise.
@@ -55,11 +55,11 @@ Profiles MAY include additional descriptive frontmatter fields beyond the requir
 - `output_shape_single_ticker` — alternate output shape when the profile supports two modes (used by Soros)
 - `tool_sequence_basket` / `tool_sequence_single_ticker` — alternate tool sequences for dual-mode profiles (used by Soros)
 
-Optional fields are ignored by dispatchers unless the dispatcher explicitly consumes them. They exist for human readability and future extensibility. Adding an optional field is a schema-compatible change; removing or renaming a REQUIRED field is not.
+Mode-specific tool sequences substitute for the generic list when the dispatcher supports those modes; discover the tools for the selected mode, including unconditional identity calls. Other optional fields are ignored by dispatchers unless the dispatcher explicitly consumes them. They exist for human readability and future extensibility. Adding an optional field is a schema-compatible change; removing or renaming a REQUIRED field is not.
 
 ## 2. Dispatcher workflow
 
-Every `skills/parallax-ai-<name>/SKILL.md` dispatcher runs this exact sequence. The dispatcher is generic — all differentiation lives in the profile spec.
+Every `skills/parallax-ai-<name>/SKILL.md` dispatcher runs this exact sequence. Use the profile-specific dispatcher for mode selection, dependencies and exception handling; this shared contract governs identity, evidence states and verdict rendering.
 
 ### Step 0: JIT-load dependencies
 
@@ -69,7 +69,7 @@ Before any Parallax tool call in the session:
 - JIT-load `_parallax/AI-profiles/output-template.md` (render contract)
 - JIT-load `_parallax/AI-profiles/profiles/<profile_id>.md` (the specific profile)
 
-Before the first Parallax tool call, run the `discover-tools` host primitive (`parallax-conventions.md` §14, bound per host in §14.2) and bind every tool in the profile's `tool_sequence` to the exact callable and schema the connector exposes this session.
+Before the first Parallax tool call, run the `discover-tools` host primitive (`parallax-conventions.md` §14, bound per host in §14.2) and bind every tool in the profile's selected `tool_sequence` or mode-specific sequence to the exact callable and schema the connector exposes this session.
 <!-- host-note -->On Claude Code this is `ToolSearch` with query `"+Parallax"`.<!-- /host-note -->
 
 Dispatchers written on the canonical step spine (`skill-structure-conventions.md`) map these steps as: Step 0 = this section's Steps 0–1 pre-flight and parse, Step 1 = ticker/mode resolution, Step 2 = the `tool_sequence` fetch, Step 3 = the §2 Step 2 cross-validation gate, Step 4 = thresholds and verdict, Step 5 = render through the output template, Step 6 = Emit. The section numbers below are the contract; the spine headings are the file layout.
@@ -80,11 +80,11 @@ Accept a ticker (or short basket for profiles whose `output_shape` is `ranked_ba
 
 ### Step 2: Pre-render cross-validation gate (spec §6.4)
 
-After any scoring tool call (`get_peer_snapshot`, `get_score_analysis`, `quick_portfolio_scores`), cross-check the company-identity field returned by the scoring tool against the `name` field returned by `get_company_info` for the same symbol. **Field names differ per tool** — use the correct one for each:
+After any scoring tool call (`get_peer_snapshot`, `get_score_analysis`, `quick_portfolio_scores`), cross-check the company-identity field returned by the scoring tool against the `data.name` field returned by `get_company_info` for the same symbol. **Field names differ per tool** — use the correct one for each:
 
 | Tool | Company-identity field to read | Notes |
 |---|---|---|
-| `get_company_info` | `name` | The target symbol's company name |
+| `get_company_info` | `data.name` | The target symbol's company name |
 | `get_peer_snapshot` | `target_company` (top-level) | No `name` field in the response — each peer's name is `comparison[].company` |
 | `get_score_analysis` | `data[0].symbol` | No company name in the response — verify the returned symbol matches the requested RIC instead |
 | `quick_portfolio_scores` | `holdings_analyzed[].company_name` | Cross-check each holding separately. Confirmed against a live response 2026-08-11 |
@@ -98,7 +98,7 @@ Error: Symbol cross-validation failed for <ticker>.
 Cannot render <display_name> profile — possible wrong-company mapping (see parallax-conventions.md §2).
 ```
 
-This check is NON-BYPASSABLE. No profile may render output on unverified data.
+This check is NON-BYPASSABLE. Normalize names and handle identity evidence only as defined in `parallax-conventions.md` §2; do not invent another normalization rule. Missing identity evidence is unverified, never a successful comparison. No profile may render analytical output on unverified identity. Consensus records a refusing profile as `skipped`.
 
 ### Step 3: Execute the profile's tool_sequence
 
@@ -106,15 +106,15 @@ Run the tools declared in the profile's `tool_sequence` frontmatter field. Fire 
 
 ### Step 4: Apply profile thresholds / logic
 
-For factor-driven profiles (`factor_tilts` non-empty), compare each returned factor score against the profile's `thresholds` and mark pass/fail per factor. For non-factor profiles (e.g., Greenblatt, Klarman, Soros), apply the profile's custom logic as specified in its body narrative.
+For factor-driven profiles (`factor_tilts` non-empty), compare each returned factor score against the profile's `thresholds` and mark pass/fail per evaluable factor. Missing, nonfinite, boolean or out-of-domain required inputs are `UNAVAILABLE`, never failed criteria. Optional context may remain unavailable without invalidating fully evaluated required criteria. For non-factor profiles (e.g., Greenblatt, Klarman, Soros), apply the profile's custom logic as specified in its body narrative.
 
 ### Step 5: Compute verdict
 
-Map pass/fail results to a verdict tag:
+First require all profile-specific required criteria (including backups) to be evaluable; otherwise use `skipped`. Then map complete pass/fail results to a verdict tag:
 - `match` — all threshold criteria met (or profile-specific "full fit" criteria)
 - `partial_match` — some but not all criteria met; graded by count (e.g., "2 of 4")
 - `no_match` — zero criteria met or explicit fail condition triggered
-- `skipped` — profile explicitly non-applicable (rare — see Soros for the only v1 case, and even that one runs in both modes per §3.2)
+- `skipped` — required identity or criterion evidence is unavailable/invalid, the rules are ambiguous for the observed inputs, or the profile is non-applicable. Retain verified observations and the reason; never convert unknown into `no_match` or fit from an incomplete denominator.
 
 ### Step 6: Render through output template
 
