@@ -92,6 +92,8 @@ Then `call-tool` `get_assessment` (async, after Batches A and B) with a prompt c
 
 Fill **Output Format** below in order: House View Preamble and Branding Header per loader.md §5.1 and integration-pattern.md §5; §7 flags via `render_view_conflict()`; Assessment section header with its italic AI-disclosure parenthetical verbatim; `parallax-conventions.md §9.2` disclosure; disclaimer per loader.md §5 when a view is active, otherwise `parallax-conventions.md §9.1`; audit entry per loader.md §6. Apply §4 fallbacks rather than omitting a section silently.
 
+Complete the audit append and its failure handling before Step 6, including a `no_view` consume entry when no view is active, as loader.md §6 requires. Include assessment unavailability, audit gaps and operator notices in the report draft; never prepend or append them outside the rendered report.
+
 ### Step 6 — Render (deterministic gate, mandatory)
 
 `write-artifact` the complete drafted report to a new `<draft-path>`, then `run-shell` the shared gate with this skill's key, both per conventions §10.3:

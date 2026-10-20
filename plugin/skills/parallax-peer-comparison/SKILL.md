@@ -83,6 +83,8 @@ No deterministic return helper is provided. Use server-computed period returns o
 
 Fill **Output Format** below in order: House View Preamble per loader.md §5.1; Branding Header per integration-pattern.md §5; §7.2 tokens under the matrix (one per conflicting peer, stacked), §7.3 banner between the matrix and Score Trajectory, §7.1 note after Score Trajectory — all via `render_view_conflict()`; `parallax-conventions.md §9.2` disclosure; disclaimer per loader.md §5 rule 5 when a view is active, otherwise `parallax-conventions.md §9.1`; audit entry per loader.md §6.1.
 
+Complete the audit append and its failure handling before Step 6, including a `no_view` consume entry when no view is active, as loader.md §6 requires. Put any audit gap or operator notice in the report draft so it passes through the render gate; never add a notice after rendering.
+
 ### Step 6 — Render (deterministic gate, mandatory)
 
 `write-artifact` the complete drafted report to a new `<draft-path>`, then `run-shell` the shared gate with this skill's key, both per conventions §10.3:
