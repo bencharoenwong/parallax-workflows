@@ -99,9 +99,10 @@ REAL_PYTHON="$(command -v python3)"
 [ -d "$PLUGIN_DIR" ] || { echo "plugin dir not found: $PLUGIN_DIR" >&2; exit 1; }
 mkdir -p "$RESULTS"
 
-# Async Parallax tools (get_news_synthesis, get_assessment, ...) can poll
-# past the default MCP idle timeout in a non-interactive session; match
-# evals/rollout/run_rollout.sh's convention of disabling it for live runs.
+# Async tools can take several minutes. Disabling the idle timer alone leaves
+# the HTTP request deadline unchanged; give each call up to five minutes too.
+# Keep the overall journey limit above as an independent process-group bound.
+export MCP_TOOL_TIMEOUT="${MCP_TOOL_TIMEOUT:-300000}"
 export CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT="${CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT:-0}"
 
 # Validate and extract all selected journeys in one Python start. NUL-delimited

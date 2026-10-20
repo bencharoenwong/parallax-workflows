@@ -17,6 +17,8 @@ LANG_ARG="${2:-en}"
 LABEL="${3:-$(git rev-parse --short HEAD 2>/dev/null || echo nogit)}"
 TARGET_MODEL="${4:-}"
 TIMEOUT_SECONDS="${ROLLOUT_TIMEOUT_SECONDS:-900}"
+# The idle timer and HTTP request deadline are separate. Async tools need both.
+export MCP_TOOL_TIMEOUT="${MCP_TOOL_TIMEOUT:-300000}"
 export CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT="${CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT:-0}"
 
 command -v claude >/dev/null || { echo "claude CLI not on PATH" >&2; exit 1; }

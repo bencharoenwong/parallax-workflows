@@ -35,6 +35,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 - `run-gate-tests.sh` and `evals.yml` also run the bundled `plugin/skills/_parallax/white-label/tests` copy, and `test_ci_root_parity.py` accepts `plugin/` paths. The white-label exempt-entry check now requires a SKILL.md only for exempt skills the manifest expects in the tree under test: every manifest skill in the source tree, only the plugin skills in a filtered distribution.
 
 ### Fixed
+- Fresh-session rollout and concierge runners allow five-minute MCP requests by default while retaining their overall process timeout. Explicit operator deadlines take precedence.
 - Deep-dive starts at most one assessment job. Timeout/pending and incomplete completed output have separate unavailable states; neither triggers an automatic replacement job. The consensus subset example now meets the three-profile minimum.
 - The standalone stock-report renderer falls back safely for malformed nested branding config and activates branding only from accepted visual values. Onboarding documentation distinguishes stored voice settings from implemented visual rendering.
 - Journey validation rejects NULs and invalid Unicode in ids/prompts, and reports malformed `needs` or helper-list values without a traceback. Preflight validates unselected journeys and emits nothing when any record is invalid. The timeout regression bounds its startup wait and checks cleanup when readiness never arrives.
