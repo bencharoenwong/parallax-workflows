@@ -48,28 +48,28 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
    <!-- host-note -->
    Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
    <!-- /host-note -->
-3. Parse args: holdings JSON; `market=` (default United States); `top_n=` (default 3); `lang=`; `register=`.
+3. Parse args: holdings JSON; `market=` (optional explicit macro lens; otherwise relevant verified-holding home markets per §6, cap 3); `top_n=` (default 3); `lang=`; `register=`.
 4. `load-reference` `_parallax/house-view/loader.md`; run §1–§2. If a view is present, capture tilt vector, excludes, prose excerpt (narrative voice) and macro_regime. On §2 failure run without the view.
 5. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`.
 
 ### Step 1 — Resolve inputs
 
-Validate holdings: RIC format (plain tickers → conventions §1), weights ~1.0; fund/OEIC identifiers get the §1 not-covered message and are dropped with a note. Top-N news set = the N largest input weights (needs no tool output), plus at most one mover chosen in Step 2.
+Validate holdings: RIC format (plain tickers → conventions §1), weights ~1.0; fund/OEIC identifiers get the §1 not-covered message and are dropped with a note. Classify instrument type from supplied verified identifiers and a discovered asset-type capability when needed: only a validated successful ETF profile establishes ETF; only the documented explicit no-profile/not-in-ETF-universe coverage response plus independently verified listed-equity identity supports the equity route. Timeout, generic error, null/empty or malformed response means type unknown, never equity by default. Fund/OEIC identifiers remain unsupported per conventions §1. Name unknown/unsupported holdings and original weight share; do not call equity-only enrichment for ETF/fund/unknown holdings or invent look-through. Top-N news set = the N largest verified equity holding weights (available after instrument-type verification), plus at most one mover chosen in Step 2.
 
 ### Step 2 — Fetch (parallel batches)
 
 **Pre-call** — `call-tool` `get_company_info` per holding, all N in parallel in ONE turn (instant; one symbol per call, so one bad symbol cannot fail the others). Each response is the **ground-truth oracle** for its holding (loader.md §5 rule 3; conventions §2) and records `expected_name`. A call that still fails after the §0.1 retry classification leaves that holding unverified (Step 3).
 
-Mover rule: parse the `changepercent` of each holding whose `get_company_info` call succeeded as a float in percent units (`"-5.73"` = -5.73%); a missing or unparseable value makes the holding ineligible. Among holdings outside the top-N set, take the largest absolute move (ties → larger weight). If it is ≥ 3.0%, add that holding to the news set. Its Holding News paragraph states the move as the last session's change.
+Mover rule: consider verified equities only, with a dated latest completed-session quote; undated/stale/misaligned changepercent is not a mover trigger. Parse the `changepercent` of each holding whose `get_company_info` call succeeded as a float in percent units (`"-5.73"` = -5.73%); a missing or unparseable value makes the holding ineligible. Among holdings outside the top-N set, take the largest absolute move (ties → larger weight). If it is ≥ 3.0%, add that holding to the news set. Its Holding News paragraph states the move as the last session's change.
 
 **Batch A** — `call-tool` ALL rows in ONE turn; per-holding rows fan out N-wide inside the same turn so the 30–90 s news calls overlap everything else (a sequential loop is the largest latency leak in this skill):
 
 | Tool | Parameters | Notes |
 |---|---|---|
 | `get_telemetry` | fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences | Market regime |
-| `macro_analyst` | `market` (default United States), no component | Macro summary with tactical inline |
-| `get_peer_snapshot` | per holding, all N in parallel | **Primary scoring source** (V2); aggregated client-side per loader.md §3b |
-| `get_news_synthesis` | per news-set holding (top-N plus any mover), all in parallel | Async 30–90 s; never blocks output (§5) |
+| `macro_analyst` | each covered relevant market inferred from the verified holdings (cap 3), or the explicitly requested market lens; no component | Macro summary with tactical inline |
+| `get_peer_snapshot` | per verified equity holding, all N in parallel | **Primary equity scoring source** (V2); ETFs and unknowns stay named/unscored; aggregated client-side per loader.md §3b |
+| `get_news_synthesis` | per verified equity news-set holding (top-N plus any mover), all in parallel | Async 30–90 s; never blocks output (§5) |
 | `check_portfolio_redundancy` | `holdings` | Overlap detection |
 
 `quick_portfolio_scores` is NOT in Batch A; it is the Step 3 V1 fallback only.
@@ -78,7 +78,7 @@ Mover rule: parse the `changepercent` of each holding whose `get_company_info` c
 
 - Cross-validation per conventions §2 / loader.md §5 rule 3: `get_peer_snapshot.target_company` vs `get_company_info.data.name` (nested under the response's `data` object, not a top-level field); mismatches are ⚠ MISMATCH and excluded from aggregates.
 - A holding whose `get_company_info` call failed has no oracle: it is unverified, excluded from every aggregate, and listed in Ground-truth Integrity with status `unverified — company-info lookup failed`. If no holding has an oracle, skip the scoring ladder below and render Portfolio Factor Tilt as unavailable.
-- Scoring ladder, first tier whose precondition holds. V2 coverage = weight share of holdings with a non-empty snapshot that passed cross-validation. **V2** (coverage ≥ 50%) → aggregate per loader.md §3b, no V1 call. **V1** (coverage < 50%) → `call-tool` `quick_portfolio_scores` once, cross-validate its `holdings_analyzed[].company_name` values against the cached per-holding `get_company_info` names (holdings without an oracle stay excluded), and re-derive each mismatched holding's score from its cached Batch A `get_peer_snapshot` `comparison[]` row (no new call): the `is_target: true` row when that snapshot passed cross-validation (the endpoint may drop the exchange suffix, e.g. `HPE` for `HPE.N`), otherwise scores unavailable; a snapshot that failed cross-validation is never a score source. **Split-and-merge** (V1 coverage also < 50%) → per `parallax-portfolio-checkup/references/health-flags.md` "Mixed-Exchange Fallback". The V1 and split-and-merge tiers re-score only holdings with an oracle; if those holdings carry < 50% of the weight, skip both tiers and render the V2 aggregate marked partial.
+- Scoring ladder, first tier whose precondition holds. V2 coverage = weight share of holdings with a non-empty snapshot that passed cross-validation. **V2** (coverage ≥ 50%) → aggregate per loader.md §3b, no V1 call. **V1** (coverage < 50%) → on verified equities only, coverage still against the original input book; `call-tool` `quick_portfolio_scores` once, cross-validate its `holdings_analyzed[].company_name` values against the cached per-holding `get_company_info` names (holdings without an oracle stay excluded), and re-derive each mismatched holding's score from its cached Batch A `get_peer_snapshot` `comparison[]` row (no new call): the `is_target: true` row when that snapshot passed cross-validation (the endpoint may drop the exchange suffix, e.g. `HPE` for `HPE.N`), otherwise scores unavailable; a snapshot that failed cross-validation is never a score source. **Split-and-merge** (V1 coverage also < 50%) → per `parallax-portfolio-checkup/references/health-flags.md` "Mixed-Exchange Fallback". The V1 and split-and-merge tiers re-score only holdings with an oracle; if those holdings carry < 50% of the weight, skip both tiers and render the V2 aggregate marked partial.
 - Failed or empty calls: §0.1 retry classification, then §4. News still pending at compose time: the pending note goes inside that holding's paragraph (§5), never above the report.
 
 ### Step 4 — Compute
@@ -114,7 +114,7 @@ Present as a structured morning brief, under 800 words:
 - **Market Regime & Signals** (2-3 sentences; if view active, note alignment/divergence with view's regime call)
 - **Macro Snapshot** (bullet points)
 - **Ground-truth Integrity** (only render if any mismatch or unverified holding — table: `input_ticker`, `returned_name`, `expected_name` (`—` when the oracle failed), status. Per loader.md §5 rule 3, a mismatched holding's per-holding scores are re-derived from the `get_peer_snapshot.comparison[]` row whose `symbol` matches the input ticker, otherwise marked "scores unavailable".)
-- **Portfolio Factor Tilt** (table: VALUE, QUALITY, MOMENTUM, DEFENSIVE scores aggregated over TRUSTED holdings only; mismatched and unverified holdings are excluded from the aggregate and say so; if view active, add column showing view-target factor)
+- **Portfolio Factor Tilt** (state original-book verified equity weight coverage; ETF/fund/unknown factor coverage unavailable, not zero or healthy. Table: VALUE, QUALITY, MOMENTUM, DEFENSIVE scores aggregated over TRUSTED holdings only; mismatched and unverified holdings are excluded from the aggregate and say so; if view active, add column showing view-target factor)
 - **Redundancy & Alignment Alerts** (only if flagged; include View Misalignment / View Excluded if view active)
 - **Verdict sensitivity** (render when any numeric health flag sits near its published cutoff): the 1-2 nearest-boundary flags and their trigger/clear arithmetic per `parallax-portfolio-checkup/references/health-flags.md` "Verdict sensitivity" (§11 by reference). Morning-brief renders no Health Status badge — state flag-level conditions only; do not use the tier-ladder language.
 - **Holding News** (one paragraph per holding)

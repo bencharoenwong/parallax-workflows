@@ -132,7 +132,7 @@ evals/
 - `AI-buffett` — a different output family (plain-line labels, citation/verdict
   contract); declares its own required sections and skill-specific checks.
 - `client-review` — adviser-facing directive recommendations; includes suitability assessment and actionable recommendation checks.
-- `explain-portfolio` — reactive drawdown attribution; includes return verification and divergence verdict (Transient/Fundamental) checks.
+- `explain-portfolio` — drawdown explanation; checks return-illustration method labels and observed price/score patterns. Driver hypotheses do not establish measured causal attribution or whether a loss is temporary.
 - `morning-brief` — fund-manager daily regime/health brief; includes 800-word limit and macro-snapshot grounding checks.
 - `portfolio-builder` — constructive thesis-to-allocation; includes holdings-allocated check (weights + scores).
 - `rebalance` — prioritized trades + quantified targets; includes trade-recs-quantified check.

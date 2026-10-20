@@ -14,7 +14,7 @@ description: "Individual investor portfolio checkup: health flags, factor scores
 - "Why am I down?" attribution → use /parallax-explain-portfolio
 - Trade recommendations → use /parallax-rebalance
 - Single stock analysis → use /parallax-should-i-buy
-- Portfolio with significant ETF allocation → equity scope only in v1; ETF holdings fail V2 scoring and may silently mismap in V1. Use /parallax-explain-portfolio (ETF-aware via `etf_profile` pre-classification) for ETF-heavy portfolios.
+- Portfolio with significant ETF allocation → equity scope only in v1; ETF holdings fail V2 scoring and may silently mismap in V1. A comprehensive proactive ETF health assessment is unsupported here; do not assign equity scores or a full-book health badge to ETFs. Offer /parallax-explain-portfolio only when the user actually asks about a drawdown/return over a period, preserving that concern. Do not invent a loss question to obtain an ETF-aware route.
 
 ## Gotchas
 
@@ -55,6 +55,8 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 6. `load-reference` `references/health-flags.md`.
 
 ### Step 1 — Resolve inputs
+
+Before scoring, identify any stated ETF/fund holdings from the supplied identifiers/context; ask about materially ambiguous instrument types instead of guessing. ETF-only proactive health requests receive the explicit equity-scope limitation and stop without equity scoring calls or a health verdict. For mixed books, name excluded ETF/fund holdings and their original weight share; ask whether an equity-sleeve-only check would answer the question before proceeding, retain the full original book for the coverage disclosure and construct a separate equity-only input with weights normalized within that sleeve. Use that explicit sleeve input consistently for scoring, concentration and redundancy, label every result equity-sleeve-only and never imply a complete portfolio health verdict. Do not promise ETF look-through, suitability or a new ETF-health product.
 
 Validate holdings: RIC format (plain tickers → conventions §1), weights summing to ~1.0; fund/OEIC identifiers get the §1 not-covered message and are dropped from scoring with a note.
 
@@ -131,6 +133,7 @@ If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwis
 
 ## Failure modes
 
+- ETF-only proactive health request: explicit unsupported boundary, no equity-scoring fallback and no fabricated drawdown. Mixed-book equity-sleeve analysis requires the operator’s agreement and a coverage-qualified label.
 - V2 coverage below 50%: V1 fallback, then split-and-merge, per Step 3; the path used is stated in the Verification Note.
 - `check_portfolio_redundancy` coverage below 60%: Overlap Alert carries the low-confidence note.
 - Macro unavailable or no covered market: Macro Context skipped (Output Format), the Macro Misalignment flag is not evaluated and the flag count says so.

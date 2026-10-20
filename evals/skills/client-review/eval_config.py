@@ -170,8 +170,8 @@ SPEC = EvalSpec(
         },
         {
             "id": "suitability_tailored_to_client",
-            "statement": "The Suitability Assessment is tailored to the stated client context (risk tolerance, income vs growth focus, horizon), not a generic portfolio comment.",
-            "pass_when": "It explicitly reconciles the holdings against the client's stated mandate (e.g. flags an aggressive tech book as misaligned with a 'conservative income' retiree); a generic 'well-diversified portfolio' note with no reference to the client profile FAILS.",
+            "statement": "The Suitability Assessment uses only explicitly supplied client context and keeps missing goal/risk/horizon dimensions unassessed, separate from mandate diagnostics and house-view alignment.",
+            "pass_when": "When client context is supplied, discuss alignment only for those dimensions and identify material unknowns. Holdings-only input says goal alignment not assessed; audience, holdings and house-view alignment never manufacture objectives. Supplied policy supports its stated constraints only. An overall suitability verdict without sufficient client context FAILS; an honest unassessed state PASSES.",
         },
     ],
     tasks_path="evals/tasks/client-review/core.jsonl",

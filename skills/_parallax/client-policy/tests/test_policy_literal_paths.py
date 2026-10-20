@@ -109,6 +109,7 @@ def _placeholders(tmp_path: Path) -> dict[str, str]:
     holdings = _draft(tmp_path, "holdings", "json", json.dumps(["AAPL.O"]))
     reconcile_payload = _draft(tmp_path, "reconcile", "json", json.dumps(_RECONCILE_PAYLOAD))
     return {
+        "<comparison-date>": "2026-10-16",
         "<policy-path>": str(policy),
         "<exposures-path>": str(exposures),
         "<tilts-path>": str(tilts),

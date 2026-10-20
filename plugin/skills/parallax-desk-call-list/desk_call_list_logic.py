@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, replace
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -248,11 +248,17 @@ def union_symbols(book: DeskBook) -> tuple[str, ...]:
 def overnight_move(closes: list[float] | tuple[float, ...]) -> float:
     if len(closes) < 2:
         raise ValueError("at least two closes are required")
-    previous, latest = float(closes[-2]), float(closes[-1])
+    raw = closes[-2:]
+    if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in raw):
+        raise ValueError("closes must be numeric, not boolean or coerced text")
+    try:
+        previous, latest = float(raw[0]), float(raw[1])
+    except OverflowError as exc:
+        raise ValueError("closes must be finite") from exc
     if not math.isfinite(previous) or not math.isfinite(latest):
         raise ValueError("closes must be finite")
-    if previous == 0:
-        raise ValueError("previous close must be non-zero")
+    if previous <= 0 or latest <= 0:
+        raise ValueError("closes must be positive")
     return (latest / previous - 1.0) * 100.0
 
 
@@ -280,11 +286,76 @@ def auto_raise_threshold(
     return math.ceil(raw * 2.0) / 2.0
 
 
-def scan_integrity(moves: dict[str, float | SymbolMove], union: Iterable[str]) -> dict[str, Any]:
+def validate_price_moves(
+    moves: dict[str, float | SymbolMove], *,
+    as_of: date | datetime | str | None = None,
+    max_age_days: int = 4,
+    max_interval_days: int = 7,
+) -> tuple[dict[str, SymbolMove], dict[str, str]]:
+    """Validate dated latest-session estimates before coverage or ranking.
+
+    Missing dates and bare numbers are not evidence of a current priced scan.
+    Different recent market calendars are allowed but must be disclosed as
+    separate latest-session intervals, never a common overnight account return.
+    The bounded age/gap rules are conservative calendar-day limits, not an
+    exchange holiday calendar; a longer closure needs new dated evidence.
+    """
+    if as_of is None:
+        today = datetime.now(timezone.utc).date()
+    elif isinstance(as_of, datetime):
+        if as_of.tzinfo is None:
+            raise ValueError("as_of datetime must include a timezone")
+        today = as_of.astimezone(timezone.utc).date()
+    elif isinstance(as_of, date):
+        today = as_of
+    elif isinstance(as_of, str):
+        today = date.fromisoformat(as_of)
+    else:
+        raise ValueError("as_of must be an ISO date or timezone-aware datetime")
+    if (isinstance(max_age_days, bool) or not isinstance(max_age_days, int)
+            or not 0 <= max_age_days <= 7):
+        raise ValueError("max_age_days must be an integer from 0 to 7")
+    if (isinstance(max_interval_days, bool) or not isinstance(max_interval_days, int)
+            or not 1 <= max_interval_days <= 7):
+        raise ValueError("max_interval_days must be an integer from 1 to 7")
+    valid: dict[str, SymbolMove] = {}
+    rejected: dict[str, str] = {}
+    for symbol, move in moves.items():
+        if (not isinstance(move, SymbolMove) or not _is_priced(move)
+                or float(move.move_pct) <= -100):
+            rejected[symbol] = "missing dated finite price move"
+            continue
+        if move.symbol != symbol:
+            rejected[symbol] = "symbol identity differs from price key"
+            continue
+        try:
+            if not isinstance(move.close_dates, tuple) or len(move.close_dates) != 2:
+                raise ValueError("two close dates required")
+            previous, latest = (date.fromisoformat(d) for d in move.close_dates)
+        except (TypeError, ValueError):
+            rejected[symbol] = "two ISO close dates required"
+            continue
+        if not 0 < (latest - previous).days <= max_interval_days:
+            rejected[symbol] = "close dates unordered or interval exceeds limit"
+        elif not 0 <= (today - latest).days <= max_age_days:
+            rejected[symbol] = "latest close is future-dated or stale"
+        else:
+            valid[symbol] = move
+    return valid, rejected
+
+
+def scan_integrity(
+    moves: dict[str, float | SymbolMove], union: Iterable[str], *,
+    as_of: date | datetime | str | None = None,
+    max_age_days: int = 4,
+) -> dict[str, Any]:
     symbols = tuple(union)
-    priced = tuple(s for s in symbols if _is_priced(moves.get(s)))
+    validated, rejected = validate_price_moves(moves, as_of=as_of, max_age_days=max_age_days)
+    priced = tuple(s for s in symbols if s in validated)
     unpriced = tuple(s for s in symbols if s not in priced)
     coverage = len(priced) / len(symbols) if symbols else 0.0
+    intervals = {s: validated[s].close_dates for s in priced}
+    pairs = set(intervals.values())
     return {
         "status": (
             "REFUSE TO SCAN"
@@ -295,6 +366,9 @@ def scan_integrity(moves: dict[str, float | SymbolMove], union: Iterable[str]) -
         "priced_count": len(priced),
         "total_count": len(symbols),
         "unpriced_symbols": unpriced,
+        "unpriced_reasons": {s: rejected.get(s, "missing price move") for s in unpriced},
+        "session_intervals": intervals,
+        "session_basis": "common_close_dates" if len(pairs) == 1 else "mixed_latest_sessions" if pairs else "unavailable",
     }
 
 
@@ -404,9 +478,12 @@ def render_no_calls_or_degraded(
     moves: dict[str, float | SymbolMove],
     threshold: float,
     min_impact: float,
+    *, as_of: date | datetime | str | None = None,
 ) -> str:
     symbols = union_symbols(book)
-    integrity = scan_integrity(moves, symbols)
+    effective_as_of = as_of if as_of is not None else datetime.now(timezone.utc)
+    integrity = scan_integrity(moves, symbols, as_of=effective_as_of)
+    moves, _ = validate_price_moves(moves, as_of=effective_as_of)
     warning_block = _validation_warning_block(book)
     if integrity["status"] == "REFUSE TO SCAN":
         return (
@@ -426,10 +503,15 @@ def render_no_calls_or_degraded(
     ranked = rank_clients(impacts, min_impact)
     if not triggered or not ranked:
         largest_symbol, largest_move = _largest_move(moves)
+        dates = "; ".join(f"{s}: {pair[0]} to {pair[1]}"
+                          for s, pair in sorted(integrity["session_intervals"].items()))
+        session_note = (f" Session basis: {integrity["session_basis"]}; {dates}. "
+                        "Latest-session estimates, not a realized account return or a common overnight interval.")
         return (
             f"**No calls indicated.** {len(symbols)} unique symbols scanned across "
             f"{len(book.clients)} client books. Largest move: {largest_symbol} {largest_move:+.1f}% "
             f"(threshold {threshold:.1f}%). No book impact reached the {min_impact:.2f} pp floor."
+            f"{session_note}"
             f"{warning_block}"
         )
     return "CALL LIST"
@@ -521,12 +603,15 @@ def _inline_client(client: dict[str, Any]) -> dict[str, Any]:
 def _move_value(move: float | SymbolMove | None) -> float | None:
     if move is None:
         return None
-    if isinstance(move, SymbolMove):
-        if not move.priced or move.move_pct is None:
-            return None
-        value = float(move.move_pct)
-    else:
-        value = float(move)
+    raw = move.move_pct if isinstance(move, SymbolMove) else move
+    if isinstance(move, SymbolMove) and not move.priced:
+        return None
+    if raw is None or isinstance(raw, bool):
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError, OverflowError):
+        return None
     return value if math.isfinite(value) else None
 
 

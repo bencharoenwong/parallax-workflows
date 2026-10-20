@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+
+import pytest
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -20,6 +22,7 @@ from coverage_check import (  # noqa: E402
     ABSENT_HOLDINGS_BASIS_PER_HOLDING,
     ABSENT_HOLDINGS_BASIS_SECTOR_INFERENCE,
     COVERAGE_TOTAL_MIN,
+    CoverageInputError,
     MAX_DIVERGENCE_PP,
     VERDICT_CONSISTENT,
     VERDICT_COVERAGE_LIMITED,
@@ -304,3 +307,67 @@ def test_cli_exits_2_on_malformed_json_file(tmp_path):
     ])
     assert proc.returncode == 2
     assert "error" in json.loads(proc.stdout)
+
+
+def _dated_history():
+    # Minimal saved-live shape: daily history, two rows per date, not one snapshot.
+    return [{"date": "2026-10-15", "sector": "Technology", "weight": .6},
+            {"date": "2026-10-15", "sector": "ETF", "weight": .4},
+            {"date": "2026-10-16", "sector": "Technology", "weight": .7},
+            {"date": "2026-10-16", "sector": "ETF", "weight": .3}]
+
+
+def test_dated_history_is_not_summed_into_false_coverage():
+    with pytest.raises(CoverageInputError, match="multiple sector dates"):
+        check_coverage(_dated_history(), {"Technology": .7, "ETF": .3})
+
+
+def test_explicit_comparable_snapshot_selects_one_date_only():
+    result = check_coverage(_dated_history(), {"Technology": .7, "ETF": .3}, snapshot_date="2026-10-16")
+    assert result.verdict == VERDICT_CONSISTENT
+    assert result.max_divergence_pp == 0
+    assert result.snapshot_date == "2026-10-16"
+
+
+def test_both_dated_single_snapshots_can_establish_their_common_date():
+    rows = _dated_history()[2:]
+    result = check_coverage(rows, rows)
+    assert result.snapshot_date == "2026-10-16"
+    assert result.verdict == VERDICT_CONSISTENT
+
+
+def test_cross_date_snapshots_reject_even_when_weights_match():
+    old = [{"date": "2026-10-15", "sector": "Technology", "weight": 1}]
+    new = [{"date": "2026-10-16", "sector": "Technology", "weight": 1}]
+    with pytest.raises(CoverageInputError, match="different dates"):
+        check_coverage(old, new)
+    with pytest.raises(CoverageInputError, match="absent"):
+        check_coverage(old, new, snapshot_date="2026-10-16")
+
+
+def test_dated_undated_comparison_needs_an_explicit_date_declaration():
+    with pytest.raises(CoverageInputError, match="dated/undated"):
+        check_coverage(_dated_history()[2:], {"Technology": .7, "ETF": .3})
+
+
+@pytest.mark.parametrize("rows", [
+    [{"date": "2026-10-16", "sector": "Technology", "weight": .5}, {"sector": "ETF", "weight": .5}],
+    [{"date": "2026-02-30", "sector": "Technology", "weight": 1}],
+    [{"date": None, "sector": "Technology", "weight": 1}],
+    [{"date": "2026-10-16", "sector": "Technology", "weight": .5}, {"date": "2026-10-16", "sector": " technology ", "weight": .5}],
+])
+def test_ambiguous_or_invalid_dated_rows_are_rejected(rows):
+    with pytest.raises(CoverageInputError):
+        check_coverage(rows, {"Technology": 1}, snapshot_date="2026-10-16")
+
+
+def test_cli_dated_history_requires_explicit_snapshot(tmp_path):
+    args = ["--portfolio-sectors", json.dumps(_dated_history()), "--redundancy-sectors", json.dumps({"Technology": .7, "ETF": .3})]
+    rejected = _run_cli(args)
+    assert rejected.returncode == 2
+    assert "multiple sector dates" in json.loads(rejected.stdout)["error"]
+    accepted = _run_cli([*args, "--snapshot-date", "2026-10-16"])
+    assert accepted.returncode == 0
+    result = json.loads(accepted.stdout)
+    assert result["snapshot_date"] == "2026-10-16"
+    assert result["verdict"] == VERDICT_CONSISTENT
