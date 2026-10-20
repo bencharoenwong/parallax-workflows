@@ -22,7 +22,7 @@ description: "Applies George Soros's top-down reflexivity framework (per 'The Al
 
 - Preserve the requested RIC(s), each observation’s source as-of date and unavailable fields. Generation time is not a substitute for a missing data date. Any handoff carries this provenance; a prior rendered profile is not a fresh or independent observation.
 
-- Expected Parallax spend: ~25–30 tokens single-ticker, ~30–40 basket (`_parallax/token-costs.md`); `macro_analyst` is 5 per market, capped at 5 markets.
+- Expected Parallax spend: Single ticker: **0.20 + 5M + 5T credits** (info 0.05, snapshot 0.1, telemetry 0.05). Basket: **0.05 + 5M + 5T + 0.15H**, H = distinct surfaced names with snapshot + identity checks (up to 15), M ≤ 5 selected tactical markets, T = 1–3 theme universe calls. At M=5: **30.20–40.20 single ticker**, or **30.50–42.30 basket** for 1–3 themes with 3–5 distinct surfaced names per theme. A successful narrower universe retry adds 5; failed async jobs are uncharged. Coverage/explanations are free; additional successful identity-resolution reads cost 0.05 per symbol. Explicit tactical calls do not trigger overview reassembly (`_parallax/token-costs.md`).
 - JIT-load `_parallax/parallax-conventions.md`, `_parallax/AI-profiles/profile-schema.md`, `_parallax/AI-profiles/output-template.md`, `_parallax/AI-profiles/profiles/soros.md` — Step 0.
 - Two modes — basket (no ticker) and single-ticker dual-channel — share the macro workflow. The dual-channel logic is load-bearing: a single-channel flag is `partial_match`, never `match`.
 - Channel B basket membership is best-effort name-matching against `divergences[*].name` (a theme name, matched against sector/industry) — `divergences[*]` has no `basket_name` field live, only `name`, `type`, `market`, `daily`, `mtd`, `basket_id`.
@@ -62,7 +62,7 @@ Mode: zero tickers → **basket mode**; exactly one → **single-ticker mode**; 
 
 **Macro workflow (both modes):** `call-tool` `list_macro_countries` and `get_telemetry` together; then `macro_analyst(component=tactical)` for each selected market together. Identify 1–3 regime themes where macro and telemetry agree on direction (e.g. "Fed cutting + dollar weakening → EM equities and commodities").
 
-**Basket mode:** per theme, `build_stock_universe` with a sector-scoped thematic query (timeout → retry ONCE narrower; then skip the theme); cap each theme's candidates at the top 20 by `composite_score`; `get_peer_snapshot` for the top 3–5 per theme, all together.
+**Basket mode:** per theme, `build_stock_universe` with a sector-scoped thematic query (timeout → retry ONCE narrower; then skip the theme); cap each theme's candidates at the top 20 by `composite_score`; `get_peer_snapshot` AND `get_company_info` for the top 3–5 per theme, all together. Deduplicate exact RICs across themes within this run; each surfaced name still runs the Step 3 identity gate.
 
 **Single-ticker mode:** fetch `get_peer_snapshot` on the resolved target independently of universe inclusion; it is required for the identity gate even when only classification path A2 is available. Per theme, `build_stock_universe` with the theme's sector-scoped query (same retry rule). A search timeout never suppresses the target identity fetch.
 
@@ -107,7 +107,7 @@ Ranked exposure candidates (informational, per conventions §12 — not trade in
 Workflow derived from: Soros (1987); Drobny (2006).
 Last anchor-tested: 2026-04-07 (NVDA.O, TSLA.O)
 Tool sequence: list_macro_countries, macro_analyst × N, get_telemetry, build_stock_universe × N, get_peer_snapshot × M
-Token cost: ~25-40 tokens
+Parallax credit estimate: <actual credits; basket 0.05 + 5M + 5T + 0.15H; see Gotchas>
 
 ---
 This output is an AI-inferred interpretation of George Soros's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by George Soros or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.
@@ -145,7 +145,7 @@ Profile fit: <match / partial_match / no_match / skipped>
 Workflow derived from: Soros (1987); Drobny (2006).
 Last anchor-tested: 2026-04-07 (NVDA.O, TSLA.O)
 Tool sequence: list_macro_countries, macro_analyst × N, get_company_info, get_telemetry, get_peer_snapshot
-Token cost: ~25-30 tokens (single-ticker mode)
+Parallax credit estimate: <actual credits; single ticker 0.20 + 5M + 5T; see Gotchas>
 
 ---
 This output is an AI-inferred interpretation of George Soros's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by George Soros or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.
@@ -187,5 +187,5 @@ If `build_stock_universe` times out, basket mode reports supported themes withou
 
 - The reply begins at the analytical Header (or the white-label header when active) and contains only the rendered template plus the Output additions; no workflow narration.
 - The cross-validation gate passed, or the exact refusal message was emitted and nothing else rendered.
-- The verdict line, the citation, the methodology footer with tool sequence and token cost, the persona disclaimer verbatim, `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present.
+- The verdict line, the citation, the methodology footer with tool sequence and credit cost, the persona disclaimer verbatim, `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present.
 - Expected spend stated (Gotchas).

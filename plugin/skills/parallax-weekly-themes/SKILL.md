@@ -1,6 +1,6 @@
 ---
 name: parallax-weekly-themes
-description: "Weekly market-themes note from Parallax telemetry: the leading and lagging theme in each covered market this week, how far each sits from its market's median theme, breadth, cross-market themes of the week, and the day's divergences, in one 1-credit call. Triggers: 'weekly themes', 'themes of the week', 'which themes led this week', 'weekly market themes newsletter', 'what moved by theme in [market] this week'. NOT for screening stocks inside a theme you already have (use /parallax-thematic-screen), not for a single-country macro read (use /parallax-country-deep-dive or /parallax-macro-outlook), not for a portfolio-level daily brief (use /parallax-morning-brief)."
+description: "Weekly market-themes note from Parallax telemetry: the leading and lagging theme in each covered market this week, how far each sits from its market's median theme, breadth, cross-market themes of the week, and the day's divergences, in one 0.05-credit call. Triggers: 'weekly themes', 'themes of the week', 'which themes led this week', 'weekly market themes newsletter', 'what moved by theme in [market] this week'. NOT for screening stocks inside a theme you already have (use /parallax-thematic-screen), not for a single-country macro read (use /parallax-country-deep-dive or /parallax-macro-outlook), not for a portfolio-level daily brief (use /parallax-morning-brief)."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -16,7 +16,7 @@ description: "Weekly market-themes note from Parallax telemetry: the leading and
 
 ## Gotchas
 
-- Expected Parallax spend: **1 credit**. `get_telemetry` is global (`date`/`fields` only, no per-market parameter). Call it once per run, never once per market.
+- Expected Parallax spend: **0.05 credits**. `get_telemetry` is global (`date`/`fields` only, no per-market parameter). Call it once per run, never once per market.
 - `fields` uses selectable telemetry roots/subfields: request exactly the names in Step 2 and handle explicit rejected-field errors. `report_date` is returned automatically but is not a valid selectable root; request `metadata` rather than `report_date`. Use the returned `report_date` as the report data date, not `metadata.run_date` (which can be later). Never request `baskets` or `factor_view`: both are very large and this skill uses neither.
 - Returns are decimals (`0.0213` is +2.13%). Format as percentages with two decimals at Compose; never round before Step 4.
 - `markets.<code>` carries the top and bottom theme by **name** only, per window (`daily`, `wtd`, `mtd`, `ytd`), with `n_baskets`, `n_positive_*` and a 5-point `distribution_*` (min, lower quartile, median, upper quartile, max). It has no stable theme id and no members. Never claim that a theme with the same name in two weeks is the same group, and never state how many of this week's themes are new.
@@ -130,4 +130,4 @@ Only when `lang=` was supplied: route the rendered note per conventions §15, in
 - First line is `## Weekly Themes: week to date through <report_date>` or the Branding Header; every Output Format section rendered or marked unavailable with its reason.
 - Every return, distance and breadth figure traces to the helper output; no member companies, no cross-week identity claim.
 - The render gate ran and the reply is its stdout (or the §14.3 note is present in About This Report).
-- `parallax-conventions.md §9.2` disclosure and §9.1 disclaimer are present; expected spend (1 credit) stated in Gotchas.
+- `parallax-conventions.md §9.2` disclosure and §9.1 disclaimer are present; expected spend (0.05 credits) stated in Gotchas.

@@ -21,7 +21,7 @@ description: "Applies Joel Greenblatt's Magic Formula (per 'The Little Book That
 
 - Preserve the requested RIC(s), each observation’s source as-of date and unavailable fields. Generation time is not a substitute for a missing data date. Any handoff carries this provenance; a prior rendered profile is not a fresh or independent observation.
 
-- Expected Parallax spend: ~35–40 tokens in BOTH modes — `build_stock_universe` (5) + `get_company_info` (1, comma-separated sector-filter batch — Step 2.2) + `get_financials(statement=ratios)` × up to 30 candidates (1 credit each; the tool has no multi-symbol support, so this is per-candidate) + `get_peer_snapshot`; plus, if the batched `get_company_info` call fails, +1 credit per candidate returned by `build_stock_universe` for the single-symbol re-queries (they run before the top-30 cap, so the worst case is +N where N is the number of candidates returned; Step 2.2).
+- Expected Parallax spend: **5 + 0.05R + 0.05K + 0.1P + 0.05I credits** before expansion/retry, where R = returned candidates checked for sector (before the cap), K = selected ratio reads (≤30), P = snapshots (3 universe / 1 ticker-check), I = 1 for the ticker identity read, else 0. At R=K=30: **8.30 universe / 8.15 ticker-check**. Comma-separated info bills per symbol. A failed whole batch is uncharged; single-symbol fallback costs 0.05 per successful symbol, replacing that failed batch rather than adding a one-credit surcharge. A narrower universe retry or under-10-name expansion can add a successful universe call (5) plus its successful metadata/ratio reads; report actual calls and any extra identity-resolution reads (`_parallax/token-costs.md`).
 - JIT-load `_parallax/parallax-conventions.md`, `_parallax/AI-profiles/profile-schema.md`, `_parallax/AI-profiles/output-template.md`, `_parallax/AI-profiles/profiles/greenblatt.md` — Step 0.
 - Universe mode is the default with no ticker; ticker-check mode with exactly one. `build_stock_universe` is a free-text relevance search with no sector-exclusion parameter — it does NOT enforce Greenblatt's financials/utilities exclusion itself. Step 2.2 enforces it instead: a `get_company_info` batch call reads each candidate's `sector` and drops Financials and Utilities names before the top-30 cap.
 - `build_stock_universe` is async and broad queries time out: queries MUST be sector-scoped (default `"US large-cap consumer staples"`); a broad request runs sector-by-sector and merges.
@@ -97,7 +97,7 @@ Workflow derived from: Greenblatt, J. (2006). The Little Book That Beats the Mar
 Last anchor-tested: 2026-04-06 (CSCO.O, MSFT.O, NVDA.O)
 Tool sequence: build_stock_universe, get_company_info (sector filter), get_financials(ratios) × N, get_peer_snapshot × N
 Dropped: <n> excluded sector, <n> unreadable sector
-Token cost: ~35-40 tokens (both modes), plus, if the batched get_company_info call fails, +1 credit per candidate returned by build_stock_universe for the single-symbol re-queries (they run before the top-30 cap, so the worst case is +N where N is the number of candidates returned)
+Parallax credit estimate: <actual successful reads; 8.30 universe / 8.15 ticker-check at R=K=30 before expansion/retry; formula in Gotchas>
 
 ---
 This output is an AI-inferred interpretation of Joel Greenblatt's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by Joel Greenblatt or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.
@@ -125,7 +125,7 @@ Workflow derived from: Greenblatt, J. (2006). The Little Book That Beats the Mar
 Last anchor-tested: 2026-04-06 (CSCO.O, MSFT.O, NVDA.O)
 Tool sequence: get_company_info (target), build_stock_universe, get_company_info (sector filter), get_financials(ratios) × N, get_peer_snapshot
 Dropped: <n> excluded sector, <n> unreadable sector
-Token cost: ~35-40 tokens, plus, if the batched get_company_info call fails, +1 credit per candidate returned by build_stock_universe for the single-symbol re-queries (they run before the top-30 cap, so the worst case is +N where N is the number of candidates returned)
+Parallax credit estimate: <actual successful reads; 8.30 universe / 8.15 ticker-check at R=K=30 before expansion/retry; formula in Gotchas>
 
 ---
 This output is an AI-inferred interpretation of Joel Greenblatt's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by Joel Greenblatt or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.
@@ -163,5 +163,5 @@ If `get_financials(ratios)` fails for a subset of universe members, drop those n
 
 - The reply begins at the analytical Header (or the white-label header when active) and contains only the rendered template plus the Output additions; no workflow narration.
 - The cross-validation gate passed, or the exact refusal message was emitted and nothing else rendered.
-- The verdict line, the citation, the methodology footer with tool sequence and token cost, the persona disclaimer verbatim, `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present.
+- The verdict line, the citation, the methodology footer with tool sequence and credit cost, the persona disclaimer verbatim, `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present.
 - Expected spend stated (Gotchas).

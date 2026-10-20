@@ -35,7 +35,7 @@ A consuming agent running a portfolio workflow with an active house view should 
 
 Full protocol: [`_parallax/house-view/tests/portfolio_diff_harness.md`](../_parallax/house-view/tests/portfolio_diff_harness.md).
 
-**Cost:** total cost is 2× the child skill's cost (Leg A + Leg B); see `_parallax/token-costs.md`.
+**Cost (credits):** add the actual distinct successful requests from Leg A and Leg B using the child skill's formula (`_parallax/token-costs.md`). Two equally scoped uncached legs cost 2× that plan; unequal conditional branches, retries or macro overview reassembly can change the sum. Deduct only identical raw-data reads that the child explicitly allows reusing across both legs, preserving source as-of, identity/completeness gates and separate view transformations. Never infer that batched per-symbol data is billed once, or that two rendered reports establish eligible reuse.
 
 ## Exit semantics
 

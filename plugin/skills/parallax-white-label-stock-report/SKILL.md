@@ -89,6 +89,8 @@ A plain ticker or company name → `call-tool` `search_stocks` for the RIC (`AAP
 
 ### Step 2 — Fetch (parallel batches)
 
+Expected Parallax spend: 0 credits for supplied JSON or a valid local cache hit; 10 for a successful fresh `get_stock_report` request. Symbol search and job polling are free. Server-side report cache hits still cost 10; reuse the saved response for rerenders. A second report request adds another 10 on success. Current discovered prices win.
+
 The renderer reads a `get_stock_report` JSON file; it never calls the MCP itself. This skill always requests the English report (`lang=en`, the tool's default) — it has no Thai workflow. Resolve the source cheapest first:
 1. **Supplied file** — a saved `get_stock_report` response passed on the command line: no fetch, no paid call (it must be the JSON response, not a rendered PDF). This is the one path where a non-English report can sneak in (someone saved a `lang=th` response). The renderer does not detect a `lang=th` report; the operator must supply `lang=en` JSON (see `references/field-map.md`, 'Localization boundary').
 2. **Same-day cache** — `~/.parallax/stock-report-cache/<RIC>-en-<YYYY-MM-DD>.json` when present and `--force` was not passed.

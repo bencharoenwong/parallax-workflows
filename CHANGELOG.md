@@ -6,6 +6,12 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 ## Unreleased
 
+### Credit pricing
+
+- Synchronize skill and workflow estimates with fractional data-read credits. State per-symbol and per-holding units, conditional macro overview costs, free resolution/polling, and successful-request assumptions. Keep historical ledgers unchanged.
+- Use decimal-safe evaluation estimates with dated price assumptions, conditional bounds and explicit incomplete-input markers. Model token usage remains separate from Parallax credits.
+- Reuse validated matching snapshots in portfolio explanations and client reviews; preserve identity, observation-date and coverage checks.
+
 ### Security
 - House-view saves from `parallax-make-house-view` now go through `view_commit` like every other writer: staged `0600` files, fsync and rename, a row-vs-bytes check, and refusal of an unreadable active view instead of an overwrite with no parent. Path refs are read through a staging-directory descriptor with `O_NOFOLLOW`, refusing non-regular files, hard-linked files and files over 16 MiB. Commit tokens are valid only while their `view_transaction` holds the lock. `--re-pair` refuses while staging leftovers show the current version's commit did not finish. The view directory and audit row are fsynced. A `--re-pair` row must match the hash and ids of the on-disk `view.yaml`, and a written row's `view_id` must match `metadata.view_id`. View YAML with merge keys, base-60 numbers, self-referencing aliases, nesting past 64 levels or more than 200,000 nodes is refused instead of parsed while the lock is held.
 

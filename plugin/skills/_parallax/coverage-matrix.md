@@ -6,6 +6,8 @@
 
 **Purpose.** Document which Parallax MCP tool covers which asset class. Skills must consult this before adding a new MCP call. Mismatched tool/asset-class pairs (e.g., `export_price_series(SPY)`) silently fail-empty and would cause silent data drops in downstream computation.
 
+Credit prices updated from direct connector metadata on 2026-10-19; asset coverage observations retain their original dates.
+
 **Last empirical sweep:** 2026-05-02. Re-verify quarterly or after Parallax MCP releases.
 
 > If you are authoring or modifying a skill that calls any tool below, run `skills/_parallax/scripts/coverage-lint.sh` before committing. The lint flags `export_price_series` and similar calls that are not preceded by an asset-class pre-classification step (per `parallax-pair-finder/SKILL.md` Batch C, `parallax-explain-portfolio/SKILL.md` Step 1a).
@@ -14,9 +16,9 @@
 
 | Tool | Equity (e.g., AAPL.O, JPM.N) | ETF (e.g., SPY, EWJ, QQQ) | Notes |
 |---|---|---|---|
-| `export_price_series` | ✓ supported | ✗ historically returns `{success:false, error}` | Equity-only, **1 credit per call**. Pass a verified RIC. Current JSON rows use `data[].price` with dates, not guaranteed `close` fields. A failure alone does not identify an ETF: transport, authorization and unsupported symbols remain separate failures. |
-| `etf_daily_price` | ✗ returns `[]` | ✓ supported | ETF-only. Pass plain ticker (no `.X` suffix). Returns per-row `date` + `changepercent` — move AND date in one call. 1 token per call. |
-| `etf_profile` | ✗ explicit not-in-ETF-universe response for a tested equity | ✓ rich profile | **Classification evidence, not a generic-error oracle.** Current tested AAPL negative is `success:false`, `status:400`, with an explicit ETF-not-found reason; historical `No profile data found` is another observed shape. A recognized negative requires independently verified listed-equity identity before equity routing. Use dated `etf_daily_price` for an ETF move; profile `change_percent` alone has no verified date. 1 credit per probe. |
+| `export_price_series` | ✓ supported | ✗ historically returns `{success:false, error}` | Equity-only, **0.05 credits per successful symbol read**. Pass a verified RIC. Current JSON rows use `data[].price` with dates, not guaranteed `close` fields. A failure alone does not identify an ETF: transport, authorization and unsupported symbols remain separate failures. |
+| `etf_daily_price` | ✗ returns `[]` | ✓ supported | ETF-only. Pass plain ticker (no `.X` suffix). Returns per-row `date` + `changepercent` — move AND date in one call. 0.05 credits per successfully read symbol. |
+| `etf_profile` | ✗ explicit not-in-ETF-universe response for a tested equity | ✓ rich profile | **Classification evidence, not a generic-error oracle.** Current tested AAPL negative is `success:false`, `status:400`, with an explicit ETF-not-found reason; historical `No profile data found` is another observed shape. A recognized negative requires independently verified listed-equity identity before equity routing. Use dated `etf_daily_price` for an ETF move; profile `change_percent` alone has no verified date. 0.1 credits per successful probe; HTTP 4xx/5xx probes cost zero. |
 | `etf_search` | n/a | ✓ supported | Discovery by market/keyword, query required. Deprecated alias of `search_etfs`; prefer `search_etfs`. |
 | `etf_holdings` | n/a | ✓ supported | Underlying holdings of an ETF. |
 | `get_company_info` | ✓ supported | ✓ partial (returns equity-shaped record for some ETFs) | **Does NOT include an `asset_class` field**; cannot be used to distinguish equity from ETF. Use `etf_profile` for that. |

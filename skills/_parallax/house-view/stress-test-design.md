@@ -125,8 +125,9 @@ default to US if ambiguous) so the macro_regime dimensions still get a compariso
 anchor. Document this fallback explicitly in the run artifact.
 
 **Fan-out cap.** The schema's `regions` block has 27 keys. Worst-case naive fan-out
-is `27 markets × 2 tools (macro_analyst + score_analysis-bellwether) ≈ 54
-concurrent MCP calls`, plus one global `get_telemetry` call, which exceeds
+is 27 macro overview tool calls, plus one global `get_telemetry` call and
+one free coverage lookup. A reassembled overview can issue ten upstream requests.
+This exceeds
 reasonable per-run MCP budget and may trip rate limits. Cap: **12 tilted markets
 per run** (covers the typical CIO view; an "EM-overweight, granular" view rarely
 exceeds this). If `tilted_markets > 12`, prompt the user once with three options:
@@ -135,10 +136,12 @@ exceeds this). If `tilted_markets > 12`, prompt the user once with three options
 Never silently truncate. `get_telemetry` is one global call regardless of market
 count — it is synchronous (no polling) and takes only `date`/`fields`, with no
 per-market parameter, so one call returns every covered market's slice and
-calling it again per tilted market just re-bills 1 credit for identical data.
-`check_macro_health` is DEPRECATED (1 credit, not 5) and carries no freshness
-field; prefer `check_api_health` (liveness, 0 credits) or `list_macro_countries`
-(coverage, 1 credit) instead of calling it at all.
+calling it again per tilted market re-bills 0.05 credits for identical data.
+`check_macro_health` is deprecated and free, and carries no freshness field;
+prefer `check_api_health` for liveness or `list_macro_countries` for coverage,
+both free. Each omitted-component macro overview costs 5 normally, up to 50
+on reassembly. K markets plus telemetry cost 5K + 0.05 normally, up to
+50K + 0.05; a top-12 run costs 60.05 normally, up to 600.05 credits.
 
 | Tool | Purpose |
 |---|---|

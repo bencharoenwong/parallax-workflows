@@ -84,7 +84,7 @@ For a skipped/incomplete profile, do not present a numeric flip condition as tho
 Workflow derived from: <citation>
 Last anchor-tested: <last_anchor_test>
 Tool sequence: <tool_sequence from profile frontmatter>
-Token cost: <N> tokens
+Parallax credit estimate: <N> credits, derived from actual calls; not a billing receipt
 ```
 
 Render rule: append ` | Last legal review: <date>` to the `Last anchor-tested` line ONLY when the profile's `last_legal_review` frontmatter value is a completed date. `PENDING` is an internal tracking state — the `profiles/*.md` frontmatter field stays REQUIRED and unchanged, but `PENDING` is never rendered in output; omit the field entirely rather than printing "pending".
@@ -109,7 +109,7 @@ This output is an AI-inferred interpretation of [Investor]'s approach, derived s
 
 ### Audience render mode (conventions §13 by reference)
 
-Apply audience render mode per `parallax-conventions.md` §13. Under `client_safe`, the §4 data table's factor rows carry the §13.3 plain-language gloss; the §6.5 Verdict-sensitivity line is omitted, while the §6.5 gate table itself is unchanged because qualification logic is not a render decision. The §7 methodology footer renders only `Workflow derived from: <citation>` and `Last anchor-tested: <date>` plus the legal-review date when completed; `Tool sequence` and `Token cost` lines are omitted.
+Apply audience render mode per `parallax-conventions.md` §13. Under `client_safe`, the §4 data table's factor rows carry the §13.3 plain-language gloss; the §6.5 Verdict-sensitivity line is omitted, while the §6.5 gate table itself is unchanged because qualification logic is not a render decision. The §7 methodology footer renders only `Workflow derived from: <citation>` and `Last anchor-tested: <date>` plus the legal-review date when completed; `Tool sequence` and `Parallax credit estimate` lines are omitted.
 
 The §2 citation block, §5 verdict, and §8 verbatim disclaimer render identically in both modes. The disclaimer is never suppressible.
 

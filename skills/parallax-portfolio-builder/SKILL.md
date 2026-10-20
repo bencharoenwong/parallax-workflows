@@ -16,7 +16,7 @@ description: "Build a portfolio from a natural language investment thesis. Const
 
 ## Gotchas
 
-- Expected Parallax spend: ~40 tokens at N=10 (`_parallax/token-costs.md`): universe 5 + Batch B's 10 `get_peer_snapshot` and 10 `get_company_info` calls (20) + redundancy at 1 credit per holding checked (10) + validation 5.
+- Expected Parallax spend (`_parallax/token-costs.md`): `10 + 0.15N + 0.1H` credits for one universe (5), N candidate snapshots + identity reads (0.15 each), H selected holdings checked for redundancy (0.1 each), and validation (5). At N=10 and H=5–8: **12–12.3 credits**. Add 5 per bounded changed-scope universe correction, actual `--augment-silent` planned-call costs, and the conditional Step 0 drift check separately. Validation fallback adds 0.1 per holding lookup in each redundancy/scoring call actually made; reuse a successful redundancy result only if its exact holdings/weights match the final allocation. Per-holding tools count selected successful lookups, including zero weights, and cap at 100; `quick_portfolio_scores` defaults to 50 unless its live limit is set explicitly.
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §2 identity cross-check, §3 parallel execution, §4 fallbacks, §13 audience mode, §14 host primitives.
 - JIT-load `_parallax/house-view/loader.md` FIRST; if a view is present follow §2, §3 (multipliers), §4 (conflict resolution), §5, §6. **The view-status banner is REQUIRED first in output** — never buried after the holdings table; if output gets compressed, keep it and drop other sections first.
 - Drift check: JIT-load `_parallax/house-view/auto-on-load-judge-pattern.md` in Step 0 (this skill builds a portfolio); `--skip-drift-check` bypasses it.

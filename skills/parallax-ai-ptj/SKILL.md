@@ -20,7 +20,7 @@ description: "Applies Paul Tudor Jones's trend-following + macro-overlay framewo
 
 - Preserve the requested RIC(s), each observation’s source as-of date and unavailable fields. Generation time is not a substitute for a missing data date. Any handoff carries this provenance; a prior rendered profile is not a fresh or independent observation.
 
-- Expected Parallax spend: ~14–16 tokens with one macro market, ~20–25 with three (`_parallax/token-costs.md`).
+- Expected Parallax spend: **5.30 + 5M credits**, M = selected tactical markets (1–3): **10.30 / 20.30 credits** for one / three markets. Base: info 0.05 + technical narrative 5 + score history 0.1 + analyst targets 0.05 + snapshot 0.1. Coverage is free; explicit tactical components never trigger overview reassembly. Extra successful identity-resolution reads add 0.05 per symbol (`_parallax/token-costs.md`).
 - JIT-load `_parallax/parallax-conventions.md`, `_parallax/AI-profiles/profile-schema.md`, `_parallax/AI-profiles/output-template.md`, `_parallax/AI-profiles/profiles/ptj.md` — Step 0.
 - Single-ticker only — reject multiple tickers with a redirect to /parallax-ai-consensus. Channels T, M, V are evaluated separately but share inputs; `match` needs all 3 flagged, `partial_match` 2.
 - `get_technical_analysis` is async and may time out — Channel T falls back to the Momentum factor proxy. `macro_analyst` needs `list_macro_countries` first; cap 3 markets (home + up to 2 exposure markets).
@@ -118,7 +118,7 @@ Setup quality: <Grade A / B / C / D>
 Workflow derived from: Schwager (1989); Covel (2004).
 Last anchor-tested: 2026-04-07 (NVDA.O, JPM.N)
 Tool sequence: list_macro_countries, get_company_info, get_technical_analysis, macro_analyst × N (N ≤ 3), get_score_analysis, get_stock_outlook, get_peer_snapshot
-Token cost: ~20-25 tokens (3 macro markets) / ~14-16 tokens (1 macro market)
+Parallax credit estimate: 20.30 credits (3 macro markets) / 10.30 credits (1 macro market)
 
 ---
 This output is an AI-inferred interpretation of Paul Tudor Jones's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by Paul Tudor Jones or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.
@@ -167,5 +167,5 @@ Halt rendering: "Insufficient data to evaluate PTJ-style framework. Service temp
 
 - The reply begins at the analytical Header (or the white-label header when active) and contains only the rendered template plus the Output additions; no workflow narration.
 - The cross-validation gate passed, or the exact refusal message was emitted and nothing else rendered.
-- The verdict line, the citation, the methodology footer with tool sequence and token cost, the persona disclaimer verbatim, `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present.
+- The verdict line, the citation, the methodology footer with tool sequence and credit cost, the persona disclaimer verbatim, `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present.
 - Expected spend stated (Gotchas).

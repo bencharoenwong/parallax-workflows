@@ -1021,7 +1021,7 @@ def test_cost_bullets_follow_the_distribution():
     web = bb.filter_token_costs(text, set(bb.WEB_SKILLS))
     plugin = bb.filter_token_costs(text, set(bb.PLUGIN_SKILLS))
     assert "desk-call-list" not in web
-    assert "/parallax-desk-call-list` (~69 tokens" in plugin
+    assert "/parallax-desk-call-list` (~32.55 credits" in plugin
 
 
 def test_plugin_bundles_the_parallax_connector():

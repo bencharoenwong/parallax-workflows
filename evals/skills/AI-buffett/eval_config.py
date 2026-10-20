@@ -23,7 +23,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _REQUIRED_SECTIONS = ["Source", "Profile fit", "Tool sequence"]
 _SECTION_LABELS = [
     "Buffett style profile applied", "Source", "Profile fit",
-    "Workflow derived from", "Tool sequence", "Token cost",
+    "Workflow derived from", "Tool sequence", "Parallax credit estimate",
 ]
 
 _VERDICT_RE = re.compile(
