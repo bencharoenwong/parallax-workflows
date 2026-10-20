@@ -21,7 +21,7 @@ description: "Applies Seth Klarman's margin-of-safety framework (per 'Margin of 
 
 - Preserve the requested RIC(s), each observation’s source as-of date and unavailable fields. Generation time is not a substitute for a missing data date. Any handoff carries this provenance; a prior rendered profile is not a fresh or independent observation.
 
-- Expected Parallax spend: ~5–7 tokens (`_parallax/token-costs.md`): three statements + peer snapshot + company info.
+- Expected Parallax spend: **0.30 credits** = info 0.05 + snapshot 0.1 + three financial statements × 0.05 (`latest=false`, the default). Choosing `latest=true` for both balance sheet and cash flow adds 0.10, but this workflow needs four comparable periods and does not request that mode. Extra successful identity-resolution reads add 0.05 per symbol (`_parallax/token-costs.md`).
 - JIT-load `_parallax/parallax-conventions.md`, `_parallax/AI-profiles/profile-schema.md`, `_parallax/AI-profiles/output-template.md`, `_parallax/AI-profiles/profiles/klarman.md` — Step 0.
 - Balance-sheet-first: `get_financials` balance_sheet AND cash_flow AND ratios, 4 periods each (one call returns 4 periods). Net cash from the balance sheet (cash − total debt), not from the ratios summary.
 - The "no position warranted" output IS valid output — not a failure. Value threshold is intentionally loose (≥ 4) per Lev-Srivastava 2022 — do not tighten without re-anchoring.
@@ -120,7 +120,7 @@ Verdict sensitivity: the verdict-relevant input nearest its cutoff is <check or 
 Workflow derived from: Klarman, S. (1991). Margin of Safety.
 Last anchor-tested: 2026-04-07 (BRKb.N, NVDA.O)
 Tool sequence: get_company_info, get_peer_snapshot, get_financials(balance_sheet/cash_flow/ratios, 4 periods)
-Token cost: ~5–7 tokens
+Parallax credit estimate: 0.30 credits (three default historical financial reads)
 
 ---
 This output is an AI-inferred interpretation of Seth Klarman's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by Seth Klarman or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.
@@ -156,5 +156,5 @@ If required data is missing or outside the supported ratio domain, mark its crit
 
 - The reply begins at the analytical Header (or the white-label header when active) and contains only the rendered template plus the Output additions; no workflow narration.
 - The cross-validation gate passed, or the exact refusal message was emitted and nothing else rendered.
-- The verdict line, the citation, the methodology footer with tool sequence and token cost, the persona disclaimer verbatim, `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present.
+- The verdict line, the citation, the methodology footer with tool sequence and credit cost, the persona disclaimer verbatim, `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present.
 - Expected spend stated (Gotchas).

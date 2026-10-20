@@ -17,7 +17,7 @@ description: "Deep dive on a single position: company profile, peer comparison, 
 
 ## Gotchas
 
-- Expected Parallax spend: ~45 tokens (`_parallax/token-costs.md`): assessment 10, technicals 5, three macro markets 15, plus the 1-token calls.
+- Expected Parallax spend: 20.6 + 5M credits, where M is the number of covered tactical macro markets (0–3): 35.6 with three markets. Identity 0.05, snapshot/history 0.1 each, summary/ratios 0.05 each, four outlook aspects 0.25 total, technicals/news 5 each, assessment 10. Excludes resolution/recovery; current discovered prices win (`_parallax/token-costs.md`).
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §2 identity cross-check, §3 parallel execution, §4 fallbacks, §14 host primitives, §15 translation.
 - JIT-load `_parallax/house-view/loader.md` FIRST; if an active view is present follow §2 (validation), §7.1/§7.2/§7.3 (single-stock conflict surfacing), §6 (audit). Do NOT apply tilts. The `get_assessment` prompt carries the active view (basis_statement + relevant tilts) so the assessment addresses alignment in prose — that is this skill's primary alignment surface; the §7 inline flags are additive. Route every §7 token through `render_view_conflict()` per `_parallax/house-view/render_helpers.md`.
 - Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).

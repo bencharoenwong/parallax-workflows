@@ -16,7 +16,7 @@ description: "Forensic earnings quality analysis: revenue recognition patterns, 
 
 ## Gotchas
 
-- Expected Parallax spend: ~24 tokens (`_parallax/token-costs.md`): Palepu 5, assessment 10, news 5, plus the 1-token calls.
+- Expected Parallax spend: 20.3 credits (`_parallax/token-costs.md`): identity 0.05, score history 0.1, three financial statements 0.05 each, Palepu/news 5 each, assessment 10. Excludes resolution/recovery; current discovered prices win.
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §3 parallel execution, §4 fallbacks, §14 host primitives.
 - `get_financial_analysis` (Palepu) is async ~2–5 min and is the core of the forensic read; compose from the instant tools while it resolves (conventions §5).
 - A quality score of 10 does not mean no risk — read the sub-components. Cross-reference news for context on every red flag. Output is actionable risk flags, not a full financial review.

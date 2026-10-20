@@ -15,6 +15,7 @@ description: "Portfolio rebalancing with health flags and macro context: analyze
 
 ## Gotchas
 
+- Expected Parallax spend (`_parallax/token-costs.md`): `5 + 0.05I + 0.1E + 0.1T + 0.1H + 5M + 0.1P` credits for one portfolio analysis, I identity reads, E equity snapshots, T trend reads, H redundancy lookups, M tactical markets (≤3) and P successful ETF probes when needed. With I=E=T=H=10, M=3 and no billed classification: **23.5 credits**; allow up to 1 more for ten probes. Replacement searches add `5U + 0.15C` for U universe jobs and C candidate snapshot/identity pairs. Legacy/V1 current-book and proposed-book calls each add 0.1 per selected successful holding; quick scores defaults to 50, maximum 100, and zero-weight lookups bill. Add any new profile-derived trend reads and the conditional Step 0 drift check separately; exact matching successful identity/trend/snapshot responses are reused, never full-batch retries.
 - JIT-load _parallax/parallax-conventions.md for fallback patterns and parallel execution
 - JIT-load _parallax/house-view/loader.md FIRST; if active view present, follow §2 (validation), §3 (multipliers), §4 (conflict resolution), §5 (output rendering), §6 (audit). Tilts in the view become trade-direction signals: rebalancing should move portfolio toward view-tilted weights.
 - When active view is present, use the view-aware disclaimer per loader.md §5 rule 5; otherwise use the standard disclaimer

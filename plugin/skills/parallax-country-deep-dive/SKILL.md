@@ -15,7 +15,7 @@ description: "Country or region equity discovery: which equities screen stronges
 
 ## Gotchas
 
-- Expected Parallax spend: ~29 credits for one market and default five names (regional macro fan-out adds 5 per extra selected covered market; `_parallax/token-costs.md`): one macro summary + universe + 5 snapshots + 5 info checks + 3 score trends.
+- Expected Parallax spend: **5 + 0.15N + 0.1 min(3,N) + Σ macro credits**: universe 5, N snapshots 0.1 each, N info checks 0.05 each, up to three score histories 0.1 each. With default N=5 and one market: **11.05 normally, up to 56.05 credits** if its omitted-component overview reassembles (5 normally/up to 50 per market). Each extra selected covered market adds 5 normally/up to 50 (maximum three); additional successful identity-resolution reads add 0.05 per symbol (`_parallax/token-costs.md`).
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.2 named-parameter discipline (`build_stock_universe(query=…)`, `macro_analyst(market=…)` with no `component`), §2 identity cross-check, §3 parallel execution, §4 fallbacks, §12 framing, §14 host primitives.
 - JIT-load `_parallax/house-view/loader.md` UNCONDITIONALLY: §5 rule 3, rule 6 and §6 apply with or without a view. With a view: §3 multipliers bias the Top Opportunities ranking (region/sector tilts) and §5 rendering applies; the country's own macro narrative is sovereign and untouched. Boundary with /parallax-macro-outlook: that skill's census is untilted by design — do not "harmonize" the two contracts.
 - Smaller markets may have fewer scored equities; `list_macro_countries` confirms macro coverage (`check_macro_health` is DEPRECATED per its own tool description and returns the same markets list at the same cost — do not call both).

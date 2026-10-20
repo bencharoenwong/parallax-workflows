@@ -14,6 +14,8 @@ description: "Configure white-label client branding for Parallax report output. 
 
 ## Gotchas
 
+- Expected Parallax spend: **0 Parallax credits**: source/brand extraction, validation and local persistence use no Parallax MCP calls. Host model or external source-fetch charges, if any, are separate.
+
 - JIT-load _parallax/white-label/schema.yaml before extraction — it is the single source of truth for config.yaml shape
 - JIT-load _parallax/white-label/extract/ (the extract package) and _parallax/white-label/validator.py before running Steps 2 and 3
 - JIT-load `_parallax/white-label/persistence.py` before the confirmation gate. Route the final disposition through `persist_disposition()`; do not reproduce the config/DESIGN.md/audit write sequence inline.

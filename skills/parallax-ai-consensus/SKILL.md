@@ -19,7 +19,7 @@ description: "Runs all installed Parallax AI Investor Profiles (Buffett, Greenbl
 
 - Preserve the requested RIC(s), each observation’s source as-of date and unavailable fields. Generation time is not a substitute for a missing data date. Any handoff carries this provenance; a prior rendered profile is not a fresh or independent observation.
 
-- Expected Parallax spend: ~85–95 tokens single ticker (sum of the five profiles' per-profile spends, with Greenblatt's own corrected to ~35-40 tokens plus, if the batched `get_company_info` call fails, +1 credit per candidate returned by `build_stock_universe` for the single-symbol re-queries (they run before the top-30 cap, so the worst case is +N where N is the number of candidates returned) — see its SKILL.md Gotchas). The ~180–240 basket-of-5 figure in `_parallax/token-costs.md` is marked there as pending re-derivation.
+- Expected Parallax spend: Use a ledger of distinct successful tool requests, in **credits**, following each dispatcher's formulas. Without reuse, a single ticker with Greenblatt R=K=30, Soros M=5/T=1–3 and PTJ M=1–3 costs **49.25–69.25 credits** before retries/expansion; add each ticker's plan for a basket of up to five (five identical plans: 246.25–346.25 before reuse). General all-five, no-reuse formula per ticker: **11.25 + 0.05R + 0.05K + 5(Ms + T + Mp)**, where Greenblatt R/K count sector-info candidates/selected ratios, Soros Ms/T count tactical markets/theme universes, and PTJ Mp counts tactical markets. These are planning examples, not fixed caps. Reuse below reduces actual calls; count shared reads once, per-symbol data per symbol, and preserve skipped-profile/identity gates. `_parallax/token-costs.md` and discovered tool descriptions give current prices.
 - JIT-load `_parallax/parallax-conventions.md`, `_parallax/AI-profiles/profile-schema.md`, `_parallax/AI-profiles/output-template.md`, `_parallax/AI-profiles/consensus-config.md`, and ALL profile specs under `_parallax/AI-profiles/profiles/` — Step 0.
 - Do NOT re-implement profile logic — run each dispatcher's workflow as documented in `skills/parallax-ai-<name>/SKILL.md`. Cap basket input at 5 tickers.
 - Super-majority uses ceiling rounding per consensus-config.md — `required = ceil(0.75 × applicable)`; partial matches do NOT count toward the signal but DO count toward factor-level agreement. Factor-level agreement is the highest-value section — never skip it.
@@ -58,6 +58,8 @@ Single ticker → **single-ticker mode** (5 profiles applicable); 2–5 comma-se
 ### Step 2 — Fetch (parallel batches)
 
 Run every applicable profile's dispatcher workflow in parallel where tool sequences do not share dependencies (never sequentialize): Buffett (info + snapshot + summary financials + score analysis, 4 thresholds); Greenblatt (info + sector-scoped universe + `get_company_info` sector-filter batch dropping Financials/Utilities + ratios for top 30 + rank; ticker-check skips with `skipped` when the target itself is Financials or Utilities); Klarman (info + snapshot + balance_sheet + cash_flow + ratios, 4 checks); Soros (macro countries + tactical × N + telemetry + info + universe per theme, dual channel; telemetry may be `UNAVAILABLE`); PTJ (macro countries + tactical × N + info + score analysis + technicals + `get_stock_outlook(aspect="analyst_targets")` + snapshot, tri-channel). Rely on server defaults for `weeks`/`periods` or typed integers (conventions §0.2). Each returns `verdict` (`match` | `partial_match` | `no_match` | `skipped`), `verdict_detail`, `factor_flags` (factor → `FLAGGED` | `NOT_FLAGGED` | `NOT_APPLICABLE` | `UNAVAILABLE`), `fallback_notes`.
+
+**Bounded reuse within this invocation:** share only an identical tool + normalized arguments + requested RIC + source as-of response across dispatchers/tickers. Keep the original payload and provenance, including unavailable fields; a prior rendered profile is not reusable data. Deduplicate in-flight requests for info, snapshots, score history, identical financial statements and identical market/component macro calls. Greenblatt universes share only when their full queries and selection rules match; never combine a Soros theme query with a Greenblatt peer query. Each profile independently runs its original identity and completeness gates against the shared payload. Do not reuse a historical record as current or relax a gate to save calls. Track each shared request once in the total and identify its consuming profiles.
 
 ### Step 3 — Verify
 
@@ -123,8 +125,8 @@ converge, where they diverge, what was unavailable or not evaluated, and which t
 
 ## Methodology footer
 
-Profiles executed: <list with token costs>
-Total token cost: <sum>
+Profiles executed: <list with credit costs; identify shared requests, without double-counting>
+Total credit cost: <sum of distinct successful requests>
 Cross-validation gate: PASSED for all rendered profiles
 Consensus config: 75% super-majority, minimum 3 applicable profiles, ceiling rounding
 
@@ -162,7 +164,7 @@ Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 - A profile lacks required identity/criterion evidence → `skipped` with the reason. Optional context may be unavailable while a fully evaluable fit remains eligible; preserve that caveat. Consensus continues only with eligible profiles
 - Input ticker not resolvable → emit standard conventions §1 error and exit, do not run profiles
 
-Token costs per profile and for the basket: `_parallax/token-costs.md` → "AI investor profile workflows" (single source). The `--only buffett,klarman,greenblatt` subset is the cheap ensemble (A = 3 → all three must match for `YES`); label its output a reduced-ensemble read.
+Credit costs per profile and for the basket: `_parallax/token-costs.md` → "AI investor profile workflows" (single source). The `--only buffett,klarman,greenblatt` subset is the cheap ensemble (A = 3 → all three must match for `YES`); label its output a reduced-ensemble read.
 
 ## Why this meta-skill exists
 
@@ -180,5 +182,5 @@ This gives users a framework for building their own views using Parallax data �
 
 - The reply begins at the analytical Header (or the white-label header when active) and contains only the rendered template plus the Output additions; no workflow narration.
 - The cross-validation gate passed, or the exact refusal message was emitted and nothing else rendered.
-- The verdict line, the citation, the methodology footer with tool sequence and token cost, the persona disclaimer verbatim, `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present.
+- The verdict line, the citation, the methodology footer with tool sequence and credit cost, the persona disclaimer verbatim, `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present.
 - Expected spend stated (Gotchas).

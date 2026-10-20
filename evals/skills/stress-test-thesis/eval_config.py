@@ -3,7 +3,7 @@
 DRAFT — spec only, never run live (same status as portfolio-checkup at authoring).
 Wired into the structural harness so the skill's output contract is captured and
 CI's pure-function grader tests can reference it; live rollouts remain manual and
-cost Parallax tokens.
+cost Parallax credits.
 
 Output family differs from should-i-buy: this skill emits an argument-decomposition
 report (Assumption Map, Load-Bearing Vulnerabilities, per-assumption status table,

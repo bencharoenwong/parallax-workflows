@@ -18,7 +18,7 @@ description: "Fund manager morning brief: market regime, macro outlook, portfoli
 
 ## Gotchas
 
-- Expected Parallax spend: ~50 tokens at 10 holdings (`_parallax/token-costs.md`): telemetry + macro (5) + 2× per-holding fan-out + 3 news (15), plus 5 when a mover qualifies (Step 2) and 10 when Step 3 falls to the V1 tier.
+- Expected Parallax spend (`_parallax/token-costs.md`): `0.05 + 0.05I + 0.1E + 0.1H + 5K + Σ macro_cost` credits: telemetry, I identity reads, E equity snapshots, H redundancy lookups and K news jobs (top-N plus at most one mover). With I=E=H=10, K=3 and one ordinary macro summary: **22.55 credits**; three ordinary markets: **32.55**; a mover adds 5. No-component macro summaries cost 5 normally, up to 50 per market on overview reassembly. Add 0.1 per successful ETF classification probe when needed, and 0.1 per selected successful holding in each V1/split-group call actually made. Portfolio lookups bill zero-weight holdings too, cap at 100, and quick scores defaults to 50.
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.2 (`macro_analyst` takes `market`, not `country`), §1 RIC resolution and coverage fallback, §2 identity cross-check, §3 parallel execution, §4/§5 fallbacks, §11 sensitivity, §14 host primitives, §15 translation.
 - JIT-load `_parallax/house-view/loader.md` FIRST; if a view is present follow §2, §3, §4, §5, §6. The brief uses the view to (a) frame the Macro Snapshot in view language, (b) flag holdings misaligned with tilts, (c) prioritize Action Items toward the view's rebalance direction.
 - The `macro_analyst` summary call returns every component inline including tactical — never make per-component calls.
