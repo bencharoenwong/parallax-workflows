@@ -57,7 +57,7 @@ PG.N — quality 7.5, defensive.
 Quality 6.2 → 7.0 after trims.
 
 ## Implementation Notes
-Execute the AAPL trim first for liquidity.
+Liquidity and implementation costs require review; no trade is executed.
 
 ## About This Report
 Default Parallax branding.
@@ -143,3 +143,23 @@ def test_macro_conditional_pass_when_not_called_and_absent():
     )
     # macro_analyst NOT called AND no Macro Context section -> conditional holds (both False).
     assert _results(no_macro, calls=[])["macro_conditional"] is True
+
+
+def test_explicit_missing_evidence_withholds_numeric_sizing():
+    prose = "## Trade Recommendations\nSizing withheld — missing verified coefficient for AAA.X. Diagnostics: concentration remains flagged."
+    assert _results(prose)["trade_recs_quantified"] is True
+
+
+def test_withheld_marker_cannot_launder_target_table():
+    prose = "## Trade Recommendations\nSizing withheld — UNVERIFIED coverage.\n| Symbol | Target |\n|---|---|\n| AAA.X | 25% |"
+    assert _results(prose)["trade_recs_quantified"] is False
+
+
+def test_withheld_marker_cannot_launder_trade_size_arrow():
+    prose = "## Trade Recommendations\nSizing withheld — infeasible policy. Suggested AAA.X 40% → 25%."
+    assert _results(prose)["trade_recs_quantified"] is False
+
+
+def test_withheld_requires_specific_failure_reason():
+    prose = "## Trade Recommendations\nSizing withheld."
+    assert _results(prose)["trade_recs_quantified"] is False

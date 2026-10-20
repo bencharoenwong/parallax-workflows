@@ -45,6 +45,7 @@ _SECTION_LABELS = [
     "Investment Thesis",
     "Universe Built",
     "Selected Holdings",
+    "Unverified Candidates",
     "View-Effect Summary",
     "Portfolio Factor Profile",
     "Redundancy Notes",
@@ -67,6 +68,10 @@ def _c_holdings_allocated(t, spec) -> Check:
             False,
             "Selected Holdings absent (empty-universe? triage)",
         )
+    withheld = re.search(r"allocation withheld\s*[—:-]\s*(?:no verified eligible candidates|universe unavailable)", sec, re.I)
+    if withheld:
+        return Check("holdings_allocated", _PCT.search(sec) is None,
+                     "allocation withheld with reason; funded weights forbidden")
     has_w, has_s = bool(_PCT.search(sec)), bool(_SCORE_NUM.search(sec))
     return Check(
         "holdings_allocated", has_w and has_s, f"weight_pct={has_w} score_num={has_s}"
@@ -141,12 +146,12 @@ SPEC = EvalSpec(
         {
             "id": "thesis_alignment",
             "statement": "The Selected Holdings actually match the stated investment thesis (sector/region/style/constraints).",
-            "pass_when": "Holdings fit the thesis (e.g. 'US tech quality+momentum' -> US technology names with strong quality/momentum scores); off-thesis picks are absent or explicitly justified.",
+            "pass_when": "Only candidates with verified identities, trusted scores and evidence for hard eligibility criteria may receive funded allocation. Unverified/mismatched candidates remain diagnostic rows with no weight. If none remain, explicit allocation withheld with the reason is correct, not a fabricated allocation. Otherwise holdings fit the thesis (e.g. 'US tech quality+momentum' -> US technology names with strong quality/momentum scores); off-thesis picks are absent or explicitly justified.",
         },
         {
             "id": "allocation_weights_valid",
             "statement": "The allocation weights are valid — they sum to approximately 1.0 (100%) and no single position dominates unless the thesis justifies concentration.",
-            "pass_when": "Weights total ~100% (±a few %); position sizes are reasonable for the stated thesis.",
+            "pass_when": "When allocation is withheld for missing universe/verified eligible candidates, no funded weights render. Otherwise weights total ~100% (±a few %); position sizes are reasonable for the stated thesis.",
         },
     ],
     tasks_path="evals/tasks/portfolio-builder/core.jsonl",

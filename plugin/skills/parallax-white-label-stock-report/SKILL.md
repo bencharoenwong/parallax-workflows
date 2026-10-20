@@ -22,6 +22,8 @@ This is a presentation overlay. The onboarded client is the presentation brand; 
 
 The active brand config (written by `/parallax-white-label-onboard`) at `~/.parallax/client-branding/config.yaml` is used automatically. With no config, the report renders in the default Parallax palette (not white-labeled).
 
+The standalone reader accepts visual tokens independently: invalid files use defaults; malformed nested branches are ignored while valid siblings survive. Invalid colors alone do not activate branding. `active` reflects accepted visual fields; default-only output retains default Parallax provenance. This is a standalone best-effort reader, without shared schema validation. Stored tone, register and voice rules never rewrite the source research. Only explicit `--full-white-label` reads usable string disclosure text from `voice.disclaimers[]`.
+
 ## Prerequisites
 
 - Parallax MCP connected (the `get_stock_report` tool available).

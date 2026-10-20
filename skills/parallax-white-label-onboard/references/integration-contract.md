@@ -1,8 +1,8 @@
 # Downstream Skill Integration Contract
 
-How visual and voice consumers load and apply white-label branding. SKILL.md keeps the high-level routing; this file holds the loader call patterns and the voice prompt-prepend template.
+How implemented visual consumers apply white-label branding, and what a future voice integration would require. Saving a voice profile does not activate automatic voice rewriting.
 
-## Two consumer classes
+## Implemented consumers and stored voice
 
 **Visual consumers** — Skills that produce a PDF or formatted report. They read `branding.colors`, `branding.logos`, `branding.fonts`. They ignore `voice`. Currently integrated:
 
@@ -11,13 +11,15 @@ How visual and voice consumers load and apply white-label branding. SKILL.md kee
 
 The canonical consumer-side contract — header rendering, footer line, color substitution, logo placement, fallback behavior — lives in `_parallax/white-label/integration-pattern.md` (§1–§9). New visual consumers must JIT-load it via the `<!-- white-label: integration-pattern.md -->` sentinel; the drift gate at `tests/test_integration_pattern_referenced.py` enforces the sentinel ↔ load-directive pairing.
 
-**Voice consumers** — letter-writing, newsletter, meeting-prep, email-drafting, and any skill that produces written content under the client's name. They read `voice.*` and apply it as a style guide before generating prose. They optionally also read `branding.*` if the output is rendered (e.g., a branded PDF letter).
+**Voice profile storage** — onboarding can extract and persist `voice.*`. No automatic letter, newsletter or meeting-prep voice consumer is promised here. CIO letter prep is visual-only and leaves voice to the CIO; it never loads `voice.*`. A future writing consumer must explicitly implement and validate profile application before claiming support.
 
-Both classes silently fall back to default Parallax styling/voice if the config is absent or corrupted. The skill never breaks downstream consumers.
+Absent or invalid config degrades to default visuals under the shared loader's error contract. Missing voice is not a substitute for an implemented voice consumer.
+
+**Independent stock-report consumer** — `/parallax-white-label-stock-report` ships its own standalone reader, with no shared schema-loader dependency. It accepts the v2 visual fields documented in that skill and falls back per malformed branch. Its optional `voice.disclaimers[]` input is verbatim disclosure text for explicit full-white-label rendering, not tone or prose synthesis. The shared visual-only contract continues to keep its standard disclaimers.
 
 ## Visual consumer loading pattern
 
-Visual-rendering skills call `loader.load_visual_branding()` — it returns only the seven keys a visual consumer is permitted to read (`client_name`, `colors`, `logos`, `fonts`, `source`, `error`, `render`) and structurally excludes `voice`/typography/`multi_source` so a misuse (`branding["voice"]`) raises `KeyError` instead of silently inheriting voice data. Pair it with `loader.is_white_label_active(branding)` (rendering predicate — do not re-implement inline; see `integration-pattern.md` §2/§4/§8) and `loader.safe_source_reference(branding)` (display-safe About This Report source ref — §7). Skills run the visual loader through the one-line `loader.py --json` command in `integration-pattern.md` §2; the import below is for Python callers. The full 14-key shape from `load_client_branding()` is reserved for voice consumers (CIO letter, newsletter, future writing skills) that need both visual and voice; it has no command form. Both wrappers bridge v1↔v2 file shapes so downstream code keeps working through the schema migration:
+Visual-rendering skills call `loader.load_visual_branding()` — it returns only the seven keys a visual consumer is permitted to read (`client_name`, `colors`, `logos`, `fonts`, `source`, `error`, `render`) and structurally excludes `voice`/typography/`multi_source` so a misuse (`branding["voice"]`) raises `KeyError` instead of silently inheriting voice data. Pair it with `loader.is_white_label_active(branding)` (rendering predicate — do not re-implement inline; see `integration-pattern.md` §2/§4/§8) and `loader.safe_source_reference(branding)` (display-safe About This Report source ref — §7). Skills run the visual loader through the one-line `loader.py --json` command in `integration-pattern.md` §2; the import below is for Python callers. The full 14-key shape from `load_client_branding()` is available for future explicitly implemented consumers that need both visual and voice; it has no command form. Both wrappers bridge v1↔v2 file shapes so downstream code keeps working through the schema migration:
 
 ```python
 from skills._parallax.white_label.loader import load_visual_branding
@@ -31,40 +33,14 @@ if result.get("error") is None:
     header_font   = result["fonts"]["header"]    # v2: derived from typography.h1.fontFamily
 ```
 
-For voice consumers that need the full token tree alongside voice, call `load_client_branding()` and read `result["typography"]`, `result["rounded"]`, `result["spacing"]`, `result["components"]` (empty dicts on v1 configs and on every error path — safe to access unconditionally), plus `result["voice"]`.
+For a future voice consumer that needs the full token tree alongside voice, call `load_client_branding()` and read `result["typography"]`, `result["rounded"]`, `result["spacing"]`, `result["components"]` (empty dicts on v1 configs and on every error path — safe to access unconditionally), plus `result["voice"]`.
 
 **Do NOT** read `cfg["branding"]["colors"]["accent"]` directly — that key exists in v1 files but is named `tertiary` in v2. The loader is the single source of truth for the legacy return shape.
 
-## Voice consumer loading pattern
+## Future voice integration boundary
 
-```python
-import yaml, os
-config_path = os.path.expanduser("~/.parallax/client-branding/config.yaml")
-voice = None
-if os.path.exists(config_path):
-    with open(config_path) as f:
-        cfg = yaml.safe_load(f)
-    if cfg.get("voice", {}).get("enabled"):
-        voice = cfg["voice"]
-
-# In the prose-generation prompt, prepend something like:
-if voice:
-    style_block = f"""
-    Write in the voice of {cfg['metadata']['client_name']}. Their register is
-    {voice['tone']['register']}. Primary attributes: {', '.join(voice['tone']['primary_attributes'])}.
-    Avoid: {', '.join(voice['tone']['avoid_attributes'])}.
-
-    Non-negotiable rules:
-    {chr(10).join('- ' + r for r in voice['core_rules'])}
-
-    Phrases to delete on sight (anti-filler):
-    {chr(10).join('- ' + p for p in voice['anti_filler'])}
-
-    How they describe themselves: {voice['company_context']}
-    """
-    prompt = style_block + "\n\n" + content_prompt
-```
+A future writing skill must call `load_client_branding()`, inspect its error state and `voice.enabled`, then define which validated profile fields its own prose-generation contract supports. It must preserve evidence, uncertainty and its disclosure rules; brand tone cannot override those rules. A saved profile alone does not authorize drafting, sending, or retaining client communications. Do not bypass the loader with raw YAML traversal or prepend unchecked profile values to a generation prompt.
 
 ## Drafted-vs-Sent feedback loop
 
-Voice consumer skills SHOULD save the AI draft + the human-edited final version after each session as an entry in `voice.drafted_vs_sent`. This is the highest-quality voice calibration data and improves future outputs. Implementation deferred until at least one voice consumer is wired up.
+Draft-versus-final calibration is unimplemented. Any future consumer needs an explicit retention and confirmation contract before saving communications; onboarding does not start that feedback loop.

@@ -14,9 +14,9 @@
 
 | Tool | Equity (e.g., AAPL.O, JPM.N) | ETF (e.g., SPY, EWJ, QQQ) | Notes |
 |---|---|---|---|
-| `export_price_series` | ✓ supported | ✗ returns `{success:false, error}` (NOT `[]`; verified live 2026-07-20) | Equity-only, **1 credit per call** (corrected 2026-10-06 — the live tool description states "Cost: 1 credit", no FREE marker; see `token-costs.md`). Pass RIC with exchange suffix. A `success:false` response is a usable equity/ETF discriminator. |
+| `export_price_series` | ✓ supported | ✗ historically returns `{success:false, error}` | Equity-only, **1 credit per call**. Pass a verified RIC. Current JSON rows use `data[].price` with dates, not guaranteed `close` fields. A failure alone does not identify an ETF: transport, authorization and unsupported symbols remain separate failures. |
 | `etf_daily_price` | ✗ returns `[]` | ✓ supported | ETF-only. Pass plain ticker (no `.X` suffix). Returns per-row `date` + `changepercent` — move AND date in one call. 1 token per call. |
-| `etf_profile` | ✗ returns `{"error":"No profile data found"}` | ✓ rich profile (name, exchange, price, market cap, scores, recommendation, `change_percent`; re-verified live 2026-10-03) | **Use as asset-class oracle.** Also returns `change_percent`, but with NO as-of/date field (verified live 2026-07-20) — use `etf_daily_price` when a dated ETF move is needed. Single-symbol probe; 1 token per call per `token-costs.md`. |
+| `etf_profile` | ✗ explicit not-in-ETF-universe response for a tested equity | ✓ rich profile | **Classification evidence, not a generic-error oracle.** Current tested AAPL negative is `success:false`, `status:400`, with an explicit ETF-not-found reason; historical `No profile data found` is another observed shape. A recognized negative requires independently verified listed-equity identity before equity routing. Use dated `etf_daily_price` for an ETF move; profile `change_percent` alone has no verified date. 1 credit per probe. |
 | `etf_search` | n/a | ✓ supported | Discovery by market/keyword, query required. Deprecated alias of `search_etfs`; prefer `search_etfs`. |
 | `etf_holdings` | n/a | ✓ supported | Underlying holdings of an ETF. |
 | `get_company_info` | ✓ supported | ✓ partial (returns equity-shaped record for some ETFs) | **Does NOT include an `asset_class` field**; cannot be used to distinguish equity from ETF. Use `etf_profile` for that. |
@@ -50,9 +50,11 @@ Markets with a fixed ticker in the pair-finder canonical table (`parallax-pair-f
 
 1. **Multi-symbol calls fail-empty on partial coverage.** `etf_daily_price("SPY,EWJ,EWG")` returns `[]` (empty array) instead of returning the two valid symbols + an error for the missing one. Same behavior on `get_company_info` (the missing symbol is silently dropped from the response). **Always use single-symbol calls when coverage might be partial.**
 
-2. **`etf_profile` returns explicit error on equities.** Useful as a clean asset-class oracle: response shape `{"error": "No profile data found", "ric": ...}` → equity; non-error response → ETF. Each probe costs 1 token.
+2. **Classify from explicit evidence.** A populated, identity-matched ETF profile supports ETF routing. On 2026-10-19 a direct-connector AAPL probe returned `success:false`, `status:400`, and `Invalid ETF symbol: ETF symbol 'AAPL' not found in the ETF universe`; older responses used `No profile data found`. These explicit coverage negatives are not the same as timeout, authorization, rate-limit, malformed or unrelated errors. A negative does not alone prove equity: require independently verified listed-equity identity/context before equity-only enrichment. Otherwise the instrument remains unknown. Never count a generic `success:false` as proof of ETF or equity. Company-info presence alone is insufficient because it also covers some ETFs.
 
-3. **`.P` exchange suffix on RIC == NYSE Arca == ETF.** When probes are unavailable, first resolve bare tickers to RICs per `parallax-conventions.md` §1. Then apply the static heuristic: a symbol that remains suffix-less or ends in `.P` is likely an ETF; otherwise treat it as equity.
+3. **Symbols are hints, not verified asset classes.** A `.P` or suffix-less symbol can guide a bounded ETF coverage lookup, but does not authorize a claimed instrument type. If classification is unavailable, retain the instrument and its original weight as unverified; use supported diagnostic evidence only. A successful dated ETF-price response may support that price leg; an unsuccessful price request does not classify the instrument. Never silently drop an unknown holding or assign it equity factors.
+
+**Partial live recheck, 2026-10-19:** direct-connector probes confirmed company-info `data.name`/`data.currency`, snapshot `comparison[]`, equity-export `data[].price`, ETF-profile positive and explicit negative shapes, and bare ETF-price rows with `date`/`close`. Other rows retain their historical verification status; this is not a full coverage recertification.
 
 ## How to add a new entry
 

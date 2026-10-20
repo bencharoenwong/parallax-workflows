@@ -45,6 +45,23 @@ def _book(clients: list[ClientBook]) -> DeskBook:
     return DeskBook("Desk", "2026-07-19T00:00:00Z", None, None, tuple(clients))
 
 
+AS_OF = "2026-10-19"
+
+
+def _dated(moves):
+    """Give legacy arithmetic fixtures an explicit, fixed recent session."""
+    return {s: SymbolMove(s, m, True, ("2026-10-15", "2026-10-16"))
+            if isinstance(m, (int, float)) else m for s, m in moves.items()}
+
+
+def _scan(moves, symbols):
+    return scan_integrity(_dated(moves), symbols, as_of=AS_OF)
+
+
+def _render(book, moves, threshold, min_impact):
+    return render_no_calls_or_degraded(book, _dated(moves), threshold, min_impact, as_of=AS_OF)
+
+
 def test_overnight_move_two_closes():
     assert overnight_move([100.0, 93.0]) == pytest.approx(-7.0)
 
@@ -109,13 +126,13 @@ def test_bounding_groups_by_symbol_above_twenty_five_clients():
 
 def test_no_calls_when_no_symbol_crosses_threshold():
     book = _book([_client("A", [("AAPL.O", 1.0)])])
-    out = render_no_calls_or_degraded(book, {"AAPL.O": 4.9}, 5.0, 0.5)
+    out = _render(book, {"AAPL.O": 4.9}, 5.0, 0.5)
     assert "No calls indicated" in out
 
 
 def test_no_calls_when_movers_exist_but_no_client_clears_min_impact():
     book = _book([_client("A", [("AAPL.O", 0.01), ("MSFT.O", 0.99)])])
-    out = render_no_calls_or_degraded(book, {"AAPL.O": 6.0, "MSFT.O": 0.0}, 5.0, 0.5)
+    out = _render(book, {"AAPL.O": 6.0, "MSFT.O": 0.0}, 5.0, 0.5)
     assert "No calls indicated" in out
 
 
@@ -188,7 +205,7 @@ def test_inline_warnings_are_surfaced():
         saved,
     )
     assert any(warning.code == "weights_off" for warning in resolved.validation_warnings)
-    out = render_no_calls_or_degraded(resolved, {"TSLA.O": 1.0}, 5.0, 0.5)
+    out = _render(resolved, {"TSLA.O": 1.0}, 5.0, 0.5)
     assert "Validation Warnings" in out
     assert "renormalised" in out
 
@@ -341,41 +358,117 @@ def test_redact_names_also_redacts_validation_warnings():
 
 
 def test_scan_integrity_below_threshold_blocks_no_calls_path():
-    integrity = scan_integrity({"AAPL.O": 1.0, "MSFT.O": SymbolMove("MSFT.O", None, False)}, ["AAPL.O", "MSFT.O"])
+    integrity = _scan({"AAPL.O": 1.0, "MSFT.O": SymbolMove("MSFT.O", None, False)}, ["AAPL.O", "MSFT.O"])
     assert integrity["status"] == "SCAN DEGRADED"
 
 
 def test_all_nan_scan_is_degraded_not_ok():
     for move in [float("nan"), SymbolMove("AAPL.O", float("nan"))]:
-        integrity = scan_integrity({"AAPL.O": move}, ["AAPL.O"])
+        integrity = _scan({"AAPL.O": move}, ["AAPL.O"])
         assert integrity["status"] == "SCAN DEGRADED"
         assert integrity["coverage"] == 0.0
 
 
 def test_scan_integrity_at_threshold_allows_render():
-    integrity = scan_integrity({"A": 1.0, "B": 1.0, "C": 1.0, "D": 1.0, "E": SymbolMove("E", None, False)}, ["A", "B", "C", "D", "E"])
+    integrity = _scan({"A": 1.0, "B": 1.0, "C": 1.0, "D": 1.0, "E": SymbolMove("E", None, False)}, ["A", "B", "C", "D", "E"])
     assert integrity["coverage"] == pytest.approx(0.80)
     assert integrity["status"] == "ok"
 
 
 def test_empty_union_is_not_no_calls():
-    out = render_no_calls_or_degraded(_book([]), {}, 5.0, 0.5)
+    out = _render(_book([]), {}, 5.0, 0.5)
     assert "Scan refused" in out
     assert "No calls indicated" not in out
 
 
 def test_scan_integrity_precedes_empty_mover_branch():
     book = _book([_client("A", [("AAPL.O", 0.5), ("MSFT.O", 0.5)])])
-    out = render_no_calls_or_degraded(book, {"AAPL.O": 1.0, "MSFT.O": SymbolMove("MSFT.O", None, False)}, 5.0, 0.5)
+    out = _render(book, {"AAPL.O": 1.0, "MSFT.O": SymbolMove("MSFT.O", None, False)}, 5.0, 0.5)
     assert "Scan degraded" in out
     assert "No calls indicated" not in out
 
 
 def test_symbol_with_one_close_is_named_not_silently_dropped():
-    integrity = scan_integrity({"AAPL.O": SymbolMove("AAPL.O", None, False)}, ["AAPL.O"])
+    integrity = _scan({"AAPL.O": SymbolMove("AAPL.O", None, False)}, ["AAPL.O"])
     assert integrity["unpriced_symbols"] == ("AAPL.O",)
 
 
 def test_scan_concurrency_is_a_named_constant():
     assert isinstance(SCAN_CONCURRENCY, int)
     assert SCAN_CONCURRENCY in {8, 24}
+
+
+@pytest.mark.parametrize("closes", [[0, 100], [100, 0], [-100, -110], [100, -10]])
+def test_nonpositive_equity_etf_closes_are_invalid(closes):
+    with pytest.raises(ValueError, match="positive"):
+        overnight_move(closes)
+
+
+@pytest.mark.parametrize("dates", [None, ("2020-01-01", "2020-01-02"),
+    ("2026-10-16", "2026-10-15"), ("2026-10-16", "2026-10-16"),
+    ("2026-10-01", "2026-10-16"), ("2026-10-19", "2026-10-20"),
+    ("invalid", "2026-10-16")])
+def test_unusable_sessions_cannot_count_as_priced_or_trigger_calls(dates):
+    moves = {"AAA.X": SymbolMove("AAA.X", 20.0, True, dates)}
+    result = scan_integrity(moves, ["AAA.X"], as_of=AS_OF)
+    assert result["coverage"] == 0
+    assert result["status"] == "SCAN DEGRADED"
+    out = render_no_calls_or_degraded(_book([_client("A", [("AAA.X", 1)])]), moves, 5, .5, as_of=AS_OF)
+    assert "Scan degraded" in out
+    assert "No calls indicated" not in out
+
+
+def test_undated_numeric_moves_are_not_current_scan_evidence():
+    assert scan_integrity({"AAA.X": 8}, ["AAA.X"], as_of=AS_OF)["coverage"] == 0
+
+
+def test_recent_mixed_market_sessions_are_disclosed_separately():
+    moves = {"AAA.X": SymbolMove("AAA.X", 8, True, ("2026-10-15", "2026-10-16")),
+             "BBB.X": SymbolMove("BBB.X", 6, True, ("2026-10-14", "2026-10-15"))}
+    result = scan_integrity(moves, moves, as_of=AS_OF)
+    assert result["status"] == "ok"
+    assert result["session_basis"] == "mixed_latest_sessions"
+    assert result["session_intervals"]["BBB.X"] == ("2026-10-14", "2026-10-15")
+
+
+def test_timezone_aware_as_of_uses_utc_and_default_is_current_utc():
+    from desk_call_list_logic import validate_price_moves
+    from datetime import timedelta
+    now = datetime.now(timezone.utc)
+    dates = ((now.date()-timedelta(days=1)).isoformat(), now.date().isoformat())
+    moves = {"AAA.X": SymbolMove("AAA.X", 1, True, dates)}
+    assert validate_price_moves(moves)[0] == moves
+    assert validate_price_moves(moves, as_of=now)[0] == moves
+    with pytest.raises(ValueError, match="timezone"):
+        validate_price_moves(moves, as_of=datetime(2026, 10, 19))
+
+
+def test_unmatched_price_identity_is_not_current_evidence():
+    moves = {"AAA.X": SymbolMove("BBB.X", 9, True, ("2026-10-15", "2026-10-16"))}
+    assert scan_integrity(moves, moves, as_of=AS_OF)["coverage"] == 0
+
+
+def test_impossible_equity_price_move_cannot_count_as_priced():
+    moves = {"AAA.X": SymbolMove("AAA.X", -100.1, True, ("2026-10-15", "2026-10-16"))}
+    assert scan_integrity(moves, moves, as_of=AS_OF)["coverage"] == 0
+
+
+def test_quiet_mixed_sessions_do_not_hide_date_basis():
+    moves = {"AAA.X": SymbolMove("AAA.X", 1, True, ("2026-10-15", "2026-10-16")),
+             "BBB.X": SymbolMove("BBB.X", 1, True, ("2026-10-14", "2026-10-15"))}
+    out = render_no_calls_or_degraded(_book([_client("A", [("AAA.X", .5), ("BBB.X", .5)])]), moves, 5, .5, as_of=AS_OF)
+    assert "No calls indicated" in out
+    assert "mixed_latest_sessions" in out
+    assert "2026-10-14 to 2026-10-15" in out
+
+
+@pytest.mark.parametrize("value", ["bad response", {}, True])
+def test_malformed_move_degrades_instead_of_crashing(value):
+    moves = {"AAA.X": SymbolMove("AAA.X", value, True, ("2026-10-15", "2026-10-16"))}
+    assert scan_integrity(moves, moves, as_of=AS_OF)["coverage"] == 0
+
+
+@pytest.mark.parametrize("closes", [[True, 100], [100, False], ["100", 110], [100, "110"], [{}, 100]])
+def test_overnight_prices_reject_boolean_and_coerced_text_before_conversion(closes):
+    with pytest.raises(ValueError, match="numeric"):
+        overnight_move(closes)
