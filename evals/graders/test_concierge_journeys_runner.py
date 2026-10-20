@@ -176,6 +176,8 @@ def bash(cmd):
     return proc.stdout
 
 emit({"type": "system", "subtype": "init", "cwd": cwd,
+      "mcp_deadlines": {key: os.environ.get(key) for key in
+                        ("MCP_TOOL_TIMEOUT", "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT")},
       "plugins": [{"name": "parallax", "path": plugin}],
       "mcp_servers": [{"name": "claude.ai Parallax", "status": "connected"}]})
 tool("Skill", {"skill": "parallax:parallax-client-review"})
@@ -211,12 +213,16 @@ def run(tmp_path):
     temp = tmp_path / "tmp"
     temp.mkdir()
 
-    def _run(mode):
+    def _run(mode, mcp_timeout=None):
         # An inherited PARALLAX_E2E_* export (timeout, connector, journeys file,
         # dry run) would change what the runner does, so none reaches it. The
         # runner's own timeout is shorter than this test's, so a hung stub is
         # killed by the runner, which then still writes its results.
         inherited = {k: v for k, v in os.environ.items() if not k.startswith("PARALLAX_E2E_")}
+        inherited.pop("MCP_TOOL_TIMEOUT", None)
+        inherited.pop("CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT", None)
+        if mcp_timeout is not None:
+            inherited["MCP_TOOL_TIMEOUT"] = mcp_timeout
         env = {**inherited, "PATH": f"{bin_dir}:{os.environ['PATH']}", "PARALLAX_E2E_LIVE": "1",
                "PARALLAX_E2E_ONLY": "J9", "PARALLAX_E2E_RESULTS_DIR": str(results),
                "PARALLAX_E2E_TIMEOUT": "120", "TMPDIR": str(temp), "STUB_MODE": mode}
@@ -230,6 +236,22 @@ def run(tmp_path):
         return proc, results, temp
 
     return _run
+
+
+@pytest.mark.parametrize("configured", [None, "420000"])
+def test_async_deadline_reaches_fresh_claude_session(run, configured):
+    proc, results, temp = run("good", mcp_timeout=configured)
+    diag = _diagnostics(proc, results, temp)
+    assert proc.returncode == 0, diag
+    transcripts = [path for path in results.glob("concierge_J9_*.jsonl")
+                   if not path.name.endswith((".trace.jsonl", ".python-starts.jsonl"))]
+    assert len(transcripts) == 1, diag
+    events = [json.loads(line) for line in transcripts[0].read_text().splitlines()]
+    init = next(event for event in events if event.get("subtype") == "init")
+    assert init["mcp_deadlines"] == {
+        "MCP_TOOL_TIMEOUT": configured or "300000",
+        "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT": "0",
+    }
 
 
 def _diagnostics(proc, results: Path, temp: Path) -> str:

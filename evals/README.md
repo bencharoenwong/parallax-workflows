@@ -58,11 +58,16 @@ within normal variance for a single run. Median over 3+ runs filters most of it.
 - **Server load is the dominant noise term.** A 30s run today might be 10s
   tomorrow on the same code. Always measure pre/post under the same
   conditions, and treat single-run differences <5s as noise.
-- **Async tools are not bounded.** `get_news_synthesis`, `get_assessment`, and
-  `get_financial_analysis` can take 30-90s independently of the skill's
+- **Async tools can dominate latency.** `get_news_synthesis`, `get_assessment`, and
+  `get_financial_analysis` can take several minutes independently of the skill's
   parallelization quality. Skills that wait on these will dominate the
   wall-clock regardless of per-holding batching. Look at the output for
   `"news": "pending"` markers to identify async-bound runs.
+  The rollout and concierge runners default `MCP_TOOL_TIMEOUT` to `300000`
+  milliseconds and disable the separate idle timer. Explicit operator values
+  take precedence. The overall rollout/journey timeout still limits the process
+  group. These settings allow longer requests; they do not guarantee completion
+  or recover a job ID lost when a request times out.
 - **Holdings size matters.** Per-holding parallelization wins scale linearly
   with N. A 5-holding portfolio shows ~1/2 the absolute saving of a 10-holding
   one. Always benchmark the size you actually care about.
@@ -412,6 +417,7 @@ assistant text (`.txt`), stderr, and the ground truth (`.trace.jsonl`,
 | `PARALLAX_E2E_CONNECTOR` | optional | `account` (default) or `plugin`. See below. |
 | `PARALLAX_E2E_ALLOWED_TOOLS` | optional | Overrides the Parallax tool patterns the connector mode picks (comma-separated). `--setting-sources project` drops user-level permissions, so the Parallax tools must be listed here or by the mode. The base permissions below are always allowed on top. |
 | `PARALLAX_E2E_TIMEOUT` | optional | Per-journey limit in seconds, default `600`. A timeout is a FAIL. |
+| `MCP_TOOL_TIMEOUT` | optional | MCP request deadline in milliseconds, default `300000`. Independent of the idle timer and overall journey limit. |
 | `PARALLAX_E2E_RESULTS_DIR` | optional | Where results land, default `evals/results/`. |
 | `PARALLAX_E2E_JOURNEYS` | optional | Journey file, default `evals/tasks/concierge/journeys.jsonl` (for a one-off calibration journey). |
 
