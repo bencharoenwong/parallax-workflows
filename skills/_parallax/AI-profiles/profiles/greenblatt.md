@@ -21,18 +21,20 @@ output_shape: ranked_basket
 output_shape_single_ticker: ticker_rank_check
 tool_sequence_universe:
   - build_stock_universe
+  - get_company_info
   - get_financials:statement=ratios
   - get_peer_snapshot
 tool_sequence_single_ticker:
   - get_company_info
   - build_stock_universe
+  - get_company_info
   - get_financials:statement=ratios
   - get_peer_snapshot
 required_factors_present: []
 thresholds:
-  roc_rank_percentile: "top decile of queried universe"
-  earnings_yield_rank_percentile: "top decile of queried universe"
-  combined_rank_percentile_for_match: "top 10% of queried universe"
+  roc_rank_percentile: "top decile of sampled eligible cohort"
+  earnings_yield_rank_percentile: "top decile of sampled eligible cohort"
+  combined_rank_percentile_for_match: "top 10% of sampled eligible cohort"
   combined_rank_percentile_for_partial: "top 25% but outside top 10%"
 owner: parallax-workflows
 last_legal_review: PENDING
@@ -52,27 +54,29 @@ Gray & Carlisle's 2012 *Quantitative Value* provides academic replication on US 
 
 Two modes:
 
-**Universe mode** — runs the Magic Formula against a defined equity universe. Uses `build_stock_universe` to get candidates, `get_financials(ratios)` to pull ROC and EY (substituting Parallax's closest available ratios where the exact metrics aren't directly exposed), ranks each candidate on both dimensions, combines ranks, and returns the top decile as a ranked basket.
+**Universe mode** — runs the Magic Formula-inspired proxy rank against a defined sampled equity cohort. Uses `build_stock_universe` to get candidates, `get_financials(ratios)` to pull ROC and EY (substituting Parallax's closest available ratios where the exact metrics aren't directly exposed), ranks each candidate on both dimensions, combines ranks, and returns the top decile as a ranked basket.
 
-**Single-ticker mode** — takes one ticker and reports where it ranks in its sector peer universe on combined Greenblatt rank. Verdict: `match` (top decile), `partial_match` (top quartile but outside top decile), or `no_match` (below top quartile).
+**Single-ticker mode** — takes one ticker and reports where it ranks in its sampled sector peer cohort on combined Greenblatt rank. Verdict: `match` (top decile), `partial_match` (top quartile but outside top decile), or `no_match` (below top quartile).
 
-Because the formula is explicitly mechanical, this profile has zero discretion — every decision is codified. The output is the formula's current ranking, nothing more.
+The dispatcher filters Financials/Utilities using verified company-info sector fields, dropping unreadable classifications. Cap at the top 30 eligible names by composite score; ticker-check always retains the verified target exactly once, using the top 29 eligible other names plus target when needed. Fetch target ratios even if absent from search. State query, exclusions, composite selection, tie convention and actual final N. This is a sampled cohort, not an entire sector or US universe.
+
+Require finite ROC (label ROIC substitution) and finite positive EV/EBIT before using its reciprocal as earnings yield. Drop unrankable peers with reasons; an unrankable target yields `skipped`, never `no_match`. The minimum cohort remains 10: expand once if smaller, otherwise `INSUFFICIENT_UNIVERSE` and no fit. Preserve top 10% match and top 25% partial thresholds within the final sampled cohort.
 
 ## What this profile does NOT capture
 
 - **Greenblatt's discretionary judgment.** Greenblatt runs Gotham Capital as a discretionary value investor; the Magic Formula is his simplified systematic version for retail. Not a full replica.
 - **Intangibles-adjusted EY.** Per Lev & Srivastava (2022), traditional earnings yield understates intangibles-heavy firms. The formula is applied as published — not intangibles-adjusted — so high-quality compounders may rank lower than a modernized version would place them.
-- **Small-cap premium.** Gray & Carlisle (2012) show the outperformance is stronger in small-caps. This profile runs on whatever universe is queried. The dispatcher's production default is sector-scoped ("US large-cap consumer staples") because broad universe queries — e.g., all mid-to-large-cap US equities — consistently time out against the async universe builder (see the dispatcher SKILL.md query-scoping rule). For a broad Magic Formula screen, the dispatcher runs sector-by-sector and merges the rankings.
-- **Sector exclusions enforcement.** Greenblatt's book excludes financials and utilities. `build_stock_universe` has no sector-exclusion parameter, so the tool does not enforce this: the default sector-scoped query avoids those sectors only because it names a different sector, and a custom query can return financials or utilities with nothing to filter them out.
+- **Small-cap premium.** Gray & Carlisle (2012) show the outperformance is stronger in small-caps. This profile runs on whatever universe is queried. The dispatcher's production default is sector-scoped ("US large-cap consumer staples") because broad universe queries — e.g., all mid-to-large-cap US equities — consistently time out against the async universe builder (see the dispatcher SKILL.md query-scoping rule). A broad query requires scoped samples; separate sector percentiles cannot establish a whole-US ranking.
+- **Complete-universe coverage.** Sector filtering is implemented, but query/composite selection and ratio availability determine the sampled cohort; omitted names cannot be ranked.
 - **Holding period / rebalancing.** Formula implies annual rebalance; profile is stateless (current ranks only).
 
 ## How to interpret the output
 
 **Universe mode:** a ranked list of top-decile names with ROC rank, EY rank, combined rank, and sector. This is what the formula says passes the screen today.
 
-**Single-ticker mode:** a verdict (`match` / `partial_match` / `no_match`) plus the ticker's percentile ranks on ROC, EY, and combined, within the peer universe.
+**Single-ticker mode:** a verdict (`match` / `partial_match` / `no_match`) plus the ticker's percentile ranks on ROC, EY, and combined, within the sampled peer cohort.
 
-A `match` means the ticker is in the top 10% of the queried peer universe by combined Greenblatt rank. It does NOT mean the ticker is a current Gotham Capital position, does NOT mean the formula is "correct" for this moment in the market, and is NOT investment advice.
+A `match` means the ticker is in the top 10% of the sampled eligible peer cohort by combined Greenblatt rank. It does NOT mean the ticker is a current Gotham Capital position, does NOT mean the formula is "correct" for this moment in the market, and is NOT investment advice.
 
 ## Anchor test plan
 
@@ -81,6 +85,6 @@ Greenblatt's Magic Formula has public replication sites. Expected behavior:
 2. Spot-check against a public Magic Formula replication site — substantial overlap expected (not exact)
 3. Known value names should cluster near the top; high-multiple growth names should cluster near the bottom
 
-## Thresholds (to be tuned during anchor test)
+## Thresholds (unchanged)
 
-The ROC and EY percentiles are computed within the queried universe. The thresholds above are the formula itself — they aren't adjustable. What IS adjustable is the universe definition (market cap cutoffs, sector exclusions, geography). The dispatcher's default universe is sector-scoped for production reliability (see "Small-cap premium" above); broad screens go through the dispatcher's sector-by-sector merge path.
+The ROC and EY percentiles are computed within the sampled eligible cohort. The thresholds above are the formula itself — they aren't adjustable. What IS adjustable is the universe definition (market cap cutoffs, sector exclusions, geography). The dispatcher's default universe is sector-scoped for production reliability (see "Small-cap premium" above); broad screens must retain their sample-selection limits.

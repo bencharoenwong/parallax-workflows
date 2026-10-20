@@ -108,7 +108,7 @@ def classify_severity(
 
     Returns:
         ``(severity, details)`` where ``severity`` is one of
-        ``drift_minor | drift_moderate | drift_material`` and ``details``
+        ``unverified | drift_minor | drift_moderate | drift_material`` and ``details``
         is a structured dict the renderer / audit row can use.
     """
     divergent_count = 0
@@ -132,6 +132,8 @@ def classify_severity(
             macro_sign_flip = True
             sign_flip_cells.append(path)
 
+    evaluable_count = sum(r.get("state") in (_DIVERGENT_STATES | {"ALIGNED"})
+                          for r in resolutions)
     pct = (divergent_count / denominator) if denominator > 0 else 0.0
 
     # Base tier from the percentage rule.
@@ -154,6 +156,9 @@ def classify_severity(
         severity = _bump_tier(severity)
         magnitude_escalated = True
 
+    if evaluable_count == 0:
+        severity = "unverified"
+
     details = {
         "divergent_count": divergent_count,
         "denominator": denominator,
@@ -165,6 +170,11 @@ def classify_severity(
         "max_magnitude": max_mag,
         "magnitude_escalated": magnitude_escalated,
         "view_age_days": view_age_days,
+        "evaluable_count": evaluable_count,
+        "coverage": min(evaluable_count / denominator, 1.0) if denominator > 0 else 0.0,
+        "assessment_status": ("unverified" if not evaluable_count else
+                              "partial" if evaluable_count < denominator else "complete"),
+        "evaluated_divergent_pct": divergent_count / evaluable_count if evaluable_count else None,
     }
     return severity, details
 

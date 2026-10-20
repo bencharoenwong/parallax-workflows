@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import render_judge
+import drift_classify
 
 
 def _kwargs(**overrides):
@@ -51,6 +52,30 @@ def test_render_minor_drift_includes_header_and_verdict():
     assert "drift_minor" in md
     assert "Minor drift detected" in md
     assert "Test View" in md
+
+
+def test_zero_coverage_report_and_json_are_unverified_without_alignment_claim():
+    resolutions = [{"dim": "tilts.sectors.health_care", "state": "PARALLAX_SILENT",
+                    "cio_tilt": 1, "parallax_view": None}]
+    severity, details = drift_classify.classify_severity(resolutions, 60, 1)
+    kwargs = _kwargs(severity=severity, severity_details=details, resolutions=resolutions,
+                     drift_summary=drift_classify.summarize_states(resolutions))
+    md = render_judge.render_markdown_report(**kwargs)
+    parsed = json.loads(render_judge.render_json_sidecar(**kwargs))
+    assert "## Verdict: UNVERIFIED" in md
+    assert "View is materially aligned" not in md
+    assert "0 of 1" in md
+    assert parsed["severity"] == "unverified"
+    assert parsed["severity_details"]["evaluable_count"] == 0
+
+
+def test_partial_coverage_banner_cannot_read_as_full_view_ok():
+    resolutions = [{"dim": "tilts.sectors.health_care", "state": "ALIGNED",
+                    "cio_tilt": 1, "parallax_view": 1}]
+    severity, details = drift_classify.classify_severity(resolutions, 60, 10)
+    md = render_judge.render_markdown_report(**_kwargs(severity=severity, severity_details=details))
+    assert "## Verdict: PARTIAL" in md
+    assert "not a full-view alignment verdict" in md
 
 
 def test_render_material_drift_banner():

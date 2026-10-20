@@ -7,7 +7,8 @@ This copy carries the sections that consumer skills render by reference from `pa
 Exactly one of:
 - `Profile fit: match` — with count, e.g., "4 of 4 factor criteria met"
 - `Profile fit: partial match` — with count, e.g., "2 of 4 factor criteria met"
-- `Profile fit: no match` — with explanation
+- `Profile fit: no match` — with explanation based on evaluated criteria
+- `Profile fit: skipped` — required evidence unavailable/invalid, ambiguous rules or non-applicability; name the reason and retain verified observations
 
 **FORBIDDEN verdict language:** "buy", "sell", "recommend", "would buy", "endorses", "rates", "likes", "hates", any first-person impersonation. See spec §5.
 

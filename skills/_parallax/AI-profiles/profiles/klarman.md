@@ -50,11 +50,17 @@ Seth Klarman's 1991 *Margin of Safety: Risk-Averse Value Investing Strategies fo
 
 ## What this profile does
 
-Applies a balance-sheet-first four-check test to a single stock: (1) net cash position, (2) debt on an absolute D/E threshold (peer comparison unavailable from the tool sequence), (3) free-cash-flow stability across four periods, (4) valuation discount to peer median. A Parallax Value score ≥ 4 is used as a backup sanity check (loose threshold per Lev-Srivastava 2022 intangibles caveat). A stock `match`es if it passes ≥ 3 of the 4 balance-sheet checks AND the Value backup. 2 of 4 → `partial_match`. ≤ 1 of 4 → `no_match`.
+Applies a balance-sheet-first four-check test to a single stock: (1) net cash position, (2) debt on an absolute D/E threshold (peer comparison unavailable from the tool sequence), (3) free-cash-flow stability across four periods, (4) valuation discount to peer median. A Parallax Value score ≥ 4 is used as a backup sanity check (loose threshold per Lev-Srivastava 2022 intangibles caveat). A stock `match`es if it passes ≥ 3 of the 4 balance-sheet checks AND the Value backup. N ≥ 3 with Value < 4, or N = 2 → `partial_match`; N ≤ 1 → `no_match`, where N counts PASS checks only. These rules require all four checks and the Value backup to be evaluable.
+
+### Required evidence and ratio domains
+
+Inputs must be finite numeric observations, not booleans. Net cash requires positive market cap: (cash − total debt) / market cap is PASS ≥ 0, PARTIAL ≥ −0.2, FAIL below. D/E requires positive equity and uses the absolute D/E < 1.0 fallback; no supplied tool provides peer-median D/E. Render “Peer comparison unavailable.” Zero/negative equity makes the check `UNAVAILABLE`.
+
+FCF = cash_from_operating_activities + capital_expenditures (already signed negative). Require four comparable periods: ≥3 positive is PASS, 2 PARTIAL, ≤1 FAIL. Fewer periods are `UNAVAILABLE`; never shrink the denominator. Valuation requires positive earnings and comparable positive target/peer P/E; when earnings are negative use P/B only with positive book equity and comparable available target/peer P/B. For the same valid comparator, PASS ≤ peer median × 0.85, PARTIAL ≤ ×1.0, FAIL above. Missing peer metrics or unsupported ratio domains are `UNAVAILABLE`, never inferred. Missing any required check or Value backup gives final `skipped`; observed checks remain visible without a negative fit claim.
 
 ## Distinctive output: "no position warranted"
 
-If a stock passes 0 of 4 checks AND has low Parallax Value, the output adds: *"No position warranted on this ticker per margin-of-safety principles. Cash is a valid stance."* This is the only v1 profile where "do nothing" is an explicit positive output. It reflects Klarman's own published view that holding cash when nothing qualifies is a disciplined stance, not a failure.
+Only when all four checks and Value are evaluable, if a stock passes 0 of 4 checks AND has low Parallax Value, the output adds: *"No position warranted on this ticker per margin-of-safety principles. Cash is a valid stance."* This is the only v1 profile where "do nothing" is an explicit positive output. It reflects Klarman's own published view that holding cash when nothing qualifies is a disciplined stance, not a failure.
 
 ## What this profile does NOT capture
 

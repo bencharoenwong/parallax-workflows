@@ -31,6 +31,8 @@ A consuming agent running a portfolio workflow with an active house view should 
 4. Emit a `<diff_output>` JSON block comparing ranks and weights.
 5. Append mechanical "what changed why" lines for shifted positions.
 
+**Comparison boundary:** two runs can differ because of fresh data or stochastic universe generation. Capture exact inputs/tool signatures, source as-of dates, universe membership, view versions and relevant randomization controls for both legs. A causal view-effect claim requires otherwise controlled inputs and the same eligible data snapshots under the child workflow's reuse contract. Without those controls, label the result `Observed two-run difference — view effect not isolated`; do not turn a changed rank into proof of view value-add. Never invent snapshot reuse that the child does not support. A public interface spec supplies neither a runner nor calibrated PASS/WEAK/KILL thresholds.
+
 Full protocol: [`_parallax/house-view/tests/portfolio_diff_harness.md`](../_parallax/house-view/tests/portfolio_diff_harness.md).
 
 **Cost:** total cost is 2× the child skill's cost (Leg A + Leg B); see `_parallax/token-costs.md`.

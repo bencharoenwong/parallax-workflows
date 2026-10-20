@@ -44,6 +44,43 @@ META = {
 }
 
 
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), -float("inf"), True, "0.1", -1.01, 10**400])
+def test_invalid_price_return_refuses_report_values(bad):
+    with pytest.raises(attribution.AttributionError, match="return"):
+        attribution.attribute_segment(_chain({"AAA.X": .5, "BBB.Y": .5}),
+                                      {"AAA.X": bad, "BBB.Y": 0.0}, META)
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), True, -.1, "0.5"])
+def test_invalid_recorded_weight_refuses_diagnostic(bad):
+    with pytest.raises(attribution.AttributionError, match="weight"):
+        attribution.attribute_segment(_chain({"AAA.X": bad, "BBB.Y": .5}),
+                                      {"AAA.X": .1, "BBB.Y": 0.0}, META)
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), True, -1, "8"])
+def test_invalid_base_score_is_not_silently_normalized(bad):
+    with pytest.raises(attribution.AttributionError, match="score"):
+        attribution.neutral_weights(_chain({"AAA.X": .5, "BBB.Y": .5},
+                                          scores={"AAA.X": bad, "BBB.Y": 2}))
+
+
+def test_report_coverage_preserves_original_weights_of_both_legs():
+    result = attribution.attribute_segment(
+        _chain({"AAA.X": .9, "BBB.Y": .1}, scores={"AAA.X": 1, "BBB.Y": 1}),
+        {"BBB.Y": .1}, META)
+    assert result["_recorded_covered_weight"] == pytest.approx(.1)
+    assert result["_neutral_covered_weight"] == pytest.approx(.5)
+    summary = attribution.merge_segments([result])
+    assert "_recorded_covered_weight" not in summary  # audit schema unchanged
+    assert summary["holdings_dropped"] == 1
+
+
+def test_leveraged_recorded_weights_refuse_long_only_diagnostic():
+    with pytest.raises(attribution.AttributionError, match="sum to 1"):
+        attribution.reconstruct_tilted_weights(_chain({"AAA.X": 1.2}))
+
+
 # -- neutral counterfactual ----------------------------------------------------
 
 def test_neutral_exact_score_proportional():
@@ -584,22 +621,12 @@ def test_the_cap_holds_across_seeded_random_portfolios():
 # ---------------------------------------------------------------------------
 
 
-def test_a_bool_inline_score_falls_back_to_approximate():
-    """`bool` is a subclass of `int`, so a YAML `true` in `base_scores.
-    response_inline` passes a bare `isinstance(v, (int, float))` and scores as
-    1.0. Deleting `and not isinstance(v, bool)` left the whole suite green.
-
-    The weights are wrong (True/(True+4) = 0.2 instead of the 0.5 equal-weight
-    fallback), but the severe part is the quality tag: without the guard the run
-    reports `"exact"`, so corrupt input is presented on the high-confidence
-    path. Both are asserted.
-    """
+def test_a_bool_inline_score_is_rejected_as_corrupt_evidence():
+    """A supplied boolean score is invalid, rather than a missing-score fallback."""
     chain = _chain({"AAPL.O": 0.5, "MSFT.O": 0.5},
                    scores={"AAPL.O": True, "MSFT.O": 4})
-    w, quality = attribution.neutral_weights(chain)
-    assert quality == "approximate", quality
-    assert w["AAPL.O"] == pytest.approx(0.5), w
-    assert w["MSFT.O"] == pytest.approx(0.5), w
+    with pytest.raises(attribution.AttributionError, match="AAPL.O"):
+        attribution.neutral_weights(chain)
 
 
 def test_the_redistribution_bound_scales_with_the_portfolio_not_a_constant():

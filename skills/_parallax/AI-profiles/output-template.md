@@ -35,9 +35,13 @@ One sentence stating what the cited source documents. Example:
 
 > Frazzini, Kabiller, Pedersen (2018) decompose Berkshire Hathaway's 1976-2017 returns into factor exposures: strong Quality, strong Value, and positive Defensive (low-beta), with ~1.6x leverage overlay at portfolio level (momentum is not a meaningful part of the profile).
 
+For Buffett, distinguish the publicly anchored Quality/Value/Defensive exposure proxies from the additional product-designed Momentum ceiling; no cited paper supplies the product's numeric score cutoffs.
+
 ### 4. Data table (for factor-driven profiles)
 
 Markdown table with columns: Factor | Profile target | Actual score | Trend | Match.
+
+Show `UNAVAILABLE` with the reason for missing required criteria; do not print NO/FAIL for unknown evidence. Counts retain their documented required denominator.
 
 For profiles with non-factor logic (Greenblatt, Klarman, Soros), substitute the relevant data structure (rank table for Greenblatt; balance-sheet checklist for Klarman; theme-exposure table for Soros).
 
@@ -46,7 +50,8 @@ For profiles with non-factor logic (Greenblatt, Klarman, Soros), substitute the 
 Exactly one of:
 - `Profile fit: match` — with count, e.g., "4 of 4 factor criteria met"
 - `Profile fit: partial match` — with count, e.g., "2 of 4 factor criteria met"
-- `Profile fit: no match` — with explanation
+- `Profile fit: no match` — with explanation based on evaluated criteria
+- `Profile fit: skipped` — required evidence unavailable/invalid, ambiguous rules or non-applicability; name the reason and retain verified observations
 
 **FORBIDDEN verdict language:** "buy", "sell", "recommend", "would buy", "endorses", "rates", "likes", "hates", any first-person impersonation. See spec §5.
 
@@ -68,6 +73,8 @@ Directly below the Synthesis section (or below the Verdict, for profiles that om
 | `parallax-ai-soros` | NO — omit | Dual-channel FLAGGED / NOT_FLAGGED / UNAVAILABLE (industry membership + telemetry basket). Neither channel has a numeric cutoff to measure distance from — forcing one would violate §11.2. If a sensitivity-style line is wanted, state the discrete criterion that would flip it (e.g., "Channel B would need to surface a basket match for `<ticker>`") — never a fabricated number. |
 | `parallax-ai-ptj` | NO — omit | Channel status (T/M/V) is a compound discrete evaluation (trend-direction category AND momentum-trend direction, or a risk-on/risk-off categorical macro read), even though individual sub-signals carry numeric cutoffs. Do not cherry-pick one sub-signal to represent the whole channel's status. |
 | `parallax-ai-consensus` | YES — meta-level only | The consensus signal itself is a clean numeric threshold: `required_matches = ceil(0.75 × A)` compared against `M`. Render Verdict sensitivity on the super-majority signal (e.g., "M is 3 vs required 4 for A = 5 — one more applicable profile reaching full match would move the signal to YES"; if already YES, state how many full matches could fall away before the signal drops to NO), never on the underlying Soros / PTJ rows inside the per-profile matrix — the omit rule above still applies to those two rows. |
+
+For a skipped/incomplete profile, do not present a numeric flip condition as though the fit were evaluated; state which required evidence prevents evaluation. For consensus below the minimum applicable count, state the eligibility shortfall rather than claiming additional matches alone would yield YES.
 
 **Non-negotiable:** never fabricate a flip threshold for a profile or channel that has no published numeric cutoff. Omitting the line for Soros and PTJ is the compliant behavior, not a gap to fill.
 
