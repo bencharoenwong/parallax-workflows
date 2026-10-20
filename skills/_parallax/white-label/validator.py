@@ -448,97 +448,104 @@ class VoiceValidator:
 
 
 class DesignMdValidator:
-    NPX_TIMEOUT_SECONDS = 20
-    _availability_cache: bool | None = None
+    """Run an explicitly configured, checksum-verified local DESIGN.md CLI."""
+
+    NPX_TIMEOUT_SECONDS = 20  # Retained for callers that customize the timeout.
+
+    @staticmethod
+    def _configured_cli() -> Path | None:
+        import hashlib
+        import os
+
+        command = os.environ.get("PARALLAX_DESIGN_MD_CLI", "")
+        digest = os.environ.get("PARALLAX_DESIGN_MD_SHA256", "").lower()
+        if not command or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+            return None
+        path = Path(command)
+        if not path.is_absolute():
+            return None
+        try:
+            path = path.resolve(strict=True)
+            if not path.is_file() or not os.access(path, os.X_OK):
+                return None
+            if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+                return None
+        except (OSError, ValueError, RuntimeError):
+            return None
+        return path
 
     @classmethod
     def is_available(cls, refresh: bool = False) -> bool:
-        """Return True when `npx` is on PATH and `npx --version` exits 0.
+        """Verify the configured local executable without starting a process.
 
-        Result is memoized for the process lifetime. Pass refresh=True to
-        force a re-probe — useful for long-running sessions where the
-        operator installs Node after an initial False result (otherwise
-        `lint()` would continue to skip even after npx becomes available).
+        Both PARALLAX_DESIGN_MD_CLI and PARALLAX_DESIGN_MD_SHA256 are required.
+        Verification runs on every call; refresh remains accepted for callers
+        of the previous cached interface. No package manager is invoked.
         """
-        if not refresh and cls._availability_cache is not None:
-            return cls._availability_cache
-        import shutil
-        import subprocess
-        if not shutil.which("npx"):
-            cls._availability_cache = False
-            return False
-        try:
-            res = subprocess.run(["npx", "--version"], capture_output=True, text=True, timeout=5)
-            cls._availability_cache = (res.returncode == 0)
-        except Exception:
-            cls._availability_cache = False
-        return cls._availability_cache
+        return cls._configured_cli() is not None
 
     @staticmethod
     def lint(design_md_text: str) -> dict[str, Any]:
-        if not DesignMdValidator.is_available():
-            return {"status": "skipped", "available": False, "note": "npx not installed"}
+        """Lint with the verified local CLI, or skip when it is unconfigured."""
+        command = DesignMdValidator._configured_cli()
+        if command is None:
+            return {
+                "status": "skipped", "available": False,
+                "note": "Optional DESIGN.md linter is unconfigured or failed executable verification",
+            }
 
         import subprocess
         import json
         import tempfile
-        from pathlib import Path
 
-        # Keep the lint input inside its own directory. TemporaryDirectory's
-        # recursive cleanup does not depend on Path.unlink, so a caller-side
-        # unlink failure cannot leak the DESIGN.md payload after timeout.
-        with tempfile.TemporaryDirectory(prefix="parallax-design-md-") as temp_dir:
-            temp_path = str(Path(temp_dir) / "DESIGN.md")
-            Path(temp_path).write_text(design_md_text, encoding="utf-8")
-            try:
-                # `-y` auto-accepts npx's first-call install prompt. Without it,
-                # npx waits for stdin and reaches the timeout without findings.
-                res = subprocess.run(
-                    ["npx", "-y", "@google/design.md", "lint", temp_path, "--format", "json"],
-                    capture_output=True,
-                    text=True,
-                    timeout=DesignMdValidator.NPX_TIMEOUT_SECONDS
-                )
-                raw_exit_code = res.returncode
+        try:
+            with tempfile.TemporaryDirectory(prefix="parallax-design-md-") as temp_dir:
+                temp_path = str(Path(temp_dir) / "DESIGN.md")
+                Path(temp_path).write_text(design_md_text, encoding="utf-8")
                 try:
-                    parsed = json.loads(res.stdout)
-                    findings = parsed.get("findings", [])
-                    # status based on findings
-                    if raw_exit_code == 0 and not findings:
-                        status = "pass"
-                    elif raw_exit_code != 0:
-                        status = "fail"
-                    else:
-                        status = "warn" if findings else "pass"
-
+                    res = subprocess.run(
+                        [str(command), "lint", temp_path, "--format", "json"],
+                        cwd=temp_dir, stdin=subprocess.DEVNULL,
+                        capture_output=True, text=True,
+                        timeout=DesignMdValidator.NPX_TIMEOUT_SECONDS,
+                    )
+                    raw_exit_code = res.returncode
+                    try:
+                        parsed = json.loads(res.stdout)
+                        if not isinstance(parsed, dict):
+                            raise ValueError("result must be an object")
+                        findings = parsed.get("findings")
+                        if not isinstance(findings, list) or any(
+                            not isinstance(row, dict) for row in findings
+                        ):
+                            raise ValueError("findings must be a list of objects")
+                    except (ValueError, TypeError):
+                        return {
+                            "status": "skipped", "available": True,
+                            "findings": [], "raw_exit_code": raw_exit_code,
+                            "note": "Failed to parse DESIGN.md linter findings",
+                        }
+                    status = "fail" if raw_exit_code != 0 else "warn" if findings else "pass"
                     return {
-                        "status": status,
-                        "available": True,
-                        "findings": findings,
-                        "raw_exit_code": raw_exit_code,
-                        "note": None
+                        "status": status, "available": True,
+                        "findings": findings, "raw_exit_code": raw_exit_code,
+                        "note": None,
                     }
-                except json.JSONDecodeError:
+                except subprocess.TimeoutExpired:
                     return {
-                        "status": "skipped",
-                        "available": True,
-                        "findings": [],
-                        "raw_exit_code": raw_exit_code,
-                        "note": f"Failed to parse npx JSON output. stdout: {res.stdout[:100]}"
+                        "status": "skipped", "available": True,
+                        "findings": [], "raw_exit_code": -1,
+                        "note": f"DESIGN.md lint timed out after {DesignMdValidator.NPX_TIMEOUT_SECONDS}s",
                     }
-            except subprocess.TimeoutExpired:
-                return {
-                    "status": "skipped",
-                    "available": True,
-                    "findings": [],
-                    "raw_exit_code": -1,
-                    "note": f"npx lint timed out after {DesignMdValidator.NPX_TIMEOUT_SECONDS}s"
-                }
-            except Exception as e:
-                return {
-                    "status": "skipped",
-                    "available": True,
-                    "findings": [],
-                    "raw_exit_code": -1,
-                    "note": f"npx lint failed to run: {e}"
-                }
+                except Exception as error:
+                    return {
+                        "status": "skipped", "available": True,
+                        "findings": [], "raw_exit_code": -1,
+                        "note": f"DESIGN.md linter could not run ({type(error).__name__})",
+                    }
+        except (OSError, UnicodeError):
+            return {
+                "status": "skipped", "available": True,
+                "findings": [], "raw_exit_code": -1,
+                "note": "DESIGN.md lint temporary input could not be prepared or removed",
+            }
