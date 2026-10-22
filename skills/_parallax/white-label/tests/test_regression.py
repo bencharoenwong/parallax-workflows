@@ -1,0 +1,549 @@
+import pytest
+import yaml
+from pathlib import Path
+
+# Add parent directory to path for imports
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+import loader
+
+def test_v1_file_returns_legacy_colors_accent(tmp_path, monkeypatch):
+    fixture_path = Path(__file__).parent / "fixtures" / "legacy_v1_config.yaml"
+    test_config = tmp_path / "config.yaml"
+    test_config.write_text(fixture_path.read_text())
+    
+    monkeypatch.setattr(loader, "_CONFIG_PATH", test_config)
+    monkeypatch.setattr(loader, "_SCHEMA_PATH", Path(__file__).parent.parent / "schema.yaml")
+    
+    result = loader.load_client_branding()
+    
+    assert result["error"] is None or "logo_missing" in result["error"]
+    assert result["colors"]["accent"] == "#FF6600"
+    assert result["fonts"]["header"] == "Inter"
+
+def test_v2_file_returns_legacy_keys_via_tertiary(tmp_path, monkeypatch):
+    test_config = tmp_path / "config.yaml"
+    
+    # Synthesize v2 dict
+    v2_dict = {
+        "metadata": {
+            "schema_version": 2,
+            "client_name": "Test Client",
+            "extracted_at": "2026-04-30T00:00:00Z",
+            "source": {"type": "url", "reference": "https://example.com", "confidence": 0.9}
+        },
+        "branding": {
+            "colors": {
+                "primary": "#001122",
+                "secondary": "#334455",
+                "tertiary": "#0066CC", # accent value
+                "neutral": "#FFFFFF",  # background value
+            },
+            "typography": {
+                "h1": {"fontFamily": "Inter"},
+                "body-md": {"fontFamily": "Source Sans Pro"},
+                "code": {"fontFamily": "JetBrains Mono"}
+            },
+            "components": {
+                "body-text": {
+                    "backgroundColor": "{colors.neutral}",
+                    "textColor": "#222222" # text value
+                }
+            },
+            "logos": {
+                "primary": "~/.parallax/client-branding/primary-logo.png",
+                "favicon": "~/.parallax/client-branding/favicon.ico"
+            }
+        },
+        "confidence_scores": {}
+    }
+    
+    test_config.write_text(yaml.dump(v2_dict))
+    
+    monkeypatch.setattr(loader, "_CONFIG_PATH", test_config)
+    monkeypatch.setattr(loader, "_SCHEMA_PATH", Path(__file__).parent.parent / "schema.yaml")
+    
+    result = loader.load_client_branding()
+    
+    assert result["error"] is None or "logo_missing" in result["error"]
+    assert result["colors"]["accent"] == "#0066CC"
+    assert result["colors"]["background"] == "#FFFFFF"
+    assert result["colors"]["text"] == "#222222"
+    
+    assert result["fonts"]["header"] == "Inter"
+    assert result["fonts"]["body"] == "Source Sans Pro"
+    assert result["fonts"]["monospace"] == "JetBrains Mono"
+    
+    assert "typography" in result
+    assert result["typography"]["h1"]["fontFamily"] == "Inter"
+
+def test_clear_archives_both_files(tmp_path, monkeypatch):
+    # Test `archive_legacy_config` directly since `--clear` orchestration lives in SKILL.md.
+    test_config = tmp_path / "config.yaml"
+    test_config.write_text("dummy")
+    
+    design_md = tmp_path / "DESIGN.md"
+    design_md.write_text("dummy design")
+    
+    archive_path = loader.archive_legacy_config(test_config)
+    
+    assert archive_path.exists()
+    assert archive_path.name == "config.yaml"
+    assert archive_path.parent.name.endswith("-pre-v2-migration")
+
+
+# ---------------------------------------------------------------------------
+# Direct round-trip + v2-shape gates for the fixes from code-reviewer
+# (round 1 catches: _config_to_draft existence, build_config_from_draft v2
+# drops fonts.*, emit_design_md package-import path).
+# ---------------------------------------------------------------------------
+
+def _sample_v2_draft():
+    return {
+        "colors": {
+            "primary":    {"hex": "#001122", "confidence": 1.0},
+            "secondary":  {"hex": "#334455", "confidence": 1.0},
+            "accent":     {"hex": "#FF6600", "confidence": 1.0},
+            "background": {"hex": "#FFFFFF", "confidence": 1.0},
+            "text":       {"hex": "#222222", "confidence": 1.0},
+        },
+        "fonts": {
+            "header":    {"name": "Inter",          "confidence": 1.0},
+            "body":      {"name": "Source Sans Pro","confidence": 1.0},
+            "monospace": {"name": "JetBrains Mono", "confidence": 1.0},
+        },
+        "logos": {
+            "primary": {"local_path": "/tmp/logo.png", "confidence": 1.0},
+        },
+        "source": {"type": "test", "reference": "unit"},
+        "extracted_at": "2026-05-15T00:00:00Z",
+        "confidence_scores": {"primary": 1.0},
+    }
+
+
+def test_build_config_v2_drops_fonts_and_emits_tertiary_neutral():
+    """Decision 3A + 5A: v2 write path drops fonts.* and emits
+    colors.tertiary + flat colors.neutral. Pins the schema change."""
+    cfg = loader.build_config_from_draft(_sample_v2_draft(), schema_version=2)
+    branding = cfg["branding"]
+    assert "fonts" not in branding, "v2 write path must NOT emit branding.fonts.*"
+    assert branding["colors"]["tertiary"] == "#FF6600"
+    assert "accent" not in branding["colors"]
+    assert branding["colors"]["neutral"] == "#FFFFFF"
+    assert isinstance(branding["colors"]["neutral"], str)  # flat hex, not dict
+    assert "background" not in branding["colors"]
+    assert branding["components"]["body-text"]["backgroundColor"] == "{colors.neutral}"
+    assert branding["components"]["body-text"]["textColor"] == "#222222"
+
+
+def test_build_config_v1_still_emits_legacy_shape():
+    """v1 write path remains backward-compatible — old consumers that hand-load
+    config.yaml continue to see colors.accent and fonts.header."""
+    cfg = loader.build_config_from_draft(_sample_v2_draft(), schema_version=1)
+    branding = cfg["branding"]
+    assert branding["colors"]["accent"] == "#FF6600"
+    assert "tertiary" not in branding["colors"]
+    assert branding["fonts"]["header"] == "Inter"
+
+
+def test_config_to_draft_round_trip_v2():
+    """_config_to_draft is the inverse of build_config_from_draft for v2.
+    Round-trip via disk must yield a config with identical branding shape."""
+    original = loader.build_config_from_draft(_sample_v2_draft(), schema_version=2)
+    reconstructed_draft = loader._config_to_draft(original)
+    rebuilt = loader.build_config_from_draft(reconstructed_draft, schema_version=2)
+    # Colors, typography, components, rounded, spacing must all match.
+    assert rebuilt["branding"]["colors"] == original["branding"]["colors"]
+    assert rebuilt["branding"]["components"] == original["branding"]["components"]
+
+
+def test_config_to_draft_round_trip_v1():
+    """_config_to_draft must also handle v1 input (the common case for
+    --regenerate-design-md on a pre-migration config)."""
+    original = loader.build_config_from_draft(_sample_v2_draft(), schema_version=1)
+    reconstructed_draft = loader._config_to_draft(original)
+    # The reconstructed draft should carry the legacy color slots populated.
+    assert reconstructed_draft["colors"]["accent"]["hex"] == "#FF6600"
+    assert reconstructed_draft["fonts"]["header"]["name"] == "Inter"
+
+
+def test_emit_design_md_loads_via_package_import_path():
+    """emit_design_md.py must work when loaded via importlib (the package
+    pattern used inside this hyphenated directory), not just under the test
+    harness sys.path. Regression for the bare-import bug fixed in round 1."""
+    import importlib.util
+    emit_path = Path(__file__).parent.parent / "emit_design_md.py"
+    spec = importlib.util.spec_from_file_location("emit_design_md_pkg", emit_path)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert hasattr(mod, "emit_design_md")
+    assert hasattr(mod, "ColorValidator")
+
+
+def test_emit_design_md_v1_fallback_includes_h1_and_body_md():
+    """Round 2 finding: emit_design_md must populate typography.h1 and
+    typography.body-md from legacy fonts.header / fonts.body when typography.*
+    is absent. Previously only fonts.monospace was propagated to typography.code,
+    leaving regenerated DESIGN.md missing the headline + body font."""
+    import importlib.util
+    emit_path = Path(__file__).parent.parent / "emit_design_md.py"
+    spec = importlib.util.spec_from_file_location("emit_design_md_pkg", emit_path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    draft = _sample_v2_draft()
+    draft.pop("typography", None)  # force v1 fallback path
+    text = mod.emit_design_md(
+        draft,
+        client_name="Test",
+        extracted_at="2026-05-15",
+        source_refs=["unit"],
+    )
+    # Frontmatter is between the two --- fences
+    frontmatter = text.split("---", 2)[1]
+    data = yaml.safe_load(frontmatter)
+    assert "typography" in data
+    assert data["typography"].get("h1", {}).get("fontFamily") == "Inter"
+    assert data["typography"].get("body-md", {}).get("fontFamily") == "Source Sans Pro"
+    assert data["typography"].get("code", {}).get("fontFamily") == "JetBrains Mono"
+
+
+# ---------------------------------------------------------------------------
+# Round-3 review findings (gate review on f720a22 → bf4949e):
+# Component invariants — every emitted component has BOTH backgroundColor AND
+# textColor; every declared color is referenced by at least one component.
+# ---------------------------------------------------------------------------
+
+def _load_emit_module():
+    import importlib.util
+    emit_path = Path(__file__).parent.parent / "emit_design_md.py"
+    spec = importlib.util.spec_from_file_location("emit_design_md_inv", emit_path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _extract_frontmatter(text: str) -> dict:
+    return yaml.safe_load(text.split("---", 2)[1])
+
+
+def _assert_components_complete(frontmatter: dict) -> None:
+    """Every emitted component MUST have both backgroundColor and textColor."""
+    for name, comp in (frontmatter.get("components") or {}).items():
+        assert "backgroundColor" in comp, f"component {name} missing backgroundColor"
+        assert "textColor" in comp, f"component {name} missing textColor"
+
+
+def _assert_no_orphaned_colors(frontmatter: dict) -> None:
+    """Every declared color must be referenced by at least one component."""
+    colors = list((frontmatter.get("colors") or {}).keys())
+    components = frontmatter.get("components") or {}
+    # Collect token-ref strings from every component property value
+    refs = set()
+    for comp in components.values():
+        for v in comp.values():
+            if isinstance(v, str) and v.startswith("{colors."):
+                refs.add(v.split(".", 1)[1].rstrip("}"))
+    orphaned = [c for c in colors if c not in refs]
+    assert not orphaned, f"orphaned color tokens (not referenced by any component): {orphaned}"
+
+
+def test_minimal_palette_primary_only_no_orphaned():
+    """Draft with only primary color — emit_design_md must still wire it into
+    a component (body-text.textColor) so the linter doesn't fire orphaned-tokens."""
+    emit = _load_emit_module()
+    draft = {
+        "colors": {"primary": {"hex": "#001122", "confidence": 1.0}},
+        "source": {"type": "test", "reference": "min"},
+        "extracted_at": "2026-05-16",
+        "confidence_scores": {},
+    }
+    fm = _extract_frontmatter(emit.emit_design_md(
+        draft, client_name="Test", extracted_at="2026-05-16", source_refs=["min"]
+    ))
+    _assert_no_orphaned_colors(fm)
+    _assert_components_complete(fm)
+
+
+def test_minimal_palette_primary_secondary_no_orphaned():
+    """Draft with primary + secondary only (no background, accent, text) —
+    both colors must be referenced; this was the regression case."""
+    emit = _load_emit_module()
+    draft = {
+        "colors": {
+            "primary":   {"hex": "#001122", "confidence": 1.0},
+            "secondary": {"hex": "#334455", "confidence": 1.0},
+        },
+        "source": {"type": "test", "reference": "min2"},
+        "extracted_at": "2026-05-16",
+        "confidence_scores": {},
+    }
+    fm = _extract_frontmatter(emit.emit_design_md(
+        draft, client_name="Test", extracted_at="2026-05-16", source_refs=["min2"]
+    ))
+    _assert_no_orphaned_colors(fm)
+    _assert_components_complete(fm)
+
+
+def test_button_primary_complete_when_no_primary_no_background():
+    """Accent only (no primary, no background) — button-primary must still
+    have textColor via the literal-hex luminance fallback."""
+    emit = _load_emit_module()
+    draft = {
+        "colors": {"accent": {"hex": "#FF6600", "confidence": 1.0}},
+        "source": {"type": "test", "reference": "accent-only"},
+        "extracted_at": "2026-05-16",
+        "confidence_scores": {},
+    }
+    fm = _extract_frontmatter(emit.emit_design_md(
+        draft, client_name="Test", extracted_at="2026-05-16", source_refs=["accent-only"]
+    ))
+    bp = (fm.get("components") or {}).get("button-primary")
+    assert bp is not None, "button-primary should be emitted when accent is present"
+    assert "backgroundColor" in bp and "textColor" in bp
+
+
+def test_body_text_complete_when_no_primary_no_text():
+    """Background only (no primary, no text) — body-text must still have
+    textColor via the literal-hex luminance fallback (chosen against neutral)."""
+    emit = _load_emit_module()
+    draft = {
+        "colors": {"background": {"hex": "#FFFFFF", "confidence": 1.0}},
+        "source": {"type": "test", "reference": "bg-only"},
+        "extracted_at": "2026-05-16",
+        "confidence_scores": {},
+    }
+    fm = _extract_frontmatter(emit.emit_design_md(
+        draft, client_name="Test", extracted_at="2026-05-16", source_refs=["bg-only"]
+    ))
+    bt = (fm.get("components") or {}).get("body-text")
+    assert bt is not None
+    assert "backgroundColor" in bt and "textColor" in bt
+
+
+def test_config_to_draft_ignores_token_ref_textcolor():
+    """Loader's _config_to_draft must NOT pass a {colors.primary}-style ref to
+    the hex-validation gate. A user-edited config with a token-ref in
+    components.body-text.textColor should leave draft.colors.text empty rather
+    than crash downstream."""
+    cfg = {
+        "metadata": {"schema_version": 2},
+        "branding": {
+            "colors": {"primary": "#001122", "neutral": "#FFFFFF"},
+            "components": {
+                "body-text": {
+                    "backgroundColor": "{colors.neutral}",
+                    "textColor": "{colors.primary}",
+                }
+            },
+        },
+    }
+    draft = loader._config_to_draft(cfg)
+    # text slot should be absent (token-ref filtered) rather than carrying a malformed hex.
+    assert "text" not in draft.get("colors", {}), "token-ref must not leak into colors.text.hex"
+
+
+# ---------------------------------------------------------------------------
+# Round-4 review finding: _normalize_branding_v2_to_return_shape symmetric
+# token-ref guard (was missing while _config_to_draft had it).
+# ---------------------------------------------------------------------------
+
+def test_loader_normalize_resolves_token_ref_textcolor():
+    """_normalize_branding_v2_to_return_shape: when components.body-text.
+    textColor is a {colors.primary} token-ref, the legacy `colors.text` slot
+    must resolve to the literal hex via colors_v2 lookup, NOT leak the raw
+    "{colors.primary}" string. Asymmetric with _config_to_draft would have
+    leaked it (round-3 review finding)."""
+    cfg = {
+        "metadata": {"schema_version": 2},
+        "branding": {
+            "colors": {
+                "primary": "#001122",
+                "secondary": "#334455",
+                "tertiary": "#FF6600",
+                "neutral": "#FFFFFF",
+            },
+            "components": {
+                "body-text": {
+                    "backgroundColor": "{colors.neutral}",
+                    "textColor": "{colors.primary}",
+                }
+            },
+        },
+    }
+    norm = loader._normalize_branding_v2_to_return_shape(cfg)
+    text_val = norm["colors"]["text"]
+    assert not (isinstance(text_val, str) and text_val.startswith("{")), \
+        f"colors.text leaked token-ref: {text_val!r}"
+    assert text_val == "#001122", f"expected resolved primary hex, got {text_val!r}"
+
+
+def test_loader_normalize_empty_when_token_ref_unresolvable():
+    """If body-text.textColor references a color that isn't defined, fall
+    back to empty rather than leak the raw ref."""
+    cfg = {
+        "metadata": {"schema_version": 2},
+        "branding": {
+            "colors": {"primary": "#001122", "neutral": "#FFFFFF"},
+            "components": {
+                "body-text": {
+                    "backgroundColor": "{colors.neutral}",
+                    "textColor": "{colors.does-not-exist}",
+                }
+            },
+        },
+    }
+    norm = loader._normalize_branding_v2_to_return_shape(cfg)
+    text_val = norm["colors"]["text"]
+    assert text_val == "", f"expected empty fallback, got {text_val!r}"
+
+
+def test_loader_normalize_passes_literal_hex_through():
+    """Sanity check: when components.body-text.textColor is already a literal
+    hex, normalize passes it through unchanged (no false-positive token-ref
+    detection on hex strings starting with #)."""
+    cfg = {
+        "metadata": {"schema_version": 2},
+        "branding": {
+            "colors": {"primary": "#001122", "neutral": "#FFFFFF"},
+            "components": {
+                "body-text": {
+                    "backgroundColor": "{colors.neutral}",
+                    "textColor": "#222222",
+                }
+            },
+        },
+    }
+    norm = loader._normalize_branding_v2_to_return_shape(cfg)
+    assert norm["colors"]["text"] == "#222222"
+
+
+# ---------------------------------------------------------------------------
+# Round-8 deferred items, addressed as follow-up before merge.
+# ---------------------------------------------------------------------------
+
+def test_v1_load_includes_empty_bonus_keys():
+    """v1 file loads MUST include typography/rounded/spacing/components as
+    empty dicts (not absent) so consumers can read them with [] access.
+    Round-8 finding: docstring promised empty dicts but v1 branch was
+    setting extra={} (absence)."""
+    fixture_path = Path(__file__).parent / "fixtures" / "legacy_v1_config.yaml"
+    import tempfile, shutil as _shutil
+    with tempfile.TemporaryDirectory() as td:
+        td_path = Path(td)
+        cfg_path = td_path / "config.yaml"
+        _shutil.copy2(fixture_path, cfg_path)
+        # Need the schema available too
+        schema_src = Path(__file__).parent.parent / "schema.yaml"
+        # Monkeypatch via direct attr override
+        orig_cp = loader._CONFIG_PATH
+        orig_sp = loader._SCHEMA_PATH
+        try:
+            loader._CONFIG_PATH = cfg_path
+            loader._SCHEMA_PATH = schema_src
+            result = loader.load_client_branding()
+        finally:
+            loader._CONFIG_PATH = orig_cp
+            loader._SCHEMA_PATH = orig_sp
+
+    assert "typography" in result and result["typography"] == {}
+    assert "rounded" in result and result["rounded"] == {}
+    assert "spacing" in result and result["spacing"] == {}
+    assert "components" in result and result["components"] == {}
+
+
+def test_extract_brand_guide_prose_skips_toc_entries():
+    """Round-8 follow-up: TOC entries (heavy dot-leaders + page numbers)
+    are decorative, not section boundaries. The extractor must not record
+    them as positions so they can't steal the first-non-empty slot from
+    real body sections that follow."""
+    from extract.web_pdf import _extract_brand_guide_prose
+
+    pdf_text = """
+Acme Brand Guide
+
+Table of Contents
+Overview ............................... 5
+Colors ................................. 8
+Typography ............................ 12
+Do's and Don'ts ....................... 18
+
+(actual body starts on page 5)
+
+Overview
+This is the real overview body text describing the brand.
+
+Colors
+The palette is rooted in warm neutrals.
+
+Typography
+Public Sans for narrative.
+
+Do's and Don'ts
+Do use primary sparingly. Don't mix corner radii.
+""".strip()
+
+    res = _extract_brand_guide_prose(pdf_text, filename="acme-brand-guide.pdf")
+    # TOC entries are skipped → real body sections are picked up
+    assert "overview" in res
+    assert "real overview body text" in res["overview"]
+    assert "colors" in res
+    assert "warm neutrals" in res["colors"]
+    assert "typography" in res
+    assert "Public Sans" in res["typography"]
+
+
+def test_loader_rejects_hybrid_v1_v2_branding():
+    """Round-8 follow-up: a hand-edited config that carries BOTH v1 and v2
+    branding markers should error with a targeted message, not silently
+    pick one shape. anyOf accepts the file; the new pre-check rejects it."""
+    cfg = {
+        "metadata": {
+            "schema_version": 2,
+            "client_name": "Hybrid",
+            "extracted_at": "2026-05-16T00:00:00Z",
+            "source": {"type": "wizard", "reference": "test", "confidence": 1.0},
+        },
+        "branding": {
+            "colors": {
+                "primary": "#001122",
+                "secondary": "#334455",
+                "tertiary": "#FF6600",    # v2
+                "neutral": "#FFFFFF",      # v2
+                "accent": "#FF6600",       # v1
+                "background": "#FFFFFF",   # v1
+                "text": "#222222",         # v1
+            },
+            "logos": {"primary": "", "favicon": ""},
+            "fonts": {"header": "Inter", "body": "Roboto", "monospace": "Mono"},  # v1
+            "typography": {"h1": {"fontFamily": "Inter"}},                          # v2
+        },
+        "confidence_scores": {"primary": 1.0},
+    }
+    msg = loader._detect_hybrid_branding(cfg)
+    assert msg is not None
+    assert "v1" in msg.lower() and "v2" in msg.lower()
+    # Both kinds of conflict should be surfaced (colors AND fonts/typography)
+    assert "colors" in msg.lower()
+    assert "typography" in msg.lower() or "fonts" in msg.lower()
+
+
+def test_loader_accepts_pure_v1_and_pure_v2():
+    """The hybrid pre-check must NOT false-positive on pure v1 or pure v2
+    configs (the common case)."""
+    pure_v2 = {
+        "branding": {
+            "colors": {"primary": "#001122", "secondary": "#334455", "tertiary": "#FF6600", "neutral": "#FFFFFF"},
+            "typography": {"h1": {"fontFamily": "Inter"}},
+        },
+    }
+    assert loader._detect_hybrid_branding(pure_v2) is None
+
+    pure_v1 = {
+        "branding": {
+            "colors": {"primary": "#001122", "secondary": "#334455", "accent": "#FF6600", "background": "#FFFFFF", "text": "#222222"},
+            "fonts": {"header": "Inter", "body": "Roboto", "monospace": "Mono"},
+        },
+    }
+    assert loader._detect_hybrid_branding(pure_v1) is None

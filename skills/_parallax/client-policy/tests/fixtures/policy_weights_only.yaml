@@ -1,0 +1,52 @@
+# Same weights as policy_full.yaml but NO bands on either dimension.
+# Drives fallback tier `weights_only`: every TAA row is `multiplier_fallback`,
+# desired_active is null, and the budget line is a sum-of-absolute-drift diagnostic.
+
+metadata:
+  schema_version: 1
+  policy_id: "b41d7e60-2c19-4a83-8f77-1d0c9a2b4e55"
+  policy_name: "Balanced Growth 60/40 (weights only)"
+  client_ref: "acct-7fd2"
+  supplied_by: "rm@firm.example"
+  supplied_at: "2026-08-29T10:00:00Z"
+  as_of_date: "2026-06-30"
+  review_due: "2026-12-31"
+  calibration_status: heuristic_phase0
+
+mandate:
+  base_currency: "USD"
+  strategic_allocation:
+    equity: 0.60
+  allocation_bands:
+    equity: {min: 0.50, max: 0.70}
+  tactical_overlay:
+    enabled: true
+    max_total_tilt: 0.10
+    max_tracking_error: null
+  prohibited_products: []
+  sub_allocations:
+    dimensions:
+      region:
+        basis: sleeve
+        code_list: parallax_region_v1
+        strategic_allocation:
+          us: 0.55
+          europe: 0.25
+          japan: 0.10
+          em_ex_china: 0.10
+        allocation_bands: {}
+      sector:
+        basis: sleeve
+        code_list: gics_sector_v1
+        strategic_allocation:
+          information_technology: 0.35
+          financials: 0.25
+          health_care: 0.40
+        allocation_bands: {}
+
+adaptation:
+  k_preset: balanced
+  k: null
+
+governance:
+  human_review_recorded: []

@@ -1,0 +1,15 @@
+{
+  "symbol": "DIST.N",
+  "statement": "income",
+  "currency": "USD",
+  "_fixture_note": "Field names and the negative-for-expense sign on interest_expense_net_non_operating match the live get_financials(income) response (confirmed against a live probe, 2026-10-06). operating_income matches the `ebit` value in get_financials_ratios_distressed.json so the two fixtures describe one consistent company. interest_expense_net_non_operating here is large enough relative to operating_income to flag RED on the published Interest Coverage threshold (< 1.5x).",
+  "periods": [
+    {
+      "period": "FY2024",
+      "operating_income": 24000000,
+      "interest_expense_net_non_operating": -20000000,
+      "interest_investment_income_non_operating": 1200000,
+      "interest_inc_exp_net_non_op_total": -18800000
+    }
+  ]
+}

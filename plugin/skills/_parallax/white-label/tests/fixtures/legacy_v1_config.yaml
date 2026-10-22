@@ -1,0 +1,26 @@
+metadata:
+  schema_version: 1
+  client_name: "Test Client"
+  extracted_at: "2026-04-30T00:00:00Z"
+  source:
+    type: "url"
+    reference: "https://example.com"
+    confidence: 0.9
+
+branding:
+  colors:
+    primary: "#001122"
+    secondary: "#334455"
+    accent: "#FF6600"
+    background: "#FFFFFF"
+    text: "#222222"
+  logos:
+    primary: "~/.parallax/client-branding/primary-logo.png"
+    favicon: "~/.parallax/client-branding/favicon.ico"
+  fonts:
+    header: "Inter"
+    body: "Source Sans Pro"
+    monospace: "JetBrains Mono"
+
+confidence_scores:
+  primary_color: 1.0

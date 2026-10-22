@@ -1,0 +1,22 @@
+{
+  "symbol": "AAPL.O",
+  "statement": "income",
+  "currency": "USD",
+  "_fixture_note": "Field names and the negative-for-expense sign on interest_expense_net_non_operating match the live get_financials(income) response (confirmed against a live probe, 2026-10-06). operating_income is the EBIT proxy credit_lens_logic.compute_interest_coverage() divides by. interest_investment_income_non_operating and interest_inc_exp_net_non_op_total are carried here because the live probe observed them alongside interest_expense_net_non_operating, but neither feeds compute_interest_coverage() or compute_interest_expense() — they are decorative in this fixture, documented so a reader does not assume they are used.",
+  "periods": [
+    {
+      "period": "FY2024",
+      "operating_income": 123216000000,
+      "interest_expense_net_non_operating": -3315000000,
+      "interest_investment_income_non_operating": 2900000000,
+      "interest_inc_exp_net_non_op_total": -415000000
+    },
+    {
+      "period": "FY2023",
+      "operating_income": 114301000000,
+      "interest_expense_net_non_operating": -3933000000,
+      "interest_investment_income_non_operating": 3750000000,
+      "interest_inc_exp_net_non_op_total": -183000000
+    }
+  ]
+}

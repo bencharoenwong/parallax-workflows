@@ -1,0 +1,436 @@
+# Parallax Workflows
+
+[![Offline checks](https://github.com/bencharoenwong/parallax-workflows/actions/workflows/evals.yml/badge.svg?branch=main)](https://github.com/bencharoenwong/parallax-workflows/actions/workflows/evals.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+Equity research workflows for [Parallax](https://parallax.chicago.global), available through Claude plugins and standalone skill packages.
+
+**Who this is for:**
+<!-- who-for:begin -->
+- **Fund manager** — Runs portfolios; daily regime and book checks. Start with `/parallax-morning-brief`.
+- **Relationship manager** — Prepares client reviews and calls. Start with `/parallax-client-review`.
+- **RM support** — Prepares briefs and reviews for an RM. Start with `/parallax-morning-brief`.
+- **Research analyst** — Researches single names and peers. Start with `/parallax-peer-comparison`.
+- **Wealth advisor** — Reviews client portfolios in plain language. Start with `/parallax-client-review`.
+- **Individual investor** — Checks stocks and a personal portfolio. Start with `/parallax-should-i-buy`.
+<!-- who-for:end -->
+- **Building on Parallax** — embedding Parallax into internal research tools, B-CIO synthesis layers, white-label investment products. Workflows are reference implementations under MIT — fork them, modify the prompts, swap the inputs, ship in your own harness.
+
+## Get started
+
+1. In Claude web or the desktop app, open **Customize → Plugins → Add → Add marketplace**.
+2. Enter `bencharoenwong/parallax-workflows` and add **Parallax**.
+3. Open **Parallax → Connectors**. Add or connect Parallax, then sign in with your Parallax account. Your organization may require an Owner to add the connector first.
+4. Start a new conversation: **Hi Parallax, I'm new here.** Choose your role and provide a ticker or holdings.
+
+Account-installed plugins are available in chat, Cowork and Claude Code when signed in to the same account. Claude Code command-line installs stay on that machine. See [Claude's plugin guide](https://claude.com/docs/plugins/overview).
+
+| Your setup | Installation path |
+|---|---|
+| Claude chat or Cowork | Marketplace steps above |
+| Claude Code only | Commands under [Setup](#setup) |
+| Organization rollout | An Owner can distribute plugins through organization settings; see [organization plugin management](https://claude.com/docs/plugins/admin) |
+| Individual skill uploads | [ZIP fallback](#individual-skill-upload-fallback) |
+| Codex or another agent | [Integration](#integration) and [AGENTS.md](AGENTS.md) |
+
+## Quick Start
+
+Once connected, try one of these:
+
+| Task | Prompt |
+|---|---|
+| Find a workflow for your role | `Hi Parallax, I'm new here` |
+| Evaluate a stock | `Should I buy AAPL?` |
+| Review a portfolio | `Check my portfolio: AAPL 40%, MSFT 60%` |
+
+You can also select a skill from Claude's `/` menu. In Claude Code, the explicit plugin command is `/parallax:parallax-should-i-buy AAPL`.
+
+## What's in this repo
+
+The repo is open-source. Two layers:
+
+1. **Framework (free, public, MIT):** skill prompts, YAML schemas, validators, extraction logic, regression corpus. Includes the [house-view ingestion framework](skills/parallax-load-house-view/) — a schema + loader + extraction pipeline for codifying CIO investment views into structured tilts that any equity scoring engine can consume. Swap out the MCP layer and it works with any scoring provider.
+2. **Parallax MCP (paid, required for the workflows to return data):** the quantitative scoring engine — factor scores, peer comparisons, macro analysis, news synthesis. The framework above is the prompt/schema layer; Parallax is the data layer.
+
+You can run the framework's validation, regression tests, and schema tooling without a Parallax subscription. To get actual portfolio output, you need Parallax connected.
+
+## Prerequisites
+
+These workflows require an active Parallax subscription from [Chicago Global Capital](https://chicago.global). API credentials and MCP connection details are provided to clients upon onboarding. If you are not yet a client, contact us at [chicago.global](https://chicago.global) to get started.
+
+## Setup
+
+### Claude Code
+
+Inside Claude Code:
+
+```text
+/plugin marketplace add bencharoenwong/parallax-workflows
+/plugin install parallax@parallax-workflows
+```
+
+Authenticate the bundled Parallax connector through `/mcp`. If you already installed the plugin on your Claude account, start a new Claude Code session or use `/reload-plugins` instead of installing it again.
+
+To update a command-line installation:
+
+```text
+/plugin marketplace update parallax-workflows
+/plugin update parallax@parallax-workflows
+```
+
+If a workflow reports "tool not found", the Parallax connector is not connected or not signed in.
+
+For an account installation, open the plugin in Customize → Plugins and check for updates. See [Claude's plugin documentation](https://claude.com/docs/plugins/overview). Plugin versions change at release, not at every source merge.
+
+### Individual skill upload fallback
+
+Use this path if your account cannot add a marketplace. When release assets are available, download the `.skill` files from [GitHub Releases](https://github.com/bencharoenwong/parallax-workflows/releases). The collection ZIP contains individual packages: unzip it first, then upload the desired skills under **Customize → Skills**. The manifest-generated table below shows which workflows support skill upload. Held translators and private-beta workflows are excluded.
+
+Connect `https://mcp.chicago.global/api/mcp` under **Customize → Connectors**, then sign in. Installing a skill alone does not connect the data service.
+
+Until a release is published, GitHub Releases may have no downloadable packages. To build the upload packages from a clone instead:
+
+```bash
+git clone https://github.com/bencharoenwong/parallax-workflows.git
+cd parallax-workflows
+python3 skills/_parallax/scripts/build_bundle.py web
+```
+
+The build ends with a leak-scan gate that expects a maintainer-local extra term list and fails closed without it; on a fresh clone, set `PARALLAX_ALLOW_PARTIAL_SCAN=1` to build with the built-in scan terms only. Upload the zips from `~/Downloads/claude-web-skills/`. Maintainers building a release should follow [Building a release](docs/releases.md).
+
+### Integration
+
+Other agents can use this repository directly: read [AGENTS.md](AGENTS.md), then the requested `skills/<workflow>/SKILL.md`. Preserve references to `skills/_parallax/` and discover the Parallax MCP tools in the active host. Host features differ; follow the workflow's capability checks and report unavailable operations.
+
+For a full Claude Code development installation:
+
+```bash
+git clone https://github.com/bencharoenwong/parallax-workflows.git "$HOME/parallax-workflows"
+bash "$HOME/parallax-workflows/install.sh"
+```
+
+The full clone includes operator and development workflows outside the released plugin. `install.sh` copies skills to `~/.claude/skills` and links the shared files. It is not a cross-host installer. Restart Claude Code after installation. The full clone does not bundle the connector: add it with `claude mcp add -s user --transport http parallax https://mcp.chicago.global/api/mcp` (user scope, so every project sees it), then run `/mcp` to sign in.
+
+## Distribution catalog
+
+The plugin is the account-wide path. Skill upload packages are independent fallback installs. This table is generated from `skills/_parallax/manifest.json`; the workflow descriptions below cover the full source repository.
+
+<!-- distributions:begin -->
+| Workflow | Distribution |
+|---|---|
+| [parallax-ai-buffett](skills/parallax-ai-buffett/SKILL.md) | Full clone only |
+| [parallax-ai-consensus](skills/parallax-ai-consensus/SKILL.md) | Full clone only |
+| [parallax-ai-greenblatt](skills/parallax-ai-greenblatt/SKILL.md) | Full clone only |
+| [parallax-ai-klarman](skills/parallax-ai-klarman/SKILL.md) | Full clone only |
+| [parallax-ai-ptj](skills/parallax-ai-ptj/SKILL.md) | Full clone only |
+| [parallax-ai-soros](skills/parallax-ai-soros/SKILL.md) | Full clone only |
+| [parallax-cio-letter-prep](skills/parallax-cio-letter-prep/SKILL.md) | Private beta |
+| [parallax-client-review](skills/parallax-client-review/SKILL.md) | Plugin, Skill upload |
+| [parallax-concierge](skills/parallax-concierge/SKILL.md) | Plugin, Skill upload |
+| [parallax-country-deep-dive](skills/parallax-country-deep-dive/SKILL.md) | Plugin |
+| [parallax-credit-lens](skills/parallax-credit-lens/SKILL.md) | Plugin |
+| [parallax-deep-dive](skills/parallax-deep-dive/SKILL.md) | Plugin, Skill upload |
+| [parallax-desk-call-list](skills/parallax-desk-call-list/SKILL.md) | Plugin |
+| [parallax-due-diligence](skills/parallax-due-diligence/SKILL.md) | Plugin, Skill upload |
+| [parallax-earnings-quality](skills/parallax-earnings-quality/SKILL.md) | Plugin |
+| [parallax-explain-portfolio](skills/parallax-explain-portfolio/SKILL.md) | Plugin, Skill upload |
+| [parallax-halal-screen](skills/parallax-halal-screen/SKILL.md) | Plugin |
+| [parallax-house-view-attribution](skills/parallax-house-view-attribution/SKILL.md) | Full clone only |
+| [parallax-house-view-diff](skills/parallax-house-view-diff/SKILL.md) | Full clone only |
+| [parallax-judge-house-view](skills/parallax-judge-house-view/SKILL.md) | Full clone only |
+| [parallax-load-house-view](skills/parallax-load-house-view/SKILL.md) | Full clone only |
+| [parallax-macro-outlook](skills/parallax-macro-outlook/SKILL.md) | Plugin |
+| [parallax-make-house-view](skills/parallax-make-house-view/SKILL.md) | Full clone only |
+| [parallax-morning-brief](skills/parallax-morning-brief/SKILL.md) | Plugin, Skill upload |
+| [parallax-pair-finder](skills/parallax-pair-finder/SKILL.md) | Plugin |
+| [parallax-peer-comparison](skills/parallax-peer-comparison/SKILL.md) | Plugin, Skill upload |
+| [parallax-portfolio-builder](skills/parallax-portfolio-builder/SKILL.md) | Plugin |
+| [parallax-portfolio-checkup](skills/parallax-portfolio-checkup/SKILL.md) | Plugin, Skill upload |
+| [parallax-rebalance](skills/parallax-rebalance/SKILL.md) | Plugin, Skill upload |
+| [parallax-scenario-analysis](skills/parallax-scenario-analysis/SKILL.md) | Plugin, Skill upload |
+| [parallax-score-explainer](skills/parallax-score-explainer/SKILL.md) | Plugin, Skill upload |
+| [parallax-should-i-buy](skills/parallax-should-i-buy/SKILL.md) | Plugin, Skill upload |
+| [parallax-stress-house-view](skills/parallax-stress-house-view/SKILL.md) | Full clone only |
+| [parallax-stress-test-thesis](skills/parallax-stress-test-thesis/SKILL.md) | Full clone only |
+| [parallax-thematic-screen](skills/parallax-thematic-screen/SKILL.md) | Plugin |
+| [parallax-watchlist-monitor](skills/parallax-watchlist-monitor/SKILL.md) | Plugin, Skill upload |
+| [parallax-weekly-themes](skills/parallax-weekly-themes/SKILL.md) | Plugin |
+| [parallax-white-label-onboard](skills/parallax-white-label-onboard/SKILL.md) | Plugin |
+| [parallax-white-label-stock-report](skills/parallax-white-label-stock-report/SKILL.md) | Plugin |
+| [translate-arabic-finance](skills/translate-arabic-finance/SKILL.md) | Held: native review pending |
+| [translate-chinese-finance](skills/translate-chinese-finance/SKILL.md) | Plugin, Skill upload |
+| [translate-thai-finance](skills/translate-thai-finance/SKILL.md) | Plugin, Skill upload |
+| [translate-vietnamese-finance](skills/translate-vietnamese-finance/SKILL.md) | Held: native review pending |
+<!-- distributions:end -->
+
+## Forking and Customizing
+
+Every workflow is a `SKILL.md` file — a structured prompt the model orchestrates. To customize:
+
+```bash
+# Develop against the repo directly. install.sh copies each skill, but if
+# ~/.claude/skills/<name> is already a symlink into this repo it is left in
+# place, so edits in the repo propagate live without re-installing.
+git clone https://github.com/bencharoenwong/parallax-workflows.git
+cd parallax-workflows
+./install.sh
+
+# Fork a workflow
+cp -r skills/parallax-should-i-buy skills/my-should-i-buy
+$EDITOR skills/my-should-i-buy/SKILL.md   # change behavior, output format, MCP tool sequence
+./install.sh                              # picks up the new skill on next Claude Code restart
+```
+
+A few common customizations:
+- **Different output format.** Edit the "Output Format" section of `SKILL.md`. The model follows it verbatim.
+- **Different tool sequence.** Add or remove Parallax tool calls (by logical name, e.g. `get_company_info`) in the workflow steps. The connector namespace differs per host and install, so skills resolve it at runtime (`skills/_parallax/parallax-conventions.md` §0.1).
+- **Different scoring backend.** The schema and loader under `skills/_parallax/house-view/` are scoring-engine-agnostic; the SKILL.md files are the layer that's coupled to Parallax MCP. Replace those calls with your own data source and the rest keeps working.
+- **Different storage path.** House-view artifacts default to `~/.parallax/active-house-view/`. The path is referenced in `SKILL.md` and the Python helpers under `_parallax/house-view/`.
+
+The Python modules (`audit_chain`, `chain_emit`, `manifest_verify`, `gap_detect`, `gap_suggest`) are pure functions with no MCP coupling — they import cleanly into any harness.
+
+## Audit & Compliance
+
+For compliance, vendor risk, and information security reviews:
+
+- **Documented methodology.** Six-factor framework with academic foundations (Markowitz, Fama). Not a black-box ML model labeled as a factor model. See `skills/_parallax/house-view/loader.md`.
+- **Hash-chained audit log.** Every house-view save and every consume appends an entry to `~/.parallax/active-house-view/audit.jsonl` with `prev_entry_hash` linking. Tampering with any entry breaks the chain on next verification.
+- **Ed25519-signed reasoning chains.** Every consume writes a structured reasoning chain to `~/.parallax/reasoning-chains/` capturing the inputs, the manifest reference, and the output. Designed for 7-year replay against pinned tool versions.
+- **Regulator-grade export.** `/parallax-load-house-view --export <view_id>` packages view + prose + provenance + full hash-chained audit trail into a tarball. Refuses to ship if the chain is broken.
+- **Per-tilt provenance.** Every non-neutral tilt carries a derivation record: prose-extraction (with source span), macro-regime rule (with rule reference and trigger), or manual edit (with prior value and edit notes). `--why <tilt-path>` reconstructs the answer.
+- **Local-only by default.** No telemetry. No external calls during ingest beyond the LLM the operator chose. Files are written with restrictive permissions.
+
+Implementation lives in `skills/_parallax/house-view/audit_chain.py`, `chain_emit.py`, `manifest_verify.py`, `manifest_cache.py`, `audit_export.py`, `gate_present.py` (shared Step 5 confirmation gate for both writer skills), and `provenance_classes.py` (6-class registry enforcing the canonical provenance vocabulary). Test coverage is in the adjacent `tests/` directory; the test signing key and fixtures are deliberately public so auditors can verify round-trip on a fresh clone.
+
+## Workflows
+
+### Concierge
+
+| Command | What it does |
+|---|---|
+| `Hi Parallax` or `/parallax-concierge` | Routes a direct request or offers a role-based first run. Menus contain only workflows shipped in the installed distribution. |
+
+### Single Stock
+
+| Command | What it does |
+|---|---|
+| `/parallax-should-i-buy AAPL` | Quick evaluation — two-lens read (Fundamentals + Technicals), scores, macro, dividends, news, outlook |
+| `/parallax-deep-dive AAPL.O` | Full analysis with technicals and AI assessment |
+| `/parallax-due-diligence AAPL.O` | All financials, Palepu framework, Parallax research report |
+| `/parallax-earnings-quality AAPL.O` | Accruals, revenue quality, manipulation risk |
+| `/parallax-score-explainer AAPL.O "why is value low?"` | Plain-language methodology explanation |
+| `/parallax-peer-comparison AAPL.O` | Factor scores and price performance vs peers |
+| `/parallax-pair-finder NVDA.O long` (or `short`, or `long=X short=Y`) | Long/short pair construction — find the other leg from peers, or evaluate a pair you have, with full residual-exposure decomposition |
+
+### Portfolio
+
+All portfolio workflows take holdings as JSON: `[{"symbol":"AAPL.O","weight":0.25}, ...]`
+
+| Command | What it does |
+|---|---|
+| `/parallax-portfolio-checkup [holdings]` | Health flags, scores, plain-language recommendations |
+| `/parallax-explain-portfolio [holdings] "down 4%"` | Attribution — regime vs factor vs stock-specific |
+| `/parallax-client-review [holdings]` | Full analysis, talk tracks, meeting prep |
+| `/parallax-morning-brief [holdings]` | Market regime, macro, portfolio health, news |
+| `/parallax-rebalance [holdings]` | Prioritized trades with health flags and score rationale |
+| `/parallax-scenario-analysis "event" portfolio=[holdings]` | Exposure assessment and rotation candidates |
+
+### Desk
+
+| Command | What it does |
+|---|---|
+| `/parallax-desk-call-list` | Scan the deduplicated union of saved client books for overnight movers, rank affected clients by weighted book impact, and draft bounded RM talk tracks. Also accepts an inline client array; see `skills/parallax-desk-call-list/references/desk-book-format.md`. |
+
+### House View — flagship complex workflow
+
+Bring your own house view. The CIO memo, IC strategy doc, or macro-desk PDF that anchors your book becomes a first-class object every portfolio workflow auto-loads.
+
+> **For users:** load it once, every portfolio command picks it up. Skip to the table.
+> **For builders:** this is the most involved skill in the repo — schema, validation, hash-chained audit log, Ed25519-signed reasoning chains, calibration manifest verifier, regulator-grade export. If you're studying how a complex `/parallax-*` skill is structured, **start here**. The implementation under `skills/_parallax/house-view/` is authored by load-house-view but its `loader.md` and `render_helpers.md` are deliberately shared — the consuming portfolio and single-stock skills JIT-load them when surfacing view conflicts.
+
+| Command | What it does |
+|---|---|
+| `/parallax-load-house-view <pdf or .md or url>` | Ingest, extract structured tilts, confirm with uploader, save as active view |
+| `/parallax-load-house-view` | Wizard mode for guided manual entry |
+| `/parallax-load-house-view --status` | Show active view summary |
+| `/parallax-load-house-view --extend <date>` | Push `valid_through` forward |
+| `/parallax-load-house-view --re-pair` | Re-pair after manual prose edit |
+| `/parallax-load-house-view --why <tilt-path>` | Trace any tilt to the source span that generated it |
+| `/parallax-load-house-view --export <view_id>` | Export regulator-grade compliance bundle |
+| `/parallax-load-house-view --clear` | Remove active view |
+| `/parallax-make-house-view` | **Synthesize** a draft view from Parallax MCP signals (no CIO PDF needed). Routes through the same confirmation gate; saves with `generator_synthesis` provenance |
+| `/parallax-make-house-view --shadow-diff` | Synthesize but do NOT save; render an additive diff vs the active bank view (preserves bank-view sovereignty) |
+| `/parallax-make-house-view --markets us,japan,uk` | Restrict synthesis fan-out scope |
+| `/parallax-make-house-view --compare <view_a> <view_b>` | Diff two **saved** view bundles cell-by-cell — tilts + excludes (e.g. UBS vs Goldman). No MCP, no synthesis, no save; neither view treated as authoritative |
+| `/parallax-judge-house-view` | **Read-only** LLM-as-judge — compare saved view to current Parallax signals, classify drift severity, emit cited per-cell recommendations + bundle |
+| `/parallax-judge-house-view --json` | Structured output for cron consumption |
+| `/parallax-judge-house-view --dry` | Skip the Phase 5 LLM recommendation step; return deterministic drift severity from MCP signals alone |
+| `/parallax-judge-house-view --mock-mcp <path>` | Replace live MCP fan-out with a canned JSON payload (CI / testing). Independent of `--dry` — combinable |
+
+**Four design choices worth knowing about:**
+
+1. **Your LLM, your prompt.** Extraction runs in your harness, against your model. Documents do not leave your machine.
+2. **Local by default.** The view lives at `~/.parallax/active-house-view/` — `view.yaml`, `prose.md`, `provenance.yaml`, `audit.jsonl`. Files are written `0600`, the directory is `0700`. We do not host it.
+3. **Audit was a design input.** Every save writes a hash-chained audit entry, an Ed25519-signed reasoning chain, and a per-tilt provenance record. `--export` produces a regulator-grade bundle. `--why tilts.factors.momentum` traces any tilt back to the source span (or rule, or manual edit) that generated it.
+4. **PDF extraction is not deterministic.** LLM-based extraction can read the same document differently on different runs, especially on long PDFs. Nothing is saved without your confirmation at the gate — treat the draft YAML as a first read to check, not a precise transcription of the source.
+
+Active view is consumed by: `parallax-portfolio-builder`, `parallax-rebalance`, `parallax-thematic-screen`, `parallax-morning-brief`, `parallax-client-review`, `parallax-explain-portfolio`. Conflict-flag-only by: `parallax-should-i-buy`, `parallax-deep-dive`. See `skills/parallax-load-house-view/samples/` for sample CIO views, `skills/_parallax/house-view/loader.md` for the multiplier mapping and conflict-resolution rules, and `skills/_parallax/house-view/README.md` for the module reference.
+
+`parallax-portfolio-builder`, `parallax-rebalance`, and `parallax-thematic-screen` JIT-load `skills/_parallax/house-view/auto-on-load-judge-pattern.md` and auto-fire `/parallax-judge-house-view --dry --json` when the active view is at least 30 days old; a one-line banner surfaces only on `drift_material` severity. `parallax-morning-brief` surfaces a conditional one-liner suggesting the judge when its existing Batch B alignment check detects ≥3 misaligned holdings. `parallax-client-review` and `parallax-explain-portfolio` deliberately skip the auto-on-load drift gate (compliance + retrospective-replay contexts respectively).
+
+### Market & Discovery
+
+| Command | What it does |
+|---|---|
+| `/parallax-macro-outlook "United States"` | Regime, macro analysis, factor implications |
+| `/parallax-country-deep-dive Japan` | Macro environment and equity opportunities |
+| `/parallax-thematic-screen "AI infrastructure"` (or `"trade ideas around energy transition"`, optionally with `--no-macro`) | Discover stocks by theme; optional macro + regime-signal overlay for trade ideas |
+| `/parallax-weekly-themes markets=US,JP,TW` | Leading and lagging theme per market this week, cross-market themes of the week, divergences |
+| `/parallax-portfolio-builder "defensive dividend Asian equities"` | Build allocation from thesis |
+| `/parallax-watchlist-monitor AAPL.O MSFT.O NVDA.O` | Flag score changes across a list |
+| `/parallax-halal-screen AAPL.O` | Shariah compliance check |
+
+### Thesis & Argument
+
+Pressure-test the *reasoning* behind a stated view — not a stock, not a portfolio. Decomposes an argument into falsifiable assumptions across five layers (macro, sector/theme, position, implicit market preconditions, holder preconditions), tests the market ones against current Parallax signals, and surfaces which assumptions the case depends on and where it breaks first. **Maps argument risk; it never issues a buy/sell/hold or suitability call**, never persists anything, and never lets a client's situation rewrite what is true about the world.
+
+| Command | What it does |
+|---|---|
+| `/parallax-stress-test-thesis "…your argument…"` | Decompose into assumptions, stress-test against live signals, rate Assumption Strength (🔴/🟡/🟢) alongside a Bias & Conviction "hype meter", and surface the load-bearing vulnerabilities and where the thesis breaks first |
+| `/parallax-stress-test-thesis "…" client_profile={…}` | Adds a client-conditioning pass — re-weights each break condition's severity for a specific holder (horizon, income reliance, risk capacity): same thesis, different verdict by investor. Pass-1 statuses stay fixed |
+
+Read-only, not advice; the client-conditioned pass is a heuristic risk observation, not a suitability determination. See `skills/parallax-stress-test-thesis/samples/` for the test-thesis corpus.
+
+### Parallax AI Investor Profiles
+
+A family of standalone skills that apply famous investors' workflow shapes (not just rubric thresholds) to current Parallax data, each anchored in published academic or biographical sources. Output is third-person ("Buffett-style"), always cites the source, and uses only public information.
+
+| Command | Workflow | Anchor |
+|---|---|---|
+| `/parallax-ai-buffett <ticker>` | Bottom-up single-stock; Quality + Value + Defensive factor profile | Frazzini-Kabiller-Pedersen (2018), *FAJ*; reconciled for 21st-century intangibles via Lev-Srivastava (2022) |
+| `/parallax-ai-greenblatt [ticker]` | Magic Formula: ROC + earnings yield → top-decile basket | Greenblatt (2006); Gray-Carlisle (2012) |
+| `/parallax-ai-klarman <ticker>` | Balance-sheet-first margin-of-safety checks (incl. "no position warranted; cash is valid") | Klarman, *Margin of Safety* (1991) |
+| `/parallax-ai-soros [ticker]` | Top-down macro → regime themes → dual-channel ticker exposure | Soros, *Alchemy of Finance* (1987); Drobny (2006) |
+| `/parallax-ai-ptj <ticker>` | Tri-channel confluence: technical setup + macro-regime alignment + volatility risk/reward | Schwager, *Market Wizards* (1989) |
+| `/parallax-ai-consensus <ticker or basket>` | Runs all 5 profiles in parallel; surfaces super-majority + factor-level agreement | Meta-skill |
+
+**Framing and legal posture:**
+- All profiles framed in third person ("Buffett-style," never "Buffett says")
+- Each output cites its academic/book source and includes a mandatory non-advice disclaimer
+- AI-inferred from publicly available information only — no proprietary endpoints
+- Not financial advice, not personalized, not endorsed by any named investor
+- See `skills/_parallax/AI-profiles/README.md` for inclusion criteria, v2 candidates, and design rationale
+
+### Symbol Format
+
+Symbols use Reuters Instrument Code (RIC) format. `/parallax-should-i-buy` auto-resolves plain tickers (AAPL); other workflows require RIC format (AAPL.O).
+
+| Exchange | Suffix | Example |
+|---|---|---|
+| NASDAQ | `.O` | AAPL.O |
+| NYSE | `.N` | JPM.N |
+| Tokyo | `.T` | 7203.T |
+| Hong Kong | `.HK` | 0700.HK |
+| London | `.L` | SHEL.L |
+| Singapore | `.SI` | D05.SI |
+
+Full exchange table in `skills/_parallax/parallax-conventions.md`.
+
+## Token Costs
+
+Each Parallax API call consumes tokens. Quick reference:
+
+| Workflow type | Typical tokens | Example |
+|---|---|---|
+| Quick stock check | 2–29 | `/parallax-should-i-buy` ~29 |
+| Deep analysis | 31–46 | `/parallax-due-diligence` ~31 |
+| Portfolio (10 holdings) | 36–105 | `/parallax-portfolio-checkup` ~46 |
+
+Full breakdown in `skills/_parallax/token-costs.md`.
+
+## What's Inside
+
+```
+skills/
+├── _parallax/                  # Shared conventions, token costs, AI profile framework
+│   ├── parallax-conventions.md # RIC resolution, parallel execution, fallbacks
+│   ├── token-costs.md          # Per-tool and per-workflow token estimates
+│   ├── render_gate.py          # Shared deterministic pre-render gate (+ test_render_gate.py)
+│   ├── AI-profiles/            # Schema, output template, and profile specs for AI-* skills
+│   └── scripts/                # Build/gate tooling: spec-validate, section-ref-lint, tracked-file scan, run-gate-tests
+├── parallax-should-i-buy/               # Quick stock evaluation
+│   └── SKILL.md
+├── parallax-deep-dive/                  # Full single-stock analysis
+│   └── SKILL.md
+├── parallax-client-review/              # RIA client meeting prep
+│   ├── SKILL.md
+│   └── references/
+│       └── recommendation-matrix.md
+├── parallax-portfolio-checkup/          # Individual investor health check
+│   ├── SKILL.md
+│   └── references/
+│       └── health-flags.md
+├── parallax-desk-call-list/             # Desk-wide RM morning call list
+│   ├── SKILL.md, desk_call_list_logic.py
+│   └── references/
+├── parallax-ai-buffett/                 # Buffett-style factor profile dispatcher
+│   └── SKILL.md
+├── parallax-ai-consensus/               # Multi-profile super-majority meta-skill
+│   └── SKILL.md
+├── parallax-load-house-view/            # Ingest CIO PDF → structured house view (writer)
+│   └── SKILL.md
+├── parallax-make-house-view/            # Synthesize draft house view from MCP signals (writer)
+│   ├── SKILL.md
+│   ├── maker.py, pillar_compose.py, pillar_formulas.py,
+│   ├── cross_country.py, prose_synth.py, shadow_diff.py
+│   └── tests/
+├── parallax-judge-house-view/           # Read-only drift monitor + per-cell recommendations
+│   ├── SKILL.md
+│   ├── judge.py, drift_classify.py, recommendation.py,
+│   ├── render_judge.py, cadence.py
+│   └── tests/
+└── ... (20+ more workflows)
+```
+
+Each `SKILL.md` is a self-contained instruction set. Claude reads it when you invoke the command, then orchestrates the Parallax MCP tools accordingly. Some workflows also invoke adjacent deterministic Python helpers for local validation, arithmetic, or rendering.
+
+**Where things live:**
+- `skills/<workflow>/SKILL.md` — the user-invocable workflows
+- `plugin/` and `.claude-plugin/marketplace.json` — the generated Claude Code plugin bundle (general-release set). Never hand-edit: edit the sources under `skills/` and rerun `python3 skills/_parallax/scripts/build_bundle.py plugin`; a gate test fails when the tracked bundle drifts from the sources.
+- `skills/_parallax/parallax-conventions.md`, `token-costs.md`, `AI-profiles/` — genuinely shared across many skills (RIC resolution, parallel-call patterns, AI profile framework)
+- `skills/_parallax/parallax-conventions.md` §14 — host primitives and the per-host binding table (Claude Code, Codex CLI, claude.ai). Skills name primitives, not host tools; §14.3 says what a skill does when a host lacks one. `skills/_parallax/skill-structure-conventions.md` — how a SKILL.md is shaped: the canonical step spine, the authority header for shared files, and the `## Failure modes` / `## Done when` sections.
+- `skills/_parallax/house-view/` — house-view subsystem. Three skills participate: `/parallax-load-house-view` (writer, bank CIO ingestion — schema, audit chain, signed reasoning chains, calibration manifest verifier), `/parallax-make-house-view` (writer, MCP-driven synthesis — routes through the same gate, persists with `generator_synthesis` provenance), and `/parallax-judge-house-view` (read-only consumer, drift monitor — emits `judge` audit rows and a per-cell recommendation bundle). Also consumed by the portfolio and single-stock skills that surface view conflicts (`parallax-portfolio-builder`, `parallax-rebalance`, `parallax-client-review`, `parallax-morning-brief`, `parallax-explain-portfolio`, `parallax-thematic-screen`, `parallax-country-deep-dive`, `parallax-macro-outlook`, `parallax-deep-dive`, `parallax-should-i-buy`). `loader.md`, `render_helpers.md`, `gate_present.py` (shared Step 5 confirmation gate), `provenance_classes.py` (canonical 6-class registry), `aggregator_weights.yaml` (cross-country weighting for the maker), `MCP_FIELD_INVENTORY.md` (Phase A0 capability map), and `auto-on-load-judge-pattern.md` (consumer drift-gate protocol — auto-fires `/parallax-judge-house-view --dry --json` for `parallax-portfolio-builder` / `parallax-rebalance` / `parallax-thematic-screen` when the active view is at least 30 days old) are the shared interface; `gap_detect` / `gap_suggest` are loaded by `portfolio-builder --augment-silent` only.
+- `skills/_parallax/white-label/` — white-label branding subsystem. Authored by `/parallax-white-label-onboard`; consumed by 16 visual-rendering skills (Tier 1 + Tier 2). `integration-pattern.md` (§1–§9) is the shared consumer-side contract — header rendering, About This Report line, color substitution, logo placement, fallback behavior — JIT-loaded by every consumer via the `<!-- white-label: integration-pattern.md -->` sentinel. `loader.load_visual_branding()` is the visual-consumer entry point (7-key subset; voice-exclusion guardrail), paired with `loader.is_white_label_active(branding)` (single source of truth for the rendering flag, per `integration-pattern.md` §2/§4/§8) and `loader.safe_source_reference(branding)` (display-safe About This Report source ref, per §7). The drift gate at `tests/test_integration_pattern_referenced.py` enforces sentinel ↔ load-directive pairing.
+
+**Reference templates.** The newer skills (`parallax-credit-lens`, `parallax-load-house-view`, `parallax-white-label-onboard`) carry typed dataclasses, comprehensive test suites, and explicit reference modules. If you're authoring or upgrading a skill, model on those.
+
+## Known Limitations
+
+- **Publicly traded securities only** — most workflows are equity-only; `/parallax-desk-call-list` also prices ETFs, but ETF score and news enrichment is unavailable
+- **RIC format required** for most workflows (except `/parallax-should-i-buy`)
+- **`build_stock_universe` uses keyword matching** — use sector-level queries ("US large cap consumer staples"), not abstract concepts ("pricing power in stagflation")
+- **Peer groups are industry-based** — mega-caps may be compared to smaller industry peers
+- **`check_macro_health` is deprecated** — use `check_api_health` for liveness or `list_macro_countries` for coverage (see `skills/_parallax/token-costs.md`)
+
+## Directory listings
+
+Browse [Parallax listings on Skills Directory](https://www.skillsdirectory.com/authors/bencharoenwong).
+Its automated grades cover indexed `SKILL.md` snapshots; supporting scripts and reference files are excluded.
+Listings can lag this repository and include workflows outside the general-release set.
+Use [Get started](#get-started) for supported installations.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+## Disclaimer
+
+These workflows are analytical tools that automate data retrieval and presentation from the Parallax platform. They do not constitute financial advice, investment recommendations, or solicitations to buy or sell securities. All outputs are informational only and should be independently verified and reviewed by qualified professionals before any investment decisions. Chicago Global Capital Pte Ltd assumes no liability for decisions made based on these outputs.
+
+### Finance translation
+
+Chinese (`zh-CN`, `zh-TW`, `zh-HK`) and Thai (`th`) translation skills ship in the plugin. The Vietnamese (`vi-VN`) and Saudi Arabic (`ar-SA`) source skills remain outside the general-release plugin pending native review.
+
+Translation entry instructions load only the relevant references. JSON and saved-prose deliverables run a source-fidelity validator; a passing style check alone cannot approve fidelity. Meaning and uncertainty still require source review.
+
+Standalone `.skill` packages include the same validator helper and can be built with `skills/build-skills.sh`. A no-argument run builds the Chinese and Thai packages; the held `vi-VN` and `ar-SA` packages build only when named, with a warning, and are not for distribution. Each package passes the same leak-scan gate as the web build, so a fresh clone needs `PARALLAX_ALLOW_PARTIAL_SCAN=1`. `SKILL_BUILD_OUT_DIR` optionally selects an output directory instead of Downloads.

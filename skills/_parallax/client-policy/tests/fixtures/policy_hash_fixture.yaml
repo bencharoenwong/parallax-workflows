@@ -1,0 +1,67 @@
+# Canonicalization fixture for schema.yaml §policy_hash computation.
+# ASSERT: `compute_policy_hash(this_document)` == expected_policy_hash below.
+# Any change that breaks the assertion is a breaking canonicalization change and
+# MUST bump metadata.schema_version plus emit a migration note.
+#
+# `metadata` and `governance` are present ON PURPOSE: Rule 1 scopes the hash to
+# `mandate` + `adaptation` only, so editing either of them must not move the digest.
+
+metadata:
+  schema_version: 1
+  policy_id: "aa11bb22-cc33-4d44-8e55-ff6677889900"
+  policy_name: "Hash Fixture"
+  client_ref: "acct-7fd2"
+  supplied_at: "2026-08-29T10:00:00Z"
+
+mandate:
+  base_currency: "USD"
+  strategic_allocation:
+    equity: 0.60
+    cash: 0.0                        # stripped (numeric zero, Rule 2)
+  allocation_bands:
+    equity: {min: 0.0, max: 0.70}    # `min` stripped (numeric zero) — see the P-3 footnote
+  tactical_overlay:
+    enabled: false                   # NOT stripped: bool guard, `False == 0` in Python
+    max_total_tilt: 0.10
+    max_tracking_error: null         # stripped (None)
+  prohibited_products: []            # stripped (empty sequence)
+  sub_allocations:
+    dimensions:
+      region:
+        basis: sleeve
+        code_list: parallax_region_v1
+        strategic_allocation:
+          us: 1.0
+        allocation_bands: {}         # stripped (empty map, after recursion)
+
+adaptation:
+  k_preset: balanced
+  k: null                            # stripped (None)
+
+governance:
+  human_review_recorded: []
+
+# Canonical body after strip + sort (byte-exact):
+#
+#   adaptation:
+#     k_preset: balanced
+#   mandate:
+#     allocation_bands:
+#       equity:
+#         max: 0.7
+#     base_currency: USD
+#     strategic_allocation:
+#       equity: 0.6
+#     sub_allocations:
+#       dimensions:
+#         region:
+#           basis: sleeve
+#           code_list: parallax_region_v1
+#           strategic_allocation:
+#             us: 1.0
+#     tactical_overlay:
+#       enabled: false
+#       max_total_tilt: 0.1
+#
+# Expected policy_hash (sha256 hex, utf-8 encoded canonical body):
+expected_policy_hash: "64bb76bcaac010eeef80367d7fddec6fdaa8de58053c3dfabef58f15cbfac311"

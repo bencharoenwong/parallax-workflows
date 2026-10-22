@@ -1,0 +1,73 @@
+{
+  "_fixture_purpose": "Models macro_analyst called WITHOUT `component` (overview mode), which returns a different live response shape than the drilldown mode macro_analyst.json models. Structurally different from macro_analyst.json (drilldown, component='tactical'): no top-level content/component_name/truncated, instead a `components` dict keyed by component name with per-entry {content, truncated}, plus component_count and budget_applied. Validate against MACRO_ANALYST_OVERVIEW_SCHEMA, not MACRO_ANALYST_SCHEMA.",
+  "_replay_context": "Synthetic fixture modelled on the live response shape, not a captured response.",
+  "success": true,
+  "report_date": "2033-01-18",
+  "market": "United States",
+  "component": "overview",
+  "components": {
+    "macro_indicators": {
+      "content": "Headline CPI has decelerated to a 2.4% annual pace while core remains sticky near 3.1%. Labor markets continue to soften gradually, with payroll growth below trend but no sharp deterioration in claims.",
+      "truncated": false
+    },
+    "tactical": {
+      "content": "The equity overweight is trimmed on valuation alone. At elevated price-to-earnings multiples against a decelerating earnings-revision breadth, the risk/reward for adding duration here is unattractive.",
+      "truncated": false
+    },
+    "fixed_income": {
+      "content": "Duration exposure is kept neutral. The curve has re-steepened modestly as term premium rebuilds; carry remains attractive at the front end.",
+      "truncated": false
+    },
+    "currency": {
+      "content": "The dollar is range-bound against a basket of DM peers, with rate-differential support offset by twin-deficit concerns.",
+      "truncated": false
+    },
+    "sector_positioning": {
+      "content": "Quality-defensive sectors are favored over high-multiple growth given decelerating earnings-revision breadth.",
+      "truncated": false
+    },
+    "liquidity": {
+      "content": "Money supply growth remains subdued; bank lending standards have eased slightly from their tightest levels.",
+      "truncated": false
+    },
+    "news": {
+      "content": "Recent Fed commentary has leaned hawkish on the pace of further easing, citing sticky core inflation.",
+      "truncated": false
+    },
+    "factors": {
+      "content": "Quality and low-volatility factors have outperformed momentum over the trailing quarter as breadth narrowed.",
+      "truncated": false
+    }
+  },
+  "component_count": 8,
+  "budget_applied": false,
+  "file_url": "https://example.com/storage/macro_reports/united-states-overview-20330118-signed.pdf",
+  "next_steps": {
+    "find_stocks": {
+      "action": "Find stocks positioned for this macro environment",
+      "tool": "build_stock_universe({ query: 'stocks benefiting from United States macro trends' })"
+    },
+    "drill_into_component": {
+      "action": "Get detailed component data",
+      "tool": "macro_analyst({ market: 'United States', component: '<component>' })",
+      "available_components": [
+        "macro_indicators",
+        "tactical",
+        "fixed_income",
+        "currency",
+        "sector_positioning",
+        "liquidity",
+        "news",
+        "factors"
+      ]
+    },
+    "compare_markets": {
+      "action": "Compare with another market",
+      "example": "macro_analyst({ market: 'China' })"
+    },
+    "full_report": {
+      "action": "Access the complete untruncated report",
+      "file_url": "https://example.com/storage/macro_reports/united-states-overview-20330118-signed.pdf"
+    }
+  }
+}

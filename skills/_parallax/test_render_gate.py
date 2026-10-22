@@ -1,0 +1,664 @@
+"""Unit tests for the shared Parallax render gate.
+
+Run: python3 -m pytest skills/_parallax/test_render_gate.py -q
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import pytest
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from render_gate import gate, main, word_cap_warning, SKILL_ANCHORS, WORD_CAPS  # noqa: E402
+
+SCAFFOLD = "**Step A.5 → Batch C complete.** Verified-holdings aggregates...\n\n"
+
+# Real view_status.py banner strings, one per state (verified against the helper's
+# f-string templates). The PREVIOUS per-skill gate test used a hand-written
+# "> 🟡 House view: ..." banner that does NOT match production output — that false
+# confidence let the active/warning/critical banners be stripped. These are the
+# strings the gate must actually preserve.
+REAL_BANNERS = {
+    "active": "Active house view: 'Q2 Defensive Tilt' — effective 2026-05-01 through 2026-08-01 (45 days remaining).",
+    "warning": "Active view 'Q2 Defensive Tilt' expires in 12 days (2026-06-20); consider refreshing soon.",
+    "critical": "⚠ Active view 'Q2 Defensive Tilt' expires in 5 day(s) (2026-06-13). Have you received an updated CIO view? Run /parallax-load-house-view to refresh.",
+    "not_yet_effective": "House view 'Q3 View' becomes effective on 2026-07-01. Running without view until then.",
+    "expired": "! House view 'Q1 View' expired 3 day(s) ago (2026-06-01). Tilts NOT applied.",
+}
+
+PC_HEADER = "## Portfolio Health Status: 🟢 **Healthy** — 0 of 5 flags raised"
+PC_BODY = PC_HEADER + "\n\nbody line\n\n## Consider\n- a question?\n"
+
+
+# --- C1: every real house-view banner SURVIVES the strip ---------------------
+
+
+def test_all_real_banners_survive_strip():
+    for state, banner in REAL_BANNERS.items():
+        draft = SCAFFOLD + banner + "\n\n" + PC_BODY
+        out = gate(draft, "portfolio-checkup")
+        first = out.lstrip().split("\n", 1)[0]
+        assert banner[:25] in first, f"{state}: banner stripped -> {first!r}"
+
+
+def test_regression_active_banner_not_eaten():
+    # The exact bug: active banner begins "Active house view" (not "house view"),
+    # so the old anchor missed it and stripped to the health-status line.
+    draft = SCAFFOLD + REAL_BANNERS["active"] + "\n\n" + PC_BODY
+    out = gate(draft, "portfolio-checkup")
+    assert out.lstrip().startswith("Active house view:"), out[:80]
+
+
+# --- C2: degraded-state note is HOISTED, not dropped -------------------------
+
+
+def test_async_timeout_note_hoisted_not_deleted():
+    draft = (
+        "get_assessment timed out (~3 min) — AI assessment marked pending.\n\n"
+        + PC_BODY
+    )
+    out = gate(draft, "portfolio-checkup")
+    assert out.lstrip().startswith("## Portfolio Health Status"), out[:60]
+    assert "timed out" in out, "degraded-state note was dropped (C2 violation)"
+    assert "Status note (preserved)" in out
+
+
+def test_comput_variants_hoisted():
+    # Widened regex for 'comput\w*' (regression for 'could not be computed' finding)
+    draft = "Financials could not be computed for AAPL.O.\n\n" + PC_BODY
+    out = gate(draft, "portfolio-checkup")
+    assert "Status note (preserved)" in out
+    assert "could not be computed" in out
+
+    draft = "Could not compute risk metrics.\n\n" + PC_BODY
+    out = gate(draft, "portfolio-checkup")
+    assert "Status note (preserved)" in out
+    assert "Could not compute" in out
+
+
+def test_pure_scaffold_not_hoisted():
+    # Non-degraded scaffold must NOT produce a spurious status note.
+    out = gate(SCAFFOLD + PC_BODY, "portfolio-checkup")
+    assert "Status note" not in out
+
+
+# --- C4: Branding Header (per-skill noun) + Ground-truth Integrity survive ----
+
+
+def test_branding_header_survives_per_skill_noun():
+    cases = {
+        "client-review": "**Acme Capital** portfolio review",
+        "morning-brief": "**Acme Capital** morning brief",
+        "watchlist-monitor": "**Acme Capital** watchlist scan",
+        "rebalance": "**Acme Capital** rebalance",
+        "portfolio-builder": "**Acme Capital** portfolio construction",
+        "explain-portfolio": "**Acme Capital** portfolio attribution",
+        "should-i-buy": "**Acme Capital** stock review",
+        "score-explainer": "**Acme Capital** score explainer",
+    }
+    for skill, hdr in cases.items():
+        draft = SCAFFOLD + hdr + "\n\nbody\n"
+        out = gate(draft, skill)
+        assert "Acme Capital" in out.split("\n", 1)[0], (skill, out[:80])
+
+
+def test_branding_logo_image_survives_above_text_line():
+    # integration-pattern.md §5: a URL logo renders as `![client](url)` on its own line
+    # ABOVE the branding text line. Both must survive the strip (regression for the
+    # gemini-gate finding `branding-logo-stripped`).
+    draft = (
+        SCAFFOLD
+        + "![Acme Capital](https://cdn.example.com/acme/logo.png)\n"
+        + "**Acme Capital** portfolio review\n\n"
+        + PC_BODY
+    )
+    out = gate(draft, "client-review")
+    first = out.lstrip().split("\n", 1)[0]
+    assert first.startswith("![Acme Capital]"), f"logo image stripped -> {first!r}"
+    assert "Acme Capital" in out
+
+
+def test_logo_url_with_pending_not_hoisted_as_status():
+    # A pure image/link line whose URL contains a degraded token ("logo-pending.png")
+    # must not be hoisted as a status note (gemini finding `degraded-regex-too-broad`).
+    # The logo anchor preserves it anyway; assert no spurious status note is appended.
+    draft = (
+        "![Acme](https://cdn.example.com/acme/logo-pending.png)\n"
+        + "**Acme** portfolio review\n\n"
+        + PC_BODY
+    )
+    out = gate(draft, "client-review")
+    assert "Status note (preserved)" not in out
+
+
+def test_ground_truth_integrity_survives():
+    draft = SCAFFOLD + "## Ground-truth Integrity\n| input | name |\n\n" + PC_BODY
+    out = gate(draft, "client-review")
+    assert out.lstrip().startswith("## Ground-truth Integrity"), out[:60]
+
+
+# --- C5: fail-open ----------------------------------------------------------
+
+
+def test_failopen_no_anchor_returns_input():
+    junk = "no recognizable header here\nmore text\n"
+    assert gate(junk, "portfolio-checkup") == junk
+
+
+def test_failopen_no_anchor_warns_on_stderr(capsys):
+    junk = "no recognizable header here\nmore text\n"
+    assert gate(junk, "portfolio-checkup") == junk
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == (
+        "[render-gate] WARN: no anchor for skill='portfolio-checkup'; "
+        "returned unchanged\n"
+    )
+
+
+def test_anchored_draft_does_not_warn(capsys):
+    gate(SCAFFOLD + PC_BODY, "portfolio-checkup")
+    assert capsys.readouterr().err == ""
+
+
+# --- per-skill: first rendered section anchors; scaffold stripped -------------
+
+FIRST_SECTION = {
+    "portfolio-checkup": "## Portfolio Health Status: 🔴 **Attention** — 2 flags",
+    "client-review": "## Portfolio Summary",
+    "morning-brief": "## Market Regime & Signals",
+    "explain-portfolio": "## What Happened",
+    "rebalance": "## Current Portfolio Assessment",
+    "watchlist-monitor": "## Watchlist Summary",
+    "portfolio-builder": "## Investment Thesis",
+    "should-i-buy": "## The Company",
+    "score-explainer": "## The Question",
+    "desk-call-list": "# Desk Call List",
+    "deep-dive": "## Company Overview",
+    "due-diligence": "## Company Overview",
+    "peer-comparison": "## Peer Group",
+    "earnings-quality": "## Risk Summary",
+    "credit-lens": "## Credit Risk Assessment: Acme Corp (ACME.O) | Traffic-Light: 🟢",
+    "thematic-screen": "## Theme: AI infrastructure companies",
+    "weekly-themes": "## Weekly Themes: week to date through 2026-10-09",
+    "macro-outlook": "## Regime Status",
+    "country-deep-dive": "## Country Overview",
+    "halal-screen": "## Screening Criteria",
+    "scenario-analysis": "## Scenario Summary",
+    "pair-finder": "#### 1. Verdict",
+    "stress-test-thesis": "## TL;DR",
+}
+
+
+def test_each_skill_strips_scaffold_keeps_first_section():
+    for skill, hdr in FIRST_SECTION.items():
+        draft = (
+            SCAFFOLD
+            + "No active house view, white-label inactive.\n\n"
+            + hdr
+            + "\nbody\n"
+        )
+        out = gate(draft, skill)
+        assert out.lstrip().startswith(hdr), (skill, out[:70])
+
+
+@pytest.mark.parametrize(
+    "hdr",
+    [
+        "- **Pair**: NVDA.O / AMD.O — semis / semis / US",
+        "**Pair**: NVDA.O / AMD.O — semis / semis / US",
+        "- **Pair:** NVDA.O / AMD.O — semis / semis / US",
+        "**Pair:** NVDA.O / AMD.O — semis / semis / US",
+        "* **Pair**: NVDA.O / AMD.O — semis / semis / US",
+    ],
+)
+def test_pair_finder_evaluate_mode_anchors_on_pair_line(hdr):
+    draft = SCAFFOLD + "No active house view, white-label inactive.\n\n" + hdr + "\nbody\n"
+    out = gate(draft, "pair-finder")
+    assert out.lstrip().startswith(hdr), out[:70]
+
+
+def test_title_form_anchors_each_skill():
+    titles = {
+        "client-review": "# Client Portfolio Review — Conservative Retiree",
+        "morning-brief": "# Fund Manager Morning Brief — 2026-06-14",
+        "explain-portfolio": "# Drawdown Attribution",
+        "rebalance": "# Portfolio Rebalance",
+        "watchlist-monitor": "# Watchlist Scan — 7 names",
+        "portfolio-builder": "# Portfolio Builder — US Tech",
+        "should-i-buy": "# Should I Buy — AAPL.O",
+        "score-explainer": "# Score Explainer — why is the value score low",
+        "deep-dive": "# Position Deep Dive — AAPL.O",
+        "due-diligence": "# Full Due Diligence — AAPL.O",
+        "peer-comparison": "# Peer Comparison — AAPL.O",
+        "earnings-quality": "# Earnings Quality Analysis — AAPL.O",
+        "credit-lens": "# Credit Lens — AAPL.O",
+        "thematic-screen": "# Thematic Screen — AI infrastructure",
+        "weekly-themes": "# Weekly Themes — 2026-10-09",
+        "macro-outlook": "# Macro Outlook — United States",
+        "country-deep-dive": "# Country Deep Dive — Japan",
+        "halal-screen": "# Halal / Shariah Screen — AAPL.O",
+        "scenario-analysis": "# Scenario Analysis — tariff shock",
+        "pair-finder": "# Pair Finder — NVDA.O long",
+        "stress-test-thesis": "# Stress-Test Thesis — NVDA",
+    }
+    for skill, title in titles.items():
+        out = gate(SCAFFOLD + title + "\nbody\n", skill)
+        assert out.lstrip().startswith("# "), (skill, out[:50])
+
+
+def test_idempotent():
+    draft = SCAFFOLD + REAL_BANNERS["active"] + "\n\n" + PC_BODY
+    once = gate(draft, "portfolio-checkup")
+    assert gate(once, "portfolio-checkup").strip() == once.strip()
+
+
+def test_every_skill_has_anchors():
+    for skill in FIRST_SECTION:
+        assert SKILL_ANCHORS.get(skill), f"no anchors for {skill}"
+
+
+def _output_format(skill_text: str) -> str:
+    marker = "## Output Format"
+    assert marker in skill_text, "SKILL.md has no Output Format section"
+    after = skill_text.split(marker, 1)[1]
+    end = re.search(r"\n#{1,6} ", after)
+    return after[: end.start()] if end else after
+
+
+def _heading_label(rendered_start: str) -> str:
+    label = re.sub(r"^#{1,4}\s*", "", rendered_start).strip()
+    return label.split(":", 1)[0]
+
+
+def test_documented_first_sections_match_anchors():
+    """Catch Output Format label drift before the gate can fail open."""
+    repo_root = Path(__file__).resolve().parents[2]
+    assert set(FIRST_SECTION) == set(SKILL_ANCHORS)
+
+    for skill, rendered_start in FIRST_SECTION.items():
+        skill_md = repo_root / "skills" / f"parallax-{skill}" / "SKILL.md"
+        assert skill_md.is_file(), f"missing skill file for anchor key {skill!r}"
+        output_format = _output_format(skill_md.read_text(encoding="utf-8"))
+        label = _heading_label(rendered_start)
+        assert re.search(rf"\b{re.escape(label)}\b", output_format, re.IGNORECASE), (
+            f"{skill}: documented first label {label!r} is absent from Output Format"
+        )
+
+        out = gate(SCAFFOLD + rendered_start + "\nbody\n", skill)
+        assert out.lstrip().startswith(rendered_start), (
+            f"{skill}: SKILL_ANCHORS does not match documented start {rendered_start!r}"
+        )
+
+
+def test_anchor_keys_and_skill_gate_commands_are_bidirectional():
+    """Every anchor key must be wired, and every wired key must be registered."""
+    repo_root = Path(__file__).resolve().parents[2]
+    skills_root = repo_root / "skills"
+    gate_call = re.compile(r"render_gate\.py[\"']?\s+--skill\s+([a-z0-9-]+)\b")
+
+    wired: dict[str, Path] = {}
+    for skill_md in skills_root.glob("parallax-*/SKILL.md"):
+        for key in gate_call.findall(skill_md.read_text(encoding="utf-8")):
+            assert key not in wired or wired[key] == skill_md, (
+                f"render-gate key {key!r} is wired by multiple skills"
+            )
+            wired[key] = skill_md
+            assert key in SKILL_ANCHORS, (
+                f"{skill_md.relative_to(repo_root)} wires unregistered key {key!r}"
+            )
+
+    for key in SKILL_ANCHORS:
+        expected = skills_root / f"parallax-{key}" / "SKILL.md"
+        assert wired.get(key) == expected, (
+            f"anchor key {key!r} is not wired by {expected.relative_to(repo_root)}"
+        )
+
+
+def test_gate_commands_pass_the_report_by_file(tmp_path):
+    """Every documented gate command is one short line that reads the draft with
+    --input, and running it through bash returns the gated report and deletes the
+    draft. Claude Code refuses a Bash command over 10,000 characters or containing
+    `$(`/`${`, so the report must never be part of the command."""
+    repo_root = Path(__file__).resolve().parents[2]
+    skills_root = repo_root / "skills"
+    literals = "literal $HOME ${HOME} $(echo x) `echo y`"
+    fence = re.compile(r"^```[a-z]*\n(.*?)^```$", re.S | re.M)
+    sources = sorted(skills_root.glob("parallax-*/SKILL.md"))
+    sources.append(skills_root / "_parallax" / "parallax-conventions.md")
+    ran = 0
+    for path in sources:
+        text = path.read_text(encoding="utf-8")
+        rel = path.relative_to(repo_root)
+        blocks = [b for b in fence.findall(text) if "render_gate.py" in b]
+        if path.name == "SKILL.md":
+            calls = text.count('render_gate.py" --skill')
+            assert len(blocks) == calls, f"{rel}: gate command outside a fenced block"
+        for block in blocks:
+            command = block.strip()
+            assert "\n" not in command, f"{rel}: gate command is not one line"
+            assert len(command) < 300, f"{rel}: gate command too long"
+            for banned in ("$(", "${", "<<", "|", "`"):
+                assert banned not in command, f"{rel}: {banned!r} in gate command"
+            assert command.endswith('--input "<draft-path>"'), f"{rel}: no --input"
+            command = command.replace("--skill <skill-key>", "--skill should-i-buy")
+            key = re.search(r"--skill (\S+)", command).group(1)
+            report = SCAFFOLD + FIRST_SECTION[key] + "\n" + literals + "\n"
+            draft = tmp_path / ".parallax-render" / f"{key}-0123abcd.md"
+            draft.parent.mkdir(exist_ok=True)
+            draft.write_text(report, encoding="utf-8")
+            script = command.replace(
+                "<skill-dir>", str(skills_root / f"parallax-{key}")
+            ).replace("<draft-path>", str(draft))
+            proc = subprocess.run(
+                ["bash", "-c", script], capture_output=True, text=True, timeout=30
+            )
+            assert proc.returncode == 0, f"{rel}: {proc.stderr}"
+            assert proc.stdout == gate(report, key), f"{rel}: gate output differs"
+            assert proc.stdout.startswith(FIRST_SECTION[key]), f"{rel}: scaffold kept"
+            assert literals in proc.stdout, f"{rel}: report text changed"
+            assert not draft.parent.exists(), f"{rel}: draft not cleaned up"
+            ran += 1
+    assert ran >= len(SKILL_ANCHORS)
+
+
+def test_documented_stdin_fallback_runs_in_bash():
+    """The §10.3 fallback for hosts without write-artifact, run as written."""
+    conv = Path(__file__).resolve().parent / "parallax-conventions.md"
+    text = conv.read_text(encoding="utf-8")
+    m = re.search(r"feed the report on stdin instead: `([^`]+)`", text)
+    assert m, "stdin fallback not documented"
+    literals = "literal $HOME ${HOME} $(echo x) `echo y`"
+    report = SCAFFOLD + FIRST_SECTION["should-i-buy"] + "\n" + literals + "\n"
+    script = (
+        m.group(1).replace("<skill-dir>", str(conv.parent.parent / "parallax-should-i-buy"))
+        .replace("<skill-key>", "should-i-buy")
+        + "\n" + report + "REPORT\n"
+    )
+    proc = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=30)
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout == gate(report, "should-i-buy")
+    assert literals in proc.stdout
+
+
+def _run_main(args, capsys):
+    rc = main(args)
+    out, err = capsys.readouterr()
+    return rc, out, err
+
+
+def _draft(tmp_path, skill="peer-comparison", suffix="0a1b2c3d"):
+    d = tmp_path / ".parallax-render"
+    d.mkdir(exist_ok=True)
+    return d / f"{skill}-{suffix}.md"
+
+
+def test_input_reads_then_deletes_draft_and_empty_dir(tmp_path, capsys):
+    draft = _draft(tmp_path)
+    report = SCAFFOLD + "# Peer Comparison: AAPL.O\r\nrow\r\n"
+    draft.write_bytes(report.encode("utf-8"))
+    rc, out, err = _run_main(["--skill", "peer-comparison", "--input", str(draft)], capsys)
+    assert rc == 0 and err == ""
+    assert out == gate(report, "peer-comparison")  # same text the stdin path sees
+    assert out.startswith("# Peer Comparison: AAPL.O")
+    assert not draft.exists() and not draft.parent.exists()
+
+
+def test_input_keeps_a_nonempty_draft_dir(tmp_path, capsys):
+    draft = _draft(tmp_path)
+    other = draft.parent / "peer-comparison-ffffffff.md"
+    other.write_text("another session's draft")
+    draft.write_text("# Peer Comparison: X\n")
+    assert _run_main(["--skill", "peer-comparison", "--input", str(draft)], capsys)[0] == 0
+    assert not draft.exists() and other.exists()
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        "portfolio.csv",
+        "draft.md",
+        ".parallax-render/notes.md",
+        ".parallax-render/should-i-buy-0a1b2c3d.md",  # another skill's draft
+        ".parallax-render/peer-comparison-0A1B2C3D.md",
+        "other/peer-comparison-0a1b2c3d.md",
+    ],
+)
+def test_input_refuses_any_path_but_this_skills_draft(tmp_path, capsys, rel):
+    path = tmp_path / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("# Peer Comparison: user data\n")
+    rc, out, err = _run_main(["--skill", "peer-comparison", "--input", str(path)], capsys)
+    assert rc == 2 and out == "" and "[render-gate] ERROR" in err
+    assert path.read_text() == "# Peer Comparison: user data\n"
+
+
+def test_input_refuses_symlinked_draft_and_keeps_target(tmp_path, capsys):
+    target = tmp_path / "secret.txt"
+    target.write_text("# Peer Comparison: not a draft\n")
+    link = _draft(tmp_path)
+    link.symlink_to(target)
+    rc, out, err = _run_main(["--skill", "peer-comparison", "--input", str(link)], capsys)
+    assert rc == 2 and out == "" and "[render-gate] ERROR" in err
+    assert target.exists() and link.is_symlink()
+
+
+def test_input_refuses_symlinked_draft_dir_and_keeps_target(tmp_path, capsys):
+    real = tmp_path / "elsewhere"
+    real.mkdir()
+    victim = real / "peer-comparison-0a1b2c3d.md"
+    victim.write_text("# Peer Comparison: not a draft\n")
+    (tmp_path / ".parallax-render").symlink_to(real, target_is_directory=True)
+    path = tmp_path / ".parallax-render" / victim.name
+    rc, out, err = _run_main(["--skill", "peer-comparison", "--input", str(path)], capsys)
+    assert rc == 2 and out == "" and "[render-gate] ERROR" in err
+    assert victim.exists()
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="no FIFOs on this platform")
+def test_input_refuses_fifo_without_hanging(tmp_path):
+    fifo = _draft(tmp_path)
+    os.mkfifo(fifo)
+    proc = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve().parent / "render_gate.py"),
+         "--skill", "peer-comparison", "--input", str(fifo)],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert proc.returncode == 2 and proc.stdout == "" and "[render-gate] ERROR" in proc.stderr
+
+
+@pytest.mark.parametrize("make", ["missing", "directory"])
+def test_input_unreadable_draft_fails_closed(tmp_path, capsys, make):
+    path = _draft(tmp_path)
+    if make == "directory":
+        path.mkdir()
+    rc, out, err = _run_main(["--skill", "peer-comparison", "--input", str(path)], capsys)
+    assert rc == 2 and out == "" and "[render-gate] ERROR" in err
+
+
+def test_input_not_utf8_fails_closed_and_deletes_draft(tmp_path, capsys):
+    draft = _draft(tmp_path)
+    draft.write_bytes(b"# Peer Comparison \xff\xfe\n")
+    rc, out, err = _run_main(["--skill", "peer-comparison", "--input", str(draft)], capsys)
+    assert rc == 2 and out == "" and "[render-gate] ERROR" in err
+    assert not draft.exists()
+
+
+def test_input_unlink_failure_still_renders(tmp_path, capsys, monkeypatch):
+    draft = _draft(tmp_path)
+    draft.write_text(SCAFFOLD + "# Peer Comparison: X\n")
+
+    def deny(*args, **kwargs):
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(os, "unlink", deny)
+    rc, out, err = _run_main(["--skill", "peer-comparison", "--input", str(draft)], capsys)
+    assert rc == 0 and out == "# Peer Comparison: X\n"
+    assert "[render-gate] WARN: draft not deleted" in err
+
+
+def test_should_i_buy_active_banner_survives_scaffold():
+    draft = SCAFFOLD + REAL_BANNERS["active"] + "\n\n## The Company\nApple Inc.\n"
+    out = gate(draft, "should-i-buy")
+    assert out.lstrip().startswith("Active house view:"), out[:80]
+    assert "## The Company" in out
+
+
+def test_desk_call_list_title_anchor():
+    draft = SCAFFOLD + "# Desk Call List\nbody\n"
+    out = gate(draft, "desk-call-list")
+    assert out.lstrip().startswith("# Desk Call List")
+
+
+def test_desk_call_list_branding_anchor():
+    draft = SCAFFOLD + "**Acme Capital** desk call list\n\nbody\n"
+    out = gate(draft, "desk-call-list")
+    assert out.lstrip().startswith("**Acme Capital** desk call list")
+
+
+def test_desk_call_list_no_calls_anchor():
+    draft = SCAFFOLD + "**No calls indicated.** 12 unique symbols scanned.\n"
+    out = gate(draft, "desk-call-list")
+    assert out.lstrip().startswith("**No calls indicated.")
+
+
+def test_desk_call_list_degraded_short_form_anchor():
+    draft = SCAFFOLD + "**Scan degraded — results not reliable.** Priced 3 of 5 symbols.\n"
+    out = gate(draft, "desk-call-list")
+    assert out.lstrip().startswith("**Scan degraded")
+
+
+def test_desk_call_list_refused_short_form_anchor():
+    draft = SCAFFOLD + "**Scan refused — 2 selector(s) matched no client.**\n"
+    out = gate(draft, "desk-call-list")
+    assert out.lstrip().startswith("**Scan refused")
+
+
+def test_desk_call_list_degraded_note_hoisted():
+    draft = "news synthesis timed out for AAPL.O\n\n# Desk Call List\nbody\n"
+    out = gate(draft, "desk-call-list")
+    assert out.lstrip().startswith("# Desk Call List")
+    assert "Status note (preserved)" in out
+    assert "news synthesis timed out" in out
+
+
+def test_input_without_dir_fd_still_refuses_symlinks(tmp_path, capsys, monkeypatch):
+    """The path-based branch used where os.open has no dir_fd (Windows)."""
+    monkeypatch.setattr(os, "supports_dir_fd", set())
+    monkeypatch.delattr(os, "O_NOFOLLOW", raising=False)
+    target = tmp_path / "secret.txt"
+    target.write_text("# Peer Comparison: not a draft\n")
+    link = _draft(tmp_path)
+    link.symlink_to(target)
+    rc, out, err = _run_main(["--skill", "peer-comparison", "--input", str(link)], capsys)
+    assert rc == 2 and out == "" and target.exists()
+    link.unlink()
+    link.write_text(SCAFFOLD + "# Peer Comparison: X\n")
+    rc, out, err = _run_main(["--skill", "peer-comparison", "--input", str(link)], capsys)
+    assert rc == 0 and out == "# Peer Comparison: X\n" and not link.exists()
+
+
+def test_input_without_dir_fd_refuses_symlinked_draft_dir(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(os, "supports_dir_fd", set())
+    monkeypatch.delattr(os, "O_NOFOLLOW", raising=False)
+    real = tmp_path / "elsewhere"
+    real.mkdir()
+    victim = real / "peer-comparison-0a1b2c3d.md"
+    victim.write_text("# Peer Comparison: not a draft\n")
+    (tmp_path / ".parallax-render").symlink_to(real, target_is_directory=True)
+    path = tmp_path / ".parallax-render" / victim.name
+    rc, out, err = _run_main(["--skill", "peer-comparison", "--input", str(path)], capsys)
+    assert rc == 2 and out == "" and victim.exists()
+
+
+def test_input_refuses_hard_linked_draft(tmp_path, capsys):
+    user_file = tmp_path / "holdings.md"
+    user_file.write_text("# Peer Comparison: user data\n")
+    link = _draft(tmp_path)
+    os.link(user_file, link)
+    rc, out, err = _run_main(["--skill", "peer-comparison", "--input", str(link)], capsys)
+    assert rc == 2 and out == "" and "hard links" in err
+    assert user_file.exists()
+
+
+def test_input_output_is_utf8_whatever_the_locale(tmp_path):
+    draft = _draft(tmp_path)
+    draft.write_text(SCAFFOLD + "# Peer Comparison: X\nscore 7 → 8, ≤ 5, 台積電\n", encoding="utf-8")
+    proc = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve().parent / "render_gate.py"),
+         "--skill", "peer-comparison", "--input", str(draft)],
+        capture_output=True, timeout=10, env={**os.environ, "PYTHONIOENCODING": "cp1252"},
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.decode("utf-8") == "# Peer Comparison: X\nscore 7 → 8, ≤ 5, 台積電\n"
+
+
+def test_stdin_output_is_utf8_whatever_the_locale():
+    report = "# Peer Comparison: X\nscore 7 → 8, ≤ 5, 台積電\n"
+    proc = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve().parent / "render_gate.py"),
+         "--skill", "peer-comparison"],
+        input=(SCAFFOLD + report).encode("utf-8"),
+        capture_output=True, timeout=10, env={**os.environ, "PYTHONIOENCODING": "cp1252"},
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.decode("utf-8") == report
+
+
+def test_stdin_not_utf8_fails_closed():
+    proc = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve().parent / "render_gate.py"),
+         "--skill", "peer-comparison"],
+        input=b"# Peer Comparison \xff\xfe\n", capture_output=True, timeout=10,
+    )
+    assert proc.returncode == 2 and proc.stdout == b""
+    assert b"[render-gate] ERROR" in proc.stderr
+
+
+def _brief(body_words: int) -> str:
+    return (
+        "## Market Regime & Signals\n\n" + " ".join(["word"] * body_words)
+        + "\n\n> *AI-assisted output. " + " ".join(["boiler"] * 200) + "*\n"
+    )
+
+
+def test_word_cap_counts_body_before_disclosure_only():
+    # 5 header + 870 body + 2 quote-marker tokens = 877 <= 880; boilerplate is excluded.
+    assert word_cap_warning(_brief(870), "morning-brief") is None
+
+
+def test_word_cap_overrun_warns():
+    warning = word_cap_warning(_brief(900), "morning-brief")
+    assert warning is not None and warning.startswith("[render-gate] WARN:")
+    assert "907 words" in warning  # 5 header + 900 body + 2 quote-marker tokens
+
+
+def test_word_cap_skips_uncapped_skill():
+    assert "peer-comparison" not in WORD_CAPS
+    assert word_cap_warning(_brief(5000), "peer-comparison") is None
+
+
+def test_word_cap_warn_goes_to_stderr_not_stdout(tmp_path, capsys):
+    report = _brief(900)
+    draft = _draft(tmp_path, skill="morning-brief")
+    draft.write_text(report, encoding="utf-8")
+    rc, out, err = _run_main(["--skill", "morning-brief", "--input", str(draft)], capsys)
+    assert rc == 0
+    assert out == report
+    assert "over the 800-word cap" in err
+
+
+def test_word_cap_boundary_matches_eval_gate():
+    # 5 header + 873 body + 2 quote-marker tokens = 880 (passes); one more word warns.
+    assert word_cap_warning(_brief(873), "morning-brief") is None
+    assert word_cap_warning(_brief(874), "morning-brief") is not None
+
+
+def test_word_cap_counts_whole_report_without_marker():
+    report = "## Market Regime & Signals\n\n" + " ".join(["word"] * 900) + "\n"
+    warning = word_cap_warning(report, "morning-brief")
+    assert warning is not None and "905 words" in warning

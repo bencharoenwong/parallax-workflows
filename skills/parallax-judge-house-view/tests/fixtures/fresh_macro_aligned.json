@@ -1,0 +1,40 @@
+{
+  "macro_analyst:United_States:macro_indicators": {
+    "report_date": "2026-05-22",
+    "market": "United States",
+    "component": "macro_indicators",
+    "content": "US growth remains constructive with real GDP tracking 2.3% and breadth improving across consumer and industrial activity. Valuation metrics at -1.00 versus history reflect modest overvaluation relative to long-run averages but well within the historical range for an expansionary regime. Quality factor leadership intact; momentum bid into health care and select tech.",
+    "success": true
+  },
+  "macro_analyst:Japan:tactical": {
+    "report_date": "2026-05-22",
+    "market": "Japan",
+    "component": "tactical",
+    "content": "Japan macro tactical view stays constructive. BoJ holding pattern supports a positive regional tilt; corporate-governance reforms continue to surface value in mid-cap industrials. Recommended overweight to Japan equity with quality bias.",
+    "success": true
+  },
+  "macro_analyst:China:macro_indicators": {
+    "report_date": "2026-05-22",
+    "market": "China",
+    "component": "macro_indicators",
+    "content": "China macro picture remains soft. Property-sector drag persists; consumer confidence below trend. Underweight stance appropriate while authorities continue piecemeal stimulus.",
+    "success": true
+  },
+  "macro_analyst:United_States:sectors": {
+    "report_date": "2026-05-22",
+    "market": "United States",
+    "component": "sectors",
+    "content": "Tech sector showing valuation compression with Quality factor effectiveness at 0.50 — leadership rotating toward Health Care defensives and selective Industrials. Underweight tech remains the consensus position for the next quarter.",
+    "success": true
+  },
+  "get_telemetry:commentary": {
+    "report_date": "2026-05-22",
+    "commentary": {"headline": "Expansion intact; quality leadership stays."},
+    "regime_tag": "Selective rotation",
+    "signals": [
+      {"text": "Quality factor effectiveness 0.50", "type": "factor_signal"}
+    ],
+    "divergences": [],
+    "success": true
+  }
+}

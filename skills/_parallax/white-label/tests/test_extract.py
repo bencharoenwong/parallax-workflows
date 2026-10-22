@@ -1,0 +1,318 @@
+import pytest
+import sys
+from datetime import datetime
+from pathlib import Path
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from extract import (
+    ColorExtractor,
+    LogoExtractor,
+    FontExtractor,
+    extract_from_url,
+    extract_from_pdf,
+    extract_from_wizard,
+)
+
+
+class TestColorExtractor:
+    """Test color extraction from text."""
+
+    def test_extract_hex_colors_6digit(self):
+        text = "Primary color: #FF5733, secondary: #3498DB"
+        result = ColorExtractor.extract_hex_colors(text)
+        assert len(result) == 2
+        assert result[0]["hex"] == "#FF5733"
+        assert result[0]["confidence"] == 0.95
+        assert result[1]["hex"] == "#3498DB"
+
+    def test_extract_hex_colors_3digit(self):
+        text = "Color: #FFF"
+        result = ColorExtractor.extract_hex_colors(text)
+        assert len(result) == 1
+        assert result[0]["hex"] == "#FFF"
+        assert result[0]["confidence"] == 0.95
+
+    def test_extract_hex_colors_rgb(self):
+        text = "Background: rgb(255, 87, 51)"
+        result = ColorExtractor.extract_hex_colors(text)
+        assert len(result) == 1
+        assert result[0]["hex"] == "#FF5733"
+        assert result[0]["confidence"] == 0.85
+
+    def test_extract_hex_colors_empty(self):
+        text = "No colors here"
+        result = ColorExtractor.extract_hex_colors(text)
+        assert result == []
+
+
+class TestLogoExtractor:
+    """Test logo extraction from text."""
+
+    def test_extract_logo_urls_markdown(self):
+        text = "![logo](https://example.com/logo.png)"
+        result = LogoExtractor.extract_logo_urls(text)
+        assert len(result) == 1
+        assert result[0]["url"] == "https://example.com/logo.png"
+        assert result[0]["alt_text"] == "logo"
+        assert 0.6 <= result[0]["confidence"] <= 0.95
+
+    def test_extract_logo_urls_heuristic_brand(self):
+        text = "Logo: https://example.com/brand-logo.png"
+        result = LogoExtractor.extract_logo_urls(text)
+        assert len(result) == 1
+        assert result[0]["confidence"] >= 0.85  # Higher confidence for "brand"
+
+    def test_extract_logo_urls_low_confidence(self):
+        text = "Image: https://example.com/image.jpg"
+        result = LogoExtractor.extract_logo_urls(text)
+        assert len(result) == 1
+        assert result[0]["confidence"] == 0.6
+
+    def test_extract_logo_paths_local(self):
+        text = "Logo at /assets/logo.png"
+        result = LogoExtractor.extract_logo_paths(text)
+        assert len(result) == 1
+        assert result[0]["path"] == "/assets/logo.png"
+        assert result[0]["confidence"] == 0.8
+
+    def test_extract_logo_paths_not_found(self):
+        text = "No paths here"
+        result = LogoExtractor.extract_logo_paths(text)
+        assert result == []
+
+    def test_extract_logo_urls_empty(self):
+        text = ""
+        result = LogoExtractor.extract_logo_urls(text)
+        assert result == []
+
+
+class TestFontExtractor:
+    """Test font extraction from CSS and text."""
+
+    def test_extract_fonts_css_header(self):
+        css = "h1, h2, h3 { font-family: Helvetica; }"
+        result = FontExtractor.extract_fonts_from_css(css)
+        assert len(result) >= 1
+        assert any(f["font_name"] == "Helvetica" and f["usage"] == "header" for f in result)
+        assert any(f["confidence"] >= 0.8 for f in result)
+
+    def test_extract_fonts_css_body(self):
+        css = "body, p { font-family: Georgia; }"
+        result = FontExtractor.extract_fonts_from_css(css)
+        assert len(result) >= 1
+        assert any(f["font_name"] == "Georgia" and f["usage"] == "body" for f in result)
+
+    def test_extract_fonts_pdf_text(self):
+        text = "Our headers use Roboto, body uses Open Sans"
+        result = FontExtractor.extract_fonts_from_pdf_text(text)
+        assert len(result) >= 1
+        # Should identify fonts mentioned in text
+
+    def test_extract_fonts_empty(self):
+        result = FontExtractor.extract_fonts_from_css("")
+        assert result == []
+
+
+class TestExtractFromUrl:
+    """Test URL-based extraction."""
+
+    def test_extract_from_url_returns_dict_shape(self):
+        # Passes an invalid/unreachable URL — extract_from_url must degrade gracefully
+        result = extract_from_url("https://0.0.0.0")
+        assert isinstance(result, dict)
+        required_keys = ["colors", "logos", "fonts", "source", "extracted_at", "confidence_scores"]
+        assert all(k in result for k in required_keys), f"Missing keys: {set(required_keys) - set(result.keys())}"
+
+    def test_extract_from_url_confidence_scores(self):
+        result = extract_from_url("https://0.0.0.0")
+        assert isinstance(result["confidence_scores"], dict)
+
+    def test_extract_from_url_sets_source_type(self):
+        result = extract_from_url("https://0.0.0.0")
+        assert result["source"]["type"] == "url"
+
+
+class TestExtractFromPdf:
+    """Test PDF-based extraction."""
+
+    def test_extract_from_pdf_missing_file(self):
+        # Spec requires graceful degradation (no exception) for missing files
+        result = extract_from_pdf("/nonexistent/path/that/does/not/exist.pdf")
+        assert isinstance(result, dict), "Must return dict, not raise"
+        assert "error" in result, "Must include 'error' key on missing file"
+        assert result["source"]["type"] == "pdf"
+
+    def test_extract_from_pdf_returns_dict_shape(self):
+        # Pass a missing file — graceful degradation still returns correct shape
+        result = extract_from_pdf("/nonexistent/path/that/does/not/exist.pdf")
+        required_keys = ["colors", "logos", "fonts", "source", "extracted_at", "confidence_scores"]
+        assert all(k in result for k in required_keys), f"Missing keys: {set(required_keys) - set(result.keys())}"
+
+
+class TestExtractFromWizard:
+    """Test wizard intake."""
+
+    def test_extract_from_wizard_signature(self):
+        # Verify function exists and is callable
+        assert callable(extract_from_wizard)
+
+    def test_extract_from_wizard_returns_dict_shape(self):
+        result = extract_from_wizard()
+        required_keys = ["colors", "logos", "fonts", "source", "extracted_at", "confidence_scores"]
+        assert all(k in result for k in required_keys), f"Missing keys: {set(required_keys) - set(result.keys())}"
+        assert result["source"]["type"] == "wizard"
+        assert "reference" in result["source"], "source must include 'reference' key for schema consistency"
+
+def test_typography_extractor():
+    from extract.web_pdf import TypographyExtractor
+    css = """
+    h1 { font-size: 32px; font-weight: bold; line-height: 1.2; font-family: "Open Sans"; }
+    .body-md { font-size: 16px; font-weight: 400; line-height: 1.5; letter-spacing: 0.1px; }
+    p { font-size: 14px; } /* Should not override body-md if .body-md is found first, wait actually our dict overrides but order depends on CSS */
+    code { font-family: monospace; }
+    """
+    scale = TypographyExtractor.extract_type_scale_from_css(css)
+    assert "h1" in scale
+    assert scale["h1"]["fontSize"] == "32px"
+    assert scale["h1"]["fontWeight"] == 700
+    assert scale["h1"]["fontFamily"] == "Open Sans"
+    
+    assert "body-md" in scale
+    assert scale["body-md"]["fontSize"] == "16px"
+    assert scale["body-md"]["fontWeight"] == 400
+    
+    assert "code" in scale
+    assert scale["code"]["fontFamily"] == "monospace"
+
+def test_shape_extractor():
+    from extract.web_pdf import ShapeExtractor
+    css = """
+    .btn-sm { border-radius: 4px; }
+    .btn-md { border-radius: 8px; }
+    .btn-lg { border-radius: 16px; }
+    .circle { border-radius: 50%; }
+    .weird { border-radius: 9999px; }
+    """
+    radii = ShapeExtractor.extract_border_radii(css)
+    assert radii["sm"] == "4px"
+    assert radii["md"] == "8px"
+    assert radii["lg"] == "16px"
+    assert radii["full"] == "9999px"
+    
+def test_spacing_extractor():
+    from extract.web_pdf import SpacingExtractor
+    css = """
+    .a { margin: 4px; }
+    .b { padding: 8px; }
+    .c { gap: 16px; }
+    .d { margin-top: 24px; }
+    .e { padding-bottom: 32px; }
+    """
+    spacing = SpacingExtractor.extract_spacing_scale(css)
+    assert spacing["xs"] == "4px"
+    assert spacing["sm"] == "8px"
+    assert spacing["md"] == "16px"
+    assert spacing["lg"] == "24px"
+    assert spacing["xl"] == "32px"
+
+def test_spacing_extractor_omits_thin():
+    from extract.web_pdf import SpacingExtractor
+    css = """
+    .a { margin: 4px; }
+    .b { padding: 8px; }
+    """
+    spacing = SpacingExtractor.extract_spacing_scale(css)
+    assert spacing == {}
+
+def test_extract_brand_guide_prose():
+    from extract.web_pdf import _extract_brand_guide_prose
+    text = """
+    1. Overview
+    This is the overview.
+    2. Colors
+    Here are colors.
+    3. Typography
+    Here is type.
+    4. Do's and Don'ts
+    Do not do this.
+    """
+    # matches filename
+    res = _extract_brand_guide_prose(text, filename="brand_guide.pdf")
+    assert "overview" in res
+    assert "This is the overview." in res["overview"]
+    assert "colors" in res
+    assert "typography" in res
+    assert "dos_and_donts" in res
+    
+    # doesn't match filename
+    res2 = _extract_brand_guide_prose(text, filename="annual_report.pdf")
+    assert res2 == {}
+
+
+
+def test_typography_extractor_rejects_utility_class_prefix():
+    """Round-6 gate finding: regex must NOT treat `.h1-banner` / `.code-block`
+    / `.p-4` as h1 / code / body-md rules. These are utility classes (Tailwind,
+    Bootstrap) whose names happen to share a prefix with canonical typography
+    tokens. Only exact-match class names (`.body-md`) should resolve."""
+    from extract.web_pdf import TypographyExtractor
+
+    css = """
+    .h1-banner { font-size: 99px; font-weight: 900; }
+    .code-block { font-size: 99px; font-family: "Wrong Mono"; }
+    .p-4 { padding: 1rem; font-size: 99px; }
+    h1 { font-size: 32px; font-family: "Real Display"; }
+    .body-md { font-size: 16px; font-family: "Real Body"; }
+    code { font-size: 14px; font-family: "Real Code"; }
+    """
+    scale = TypographyExtractor.extract_type_scale_from_css(css)
+    assert scale["h1"]["fontSize"] == "32px"
+    assert scale["h1"]["fontFamily"] == "Real Display"
+    assert scale["body-md"]["fontFamily"] == "Real Body"
+    assert scale["code"]["fontFamily"] == "Real Code"
+    # Utility classes must NOT have polluted the typography scale
+    assert scale["h1"]["fontSize"] != "99px"
+    assert scale["code"]["fontFamily"] != "Wrong Mono"
+
+
+def test_typography_extractor_handles_at_media_rules():
+    """Round-8 finding: rule-finder regex doesn't handle nested braces, so
+    rules inside @media blocks were silently dropped. _flatten_at_rules
+    pre-pass unwraps them so the typography scale captures responsive rules."""
+    from extract.web_pdf import TypographyExtractor
+
+    css = """
+    h1 { font-size: 14px; }
+    @media (min-width: 768px) {
+      h1 { font-size: 32px; font-family: "Real Display"; }
+      .body-md { font-size: 16px; font-family: "Real Body"; }
+    }
+    @supports (display: grid) {
+      code { font-family: "Real Mono"; }
+    }
+    """
+    scale = TypographyExtractor.extract_type_scale_from_css(css)
+    # Outer h1 wins because it appears first (we take first-occurrence-only).
+    # But the key insight: the inner rules MUST also be discoverable so other
+    # selectors (body-md, code) aren't silently lost.
+    assert scale["h1"]["fontSize"] == "14px"
+    assert scale["body-md"]["fontFamily"] == "Real Body"
+    assert scale["code"]["fontFamily"] == "Real Mono"
+
+
+def test_normalize_css_dimension_unitless_zero_gets_unit():
+    """Round-8 finding: _normalize_css_dimension returned bare '0' for
+    `letter-spacing: 0`, which the DESIGN.md linter rejects (letterSpacing
+    must carry a unit). Unitless zero now gets the zero_unit (default 'em')."""
+    from extract.web_pdf import _normalize_css_dimension
+    assert _normalize_css_dimension("0") == "0em"
+    assert _normalize_css_dimension("0.0") == "0em"
+    # Non-zero unitless stays unchanged (line-height multiplier path)
+    assert _normalize_css_dimension("1.5") == "1.5"
+    # pt → px conversion still works
+    assert _normalize_css_dimension("12pt") == "16px"
+    # px/rem/em pass through with normalized casing
+    assert _normalize_css_dimension("16PX") == "16px"
+    assert _normalize_css_dimension("1.5rem") == "1.5rem"

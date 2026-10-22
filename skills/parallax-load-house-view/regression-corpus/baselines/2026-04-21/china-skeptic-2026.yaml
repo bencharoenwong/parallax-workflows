@@ -1,0 +1,68 @@
+# Baseline extraction for regression-corpus entry: china-skeptic-2026
+# Source: skills/load-house-view/samples/China-skeptic.md
+# Produced by: claude-opus-4-7 (manual Step-2 extraction per SKILL.md)
+# Produced at: 2026-04-21
+# Schema version: post-2026-04-21 (macro_regime nullable + reshoring theme)
+
+entry_id: china-skeptic-2026
+
+metadata:
+  view_name: "Geopolitical Risk View — China Underweight, EM Reallocation"
+  uploader_role: Investment Committee        # "Strategy desk + Geopolitical Risk Committee"
+  effective_date: "2026-04-01"
+  valid_through: "2026-09-30"
+
+tilts:
+  sectors:
+    industrials: 1                           # US industrials with reshoring exposure
+
+  regions:
+    china: -2
+    em_ex_china: 2                           # India, Vietnam, Indonesia, Malaysia overweight
+    japan: 1
+    us: 1                                    # US industrials with reshoring theme
+
+  factors:
+    quality: 1
+    defensive: 1
+    value: 1                                 # "modest overweight value within EM ex-China"
+    momentum: 0                              # explicitly "neutral momentum at portfolio level"
+
+  themes:
+    reshoring: 2                             # EXPLICIT — uses new theme key
+
+  styles: {}
+
+  # CRITICAL: Geopolitical thesis, not macro-framed. Source contains zero macro regime
+  # language. Post-2026-04-21 schema allows null → high-confidence null extraction.
+  macro_regime:
+    growth: null
+    inflation: null
+    rates: null
+    risk_appetite: null
+
+  excludes: [russia, belarus]
+  excludes_freeform:
+    - "US Entity List Chinese issuers (Treasury list, weekly refresh)"
+    - "Hong Kong-listed CCP-affiliated state enterprises"
+    - "Companies with >25% China revenue exposure"      # cap, not exclude, but source-level flag
+    - "Hong Kong-domiciled issuers with majority mainland revenue exposure"
+
+extraction_confidence:
+  sectors: 0.75                              # only industrials explicit; others implicit
+  regions: 0.95                              # strongest region tilts in corpus — very explicit
+  factors: 0.90
+  styles: 0.95                               # high-conf zero
+  themes: 0.88                               # reshoring now capturable
+  excludes: 0.80                             # standard + several freeform entries
+  macro_regime: 0.92                         # HIGH confidence that it's null (geopolitical thesis)
+
+extraction_notes: |
+  Geopolitical view. Like esg-screened, zero macro regime language in source — under
+  post-2026-04-21 schema, macro_regime null produces high confidence rather than forcing
+  a misleading neutral default. reshoring theme now captured directly via new schema key
+  rather than being lost in translation to "industrials". Multi-country reallocation map
+  (India, Mexico, Japan, Vietnam, Indonesia, Malaysia) partially captured via em_ex_china
+  and japan keys; Mexico/Vietnam/Indonesia/Malaysia individually are not in schema but
+  collapse acceptably to em_ex_china (the reallocation bucket). Entity List / HK CCP SOE
+  entries in excludes_freeform — dynamic lists, not static RICs.

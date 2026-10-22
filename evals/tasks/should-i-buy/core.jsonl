@@ -1,0 +1,4 @@
+{"id": "aapl_en", "args": "AAPL", "lang": "en", "expect_macro": true, "note": "US large-cap, dividend payer"}
+{"id": "msft_en", "args": "MSFT.O", "lang": "en", "expect_macro": true, "note": "RIC form, dividend payer"}
+{"id": "googl_en", "args": "GOOGL", "lang": "en", "expect_macro": true, "note": "US large-cap, non-dividend payer"}
+{"id": "jpm_en", "args": "JPM.N", "lang": "en", "expect_macro": true, "note": "financials sector large-cap"}

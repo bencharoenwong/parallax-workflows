@@ -1,0 +1,467 @@
+# Evals — wall-clock benchmark harness for skill changes
+
+Lightweight runner for timing fresh-session `/parallax-*` invocations. Use this
+to **validate that a change actually improved end-to-end latency**, not just
+that the code looks faster on paper. The skill SKILL.md is cached at session
+start (per `CONTRIBUTING.md`), so the only honest way to test SKILL.md edits
+is a fresh `claude -p` session — that's what this harness wraps.
+
+## Layout
+
+```
+evals/
+├── README.md          # this file
+├── bench.sh           # run one prompt, time it, log
+├── compare.sh         # run a prompt across two git refs, summarize delta
+├── portfolios/        # reusable JSON test portfolios
+│   ├── small_5.json
+│   └── medium_10.json
+└── results/           # gitignored; accumulates timings locally
+```
+
+## Single-run timing
+
+```bash
+# Time one invocation — saves output + timing under evals/results/
+./evals/bench.sh "/parallax-morning-brief $(cat evals/portfolios/small_5.json)"
+```
+
+The label defaults to `git rev-parse --short HEAD`. Override:
+
+```bash
+./evals/bench.sh "/parallax-morning-brief $(cat evals/portfolios/small_5.json)" pre-fix-baseline
+```
+
+## Comparing two commits (typical pre/post change workflow)
+
+```bash
+# Compare two refs, 3 runs each, take median
+./evals/compare.sh \
+  "/parallax-morning-brief $(cat evals/portfolios/small_5.json)" \
+  HEAD~1 HEAD 3
+```
+
+Refuses to run if the working tree is dirty (would be lost on `git checkout`).
+Restores the original branch on exit.
+
+The summary prints the median wall-clock for each ref and the delta. **Run at
+similar times of day** — Parallax MCP server load varies and a 2× swing is
+within normal variance for a single run. Median over 3+ runs filters most of it.
+
+## Caveats
+
+- **Wall-clock only in v1.** Individual MCP call durations and parallelism
+  observation are out of scope for now. Token usage is not: v2's
+  `graders/runrecord.py` parses the `claude -p --output-format stream-json`
+  stream this caveat pointed at and reports both meters — see "Derived Parallax
+  cost meter" below.
+- **Server load is the dominant noise term.** A 30s run today might be 10s
+  tomorrow on the same code. Always measure pre/post under the same
+  conditions, and treat single-run differences <5s as noise.
+- **Async tools are not bounded.** `get_news_synthesis`, `get_assessment`, and
+  `get_financial_analysis` can take 30-90s independently of the skill's
+  parallelization quality. Skills that wait on these will dominate the
+  wall-clock regardless of per-holding batching. Look at the output for
+  `"news": "pending"` markers to identify async-bound runs.
+- **Holdings size matters.** Per-holding parallelization wins scale linearly
+  with N. A 5-holding portfolio shows ~1/2 the absolute saving of a 10-holding
+  one. Always benchmark the size you actually care about.
+
+## Saving and sharing observations
+
+`evals/results/` is gitignored. If you want to commit a notable finding (a
+significant regression, a confirmed improvement), copy the relevant `.time`
+file under `notes/archive/` (also gitignored — local-only) with a short
+description, or paste the key numbers into the PR description if it
+informs a strategic call.
+
+Don't commit raw results to the public repo — they leak server-load info and
+specific portfolio examples. The harness is public; the data isn't.
+
+## Adding new test portfolios
+
+Drop a `<name>.json` into `evals/portfolios/` with the standard holdings
+shape: `[{"symbol":"<RIC>","weight":<float>}, ...]`, weights summing to 1.0.
+Keep them small (≤15 holdings) and use generic public tickers.
+
+---
+
+## Quality evals (v2) — grading, not just timing
+
+v1 (above) times latency. v2 adds a **two-tier quality signal** (deterministic
+structural checks + LLM-as-judge rubric) on top of a **spec-driven, skill-agnostic
+grading engine**. Latency timing is retained (it becomes the Stage-2 Tier-3
+non-regression check); v2 supersedes the v1 "no quality scoring" and "no token
+usage" caveats.
+
+### Layout (v2 additions)
+
+```
+evals/
+├── graders/             # skill-agnostic engine + pure-function tests (CI-safe)
+│   ├── eval_spec.py        # EvalSpec dataclass — the per-skill contract
+│   ├── tier1_structural.py # deterministic structural check registry (hard gate)
+│   ├── judge_criteria.py   # Tier-2 rubric criteria (should-i-buy baseline set)
+│   ├── run_judge.py        # pinned-Anthropic rubric judge (allowlist-guarded)
+│   ├── transcript.py       # stream-json → final-prose extraction
+│   ├── infra_failure.py    # shared "harness/connector broke" predicate (one owner)
+│   ├── runrecord.py        # one measured run → RunRecord (timing + both cost meters)
+│   ├── token_model.py      # Parallax token price table (derived from skills/_parallax/token-costs.md)
+│   └── test_*.py           # pure-function unit tests (the only thing CI runs)
+├── skills/              # per-skill eval specs (one eval_config.py each)
+│   ├── should-i-buy/       # reference baseline spec
+│   ├── AI-buffett/         # different output family — its own checks
+│   ├── client-review/      # adviser-facing directive recommendations
+│   ├── explain-portfolio/  # reactive drawdown attribution
+│   ├── morning-brief/      # fund-manager daily regime/health brief
+│   ├── portfolio-builder/  # constructive thesis-to-allocation
+│   ├── rebalance/          # prioritized trades + quantified targets
+│   ├── watchlist-monitor/  # score-surveillance scan (no weights)
+│   ├── deep-dive/          # single-position research (structural-only)
+│   ├── portfolio-checkup/  # DRAFT — spec only, never run live
+│   └── stress-test-thesis/ # DRAFT — thesis decomposition; spec only, never run live
+├── tasks/<skill>/core.jsonl  # eval task inputs per skill
+├── fixtures/<skill>/       # golden + broken stream-json transcripts (offline tests)
+├── rollout/run_rollout.sh  # one live stream-json rollout
+└── baseline/run_baseline.sh  # n>=3 rollouts/task → noise-floor report
+```
+
+### Skills with evals
+
+- `should-i-buy` — the reference baseline spec.
+- `AI-buffett` — a different output family (plain-line labels, citation/verdict
+  contract); declares its own required sections and skill-specific checks.
+- `client-review` — adviser-facing directive recommendations; includes suitability assessment and actionable recommendation checks.
+- `explain-portfolio` — reactive drawdown attribution; includes return verification and divergence verdict (Transient/Fundamental) checks.
+- `morning-brief` — fund-manager daily regime/health brief; includes 800-word limit and macro-snapshot grounding checks.
+- `portfolio-builder` — constructive thesis-to-allocation; includes holdings-allocated check (weights + scores).
+- `rebalance` — prioritized trades + quantified targets; includes trade-recs-quantified check.
+- `watchlist-monitor` — score-surveillance scan (no weights); includes score-changes-quantified check.
+- `deep-dive` — single-position research; includes technical-fallback structural check.
+- `portfolio-checkup` — **DRAFT spec only, never run.** Same output family as
+  should-i-buy.
+- `stress-test-thesis` — **DRAFT spec only, never run.** Different output family
+  (Assumption Map + per-assumption status table + World Verdict; no per-stock
+  scorecard). Makes no buy/sell/hold call — `verdict_no_rec` is the analogue of
+  should-i-buy's `bottom_line_no_rec`. Core tasks are Pass-1-only; the §9.5
+  two-pass client-conditioning acceptance test needs paired-run support the
+  single-transcript engine doesn't have yet, so it stays a manual live test.
+
+### Key scripts
+
+- `rollout/run_rollout.sh '<args>' [lang]` — one live stream-json rollout.
+- `graders/tier1_structural.py` — deterministic structural checks (Tier-1, hard gate).
+- `graders/run_judge.py` + `judge_criteria.py` — pinned-Anthropic rubric judge (Tier-2).
+  The judge model is allowlist-guarded — non-Anthropic models abort (perimeter).
+- `baseline/run_baseline.sh [--skill NAME] [--dry-run] [-n N]` — the headline
+  deliverable: n>=3 rollouts/task -> pass-rate + variance noise-floor report in
+  `results/`. `--skill` loads `evals/skills/<name>/eval_config.py`, so the
+  runner uses the selected skill's slash command, task file, output prefix, and
+  Tier-2 criteria.
+- `baseline/score_existing.py --skill NAME evals/results/<prefix>_baseline_*.stream.json`
+  — offline Tier-1 scoring for already-captured rollouts; no live token spend.
+
+Example dry-runs before spending tokens:
+
+```bash
+./evals/baseline/run_baseline.sh --skill rebalance --dry-run -n 3
+./evals/baseline/run_baseline.sh --skill portfolio-builder --dry-run -n 3
+```
+
+**CI runs only the pure-function unit tests — never a live rollout:**
+`cd evals && python3 -m pytest graders -q`
+
+Live rollouts (`run_rollout.sh`, `run_baseline.sh` without `--dry-run`) cost Parallax
+tokens and are run manually.
+
+### Derived Parallax cost meter
+
+`RunRecord` reports Parallax token cost as **derived** — counted tool calls ×
+published unit price from `skills/_parallax/token-costs.md` — never metered.
+Attribution is by MCP namespace, not by tool name, because a tool name cannot
+prove which server served it:
+
+- Namespace contains `parallax`, or is listed in `PARALLAX_MCP_ALIASES` → billed.
+- No MCP namespace at all → harness-local (Read, Bash, …) → ignored.
+- A known endpoint name under an unrecognised namespace → **ambiguous**: billed
+  to nobody, listed in `ambiguous_endpoints`, and the run is degraded so it
+  cannot pool into an aggregate that reads as a measured client bill.
+
+An ambiguous namespace is resolvable in **both** directions, and picking the
+wrong one corrupts the meter:
+
+- The namespace *is* the connector, mounted under an alias with no "parallax" in
+  it (white-label, in particular) → add it to `PARALLAX_MCP_ALIASES`. Its calls
+  are billed from then on.
+- The namespace is a **different** MCP server whose tool name happens to collide
+  with a Parallax endpoint (`submit_feedback`, say) → add it to
+  `PARALLAX_MCP_FOREIGN_NAMESPACES`. Its calls are ignored, not billed.
+
+Both take comma-separated namespace segments. Declaring a foreign server a
+Parallax alias to silence the degrade would start billing the client for another
+server's calls, so use the variable that matches what the namespace actually is.
+
+An endpoint under a recognised Parallax namespace that the price table does not
+know still lands in `unknown_endpoints` and degrades the run — the stale-table
+signal.
+
+## Adding a new skill eval
+
+Each skill's eval is one `skills/<skill>/eval_config.py` exporting a `SPEC =
+EvalSpec(...)`. The engine (`graders/`) is shared; the spec is where you declare
+what *this* skill's output must contain:
+
+1. Create `evals/skills/<skill>/eval_config.py` with an `EvalSpec` — set
+   `required_sections`, `check_ids` (from the Tier-1 registry), and
+   `tier2_criteria`. Copy the nearest-family spec as a starting point
+   (`should-i-buy` for structured-English research output) and prune to fit.
+2. Add task inputs at `evals/tasks/<skill>/core.jsonl`.
+3. For offline regression, drop golden + broken stream-json transcripts under
+   `evals/fixtures/<skill>/` and assert against them in a `graders/test_*.py`.
+
+## Live concierge journeys
+
+Owner-run, pre-release checks for the concierge's New-here path (`skills/parallax-concierge/SKILL.md`,
+`## New here?`): role question, connect/integrator/uncovered-ticker states, and the
+scheduling-offer guard. Each journey is one fresh `claude -p` session against **this
+branch's built plugin copy** (`--plugin-dir <repo>/plugin --setting-sources project`), run
+from a fresh scratch directory so the repo's `CLAUDE.md` and source files are out of reach.
+Each run also gets a scratch `HOME` that holds only symlinks to `~/.claude`,
+`~/.claude.json` and, on macOS, `~/Library/Keychains` (where the Claude Code login is
+kept), so sign-in and the claude.ai connectors still load but local Parallax
+config under `~/.parallax` (white-label branding, an active house view) cannot shape the
+report. `PARALLAX_HOUSE_VIEW_DIR` points at an empty scratch directory and `TMPDIR` is
+inside the scratch tree. They are **not CI tests**: they call a real model and most of them call real Parallax MCP
+tools, which bills Parallax credits. On macOS a live run starts `caffeinate -i` for the
+runner's lifetime, so idle sleep cannot cut off a run that has already billed credits.
+
+The checker credits helper runs from ground truth, not from shell text. The runner
+records three things for each run and copies them to the results directory before it
+deletes the scratch tree:
+
+- **Run trace** (`.trace.jsonl`). The runner sets `PARALLAX_E2E_TRACE` to a file it
+  creates at mode 0600. Each traced plugin helper (`render_gate.py`, `adaptation.py`,
+  `reconcile.py`, `coverage_check.py`, `audit_append.py`) then appends one line through
+  `skills/_parallax/run_trace.py`: the helper, the resolved path of the script that ran,
+  its exit code, and for each input its role (the argument it came from), its source
+  (file, stdin or inline), the file's base name, and the sha256 of the bytes read. The
+  render gate also records its skill key and the sha256 of its output. Lines hold digests
+  only, never payload text. Without the variable the helpers load nothing new and write
+  nothing.
+- **Python starts** (`.python-starts.jsonl`). `python`, `python3` and `python3.N` shims
+  (`evals/make_python_shims.py`) lead the run's `PATH`. Each logs its arguments, working
+  directory and, for each argument that names anything that exists (a file, a directory,
+  a `/dev` path), its resolved path, then runs the interpreter `PATH` gave it,
+  unresolved, so an active virtual environment stays active.
+- **Scratch listing** (`.fs.json`, `evals/scratch_snapshot.py`): every entry's path,
+  type, mode, and for a file its size, sha256 and whether it starts with `#!`. Symbolic
+  links are listed, not followed.
+
+The model under test is assumed to improvise, not to attack the harness. The helpers and
+the model's shell share one sandbox, so the trace is not tamper-proof; deliberate forgery
+is out of scope. A command or file-tool call that names the ground-truth files fails the
+run.
+
+```bash
+# Preview every command this would run (no model call, no credits spent)
+PARALLAX_E2E_DRY_RUN=1 bash evals/concierge_journeys.sh
+
+# Run only the free journeys
+PARALLAX_E2E_LIVE=1 PARALLAX_E2E_ONLY=J2,J3,J5,J8 bash evals/concierge_journeys.sh
+
+# Run all of them (bills Parallax credits)
+PARALLAX_E2E_LIVE=1 bash evals/concierge_journeys.sh
+```
+
+Journeys are defined in `evals/tasks/concierge/journeys.jsonl`, one JSON object per
+line: `id`, `prompt`, `expect` (substrings that must all appear, case-insensitive),
+`forbid` (substrings that must not appear), an optional `expect_any` (passes if any
+one substring appears), and an optional `needs`. `"needs": "no-connector"` runs with
+claude.ai connectors disabled, `--strict-mcp-config` and an empty `--mcp-config`, so no
+Parallax server loads. `"needs": "connector-optional"` runs like a connector journey
+but skips only the Parallax-server-presence check. Use it for a journey that calls no
+Parallax tool, because a claude.ai connector can be missing from the init message. An
+optional `skill` names the plugin skill the journey must run (`parallax:` prefix); it
+defaults to `parallax:parallax-concierge`. An optional `require_helpers` lists helpers
+(`adaptation.py`, `audit_append.py`, `coverage_check.py`, `reconcile.py`,
+`render_gate.py`) that must each have run successfully from this branch's `plugin/`
+directory. A required run counts when its trace line shows exit 0, every file input it
+read hashes to a draft the Write tool wrote, no input was passed inline, and its primary
+input (`--policy`, `--input`, `--portfolio-sectors`) is the right kind of draft: a
+`.parallax-policy/` draft (conventions §14.4) for the policy helpers, a
+`.parallax-render/audit-<8 hex>.json` row draft for `audit_append.py` (loader §6). A
+successful, not denied Bash call must also match the helper's documented command and
+name a draft with that same base name: a real helper run through a shell variable does
+not count, because real users' Claude Code refuses that form. A draft last changed by
+Edit or MultiEdit has no known content and never counts. `render_gate.py` must run with
+`--skill` set to the journey skill's key, on a Write-tool `.parallax-render/` draft or in
+the documented stdin form (conventions §10.3, matched by the hash of the heredoc body
+plus its newline), and the final answer must equal the gate's output with whitespace
+collapsed. The checker replays `render_gate.gate()` from `skills/_parallax/` on the bytes
+the gate read. When the replay's hash differs from the output hash in the trace, the
+plugin was not rebuilt and the journey FAILs with a rebuild reason. The render-gate
+requirement needs `skill`. It assumes an untranslated answer: a journey with `lang=`
+(conventions §15) would FAIL it. The runner validates every line before any model call
+and rejects unknown keys, a list field that is not a list of strings, a `skill` without
+the `parallax:` prefix, a `require_helpers` entry outside that set, and `render_gate.py`
+in `require_helpers` without `skill`.
+
+Each run is captured as `--output-format stream-json --verbose` and fails closed. A
+journey FAILs when:
+
+- the result is missing or errored, or lists a blocking permission denial: any denied
+  non-Bash tool (a Parallax tool, Write, Skill); a denied Bash command that cannot be
+  read; the documented one-line helper command itself (`render_gate.py --input`,
+  `audit_append.py --input`, `adaptation.py --policy`, `coverage_check.py
+  --portfolio-sectors`, or `reconcile.py --input`); or a denied command that ran a
+  helper through `python3` or `python` (a bare mention, such as a `sed` or `grep` of
+  the helper's file, does not count) when no later Bash call ran that helper's
+  documented command from `plugin/` (the gate must succeed; the audit, adaptation, coverage and
+  reconcile helpers only need to run, since their nonzero exits are documented
+  non-fatal outcomes);
+- any Bash command, denied or not, names `audit.jsonl` (only `audit_append.py` may
+  touch the log, and its command names a draft, never the log; a raw write bypasses
+  the hash chain, and §0.0 forbids reading files through the shell);
+- the run trace, the Python start log or the scratch listing is missing (the run
+  predates these checks, or the run removed the file);
+- a trace line comes from a helper script outside this branch's `plugin/` (a copy the
+  model made and ran), or a helper was given a payload inline instead of a draft
+  (conventions §14.4);
+- a report draft (`.parallax-render/<key>-<8 hex>.md`) the Write tool wrote was never
+  read by a successful plugin `render_gate.py` run with `--skill <key>` (matched by
+  content hash, so a rewritten draft must be gated again; a failed write and a skill
+  that stops before drafting, such as an unresolvable ticker, need no gate run);
+- a `.parallax-policy/<label>-<8 hex>.json` or `.yaml` draft the Write tool wrote was
+  never read by a plugin `adaptation.py`, `coverage_check.py` or `reconcile.py` run
+  (any exit: their nonzero exits are documented outcomes), or an audit row draft was
+  never read by `audit_append.py`;
+- a journey's `require_helpers` helper did not run as above;
+- a file tool wrote code (a script suffix such as `.py` or `.sh`, or content starting
+  with `#!`; conventions §14.4), or wrote a file into a draft directory that is not a
+  documented draft name directly under the working directory;
+- the shims logged Python code read from stdin (`python3 -`, `python3 < file`) or a
+  Python script outside `plugin/`. `python3 -c` (the white-label loader snippet,
+  integration-pattern.md §2), `python3 -m`, and a script path that named no file (a
+  typo; nothing ran) print `WARN:` lines instead;
+- a counted trace line has no shim-logged Python start of the same helper script (the
+  shims were not first on `PATH`, or the helper ran by an absolute interpreter path);
+- the scratch listing shows, outside the runner's `home/`, `tmp/`, `house-view/` and
+  `e2e-trace/`: a symbolic link or other non-regular file; a file in a draft directory
+  that is not a draft or that differs from the bytes the Write tool wrote (a Bash-made
+  or Bash-changed draft); or a script (script suffix, execute bit, or `#!` first
+  line). A script-like file in the runner's `tmp/` or `home/` is a `WARN:` line: tools
+  write code of their own there (`npx` installs `.js` files under `home/.npm/_npx`);
+- a Bash command or file-tool call names the ground-truth files (`e2e-trace`,
+  `journey-trace`, `python-starts`, `PARALLAX_E2E_TRACE`);
+- a Write, Edit, MultiEdit or NotebookEdit call targets `audit.jsonl`;
+- `claude` exits non-zero or hits the timeout;
+- no Skill call of the journey's required skill succeeds, no skill in the `parallax:`
+  plugin namespace runs, a Parallax skill is called without the `parallax:` prefix (a
+  copy outside this plugin answered), or the init message does not list this branch's
+  `plugin/` directory;
+- a connector journey shows no connected Parallax server in the init message and makes no
+  successful Parallax tool call (a claude.ai connector can finish loading after the
+  init message);
+- a no-connector journey shows a Parallax server or calls a Parallax tool.
+
+Any other denied Bash command is one the model improvised, such as a doc-reading
+`cd …; sed …` chain or an `echo $?` suffix. Claude Code's checker refuses these
+inconsistently, even within one session, and the run recovers without them, so each
+prints a `WARN:` line with the command and the journey can still pass.
+
+`expect` and `expect_any` run on the final answer. `forbid` runs on all assistant text
+in the run, so a forbidden phrase in an earlier turn also fails. Every connector
+journey forbids "To connect" and "No connection needed", phrases of the concierge's
+not-connected state, so a not-connected run cannot pass. `/mcp` itself is not
+forbidden: a correct connected run can mention it when a second, signed-out Parallax
+connector is loaded. The checker is `evals/concierge_journeys_check.py`, pytested on canned streams
+at `evals/graders/test_concierge_journeys_check.py`. `evals/graders/test_concierge_journeys_runner.py`
+runs the real runner with a stub `claude` that plays J9 (no model, no credits) to check
+the trace, shim and listing plumbing end to end. Both run in CI; the journeys do not.
+Results (gitignored) land in `evals/results/` as the raw stream (`.jsonl`), all
+assistant text (`.txt`), stderr, and the ground truth (`.trace.jsonl`,
+`.python-starts.jsonl`, `.fs.json`).
+
+| Env var | Required | Purpose |
+|---|---|---|
+| `PARALLAX_E2E_LIVE` | yes (unless dry-run) | Must be `1` to run for real. Unset or anything else prints a skip message and exits 0. |
+| `PARALLAX_E2E_DRY_RUN` | optional | `1` prints each `claude` command instead of running it. Takes effect even without `PARALLAX_E2E_LIVE=1`. |
+| `PARALLAX_E2E_ONLY` | optional | Comma-separated journey ids. Each entry matches a full id or the part before its first `_` (`J2` matches `J2_not_connected`). An entry that matches nothing prints a warning. |
+| `PARALLAX_E2E_CONNECTOR` | optional | `account` (default) or `plugin`. See below. |
+| `PARALLAX_E2E_ALLOWED_TOOLS` | optional | Overrides the Parallax tool patterns the connector mode picks (comma-separated). `--setting-sources project` drops user-level permissions, so the Parallax tools must be listed here or by the mode. The base permissions below are always allowed on top. |
+| `PARALLAX_E2E_TIMEOUT` | optional | Per-journey limit in seconds, default `600`. A timeout is a FAIL. |
+| `PARALLAX_E2E_RESULTS_DIR` | optional | Where results land, default `evals/results/`. |
+| `PARALLAX_E2E_JOURNEYS` | optional | Journey file, default `evals/tasks/concierge/journeys.jsonl` (for a one-off calibration journey). |
+
+The runner itself sets `PARALLAX_E2E_TRACE` (the run trace file) and puts the Python
+start shims first on `PATH` for each run; do not set them by hand.
+
+Permissions in every journey:
+
+- `Read`, `Grep` and `Glob`, not limited by path.
+- `Write` and `Edit` only inside the scratch tree (`Edit(//<scratch>/**)`, both the
+  `/var/folders` and `/private/var/folders` spellings). A write anywhere else is
+  denied, which fails the journey.
+- The Parallax MCP tools for the connector mode.
+- `Bash` has no allow rule. It runs only inside Claude Code's Bash sandbox
+  (Seatbelt on macOS), passed with `--settings`: `sandbox.enabled`,
+  `failIfUnavailable` (refuse to start rather than run unsandboxed),
+  `autoAllowBashIfSandboxed`, `allowUnsandboxedCommands: false` (no unsandboxed
+  retry), and `network.allowedDomains: []` with `strictAllowlist`. The OS confines each
+  command and its child processes: writes only to the scratch tree (the cwd, plus
+  the per-user temp dir that `CLAUDE_CODE_TMPDIR` puts inside it), and no network.
+  Claude Code's protected paths, such as `~/.claude` and `~/.claude.json`, stay
+  write-denied even through the scratch home's symlinks. There is no `--add-dir`,
+  because an added directory would become writable to sandboxed commands.
+
+The sandbox does not lift Claude Code's own command checks. A command that contains a
+shell expansion such as `$(…)` or `${VAR:-default}` is still denied with "Contains
+expansion", sandboxed or not. The render-gate command in `parallax-conventions.md`
+§10.3 has no expansion and stays short: the model writes the report to
+`<scratch>/.parallax-render/…` (allowed by the scratch `Edit` rule), then runs
+`render_gate.py --input <path>`, so the sandbox auto-allow above lets it run. Claude
+Code also refuses any command over 10,000 characters, so a report passed inside the
+command, such as through a heredoc, fails once it is long. A skill or edit that brings
+back an expanded or embedded form makes the journeys that reach the render gate (J1,
+J4, J6 and J7 when they render a report) FAIL on the gate attempt.
+
+Remaining risk, stated plainly:
+
+- `Read`, `Grep`, `Glob` and sandboxed shell reads are not limited by path. A journey
+  can read most of the machine, including files under the real home through the
+  scratch home's symlinks (`~/.claude`, `~/.claude.json`, the keychain directory).
+- MCP tools run outside the sandbox. A connector journey can call any allowed
+  Parallax tool, and each billed call costs Parallax credits.
+- Built-in tools such as `Write`/`Edit` follow permission rules, not the sandbox; the
+  scratch-only `Edit` rule is what limits them.
+- The ground-truth checks do not see: Python other than a traced helper run by
+  absolute path (`/usr/bin/python3 x`) or after the model changes `PATH` (a traced
+  helper run that way fails the run); inline code (`python3 -c`,
+  only a warning, since a documented step uses it); a non-Python script written by Bash,
+  run, and deleted; code placed in a draft-named file and run with `-c`; and deliberate
+  forgery of the trace.
+
+Connector modes:
+
+- **`account`** (default): the Parallax connector on your claude.ai account, or one added
+  with `claude mcp add`. Allows `mcp__claude_ai_Parallax__*` and `mcp__parallax__*`. When
+  the account has the Parallax connector, Claude Code loads it and drops the plugin's
+  bundled copy, so this mode does not exercise the bundled server.
+- **`plugin`**: the plugin's bundled server (`plugin/.mcp.json`). Sets
+  `ENABLE_CLAUDEAI_MCP_SERVERS=false` for the run and allows
+  `mcp__plugin_parallax_parallax__*`. It needs a one-time `/mcp` sign-in to that server,
+  and that sign-in from Claude Code needs the server-side loopback fix to be deployed.
+
+What each journey checks:
+
+| Journey | Checks |
+|---|---|
+| `J1_research_connected` | New-here research-analyst role runs `/parallax-peer-comparison` on NVDA without asking the role question (bills Parallax credits). |
+| `J2_not_connected` | No connector: the Check state shows the `/mcp` connect step instead of routing anywhere (no Parallax credits billed). |
+| `J3_integrator` | "Building on Parallax" role gets the integration pointer (the README "Forking and Customizing" link), not a skill run (`check_api_health` only, free). |
+| `J4_rm_support_schedule` | RM-support role with holdings runs `/parallax-morning-brief` (bills Parallax credits) and, because scheduling is currently unverified on every host, the concierge must not offer it; forbids the scheduling and delivery phrasing such an offer would use. |
+| `J5_returning` | A plain "Hi Parallax" (no "new here") gets the standard opener, including the "New here?" pointer, and no role label. It makes no Parallax call (free), so it uses `connector-optional`. |
+| `J6_uncovered_ticker` | An unknown ticker is reported as not covered or not resolved, not replaced by an invented symbol. Bills Parallax credits: the should-i-buy route resolves with `get_company_info` (1 credit per attempt). |
+| `J7_direct_task_bypass` | "I'm new here. Should I buy AAPL?" runs `parallax:parallax-should-i-buy` directly (`"skill"` field; bills Parallax credits) and shows no role label. |
+| `J8_role_asked_not_guessed` | A bare "I'm new here" (no payload) gets asked the role question with the role labels offered, not guessed, and no skill runs yet (`check_api_health` only, free). |
+| `J9_client_review_policy` | A wealth advisor's client review with an inline `policy=` runs `parallax:parallax-client-review`, writes the policy to a `.parallax-policy/` draft, runs `adaptation.py` on it as documented, gates the report with `render_gate.py` (both `require_helpers`), and renders SAA Drift and Policy Data Quality. Bills Parallax credits. Before the 2026-10-16 rewrite of client-review's draft and helper steps as literal commands (see CHANGELOG), two live runs on 2026-10-13 failed: the model wrote the policy through a heredoc, ran `adaptation.py` through a shell variable, and put the report draft in `.parallax-policy/`. A live run on 2026-10-16 passed. |

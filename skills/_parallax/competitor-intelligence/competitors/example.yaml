@@ -1,0 +1,48 @@
+# Example competitor entry — fictional placeholder demonstrating schema shape.
+# Real competitor teardowns live outside this repo (gitignored notes/) so
+# substantive intelligence is not committed to a public artifact.
+
+competitor:
+  name: "Acme Risk Platform"
+  ric_mapping: ""
+  category: "Enterprise Risk & Portfolio Management"
+
+intelligence:
+  teardown:
+    last_date: "2026-01-15"
+    analyst: "Internal review"
+    confidence: 0.5
+
+  pricing:
+    model: "Enterprise (annual contract)"
+    base_cost: "(redacted — see internal notes)"
+    as_of: "2026-01-01"
+    source_url: ""
+
+  win_loss_vectors:
+    strengths:
+      - factor: "Deployment speed"
+        proof_point: "Parallax delivers structured outputs via MCP from day one; competitor requires multi-week onboarding."
+      - factor: "Methodology transparency"
+        proof_point: "Parallax cites the source paper for each factor; competitor methodology is not externally documented."
+    weaknesses:
+      - factor: "Multi-asset breadth"
+        rebuttal: "Parallax is global-equity focused; teams that need cross-asset risk aggregation in a single pane are better served by an established multi-asset platform."
+
+  market_intel:
+    target_personas:
+      - "Pension funds"
+      - "Large asset managers"
+    muscle_memory_friction:
+      - habit: "Heavyweight desktop UI"
+        parallax_alternative: "Workflow-native MCP / API integration callable from existing tools."
+
+  verifiable_claims:
+    supported:
+      - claim: "(populate with verifiable, citable claims only)"
+        citation: ""
+    forbidden:
+      - claim: "(populate with claims to AVOID — outdated, inaccurate, or libel-adjacent)"
+        reason: ""
+
+  who_should_choose: "Teams whose primary requirement is multi-asset risk aggregation in a single integrated platform, where deployment speed is secondary to breadth."

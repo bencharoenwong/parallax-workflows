@@ -1,0 +1,31 @@
+{
+  "regime_tag": "risk-off",
+  "signals": {
+    "vix": 22.4,
+    "credit_spread_hy_bps": 412,
+    "term_premium_10y": 0.18,
+    "breadth_pct_above_200dma": 38.5
+  },
+  "commentary": {
+    "headline": "Defensive rotation as duration-sensitive growth de-rates",
+    "mechanism": "Sticky core CPI plus hawkish Fed minutes lifted the back end; high-multiple growth lost ~5% while staples and healthcare outperformed."
+  },
+  "divergences": [
+    {
+      "name": "Life Science Tools & Diagnostics",
+      "type": "rebound",
+      "market": "US",
+      "daily": 0.0241,
+      "mtd": -0.0067,
+      "basket_id": "US_20330114_031"
+    },
+    {
+      "name": "Semiconductors & Semiconductor Equipment",
+      "type": "breakdown",
+      "market": "US",
+      "daily": -0.0183,
+      "mtd": 0.0124,
+      "basket_id": "US_20330114_012"
+    }
+  ]
+}

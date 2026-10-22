@@ -1,0 +1,5 @@
+{
+  "regions": {"us": 1, "japan": -1},
+  "sectors": {"information_technology": -2},
+  "excludes": ["tobacco", "GAZP.MM"]
+}

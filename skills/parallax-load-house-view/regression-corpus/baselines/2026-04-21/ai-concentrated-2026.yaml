@@ -1,0 +1,69 @@
+# Baseline extraction for regression-corpus entry: ai-concentrated-2026
+# Source: skills/load-house-view/samples/AI-concentrated.md
+# Produced by: claude-opus-4-7 (manual Step-2 extraction per SKILL.md)
+# Produced at: 2026-04-21
+# Schema version: post-2026-04-21 (uses new taiwan + south_korea region keys)
+
+entry_id: ai-concentrated-2026
+
+metadata:
+  view_name: "Conviction View — AI Infrastructure Buildout, 2026-2028"
+  uploader_role: CIO
+  auto_expire_days: 90                       # "24-36 month horizon, reassess each quarter"
+
+tilts:
+  sectors:
+    information_technology: 2
+    utilities: 1                             # "industrial power and grid operators"
+    financials: -2
+    consumer_discretionary: -1
+    real_estate: -2
+
+  regions:
+    us: 2
+    taiwan: 2                                # explicit — uses new region key
+    south_korea: 2                           # explicit — uses new region key
+    japan: 1
+    europe: -1
+    em_ex_china: -1
+
+  factors:
+    momentum: 2
+    quality: 1                               # qualified — "only insofar as it's quality with right capex exposure"
+    defensive: -2
+    value: -2
+
+  themes:
+    ai_infrastructure: 2
+    energy_transition: 1                     # industrial power buildouts for AI = transition beneficiary
+
+  styles:
+    cap_size:
+      large: 2
+
+  macro_regime:
+    growth: expansion
+    inflation: benign
+    rates: null                              # not explicit
+    risk_appetite: risk_on
+
+  excludes: []
+  excludes_freeform:
+    - "AI-washing (companies adding AI to investor decks without changing P&L)"
+    - "pre-revenue AI-themed names with no compute moat"
+
+extraction_confidence:
+  sectors: 0.85
+  regions: 0.90                              # taiwan/korea now capturable — previously collapsed to apac_ex_japan
+  factors: 0.92
+  styles: 0.80
+  themes: 0.95
+  excludes: 0.75                             # non-standard qualitative screens
+  macro_regime: 0.70                         # partial: expansion+benign+risk_on explicit, rates null
+
+extraction_notes: |
+  Pure thematic-conviction view. Critical for this entry: taiwan and south_korea are the
+  EXPLICIT reallocation targets (TSMC / ASML / memory makers); post-2026-04-21 schema change
+  captures them directly rather than collapsing to apac_ex_japan. Rates field left null —
+  source does not frame a Fed-rate view. Quality tilt qualified to +1 despite "matters but
+  only insofar as quality with right capex exposure" — a defensible +1 or +0 extraction.

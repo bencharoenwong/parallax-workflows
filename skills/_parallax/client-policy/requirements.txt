@@ -1,0 +1,21 @@
+# Runtime dependency for the S3 reconciliation solver (reconcile.py).
+#
+# scipy provides linprog (HiGHS), the LP backend for policy-constrained
+# rebalance targets and the exact smallest-violation infeasibility diagnosis.
+# The solver FAILS CLOSED without it — status="solver_unavailable", no target
+# weights, no trade list, the caller renders UNVERIFIED (conventions §4.0) —
+# because a trade list is a gate-shaped output and a silently degraded one is
+# worse than none. Install it for any real deployment:
+#
+#   python3 -m pip install -r skills/_parallax/client-policy/requirements.txt
+#
+# Floor at 1.10: the first line with a stable HiGHS default surface for the
+# arguments reconcile.py uses (A_ub/A_eq/bounds/method="highs"). Pin an exact
+# version here if a regulated deployment needs reproducible solver behavior.
+#
+# adaptation.py (S0-S2) stays pure-stdlib apart from pyyaml and does not need
+# this file; pyyaml is listed so this file stands alone for the whole
+# client-policy directory.
+
+scipy>=1.10
+pyyaml>=6
