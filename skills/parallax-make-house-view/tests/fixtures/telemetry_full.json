@@ -1,0 +1,22 @@
+{
+  "success": true,
+  "commentary": {
+    "headline": "Damaged pockets bounced harder than established winners — risk-on tone persists across DM"
+  },
+  "divergences": [
+    {"name": "Indonesian Commodity Miners", "market": "ID", "type": "rebound", "daily": 0.092, "mtd": -0.166, "basket_id": "ID_20260223_052"},
+    {"name": "US Semis Leaders", "market": "US", "type": "drift", "daily": 0.01, "mtd": 0.05, "basket_id": "US_20260301_011"},
+    {"name": "Japan Banks", "market": "JP", "type": "drift", "daily": 0.005, "mtd": 0.03, "basket_id": "JP_20260301_017"},
+    {"name": "Korean Defensive", "market": "KR", "type": "drift", "daily": 0.0, "mtd": 0.01, "basket_id": "KR_20260301_002"},
+    {"name": "China Property", "market": "CN", "type": "drift", "daily": -0.005, "mtd": -0.02, "basket_id": "CN_20260301_005"},
+    {"name": "Germany Industrials", "market": "DE", "type": "drift", "daily": 0.003, "mtd": 0.015, "basket_id": "DE_20260301_009"},
+    {"name": "UK Energy", "market": "GB", "type": "drift", "daily": 0.001, "mtd": 0.008, "basket_id": "GB_20260301_004"},
+    {"name": "India IT", "market": "IN", "type": "drift", "daily": 0.0, "mtd": 0.012, "basket_id": "IN_20260301_011"}
+  ],
+  "regime_tag": "Selective rotation",
+  "report_date": "2026-05-19",
+  "signals": [
+    {"text": "Biggest daily move: ID Indonesian Commodity Miners +9.2%", "type": "biggest_move"},
+    {"text": "Outlier: ID Indonesian Commodity Miners daily z=4.9", "type": "zscore_outlier"}
+  ]
+}

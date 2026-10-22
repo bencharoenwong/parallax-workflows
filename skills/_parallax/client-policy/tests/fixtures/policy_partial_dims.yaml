@@ -1,0 +1,55 @@
+# Region covered with sparse bands; sector declared but with no strategic_allocation.
+# Drives fallback tier `partial_dimensions`:
+#   us            two-sided band  -> semantics `policy`
+#   europe        one-sided band  -> semantics `policy`, missing_bands disclosure, P-1
+#   japan         no band         -> semantics `multiplier_fallback`
+#   em_ex_china   no band         -> semantics `multiplier_fallback`
+#   sector        uncovered       -> absent from drift/TAA, uncovered_dimension row
+
+metadata:
+  schema_version: 1
+  policy_id: "c9a0f312-7de4-4b2a-9a10-3f5b8c7d2e11"
+  policy_name: "Regional Sleeve Only"
+  client_ref: "acct-7fd2"
+  supplied_by: "rm@firm.example"
+  supplied_at: "2026-08-29T10:00:00Z"
+  as_of_date: "2026-06-30"
+  review_due: "2026-12-31"
+  calibration_status: heuristic_phase0
+
+mandate:
+  base_currency: "USD"
+  strategic_allocation:
+    equity: 0.60
+  allocation_bands:
+    equity: {min: 0.50, max: 0.70}
+  tactical_overlay:
+    enabled: true
+    max_total_tilt: 0.10
+    max_tracking_error: null
+  prohibited_products: []
+  sub_allocations:
+    dimensions:
+      region:
+        basis: sleeve
+        code_list: parallax_region_v1
+        strategic_allocation:
+          us: 0.55
+          europe: 0.25
+          japan: 0.10
+          em_ex_china: 0.10
+        allocation_bands:
+          us: {min: 0.45, max: 0.65}
+          europe: {min: 0.18}
+      sector:
+        basis: sleeve
+        code_list: gics_sector_v1
+        strategic_allocation: {}
+        allocation_bands: {}
+
+adaptation:
+  k_preset: balanced
+  k: null
+
+governance:
+  human_review_recorded: []

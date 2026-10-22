@@ -1,0 +1,68 @@
+# Fixture: second-firm saved view for --compare tests.
+# Designed RELATIVE TO bank_view_anchor.yaml to produce clear, asserted outcomes:
+#   AGREE     : sectors.energy(-1), regions.us(1), regions.japan(1),
+#               pillars.econometrics_phase(1), pillars.psychological_wavelength(1),
+#               macro_regime.rates(holding)
+#   DISAGREE  : sectors.information_technology (anchor +1 vs this -1),
+#               macro_regime.growth/inflation/risk_appetite
+#   LEFT ONLY : factors.momentum (anchor has +1; this view silent)
+#   RIGHT ONLY: sectors.health_care, regions.india, factors.value, pillars.market_entropy
+#   EXCLUDES  : anchor has none; this view excludes weapons + fossil_fuels -> right_only
+metadata:
+  schema_version: 1
+  calibration_status: heuristic_phase0
+  view_id: aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa
+  view_name: "Goldman Test View Q2 2026"
+  uploaded_by: strategist@goldman.example
+  uploader_role: Strategist
+  upload_timestamp: "2026-05-01T10:00:00Z"
+  effective_date: "2026-05-01"
+  valid_through: "2026-07-31"
+  auto_expire_days: 90
+  basis_statement: "May IC; cautious on US tech, constructive on EM."
+  source_documents:
+    - "goldman-may-2026.pdf"
+  version_id: bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb
+  parent_version_id: null
+  view_hash: cafebabe
+tilts:
+  pillars:
+    econometrics_phase: 1        # anchor 1  -> AGREE
+    valuation_state: 0           # anchor 0  -> both silent (skipped)
+    market_entropy: -1           # anchor 0  -> RIGHT ONLY
+    psychological_wavelength: 1  # anchor 1  -> AGREE
+  sectors:
+    information_technology: -1   # anchor +1 -> DISAGREE
+    health_care: 1               # anchor silent -> RIGHT ONLY
+    energy: -1                   # anchor -1 -> AGREE
+  regions:
+    us: 1                        # anchor 1 -> AGREE
+    japan: 1                     # anchor 1 -> AGREE
+    india: 1                     # anchor silent -> RIGHT ONLY
+  factors:
+    value: 1                     # anchor silent -> RIGHT ONLY
+  styles: {}
+  themes: {}
+  macro_regime:
+    growth: slowing              # anchor expansion -> DISAGREE
+    inflation: sticky            # anchor benign -> DISAGREE
+    rates: holding               # anchor holding -> AGREE
+    risk_appetite: risk_off      # anchor risk_on -> DISAGREE
+  excludes:
+    - weapons
+    - fossil_fuels
+extraction:
+  source_type: pdf
+  extraction_method: claude-opus-4-7
+  extracted_at: "2026-05-01T09:58:00Z"
+  extraction_confidence:
+    pillars: 0.82
+    sectors: 0.88
+    regions: 0.85
+    factors: 0.75
+    styles: 0.70
+    themes: 0.60
+    excludes: 1.0
+    macro_regime: 0.87
+  extraction_notes: ""
+  uploader_confirmed: true

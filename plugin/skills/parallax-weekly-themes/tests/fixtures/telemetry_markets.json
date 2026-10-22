@@ -1,0 +1,46 @@
+{
+  "success": true,
+  "report_date": "2026-01-02",
+  "markets": {
+    "AA": {
+      "as_of": "2026-01-02",
+      "market_name": "Market A",
+      "n_baskets": 5,
+      "top_wtd": {"name": "Theme A1", "value": 0.031},
+      "bottom_wtd": {"name": "Theme A5", "value": -0.022},
+      "distribution_wtd": [-0.022, -0.005, 0.004, 0.012, 0.031],
+      "n_positive_wtd": 3,
+      "aggregate_wtd": 0.004
+    },
+    "BB": {
+      "as_of": "2026-01-02",
+      "market_name": "Market B",
+      "n_baskets": 4,
+      "top_wtd": {"name": "Theme B1", "value": 0.05},
+      "bottom_wtd": {"name": "Theme B4", "value": -0.01},
+      "distribution_wtd": [-0.01, 0.0, 0.005, 0.02, 0.05],
+      "n_positive_wtd": 2,
+      "aggregate_wtd": 0.006
+    },
+    "CC": {
+      "as_of": "2026-01-02",
+      "market_name": "Market C",
+      "n_baskets": 1,
+      "top_wtd": {"name": "Theme C1", "value": 0.02},
+      "bottom_wtd": {"name": "Theme C1", "value": 0.02},
+      "distribution_wtd": [0.02, 0.02, 0.02, 0.02, 0.02],
+      "n_positive_wtd": 1,
+      "aggregate_wtd": 0.02
+    },
+    "DD": {
+      "as_of": "2026-01-01",
+      "market_name": "Market D",
+      "n_baskets": 2,
+      "top_wtd": {"name": "Theme D1", "value": 0.09},
+      "bottom_wtd": {"name": "Theme D2", "value": -0.03},
+      "distribution_wtd": [-0.03, 0.0, 0.03, 0.06, 0.09],
+      "n_positive_wtd": 1,
+      "aggregate_wtd": 0.03
+    }
+  }
+}

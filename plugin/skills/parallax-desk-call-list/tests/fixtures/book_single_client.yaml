@@ -1,0 +1,9 @@
+schema_version: 1
+desk_name: Single Client Desk
+updated_at: "2026-07-19T00:00:00Z"
+clients:
+  - client_name: Northgate
+    client_ref: NG-001
+    holdings:
+      - {symbol: aapl.o, weight: 0.60, asset_class: equity}
+      - {symbol: MSFT.O, weight: 0.40, asset_class: equity}

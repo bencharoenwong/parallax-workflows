@@ -1,0 +1,14 @@
+metadata:
+  effective_date: '2026-04-26'
+  provenance_hash: 639d277ea57d17ecd589edfffd2ec49567083ad5535463ef1922335c0e90f515
+  upload_timestamp: '2026-05-24T02:33:15.797701+00:00'
+  version_id: ver-00001
+  view_hash: 65112ba7c0e45ba452a6742c37c7c189058c86761c759c1c433a38b46d25780b
+  view_id: view-12345
+  view_name: E2E Golden Baseline View
+tilts:
+  factors:
+    low_volatility: 2
+    momentum: -1
+  sectors:
+    consumer_staples: 1

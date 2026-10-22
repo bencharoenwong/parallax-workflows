@@ -1,0 +1,56 @@
+# `basis: total` on the region dimension. Weights are fractions of the TOTAL
+# portfolio, so S0 divides them by mandate.strategic_allocation.equity (0.60):
+#
+#   us 0.33 / 0.60 = 0.55      europe 0.15 / 0.60 = 0.25
+#   japan 0.06 / 0.60 = 0.10   em_ex_china 0.06 / 0.60 = 0.10
+#
+# which reproduces policy_full.yaml's sleeve weights exactly. Band edges convert
+# with the same divisor: us {0.27, 0.39} / 0.60 = {0.45, 0.65}.
+# Weights sum to 0.60 == equity, which is the sum rule on `total` basis.
+
+metadata:
+  schema_version: 1
+  policy_id: "6d0a4b91-8c33-4e57-9f21-0b8e4c6a7d12"
+  policy_name: "Balanced Growth (total basis)"
+  client_ref: "acct-7fd2"
+  supplied_by: "rm@firm.example"
+  supplied_at: "2026-08-29T10:00:00Z"
+  as_of_date: "2026-06-30"
+  review_due: "2026-12-31"
+  calibration_status: heuristic_phase0
+
+mandate:
+  base_currency: "USD"
+  strategic_allocation:
+    equity: 0.60
+  allocation_bands:
+    equity: {min: 0.50, max: 0.70}
+  tactical_overlay:
+    enabled: true
+    max_total_tilt: 0.10
+    max_tracking_error: null
+  prohibited_products: []
+  sub_allocations:
+    dimensions:
+      region:
+        basis: total
+        code_list: parallax_region_v1
+        strategic_allocation:
+          us: 0.33
+          europe: 0.15
+          japan: 0.06
+          em_ex_china: 0.06
+        allocation_bands:
+          us: {min: 0.27, max: 0.39}
+      sector:
+        basis: sleeve
+        code_list: gics_sector_v1
+        strategic_allocation: {}
+        allocation_bands: {}
+
+adaptation:
+  k_preset: balanced
+  k: null
+
+governance:
+  human_review_recorded: []

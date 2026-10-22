@@ -1,0 +1,45 @@
+{
+  "macro_analyst:United_States:macro_indicators": {
+    "report_date": "2026-05-22",
+    "market": "United States",
+    "component": "macro_indicators",
+    "content": "US macro indicators have rolled over decisively. Real GDP tracking 0.5% with ISM new orders sliding below 45. Recession risk has materially elevated; overweight US equity is no longer warranted. Recommended underweight US with defensive bias and quality tilt.",
+    "success": true
+  },
+  "macro_analyst:Japan:tactical": {
+    "report_date": "2026-05-22",
+    "market": "Japan",
+    "component": "tactical",
+    "content": "Japan tactical picture has reversed sharply. Yen strength is biting into exporters; BoJ unexpectedly hiked, triggering carry-trade unwind. Underweight Japan equity recommended for the next quarter.",
+    "success": true
+  },
+  "macro_analyst:China:macro_indicators": {
+    "report_date": "2026-05-22",
+    "market": "China",
+    "component": "macro_indicators",
+    "content": "China macro picture has improved meaningfully. Property completions accelerating, retail sales surprising to the upside, policy package landing earlier than expected. Recommended overweight China equity for the next two quarters.",
+    "success": true
+  },
+  "macro_analyst:United_States:sectors": {
+    "report_date": "2026-05-22",
+    "market": "United States",
+    "component": "sectors",
+    "content": "Tech sector leadership re-asserting. Earnings beats across hyperscalers, AI capex accelerating, valuation digesting prior compression. Overweight Tech is the consensus tactical call for the next quarter.",
+    "success": true
+  },
+  "get_telemetry:commentary": {
+    "report_date": "2026-05-22",
+    "commentary": {"headline": "Regime shift: growth scare in US, recovery in China."},
+    "regime_tag": "Growth deceleration",
+    "signals": [
+      {"text": "ISM new orders sub-45", "type": "regime_signal"},
+      {"text": "BoJ surprise hike", "type": "policy_shock"}
+    ],
+    "divergences": [
+      {"name": "US Defensives", "type": "rebound", "market": "US"},
+      {"name": "China Consumer", "type": "rebound", "market": "CN"},
+      {"name": "Japan Exporters", "type": "trend_break", "market": "JP"}
+    ],
+    "success": true
+  }
+}

@@ -1,0 +1,19 @@
+# Test-only dependencies for the white-label brand-ingest suite.
+#
+# The production extractors do NOT import these. extract/ooxml.py parses
+# OOXML with stdlib zipfile + ElementTree so that PPTX/DOCX ingest works on
+# a bare interpreter. These packages exist solely to BUILD the .pptx/.docx
+# fixtures that tests/test_doc_extractors.py and tests/test_roundtrip_and_url.py
+# feed to those extractors.
+#
+# Without them pytest reports ModuleNotFoundError at fixture setup and 18
+# OOXML tests are skipped as errors — a green-looking run that never touched
+# the OOXML path. Install into the SAME interpreter the commit gate uses
+# (python@3.11), not the default python3 alias:
+#
+#   python3.11 -m pip install -r skills/_parallax/white-label/requirements-test.txt
+#
+# Pinned 2026-08-29 against the versions the suite was verified green on.
+
+python-pptx==1.0.2
+python-docx==1.2.0

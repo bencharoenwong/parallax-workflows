@@ -1,0 +1,649 @@
+# Parallax Skill Conventions
+
+<!-- authority: contract -->
+<!-- verified: 2026-10-07 -->
+<!-- overrides: none -->
+
+Shared patterns for all `parallax-*` skills. JIT-load from any skill that calls Parallax MCP tools.
+
+---
+
+## 0. Feature Flags
+
+Feature flags gate architectural changes in these skills. Read each flag via the `read-config` host primitive (§14); absent that primitive, the flag takes its documented default (§14.3).
+
+- **`PARALLAX_LOADER_V2=1`** (Phase 0 rewrite):
+  - **Universe Construction**: Replaces single-shot tilt-prepended `build_stock_universe` calls with N parallel per-tilt calls + client-side merge/dedupe. Required for multi-sector/multi-theme views to prevent universe collapse (Q-A).
+  - **Portfolio Scoring**: Replaces batch `quick_portfolio_scores` with per-holding `get_peer_snapshot` aggregation + `get_company_info` cross-validation. Required to bypass upstream symbol-mapping bugs (Q-B).
+  - **Active House View**: When a house view is active, V2 patterns are MANDATORY to ensure tilt integrity.
+
+---
+
+## 0.0 Pre-flight (before any data gathering)
+
+Run this once at the top of any should-i-buy / two-lens / house-view / portfolio workflow, **before the first data call** — not as a mid-run recovery:
+
+0. **Read files, do not shell them.** Read every convention, reference and house-view file with `load-reference` (the Read tool on Claude Code), never `cd`, `cat`, `sed` or `grep` in the shell. Run each documented command exactly as written, one per `run-shell` call, with no `cd`, `;` or `&&` chain, or `echo $?` added; `run-shell` already reports the exit code.
+1. **Resolve paths.** Resolve every `_parallax/...` conventions and house-view path to the canonical `parallax-workflows` copy (see `_parallax/skill-structure-conventions.md` → "Canonical source & path resolution"). Do not assume the installed skill directory contains them.
+2. **Discover live capabilities.** Run the `discover-tools` host primitive (§14) once before the first data call; the per-host binding table in §14 says what that means on the current host. Inspect the returned callable names and input schemas, then bind each logical operation used by the workflow to the exact callable exposed in this session.
+3. **Let the live contract win.** Live capability discovery is authoritative for the callable namespace, tool availability, parameter names, required fields, types, and enums. Names and schemas in this repository are implementation notes, not permission to call an alias or argument shape that the runtime did not advertise.
+4. **Abort or degrade cleanly on a gap.** If a required convention/house-view file cannot be resolved, or a required logical capability is absent from the discovered set, **stop for gates or mark the affected display section unavailable per §4.** Tell the operator exactly what is missing. Do not invent a namespace, guess a parameter variant, silently proceed through a gate, or fabricate data.
+
+Most should-i-buy failures trace to one of two causes this pre-flight removes — missing convention/house-view files, and stale assumptions about the live connector contract. Resolving both before execution prevents sessions that burn the turn budget retrying calls the runtime cannot accept. This is the open-side complement to §0.3 (validation before reporting done).
+
+---
+
+## 0.1 Live MCP Capability Discovery
+
+Parallax tool namespaces are runtime-assigned and may differ across Claude Code, Claude.ai, Codex, plugins, or multiple connections in the same host. Before the first Parallax data call:
+
+1. Use the host's live discovery mechanism (the `discover-tools` primitive, bound per host in §14) to find Parallax capabilities and load their current schemas. The Claude Code binding is one example, not a universal namespace contract.
+2. Build a session-local binding map from each logical tool name used by the skill (for example, `get_company_info`) to the exact callable name returned by discovery.
+3. Read the callable's live input schema immediately before constructing its arguments. Send only advertised parameters, with the advertised types and enum values. If static prose conflicts with discovery, discovery wins.
+4. Never synthesize a callable by attaching a remembered namespace to a logical tool name. A configured server alias, README example, previous transcript, or cached skill instruction does not prove that callable exists in the current session.
+5. If discovery returns more than one Parallax namespace (for example a separate connector and a plugin's bundled one), choose one for the whole session. First call the free `check_api_health` probe once on each namespace. If exactly one is signed in, use it. If none is signed in, the connector is unavailable: show the connect steps for this host. If more than one is signed in, or any probe is missing, fails, or times out, ask the user which to use, naming each, because each may bill a different account. Tell the user once which namespace the session uses. Bind every later call to that namespace, and never call a billed tool on two namespaces. Some hosts merge or suppress same-address servers before discovery; this rule applies whenever discovery still returns more than one.
+
+**Retry classification.** A transient transport failure, cancellation, or empty success may be retried once for the affected call after discovery remains available. Do not re-fire an entire batch because one sibling failed. A tool-not-found or schema-validation response is a deterministic contract failure: do not repeat the same payload and do not try guessed aliases or argument variants. Re-read the discovered schema and make one corrected call only when the mapping is unambiguous; otherwise use a discovered fallback per §4 and mark the missing coverage explicitly.
+
+---
+
+## 0.2 Tool Parameter Reference
+
+The table below records commonly observed parameter names. It is a maintenance aid, not a runtime contract. Use an entry only when the live discovered schema advertises the same parameter and type; the live schema overrides every row.
+
+| Tool | Parameter | Type | Notes |
+|---|---|---|---|
+| `macro_analyst` | `market` (not `country`) | string | e.g., `"United States"`, `"Japan"`. Matches names returned by `list_macro_countries`. |
+| `macro_analyst` | `component` | string | e.g., `"tactical"`, `"sectors"`, `"factors"`. See `list_macro_countries` next_steps for others. |
+| `build_stock_universe` | `query` (not `description`) | string | Free-text sector-scoped query, e.g., `"US large-cap technology software"`. Broad/abstract queries time out. |
+| `get_financials` | `statement` | string | `"summary"`, `"income"`, `"balance_sheet"`, `"cash_flow"`, `"ratios"`. Defaults to `"summary"`. |
+| `get_financials` | `periods` | integer | Defaults to 4. **Do NOT pass as string via `:periods=4` syntax** — MCP serializes it as a string and fails validation. Rely on server default or pass as typed integer at call site. |
+| `get_score_analysis` | `weeks` | integer | Defaults to 52. Same serialization caveat as `periods`. |
+| `get_stock_outlook` | `limit` | integer | Defaults to 20 (applies to `dividends` aspect, range 1-100). Same serialization caveat as `periods`. |
+| `export_price_series` | `days` | integer | Defaults to 100 (range 1-365). Same serialization caveat as `periods`. |
+| `get_peer_snapshot` | N/A | — | Symbol only; company-identity field in response is `target_company` (top-level). The response has no `name` field — each peer's name is `comparison[].company`. `comparison[]` carries the target's own row alongside its peers (`peer_count` counts peers only), so exclude the row whose `symbol` equals the queried symbol when iterating the peer set. |
+
+When the live schemas match these observations, `country=` and `description=` are invalid for the two examples above. If the live schemas differ, follow the discovered names instead of retrying the remembered shape.
+
+---
+
+## 0.3 Validation before reporting done
+
+Before reporting any Parallax workflow complete:
+
+1. **Capability integrity** — confirm every invoked callable came from this session's discovery result and every request conformed to that callable's live input schema. A remembered namespace or a previously valid payload is not evidence of current availability.
+2. **Data integrity** — confirm the MCP batch returned real data. Empty ≠ done. Retry only the affected call when §0.1 classifies the failure as transient; never replay a full expensive batch by default.
+3. **Field-request integrity** — after any `analyze_portfolio` call that supplies `fields=`, read `result._meta.invalid_fields`. A non-empty value is a deterministic caller mismatch, even if the envelope says `success: true`. Do not retry with guessed field names. Make a corrected call only when the live schema or response metadata explicitly identifies accepted values; otherwise use discovered fallback capabilities for the affected sections and record the coverage loss. `_parallax/response-schemas.md` is historical shape guidance only.
+4. **House-view integrity** — when a house view is active, confirm the `view_status` `banner` string actually appears in the rendered output (verify its presence — don't assume it rendered). Per loader.md §2 "Load-time validation" item 6, the **hard-block** states `malformed` / `expired` (tilts do NOT apply) and the **soft** state `critical` (tilts apply; expiry imminent) all surface their banner verbatim — never swallow one to make a workflow look clean.
+
+Integrity failures are flagged explicitly in the output, not omitted. This is the Parallax-domain instance of the completion-claim discipline in `CLAUDE.verification.md` ("a passing metric is necessary, not sufficient"; verify, don't eyeball).
+
+---
+
+## 1. RIC Resolution
+
+Parallax tools require Reuters Instrument Codes (RICs). When the user provides a plain ticker:
+
+1. Call `get_company_info` with the plain ticker first — it often resolves automatically.
+2. If empty result, retry with the most likely exchange suffix from this table:
+
+| Exchange | Suffix | Example | Clues |
+|---|---|---|---|
+| NASDAQ | `.O` | `AAPL.O` | US tech, biotech |
+| NYSE | `.N` | `JPM.N` | US financials, industrials |
+| London | `.L` | `SHEL.L` | UK companies |
+| Frankfurt / Xetra | `.DE` | `SAP.DE` | German companies |
+| Paris | `.PA` | `MC.PA` | French companies |
+| Tokyo | `.T` | `7203.T` | Numeric codes (4 digits) |
+| Hong Kong | `.HK` | `0700.HK` | Numeric codes (4 digits, context: China/HK) |
+| Taiwan | `.TW` | `2330.TW` | Numeric codes (4 digits, context: Taiwan) |
+| Sydney | `.AX` | `BHP.AX` | Australian companies |
+| Oslo | `.OL` | `YAR.OL` | Norwegian companies |
+| Korea | `.KS` | `005930.KS` | 6-digit numeric codes |
+
+**Resolution order for ambiguous plain tickers:** Try `.O` → `.N` first (US most common). For numeric tickers, use digit count + context: 4 digits → `.T` or `.HK` or `.TW` depending on context; 6 digits → `.KS`.
+
+Only escalate to the user if resolution fails after 2 attempts with the most likely suffixes.
+
+**Peer symbol RIC resolution:** Peer symbols from `get_peer_snapshot` may lack exchange suffixes (e.g., `GM` instead of `GM.N`). Resolve them using the exchange suffix table above before passing to downstream tools.
+
+**Fund/OEIC resolution fallback:** If resolution still fails after the standard 2 attempts above, and the identifier pattern suggests a fund, OEIC, or investment trust (an ISIN-style code, or a name containing a `Fund`/`OEIC`/`Trust`/`Acc`/`Inc` share-class marker), do not surface a raw resolution error. State plainly: "This looks like a fund/OEIC — coverage is listed equities and ETFs only; funds are not covered," and continue processing any remaining symbols. Skills that JIT-load this section inherit the fallback with no per-skill edit required.
+
+---
+
+## 2. Symbol Cross-Validation
+
+Scoring tools (`get_peer_snapshot`, `get_score_analysis`, `quick_portfolio_scores`) may occasionally return data for a different company than intended — especially for numeric codes (`.HK`, `.T`, `.TW`, `.KS`) but also for alphabetic tickers on any exchange. `analyze_portfolio` is not a scoring tool, but its per-holding rows resolve symbols the same way and are subject to the same mis-mapping, so they belong in the same check.
+
+**After any scoring call:**
+
+1. Cross-check the company-identity field against the `get_company_info` result for the same symbol. **The field differs per tool** — there is no single `name` field shared across scoring tools, and reading the wrong one silently validates nothing:
+
+   | Tool | Identity field |
+   |---|---|
+   | `get_company_info` | `data.name` — the oracle the other checks compare against. Nested under a `data` object (confirmed live, 2026-10-05); there is no top-level `name`, and the market/region field is `data.market`, never `country` — `data` has no `country` key at all |
+   | `get_peer_snapshot` | `target_company`, **top level**. There is no `name` field anywhere in the response — each peer's name is `comparison[].company` |
+   | `get_score_analysis` | no company name in the response — verify `data[0].symbol` matches the requested RIC instead |
+   | `quick_portfolio_scores` | `holdings_analyzed[].company_name`, per holding row |
+   | `analyze_portfolio` | no top-level identity field and no peer rollup. Per-holding names are `latest_holdings[].name` and `company_contribution[].name`, matched to `get_company_info` by the row's `ric`. Both blocks are caller-selected via `fields=`, so a holding with no row in whichever block was requested cannot be checked here. Fall back to the `get_peer_snapshot` row above if the workflow calls that tool — `target_company` is an independent name. Otherwise record the holding UNCHECKED and surface it as a coverage gap; never treat the absent comparison as a pass, and never substitute `get_score_analysis`'s `data[0].symbol`, which is the RIC you sent and agrees by construction (see step 2) |
+
+2. **Normalize both names before comparing.** The check exists to catch a wrong-company mapping for a RIC, not to police punctuation, and the tools disagree on name-of-record formatting: `analyze_portfolio` returns `Apple Inc` where `get_company_info` returns `Apple Inc.` for the same RIC. A raw string comparison therefore flags a mismatch on almost every holding, and a check that fires on every row gets ignored or switched off — the same end state as a check that never fires. Apply to each side, in order, repeating until the string stops changing:
+
+   1. Case-fold and collapse runs of internal whitespace to a single space.
+   2. Strip trailing punctuation.
+   3. Strip a trailing corporate-form token: `inc`/`incorporated`, `corp`/`corporation`, `ltd`/`limited`, `co`/`company`, `ag`/`aktiengesellschaft`, plus `plc`, `sa`, `nv`. Compare token-wise, matching the candidate token with its own periods and commas removed so `S.A.` folds the way `SA` does — never as a substring, or `Maytag` loses its `ag`. Every abbreviation is listed with its expanded form on purpose: a set carrying `ltd` but not `limited` folds `X Ltd` to `x` while leaving `X Limited` as `x limited`, which is the false mismatch this step exists to prevent. `plc`, `sa` and `nv` expand to several words, which a single-token strip cannot absorb, so a spelled-out variant of those three still diverges.
+
+   Repeat because one strip exposes the next: `Samsung Electronics Co., Ltd.` needs the `ltd` strip before the comma it leaves behind is reachable. Compare the normalized forms. `Apple Inc` vs `Apple Inc.` is a formatting difference and MUST NOT flag; `Apple Inc` vs `Apple Hospitality REIT` is a genuine divergence and MUST flag. The RIC cannot serve as the check — it is the input to both calls, so it agrees by construction, which is why the name is the only independent signal and why this rule is written down rather than left to judgement. **If either side normalizes to the empty string** (a name made of nothing but a corporate-form token, e.g. "Inc." or "Ltd") the comparison is undecidable, not a match — `"" == ""` must NOT be read as identity confirmed. Record the holding UNCHECKED per step 1's coverage-gap rule instead. `_parallax/scripts/contract_validator.py` carries `normalize_company_name()`, an executable statement of the steps above, and `names_match()`, which applies this empty-string guard and returns `None` for the undecidable case — used by the contract tests.
+3. If the normalized names diverge, warn the user clearly and treat `get_company_info` as the source of truth.
+4. Do not present scores from a mismatched company as belonging to the intended security.
+
+Field names above were confirmed against live tool responses on 2026-08-11. Two are easy to get wrong from intuition: `get_peer_snapshot` exposes no `name` field at all — the target is `target_company` at top level and each peer's name is `comparison[].company`, so a name-based check there reads nothing; and `get_score_analysis` likewise carries no company name, so its check must compare `data[0].symbol` against the requested RIC.
+
+**For portfolio workflows (`PARALLAX_LOADER_V2=1`):** Use per-holding `get_peer_snapshot` aggregation in parallel with `get_company_info` cross-validation. This is the **primary robust path**. Do NOT rely on `quick_portfolio_scores` for portfolio factor profiling when a house view is active.
+
+**For portfolio workflows (Legacy/V1):** Cross-check company names for each holding in the `quick_portfolio_scores` response. If any holding maps to the wrong company, re-derive its score from that holding's cached `get_peer_snapshot` `comparison[]` row (no new call): the `is_target: true` row when that snapshot passed cross-validation, otherwise mark its scores unavailable; a snapshot that failed cross-validation is never a score source. Note the discrepancy.
+
+**Hong Kong / numeric codes require extra caution:** HK uses numeric codes that can collide across H-shares, red chips, and local listings. Always cross-validate `.HK`, `.T`, `.TW`, `.KS` symbols.
+
+---
+
+## 3. Parallel Execution
+
+Default execution mode is **parallel where dependencies allow**. Claude Code supports concurrent MCP tool calls within a single response turn.
+
+**Batch your calls:**
+- **Independent calls** fire simultaneously: `get_company_info`, `get_peer_snapshot`, `get_financials`, `get_score_analysis`, `get_stock_outlook` (all aspects), `get_news_synthesis`, `check_portfolio_redundancy`, `quick_portfolio_scores`
+- **Dependent calls** wait for prior results: `get_assessment` (needs all findings), `macro_analyst` (needs `list_macro_countries` result + company info for market reasoning), `build_stock_universe` (needs analysis of what to replace)
+
+**Example single-stock batch:**
+```
+Batch A (parallel): get_company_info + get_peer_snapshot + get_financials + get_score_analysis + get_stock_outlook (×4 aspects) + get_news_synthesis
+Batch B (after A):  list_macro_countries → macro_analyst per relevant market
+Batch C (after B):  get_assessment (synthesis prompt with all data)
+```
+
+---
+
+## 3.1 Concurrent Annotation Pattern
+
+When a skill produces a ranked output (e.g., Top Picks) and also needs to attach annotations derived from already-known rank inputs (e.g., macro tags, regime classification), the annotation step **must run concurrently with downstream consumers of the rank, never gate them**.
+
+**Reference implementation:** `thematic-screen/SKILL.md` Phase C1.5.
+
+**Rule:** annotation steps that derive from data already available at the moment rank is established MUST NOT block subsequent steps that consume rank order. In thematic-screen the pattern is:
+- C1 establishes rank (composite scoring + ground-truth check)
+- C1.5 annotates with macro_tag — runs concurrently with C2 and C3
+- C2 calls `export_peer_comparison` on the highest-scored trusted row
+- C3 calls `get_financials` on top-3 trusted picks
+
+C1.5 does NOT gate C2 or C3 because C2 and C3 only need the rank C1 produced — they do not need C1.5's annotations.
+
+**Non-negotiable constraints when copying this pattern:**
+
+1. Annotations MUST NOT change rank order. Rank stays composite-driven from the upstream scoring step to preserve auditability.
+2. Annotations MUST NOT alter membership (do not drop, filter, or re-select rows based on annotation values).
+3. Downstream consumers (chained skills, exporters, dashboards) MUST also preserve all annotated rows in their output — annotation tags are read-only, NEVER a filter predicate.
+4. The downstream-row-preservation contract is a parallel obligation to the section-header parsing contract; both must be honored by any consumer of an annotated output.
+
+**Anti-pattern:** introducing a sort or filter step driven by annotation values. Re-ranking by annotation breaks auditability and inverts the purpose of separating rank from annotation in the first place.
+
+---
+
+## 4. Graceful Fallback Patterns
+
+### 4.0 Gates fail closed; display sections degrade
+
+Everything else in §4 is a **display-section** rule: a tool fails, you mark that section unavailable, and the rest of the report still stands. That is the correct default for narrative and analysis output.
+
+It is the **wrong** default for a gate. A gate is any step whose output is a pass/fail, include/exclude, or eligible/ineligible verdict on a named security — Shariah compliance, a stated eligibility screen, a hard mandate constraint. For a gate, "continue without the data" silently converts *unknown* into *pass*, and the failure concentrates exactly where the data is thinnest: the obscure, poorly-covered names a screen exists to catch.
+
+**Rule.** When a tool call that feeds a gate fails, returns empty, or returns null/missing values for a gated field, after any retry permitted by §0.1:
+
+1. The name's verdict is **`UNVERIFIED`** — never `pass`, never `fail`, and never silently omitted.
+2. `UNVERIFIED` names are **excluded from any "eligible" / "compliant" / "passes" list** and from aggregates computed over that list.
+3. The verdict table carries `UNVERIFIED` as a **rendered state with the reason** (which field or tool was unavailable), so the gap is visible to the reader rather than inferred from an absence.
+4. Never substitute model judgement for the missing value. If a gated field is unavailable, it is unavailable — do not estimate it from sector, peers, or narrative text. (`parallax-thematic-screen` applies this shape to market exposure: on a missing `country`, set the neutral tag and continue, "never infer market from sector or LLM judgement.")
+
+Absence is not a pass. A reader who cannot distinguish "screened and cleared" from "could not be screened" has been given a false negative on risk.
+
+### Fast-response tools
+`get_company_info`, `get_peer_snapshot`, `get_score_analysis`, `get_financials`, `get_stock_outlook`, `explain_methodology`, `list_macro_countries`, `macro_analyst`
+
+→ Invoke only when the logical capability is present in live discovery. Retry once for a transient transport failure or empty success. Do **not** retry a tool-not-found or schema-validation failure; use another discovered capability or mark the section **"Data unavailable"** and continue. **If the failed call feeds a gate, apply §4.0 instead** — "mark unavailable and continue" would turn an unknown into a pass.
+
+Note: "fast-response" refers to latency, not token cost. Token costs vary per tool — see `token-costs.md` for the full table. In particular, `macro_analyst` returns quickly but costs 5 tokens per call.
+
+### Async tools
+`get_news_synthesis` (~30-90s), `get_assessment` (~30-90s), `get_technical_analysis`, `get_financial_analysis` (~2-5min), `get_stock_report` (~1-2min)
+
+→ Do not retry immediately. If they fail or time out, note **"Analysis pending — service temporarily unavailable"** and continue.
+
+### Stock outlook coverage
+`get_stock_outlook` has 4 aspects: `analyst_targets`, `recommendations`, `risk_return`, `dividends`.
+- **2+ aspects return data** → Proceed normally, note missing aspects.
+- **0-1 aspects return data** → Flag: "Insight card may be materially incomplete for this security."
+
+### Portfolio scoring coverage
+If `quick_portfolio_scores` (Legacy/V1) covers **<50% of holdings by weight**, execute mixed-exchange fallback:
+1. Split holdings by exchange suffix.
+2. Score each exchange group separately.
+3. Merge into portfolio-weighted result.
+4. Note: "Scoring used split-and-merge due to partial coverage."
+
+**For `PARALLAX_LOADER_V2=1` (Preferred path):** When live discovery exposes it, use parallel per-holding `get_peer_snapshot` aggregation. If a specific holding returns "No scores available," retry that holding once. A schema-validation failure is not retryable. If the call still fails, skip the holding's contribution to the weighted average and report degraded coverage.
+
+If `check_portfolio_redundancy` covers **<60% of holdings**, flag redundancy results as **"Low confidence — limited coverage."**
+
+### Concentration flag caveat
+For portfolios with fewer than 7 holdings, concentration flags (>15% single, >45% top-3) are structural and reflect portfolio size, not poor diversification. Note them but don't alarm.
+
+### Empty-output handling
+If any tool returns successfully but with no output content (not an error, just empty), treat it as a transient failure and retry that call once. Do not replay sibling calls and do not treat empty-but-successful as valid data. When the empty response feeds a gate, the post-retry outcome is §4.0 `UNVERIFIED`, not an unmarked omission.
+
+---
+
+## 5. News Async Handling
+
+`get_news_synthesis` takes 30-90s and should never block output assembly.
+
+- Fire it in parallel with other data calls.
+- Begin assembling output from instant-response tools immediately.
+- Insert news section when it resolves.
+- If still pending when output is ready, include `"news": "pending"` placeholder.
+
+---
+
+## 6. Macro Context Reasoning
+
+When analyzing a single stock or portfolio, determine relevant macro markets:
+
+1. **Home market** — Derive from RIC suffix (`.O`/`.N` → US, `.T` → Japan, `.HK` → China/HK, etc.)
+2. **Revenue geographies** — If `get_company_info` mentions major revenue from other regions, include those.
+3. **Commodity exposures** — Energy/materials companies: add commodity-relevant markets.
+4. **Supply chain** — Known dependencies (e.g., semiconductors → Taiwan, China).
+
+**Procedure:**
+1. Call `list_macro_countries` to get covered markets.
+2. Identify which covered markets are relevant (reasoning, not just mechanical mapping).
+3. Call `macro_analyst` with `component: "tactical"` for each relevant market.
+4. Cap at **3 markets** for single-stock, **3 unique markets** for portfolios (to manage latency).
+
+If no covered markets are relevant, return `"macro": "unavailable"` — don't force irrelevant context.
+
+**Macro fallback from RIC suffixes:** If `list_macro_countries` fails, derive home market(s) from RIC suffixes: `.O`/`.N`/`.K` = United States, `.T` = Japan, `.HK` = Hong Kong, `.L` = United Kingdom, `.SI` = Singapore, `.DE` = Germany. Use the exchange suffix table in Section 1.
+
+---
+
+## 7. Capability Index — "I want to do X, which skill/tool?"
+
+External integrators and skill authors frequently ask for capabilities that have existed under a different name. Use this index for semantic orientation only, then confirm the capability and its schema through live discovery. A row that says a capability is absent or uses a particular tool is a dated observation, not authority over the current runtime.
+
+### Portfolio analytics
+
+| User-phrased need | Use this | Notes |
+|---|---|---|
+| Stress book / scenario analysis | `/parallax-scenario-analysis` skill | Forward-looking event analysis (rate shock, USD shock, oil shock, regime replays). Skill orchestrates `get_assessment` + macro + news. NOT a REST primitive — talk track lives in skill layer. |
+| Drawdown attribution ("why am I down X%?") | `/parallax-explain-portfolio` skill | Decomposes drawdown into market-regime / factor / stock-specific components via score-vs-price divergence. ~80 billable tokens at 10 holdings (`_parallax/token-costs.md`). |
+| Per-holding return contribution | `analyze_portfolio` → `company_contribution` field | Returns `total_pl`, `contribution_pct`, `return_pct`, `avg_weight` per holding. **NOTE:** This is RETURN contribution, NOT risk contribution (no marginal vol / component VaR). For risk decomposition, no current capability — flag as gap. **`contribution_pct` is a return contribution: `row.total_pl / portfolio_parameters.initial_value`, rows sum to `portfolio_summary.total_return`.** `contrib_bps = contribution_pct × 10000`; rank and take sign directly from `contribution_pct`. An older server build returned a P&L-share basis instead (rows summing to 1.0, needing `× total_return` to convert) — callers without a client-visible version signal for a given call pattern should guard against a reversion: if `sum(contribution_pct) ≈ 1.0` rather than `≈ total_return`, the share basis is back; apply the `× total_return` conversion and flag it. See `response-schemas.md`. |
+| Portfolio drawdown statistics | `analyze_portfolio` → `drawdown_analysis` field | Includes `current_drawdown`, `max_drawdown`, underwater periods, durations, recovery days, and a per-day timeseries. See `response-schemas.md` for nested structure. |
+| Rolling metrics (Sharpe, vol, beta, correlation) | `analyze_portfolio` → `rolling_metrics` field | Three windows: `window_30d` / `window_60d` / `window_90d`, each with daily timeseries. See `response-schemas.md`. |
+| Concentration / effective N / HHI | `analyze_portfolio` → `concentration_metrics` field | `effective_positions` is weight-based (1/HHI on weights). Risk-weighted Effective N is not currently exposed. |
+| Score time series (per symbol) | `get_score_analysis` with `weeks` parameter | Returns weeks-windowed factor history. Default 52 weeks. **Portfolio-level score history is not currently exposed** — must aggregate per-holding client-side. |
+| Sector/market overlap, redundancy | `check_portfolio_redundancy` | Pairwise overlap + clustering at the portfolio level. |
+| Client SAA / policy drift and tilt-vs-mandate diagnostic | `/parallax-client-review` with `policy=` | Strategic-allocation drift, band status, and tactical-alignment diagnostics against a supplied client policy. Contract in `_parallax/client-policy/policy-loader.md`. Diagnostic only — no target-weight or trade math. |
+| Build/tilt a stock universe | `build_stock_universe` (V2: per-tilt parallel calls per §0) | Free-text query, sector-scoped. |
+
+### Multi-stock / consensus
+
+| User-phrased need | Use this | Notes |
+|---|---|---|
+| Multi-investor consensus across factor-profile lenses | `/parallax-ai-consensus` skill | Orchestrates Buffett / Klarman / Greenblatt / Soros / PTJ profile skills. **Skill-only by design** — multi-profile orchestration with judgment fusion does NOT translate to a REST contract without freezing the ensemble. |
+| Single-investor profile factor scoring | `/parallax-ai-buffett`, `-ai-soros`, `-ai-greenblatt`, `-ai-klarman`, `-ai-ptj` | Each is a standalone profile skill. Profiles ARE proprietary — see `_parallax/AI-profiles/`. |
+| Peer comparison table | `get_peer_snapshot` | Symbol → `target_company` (top-level) + peer rows (`comparison[].company`). |
+
+### Symbol resolution & search
+
+| User-phrased need | Use this | Notes |
+|---|---|---|
+| Plain ticker → RIC | Pass through any tool — most resolve automatically; otherwise apply §1 suffix table | `analyze_portfolio` already routes through `bulk_resolve_symbols` server-side. A symbol returned in `data_quality.missing_rics` is missing from the IDENTIFIERS table — escalate it as a data-coverage issue, not a tool failure (see `response-schemas.md` → `data_quality`). **This escalation only reaches you when `fields=` is omitted**, which is the call shape that returns every block. A call supplying `fields=` gets exactly the blocks it names, so it must add `data_quality` to its own list to receive the signal at all; no current skill's field list does, and those calls have no `missing_rics` to read. |
+| Fuzzy / typo-tolerant search ("apple" / "semiconductor") | `search_stocks` MCP tool | Whoosh-backed; supports market/sector filters. |
+| Validate a single symbol | `validate_symbol` MCP tool (if exposed) — otherwise `get_company_info` | Returns resolved RIC. |
+
+### Reports & analysis
+
+| User-phrased need | Use this | Notes |
+|---|---|---|
+| Full Parallax research report (PDF-shaped) | `get_stock_report` (async, ~1-2min) | Use `check_job_status` to poll. |
+| Forensic earnings-quality screen | `/parallax-earnings-quality` skill | Accruals, revenue recognition, manipulation risk. |
+| Full Palepu-framework due diligence | `/parallax-due-diligence` skill | Financials + ratios + macro context + Parallax research report. |
+| Long/short pair construction | `/parallax-pair-finder` skill | Given one leg, suggests counter-leg from peers; given both, reports residual exposure. |
+
+### Reverse-lookup: "I have a Parallax response field, what is it?"
+
+If you see a field in a response and don't know what it means, inspect the live discovered schema/metadata first, then use `response-schemas.md` for historical nested-shape guidance (`rolling_metrics`, `drawdown_analysis`, `concentration_metrics`, `company_contribution`, `portfolio_scores`, `data_quality`). The reference file never overrides a live schema or response.
+
+---
+
+## 8. Marketing & Competitive Integrity
+
+For all marketing artifacts (vs-pages, alternative guides, feature comparisons), the **Autoreason Adversarial Loop** is the mandatory quality gate.
+
+1. **Evidence-First**: Every claim about a competitor must be cross-referenced against the `competitor-intelligence` schema.
+2. **Adversarial Audit**: High-stakes content must be filtered through a **Strawman** persona to detect and remove "marketing slop" (hyperbolic adjectives) and unsubstantiated claims.
+3. **Objective Nuance**: Every comparison must include a "Who should choose [Competitor]" section to maintain institutional credibility.
+4. **Staleness Check**: Competitive claims are dated. If the teardown data is >180 days old, a fresh verification is required before publishing.
+
+---
+
+## 9. Disclaimer
+
+### §9.1 Standard disclaimer
+
+Every workflow output must end with a disclaimer. Use the exact wording from the skill's Output Format section if one is specified, otherwise use:
+
+*"This is informational analysis based on Parallax factor scores, not investment advice. All outputs should be reviewed by qualified professionals before any investment decisions."*
+
+**Consumer skill reference pattern:** Skills using the standard wording MUST render it by reference, not by inlining the text. Example Output Format directive: `Render the standard disclaimer verbatim from parallax-conventions.md §9.1.` Inlining creates drift risk — the wording above is the single source of truth, and a future edit propagates to all consumer skills automatically. Skills with bespoke disclaimers (e.g., scenario-analysis's scenario-based wording, pair-finder's liquidity caveat, concierge's router wording) keep their full wording inline in their own Output Format section per the first paragraph of this section — the skill, not this file, owns bespoke wording. House-view consumers substitute the view-aware disclaimer per `house-view/loader.md` §5 rule 5 when an active view is loaded.
+
+### §9.2 AI-interaction disclosure
+
+Every workflow output that contains AI-generated narrative, synthesis, or recommendations MUST render the following banner immediately above the §9.1 disclaimer (or immediately above the view-aware disclaimer when an active house view is loaded — see house-view/loader.md §5 rule 6). This applies whether or not a white-label client view is active, and whether or not a house view is loaded. The wording is a working banner pending counsel sign-off:
+
+> *AI-assisted output. Quantitative data — factor scores, financials, peer mappings, technicals, price series — is from Parallax's deterministic pipelines. Qualitative content — news synthesis, macro commentary, AI assessments, narrative framing, and recommendations — is LLM-generated, either by Parallax's MCP services (news, macro, assessment) or by the orchestrating model (narrative and recommendations). See the 'About This Report' footer for this output's branding and data-basis state. Verify any specific statement before acting.*
+
+<!-- Maintainer note: this is a working banner pending final review. It intentionally distinguishes deterministic quantitative pipelines from LLM-generated qualitative content and keeps the banner URL-free; do not add a methodology URL. -->
+
+**Why §9.2 is mandatory:**
+
+- **EU AI Act Art 50(1)** (effective 2 August 2026) — providers of AI systems generating synthetic content must mark outputs as artificially generated; the "AI-assisted output" label at the head of the §9.2 banner satisfies this marking obligation.
+- **EU AI Act Art 50(2)** — deployers of AI systems intended to interact directly with natural persons must inform users they are interacting with an AI; the "AI-assisted output" label satisfies this.
+- **HKMA GenAI Circular (19 August 2024)** + **HKMA Consumer Protection circular on GenAI (7 November 2024)** — authorised institutions must disclose the purposes and limitations of GenAI in customer-facing applications, monitor outputs, and let customers opt out / request human intervention.
+- **SFC Circular on Use of Generative AI Language Models (12 November 2024)** — for high-risk use cases (investment recommendations, advice, or research), licensed corporations must provide PROMINENT and CONTINUOUS disclosure that users are interacting with AI and that output may not be accurate. Parallax consumer-skill outputs fall in this high-risk category.
+- **FCA Consumer Duty (PS22/9)** + **April 2025 FCA AI Update** + **PRIN 7** — the UK has no AI-specific rules; AI-generated client communications must satisfy the existing "clear, fair, and not misleading" obligation and Consumer Duty's consumer understanding outcome.
+- **MAS FEAT principles** (2018, reaffirmed 2022) + **MAS AI Risk Management Guidelines** (consultation 13 November 2025 – 31 January 2026; final issuance expected 2026 with a 12-month transition period; AI Risk Management Toolkit published March 2026 under Project MindForge phase 2) — transparency required for customer-facing AI in financial advice and regulated activities.
+- **SR 11-7** (US Fed model risk guidance) — conceptual-soundness implication: a client must be able to distinguish deterministic model output (CG scoring pipeline) from the LLM synthesis layer.
+
+**§9.2 scope:** The §9.2 banner is **content-level** disclosure. **Firm-level UI obligations** — opt-out / human-intervention option (HKMA), prominent UI placement and continuous-disclosure cadence (SFC), accessibility considerations — remain the responsibility of the deploying institution and are NOT preempted by rendering §9.2 in skill output.
+
+**Exemption:** Skills that produce configuration artifacts rather than direct client-facing analysis (currently `parallax-white-label-onboard` and `parallax-make-house-view`) are exempt from rendering §9.2. The rationale is narrow: such skills must (a) emit YAML/audit artifacts rather than a finished client deliverable, AND (b) gate any LLM-generated content behind an explicit operator confirmation step before that content can flow to downstream consumer skills. `parallax-white-label-onboard` qualifies because its Step 2b voice extraction is LLM-driven, but the resulting voice profile is reviewed and confirmed by the operator at Step 5 before being written to `~/.parallax/client-branding/` for downstream skills to consume — at which point the downstream skill renders §9.2 in its own output. `parallax-make-house-view` qualifies because it emits `view.yaml` + `prose.md` configuration artifacts whose LLM-synthesized content is gated by the shared Step 5 confirmation gate (`gate_present.py` — no save path bypasses it) before any downstream consumer can load the view — and every downstream consumer renders §9.2 in its own output per loader.md §5 rule 6. A future skill that emits LLM-generated content without an equivalent operator gate does NOT qualify for exemption, even if it produces "config" — the gate, not the artifact format, is the load-bearing condition. In particular, `parallax-judge-house-view` does NOT qualify: it emits an LLM-as-judge analysis report (not a config artifact) read directly by a natural person, so its report renders §9.2. `parallax-load-house-view` also qualifies: it emits `view.yaml` configuration artifacts, and any LLM-extracted content is gated by its own Step 5 operator confirmation step before that content flows to downstream consumers — each of which renders §9.2 in its own output. Adding a skill to `_NINE_TWO_EXEMPT_SKILLS` in the test gate requires updating this exemption text in the same PR; entries are full skill directory names (`parallax-*`).
+
+**Consumer skill reference pattern:** Skills MUST render the §9.2 banner by reference, not by inlining the text. Example Output Format directive: `Render AI-interaction disclosure per parallax-conventions.md §9.2 immediately above the disclaimer.` Inlining the banner text creates drift risk — when counsel finalizes the wording (or when the attribution API lands), the canonical §9.2 entry is edited once and all consumer skills propagate automatically.
+
+---
+
+## 10. Render Gate
+
+Portfolio-family skills (`client-review`, `morning-brief`, `portfolio-builder`, `portfolio-checkup`, `rebalance`, `explain-portfolio`, `watchlist-monitor`), the desk-level skill `desk-call-list`, and the single-stock report skills (`should-i-buy`, `score-explainer`, `deep-dive`, `due-diligence`, `peer-comparison`, `earnings-quality`, `credit-lens`), and the discovery skills (`thematic-screen`, `macro-outlook`, `country-deep-dive`, `halal-screen`, `scenario-analysis`, `pair-finder`, `stress-test-thesis`, `weekly-themes`) MUST pass their drafted report through the shared deterministic render gate as their **MANDATORY last step**. `SKILL_ANCHORS` in `render_gate.py` is the authoritative registry of gated skills; `test_render_gate.py` enforces it against each SKILL.md in both directions. When adding a gated skill, update this list alongside the registry — the test checks the registry and the SKILL.md files, not this prose.
+
+### 10.1 Why it exists
+
+Orchestrating models often emit "pre-report scaffold" — step-completion notes, scratch computation, cross-validation status, white-label config probes, or "no active house view" narration. This scaffold:
+1.  **Clutters the output** for the end-user.
+2.  **Weakens the white-label illusion** by surfacing the underlying model's "thinking."
+3.  **Causes drift** across skills when each tries to implement its own "strip to header" logic (some stripping too much, e.g. the house-view banner).
+
+### 10.2 Operation
+
+The gate (`_parallax/render_gate.py`) is a pure-stdlib Python script. It deterministically strips everything before the first recognized "anchor" block:
+- **Common anchors:** House View Preamble banner, Branding Header logo, and Ground-truth Integrity table.
+- **Skill anchors:** The specific skill's title, first rendered section, or Branding Header text.
+
+**Degraded-state notes** (e.g. `Analysis pending — service temporarily unavailable` or `Rolling metrics could not be computed`) found in the stripped preamble are **hoisted** to a status line at the bottom of the report, ensuring no tool-failure visibility is lost.
+
+### 10.3 Usage in SKILL.md
+
+Every gated skill carries a `### Render — deterministic gate` heading (spine form: `### Step 6 — Render (deterministic gate, mandatory)`, per the authoring conventions' "Canonical step spine" section; both forms carry the same gate command) before its **Output Format** section. The step has two parts:
+
+1. `write-artifact` the complete drafted report to a new draft path: `<cwd>/.parallax-render/<skill-key>-<8 random hex>.md`, written as a literal path, either absolute (the session's working directory, resolved) or relative to it (`.parallax-render/<skill-key>-<8 random hex>.md`), with no `~`, `$VAR` or `${…}`. The draft goes in `.parallax-render/` and nowhere else, and `render_gate.py` is the only check: never write or run a script of your own in its place. Use a fresh random suffix on every run. If that file already exists, pick another suffix; never read or overwrite an existing draft, which may belong to another session. Write the draft only when the report is complete, and write it once: never modify it in place afterward, not even to fix one word. If the report needs a change after the draft is written, run the step 2 command on that draft unchanged (the gate reads and deletes it; ignore that output), then write the corrected report to a fresh path and run the command on it. The final answer is the gate output for the final draft.
+
+   <!-- host-note -->
+   Claude Code: write the draft with the `Write` tool only. Never change it with `Edit` or `MultiEdit`.
+   <!-- /host-note -->
+2. `run-shell` exactly this one-line command, with `<draft-path>` replaced by that same literal path:
+
+```bash
+python3 "<skill-dir>/../_parallax/render_gate.py" --skill <skill-key> --input "<draft-path>"
+```
+
+The gate accepts only a path of that shape and refuses any other file. It reads the draft, deletes it (and the `.parallax-render` directory once empty), and writes the cleaned report to stdout. The report never passes through the shell command. Keep the command to that one line: no heredoc, no pipe, no `$(…)` or `${…}`. Claude Code denies any command containing a shell expansion, and it refuses any command over 10,000 characters, heredoc body included, even in its sandbox; a report embedded in the command fails on both counts once it is long.
+
+If the host has `run-shell` but no `write-artifact`, or the draft write is denied, feed the report on stdin instead: `python3 "<skill-dir>/../_parallax/render_gate.py" --skill <skill-key> <<'REPORT'`, then the report, then a line containing only `REPORT`. This fallback is for hosts without Claude Code's command checker. On Claude Code it works only for reports well under 10,000 characters that contain no `{` followed by a quote. A gate error (`[render-gate] ERROR:` on stderr, nothing on stdout) has two cases. If the command itself was wrong (wrong `--skill`, or a path not of the documented shape), the gate refused it before reading the draft: re-run the correct command on the same draft. Otherwise the draft was not usable: write the report once more to a fresh path and re-run. If the second attempt also fails, follow the render-gate row of §14.3 but write `Render gate: not applied (gate error)` in About This Report. The draft holds the full report, client data included, until the gate deletes it. If the working directory is synced (Dropbox, iCloud) or a git work tree, the draft can be uploaded or committed in that window, and a draft left by an interrupted session stays there; a `.parallax-render/` directory is safe to delete.
+
+The skill's **entire final message** is exactly that command's stdout, or, when a conditional Translate step follows (§15), the sole input to that step; translated output is not re-gated. `render_gate.py` uses a fail-open design: if no anchor is found, the input is returned unchanged, ensuring the gate never destroys a report it cannot positively locate. The fail-open path also writes one `[render-gate] WARN: no anchor for skill='<key>'; returned unchanged` line to **stderr**; stdout is untouched. That line is diagnostics — never include it in the reply and never feed it to a downstream translate step. It means the drafted opening drifted from the skill's documented Output Format start: the gate has already deleted that draft, so write the report with the corrected opening to a fresh path and run the gate on it. A skill listed in `WORD_CAPS` in `render_gate.py` can also get a `[render-gate] WARN: body has N words, over the …-word cap` line; it gets the same diagnostics handling, and that skill's SKILL.md states the response.
+
+---
+
+## 11. Verdict Sensitivity
+
+### §11.1 Principle
+
+Any skill that renders a threshold-driven verdict, screen, badge, or flag — a rendered output whose classification is determined by comparing a numeric input against a published numeric cutoff — MUST also state, in third person and grounded purely in arithmetic, which 1-2 inputs sit nearest their boundary and what would flip the verdict. This is a restatement of deterministic threshold logic already computed during the workflow: it introduces no new claim, no forecast, and no first-person voice. It is not advice — it never says whether an input *should* move, only what value *would* flip the classification if it did.
+
+**Surface label:** Skills with a categorical verdict (match / partial / no-match, PASS / FAIL, GREEN / AMBER / RED, Healthy / Monitor / Attention) render a line labeled **"Verdict sensitivity"**. `parallax-score-explainer`'s existing "What Would Change It" line is the grandfathered precedent for continuous-score skills that predate this section — it satisfies the same principle in different wording and MUST NOT be reworded to match.
+
+### §11.2 What qualifies as "purely arithmetic"
+
+A verdict is eligible for §11 rendering only if:
+
+1. Every input feeding the verdict has a **published, fixed numeric cutoff** stated in the skill's own spec (not inferred, not a model judgment call).
+2. The distance from an input's current value to its nearest cutoff can be computed with subtraction / comparison alone — no forecasting, no counterfactual data pull.
+3. The "what would flip it" statement names only inputs and cutoffs already surfaced in the rendered table / flags — it must not introduce a new metric.
+
+Discrete or qualitative verdicts (industry classification match, telemetry basket membership, technical trend direction, or any compound AND/OR-gated channel status) do NOT qualify. Forcing an arithmetic distance onto a qualitative or compound criterion is a grounding-failure risk — the very failure mode this section exists to prevent — and is FORBIDDEN.
+
+### §11.3 Selecting which input(s) to surface
+
+1. Compute `|current_value − nearest_cutoff|` for every qualifying input.
+2. Report the 1 input (or, if two are comparably close, 2) with the smallest distance.
+3. **Distance-0 case (the input sits exactly AT its cutoff):** state that fact explicitly — e.g., "Value 4 is at the ≥ 4 boundary" — and state the flip direction ("a Value read below 4 would move this leg from PASS to FAIL"). Distance 0 is the MOST sensitive case, not a degenerate one to round away.
+4. Never fabricate a flip number for an input with no published cutoff (the §11.2 gate). If none of the rendered inputs have a published cutoff, omit the Verdict Sensitivity line entirely rather than force one.
+
+### §11.4 Forbidden language
+
+Verdict Sensitivity is a restatement of arithmetic, not a recommendation. The forbidden-language list from `_parallax/AI-profiles/output-template.md` §5 applies without exception: no "buy", "sell", "would buy", "recommend", "should", or advice-framed "consider adding / trimming." Correct: *"Value 4 is at the ≥ 4 boundary; the verdict flips to partial match if Value falls below 4."* Incorrect: *"Value is right at the line — you may want to wait for a pullback before buying."*
+
+### §11.5 Consumer skill reference pattern
+
+Skills rendering Verdict Sensitivity MUST render it by reference, not by inlining this section's prose. Example Output Format directive: `Render Verdict Sensitivity per parallax-conventions.md §11 — the 1-2 nearest-boundary inputs and the arithmetic flip condition, third person, no advice language.` Inlining creates drift risk — the qualification gate and forbidden-language list here are the single source of truth; a future tightening propagates to all consumers automatically.
+
+---
+
+## 12. Information Framing (Advice Boundary)
+
+### §12.1 Principle
+
+Rendered classifications and candidate actions are observational statements about threshold logic — never execution instructions. A skill may report that a holding crossed a published cutoff and name the classification that cutoff maps to; it may never tell the reader what to do about it.
+
+**Forbidden:** reader-directed imperative trade verbs ("sell", "buy", "trim", "exit this position"), first-person advice framing ("we recommend", "you should"), or "should" applied to a trade action.
+
+**Permitted:** capitalized action-type labels (Exit, Trim, Reweight, Investigate, Hold) when the label is defined by a cited matrix or threshold table, and each instance cites the specific flag or finding that produced it — the label names a classification, not a directive.
+
+### §12.2 Required framing devices
+
+Any section that renders an action-type table or a candidate-action list MUST carry:
+
+1. **A one-line informational preface** immediately above the table, stating that the section is an analytical classification, not an instruction.
+2. **Conditional/descriptive rationale verbs** ("flags", "sits above", "diverges from") in place of imperative verbs in the rationale column or supporting prose.
+3. A pointer to an existing reference pattern rather than inventing new framing per skill — `parallax-portfolio-checkup`'s question-framed "Consider" section and `parallax-pair-finder`'s informational halt are the reference patterns (cited by skill name only).
+
+### §12.3 Suppressible action-label mode
+
+Skills that render action-type labels MUST support an `action_labels=plain` render directive that maps each label to a neutral status description instead of an action-type word (e.g., Exit → "flagged for full-position review", Trim → "flagged for partial-position review", Reweight → "flagged for allocation review", Investigate → "flagged for further review", Hold → "no threshold breach"), for retail-suitable deployments. Under `action_labels=plain`, any magnitude accompanying a label renders as distance-to-threshold arithmetic (current value vs. published cutoff), not a suggested trade size.
+
+### §12.4 Consumer reference pattern
+
+Skills MUST render this section by reference, not by inlining its prose, per the same pattern as §9 and §11. Example Output Format directive: `Render the informational preface and action-label framing per parallax-conventions.md §12.` Inlining creates drift risk — a future tightening of the forbidden-language list propagates to all consumers automatically only if they reference this section rather than copy it.
+
+---
+
+## 13. Audience Render Mode
+
+### §13.1 Modes & precedence
+
+Two audience modes are supported:
+
+- `internal_analyst` — default; today's rendering, unchanged.
+- `client_safe` — deliverable suitable for forwarding to an end client / retail reader.
+
+Resolve audience mode in this order:
+
+1. Per-invocation flag `audience=client_safe` or `audience=internal_analyst`.
+2. White-label config `render.audience_default`, read via the loader per `white-label/integration-pattern.md` §2/§3 — never by re-parsing the YAML.
+3. Absent both, use `internal_analyst`.
+
+Unrecognized values fall back to `internal_analyst` with a one-line notice in the About This Report footer.
+
+### §13.2 Client-safe transformation table
+
+| Surface | `internal_analyst` (default, unchanged) | `client_safe` |
+|---|---|---|
+| Factor names (VALUE/QUALITY/MOMENTUM/DEFENSIVE) | raw pillar names | each carries the plain-language gloss from the canonical table in §13.3 |
+| Verdict-sensitivity lines (§11) | rendered | **omitted** (the verdict itself is unchanged; the flip-arithmetic line is analyst apparatus) |
+| Action-type labels (§12.3) | as defined | `action_labels=plain` is **implied** — neutral status descriptions |
+| Published-cutoff arithmetic in body prose | rendered | state the classification and its plain-language meaning; omit the cutoff arithmetic |
+| Methodology/ops apparatus (tool sequences, token-cost lines, per-cell source-tag columns) | inline | **relocated** to a clearly-separable trailing "Methodology appendix (internal)" section, or omitted where nothing requires retention. Anything under a compliance contract (e.g. portfolio-builder Tilt Source tags) is relocated, **never deleted** |
+| Footer ("About This Report") | rendered | rendered, plus one extra line: `Audience mode: client-safe` (auditability of mode state) |
+
+Non-suppressible in ANY mode: the §9.2 AI-interaction disclosure banner; the §9.1/bespoke disclaimers; the AI-profile family's verbatim disclaimer (output-template.md §8); Ground-truth Integrity / ⚠ MISMATCH data-integrity warnings; §4.0 `UNVERIFIED` gate states and the section that lists them; the House View Preamble banner; the About This Report footer itself.
+
+The §9.2 AI-interaction disclosure banner is not suppressible, rewordable, or movable by audience mode; its wording and placement are fixed pending counsel sign-off.
+
+### §13.3 Canonical plain-language factor gloss
+
+This table is the single source for plain-language factor gloss. Consumers and `parallax-portfolio-checkup` Step 4 render it by reference.
+
+- High VALUE = tilts toward cheaper stocks
+- High QUALITY = strong balance sheets and profitability
+- High MOMENTUM = stocks with recent price strength
+- High DEFENSIVE = lower volatility, stable businesses
+
+### §13.4 Footer mode line
+
+Under `client_safe`, the About This Report footer gains this line:
+
+`Audience mode: client-safe`
+
+### §13.5 Consumer reference pattern
+
+Skills MUST render this section by reference, not by inlining its prose, per the same pattern as §12. Example Output Format directive: `Apply audience render mode per parallax-conventions.md §13; default internal_analyst.` Inlining creates drift risk — a future tightening propagates to all consumers automatically only if they reference this section rather than copy it.
+
+Rollout: this batch wires the mode into the report-rendering consumers named in the batch plan; remaining consumers inherit the definition when wired.
+
+---
+
+## 14. Host Primitives (portability contract)
+
+### §14.1 Principle
+
+These skills run on more than one harness. A SKILL.md therefore names **host primitives**, never host tools. Ten primitives cover everything the skills do outside the Parallax connector. The binding table in §14.2 says what each primitive means on each host; the fail-open table in §14.3 says what a skill does when the host lacks one. A SKILL.md that names a host tool (`ToolSearch`, `AskUserQuestion`, `Write`, `WebFetch`, a `Skill` tool, a `/slash` chaining syntax, or a connector namespace literal) outside a `<!-- host-note -->` block is host-locked and non-conforming; the rule is forward-only for skills that predate 2026-09-04, per the authoring conventions' "Host portability" section (the same document as the "Canonical source & path resolution" reference in §0.0).
+
+| Primitive | Meaning |
+|---|---|
+| `discover-tools` | learn the callable names and input schemas of the Parallax connector in THIS session (§0.1) |
+| `call-tool` | call one discovered callable; independent calls may be issued together (§3) |
+| `ask-operator` | block on a human decision at a confirmation gate |
+| `run-shell` | execute a documented helper command (`render_gate.py`, `adaptation.py`, `view_commit`, …). Write every path and value literally: no `$VAR`, `${…}`, `$(…)`, backticks or `~`, and no variable assignments. Claude Code's permission check refuses some of these even in its sandbox (command substitution, and observed live: an expansion in a redirect target and an assignment reused later), and which ones it refuses varies, while a literal command passes. When a value lives in the environment, use a helper that resolves it (the house-view helpers read `PARALLAX_HOUSE_VIEW_DIR` themselves) or read it first with a separate `printenv NAME` and paste the result. Text that may hold quotes, `$` or braces (report drafts, audit rows) goes in a file written with `write-artifact` and is read by a helper from its literal path; never put it in the command line or a heredoc, because Claude Code checks a heredoc body too and refuses one that holds `{` followed by a quote, which every JSON object does. |
+| `invoke-skill` | hand a payload to a sibling skill (translate, concierge routing, the judge drift check) |
+| `load-reference` | read a shared `_parallax/...` or `references/...` file by path (§0.0 item 1) |
+| `write-artifact` | create a file at a named path WITHOUT passing its content through a shell. Document-derived text (CIO prose, client documents) must never reach an unquoted heredoc, which the shell subjects to parameter expansion and command substitution. The render gate (§10.3) uses `write-artifact` for its draft; its stdin fallback is a quoted-delimiter heredoc (`<<'REPORT'`), which performs no expansion. Prefer `write-artifact` wherever the host has it. Never a substitute for an append through a helper that owns a hash chain (`audit_chain.append_entry`) |
+| `read-config` | read an environment switch (`PARALLAX_*`) or operator state under `~/.parallax/` |
+| `fetch-url` | retrieve a public URL as text. A skill that ships its own destination-validated fetcher (`download_public_url()` in white-label onboard) uses that fetcher for those URLs, never this primitive |
+| `schedule-task` | create a recurring run of a skill with fixed inputs |
+
+### §14.2 Per-host binding table
+
+The connector namespace is never written here: it is whatever `discover-tools` returns in the session (§0.1 item 4). Rows marked *verify* were not exercised end-to-end when this section was written (2026-09-04; plugin columns and `schedule-task` added 2026-10-07) and must be confirmed in the first cross-host parity run before a skill relies on them.
+
+| Primitive | Claude Code | Codex CLI | claude.ai (uploaded `.skill`) | claude.ai chat (plugin) | Cowork (plugin) |
+|---|---|---|---|---|---|
+| `discover-tools` | `ToolSearch` with query `"+Parallax"`, then read each returned schema | MCP tools registered in the Codex config are pre-listed in the session tool list; the list is the discovery result. Read each tool's schema from that list | Connector tools are pre-listed when the Parallax connector is enabled; the list is the discovery result | connector tools listed in the session | connector tools listed in the session |
+| `call-tool` | parallel tool calls in one turn | parallel tool calls in one turn (*verify* batch size) | tool calls in one turn (*verify* parallelism) | *verify* | *verify* |
+| `ask-operator` | `AskUserQuestion` | interactive session: ask in prose and wait for the next turn (*verify* whether a structured question tool exists); non-interactive `exec` mode: absent | ask in prose and wait for the next turn | *verify* | *verify* |
+| `run-shell` | `Bash` | shell in the sandbox; network per the sandbox policy | code execution when enabled for the workspace; otherwise absent | *verify* | *verify* |
+| `invoke-skill` | `Skill` tool or `/name` | skills auto-selected by description; explicit invocation by naming the skill (*verify* syntax) | absent (one uploaded skill per conversation) | skills load by description (*verify*) | skills load by description (*verify*) |
+| `load-reference` | `Read` on the resolved path | file read on the resolved path | file read inside the zip; shared files live under `_vendored/_parallax/` (the web build rewrites references) | *verify* | *verify* |
+| `write-artifact` | `Write` tool | file-write / patch tool (never a heredoc) | file write in the sandbox when code execution is enabled; otherwise absent | *verify* | *verify* |
+| `read-config` | shell env + `~/.parallax/` | shell env + `~/.parallax/` | absent: no environment, no persistent state directory | *verify* | *verify* |
+| `fetch-url` | `WebFetch` | shell fetch per the sandbox network policy (*verify*) | absent unless a browsing tool is enabled | *verify* | *verify* |
+| `schedule-task` | scheduled cloud routine (`/schedule`) (*verify* that the routine sees the installed skills and the signed-in Parallax connector) | absent | absent | *verify* (treated as absent) | scheduled task (cloud; uses installed skills and plugins; paid plans) (*verify*) |
+
+Install-layout invariant. Every installed skill directory has `../_parallax/` as a sibling (symlink or copy) OR carries the vendored copy under `<skill>/_vendored/_parallax/` with references rewritten. Every `run-shell` and `load-reference` path in a SKILL.md is written relative to the skill directory so both layouts resolve.
+
+### §14.3 Fail-open rules (what to do when the host lacks a primitive)
+
+Gates fail closed (§4.0); display sections degrade (§4). The rows below apply that split per primitive. A binding marked *verify* in §14.2 counts as absent until it is exercised on that host.
+
+| Primitive absent | Rule |
+|---|---|
+| `discover-tools` | If the host pre-lists MCP tools, the list is the discovery result. If there is neither live discovery nor a pre-list, the Parallax connector is unavailable this session: apply §0.0 item 4 (stop for gates; mark display sections unavailable). Never fall back to names documented in this repository. |
+| `call-tool` (sequential-only host) | Issue fast-response calls first and async tools (§4 "Async tools") last, in the documented order. Never drop a call. |
+| `ask-operator` | Render the question and its choices in prose and stop. Within that turn the gate is NOT passed and nothing is persisted. An explicit operator answer in a later turn satisfies the gate; where the skill appends an audit row, record which form the answer took in that row's `notes` field per loader.md §6.2, and add no custom key. |
+| `run-shell` — render gate | Do not generate scaffold at all: begin the message at the documented Output Format start; keep every degraded-state note inline in its own section; add `Render gate: not applied (no shell)` to About This Report. Never delete already-generated text by hand — a hand strip is the drift the gate exists to remove (§10.1). |
+| `run-shell` — gate-shaped helper (verdict, eligibility, trade list) | Every affected name is `UNVERIFIED` per §4.0, or the skill declares itself unavailable on this host up front. Never recompute the verdict in prose. |
+| `run-shell` — display-shaped helper | The section is unavailable per §4 with the stated reason `Computed value unavailable (no shell)`. Never recompute in prose. |
+| `invoke-skill` — translate | Emit the English report with the footer `> Translation to <lang> unavailable on this host; output shown in English.` (§15; distinct from the translator-failed footer). |
+| `invoke-skill` — concierge routing | Route by prose: name the target skill and its usage line. |
+| `invoke-skill` — judge drift check | Emit the existing line from `house-view/auto-on-load-judge-pattern.md` ("not installed; drift check skipped"). The check is never a gate. |
+| `load-reference` | §0.0 item 4. |
+| `write-artifact` | Render gate: use its stdin fallback (§10.3). The §14.4 policy/coverage drafts follow §14.4's own no-host-absent-fallback rule instead. Every other consumer is a persist step behind a confirmation gate: stop and report that the artifact could not be written on this host. |
+| `read-config` | No environment: every `PARALLAX_*` switch takes its documented default; say so in About This Report when the default changes behavior. No state directory: no active view and no branding, per `house-view/loader.md` §1 and `white-label/integration-pattern.md` §4. |
+| `fetch-url` | Report the source as not fetched and ask for pasted text. Never guess content. |
+| `schedule-task` | Do not offer scheduling. Never describe a schedule the host cannot create. A *verify* binding counts as absent. |
+
+### §14.4 Policy and coverage JSON drafts
+
+Any skill assembling a payload for `_parallax/client-policy/adaptation.py`, `_parallax/client-policy/reconcile.py`, or `_parallax/coverage_check.py` writes it with `write-artifact` to a literal draft path, never a shell variable: `<cwd>/.parallax-policy/<label>-<8 random hex>.<ext>`. Write it as a literal path, either absolute (the session's working directory, resolved) or relative to the working directory (`.parallax-policy/<label>-<8 random hex>.<ext>`), with no `~`, `$VAR` or `${…}`, and name it the same way in the helper command. `<ext>` is `yaml` for an inline YAML policy document, `json` for inline JSON and for every other payload. Use a fresh random suffix on every run; if that file already exists, pick another. A `policy=` value that is already a file path is passed through to the helper literally instead — no draft, no write.
+
+Before the session's first write, check `.parallax-policy` in the cwd: if it exists and is a symbolic link or anything other than a plain directory, stop and report it; do not write through it. The helpers refuse a draft that is a symlink, a FIFO, a hard-linked file, or sits in a symlinked `.parallax-policy`, so a planted entry fails the helper call rather than being read. On the session's first write to `.parallax-policy/`, also `write-artifact` `.parallax-policy/.gitignore` containing the single line `*`, idempotent (skip it once the directory already holds one this session). The directory lives in the operator's cwd, which may be a synced folder (Dropbox, iCloud) or a git work tree, and none of these three helpers deletes its input after reading it — §10.3's synced-directory caveat applies here the same way, and drafts left in a `.parallax-policy/` directory by an interrupted session can be deleted file by file. Never delete the directory recursively: if it were a symbolic link, a recursive delete would remove the link's target.
+
+**Write once.** Each payload draft is written once and never modified in place. If a payload must change after it is written, run its documented helper command on it unchanged first (ignore that output), then write the changed payload to a fresh path and run the command on the new path. Rewrite only the draft that changed. When a helper takes several drafts, pass the unchanged ones again at their existing paths.
+
+**No code of your own.** `.parallax-policy/` holds payload drafts and its `.gitignore`, nothing else. Never write a script, or run code you wrote, to do a helper's job, to inspect a tool result, or to check a report: the documented helper commands are the only commands that read these drafts, and only `render_gate.py` gates a report (§10.3). If a documented command is refused, report the refusal; do not work around it.
+
+**No host-absent fallback.** Without `write-artifact` none of these drafts is written and the helper call is not made. `adaptation.py` and `reconcile.py` render every affected name per the `run-shell` — gate-shaped helper row above (`adaptation.py` is gate-shaped wherever its tier feeds a verdict; the S3 solver is always gate-shaped per §4.0). The `coverage_check.py` sector cross-check renders per the `run-shell` — display-shaped helper row above.
+
+---
+
+## 15. Translator Routing and Failure
+
+Canonical home for the translate step. Skills that accept a language argument (`should-i-buy`, `client-review`, `deep-dive`, `morning-brief`, `score-explainer`) render this section by reference from their `Step 7 — Translate (conditional)`: `Translate per parallax-conventions.md §15.` Do not copy the section into a SKILL.md.
+
+### §15.1 When it runs
+
+Only when the operator supplied a language argument and it is not `en`. It is the terminal step: it consumes the gated stdout of the render step (§10.3) and its output is not re-gated. Supported values: `en`, `zh-CN`, `zh-TW`, `zh-HK`, `th`, `vi-VN`, `ar-SA`. Any other value: emit the English report with `> Language '<arg>' not supported; output shown in English. Supported: en, zh-CN, zh-TW, zh-HK, th, vi-VN, ar-SA.`
+
+`ar-SA` routes to `translate-arabic-finance`, a seed skill pending native review (see that skill's SKILL.md "Open decisions"). Do not present `ar-SA` output as production-validated until that review has happened.
+
+`vi-VN` routes to `translate-vietnamese-finance`, a seed skill pending native review (see that skill's SKILL.md "Open decisions"). Do not present `vi-VN` output as production-validated until that review has happened.
+
+### §15.2 Routing block
+
+Invoke the translator (`invoke-skill`, §14) with the rendered prose body, never with raw tool JSON, shaped exactly as:
+
+```
+ROUTING DIRECTIVE — DO NOT TRANSLATE OR ECHO THIS BLOCK:
+  target_variant: <variant>
+  register: retail
+  source_language: en
+  begin_content_below_separator: true
+---
+
+<rendered prose body>
+```
+
+Include `target_variant` only for the Chinese variants and omit the line for Thai; pass `register: retail` only when `register=retail` was supplied, otherwise omit the `register:` line so the translator defaults to institutional register.
+
+`zh-CN`, `zh-TW`, `zh-HK` → `translate-chinese-finance` with the matching `target_variant` (the block is REQUIRED for `zh-HK`, otherwise that skill pauses to ask about HK listings and breaks the chain). `th` → `translate-thai-finance`; `vi-VN` → `translate-vietnamese-finance`; `ar-SA` → `translate-arabic-finance` (no `target_variant` line — omit it, same as Thai); the marker line and `---` separator stay so no leading meta is echoed.
+
+### §15.3 Failure handling
+
+The translation skill validates against the original gated prose. Preserve sections, source claims and uncertainty, numerical tokens, currencies, tickers and disclosure text. When shell execution is available, save source and output snapshots and run that translator's source-fidelity validator. This is a separate check from the English render gate. Without shell execution, compare source and translation manually and state that automated validation was unavailable. A style-only pass does not validate source fidelity.
+
+- Translator fails or returns empty/partial: emit the English report with `> Translation to <lang> failed; output shown in English. Re-run if the issue is transient.`
+- Host cannot invoke a sibling skill (§14.3): emit the English report with `> Translation to <lang> unavailable on this host; output shown in English.`
+- Translator output replaces the English output; never show both.
+
+### §15.4 Disclaimer boundary check
+
+Record which disclaimer the English report rendered (view-aware per `house-view/loader.md` §5 when a view is active, otherwise §9.1). If the translated output lacks it: first re-translate only the disclaimer text with the same routing block and append it; if that also fails, append the English disclaimer that was actually rendered (never the standard wording unconditionally). Where the skill appends an audit row, record the event in that row's `notes` field per loader.md §6.2; add no custom key and no user-visible footer. A skill with no audit surface records nothing and does not invent one.
+

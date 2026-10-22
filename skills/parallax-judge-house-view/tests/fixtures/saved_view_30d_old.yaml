@@ -1,0 +1,116 @@
+metadata:
+  schema_version: 1
+  calibration_status: heuristic_phase0
+  view_id: "11111111-1111-4111-8111-111111111111"
+  view_name: "Q2 2026 House View (test fixture)"
+  uploaded_by: "test-cio@example.com"
+  uploader_role: CIO
+  upload_timestamp: "2026-04-24T09:30:00Z"
+  effective_date: "2026-04-24"
+  valid_through: "2026-06-30"
+  auto_expire_days: 90
+  basis_statement: |
+    Test fixture for /parallax-judge-house-view. Designed so the judge has
+    non-zero tilts on every category (pillars, sectors, regions, factors,
+    macro_regime) and tests can exercise drift severity branches.
+  source_documents:
+    - "fixture.pdf"
+  version_id: "22222222-2222-4222-8222-222222222222"
+  parent_version_id: null
+  view_hash: "<recomputed-by-loader>"
+
+tilts:
+  pillars:
+    econometrics_phase: 1
+    valuation_state: -1
+    market_entropy: 0
+    psychological_wavelength: 0
+
+  sectors:
+    information_technology: -1
+    health_care: 1
+    energy: 0
+    materials: 0
+    industrials: 0
+    consumer_discretionary: 0
+    consumer_staples: 0
+    financials: 0
+    communication_services: 0
+    utilities: 0
+    real_estate: 0
+
+  regions:
+    us: 1
+    japan: 1
+    china: -1
+    uk: 0
+    germany: 0
+    france: 0
+    india: 0
+    canada: 0
+    south_korea: 0
+    taiwan: 0
+    singapore: 0
+    indonesia: 0
+    thailand: 0
+    malaysia: 0
+
+  factors:
+    value: 0
+    profitability: 1
+    momentum: 0
+    low_volatility: 0
+    trading_signals: 0
+    quality: 0
+    defensive: 0
+
+  styles:
+    cap_size:
+      large: 0
+      mid: 0
+      small: 0
+    growth_value:
+      growth: 0
+      value: 0
+
+  themes:
+    ai_infrastructure: 0
+    energy_transition: 0
+    defense: 0
+    obesity_drugs: 0
+    reshoring: 0
+
+  excludes:
+    - tobacco
+  exclude_reasons:
+    - "ESG mandate"
+
+  tilt_conviction:
+    pillars: {}
+    sectors: {}
+    regions: {}
+    factors: {}
+    styles: {}
+    themes: {}
+
+  macro_regime:
+    growth: expansion
+    inflation: benign
+    rates: holding
+    risk_appetite: neutral
+
+extraction:
+  source_type: pdf
+  extraction_method: "test-fixture"
+  extracted_at: "2026-04-24T09:28:00Z"
+  extraction_confidence:
+    pillars: 0.75
+    sectors: 0.92
+    regions: 0.85
+    factors: 0.78
+    styles: 0.72
+    themes: 0.68
+    excludes: 0.95
+    macro_regime: 0.81
+  extraction_notes: "Fixture file — not a real view."
+  uploader_confirmed: true

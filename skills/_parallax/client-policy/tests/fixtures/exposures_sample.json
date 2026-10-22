@@ -1,0 +1,15 @@
+{
+  "basis": "sleeve",
+  "dimensions": {
+    "region": {"us": 0.66, "europe": 0.20, "japan": 0.06, "em_ex_china": 0.08},
+    "sector": {"information_technology": 0.40, "financials": 0.25, "health_care": 0.35}
+  },
+  "coverage": {"region": 0.97, "sector": 1.00},
+  "unmapped": [{"symbol": "ABC.L", "weight": 0.03, "dimension": "region"}],
+  "holdings": [
+    {"symbol": "AAPL.O", "weight": 0.25, "region": "us", "sector": "information_technology"},
+    {"symbol": "NESN.S", "weight": 0.10, "region": "europe", "sector": "consumer_staples"},
+    {"symbol": "GAZP.MM", "weight": 0.04, "region": "em_ex_china", "sector": "energy"},
+    {"symbol": "XYZ.OQ", "weight": 0.03, "region": "us", "sector": "health_care"}
+  ]
+}

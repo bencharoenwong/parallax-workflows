@@ -1,0 +1,384 @@
+#!/usr/bin/env python3
+"""Shared deterministic render gate for gated skills (portfolio family + single-stock report skills).
+
+Strips any pre-report scaffold the orchestrating model may emit before the rendered
+output (step/batch-completion notes, scratch computation, cross-validation status,
+white-label config probes, "no active house view" narration). Pure stdlib; no network.
+
+Mirrors the _parallax/house-view/view_status.py pattern: a deterministic helper the
+skill shells out to as its final step, so behaviour is identical across operator LLMs
+and not a generation-under-prior trust assumption. The skill passes its complete drafted
+report to this gate; the gate's stdout IS the response.
+
+Skills write the draft to a file and pass `--input PATH`; the gate reads the file and
+deletes it. The report never appears in the shell command, so the host's command-length
+and command-content checks never see it (Claude Code refuses a Bash command over 10,000
+characters, heredoc body included). Stdin still works for direct use and tests.
+
+Design (one engine, per-skill allowlist):
+- COMMON_ANCHORS: blocks that legitimately precede the body for ANY skill and MUST
+  survive the strip — the House View Preamble banner (every real `view_status` banner
+  state) and the Ground-truth Integrity table.
+- SKILL_ANCHORS[<skill>]: that skill's title, first rendered section, and Branding
+  Header (matched on the skill's own header noun).
+- The gate keeps from the EARLIEST line matching ANY anchor (preamble/branding, when
+  present, precede the body), so anchor precedence is by line position.
+- Degraded-state notes (async-timeout / pending / unavailable) found in the stripped
+  preamble are HOISTED to a trailing status line, never silently dropped.
+- Fail-open: if NO anchor is found the input is returned unchanged — the gate never
+  destroys a report it cannot positively locate. That path warns on stderr (stdout
+  stays the report), so anchor drift is visible instead of silently passing scaffold
+  through. See parallax-conventions.md §10.3.
+
+Usage:
+    python3 render_gate.py --skill client-review --input /abs/.parallax-render/client-review-0a1b2c3d.md
+    python3 render_gate.py --skill client-review < draft.md     # stdin; file is kept
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import stat
+import sys
+
+# --- COMMON anchors: must survive the strip for every skill (C1, C4) ---------
+
+# House View Preamble banner — matches every `view_status.py` banner state: active
+# "Active house view: ...", warning/critical "Active view ..." / "⚠ Active view ...",
+# not_yet_effective/expired/malformed "House view ..." / "! House view ...". Also the
+# loader.md §2 "Legacy view:" load-preamble warning (emitted by the loader, not the
+# helper). Optional leading blockquote, status emoji or "!", and bold.
+_HOUSE_VIEW = (
+    r"^\s{0,3}>?\s*(?:🟢|🟡|🔴|⚠|ℹ️|!)?\s*\*{0,2}\s*"
+    r"(?:active\s+(?:house\s+)?view|house\s+view|legacy\s+view)\b"
+)
+# Ground-truth Integrity table — renders first on a holding-name mismatch (C4).
+_GROUND_TRUTH = r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)ground-?truth\b"
+# Branding Header logo — per integration-pattern.md §5 a URL logo renders as
+# `![<client>](<url>)` on its OWN line ABOVE the branding text line. Anchor on a
+# leading image-only line so the logo survives the strip (C4). Scaffold never emits a
+# bare markdown image, so this does not false-anchor on internal narration.
+_BRANDING_LOGO = r"^\s{0,3}!\[[^\]]*\]\([^)]+\)\s*$"
+
+COMMON_ANCHORS = [_HOUSE_VIEW, _BRANDING_LOGO, _GROUND_TRUTH]
+
+
+def _branding(noun: str) -> str:
+    """Branding Header anchor for a skill: `(## )(> )**<client>** <noun>` (C4).
+    Matched on the skill's own header noun, never a hardcoded one."""
+    return rf"^\s{{0,3}}(?:#{{1,4}}\s+)?>?\s*\*\*[^*]+\*\*\s+{noun}\b"
+
+
+# --- Per-skill anchors: title + first rendered section + Branding Header ------
+# Title/section anchors accept a markdown HEADER (^#{1,4}) with the keyword anywhere on
+# the line (titles carry descriptive suffixes / emojis, e.g. "## Why am I down —
+# Portfolio Attribution"), OR a BOLD line with the keyword IMMEDIATELY after the `**`
+# (a bold title like "**Watchlist scan — ...**"). The bold branch requires the keyword
+# right after the marker so a bold SCAFFOLD sentence ("**Batch D ... rebalance works**")
+# does NOT match. The Branding Header is handled separately (_branding, noun-specific).
+# Gate and grader agree on the valid-opening VOCABULARY, but not on shape: an
+# eval config's _OK_START is one compiled pattern, this is a list of two (title
+# plus Branding Header), and only 6 of these 22 skills have an eval config at
+# all. They are not mirrors; do not try to unify them.
+# This dict is reconciled against _parallax/manifest.json by
+# test_skill_manifest.py. The gate keeps the literal on purpose: it is the last
+# step of every skill on every host and must gain no file dependency.
+SKILL_ANCHORS: dict[str, list[str]] = {
+    "portfolio-checkup": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:portfolio health|health status)\b",
+        r"^\s{0,3}#\s*(?:your\s+)?portfolio checkup\b",
+        _branding("portfolio checkup"),
+    ],
+    "client-review": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:client portfolio review|portfolio review|portfolio summary)\b",
+        _branding("portfolio review"),
+    ],
+    "morning-brief": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:(?:fund manager )?morning brief|market regime)\b",
+        _branding("morning brief"),
+    ],
+    "explain-portfolio": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:explain portfolio|(?:portfolio |performance |drawdown )?attribution|what happened|market & regime)\b",
+        _branding("portfolio attribution"),
+    ],
+    "rebalance": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:portfolio rebalance|rebalance|current portfolio(?: assessment)?)\b",
+        _branding("rebalance"),
+    ],
+    "watchlist-monitor": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)watchlist (?:monitor|summary|scan)\b",
+        _branding("watchlist scan"),
+    ],
+    "desk-call-list": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:desk call list|priority calls|no calls indicated|scan degraded|scan refused)\b",
+        _branding("desk call list"),
+    ],
+    "portfolio-builder": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:portfolio builder|portfolio construction|investment thesis)\b",
+        _branding("portfolio construction"),
+    ],
+    "should-i-buy": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:the company|should i buy|stock (?:review|evaluation))\b",
+        _branding("stock review"),
+    ],
+    "deep-dive": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:company overview|position deep dive|deep dive)\b",
+        _branding("deep dive"),
+    ],
+    "due-diligence": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:scope note|company overview|full due diligence|due diligence)\b",
+        _branding("research report"),
+    ],
+    "peer-comparison": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:peer group|peer comparison)\b",
+        _branding("peer comparison"),
+    ],
+    "earnings-quality": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:risk summary|earnings quality)\b",
+        _branding("earnings quality review"),
+    ],
+    "credit-lens": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:credit risk assessment|credit lens)\b",
+        _branding("credit lens"),
+    ],
+    "thematic-screen": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:theme|thematic screen|universe built)\b",
+        _branding("thematic screen"),
+    ],
+    "weekly-themes": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:weekly themes|themes of the week)\b",
+        _branding("weekly themes"),
+    ],
+    "macro-outlook": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:regime status|macro outlook)\b",
+        _branding("macro outlook"),
+    ],
+    "country-deep-dive": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:country overview|country deep dive)\b",
+        _branding("country deep dive"),
+    ],
+    "halal-screen": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:screening criteria|halal|shariah screen)\b",
+        _branding("shariah screen"),
+    ],
+    "scenario-analysis": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:scenario summary|scenario analysis)\b",
+        _branding("scenario analysis"),
+    ],
+    "pair-finder": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:verdict|top pair|pair finder)",
+        r"^\s{0,3}(?:[-*]\s*)?\*\*\s*pair\s*(?::\*\*|\*\*\s*:)",
+        _branding("pair finder"),
+    ],
+    "stress-test-thesis": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:tl;dr|stress-test thesis|thesis restatement)",
+        r"^\s{0,3}~\d+ min read\b",
+    ],
+    "score-explainer": [
+        r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:the question|score explainer)\b",
+        _branding("score explainer"),
+    ],
+}
+
+# Degraded-state markers worth preserving if the model leaked them into the preamble
+# (C2): async-tool timeouts, pending/unavailable analyses, partial coverage. The gate
+# hoists these to a trailing status line rather than dropping them with the scaffold.
+_DEGRADED = re.compile(
+    r"(?i)\b(timed out|timeout|pending|unavailable|could not (?:be )?comput\w*|"
+    r"partial(?:ly)?|degraded|not (?:yet )?available)\b"
+)
+# A stripped line that is just a markdown image/link is NOT a degraded-state note even
+# if its URL contains a token like "logo-pending.png" — don't hoist it.
+_IMAGE_OR_LINK = re.compile(r"^\s{0,3}!?\[[^\]]*\]\([^)]+\)\s*$")
+
+
+def gate(draft: str, skill: str) -> str:
+    """Return ``draft`` from its first rendered-block anchor onward (else unchanged),
+    hoisting any degraded-state note out of the stripped preamble.
+
+    Unknown skill -> COMMON anchors only (still strips to a surviving preamble block;
+    fail-open if none). Raises nothing; never destroys an unlocatable report."""
+    patterns = COMMON_ANCHORS + SKILL_ANCHORS.get(skill, [])
+    anchor_re = re.compile("|".join(f"(?:{p})" for p in patterns), re.IGNORECASE)
+    lines = draft.splitlines()
+    for i, line in enumerate(lines):
+        if anchor_re.search(line):
+            body = "\n".join(lines[i:]).strip()
+            notes = [
+                ln.strip()
+                for ln in lines[:i]
+                if ln.strip() and _DEGRADED.search(ln) and not _IMAGE_OR_LINK.match(ln)
+            ]
+            if notes:
+                body += "\n\n> _Status note (preserved): " + " ".join(notes) + "_"
+            return body + "\n"
+    sys.stderr.write(
+        f"[render-gate] WARN: no anchor for skill={skill!r}; returned unchanged\n"
+    )
+    return draft  # fail-open: no anchor -> never strip
+
+
+# Per-skill word caps on the brief body. The count mirrors the skill's eval check
+# (evals/skills/<skill>/eval_config.py): words before the first §9.2/§9.1 boilerplate
+# marker, allowed up to the cap plus 10% for headers and table cells. An overrun is a
+# stderr WARN only; stdout is unchanged and the exit code stays 0.
+WORD_CAPS: dict[str, int] = {"morning-brief": 800}
+_BOILERPLATE = re.compile(
+    r"(?i)AI-assisted output|AI-interaction disclosure|not investment advice"
+)
+
+
+def word_cap_warning(report: str, skill: str) -> str | None:
+    """Return a WARN line when ``report``'s body exceeds the skill's word cap
+    (with 10% tolerance), else None. Skills without a cap never warn."""
+    cap = WORD_CAPS.get(skill)
+    if cap is None:
+        return None
+    m = _BOILERPLATE.search(report)
+    words = len((report[: m.start()] if m else report).split())
+    if words <= cap + cap // 10:
+        return None
+    return (
+        f"[render-gate] WARN: body has {words} words, over the {cap}-word cap "
+        f"for skill={skill!r}; shorten and re-run\n"
+    )
+
+
+DRAFT_DIR_NAME = ".parallax-render"
+_DRAFT_SUFFIXES = (".md", ".json")
+
+
+def read_draft(path: str, skill: str, suffix: str = ".md") -> str:
+    """Read the draft the skill wrote at `path`, then delete it.
+
+    Only a draft is accepted: `<dir>/.parallax-render/<skill>-<8 hex><suffix>`, where
+    suffix is `.md` (reports) or `.json` (house-view audit rows, audit_append.py). Any
+    other path is refused before it is opened, so the gate prints and deletes only
+    a draft-shaped file in a `.parallax-render` directory. Any directory of that
+    name qualifies; the gate does not check that it sits under the session's cwd.
+    The `.parallax-render` directory and the draft are opened without following
+    symlinks, the read does not block on a FIFO, and the draft is read and unlinked
+    relative to the opened directory. Bytes are decoded as UTF-8 with newlines kept
+    as written, the same as the stdin path. A failed unlink is a warning, not an
+    error: the report still renders.
+    """
+    parent, name = os.path.split(os.path.abspath(path))
+    if suffix not in _DRAFT_SUFFIXES or not re.fullmatch(r"[a-z0-9-]+", skill):
+        raise ValueError(f"unsupported draft kind: {skill!r} {suffix!r}")
+    if os.path.basename(parent) != DRAFT_DIR_NAME or not re.fullmatch(
+        re.escape(skill) + r"-[0-9a-f]{8}" + re.escape(suffix), name
+    ):
+        raise ValueError(
+            f"not a draft path for {skill!r}: {path} "
+            f"(expected .../{DRAFT_DIR_NAME}/{skill}-<8 hex>{suffix})"
+        )
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    flags = (
+        os.O_RDONLY
+        | nofollow
+        | getattr(os, "O_NONBLOCK", 0)
+        | getattr(os, "O_BINARY", 0)
+    )
+    use_dir_fd = os.open in os.supports_dir_fd and hasattr(os, "O_DIRECTORY")
+    if use_dir_fd:
+        dir_fd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY | nofollow)
+        target = name
+    else:  # no dir_fd (Windows): check for symlinks by path instead
+        if os.path.islink(parent) or os.path.islink(path):
+            raise ValueError(f"draft path goes through a symlink: {path}")
+        dir_fd, target = None, path
+    try:
+        fd = os.open(target, flags, dir_fd=dir_fd)
+        try:
+            st = os.fstat(fd)
+            if not stat.S_ISREG(st.st_mode):
+                raise ValueError(f"draft is not a regular file: {path}")
+            if st.st_nlink != 1:
+                raise ValueError(f"draft has other hard links: {path}")
+            chunks = []
+            while chunk := os.read(fd, 1 << 16):
+                chunks.append(chunk)
+        finally:
+            os.close(fd)
+        try:
+            os.unlink(target, dir_fd=dir_fd)
+        except OSError as exc:
+            sys.stderr.write(f"[render-gate] WARN: draft not deleted: {exc}\n")
+    finally:
+        if dir_fd is not None:
+            os.close(dir_fd)
+    try:
+        os.rmdir(parent)
+    except OSError:
+        pass  # not empty, or already gone
+    return b"".join(chunks).decode("utf-8")
+
+
+def _run_trace():
+    """The live-journey run trace (``_parallax/run_trace.py``) when
+    PARALLAX_E2E_TRACE is set, else None. Loaded by path, so an ordinary run
+    imports nothing new (evals/README.md § Live concierge journeys)."""
+    if not os.environ.get("PARALLAX_E2E_TRACE"):
+        return None
+    module = sys.modules.get("_parallax_run_trace")
+    if module is None:
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location(
+                "_parallax_run_trace", os.path.join(os.path.dirname(os.path.realpath(__file__)), "run_trace.py"))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            sys.modules["_parallax_run_trace"] = module
+        except Exception:
+            return None
+    return module
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description="Shared Parallax render gate.")
+    ap.add_argument("--skill", required=True, help="skill key, e.g. client-review")
+    ap.add_argument(
+        "--input",
+        metavar="PATH",
+        help="read the draft from PATH and delete it (default: read stdin)",
+    )
+    args = ap.parse_args(argv)
+    try:
+        if args.input is not None:
+            draft = read_draft(args.input, args.skill)
+        elif (stdin := getattr(sys.stdin, "buffer", None)) is not None:
+            draft = stdin.read().decode("utf-8")
+        else:
+            draft = sys.stdin.read()
+    except (OSError, ValueError) as exc:
+        sys.stderr.write(f"[render-gate] ERROR: cannot read draft: {exc}\n")
+        return 2
+    trace = _run_trace()
+    if trace is not None:
+        trace.note_skill(args.skill)
+        if args.input is not None:
+            trace.note_input(draft.encode("utf-8"), role="input", path=args.input)
+        else:
+            trace.note_input(draft.encode("utf-8"), role="stdin", source="stdin")
+    out = gate(draft, args.skill)
+    if (warning := word_cap_warning(out, args.skill)) is not None:
+        sys.stderr.write(warning)
+    if trace is not None:
+        trace.note_output(out.encode("utf-8"))
+    # UTF-8 bytes, not the locale's encoding: a cp1252 stdout would raise on
+    # "→" after the draft is already deleted.
+    buffer = getattr(sys.stdout, "buffer", None)
+    if buffer is None:
+        sys.stdout.write(out)
+    else:
+        sys.stdout.flush()
+        buffer.write(out.encode("utf-8"))
+        buffer.flush()
+    return 0
+
+
+if __name__ == "__main__":
+    _trace = _run_trace()
+    raise SystemExit(_trace.run("render_gate.py", __file__, main) if _trace else main())

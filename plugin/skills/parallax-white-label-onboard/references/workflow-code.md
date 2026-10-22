@@ -1,0 +1,458 @@
+# Workflow Code Reference
+
+Full Python code blocks for `/parallax-white-label-onboard`. SKILL.md keeps the runtime decision logic and breadcrumbs; this file holds the verbose code Claude JIT-loads when actually executing.
+
+JIT-load `_parallax/white-label/extract/` (the extract package), `_parallax/white-label/validator.py`, and `_parallax/white-label/loader.py` before using the patterns below.
+
+---
+
+## Step 2a — Folder extraction (after F-3 operator confirmation)
+
+Folder mode F-4 uses the callable extraction boundary. It applies the confirmed
+classifications, merges branded drafts, drops visuals from voice-only files,
+and enforces the exact 3,000-word retained-corpus limit:
+
+```python
+from extract import extract_from_folder
+
+draft = extract_from_folder(
+    folder_path,
+    classifications=classified_files,
+)
+```
+
+When two or more branded files disagree, `draft["multi_source"]["mismatches"]`
+records each field and `draft["multi_source"]["component_drafts"]` carries the
+per-source drafts. Pass that list to `merge_resolved_drafts` at the Step 5 gate:
+
+```python
+mismatches = draft.get("multi_source", {}).get("mismatches", [])
+if mismatches:
+    # resolutions = {field: source_reference}, one per mismatch, operator-chosen
+    draft = merge_resolved_drafts(
+        draft["multi_source"]["component_drafts"], resolutions
+    )
+```
+
+`classified_files` maps an absolute path or filename to `branded`,
+`branded_visual_voice`, `voice_only`, or `skip`. The two branded labels are
+aliases. A bare filename that more than one inventoried file answers to raises
+`AmbiguousClassificationError` — supply the full path for those. A key that
+reaches no inventoried file raises the same error rather than being dropped;
+note the inventory covers two folder levels. Any remaining ambiguous file
+raises `AmbiguousClassificationError` before an extractor runs.
+
+---
+
+## Step 2a — Multi-source extraction (URL + folder + any 2+ sources)
+
+```python
+drafts = []
+for arg in args:
+    if arg.startswith("http"):
+        drafts.append(extract_from_url(arg))
+    elif arg.endswith(".pptx"):
+        drafts.append(extract_from_pptx(arg))
+    elif arg.endswith(".docx"):
+        drafts.append(extract_from_docx(arg))
+    elif arg.endswith(".pdf"):
+        drafts.append(extract_from_pdf(arg))
+    elif Path(arg).is_dir():
+        # Recurse via folder mode helper
+        ...
+
+draft = merge_drafts(drafts)
+cross_validation = cross_validate_visual(drafts)
+draft["multi_source"] = {
+    "sources": [d["source"] for d in drafts],
+    "mismatches": cross_validation["mismatches"],
+    "agreements": cross_validation["agreements"],
+}
+```
+
+Mismatches are NOT auto-resolved here. They surface in the Step 5 confirmation gate.
+
+---
+
+## Step 2a — Draft structure after extraction
+
+All extraction modes produce a `draft` dict with this shape:
+
+```python
+{
+    "colors": {
+        "primary": {"hex": "#...", "confidence": 0.95},
+        "secondary": {"hex": "#...", "confidence": 0.90},
+        "accent": {"hex": "#...", "confidence": 0.85},
+        "background": {"hex": "#FFFFFF", "confidence": 0.75},
+        "text": {"hex": "#333333", "confidence": 0.70},
+    },
+    "logos": {
+        "primary": {"url": "https://...", "confidence": 0.90},  # or "path": "..."
+        "favicon": {"url": "https://...", "confidence": 0.80},
+    },
+    "fonts": {
+        "header": {"name": "Montserrat", "confidence": 0.85},
+        "body": {"name": "Open Sans", "confidence": 0.80},
+        "monospace": {"name": "Courier New", "confidence": 0.70},
+    },
+    "source": {"type": "url"|"pdf"|"pptx"|"docx"|"wizard"|"multi", "reference": "..."},
+    "extracted_at": "2026-04-30T00:00:00Z",
+    "confidence_scores": {...},
+    "voice_corpus": {                         # only present for sources with body text
+        "text": "...",                        # cleaned, optionally truncated to ~3000 words
+        "word_count": 0,
+        "truncated": False,
+    },
+    # Only present for multi-source extraction:
+    "multi_source": {
+        "sources": [...],
+        "mismatches": [{"field": "...", "values": [...]}, ...],
+        "agreements": [{"field": "...", "value": ...}, ...],
+    },
+}
+```
+
+Missing fields (empty dict values or absent keys) are acceptable — they will surface as warnings at Step 3 and can be filled at Step 5.
+
+---
+
+## Step 2c — Completeness audit checks
+
+```python
+audit = []
+n_brand_colors = sum(1 for r in ["primary", "secondary", "accent"] if r in draft.get("colors", {}))
+n_fonts = len(draft.get("fonts", {}))
+voice_words = draft.get("voice_corpus", {}).get("word_count", 0)
+voice_enabled = draft.get("voice", {}).get("enabled", False)
+has_logo = "primary" in draft.get("logos", {})
+
+if n_brand_colors < 2:
+    audit.append(("colors_thin", f"only {n_brand_colors} brand color(s) extracted"))
+if n_fonts == 0:
+    audit.append(("fonts_missing", "no fonts extracted (URL extraction often misses externally-hosted CSS)"))
+if not has_logo:
+    audit.append(("logo_missing", "no logo extracted"))
+if voice_words < 500:
+    audit.append(("voice_corpus_thin", f"voice corpus is only {voice_words} words; voice extraction skipped (need ≥500)"))
+elif voice_words < 2000:
+    audit.append(("voice_corpus_low", f"voice corpus is {voice_words} words; below recommended 2000 for high-confidence voice extraction"))
+if not voice_enabled and voice_words >= 500:
+    audit.append(("voice_disabled_unexpectedly", "voice corpus was sufficient but voice section is not enabled"))
+```
+
+---
+
+## Step 3 — Per-validator code blocks
+
+Run all validators in parallel (no inter-dependency). Collect results into a `validation_results` dict.
+
+### Color contrast (WCAG AA)
+
+```python
+text_color = draft["colors"].get("text", {}).get("hex", "#333333")
+bg_color   = draft["colors"].get("background", {}).get("hex", "#FFFFFF")
+contrast   = ColorValidator.validate_text_contrast(text_color, bg_color)
+# contrast = {"status": "pass"|"warn"|"fail", "ratio": float, "recommendation": str|None}
+```
+
+### Individual hex validation
+
+```python
+for role in ["primary", "secondary", "accent", "background", "text"]:
+    hex_val = draft["colors"].get(role, {}).get("hex", "")
+    if hex_val:
+        valid = ColorValidator.is_valid_hex(hex_val)
+        # If not valid: fail that color slot
+```
+
+### Logo validation (local files only)
+
+```python
+if "path" in draft["logos"].get("primary", {}):
+    logo_result = LogoValidator.validate_logo(draft["logos"]["primary"]["path"])
+# For URLs: mark as "pending" — validate after download in Step 6
+```
+
+### Font validation
+
+```python
+for role in ["header", "body", "monospace"]:
+    font_name = draft["fonts"].get(role, {}).get("name", "")
+    if font_name:
+        font_result = FontValidator.validate_font(font_name)
+```
+
+### Voice validation
+
+Skip when `draft["voice"]["enabled"]` is False — `status: "skipped"` is the default for visual-only sources and is informational, never an error.
+
+```python
+from skills._parallax.white_label.validator import VoiceValidator
+voice_result = VoiceValidator.validate_voice(draft.get("voice", {"enabled": False}))
+# voice_result = {"status": "pass"|"warn"|"fail"|"skipped", "checks": {"corpus": {...}, "completeness": {...}}}
+```
+
+### Confidence summary
+
+```python
+avg_conf = sum(draft["confidence_scores"].values()) / max(len(draft["confidence_scores"]), 1)
+lowest_field = min(draft["confidence_scores"], key=draft["confidence_scores"].get, default="n/a")
+```
+
+---
+
+## Step 6b — Download logos to local assets/
+
+```python
+import os
+from pathlib import Path
+from urllib.parse import urlparse
+
+from skills._parallax.white_label.extract import download_public_url
+
+assets_dir = os.path.expanduser("~/.parallax/client-branding/assets")
+os.makedirs(assets_dir, mode=0o700, exist_ok=True)
+```
+
+**Download only via `download_public_url`.** Logo and favicon URLs come from untrusted page content, so they carry the same SSRF exposure as the page fetch itself. `download_public_url` applies the destination policy that `extract_from_url` uses — public HTTP(S) only, redirects re-validated, connection pinned to the validated address, response size capped. Do NOT substitute `urllib.request.urlretrieve`, `requests`, or any other fetcher: those accept `file://` and private/loopback destinations and follow redirects unchecked.
+
+For each logo with a URL (not already a local path):
+
+```python
+# Primary logo
+if "url" in draft["logos"].get("primary", {}):
+    url = draft["logos"]["primary"]["url"]
+    ext = Path(urlparse(url).path).suffix or ".png"
+    dest = f"{assets_dir}/logo-primary{ext}"
+    download_public_url(url, dest)
+    draft["logos"]["primary"]["local_path"] = dest
+
+# Favicon
+if "url" in draft["logos"].get("favicon", {}):
+    url = draft["logos"]["favicon"]["url"]
+    ext = Path(urlparse(url).path).suffix or ".ico"
+    dest = f"{assets_dir}/favicon{ext}"
+    download_public_url(url, dest)
+    draft["logos"]["favicon"]["local_path"] = dest
+```
+
+On download failure: warn (`"Logo download failed: <error>. URL preserved in config; local copy unavailable."`) and set `local_path` to `None`. Do not abort the save. A `UrlNotPublicError` means the asset URL itself was rejected by the destination policy — report it as such and do not retry through another path.
+
+After download, re-run `LogoValidator.validate_logo(dest)` and append results to the validation summary.
+
+---
+
+## Step 6c — Construct config.yaml via `build_config_from_draft`
+
+**Use `build_config_from_draft(draft, schema_version=2)` from `loader.py` — do not hand-assemble the config dict.** The builder is the single source of truth for the v2 shape (drops `fonts.*`, emits `colors.tertiary` and flat `colors.neutral`, wires `components.body-text`). It also handles the `voice` section and the `multi_source` provenance block — no post-build mutation needed.
+
+```python
+from skills._parallax.white_label.loader import build_config_from_draft
+
+config = build_config_from_draft(
+    draft,
+    client_name=draft.get("client_name", ""),
+    extracted_by=draft.get("extracted_by", ""),
+    notes=draft.get("notes", ""),
+    validation_summary=validation_results,   # from Step 3; updated with post-download logo checks
+    schema_version=2,
+)
+```
+
+For reference, the v2 config shape looks like (do NOT hand-write this — call the builder):
+
+```yaml
+metadata:
+  schema_version: 2
+  client_name: <draft.client_name>
+  extracted_at: <draft.extracted_at>
+  source: <draft.source>
+branding:
+  colors:
+    primary: <hex>
+    secondary: <hex>
+    tertiary: <hex>           # was 'accent' in v1
+    neutral: <hex>            # flat hex; was 'background' in v1
+  logos:
+    primary: <local_path or url>
+    favicon: <local_path or url>
+  typography:
+    h1:      { fontFamily, fontSize, fontWeight, lineHeight, letterSpacing }
+    h2..h5:  { ... }
+    body-md: { ... }
+    code:    { ... }          # was 'fonts.monospace' in v1
+  rounded:   { sm, md, lg, full }
+  spacing:   { xs, sm, md, lg, xl }
+  components:
+    body-text:
+      backgroundColor: "{colors.neutral}"
+      textColor: <hex>        # text-on-neutral pair; was 'colors.text' in v1
+validation_summary: <validation_results>
+confidence_scores: <draft.confidence_scores>
+```
+
+`fonts.*` is **not** emitted in v2. The loader's `_normalize_branding_v2_to_return_shape` derives the legacy `fonts.{header,body,monospace}` keys from `typography.{h1,body-md,code}.fontFamily` at read time, so downstream consumers continue to see the legacy fonts keys regardless of on-disk schema version. The full `load_client_branding()` return shape is 14 keys on every path (the four v2 token-tree keys — `typography`, `rounded`, `spacing`, `components` — plus the `render` defaults key are populated as empty dicts on v1 and error paths so consumers can read them unconditionally).
+
+Legacy v1 fallback (only when a downstream skill or migration explicitly passes `schema_version=1`):
+
+```python
+config = build_config_from_draft(draft, schema_version=1, validation_summary=validation_results)
+# Emits the old shape: colors.accent / colors.background / colors.text + fonts.{header,body,monospace}
+```
+
+Compute `config_hash = sha256(yaml.safe_dump(config["branding"], sort_keys=True).encode()).hexdigest()`.
+
+---
+
+## Step 6d — Persist the disposition (single transaction boundary)
+
+Every confirmation-gate outcome goes through one call. `persist_disposition`
+routes an activating disposition to `save_confirmed_branding` and a
+non-activating one to `record_extraction_attempt`. Do not reproduce the
+config.yaml / DESIGN.md / audit.jsonl write sequence inline: the three files are
+one transaction, and writing them separately can leave config.yaml on the new
+brand while DESIGN.md still describes the old one and audit.jsonl records
+neither.
+
+```python
+from persistence import persist_disposition, PersistenceError
+
+result = persist_disposition(
+    draft,
+    disposition=disposition,          # "confirmed" | "edited" | "re_extracted" | "rejected"
+    client_name=client_name,
+    validation_summary=validation_results,
+    extracted_by=extracted_by,        # optional
+    notes=notes,                      # optional
+    lint_status=lint_status,          # "pass" | "warn" | "fail" | "skipped"
+    pre_edit_draft=pre_edit_draft,    # REQUIRED when disposition == "edited"
+    edit_notes=edit_notes,            # optional one-liner, written beside it
+)
+```
+
+An `edited` disposition must pass the pre-edit draft — the call raises
+`ValueError` without it. `draft_yaml_hash` is then the hash of what extraction
+produced rather than what the operator settled on, so an edit is
+distinguishable from a plain confirmation, and the same bytes are archived as
+`pre_edit.yaml` (with `edit_notes.md` beside it when `edit_notes` is non-empty)
+under the returned `archive_dir`. `config_hash` already records the activated
+state.
+
+`confirmed` and `edited` activate: the call builds `config.yaml` via
+`build_config_from_draft`, emits `DESIGN.md` via `emit_design_md`, appends the
+hash-chained audit entry, archives any superseded config, and replaces all three
+live files under a writer lock. It returns
+`{"applied": True, "config_hash": ..., "design_md_hash": ..., "client_name": ...,
+"archive_dir": ...}` — `archive_dir` is the `.archive/<ts>-<txid>` directory
+holding the superseded config and any pre-edit evidence, or `None` when nothing
+was archived.
+
+`re_extracted` and `rejected` do not activate: the call appends an
+`action: "extraction_attempt"`, `applied: false` audit entry and writes no
+active artifact. It returns `{"applied": False, "disposition": ...}`. Every
+extraction attempt that does not result in a save is recorded this way,
+including aborted sessions.
+
+`emit_design_md` raises `ValueError` on invalid hex tokens in the draft, which
+surfaces as a failed save. On any failure the previous active state is restored
+and `PersistenceError` is raised; report it cleanly and treat the save as not
+applied. `RecoveryError` (a `PersistenceError`) means an earlier interrupted
+save left a state this process cannot repair — surface it rather than retrying.
+Call `recover_interrupted_save()` to repair a branding root explicitly; every
+save already begins with that repair.
+
+**Audit-entry schema bump (intentional chain discontinuity).** Save entries
+include `design_md_hash` and `lint_status`. The chain hash is
+`sha256(prior-line-bytes)`, so the first new-shape entry after a v1 audit log
+appears as a chain break to any downstream verifier comparing entry shape across
+the bump. This is intentional: keep the prior chain readable for forensics but
+treat entries before this point as belonging to the v1 audit schema. Gate a
+verifier on `entry.get("design_md_hash") is not None` to detect schema-2
+entries; absent that field, treat the entry as v1.
+
+---
+
+## Regenerate-from-config — Python block
+
+For the `--regenerate-design-md` operational mode. Validates required keys, reconstructs a synthetic draft via `_config_to_draft`, calls `emit_design_md`, writes atomically, appends audit entry.
+
+```python
+import os, hashlib, shutil, yaml
+from datetime import datetime, timezone
+from skills._parallax.white_label.emit_design_md import emit_design_md
+
+config_path = os.path.expanduser("~/.parallax/client-branding/config.yaml")
+if not os.path.exists(config_path):
+    print("No active branding to regenerate from. Run /parallax-white-label-onboard first.")
+    return
+
+with open(config_path) as f:
+    cfg = yaml.safe_load(f) or {}
+
+# Validate minimum required keys for emission
+required_ok = (
+    cfg.get("branding", {}).get("colors", {}).get("primary")
+    and (
+        cfg.get("branding", {}).get("typography", {}).get("h1")
+        or cfg.get("branding", {}).get("fonts", {}).get("header")
+    )
+)
+if not required_ok:
+    missing = []
+    if not cfg.get("branding", {}).get("colors", {}).get("primary"):
+        missing.append("branding.colors.primary")
+    if not (cfg.get("branding", {}).get("typography", {}).get("h1") or cfg.get("branding", {}).get("fonts", {}).get("header")):
+        missing.append("branding.typography.h1 or branding.fonts.header")
+    print(f"Cannot regenerate — config.yaml missing required keys: {missing}. Re-run /parallax-white-label-onboard to repair.")
+    return
+
+# Reconstruct a synthetic draft (the inverse of build_config_from_draft)
+draft = _config_to_draft(cfg)  # in loader.py; mirrors build_config_from_draft
+
+design_md_text = emit_design_md(
+    draft,
+    client_name=cfg.get("metadata", {}).get("client_name", ""),
+    extracted_at=cfg.get("metadata", {}).get("extracted_at", ""),
+    source_refs=[(cfg.get("metadata", {}).get("source") or {}).get("reference", "regenerated-from-config")],
+)
+
+# Atomic write
+design_md_path = os.path.expanduser("~/.parallax/client-branding/DESIGN.md")
+staging = design_md_path + ".staging"
+with open(staging, "w", encoding="utf-8") as f:
+    f.write(design_md_text)
+shutil.move(staging, design_md_path)
+os.chmod(design_md_path, 0o600)
+
+# Audit entry
+audit_path = os.path.expanduser("~/.parallax/client-branding/audit.jsonl")
+prev_hash = "0" * 64
+if os.path.exists(audit_path):
+    with open(audit_path) as f:
+        lines = [l.strip() for l in f if l.strip()]
+    if lines:
+        prev_hash = hashlib.sha256(lines[-1].encode()).hexdigest()
+
+entry = {
+    "schema_version": 1,
+    "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    "skill": "parallax-white-label-onboard",
+    "action": "regenerate_design_md",
+    "applied": True,
+    "design_md_hash": hashlib.sha256(design_md_text.encode("utf-8")).hexdigest(),
+    "prev_entry_hash": prev_hash,
+}
+import json
+with open(audit_path, "a") as f:
+    f.write(json.dumps(entry, separators=(",", ":")) + "\n")
+os.chmod(audit_path, 0o600)
+
+print("DESIGN.md regenerated from config.yaml. Sources unchanged.")
+```
+
+Hard errors (printed + return, no partial emit):
+- `config.yaml` not present → "No active branding to regenerate from. Run /parallax-white-label-onboard first."
+- `config.yaml` present but missing `branding.colors.primary` or both typography & fonts → "Cannot regenerate — config.yaml missing required keys: ...". Do not write a partial `DESIGN.md`.
+
+Behavior on a v1 config (no `typography.*` block): emitter takes `fonts.header` / `fonts.body` / `fonts.monospace` as the `typography.h1.fontFamily` / `body-md.fontFamily` / `code.fontFamily` defaults (with confidence-neutral 0.5).

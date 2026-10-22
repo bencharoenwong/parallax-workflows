@@ -1,0 +1,49 @@
+# Competitor Intelligence Schema
+#
+# Governs the structured ground truth for the "Autoreason" adversarial marketing loop.
+# Used by the Strawman agent to verify claims and enforce institutional credibility.
+
+metadata:
+  schema_version: 1
+  last_updated: "2026-05-02"
+
+competitor:
+  name: ""                                  # Primary display name
+  ric_mapping: ""                           # RIC code for the organization (if public)
+  category: ""                              # e.g., "Terminal", "Portfolio Analytics", "Risk Management"
+  
+intelligence:
+  teardown:
+    last_date: "YYYY-MM-DD"                # Date of last full product walkthrough
+    analyst: ""                             # Lead analyst for the teardown
+    confidence: 0.0                        # 1.0 = high, reflects depth of access (trial vs docs)
+
+  pricing:
+    model: ""                               # e.g., "Per-seat", "Enterprise", "AUM-based"
+    base_cost: ""                           # Sourced cost for typical entry-level user
+    as_of: "YYYY-MM-DD"                    # Date pricing was last verified
+    source_url: ""                         # Link to pricing page or public filing
+
+  win_loss_vectors:
+    strengths:                              # Why we (Parallax) win against them
+      - factor: ""                          # The specific differentiator
+        proof_point: ""                     # Verifiable evidence/case study
+    weaknesses:                             # Why we lose to them (Crucial for Honesty)
+      - factor: ""                          # Where they beat us
+        rebuttal: ""                        # Our strategic positioning on this gap
+
+  market_intel:
+    target_personas: []                    # Who they sell to (Family offices, L/S Hedge Funds, etc.)
+    muscle_memory_friction:                # What UI/Workflow habits their users have that we break
+      - habit: ""                          # The specific user habit
+        parallax_alternative: ""           # How we handle it differently (and why)
+
+  verifiable_claims:
+    supported:                             # Claims we CAN make about them
+      - claim: ""
+        citation: ""                        # Link to public docs/release notes
+    forbidden:                             # Claims we CANNOT make (to avoid libel/inaccuracy)
+      - claim: ""
+        reason: ""                          # Why it's prohibited (e.g., "Outdated as of v4.2")
+
+  who_should_choose: ""                     # Mandatory section: specific segment better served by them

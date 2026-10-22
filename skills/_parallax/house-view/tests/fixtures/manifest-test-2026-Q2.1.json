@@ -1,0 +1,45 @@
+{
+  "calibration_version": "test-2026-Q2.1",
+  "issued_at": "2026-04-25T12:00:00Z",
+  "manifest_expires_at": "2026-07-25T12:00:00Z",
+  "org_id": "parallax-default",
+  "provenance": {
+    "sec-pillar-multipliers": {
+      "backtest_ref": null,
+      "methodology_section": "GUESS",
+      "notes": "test-only fixture; not for production"
+    }
+  },
+  "schema_version": "1.0.0",
+  "signature": {
+    "alg": "ed25519",
+    "value": "x90WkTGe2KFW05Yt3g16drtoRhizk6wdkxLgZAljHKGCO+KLTarIwJMxDVuNY8rweGJLMH8CSvlcL6uOPckfCw=="
+  },
+  "signing_key_id": "test-91deb42f109a",
+  "values": {
+    "sec-kill-criterion": {
+      "applies_to_bundles": [
+        "default"
+      ],
+      "median_shift_pct": 5.0
+    },
+    "sec-pillar-multipliers": {
+      "active": true,
+      "values": {
+        "econometrics_phase": 1.0,
+        "market_entropy": 1.0,
+        "psychological_wavelength": 1.0,
+        "valuation_state": 1.0
+      }
+    },
+    "sec-sensitivity-bands": {
+      "bands": {
+        "default": {
+          "median_shift_max_bp": 25,
+          "median_shift_min_bp": -25
+        }
+      },
+      "warn_multiplier": 1.5
+    }
+  }
+}

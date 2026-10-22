@@ -1,0 +1,25 @@
+{
+  "symbol": "AAPL.O",
+  "company_name": "Apple Inc.",
+  "sector": "Technology",
+  "industry": "Consumer Electronics",
+  "peer_group": ["MSFT.O", "GOOGL.O", "META.O", "AMZN.O", "NVDA.O"],
+  "factor_scores": {
+    "quality": 7.2,
+    "value": 3.8,
+    "momentum": 6.1,
+    "growth": 5.5,
+    "total": 6.7
+  },
+  "peer_rank": {
+    "quality": 2,
+    "value": 4,
+    "momentum": 3,
+    "growth": 3,
+    "total": 2
+  },
+  "peer_count": 5,
+  "debt_to_equity_peer_median": 0.52,
+  "market_cap_usd": 3280000000000,
+  "suggestion": null
+}

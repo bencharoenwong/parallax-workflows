@@ -1,0 +1,40 @@
+{
+  "_fixture_purpose": "Models the live tool's tri-state has_issues when fewer than 50% of input weight resolves: has_issues becomes the literal string \"unknown\", not a real bool, until coverage recovers. Distinct from check_portfolio_redundancy_silent_fail.json, which models a different bug (empty payload despite real concentration) where has_issues stays a real bool. See CHECK_PORTFOLIO_REDUNDANCY_SCHEMA's has_issues note in contract_schemas.py.",
+  "_replay_context": "Synthetic fixture modelled on the live response shape, not a captured response. Update if the live coverage threshold or has_issues behavior changes.",
+  "success": true,
+  "has_issues": "unknown",
+  "holdings_input": 5,
+  "holdings_resolved": 2,
+  "holdings_failed": 3,
+  "holdings_trimmed": 0,
+  "holdings_unresolved": [
+    {
+      "symbol": "AAAQ.O",
+      "weight": 0.2,
+      "status": 404,
+      "error": "Target not found in peer response"
+    },
+    {
+      "symbol": "BBBQ.O",
+      "weight": 0.2,
+      "error": "No sector data",
+      "industry": "Specialty Retail"
+    },
+    {
+      "symbol": "CCCQ.O",
+      "weight": 0.2,
+      "error": "Upstream request timed out"
+    }
+  ],
+  "coverage_weight_fraction": 0.4,
+  "sector_concentration": {
+    "Industrials": 0.4
+  },
+  "industry_overlap": {},
+  "warnings": [
+    "Only 40% of portfolio weight checked — cannot assess diversification"
+  ],
+  "recommendations": [
+    "Insufficient data coverage — retry later or check symbols with search_stocks"
+  ]
+}

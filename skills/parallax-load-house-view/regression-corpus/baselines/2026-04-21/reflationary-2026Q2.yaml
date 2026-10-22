@@ -1,0 +1,64 @@
+# Baseline extraction for regression-corpus entry: reflationary-2026Q2
+# Source: skills/load-house-view/samples/2026-reflationary.md
+# Produced by: claude-opus-4-7 (manual Step-2 extraction per SKILL.md)
+# Produced at: 2026-04-21
+# Schema version: post-2026-04-21 (macro_regime nullable, taiwan/korea regions, reshoring theme)
+
+entry_id: reflationary-2026Q2
+
+metadata:
+  view_name: "Q2 2026 House View — Reflationary Re-acceleration"
+  uploader_role: CIO
+  effective_date: "2026-04-01"
+  valid_through: "2026-06-30"
+
+tilts:
+  sectors:
+    financials: 1
+    industrials: 1
+    energy: 1
+    information_technology: 1
+    consumer_staples: -1
+    utilities: -1
+
+  regions:
+    us: 1
+    em_ex_china: 2
+    japan: -1
+    china: -1
+
+  factors:
+    value: 1
+    momentum: 1
+    defensive: -1
+
+  themes:
+    ai_infrastructure: 1
+    energy_transition: 2
+    defense: 1
+
+  styles: {}
+
+  macro_regime:
+    growth: reflationary
+    inflation: benign
+    rates: holding
+    risk_appetite: risk_on
+
+  excludes: [tobacco, weapons, russia, belarus]
+  excludes_freeform: []
+
+extraction_confidence:
+  sectors: 0.85
+  regions: 0.80
+  factors: 0.90
+  styles: 0.95
+  themes: 0.82
+  excludes: 0.95
+  macro_regime: 0.85
+
+extraction_notes: |
+  Information technology collapsed to +1 despite hedged source language ("constructive on
+  AI infra but selective in software"); captured separately via themes.ai_infrastructure=+1.
+  China tilt (-1) inferred from "EM ex-China" framing, not explicit. Explicit factor tilts
+  stack with reflationary macro-regime auto-tilts at loader consume time.

@@ -1,0 +1,25 @@
+{
+  "symbol": "AAPL.O",
+  "statement": "cash_flow",
+  "currency": "USD",
+  "periods": [
+    {
+      "period": "FY2024",
+      "operating_cash_flow": 118254000000,
+      "capital_expenditures": -9447000000,
+      "free_cash_flow": 108807000000,
+      "dividends_paid": -15025000000,
+      "share_repurchases": -94949000000,
+      "net_change_in_cash": -5445000000
+    },
+    {
+      "period": "FY2023",
+      "operating_cash_flow": 110543000000,
+      "capital_expenditures": -10959000000,
+      "free_cash_flow": 99584000000,
+      "dividends_paid": -15012000000,
+      "share_repurchases": -77550000000,
+      "net_change_in_cash": 1018000000
+    }
+  ]
+}

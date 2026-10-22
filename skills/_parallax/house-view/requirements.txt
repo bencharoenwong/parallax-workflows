@@ -1,0 +1,20 @@
+# Calibration manifest verifier — exact pins for replay determinism.
+#
+# Per reasoning chain spec (notes/2026-04-24-reasoning-chain-spec.md §5),
+# the lockfile MUST contain exact versions, not ranges. A patch-version
+# difference in rfc8785 between two installs is enough to break chain
+# hash byte-identity, so a 7yr-old chain MUST replay against the same
+# resolved version that signed/hashed it originally.
+#
+# To bump: regenerate fixtures with the new rfc8785 version, run all
+# tests against both pinned versions, and document the cutover in the
+# skill_version changelog before flipping the pin.
+#
+# Pinned 2026-04-25 against the spec triad's v1 implementation range:
+#   pynacl install range: >=1.5,<2
+#   rfc8785 install range: >=0.1.0,<0.2.0  (per chain spec §5)
+
+pynacl==1.6.2
+rfc8785==0.1.4
+pyyaml==6.0.3
+
