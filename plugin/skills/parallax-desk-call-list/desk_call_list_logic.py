@@ -505,7 +505,7 @@ def render_no_calls_or_degraded(
         largest_symbol, largest_move = _largest_move(moves)
         dates = "; ".join(f"{s}: {pair[0]} to {pair[1]}"
                           for s, pair in sorted(integrity["session_intervals"].items()))
-        session_note = (f" Session basis: {integrity["session_basis"]}; {dates}. "
+        session_note = (f" Session basis: {integrity['session_basis']}; {dates}. "
                         "Latest-session estimates, not a realized account return or a common overnight interval.")
         return (
             f"**No calls indicated.** {len(symbols)} unique symbols scanned across "

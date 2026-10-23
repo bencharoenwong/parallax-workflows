@@ -117,7 +117,11 @@ def history_stats(long: dict[str, float], short: dict[str, float], ratio: float)
         dd = max_drawdown(wealth)
     except ValueError:
         return {"available": False, "reason": "synthetic spread wealth became nonpositive or non-finite"}
-    corr = statistics.correlation(l, s) if statistics.pstdev(l) > 0 and statistics.pstdev(s) > 0 else None
+    sd_l, sd_s = statistics.pstdev(l), statistics.pstdev(s)
+    corr = None
+    if sd_l > 0 and sd_s > 0:
+        mean_l, mean_s = statistics.mean(l), statistics.mean(s)
+        corr = sum((a - mean_l) * (b - mean_s) for a, b in zip(l, s)) / (len(l) * sd_l * sd_s)
     return {"available": True, "common_return_intervals": len(common),
             "start_date": common[0][0], "end_date": common[-1][1],
             "correlation": corr, "annualized_spread_volatility": statistics.stdev(spread) * math.sqrt(252),
