@@ -35,6 +35,11 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 - `run-gate-tests.sh` and `evals.yml` also run the bundled `plugin/skills/_parallax/white-label/tests` copy, and `test_ci_root_parity.py` accepts `plugin/` paths. The white-label exempt-entry check now requires a SKILL.md only for exempt skills the manifest expects in the tree under test: every manifest skill in the source tree, only the plugin skills in a filtered distribution.
 
 ### Fixed
+- Single-stock and portfolio workflows run identity reads and the symbol cross-check before paid async tools (news, technicals, Palepu, assessment). A mismatched symbol no longer bills those calls. Applies to deep-dive, should-i-buy, due-diligence, earnings-quality, morning-brief, credit-lens and the PTJ profile.
+- Conventions list all eight async tools with their server wait limits, state that `get_stock_report` returns inline and is never re-called, and route the four newer tools (`get_performance_history`, `get_score_summary`, `get_etf_report`, `explore_telemetry`).
+- `analyze_portfolio` `fields` is documented as a validated enum; two names the server does not accept are removed. The macro fallback maps every RIC-table suffix, plus `.K` and `.SI`, to a live macro market name or to unavailable.
+- The Soros universe timeout rule checks the original job before any replacement call and allows one replacement only after a failed job.
+- Credit tables price `explore_telemetry` and count 36 tools; stale token-era wording and hardcoded macro market counts are removed.
 - Fresh-session rollout and concierge runners allow five-minute MCP requests by default while retaining their overall process timeout. Explicit operator deadlines take precedence.
 - Deep-dive starts at most one assessment job. Timeout/pending and incomplete completed output have separate unavailable states; neither triggers an automatic replacement job. The consensus subset example now meets the three-profile minimum.
 - The standalone stock-report renderer falls back safely for malformed nested branding config and activates branding only from accepted visual values. Onboarding documentation distinguishes stored voice settings from implemented visual rendering.

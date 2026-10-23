@@ -229,7 +229,7 @@ server:
 Declare an alias only for an actual Parallax connector. A genuinely foreign
 server needs the foreign-namespace declaration. An unknown tool under a Parallax
 namespace enters `unknown_endpoints` and degrades the record as a stale-table
-signal. All 35 currently published endpoints are priced, including the free
+signal. All 36 currently published endpoints are priced, including the free
 search, documentation, health, polling and feedback tools.
 
 ## Adding a new skill eval
