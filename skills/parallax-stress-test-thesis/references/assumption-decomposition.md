@@ -134,7 +134,7 @@ own bias made visible. Keep it to one line plus a sentence of why; do not morali
 ## Extraction quality gate
 
 Before moving to Phase 2, **play the Assumption Map back to the user** as a table (id, layer,
-claim, criticality) and let them correct a mis-read before any tool calls burn tokens on the wrong
+claim, criticality) and let them correct a mis-read before any tool calls spend credits on the wrong
 argument. This is the single highest-leverage error-catching step in the whole skill — a
 mis-extracted assumption produces a confidently wrong verdict five phases later. Don't skip this
 for the sake of a faster run.

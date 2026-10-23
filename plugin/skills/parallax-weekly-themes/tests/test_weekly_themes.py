@@ -109,3 +109,38 @@ def test_cli_bad_input_exits_2(tmp_path):
     bad.write_text("{not json", encoding="utf-8")
     assert main(["--input", str(bad)]) == 2
     assert main(["--input", str(tmp_path / "missing.json")]) == 2
+
+
+@pytest.mark.parametrize("field,value", [("top_wtd", "broken"), ("bottom_wtd", [1]), ("n_baskets", -1), ("n_positive_wtd", 8), ("as_of", "2026-02-30")])
+def test_invalid_market_payload_has_controlled_cli_failure(payload, tmp_path, capsys, field, value):
+    payload["markets"]["AA"][field] = value
+    path = tmp_path / "telemetry.json"
+    path.write_text(json.dumps(payload))
+    assert main(["--input", str(path)]) == 2
+    assert capsys.readouterr().out == ""
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf")])
+def test_nonfinite_returns_never_rank(payload, value):
+    payload["markets"]["AA"]["top_wtd"]["value"] = value
+    with pytest.raises(ValueError, match="finite"):
+        compute(payload)
+
+
+def test_unknown_freshness_is_visible_and_not_ranked(payload):
+    payload["markets"]["BB"].pop("as_of")
+    result = compute(payload)
+    assert result.unknown_freshness == ["BB"]
+    assert [r.code for r in result.themes_of_week] == ["AA"]
+    assert "freshness unknown" in next(r.note for r in result.markets if r.code == "BB")
+    payload.pop("report_date")
+    assert not compute(payload).themes_of_week
+
+
+def test_metadata_run_date_does_not_replace_returned_report_data_date(payload):
+    # Telemetry can run the next day while its market data/report_date remain Friday.
+    payload["metadata"] = {"run_date": "2026-01-03", "data_as_of": "2026-01-02"}
+    result = compute(payload)
+    assert result.report_date == "2026-01-02"
+    assert [r.code for r in result.themes_of_week] == ["BB", "AA"]
+    assert result.stale == ["DD"]

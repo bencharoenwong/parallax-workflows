@@ -15,8 +15,8 @@ S3 optimizer — a real Bash tool call, never prose arithmetic:
      holding's aggregated composite score (loader.md §3b) × its region tilt
      multiplier × its sector tilt multiplier (loader.md §3; each 1.0 with no
      active view). Every non-excluded holding needs one; a holding whose score
-     is unavailable must be either excluded from the solve or given an
-     explicit disclosed treatment — the solver rejects a missing coefficient
+     is unavailable blocks the complete target-book solve unless its
+     coefficient receives an independently verified treatment — the solver rejects a missing coefficient
      rather than guessing. **The explicit disclosed treatment for a
      profile-derived score** (Batch A coverage-gap fallback, `get_peer_snapshot`
      row): before using it as a coefficient here, cross-check it against the
@@ -24,8 +24,8 @@ S3 optimizer — a real Bash tool call, never prose arithmetic:
      composite field, same 1–10 scale — the coefficient is same-scale by
      construction and enters the solve with the profile-derived disclosure. If
      they disagree, or only one source returned, do NOT solve with a guessed
-     value: exclude the holding from the solve instead, using the
-     excluded-holding disclosure named above (mixed-scale coefficients change
+     value: block the complete target-book solve instead, using a
+     named missing-evidence disclosure (mixed-scale coefficients change
      the LP optimum itself, so a guessed value is never an acceptable
      substitute). State the same-scale verification outcome for every
      profile-derived holding in Policy Reconciliation.
@@ -79,17 +79,18 @@ S3 optimizer — a real Bash tool call, never prose arithmetic:
    - `infeasible`: render the `violations` table (the exact smallest
      relaxations) and NO optimizer targets — no target weights, no trade
      list, not even labeled "suggested". Never silently relax. Trade
-     Recommendations fall back to the flag-based path, labeled "not
-     policy-reconciled — constraints jointly infeasible, see Policy
-     Reconciliation". When the smallest-violation table names a bound on a
+     Recommendations retain diagnostic flags only, labeled "constraints
+     jointly infeasible — sizing withheld, see Policy Reconciliation"; no
+     numeric flag-based targets or trade sizes may substitute. When the smallest-violation table names a bound on a
      holding that is the sole member of a floored band, state that the
      mandate is internally contradictory (cap against floor) — distinct from
      ordinary infeasibility.
    - `conflict`: render each named conflict (e.g. an exclude against a user
      minimum) for human decision — precedence collisions are never
-     auto-resolved (design guardrail 5). Same fallback labeling as
+     auto-resolved (design guardrail 5). Same diagnostics-only/no-sizing treatment as
      `infeasible`.
    - `solver_unavailable` / `invalid_input` / `solver_error`: the
      reconciliation verdict is **UNVERIFIED** — state the reason from the
-     result, render no optimizer targets, and label the flag-based fallback
-     "not policy-checked". Never substitute model judgement for the solve.
+     result, render no optimizer targets, and label diagnostic findings
+     "not policy-checked — sizing withheld". No numeric target/trade-size
+     fallback is permitted. Never substitute model judgement for the solve.

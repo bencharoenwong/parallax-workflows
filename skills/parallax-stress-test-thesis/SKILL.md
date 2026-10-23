@@ -15,15 +15,15 @@ description: "Pressure-tests a written investment thesis: decomposes it into fal
 
 ## Gotchas
 
-- Expected Parallax spend: scales with markets × components and named tickers; the optional `get_assessment` cross-check adds 10.
+- Expected Parallax spend: `0.05 + 5C + 5.4N + 10A` credits: one global telemetry read 0.05; C distinct market/component macro requests at 5 each; N named equities at 5.4 each (identity 0.05 + snapshot/history 0.1 each + analyst targets 0.05 + risk/return 0.1 + news 5); A optional assessment calls (0–2, including a separate client-conditioned pass) at 10 each. Country/health probes are free. Excludes resolution/recovery; current discovered prices win (`_parallax/token-costs.md`).
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §2 identity cross-check, §3 parallel execution, §4 fallbacks, §6 macro market selection, §9.1/§9.2 disclosures, §14 host primitives.
 - References, loaded when their step fires: `references/assumption-decomposition.md` (Step 1 taxonomy, records, degenerate inputs, hype scan), `references/market-stress-test.md` (Step 2/3 layers 1–4: market selection, batch calls, Supported/Contradicted/Unconfirmed, magnitude + time-to-play-out), `references/position-evaluation.md` (layer 3 position read), `references/world-verdict.md` (Step 4 synthesis and the async fallback), `references/client-conditioning.md` (Pass 2, only with a `client_profile`), `references/house-view-check.md` (only if an active view exists), `references/portfolio-aggregation.md` (book mode only), `references/output-modes.md` (depth, JSON, decay-compare, role, single-layer, export).
 - **Step 0 hard-stop is two distinct failure modes** — not-connected (no Parallax tools discovered) vs. connected-but-unentitled (tools discovered, the `check_api_health` probe errors). A slow or timed-out probe alone is not a hard stop.
-- `get_stock_outlook` takes exactly one `aspect` per call; `get_news_synthesis` is symbol-only (theme news is `macro_analyst(component: "news")`); `get_telemetry` is synchronous (returns directly, no polling) and global — it takes no market/country parameter, so call it once per run, not once per market; `get_assessment` (~3 min) is the async one here — fire it early, never block instant tools on it.
+- `get_stock_outlook` takes exactly one `aspect` per call; `get_news_synthesis` is symbol-only (theme news is `macro_analyst(component: "news")`); `get_telemetry` is synchronous (returns directly, no polling) and global — it takes no market/country parameter, so call it once per run, not once per market; `get_assessment` (~3 min) is the async one here — submit it only after the fixed records exist, and never block independent instant reads on it.
 - **Core invariant: Pass 2 never rewrites a Pass-1 Supported/Contradicted/Unconfirmed status** — it re-weights severity only.
 - House-view cross-check is optional, read-only and flag-only; it writes no §6 consume-audit row by default (`--house-view-audit` opts in — see the reference). No active view → render nothing.
 - Book mode (>1 thesis) is pure synthesis over per-thesis records — no new tool calls, no writes, no sizing call, never rewrites a per-thesis status.
-- No persisted state, no writes: `client_profile` lives in-session only.
+- No persistent analysis state or portfolio/config mutation: `client_profile` lives in-session only. The render gate uses a temporary local draft and consumes it; this is a local rendering artifact, not saved client context.
 
 ## Usage
 
@@ -56,10 +56,10 @@ drop the disclaimer.
 - **Structured (JSON) output** — on `--json` / "machine-readable", emit a fenced `json` block
   mirroring the records (assumption map, statuses, verdict) for embedding. **No `action`/`rating`/`weight`
   key ever**; carries `disclaimer_variant` + `not_a_recommendation: true`; no new derivation; still
-  read-only (rendered in-chat, writes nothing). → `references/output-modes.md` §7
+  read-only (rendered in-chat, creates no persistent analysis state). → `references/output-modes.md` §7
 - **Decay-compare** — "what changed since last time?": the caller pastes a prior run's JSON (or names
   the prior statuses) as a **session input** — the skill re-reads today's data live, diffs Assumption
-  Strength / status flips into a **What Changed** section, and writes nothing. This is the
+  Strength / status flips into a **What Changed** section, and creates no persistent analysis state. This is the
   no-persistence monitoring loop (state lives with the caller). → `references/output-modes.md` §8
 - **Role-tailored presentation** — an optional `role` (individual / rm / wealth_advisor /
   fund_manager / research_analyst / engineering) makes the skill *default* to the outputs that role
@@ -78,7 +78,7 @@ drop the disclaimer.
 
 ## Where artifacts live
 
-None. This skill is read-only and persists nothing — no files, no cache. `client_profile` is a session-only input.
+Only the temporary Step-6 render draft exists locally and is consumed by the gate. No client-profile store, analysis cache or persistent workflow state is created; `client_profile` is session-only.
 
 ## Workflow
 
@@ -103,7 +103,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 
 ### Step 2 — Fetch (parallel batches) (Phases 2–3 reads)
 
-`load-reference` `references/market-stress-test.md` and, when tickers were named, `references/position-evaluation.md`. `call-tool` the layer 1–4 market reads (market selection per conventions §6; instant tools first, `get_telemetry` alongside) and the per-symbol position reads together; fire the optional `get_assessment` cross-check early only at `deep` depth or on request.
+`load-reference` `references/market-stress-test.md` and, when tickers were named, `references/position-evaluation.md`. `call-tool` the layer 1–4 market reads (market selection per conventions §6; instant tools first, `get_telemetry` alongside) and the per-symbol position reads together; collect the independent reads first. At `deep` depth or on request, the optional `get_assessment` cross-check fires in Step 4 only after the complete fixed Phase-2/3 records exist; do not submit incomplete early context.
 
 ### Step 3 — Verify (Phase 2 classification)
 
@@ -135,7 +135,7 @@ The entire final message is that command's stdout (`--json` output is a fenced b
 
 ## Output Format
 
-**Begin the response immediately with the rendered report — no preamble.** The first expected line is the `~N min read` marker, then `**TL;DR**`.
+**Begin the response immediately with the rendered report — no preamble.** For prose, the first expected line is the `~N min read` marker, then `**TL;DR**`. JSON-only mode instead begins with a fenced JSON block containing the records, full applicable disclaimer text, AI disclosure and `not_a_recommendation: true`; it does not require the prose opening. Gate warnings about that alternate opening are diagnostics, not permission to replace JSON with invented prose.
 
 Depth (§Modes) sets which of these render in full vs. collapsed; the **bold-starred** items below
 survive at every depth — they are never collapsed away. → `references/output-modes.md`.
@@ -203,7 +203,7 @@ See `COMPLIANCE.md` for the compliance/review map — where each invariant is en
 
 ## Done when
 
-- The Assumption Map was played back before any Step 2/3 spend, and the report opens with the `~N min read` marker and TL;DR.
+- The Assumption Map was played back before any Step 2/3 spend; prose opens with the read-time marker and TL;DR, or JSON-only uses the documented fenced payload and embedded disclosure/disclaimer.
 - No layer-1–4 status was reported without a live Parallax read behind it (Unconfirmed/out-of-scope otherwise).
 - Every Supported/Contradicted assumption carries a break condition's magnitude and time-to-play-out.
 - With a profile: the client-conditioned ranking visibly differs from Pass 1 where horizon/income-reliance bite, with Pass-1 statuses unchanged; without one: Pass 2 stated as skipped.

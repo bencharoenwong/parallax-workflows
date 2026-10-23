@@ -99,57 +99,19 @@ REAL_PYTHON="$(command -v python3)"
 [ -d "$PLUGIN_DIR" ] || { echo "plugin dir not found: $PLUGIN_DIR" >&2; exit 1; }
 mkdir -p "$RESULTS"
 
-# Async Parallax tools (get_news_synthesis, get_assessment, ...) can poll
-# past the default MCP idle timeout in a non-interactive session; match
-# evals/rollout/run_rollout.sh's convention of disabling it for live runs.
+# Async tools can take several minutes. Disabling the idle timer alone leaves
+# the HTTP request deadline unchanged; give each call up to five minutes too.
+# Keep the overall journey limit above as an independent process-group bound.
+export MCP_TOOL_TIMEOUT="${MCP_TOOL_TIMEOUT:-300000}"
 export CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT="${CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT:-0}"
 
-jfield() {
-  # jfield <json-line> <key> — extract a scalar string field, "" if absent/null.
-  python3 -c '
-import json, sys
-d = json.loads(sys.argv[1])
-v = d.get(sys.argv[2], "")
-print("" if v is None else v)
-' "$1" "$2"
-}
-
-selected() {
-  # selected <id> — 0 if PARALLAX_E2E_ONLY is empty or names this id.
-  [ -z "$ONLY" ] && return 0
-  local entry
-  local IFS=,
-  for entry in $ONLY; do
-    if [ "$entry" = "$1" ] || [ "$entry" = "${1%%_*}" ]; then
-      return 0
-    fi
-  done
-  return 1
-}
-
-# Validate every line first, so a malformed journey never costs a model call.
-BAD=0
-ALL_IDS=""
-while IFS= read -r LINE || [ -n "$LINE" ]; do
-  [ -z "$LINE" ] && continue
-  case "$LINE" in \#*) continue ;; esac
-  if ! VOUT=$(python3 "$CHECK" --validate "$LINE" 2>&1); then
-    BAD=1
-    echo "invalid journey line: $LINE" >&2
-    echo "$VOUT" | sed 's/^/  /' >&2
-  else
-    ALL_IDS="$ALL_IDS $(jfield "$LINE" id)"
-  fi
-done < "$JOURNEYS"
-[ "$BAD" -eq 0 ] || exit 1
-
-for ENTRY in $(printf '%s' "$ONLY" | tr ',' ' '); do
-  MATCHED=0
-  for JID in $ALL_IDS; do
-    if [ "$ENTRY" = "$JID" ] || [ "$ENTRY" = "${JID%%_*}" ]; then MATCHED=1; fi
-  done
-  [ "$MATCHED" -eq 1 ] || echo "WARNING: PARALLAX_E2E_ONLY entry matched no journey: $ENTRY" >&2
-done
+# Validate and extract all selected journeys in one Python start. NUL-delimited
+# fields preserve prompts containing tabs, newlines or shell metacharacters.
+PREPARED=$(mktemp "${TMPDIR:-/tmp}/concierge_preflight.XXXXXX") || exit 1
+trap 'rm -f "$PREPARED"' EXIT
+if ! python3 "$CHECK" --prepare "$JOURNEYS" --only "$ONLY" > "$PREPARED"; then
+  exit 1
+fi
 
 TOTAL=0
 FAILS=0
@@ -166,6 +128,7 @@ cleanup() {
     kill -KILL "$PID" 2>/dev/null
     PID=""
   fi
+  rm -f "$PREPARED"
   if [ -n "$SCRATCH" ]; then
     rm -rf "$SCRATCH"
     SCRATCH=""
@@ -174,14 +137,8 @@ cleanup() {
 trap 'cleanup; echo "interrupted" >&2; exit 130' INT TERM HUP
 trap cleanup EXIT
 
-while IFS= read -r LINE || [ -n "$LINE" ]; do
-  [ -z "$LINE" ] && continue
-  case "$LINE" in \#*) continue ;; esac
-
-  ID=$(jfield "$LINE" id)
-  selected "$ID" || continue
-  PROMPT=$(jfield "$LINE" prompt)
-  NEEDS=$(jfield "$LINE" needs)
+while IFS= read -r -d '' LINE && IFS= read -r -d '' ID &&
+      IFS= read -r -d '' PROMPT && IFS= read -r -d '' NEEDS; do
   TOTAL=$((TOTAL + 1))
 
   # Scratch layout (cwd = $SCRATCH): home/ holds only symlinks to the real
@@ -296,7 +253,7 @@ while IFS= read -r LINE || [ -n "$LINE" ]; do
   fi
   echo "  text: $TXT"
   echo "  stream: $RAW"
-done < "$JOURNEYS"
+done < "$PREPARED"
 
 if [ "$DRY_RUN" = "1" ]; then
   exit 0

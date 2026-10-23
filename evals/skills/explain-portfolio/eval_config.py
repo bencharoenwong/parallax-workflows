@@ -1,13 +1,13 @@
 """Eval spec for /parallax-explain-portfolio.
 
 explain-portfolio is reactive drawdown attribution. Its core deliverables — a
-score-vs-price divergence verdict (Transient/Fundamental/Ambiguous) and a computed
-portfolio return — have no analogues in the other portfolio skills, so it uses several
+observational price/score divergence summary and an explicitly labeled
+period-return illustration — have no analogues in the other portfolio skills, so it uses several
 skill-specific checks. Macro/regime is attribution layer 1 (get_telemetry + macro_analyst
 always run), rendered as a standalone "Market & Regime Context".
 
 Checks: sections_present, regime_context_grounded, ai_disclosure_present,
-disclaimer_present_correct, provenance_present, return_quantified, divergence_verdict,
+disclaimer_present_correct, provenance_present, return_quantified, divergence_verdict, return_method_stated,
 clean_start, orchestrator_length.
 Tier-2: no_hallucinated_data, regime_specific, divergence_logic_sound,
 advice_matches_verdict, return_reconciled_with_client.
@@ -58,7 +58,7 @@ _REGIME_TERMS = re.compile(
     re.I,
 )
 _VERDICT_TOKENS = re.compile(
-    r"\b(transient|fundamental|ambiguous|noise|signal|mixed)\b", re.I
+    r"\b(observed divergence|observed co-decline|mixed / insufficient evidence)\b", re.I
 )
 _PCT = re.compile(r"-?\d+(?:\.\d+)?\s*%")
 
@@ -80,7 +80,7 @@ def _c_regime_context_grounded(t, spec) -> Check:
 
 def _c_divergence_verdict(t, spec) -> Check:
     """Checks that 'The Key Question: Noise or Signal?' section is present and contains
-    a divergence classification (Transient/Fundamental/Ambiguous/noise/signal/mixed)."""
+    an observational pattern, rather than treating the heading itself as evidence."""
     sec = _section_text(t.final_prose, "The Key Question", spec.section_labels)
     if not sec:
         return Check("divergence_verdict", False, "Key Question section absent")
@@ -89,6 +89,21 @@ def _c_divergence_verdict(t, spec) -> Check:
     return Check(
         "divergence_verdict", ok, f"verdict_token={bool(_VERDICT_TOKENS.search(body))}"
     )
+
+
+def _c_return_method_stated(t, spec) -> Check:
+    """Require a method label beside returns, not a disclaimer elsewhere.
+
+    This checks explicit presentation only; the tier-2 criterion verifies whether
+    the claimed method is supported by the supplied history and price evidence.
+    """
+    sec = _section_text(t.final_prose, "What Happened", spec.section_labels)
+    pattern = re.compile(
+        r"current-weight period illustration|static-weight period illustration|"
+        r"verified account return|reconstructed (?:account|trading-history) return", re.I
+    )
+    ok = bool(sec) and pattern.search(sec) is not None
+    return Check("return_method_stated", ok, f"method_label={ok}")
 
 
 def _c_return_quantified(t, spec) -> Check:
@@ -159,6 +174,7 @@ SPEC = EvalSpec(
         "disclaimer_present_correct",  # COPIED (§9.1)
         "provenance_present",  # COPIED
         "return_quantified",  # NEW
+        "return_method_stated",
         "divergence_verdict",  # NEW
         "clean_start",  # NEW
         "orchestrator_length",  # COPIED
@@ -166,6 +182,7 @@ SPEC = EvalSpec(
     extra_checks={
         "regime_context_grounded": _c_regime_context_grounded,
         "return_quantified": _c_return_quantified,
+        "return_method_stated": _c_return_method_stated,
         "divergence_verdict": _c_divergence_verdict,
         "clean_start": _c_clean_start,
     },
@@ -178,18 +195,18 @@ SPEC = EvalSpec(
         },
         {
             "id": "divergence_logic_sound",
-            "statement": "Each holding's Transient/Fundamental/Ambiguous classification correctly follows from its score-vs-price pattern.",
-            "pass_when": "price-down + scores-stable -> Transient; price-down + scores-down -> Fundamental; mixed -> Ambiguous. The label matches the evidence shown for that holding.",
+            "statement": "Price/score patterns are descriptive observations with dates, lag, competing explanations and unresolved evidence.",
+            "pass_when": "Stable scores plus a loss are observed divergence, not proof of unchanged fundamentals or temporary loss. Co-decline does not establish causation. Missing/stale scores and news are stated; driver tags remain qualitative hypotheses unless a measured method supports them.",
         },
         {
             "id": "advice_matches_verdict",
-            "statement": "The 'What To Do' advice is consistent with the portfolio-level Noise/Signal verdict.",
-            "pass_when": "Transient verdict -> hold/stay-the-course; Fundamental -> investigate/trim the deteriorating names; Mixed -> separates the two. Advice does not contradict the verdict.",
+            "statement": "What To Do addresses unresolved evidence and risk/mandate checks without deriving trading actions from price/score patterns.",
+            "pass_when": "No hold/add/trim instruction follows solely from score stability, score decline or absent news; any optional investigation answers a stated unresolved question. Institutional view alignment does not establish client suitability.",
         },
         {
             "id": "return_reconciled_with_client",
-            "statement": "When the client stated a loss figure, the brief reconciles the COMPUTED return against it (confirming or flagging a >1% discrepancy).",
-            "pass_when": "The computed portfolio return is compared to the client's stated number; a material gap is surfaced. If the client gave no number, the computed figure stands and this passes vacuously.",
+            "statement": "Return method, weight dates, currency/price basis and coverage are explicit before comparison with a client loss figure.",
+            "pass_when": "Current/end weights alone receive the current-weight period illustration label, never a realized account claim. A known entry date alone is insufficient. Realized claims require verified account returns or supported reconstruction of positions/trades/cash flows. Gaps greater than 1 percentage point and incompatible/unknown bases are disclosed, not called verified discrepancies. Unadjusted closes are not asserted as total returns.",
         },
     ],
     tasks_path="evals/tasks/explain-portfolio/core.jsonl",

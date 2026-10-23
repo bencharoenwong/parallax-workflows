@@ -18,7 +18,7 @@ description: "Full macro regime analysis with optional equity screening: country
 
 ## Gotchas
 
-- Expected Parallax spend: ~46 tokens with `equities=true`, ~28 without (`_parallax/token-costs.md`). This skill no longer calls `check_macro_health` (DEPRECATED per its own tool description, and `list_macro_countries` already covers the coverage check).
+- Expected Parallax spend: **0.05 + Σ macro credits** without equities: free coverage + telemetry 0.05 + one omitted-component overview per selected covered market (5 normally/up to 50 on reassembly). One market: **5.05 normally/up to 50.05 credits**. Each requested five-name equity census adds **6.05** = universe 5 + snapshots 0.50 + identity 0.25 + three histories 0.30; one market with equities: **11.10 normally/up to 56.10**. Extra successful identity-resolution reads add 0.05 per symbol. Discovered prices win; deprecated `check_macro_health` is not called (`_parallax/token-costs.md`).
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.2 (`macro_analyst` takes `market`; summary mode returns all components inline — never per-component calls), §2 identity cross-check, §3 parallel execution, §4 fallbacks, §13 audience mode, §14 host primitives.
 - JIT-load `_parallax/house-view/loader.md` UNCONDITIONALLY: §5 rule 3 (ground-truth), rule 6 (AI disclosure) and §6 (audit) apply with or without a view. This skill answers the regime question, so neither §3 multipliers nor §7 apply: the macro narrative reflects live data and the optional equity census is **deliberately untilted** (tilted discovery is /parallax-country-deep-dive's job). Regime-alignment mode (this skill's own §7.4): when the view's stated regime conflicts with live `get_telemetry.regime_tag`, render `View regime: <X> | Live regime: <Y>` directly under the preamble; live wins for the narrative.
 - Smaller/EM markets may have fewer scored equities — set expectations. ETFs are not in the scoring universe.
@@ -49,19 +49,19 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
    <!-- host-note -->
    Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
    <!-- /host-note -->
-3. Parse args: one or more markets; `equities=`; `component=`; `audience=`.
+3. Parse args: one or more markets; `equities=true|false` (default false); optional `component=` validated against discovered macro components; `audience=`. A component selects which returned summary sections are presented, not extra per-component calls.
 4. `load-reference` `_parallax/house-view/loader.md`; run §1–§2. If a view is present, capture the load preamble and `view.macro_regime` (or a regime keyword from `basis_statement`: recessionary, expansion, stagflation, soft landing, hard landing, reflationary, disinflationary) for the Step 4 alignment check.
 5. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`.
 
 ### Step 1 — Resolve inputs
 
-Market names must match `list_macro_countries` verbatim (conventions §0.2); a bellwether RIC per market for the score read (e.g. AAPL.O for United States, 7203.T for Japan).
+Resolve market names against Batch A's `list_macro_countries` verbatim (conventions §0.2); ask for ambiguous region membership. A single company's score is not evidence of a country regime; do not fetch an unused bellwether series.
 
 ### Step 2 — Fetch (parallel batches)
 
 **Batch A** — `call-tool` together: `list_macro_countries`; `get_telemetry` (fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences).
 
-**Batch B** — after A: `macro_analyst(market=<country>)` in summary mode (all components inline); `get_score_analysis` for the bellwether. Repeat per market when comparing.
+**Batch B** — after A: `macro_analyst(market=<country>)` in summary mode (all components inline). Repeat once per covered selected market when comparing; preserve each report date. Present the requested component from the summary, or mark it unavailable if absent.
 
 **Batch C** (only with `equities=true`) — `build_stock_universe(query="[country] equities")`; for the top 5, `get_peer_snapshot` AND `get_company_info` together; for the top 3, `get_score_analysis` with `weeks` as int 26 (conventions §0.2).
 

@@ -80,6 +80,11 @@ def _branding(reference: str) -> _VoiceTrap:
             "do-not-render",
         ),
         ("/private/operator/clients/example/brand.pdf", "brand.pdf", "/private/operator"),
+        ("https:user:TOPSECRET@assets.example.test", "", "TOPSECRET"),
+        ("deck.pdf?sig=prefix/TOPSECRET", "deck.pdf", "TOPSECRET"),
+        ("//user:TOPSECRET@assets.example.test", "//assets.example.test", "TOPSECRET"),
+        ("/private/client#1/brand.pdf", "brand.pdf", "/private/client"),
+        ("x" * 257, "", "x" * 257),
     ],
 )
 def test_rm_output_uses_only_safe_source_reference(
@@ -94,7 +99,7 @@ def test_rm_output_uses_only_safe_source_reference(
         branding_loader=lambda: _branding(reference),
     )
 
-    assert safe_reference in output
+    assert f"Branding: white-label (source: {safe_reference})" in output
     assert secret not in output
     assert reference not in output
 

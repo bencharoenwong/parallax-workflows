@@ -5,6 +5,8 @@ or:  python3 tests/test_render_smoke.py
 """
 import json
 import sys
+
+import pytest
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -248,15 +250,121 @@ def test_bare_report_dict_still_renders():
     assert 'id="sec-cover"' in html
 
 
+# Optional config regressions exercise the real loader and renderer.
+
+def load(tmp_path, payload):
+    config = tmp_path / 'config.yaml'
+    config.write_text(json.dumps(payload))
+    return r.load_branding(config)
+
+
+def assert_default_report(branding):
+    assert branding['active'] is False
+    assert branding['source'] == 'default Parallax'
+    assert branding['colors'] == r.DEFAULT_BRANDING['colors']
+    output = r.render_html(RESPONSE, branding)
+    assert '--brand-primary: #1b2a4a' in output
+    assert 'Monetary Authority of Singapore' in output
+    assert 'Powered by Parallax' in output
+    assert 'id="sec-cover"' in output
+
+
+@pytest.mark.parametrize('payload', [
+    None, [], 'not-a-config', {'branding': 'not-a-mapping'},
+    {'branding': {'colors': ['#abc']}},
+    {'branding': {'typography': 'broken', 'components': 'broken', 'logos': []}},
+    {'branding': {'typography': {'h1': 42, 'body-md': []},
+                  'components': {'body-text': False}}},
+    {'metadata': ['wrong'], 'voice': 'wrong'},
+    {'voice': {'disclaimers': 12}},
+    {'branding': {'colors': {'primary': 'not-a-color'}}},
+    {'branding': {'colors': {'primary': '#12zzzz'}}},
+    {'branding': {'typography': {'h1': {'fontFamily': []}}, 'logos': {'primary': {}}}},
+])
+def test_malformed_optional_config_renders_defaults(tmp_path, payload):
+    assert_default_report(load(tmp_path, payload))
+
+
+def test_missing_and_corrupt_config_render_defaults(tmp_path):
+    config = tmp_path / 'config.yaml'
+    assert_default_report(r.load_branding(config))
+    config.write_text('branding: [unterminated')
+    assert_default_report(r.load_branding(config))
+    assert_default_report(r.load_branding('\0'))
+
+
+@pytest.mark.parametrize('payload, expected', [
+    ({'branding': {'colors': {'primary': '#A1B2C3'}}}, '--brand-primary: #a1b2c3'),
+    ({'branding': {'colors': {'secondary': '#abc'}}}, '--brand-secondary: #abc'),
+    ({'branding': {'typography': {'h1': {'fontFamily': 'Courier New'}}}}, 'Courier New'),
+    ({'metadata': {'client_name': 'Example Brand'}}, 'Example Brand'),
+])
+def test_usable_visual_input_activates_only_accepted_tokens(tmp_path, payload, expected):
+    branding = load(tmp_path, payload)
+    assert branding['active'] is True
+    assert branding['source'] == 'config.yaml'
+    output = r.render_html(RESPONSE, branding)
+    assert expected in output
+    assert 'Powered by Parallax' in output
+    assert '--neg: #b3261e' in output
+
+
+def test_malformed_branch_preserves_valid_sibling(tmp_path):
+    branding = load(tmp_path, {'branding': {'colors': 'wrong',
+        'components': {'body-text': {'textColor': '#123456'}}},
+        'metadata': {'client_name': 'Example Brand'}, 'voice': {'disclaimers': 1}})
+    output = r.render_html(RESPONSE, branding)
+    assert branding['active'] is True
+    assert branding['client_disclaimers'] == []
+    assert '--brand-primary: #1b2a4a' in output
+    assert '--brand-text: #123456' in output
+    assert 'Example Brand' in output
+
+
+def test_disclosures_are_separate_from_visual_activation(tmp_path):
+    text = '  Example issuer approved disclosure.  '
+    branding = load(tmp_path, {'voice': {'disclaimers': [
+        {'text': text, 'placement': 'report-end', 'jurisdiction': 'Example'},
+        {'text': ['invalid']}, {'text': '  '}, None,
+    ]}})
+    assert branding['active'] is False
+    assert branding['source'] == 'default Parallax'
+    assert len(branding['client_disclaimers']) == 1
+    assert branding['client_disclaimers'][0]['text'] == text
+    output = r.render_html(RESPONSE, dict(branding, full_white_label=True))
+    assert 'Example issuer approved disclosure.' in output
+    assert 'Monetary Authority of Singapore' not in output
+    assert 'Powered by Parallax' not in output
+
+
+@pytest.mark.parametrize('disclaimers', ['bad', {'text': 'wrong container'},
+    [{'text': 1}], [{'text': []}], [{'text': '  '}], None])
+def test_invalid_disclosure_cannot_bypass_full_white_label_gate(tmp_path, disclaimers):
+    branding = load(tmp_path, {'voice': {'disclaimers': disclaimers}})
+    with pytest.raises(ValueError, match='client_disclaimers'):
+        r.render_html(RESPONSE, dict(branding, full_white_label=True))
+
+
+def test_defaults_are_independent_between_loads(tmp_path):
+    first = r.load_branding(tmp_path / 'missing.yaml')
+    first['colors']['primary'] = '#000000'
+    first['fonts']['header'] = 'mutated'
+    first['client_disclaimers'].append({'text': 'mutated'})
+    assert_default_report(r.load_branding(tmp_path / 'missing.yaml'))
+    assert r.DEFAULT_BRANDING['fonts']['header'] != 'mutated'
+    assert r.DEFAULT_BRANDING['client_disclaimers'] == []
+
+
+def test_logo_only_activates_when_the_local_asset_can_be_loaded(tmp_path):
+    branding = load(tmp_path, {'branding': {'logos': {'primary': '/missing/logo.png'}}})
+    assert_default_report(branding)
+    logo = tmp_path / 'logo.svg'
+    logo.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>')
+    branding = load(tmp_path, {'branding': {'logos': {'primary': str(logo)}}})
+    assert branding['active'] is True
+    assert branding['source'] == 'config.yaml'
+    assert 'data:image/svg+xml;base64,' in r.render_html(RESPONSE, branding)
+
+
 if __name__ == "__main__":
-    fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
-    failed = 0
-    for fn in fns:
-        try:
-            fn()
-            print(f"PASS {fn.__name__}")
-        except Exception as e:  # noqa: BLE001
-            failed += 1
-            print(f"FAIL {fn.__name__}: {e}")
-    print(f"\n{len(fns) - failed}/{len(fns)} passed")
-    sys.exit(1 if failed else 0)
+    sys.exit(pytest.main([__file__, "-q"]))

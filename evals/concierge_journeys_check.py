@@ -24,6 +24,7 @@ pytests the pure functions on canned text (no model, no network — CI-safe).
 from __future__ import annotations
 
 import argparse
+from datetime import date
 import contextlib
 import functools
 import importlib.util
@@ -120,6 +121,7 @@ _HELPER_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
         r"python3 " + _arg("script_cc") + r" --portfolio-sectors " + _arg("portfolio_sectors")
         + r" --redundancy-sectors " + _arg("redundancy_sectors")
         + r"(?: --holdings " + _arg("holdings") + r")?"
+        + r'(?: --snapshot-date (?:(?:"(?P<snapshot_date>\d{4}-\d{2}-\d{2})")|(?P<snapshot_date__bare>\d{4}-\d{2}-\d{2})))?'
     )),
     ("reconcile.py", re.compile(
         r"python3 " + _arg("script_rc") + r" --input " + _arg("input")
@@ -268,6 +270,11 @@ def _match_documented_helper(command: str) -> dict[str, str] | None:
         script = next((v for k, v in groups.items() if k.startswith("script_") and v), "")
         if not script.endswith(_HELPER_SCRIPT_SUFFIX[helper]):
             continue
+        if groups.get("snapshot_date") is not None:
+            try:
+                date.fromisoformat(groups["snapshot_date"])
+            except ValueError:
+                continue
         return {"helper": helper, "script": script,
                 **{k: v for k, v in groups.items() if not k.startswith("script_")}}
     return None
@@ -301,6 +308,13 @@ def validate_journey(journey: object) -> list[str]:
         value = journey.get(key)
         if not isinstance(value, str) or not value:
             problems.append(f"{key!r} must be a non-empty string")
+        elif "\0" in value:
+            problems.append(f"{key!r} must not contain NUL characters")
+        else:
+            try:
+                value.encode("utf-8")
+            except UnicodeEncodeError:
+                problems.append(f"{key!r} must contain valid Unicode scalar values")
     for key in LIST_KEYS:
         if key not in journey:
             continue
@@ -311,13 +325,15 @@ def validate_journey(journey: object) -> list[str]:
         value = journey["skill"]
         if not isinstance(value, str) or not value.startswith(PLUGIN_PREFIX) or value == PLUGIN_PREFIX:
             problems.append(f"'skill' must be a string starting with {PLUGIN_PREFIX!r}")
-    if isinstance(journey.get("require_helpers"), list):
+    if (isinstance(journey.get("require_helpers"), list)
+            and all(isinstance(v, str) for v in journey["require_helpers"])):
         bad = sorted(set(journey["require_helpers"]) - REQUIRABLE_HELPERS)
         if bad:
             problems.append(f"'require_helpers' entries must be in {sorted(REQUIRABLE_HELPERS)}: {bad}")
         if "render_gate.py" in journey["require_helpers"] and "skill" not in journey:
             problems.append("'require_helpers' with render_gate.py needs 'skill' (the gate's --skill key)")
-    if "needs" in journey and journey["needs"] not in NEEDS_VALUES:
+    if "needs" in journey and (not isinstance(journey["needs"], str)
+                               or journey["needs"] not in NEEDS_VALUES):
         problems.append(f"'needs' must be one of {sorted(NEEDS_VALUES)}")
     return problems
 
@@ -858,9 +874,55 @@ def _read_jsonl(path: str | None, label: str, missing: list[str]) -> list | None
     return out
 
 
+def prepare_journeys(path: str, only: str) -> int:
+    """Validate the whole file, then emit selected records for the Bash runner.
+
+    Emit four UTF-8, NUL-terminated fields per record: JSON, id, prompt, needs.
+    Nothing reaches stdout if any line is invalid.
+    """
+    records: list[tuple[str, dict]] = []
+    problems: list[str] = []
+    try:
+        with open(path, encoding="utf-8") as source:
+            for number, line in enumerate(source, 1):
+                line = line.rstrip("\n")
+                if not line or line.startswith("#"):
+                    continue
+                try:
+                    journey = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    errors = [f"not JSON: {exc}"]
+                else:
+                    errors = validate_journey(journey)
+                    if not errors:
+                        records.append((line, journey))
+                problems.extend(f"invalid journey line {number}: {error}" for error in errors)
+    except (OSError, UnicodeError) as exc:
+        problems.append(f"could not read journeys: {exc}")
+    if problems:
+        print("\n".join(problems), file=sys.stderr)
+        return 2
+
+    entries = [entry for entry in only.split(",") if entry]
+    ids = {alias for _, journey in records
+           for alias in (journey["id"], journey["id"].split("_", 1)[0])}
+    for entry in entries:
+        if entry not in ids:
+            print(f"WARNING: PARALLAX_E2E_ONLY entry matched no journey: {entry}", file=sys.stderr)
+    for line, journey in records:
+        if only and not any(entry in (journey["id"], journey["id"].split("_", 1)[0])
+                            for entry in entries):
+            continue
+        for field in (line, journey["id"], journey["prompt"], journey.get("needs", "")):
+            sys.stdout.buffer.write(field.encode("utf-8") + b"\0")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI.
 
+    ``concierge_journeys_check.py --prepare FILE [--only IDS]``
+        validate all lines, then emit selected records for the shell runner.
     ``concierge_journeys_check.py --validate '<journey-json-line>'``
         exit 0 if the line is a valid journey, 2 with the problems otherwise.
     ``concierge_journeys_check.py '<journey-json-line>' --stream FILE
@@ -872,7 +934,9 @@ def main(argv: list[str] | None = None) -> int:
         fail. A missing ground-truth file is a FAIL.
     """
     ap = argparse.ArgumentParser()
-    ap.add_argument("journey")
+    ap.add_argument("journey", nargs="?")
+    ap.add_argument("--prepare", metavar="JOURNEYS_FILE")
+    ap.add_argument("--only", default="")
     ap.add_argument("--validate", action="store_true")
     ap.add_argument("--stream")
     ap.add_argument("--exit-code", type=int, default=0)
@@ -883,6 +947,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--python-starts")
     ap.add_argument("--fs-snapshot")
     args = ap.parse_args(sys.argv[1:] if argv is None else argv)
+
+    if args.prepare:
+        return prepare_journeys(args.prepare, args.only)
+    if args.journey is None:
+        ap.error("journey is required unless --prepare is used")
 
     try:
         journey = json.loads(args.journey)

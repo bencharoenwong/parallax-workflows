@@ -14,9 +14,9 @@
 # silent-partial-coverage gap that the hand-picked `house-view + graders`
 # command left (it ran ~285 of ~905 tests).
 #
-# The default mode is hermetic/offline and deselects tests marked `npx` because
-# the real smoke uses `npx -y`, which can download and execute a package. Set
-# PARALLAX_GATE_MODE=network only in an explicitly network-authorized run.
+# The default mode is hermetic/offline and deselects the external CLI smoke
+# under the legacy `npx` marker. The validator never downloads a dependency.
+# PARALLAX_GATE_MODE=network opts in to the separately configured integration.
 #
 # Invariant: each top-level root must hold at most ONE conftest.py (else two
 # would collide inside that root's single process). This is asserted below and

@@ -1,6 +1,6 @@
 ---
 name: parallax-white-label-onboard
-description: "Configure white-label client branding for Parallax report output. Extracts colors, logos, fonts AND writing voice from a folder of client collateral (PowerPoint, Word docs), a website URL, a PDF brand guide, or guided wizard intake. Multi-source ingestion supported: when more than one source is provided, mismatches between sources are flagged at the confirmation gate rather than silently resolved. Validates visual assets against WCAG accessibility standards and voice section against corpus-size and completeness thresholds, presents a confirmation gate, then saves branding to ~/.parallax/client-branding/ where downstream skills inject it: visual goes into client-review, due-diligence, and deep-dive PDFs; voice goes into letter-writing, newsletter, and meeting-prep skills. Use to onboard a new client brand, update an existing one, or audit what branding is currently active."
+description: "Configure white-label client branding for Parallax report output. Extracts colors, logos, fonts AND writing voice from a folder of client collateral (PowerPoint, Word docs), a website URL, a PDF brand guide, or guided wizard intake. Multi-source ingestion supported: when more than one source is provided, mismatches between sources are flagged at the confirmation gate rather than silently resolved. Validates visual assets against WCAG accessibility standards and voice section against corpus-size and completeness thresholds, presents a confirmation gate, then saves branding to ~/.parallax/client-branding/ for integrated visual report consumers. Voice extraction saves a style profile for review and future consumers; it does not enable automatic voice rewriting in letter, newsletter or meeting-prep workflows. Use to onboard a new client brand, update an existing one, or audit what branding is currently active."
 ---
 
 # White-Label Client Onboarding
@@ -13,6 +13,8 @@ description: "Configure white-label client branding for Parallax report output. 
 - Single-prompt voice rewrite of one piece of content (not covered by Parallax workflows; this skill is for persistent client brand state)
 
 ## Gotchas
+
+- Expected Parallax spend: **0 Parallax credits**: source/brand extraction, validation and local persistence use no Parallax MCP calls. Host model or external source-fetch charges, if any, are separate.
 
 - JIT-load _parallax/white-label/schema.yaml before extraction — it is the single source of truth for config.yaml shape
 - JIT-load _parallax/white-label/extract/ (the extract package) and _parallax/white-label/validator.py before running Steps 2 and 3
@@ -84,19 +86,19 @@ deployment.
 
 ## Optional prerequisites
 
-The DESIGN.md emit path is in-process and pure Python. The optional **DESIGN.md linter** wraps `npx @google/design.md` (Google Labs CLI, published to npm). When Node 18+ is on PATH, the validator runs the linter at save time and surfaces findings in the confirmation gate. When Node is absent, the validator returns `status: "skipped"` and the save proceeds — nothing breaks; the operator just doesn't get inline lint feedback.
+The DESIGN.md emit path is in-process and pure Python. The optional **DESIGN.md linter** uses a separately installed local CLI. It never installs a package or invokes `npx`. Without explicit executable configuration, lint returns `status: "skipped"` and the save proceeds. Lint findings remain informational in the confirmation gate.
 
-If you want the inline lint feedback, install Node 18+ (e.g., `brew install node@20`) and run `/parallax-white-label-onboard <source>` once to warm the npm cache. To pin the version for reproducibility, run `npm install -g @google/design.md@<version>` before invoking the skill. The validator passes `-y` so first-call invocation does not block on the npm install prompt; this also means npx will silently fetch whatever the registry resolves for `@google/design.md` on a clean machine — pin the version in regulated environments.
+To enable lint, install a reviewed version of the Google Labs `@google/design.md` CLI separately using a locked dependency tree. Set `PARALLAX_DESIGN_MD_CLI` to the executable's absolute path and `PARALLAX_DESIGN_MD_SHA256` to the SHA-256 digest of its resolved file. The validator checks the executable and digest on every invocation. A missing, non-executable or changed file skips lint. The digest pins the entrypoint; retain the installation lockfile to reproduce its dependencies. No executable availability result is cached.
 
 ## Integration with Downstream Skills
 
-Two consumer classes: **visual** (PDF/report skills, read colors/logos/fonts) and **voice** (letter/newsletter/writing skills, read `voice.*`). Both fall back silently to defaults if config is absent.
+The integrated shared consumers apply **visual branding** (colors, logos and fonts) through `loader.load_visual_branding()` (7-key visual subset), with default styling when config is absent. Stored `voice.*` is an optional extracted profile, not an installed prose-generation capability. In particular, CIO letter prep loads visual-only branding and leaves voice and disclosure review to the CIO. No newsletter or meeting-prep voice consumer is implemented by this onboarding workflow.
 
-Visual consumers call `loader.load_visual_branding()` (7-key visual subset). Voice consumers call `loader.load_client_branding()` (full 14-key shape including voice + v2 token tree + render defaults).
+`loader.load_client_branding()` exposes the full shape for an explicitly implemented future voice consumer; merely saving voice does not wire one up. The standalone stock-report renderer independently reads visual fields and, only in its explicit full-white-label mode, client disclosure text; it does not rewrite research prose.
 
 Currently integrated: **Tier 1** (`/parallax-cio-letter-prep`, `/parallax-client-review`, `/parallax-due-diligence`, `/parallax-deep-dive`) and **Tier 2** (`/parallax-should-i-buy`, `/parallax-thematic-screen`, `/parallax-portfolio-checkup`, `/parallax-portfolio-builder`, `/parallax-rebalance`, `/parallax-morning-brief`, `/parallax-explain-portfolio`, `/parallax-scenario-analysis`, `/parallax-country-deep-dive`, `/parallax-pair-finder`, `/parallax-peer-comparison`, `/parallax-macro-outlook`). New visual consumers must JIT-load `_parallax/white-label/integration-pattern.md` via the `<!-- white-label: integration-pattern.md -->` sentinel; the drift gate at `tests/test_integration_pattern_referenced.py` enforces sentinel ↔ load-directive pairing.
 
-> Full loader API + visual/voice loading patterns + voice prompt-prepend template: see `references/integration-contract.md`.
+> Full loader API, visual loading pattern and future voice integration guidance: see `references/integration-contract.md`.
 
 ## Workflow
 
@@ -387,15 +389,15 @@ Branding saved.
 
 Active in:
   visual:  client-review, due-diligence, deep-dive
-  voice:   any skill that calls cfg["voice"] when enabled
-Fallback: if branding load fails, downstream skills use default Parallax styling/voice.
+  voice:   stored style profile only; automatic prose rewriting is not enabled
+Fallback: if branding load fails, integrated visual consumers use default Parallax styling.
 
 Audit & inspect:
   /parallax-white-label-onboard --status    # active branding summary
   /parallax-white-label-onboard --clear     # remove branding
 
 Try it:
-  /parallax-client-review <ticker>          # generates a branded client report
+  /parallax-client-review [{"symbol":"AAPL.O","weight":0.6},{"symbol":"MSFT.O","weight":0.4}]  # weighted portfolio review
 ```
 
 For `--status`: `references/status-format.md`. For other modes, the requested success/failure message.

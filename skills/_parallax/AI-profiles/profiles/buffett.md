@@ -50,7 +50,7 @@ Frazzini, Kabiller, and Pedersen's 2018 *Financial Analysts Journal* paper "Buff
 
 ## What this profile does
 
-Applies the BKP 2018 factor profile (reconciled for the intangibles era per Lev-Srivastava 2022) to a single stock's current Parallax factor scores. For each of the four factors, the profile compares the stock's Parallax score against a threshold and renders a verdict of `match` (4 of 4), `partial_match` (1-3 of 4), or `no_match` (0 of 4). The leverage overlay is disclosed but NOT applied per stock — leverage is a portfolio-construction choice.
+Applies the BKP 2018 factor profile (reconciled for the intangibles era per Lev-Srivastava 2022) to a single stock's current Parallax factor scores. For each of the four factors, the profile compares the stock's Parallax score against a threshold and renders a verdict of `match` (4 of 4), `partial_match` (1-3 of 4), or `no_match` (0 of 4). All four scores must be finite numeric observations on the documented scale. Missing/invalid scores are `UNAVAILABLE`; fewer than four evaluable criteria yields `skipped`, retaining observed results without a fit claim. Optional financial/trend context may be unavailable without invalidating complete current-score evidence. The leverage overlay is disclosed but NOT applied per stock — leverage is a portfolio-construction choice.
 
 ## What this profile does NOT capture
 
@@ -63,7 +63,7 @@ Applies the BKP 2018 factor profile (reconciled for the intangibles era per Lev-
 
 ## How to interpret the output
 
-A `match` verdict means the stock currently exhibits the factor profile BKP 2018 documents Berkshire's historical portfolio had. It does NOT mean the stock fits Berkshire's current holdings, does NOT mean the stock is a current Berkshire position, and is NOT investment advice. It is a statement about factor exposures, nothing more.
+A `match` verdict means the stock meets the product's current four-criterion screen: Quality/Value/Defensive proxies inspired by BKP 2018 plus the product-designed Momentum ceiling. The numerical cutoffs are product calibration, not thresholds estimated or endorsed by that paper. It does NOT mean the stock fits Berkshire's current holdings, does NOT mean the stock is a current Berkshire position, and is NOT investment advice. It is a statement about factor exposures, nothing more.
 
 A `partial_match` is informative — users should look at *which* factors matched and which didn't. A stock that matches Quality and Defensive but not Value is factor-adjacent to Berkshire's profile but lacks the valuation discipline the paper documents.
 

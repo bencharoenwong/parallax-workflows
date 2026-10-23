@@ -69,6 +69,12 @@ def _c_trade_recs_quantified(t, spec) -> Check:
     sec = _section_text(t.final_prose, "Trade Recommendations", spec.section_labels)
     if not sec:
         return Check("trade_recs_quantified", False, "Trade Recommendations absent")
+    withheld = re.search(r"sizing withheld\s*[—:-]\s*(?:unverified|infeasible|conflict|missing|unavailable|constraint|identity|coverage|coefficient)", sec, re.I)
+    if withheld:
+        sized_table = re.search(r"(?im)^\s*\|.*\b(target|delta|trade size)\b", sec)
+        sized_arrow = re.search(r"\d+(?:\.\d+)?%\s*(?:->|→)\s*\d", sec)
+        return Check("trade_recs_quantified", not (sized_table or sized_arrow),
+                     "sizing withheld with reason; numeric target fallback forbidden")
     has_p, has_a, has_w = (
         bool(_PRIORITY.search(sec)),
         bool(_ACTION.search(sec)),
@@ -154,12 +160,12 @@ SPEC = EvalSpec(
         {
             "id": "trade_recs_cite_findings",  # ADAPTED
             "statement": "Every row in Trade Recommendations cites a SPECIFIC trigger — a named health flag, score, concentration figure, or stated constraint — not generic advice.",
-            "pass_when": "Each trade names its concrete driver (e.g. 'Trim AAPL 40%->25% — Concentration flag', 'Exit XOM — no-energy constraint'); no boilerplate like 'rebalance for diversification'.",
+            "pass_when": "If sizing is blocked, diagnostics name the failed prerequisite and no numeric target/trade list renders. Otherwise each trade names its concrete driver (e.g. 'Trim AAPL 40%->25% — Concentration flag', 'Exit XOM — no-energy constraint'); no boilerplate like 'rebalance for diversification'.",
         },
         {
             "id": "before_after_consistent",
-            "statement": "The Before/After Comparison reflects the proposed trades — the 'after' allocation/scores are the logical result of applying the Trade Recommendations to the current book.",
-            "pass_when": "Trimmed names have lower 'after' weight, added/replacement names appear, and any claimed factor-score improvement is directionally consistent with the trades shown.",
+            "statement": "When sizing is verified, the Before/After Comparison reflects the proposed trades — the 'after' allocation/scores are the logical result of applying the Trade Recommendations to the current book.",
+            "pass_when": "If required identity, coverage, coefficients or constraints are missing/unverified/infeasible, explicit sizing withheld and no target/delta/after-book is the correct outcome. Neutral labels or a disclaimer do not permit partial numeric fallback. Otherwise trimmed names have lower 'after' weight, added/replacement names appear, and any claimed factor-score improvement is directionally consistent with the trades shown.",
         },
     ],
     tasks_path="evals/tasks/rebalance/core.jsonl",

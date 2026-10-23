@@ -31,6 +31,7 @@ Semantic colors (positive / negative / warning) are NEVER branded.
 """
 import argparse
 import base64
+from copy import deepcopy
 import html as _html
 import json
 import os
@@ -276,51 +277,73 @@ def data_uri(path):
 # --------------------------------------------------------------------------- #
 # Branding
 # --------------------------------------------------------------------------- #
-def load_branding(path=None):
-    """Read the client brand config. Always returns a complete branding dict;
-    falls back to the default Parallax palette on any error (never raises)."""
-    if path is None:
-        path = os.path.expanduser("~/.parallax/client-branding/config.yaml")
-    if yaml is None or not os.path.isfile(path):
-        return dict(DEFAULT_BRANDING)
-    try:
-        cfg = yaml.safe_load(Path(path).read_text())
-        if not isinstance(cfg, dict):
-            return dict(DEFAULT_BRANDING)
-    except Exception:
-        return dict(DEFAULT_BRANDING)
+def _mapping(value: object) -> dict:
+    """Treat a malformed optional config branch as absent."""
+    return value if isinstance(value, dict) else {}
 
-    b = cfg.get("branding", {}) or {}
-    colors = b.get("colors", {}) or {}
-    typo = b.get("typography", {}) or {}
-    comp = (b.get("components", {}) or {}).get("body-text", {}) or {}
-    # Client jurisdiction disclaimers live in the onboard config under voice.disclaimers[]
-    # ({jurisdiction, text, placement}); used only by --full-white-label (see SKILL.md).
-    voice = cfg.get("voice", {}) or {}
-    client_disclaimers = [x for x in (voice.get("disclaimers") or [])
-                          if isinstance(x, dict) and x.get("text")]
-    d = DEFAULT_BRANDING["colors"]
-    primary = _hex(colors.get("primary"), d["primary"])
-    branding = {
-        "client_name": (cfg.get("metadata", {}) or {}).get("client_name", "") or "",
-        "active": bool(colors.get("primary")),
-        "source": os.path.basename(path),
-        "colors": {
-            "primary": primary,
-            "secondary": _hex(colors.get("secondary"), primary),
-            "tertiary": _hex(colors.get("tertiary"), d["tertiary"]),
-            "neutral": _hex(colors.get("neutral"), d["neutral"]),
-            "text": _hex(comp.get("textColor"), d["text"]),
-        },
-        "fonts": {
-            "header": (typo.get("h1", {}) or {}).get("fontFamily")
-            or DEFAULT_BRANDING["fonts"]["header"],
-            "body": (typo.get("body-md", {}) or {}).get("fontFamily")
-            or DEFAULT_BRANDING["fonts"]["body"],
-        },
-        "logo": (b.get("logos", {}) or {}).get("primary"),
-        "client_disclaimers": client_disclaimers,
-    }
+
+def _text(value: object) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
+def load_branding(path=None):
+    """Read optional visual tokens and explicit client disclosures without raising.
+
+    Malformed branches use defaults independently; usable siblings survive.
+    ``active`` describes accepted visual branding, not config-file existence.
+    This standalone reader deliberately does not import the shared schema loader.
+    """
+    branding = deepcopy(DEFAULT_BRANDING)
+    try:
+        path = Path(path).expanduser() if path is not None else Path(
+            "~/.parallax/client-branding/config.yaml").expanduser()
+        if yaml is None:
+            return branding
+        cfg = yaml.safe_load(path.read_text())
+        if not isinstance(cfg, dict):
+            return branding
+    except Exception:
+        return branding
+
+    b = _mapping(cfg.get("branding"))
+    colors = _mapping(b.get("colors"))
+    typo = _mapping(b.get("typography"))
+    comp = _mapping(_mapping(b.get("components")).get("body-text"))
+    primary = _hex(colors.get("primary"), None)
+    visual_colors = {key: _hex(colors.get(key), None)
+                     for key in ("primary", "secondary", "tertiary", "neutral")}
+    visual_colors["text"] = _hex(comp.get("textColor"), None)
+    branding["colors"].update({key: value for key, value in visual_colors.items() if value})
+    # Retain the standalone renderer's secondary-to-primary fallback.
+    if primary and not visual_colors["secondary"]:
+        branding["colors"]["secondary"] = primary
+
+    font_values = {}
+    for target, token in (("header", "h1"), ("body", "body-md")):
+        value = _text(_mapping(typo.get(token)).get("fontFamily"))
+        value = _safe_font(value).strip()
+        if value:
+            font_values[target] = value
+    branding["fonts"].update(font_values)
+    branding["client_name"] = _text(_mapping(cfg.get("metadata")).get("client_name"))
+    logo = _text(_mapping(b.get("logos")).get("primary"))
+    branding["logo"] = logo if logo and data_uri(logo) else None
+    branding["active"] = bool(any(visual_colors.values()) or font_values
+                              or branding["client_name"] or branding["logo"])
+    if branding["active"]:
+        branding["source"] = path.name
+
+    # Disclosures are an explicit full-white-label input, never a voice rewrite
+    # or a reason to claim visual branding is active.
+    disclaimers = _mapping(cfg.get("voice")).get("disclaimers")
+    if isinstance(disclaimers, list):
+        branding["client_disclaimers"] = [
+            {"text": item["text"],
+             "jurisdiction": _text(item.get("jurisdiction")),
+             "placement": _text(item.get("placement"))}
+            for item in disclaimers
+            if isinstance(item, dict) and _text(item.get("text"))
+        ]
     return branding
 
 

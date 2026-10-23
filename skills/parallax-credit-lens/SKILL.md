@@ -16,7 +16,7 @@ description: "Credit risk assessment for publicly traded companies: leverage, co
 
 ## Gotchas
 
-- Expected Parallax spend: ~12 tokens: Batch A 5 (four statements + peer snapshot), Batch B 7 (Palepu 5, score analysis 1, telemetry 1).
+- Expected Parallax spend: 5.5 credits: identity 0.05, Batch A 0.3 (four statements at 0.05 + snapshot 0.1), Batch B 5.15 (Palepu 5 + score history 0.1 + telemetry 0.05). Excludes resolution/recovery; current discovered prices win (`_parallax/token-costs.md`).
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §3 parallel execution, §4 / §4.0 fallbacks, §11 verdict sensitivity, §14 host primitives.
 - `credit_lens_logic.py` is the pure arithmetic layer: every flag, the Altman Z-score and zone, the Quality-change flag and the overall traffic-light are computed there, never in prose. No MCP calls or file writes go in it. `assemble_report()` is a test-only reference renderer: it omits §9.1 and §9.2 and must not produce client-facing output.
 - The published cutoffs in Step 4 mirror the module's constants (`ABSOLUTE_THRESHOLDS`, the Altman zone function, `flag_quality_change`); `tests/test_credit_lens.py` pins the two in agreement. Edit the module first, then the table.
@@ -55,7 +55,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 
 ### Step 2 — Fetch (parallel batches)
 
-**Batch A — core financials (5 tokens).** `call-tool` all five together:
+**Batch A — core financials (0.3 credits).** `call-tool` all five together:
 
 ```
 get_financials(symbol=<RIC>, statement="balance_sheet")   # Total debt, equity, total assets, working capital, retained earnings
@@ -65,7 +65,7 @@ get_financials(symbol=<RIC>, statement="ratios")          # D/E, D/EBITDA, curre
 get_peer_snapshot(symbol=<RIC>)                           # factor scores and pe_ratio only — no peer medians (see Step 4)
 ```
 
-**Batch B — solvency, trend, macro (7 tokens, async).** `call-tool` all three together; `get_financial_analysis` never blocks the rest:
+**Batch B — solvency, trend, macro (5.15 credits, Palepu async).** `call-tool` all three together; `get_financial_analysis` never blocks the rest:
 
 ```
 get_financial_analysis(symbol=<RIC>)   # Palepu solvency AND liquidity read (async)
@@ -75,8 +75,8 @@ get_telemetry()                        # Market regime tag (no symbol parameter)
 
 ### Step 3 — Verify
 
-- Identity per conventions §2: `get_peer_snapshot.target_company` vs `get_company_info.name`; `get_score_analysis` `data[0].symbol` vs the RIC.
-- Input completeness for the helper: zero `total_assets` or `total_liabilities`, or a non-finite value, makes the Altman leg UNAVAILABLE (the module raises; do not substitute zero). A missing `peer_median`/`peer_p75` pair on a peer-relative-only metric makes that row UNAVAILABLE, never GREEN.
+- Identity per conventions §2: `get_peer_snapshot.target_company` vs `get_company_info.data.name`; `get_score_analysis` `data[0].symbol` vs the RIC.
+- Input completeness for the helper: non-positive `total_assets` or `total_liabilities`, or a non-finite value, makes the Altman leg UNAVAILABLE (the module raises; do not substitute zero). A missing `peer_median`/`peer_p75` pair on a peer-relative-only metric makes that row UNAVAILABLE, never GREEN.
 - Interest Coverage: `compute_interest_coverage` returns `None` — render UNAVAILABLE, never divide by hand — when `income.operating_income` is absent/non-finite, or `income.interest_expense_net_non_operating` is absent, non-finite, or non-negative (a non-negative value is net non-operating interest *income*, not a usable expense figure; it is never treated as a zero denominator).
 - The traffic-light is gate-shaped for its legs (conventions §4.0): an unjudgeable leg is UNAVAILABLE and excluded from the vote; the coverage clause in the header states it.
 

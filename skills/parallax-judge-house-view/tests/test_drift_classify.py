@@ -88,8 +88,26 @@ def test_magnitude_escalation_caps_at_material():
 
 def test_zero_denominator_safe():
     severity, details = drift_classify.classify_severity([], view_age_days=5, denominator=0)
-    assert severity == "drift_minor"
+    assert severity == "unverified"
     assert details["divergent_pct"] == 0.0
+
+
+def test_all_unavailable_cells_do_not_imply_minor_drift():
+    severity, details = drift_classify.classify_severity(
+        [_res("PARALLAX_SILENT"), _res("UNCOVERED")], 60, 2)
+    assert severity == "unverified"
+    assert details["evaluable_count"] == 0
+    assert details["assessment_status"] == "unverified"
+    assert details["evaluated_divergent_pct"] is None
+
+
+def test_partial_coverage_preserves_threshold_denominator_and_exposes_evaluated_share():
+    severity, details = drift_classify.classify_severity(
+        [_res("DIVERGENT_FRESH")] + [_res("PARALLAX_SILENT") for _ in range(9)], 60, 10)
+    assert severity == "drift_minor"  # unchanged full-view threshold
+    assert details["assessment_status"] == "partial"
+    assert details["coverage"] == .1
+    assert details["evaluated_divergent_pct"] == 1.0
 
 
 def test_summarize_states_buckets_correctly():

@@ -35,9 +35,13 @@ One sentence stating what the cited source documents. Example:
 
 > Frazzini, Kabiller, Pedersen (2018) decompose Berkshire Hathaway's 1976-2017 returns into factor exposures: strong Quality, strong Value, and positive Defensive (low-beta), with ~1.6x leverage overlay at portfolio level (momentum is not a meaningful part of the profile).
 
+For Buffett, distinguish the publicly anchored Quality/Value/Defensive exposure proxies from the additional product-designed Momentum ceiling; no cited paper supplies the product's numeric score cutoffs.
+
 ### 4. Data table (for factor-driven profiles)
 
 Markdown table with columns: Factor | Profile target | Actual score | Trend | Match.
+
+Show `UNAVAILABLE` with the reason for missing required criteria; do not print NO/FAIL for unknown evidence. Counts retain their documented required denominator.
 
 For profiles with non-factor logic (Greenblatt, Klarman, Soros), substitute the relevant data structure (rank table for Greenblatt; balance-sheet checklist for Klarman; theme-exposure table for Soros).
 
@@ -46,7 +50,8 @@ For profiles with non-factor logic (Greenblatt, Klarman, Soros), substitute the 
 Exactly one of:
 - `Profile fit: match` — with count, e.g., "4 of 4 factor criteria met"
 - `Profile fit: partial match` — with count, e.g., "2 of 4 factor criteria met"
-- `Profile fit: no match` — with explanation
+- `Profile fit: no match` — with explanation based on evaluated criteria
+- `Profile fit: skipped` — required evidence unavailable/invalid, ambiguous rules or non-applicability; name the reason and retain verified observations
 
 **FORBIDDEN verdict language:** "buy", "sell", "recommend", "would buy", "endorses", "rates", "likes", "hates", any first-person impersonation. See spec §5.
 
@@ -69,6 +74,8 @@ Directly below the Synthesis section (or below the Verdict, for profiles that om
 | `parallax-ai-ptj` | NO — omit | Channel status (T/M/V) is a compound discrete evaluation (trend-direction category AND momentum-trend direction, or a risk-on/risk-off categorical macro read), even though individual sub-signals carry numeric cutoffs. Do not cherry-pick one sub-signal to represent the whole channel's status. |
 | `parallax-ai-consensus` | YES — meta-level only | The consensus signal itself is a clean numeric threshold: `required_matches = ceil(0.75 × A)` compared against `M`. Render Verdict sensitivity on the super-majority signal (e.g., "M is 3 vs required 4 for A = 5 — one more applicable profile reaching full match would move the signal to YES"; if already YES, state how many full matches could fall away before the signal drops to NO), never on the underlying Soros / PTJ rows inside the per-profile matrix — the omit rule above still applies to those two rows. |
 
+For a skipped/incomplete profile, do not present a numeric flip condition as though the fit were evaluated; state which required evidence prevents evaluation. For consensus below the minimum applicable count, state the eligibility shortfall rather than claiming additional matches alone would yield YES.
+
 **Non-negotiable:** never fabricate a flip threshold for a profile or channel that has no published numeric cutoff. Omitting the line for Soros and PTJ is the compliant behavior, not a gap to fill.
 
 ### 7. Methodology footer
@@ -77,7 +84,7 @@ Directly below the Synthesis section (or below the Verdict, for profiles that om
 Workflow derived from: <citation>
 Last anchor-tested: <last_anchor_test>
 Tool sequence: <tool_sequence from profile frontmatter>
-Token cost: <N> tokens
+Parallax credit estimate: <N> credits, derived from actual calls; not a billing receipt
 ```
 
 Render rule: append ` | Last legal review: <date>` to the `Last anchor-tested` line ONLY when the profile's `last_legal_review` frontmatter value is a completed date. `PENDING` is an internal tracking state — the `profiles/*.md` frontmatter field stays REQUIRED and unchanged, but `PENDING` is never rendered in output; omit the field entirely rather than printing "pending".
@@ -102,7 +109,7 @@ This output is an AI-inferred interpretation of [Investor]'s approach, derived s
 
 ### Audience render mode (conventions §13 by reference)
 
-Apply audience render mode per `parallax-conventions.md` §13. Under `client_safe`, the §4 data table's factor rows carry the §13.3 plain-language gloss; the §6.5 Verdict-sensitivity line is omitted, while the §6.5 gate table itself is unchanged because qualification logic is not a render decision. The §7 methodology footer renders only `Workflow derived from: <citation>` and `Last anchor-tested: <date>` plus the legal-review date when completed; `Tool sequence` and `Token cost` lines are omitted.
+Apply audience render mode per `parallax-conventions.md` §13. Under `client_safe`, the §4 data table's factor rows carry the §13.3 plain-language gloss; the §6.5 Verdict-sensitivity line is omitted, while the §6.5 gate table itself is unchanged because qualification logic is not a render decision. The §7 methodology footer renders only `Workflow derived from: <citation>` and `Last anchor-tested: <date>` plus the legal-review date when completed; `Tool sequence` and `Parallax credit estimate` lines are omitted.
 
 The §2 citation block, §5 verdict, and §8 verbatim disclaimer render identically in both modes. The disclaimer is never suppressible.
 

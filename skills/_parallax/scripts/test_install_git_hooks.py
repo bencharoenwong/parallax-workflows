@@ -467,10 +467,15 @@ def test_a_usable_temp_dir_does_not_block_a_clean_scan(clone: Path,
 
     usable = tmp_path / "usable-tmpdir"
     usable.mkdir()
+    unrelated = usable / "unrelated-tool-cache"
+    unrelated.write_text("preserve unrelated temporary files")
     r = _run_hook(clone, _REF_LINE, env={"TMPDIR": str(usable)})
     assert r.returncode == 0, r.stderr
     assert "cannot create a temp file" not in r.stderr
-    assert not list(usable.iterdir()), "left the ref-list temp file behind"
+    # Other processes (including Apple's git launcher) may create their own
+    # caches in TMPDIR. The hook owns only its parallax-prepush files.
+    assert not list(usable.glob("parallax-prepush.*")), "left the ref-list temp file behind"
+    assert unrelated.read_text() == "preserve unrelated temporary files"
 
 
 @pytest.mark.parametrize("scanner_rc, should_block", [

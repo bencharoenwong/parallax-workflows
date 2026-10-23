@@ -39,7 +39,7 @@ def _ignore_non_runtime_files(_directory: str, names: list[str]) -> set[str]:
 
 
 @pytest.fixture
-def isolated_skills(tmp_path: Path):
+def isolated_skills(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Replicate installed runtime trees and isolate their bare imports.
 
     House-view skills use sibling-directory discovery and bare module imports,
@@ -73,6 +73,12 @@ def isolated_skills(tmp_path: Path):
         sys.path.insert(0, str(path))
 
     try:
+        # The real emitter must run, but never against the operator's archive.
+        # Import after installing replica paths so maker and judge share this
+        # isolated module and destination.
+        import chain_emit
+
+        monkeypatch.setattr(chain_emit, "DEFAULT_CHAIN_DIR", tmp_path / "reasoning-chains")
         yield skills_dir
     finally:
         sys.path[:] = original_sys_path
@@ -259,7 +265,24 @@ def test_disable_maker_leaves_judge_functional(
         result = judge.run_judge(config=config)
         
         assert result is not None
-        assert result.severity in ("drift_minor", "drift_moderate", "drift_material")
+        # No mocked MCP evidence is available: functionality means a complete
+        # unverified report, not a fabricated drift/alignment assessment.
+        assert result.severity == "unverified"
+        assert result.severity_details["assessment_status"] == "unverified"
+        assert result.severity_details["denominator"] > 0
+        assert result.severity_details["evaluable_count"] == 0
+        assert result.severity_details["evaluated_divergent_pct"] is None
+        assert result.drift_summary["aligned_count"] == 0
+        assert result.recommendations == []
+        assert result.audit_entry["action"] == "judge"
+        assert result.audit_entry["applied"] is False
+        assert result.audit_entry["drift_summary"] == result.drift_summary
+        report = (result.report_dir / "report.md").read_text()
+        assert "UNVERIFIED" in report
+        assert "No drift or alignment conclusion" in report
+        assert not result.chain_emit_failed
+        assert result.chain_path.is_file()
+        assert result.chain_path.is_relative_to(tmp_path / "reasoning-chains")
         assert any("maker modules unavailable" in d for d in result.diagnostics)
 
 def test_disable_judge_leaves_maker_functional_and_consumers_skip_gracefully(

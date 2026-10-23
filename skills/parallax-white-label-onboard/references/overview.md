@@ -10,7 +10,7 @@ The white-label onboarding skill provides a complete workflow for:
 2. **Validation** — Verify color contrast (WCAG AA compliance), logo dimensions, font availability, and confidence scoring
 3. **Confirmation** — User-facing review and approval gate before saving
 4. **Storage** — Save to a global, persistent location (`~/.parallax/client-branding/config.yaml`)
-5. **Application** — Downstream skills automatically apply branding to all PDF outputs
+5. **Application** — Integrated visual consumers apply branding to their supported report outputs; saving voice does not enable prose rewriting
 6. **DESIGN.md export** — A Google Labs DESIGN.md companion file is emitted alongside `config.yaml`. This file expresses the extracted brand tokens (colors, typography, spacing, rounded) in a recognized spec format that can be handed to a designer or imported into design-system tooling that accepts Google Labs' DESIGN.md format. It is kept in sync with `config.yaml`; use `--regenerate-design-md` to refresh it after manual config edits.
 
 ## Features
@@ -39,7 +39,7 @@ The skill will guide you through:
 
 ### For Downstream Skills
 
-Visual consumers (any skill that generates a PDF or formatted report) load the 7-key visual subset via `load_visual_branding()`. Voice consumers (letter / newsletter / writing skills) load the full 14-key shape via `load_client_branding()`. See `_parallax/white-label/integration-pattern.md` for the canonical consumer-side contract.
+Visual consumers (any skill that generates a PDF or formatted report) load the 7-key visual subset via `load_visual_branding()`. The full 14-key shape from `load_client_branding()` is available for future explicit voice integrations; CIO letter prep is visual-only, and no newsletter or meeting-prep voice consumer is promised. See `_parallax/white-label/integration-pattern.md` for the canonical consumer-side contract.
 
 ```python
 from skills._parallax.white_label.loader import load_visual_branding
@@ -71,7 +71,7 @@ pdf_builder.set_font(branding["fonts"].get("header", "Helvetica"))
   - `FontValidator` — System availability via matplotlib, web-safe fallbacks
 
 - **`loader.py`** — Configuration loading and graceful degradation
-  - `load_client_branding()` — Full 14-key shape (visual + voice + token tree + render defaults). Voice-consumer entry point.
+  - `load_client_branding()` — Full 14-key shape (visual + voice + token tree + render defaults). Potential future voice-consumer entry point; not evidence of a wired consumer.
   - `load_visual_branding()` — 7-key visual subset (`client_name`, `colors`, `logos`, `fonts`, `source`, `error`, `render`). Structurally excludes `voice`/typography/`multi_source`. Visual-consumer entry point.
   - `is_white_label_active(branding) -> bool` — single source of truth for the rendering predicate. Consumer skills call this instead of re-implementing the active-flag check (see `integration-pattern.md` §2/§4/§8).
   - `safe_source_reference(branding) -> str` — display-safe About This Report source ref (URLs collapsed to scheme+hostname, paths to basename); used by `integration-pattern.md` §7.

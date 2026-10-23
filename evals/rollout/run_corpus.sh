@@ -4,7 +4,7 @@
 # One fresh `claude -p` per planned run (correct methodology: SKILL.md is cached at session
 # start, so only a cold session honestly exercises a SKILL.md edit). Captures stream-json to
 # evals/results/ (gitignored). Supports a repeat count per task so the same thesis can be run
-# N times for a VARIANCE pass. Runs the connector preflight first and refuses to spend a token
+# N times for a VARIANCE pass. Runs the connector preflight first and refuses to spend credits
 # if the connector isn't live.
 #
 # Usage:

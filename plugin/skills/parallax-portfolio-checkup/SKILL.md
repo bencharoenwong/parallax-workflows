@@ -14,11 +14,11 @@ description: "Individual investor portfolio checkup: health flags, factor scores
 - "Why am I down?" attribution → use /parallax-explain-portfolio
 - Trade recommendations → use /parallax-rebalance
 - Single stock analysis → use /parallax-should-i-buy
-- Portfolio with significant ETF allocation → equity scope only in v1; ETF holdings fail V2 scoring and may silently mismap in V1. Use /parallax-explain-portfolio (ETF-aware via `etf_profile` pre-classification) for ETF-heavy portfolios.
+- Portfolio with significant ETF allocation → equity scope only in v1; ETF holdings fail V2 scoring and may silently mismap in V1. A comprehensive proactive ETF health assessment is unsupported here; do not assign equity scores or a full-book health badge to ETFs. Offer /parallax-explain-portfolio only when the user actually asks about a drawdown/return over a period, preserving that concern. Do not invent a loss question to obtain an ETF-aware route.
 
 ## Gotchas
 
-- Expected Parallax spend: ~46 tokens at 10 holdings (`_parallax/token-costs.md`): 2× per-holding fan-out (20) + up to 3 macro markets (15) + `check_portfolio_redundancy` at 1 credit per holding checked (10) + `list_macro_countries` (1).
+- Expected Parallax spend (`_parallax/token-costs.md`): `0.15N + 0.1H + 5M` credits for N equity snapshot/identity pairs, H redundancy lookups and M explicit tactical macro markets (0–3); `list_macro_countries` is free. With N=H=10: **7.5 credits at one market, 17.5 at three**. V1 fallback adds 0.1 per successful selected holding; split-and-merge adds the same per-holding rate again for every group call actually made. Each portfolio tool selects at most 100 holdings (quick scores defaults to 50); successful zero-weight lookups still bill. Retry costs and any extra resolution calls are additional.
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §2 identity cross-check, §3 parallel execution, §4 fallbacks, §11 sensitivity, §13 audience mode, §14 host primitives.
 - JIT-load `references/health-flags.md` for the 5-flag system, thresholds, the mixed-exchange fallback, and the Verdict-sensitivity wording.
 - Per-holding `get_peer_snapshot` + `get_company_info` cross-validation is the primary scoring path; `quick_portfolio_scores` is the V1 fallback with known symbol-mapping bugs for non-US numeric tickers. Never fire it unconditionally.
@@ -55,6 +55,8 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 6. `load-reference` `references/health-flags.md`.
 
 ### Step 1 — Resolve inputs
+
+Before scoring, identify any stated ETF/fund holdings from the supplied identifiers/context; ask about materially ambiguous instrument types instead of guessing. ETF-only proactive health requests receive the explicit equity-scope limitation and stop without equity scoring calls or a health verdict. For mixed books, name excluded ETF/fund holdings and their original weight share; ask whether an equity-sleeve-only check would answer the question before proceeding, retain the full original book for the coverage disclosure and construct a separate equity-only input with weights normalized within that sleeve. Use that explicit sleeve input consistently for scoring, concentration and redundancy, label every result equity-sleeve-only and never imply a complete portfolio health verdict. Do not promise ETF look-through, suitability or a new ETF-health product.
 
 Validate holdings: RIC format (plain tickers → conventions §1), weights summing to ~1.0; fund/OEIC identifiers get the §1 not-covered message and are dropped from scoring with a note.
 
@@ -131,6 +133,7 @@ If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwis
 
 ## Failure modes
 
+- ETF-only proactive health request: explicit unsupported boundary, no equity-scoring fallback and no fabricated drawdown. Mixed-book equity-sleeve analysis requires the operator’s agreement and a coverage-qualified label.
 - V2 coverage below 50%: V1 fallback, then split-and-merge, per Step 3; the path used is stated in the Verification Note.
 - `check_portfolio_redundancy` coverage below 60%: Overlap Alert carries the low-confidence note.
 - Macro unavailable or no covered market: Macro Context skipped (Output Format), the Macro Misalignment flag is not evaluated and the flag count says so.

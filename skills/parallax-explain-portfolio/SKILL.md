@@ -1,6 +1,6 @@
 ---
 name: parallax-explain-portfolio
-description: "Reactive portfolio performance attribution: decompose a drawdown into market/regime, factor/thematic, and stock-specific components. Also called 'drawdown attribution' or 'performance attribution' in PM/RIA vocabulary. Uses score-vs-price divergence to determine if the loss is fundamental or transient, then gives conditional advice. Triggered when a client asks 'why am I down X%?'. Holdings as [{symbol, weight}]. NOT for proactive health checks (use /parallax-portfolio-checkup), not for forward-looking reviews (use /parallax-client-review), not for hypothetical scenarios (use /parallax-scenario-analysis), not for trade recommendations (use /parallax-rebalance)."
+description: "Reactive portfolio performance attribution: describe a drawdown using measured holding contributions and qualitative market/regime, factor/thematic, and stock-specific context. Also called 'drawdown attribution' or 'performance attribution' in PM/RIA vocabulary. Reports price/score divergence as an observation, competing explanations and unresolved evidence; it does not infer transience or investment actions from score stability. Triggered when a client asks 'why am I down X%?'. Holdings as [{symbol, weight}]. NOT for proactive health checks (use /parallax-portfolio-checkup), not for forward-looking reviews (use /parallax-client-review), not for hypothetical scenarios (use /parallax-scenario-analysis), not for trade recommendations (use /parallax-rebalance)."
 ---
 
 <!-- white-label: integration-pattern.md -->
@@ -17,16 +17,16 @@ description: "Reactive portfolio performance attribution: decompose a drawdown i
 
 ## Gotchas
 
-- Expected Parallax spend: ~80 tokens at 10 holdings (`_parallax/token-costs.md`): 10 info + 10 scoring + 10 trends + telemetry + 2 macro + 3 news + 3 detractor snapshots + 10 `etf_profile` probes + 10 per-holding price-series calls (`export_price_series` or `etf_daily_price`, 1 credit each).
+- Expected Parallax spend (`_parallax/token-costs.md`): `0.05 + 0.05I + 0.05Q + 0.1E + 0.1T + 0.1P + 5M + 5D` credits for telemetry, I identity reads, Q priced symbols, E equity snapshots, T equity trend reads, P successful ETF classification probes, M tactical markets (≤2) and D equity detractor news jobs (≤3). Ten equities with all prices/trends, two markets and three news jobs cost **28.05 credits before classification**; reserve up to 1 more for ten probes, but HTTP 4xx/5xx probes are free. Reuse same-request trusted detractor snapshots from Batch B. V1, when selected, adds 0.1 per successful selected holding (default 50, maximum 100; zero-weight lookups bill); changed-scope/retry reads are additional.
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.2 typed integers, §1 RIC resolution, §2 identity cross-check, §3 parallel execution, §4/§5 fallbacks, §6 macro reasoning, §14 host primitives.
 - JIT-load `_parallax/coverage-matrix.md`: `export_price_series` is equity-only; every holding is classified via `etf_profile` before any price call, and ETFs price via `etf_daily_price`.
-- JIT-load `_parallax/house-view/loader.md` FIRST if a view is present: §2, §5, §6. The view does NOT change the attribution math; it shapes the verdict — a loss in a view-OW sector is "expected pain from view exposure", a loss in a view-UW sector still held raises a portfolio-management question.
+- JIT-load `_parallax/house-view/loader.md` FIRST if a view is present: §2, §5, §6. The view does NOT change the attribution math; it describes exposure relative to institutional intent. Overweight/underweight tags do not identify the cause of a loss, prove it was expected, establish suitability or imply a trade.
 - Score data is weekly (`get_score_analysis`), prices daily: up to ~7 days of lag. Say so in the divergence analysis, and mark a holding provisional when a major event broke after its last score point.
-- The client's stated number is verified against computed returns before anything is attributed; a >1% gap is stated.
+- Current weights alone produce a period illustration, not realized account performance. State the method before comparing to the client's number; a gap greater than 1 percentage point is a basis difference to investigate, not a verified account discrepancy.
 - `get_peer_snapshot` may return a different target; read the queried symbol's row from `comparison[]` (conventions §2), never `target_company` blindly.
 - Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
 
-Reactive performance attribution when a client asks "why am I down?" Decomposes the loss into market/regime, factor/thematic, and stock-specific layers, then determines if the drawdown is fundamental or noise.
+Reactive performance attribution when a client asks "why am I down?" Separates measured holding contributions from qualitative market/regime, factor/thematic and company context; identifies what evidence is still needed to explain the loss.
 
 ## Usage
 
@@ -34,7 +34,7 @@ Reactive performance attribution when a client asks "why am I down?" Decomposes 
 /parallax-explain-portfolio [{"symbol":"AAPL.O","weight":0.25},{"symbol":"JPM.N","weight":0.20},{"symbol":"MSFT.O","weight":0.30},{"symbol":"JNJ.N","weight":0.25}] "I'm down about 4% this month"
 ```
 
-The second argument is the client's stated concern — it anchors the lookback period and is validated against actual returns.
+The second argument is the client's stated concern — it anchors the lookback period and is compared only on an explicitly stated, compatible return basis.
 
 ## Workflow
 
@@ -47,46 +47,50 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
    <!-- host-note -->
    Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
    <!-- /host-note -->
-3. Parse args: holdings JSON; the client's statement → lookback ("this week" 5 trading days, "this month" ~21, "this quarter" ~63; default 21).
+3. Parse args: holdings JSON; the client's statement → exact ISO start/end dates and stated timezone. Calendar-to-date language means the start of that calendar week/month/quarter through the latest completed session as of the request; rolling periods require their actual calendar boundaries. If period is missing or materially ambiguous, ask for it; do not substitute 21 trading days for 21 calendar days.
 4. `load-reference` `_parallax/house-view/loader.md`; run §1–§2. If a view is present, capture the tilt vector for the Step 4/5 framing.
 5. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`.
 
 ### Step 1 — Resolve inputs
 
-Validate holdings: RIC format (plain tickers → conventions §1), weights ~1.0. Home markets from RIC suffixes (conventions §6).
+Validate holdings: RIC format (plain tickers → conventions §1), weights ~1.0. Home markets from RIC suffixes (conventions §6). Classify instrument type from supplied verified identifiers and a discovered asset-type capability when needed: only a validated successful ETF profile establishes ETF; only the documented explicit no-profile/not-in-ETF-universe coverage response plus independently verified listed-equity identity supports the equity route. Timeout, generic error, null/empty or malformed response means type unknown, never equity by default. Fund/OEIC identifiers remain unsupported per conventions §1. Name unknown/unsupported holdings and original weight share; do not call equity-only enrichment for ETF/fund/unknown holdings or invent look-through. Establish the exact common requested start/end dates, whether weights are current/end weights or verified start weights, and whether trades, cash flows, fees, dividends and currency affect the client’s number. Do not invent missing history. Current/end weights use the current-weight illustration below; verified start weights without intervening-history evidence support only a stated static-weight illustration. A realized account return requires verified account returns or an explicitly supported dated-position/trade/cash-flow reconstruction; this workflow has no history-reconstruction engine and must not simulate one from final weights.
 
 ### Step 2 — Fetch (parallel batches)
 
-**Batch A — asset-class pre-classification (mandatory).** `call-tool` `etf_profile(<plain_ticker>)` for every holding together: `{"error": "No profile data found"}` → equity → `export_price_series`; a profile → ETF → `etf_daily_price`. N calls at 1 token each.
+**Batch A — asset-class pre-classification (mandatory).** `call-tool` the discovered `etf_profile` capability for unclassified holdings together. Apply Step 1’s validated-profile / explicit-negative-plus-equity-identity / unknown distinction; never classify arbitrary failure as equity. Verified equities price via `export_price_series`, ETFs via `etf_daily_price`; unknown/fund holdings have unavailable price coverage unless another discovered supported price capability establishes it.
 
 **Batch B — prices, regime, scoring.** `call-tool` ALL together in one turn:
 
 | Tool | Parameters | Purpose |
 |---|---|---|
-| `export_price_series` | each equity holding: `symbol=<ric>`, `days=<period>` as int, `format="json"` | close-to-close returns |
-| `etf_daily_price` | each ETF holding: `symbol=<plain_ticker>`, `start_date=<today − period>`, `end_date=<today>` | ETF returns |
+| `export_price_series` | each equity holding: `symbol=<ric>`, `days=<calendar lookback sufficient to include a close on or before requested start>` as int, `format="json"` | close-to-close returns |
+| `etf_daily_price` | each ETF holding: `symbol=<plain_ticker>`, `start_date=<common requested start minus bounded anchor lookback>`, `end_date=<common requested end>` | ETF returns |
 | `get_telemetry` | fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences | Is the whole market down? |
 | `list_macro_countries` | — | coverage for home markets |
-| `get_peer_snapshot` | per holding | **Primary scoring source** (V2); aggregated client-side per loader.md §3b |
+| `get_peer_snapshot` | per verified equity holding | **Primary scoring source** (V2); aggregated client-side per loader.md §3b |
 | `get_company_info` | per holding | **Ground-truth oracle** (loader.md §5 rule 3) |
-| `get_score_analysis` | per holding, `weeks` as int 13 (non-default — conventions §0.2) | **Primary factor-trend source** |
-| `quick_portfolio_scores` | `holdings` | V1 only; not with `PARALLAX_LOADER_V2=1` and a view active; if it fails or covers <50%, do not retry — `get_score_analysis` is the factor source |
+| `get_score_analysis` | per verified equity holding, `weeks` as int 13 (non-default — conventions §0.2) | **Primary factor-trend source** |
+| `quick_portfolio_scores` | verified equity holdings only | V1 only; not with `PARALLAX_LOADER_V2=1` and a view active; if it fails or covers <50%, do not retry — `get_score_analysis` is the factor source |
 
-**Batch C — after Batch B.** `macro_analyst` with `component="tactical"` for each covered home market (cap 2). Then for the top 3 detractors by weighted contribution (Step 4), together: `get_news_synthesis` and `get_peer_snapshot` — non-blocking per §5, but Step 5's divergence verdict for those three WAITS for their news (or its confirmed absence), because the provisional flag keys on whether a major event broke after the last score point.
+**Batch C — after Batch B.** `macro_analyst` with `component="tactical"` for each covered home market (cap 2). Then for the top 3 detractors by weighted contribution (Step 4), together: `get_news_synthesis` for verified-equity detractors only (ETF/unknown enrichment unavailable). Reuse each detractor's successful, identity-validated Batch B `get_peer_snapshot` when symbol, arguments and as-of basis match; keep the name/symbol checks and original coverage warnings. A missing/untrusted snapshot stays unavailable unless the shared retry rules allow one affected-call retry; changed-scope enrichment is separately costed — non-blocking per §5. Compose from resolved evidence; pending/failed news remains explicitly unknown and never triggers a duplicate job or a claim that no company event occurred. Mark post-score developments and pending news in the observational summary.
 
 ### Step 3 — Verify
 
 - Cross-validation per conventions §2 / loader.md §5 rule 3: V2 mismatches ⚠ MISMATCH and excluded from aggregates; V1 mismatches re-scored individually.
-- **Halt rule (no silent drops):** a holding empty from BOTH `etf_profile` and its routed price endpoint is surfaced above the attribution table with the ⚠ banner naming it, the weight share the reported return covers, and the operator decision required (supply prices, or drop the holding); never zero or skip it silently.
-- Computed portfolio return vs the client's figure: a gap > 1% is stated in What Happened.
+- **Halt rule (no silent drops):** any holding lacking usable prices from its supported routed endpoint, regardless of whether its profile succeeded is surfaced above the attribution table with the ⚠ banner naming it, the weight share the reported return covers, and the operator decision required (supply prices, or drop the holding); never zero or skip it silently.
+- Report the computed method, price-return/currency basis and coverage before comparing to the client's figure. A gap >1 percentage point is stated in What Happened with basis/history differences; if the account basis is unknown, say reconciliation is not possible, never confirm the client's realized return from current weights.
 
 ### Step 4 — Compute
 
-Per-holding close-to-close return; weighted contribution (return × weight); total; rank by contribution (detractors first). Layer 2: which factor scores moved most, whether moves are correlated across holdings (systematic) or not (stock-specific), and whether the portfolio's factor tilt is out of favor per the regime and telemetry divergences. Layer 3: for each top-3 detractor, broad market / sector-factor rotation / company-specific. Divergence classification per holding — Down/Stable-or-Up = **Transient** (hold or add); Down/Down = **Fundamental** (investigate, consider trim); Down/Mixed = **Ambiguous** (monitor) — with the provisional flag where news post-dates the last score point. Portfolio verdict = the weighted majority class.
+Use the same exact requested start/end calendar boundaries for every return. For each holding choose the latest supported close on or before each boundary, disclose both actual close dates and any nontrading-day carry; reject missing start anchors, stale/undated/future prices or incompatible currency/adjustment bases. Never aggregate 21 trading days for equities with 21 calendar days for ETFs. A longer exchange closure or material date mismatch remains a named coverage gap unless the user accepts an explicit partial illustration; no fabricated zero return.
+
+Per-holding close-to-close price return; static-weight contribution (return × supplied weight); sum and rank detractors. With current/end weights label every total and contribution table **Current-weight period illustration — not realized account performance**. With verified period-start weights label **Static-weight period illustration — not verified realized account performance**, disclosing the no-rebalancing/flow assumption; with true period-start weights and a consistent return basis this arithmetic represents a no-trade buy-and-hold illustration, not a reconstructed traded account. End-weight arithmetic does not recover that starting book. State actual price treatment (including whether adjusted/dividends are available), dates, currency and missing coverage; do not assert total return from unadjusted closes.
+
+Report observed score changes and price changes separately, with dates and the weekly-score lag. Price down / scores stable-or-up = **Observed divergence**; price down / scores down = **Observed co-decline**; mixed or missing evidence = **Mixed / insufficient evidence**. These are descriptive patterns, not transient/fundamental diagnoses, causes or hold/add/trim instructions. Summarize the patterns without a weighted-majority causal verdict. For top detractors, state supported facts, competing explanations (market/sector repricing, company developments, stale scores or omitted information as applicable) and what evidence would distinguish them. Market / Factor / Stock-Specific driver tags are **qualitative hypotheses — not measured attribution** unless a documented measured method supports them; correlated score changes and telemetry alone do not identify causal contributions. News can inform hypotheses but cannot prove that all other fundamentals are unchanged.
 
 ### Step 5 — Compose
 
-Fill **Output Format** below in order; conditional advice by verdict: transient → fundamentals unchanged, regime-driven, stay the course unless risk tolerance changed; fundamental → name the deteriorating holdings and suggest deeper analysis (`/parallax-deep-dive`), trim, or replacement, and rebalance toward favored factors when the tilt is the problem; mixed → separate hold from investigate, prioritized by weighted contribution. House View Preamble per loader.md §5.1; Branding Header per integration-pattern.md §5; view-exposure tags where a view is active; `parallax-conventions.md §9.2` disclosure; disclaimer per loader.md §5 rule 5 when a view is active, otherwise `parallax-conventions.md §9.1`; audit entry per loader.md §6. Tone calm and explanatory.
+Fill **Output Format** below in order. What To Do names unresolved evidence, relevant risk/mandate checks and optional further investigation; stable scores, missing news or a price decline alone cannot justify hold/add/trim. If a view is active, distinguish institutional exposure alignment from evidence about returns or client objectives. House View Preamble per loader.md §5.1; Branding Header per integration-pattern.md §5; `parallax-conventions.md §9.2` disclosure; disclaimer per loader.md §5 rule 5 when a view is active, otherwise `parallax-conventions.md §9.1`; audit entry per loader.md §6. Tone calm and explanatory.
 
 ### Step 6 — Render (deterministic gate, mandatory)
 
@@ -104,13 +108,13 @@ The entire final message is that command's stdout. The stderr `[render-gate] WAR
 
 - **House View Preamble** (only if view active) — render per loader.md §5 rule 1 (preamble). Per loader.md §5.1 the preamble goes at the very top — it precedes the Branding Header.
 - **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view): `**<client_name>** portfolio attribution`. Logo handling per integration-pattern.md §5: empty path → text only; URL → embed; absolute local (`/` or `~`) → skip embed and append `Logo on file: <basename>` to About This Report.
-- **What Happened** (computed portfolio return over the period, compared to client's stated figure; 1-sentence summary of the loss magnitude)
-- **Performance Attribution** (table: each holding with return, weighted contribution, and primary driver tag — Market / Factor / Stock-Specific; if view active, add "View Exposure" tag — OW / Neutral / UW per the view)
+- **What Happened** (period, price-return method, weight date and coverage; the current-weight/static-weight illustration label next to the computed percentage; compare to the client’s figure only with basis limitations, or state why realized-account reconciliation is unavailable)
+- **Performance Attribution** (table: each holding with return, weighted contribution, and possible driver tag — Market / Factor / Stock-Specific / Unknown, explicitly qualitative hypotheses rather than measured causal attribution; repeat the illustration method label above the table; if view active, add "View Exposure" tag — OW / Neutral / UW per the view)
 - **Market & Regime Context** (regime tag, mechanism, 2-3 sentences on what's driving markets; is the broad market down too?)
-- **Factor Exposure** (which factor tilts helped/hurt; connection to the current regime; if view active, note whether realized factor exposure matched view's intended tilts)
-- **Top Detractors** (for each of top 3: what happened, why, and whether scores agree with the price move; flag whether the holding's view-exposure tag means the loss was expected pain from the view)
-- **The Key Question: Noise or Signal?** (score-vs-price divergence summary — portfolio-level verdict with per-holding classification table)
-- **What To Do** (conditional advice based on the verdict; if view active, separate "stay-the-course-per-view" actions from "view says trim anyway" actions)
+- **Factor Exposure** (observed factor-score changes and possible regime connections, without quantitative factor-return claims unsupported by a measured method; if view active, compare observed exposure to intended tilts)
+- **Top Detractors** (for each of top 3: observed return and score dates, supported news, competing explanations and unresolved evidence; view-exposure tags describe institutional positioning only)
+- **The Key Question: Noise or Signal?** (observational price/score summary with a per-holding pattern table, competing explanations, unknowns and the score-lag caveat; explicitly say the observations do not establish whether the loss is temporary or its cause)
+- **What To Do** (prioritized evidence checks and optional investigation grounded in the unresolved question; no hold/add/trim inference from price/score patterns; institutional alignment is separate from client objectives)
 - **About This Report** (always present): one line stating branding state per integration-pattern.md §7 markdown column (render per table; do not collapse). If a logo was skipped per the Branding Header rule, append `Logo on file: <basename>` as a second About This Report line.
 
 Append audit log entry per loader.md §6.
@@ -125,7 +129,7 @@ If active view: end with the view-aware disclaimer per loader.md §5 rule 5. Oth
 ## Failure modes
 
 - A holding with no price from either endpoint: the Step 3 halt banner; the attribution proceeds on the remaining weight and says so.
-- News pending for a top detractor: `Analysis pending — service temporarily unavailable` inside Top Detractors and that holding's divergence row marked provisional-pending-news; never finalize a Transient verdict on a freshly adverse name without its news.
+- News pending for a top detractor: `Analysis pending — service temporarily unavailable` inside Top Detractors and that holding's divergence row marked provisional-pending-news; retain the observational pattern and name the missing evidence; news absence never proves a temporary loss.
 - `quick_portfolio_scores` failure or <50% coverage: no retry; `get_score_analysis` is the factor source.
 - Telemetry or macro unavailable: Market & Regime Context renders the §4 note; the layer-1 attribution is stated as unavailable, layers 2–3 still render.
 - House-view banner states `malformed` / `expired` / `critical`: the banner renders verbatim (conventions §0.3 item 4).
@@ -133,9 +137,9 @@ If active view: end with the view-aware disclaimer per loader.md §5 rule 5. Oth
 
 ## Done when
 
-- What Happened states the computed return, the period, and the gap to the client's figure; first line is the House View Preamble, the Branding Header, or `## What Happened`.
-- Every holding is in the attribution table or in the halt banner; the verdict table classifies every priced holding.
-- The Key Question section carries a portfolio-level verdict and the score-lag caveat.
+- What Happened states the computed illustration, method, period, coverage and limits of comparison to the client’s figure; first line is the House View Preamble, the Branding Header, or `## What Happened`.
+- Every holding is in the attribution table or in the halt banner; the pattern table describes every priced holding, including missing-score evidence.
+- The Key Question section carries observed patterns, competing explanations, unresolved evidence and the score-lag caveat; no pattern is promoted to a causal diagnosis or trading instruction.
 - When a view is active: the `view_status` banner appears verbatim; audit entry appended per loader.md §6 (every consume event).
 - The render gate ran and the reply is its stdout (or the §14.3 note is present in About This Report).
 - `parallax-conventions.md §9.2` disclosure and the §9.1 or view-aware disclaimer are present; expected spend stated (Gotchas).

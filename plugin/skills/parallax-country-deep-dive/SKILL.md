@@ -15,7 +15,7 @@ description: "Country or region equity discovery: which equities screen stronges
 
 ## Gotchas
 
-- Expected Parallax spend: ~29 tokens (`_parallax/token-costs.md`): one macro summary + universe + 5 snapshots + 5 info checks + 3 score trends.
+- Expected Parallax spend: **5 + 0.15N + 0.1 min(3,N) + Σ macro credits**: universe 5, N snapshots 0.1 each, N info checks 0.05 each, up to three score histories 0.1 each. With default N=5 and one market: **11.05 normally, up to 56.05 credits** if its omitted-component overview reassembles (5 normally/up to 50 per market). Each extra selected covered market adds 5 normally/up to 50 (maximum three); additional successful identity-resolution reads add 0.05 per symbol (`_parallax/token-costs.md`).
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.2 named-parameter discipline (`build_stock_universe(query=…)`, `macro_analyst(market=…)` with no `component`), §2 identity cross-check, §3 parallel execution, §4 fallbacks, §12 framing, §14 host primitives.
 - JIT-load `_parallax/house-view/loader.md` UNCONDITIONALLY: §5 rule 3, rule 6 and §6 apply with or without a view. With a view: §3 multipliers bias the Top Opportunities ranking (region/sector tilts) and §5 rendering applies; the country's own macro narrative is sovereign and untouched. Boundary with /parallax-macro-outlook: that skill's census is untilted by design — do not "harmonize" the two contracts.
 - Smaller markets may have fewer scored equities; `list_macro_countries` confirms macro coverage (`check_macro_health` is DEPRECATED per its own tool description and returns the same markets list at the same cost — do not call both).
@@ -42,19 +42,19 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
    <!-- host-note -->
    Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
    <!-- /host-note -->
-3. Parse args: country or region; `top_n=` (default 5).
+3. Parse args: country or region; `top_n=` (default 5), integer 1–20. Reject missing geography or invalid count before billed calls.
 4. `load-reference` `_parallax/house-view/loader.md`; run §1–§2. If a view is present, capture the load preamble and the tilt vector for Step 4.
 5. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`.
 
 ### Step 1 — Resolve inputs
 
-The market name must match `list_macro_countries` verbatim; a region maps to its covered member markets.
+Use `list_macro_countries` from Batch A to resolve exact covered market names. Preserve the original country/region as the universe scope. For a region, explicitly list its covered member markets; if membership is ambiguous, ask rather than invent it. Cap macro reads at three explicitly selected member markets, disclose any omitted/uncovered members and ask for selection if no priority was supplied. Never pass a region label as a country parameter.
 
 ### Step 2 — Fetch (parallel batches)
 
 **Batch A** — `call-tool` together: `list_macro_countries`; `build_stock_universe(query="[country] equities")`.
 
-**Batch B** — after A: `macro_analyst(market="[country]")` summary mode (no `component`; all components inline); for the top N universe results, `get_peer_snapshot` AND `get_company_info` per symbol together; for the top 3, `get_score_analysis` with `weeks` as int 26.
+**Batch B** — after A: `macro_analyst(market=<exact selected covered member name>)` summary mode once per selected member (no `component`; all components inline, maximum three); for the top N universe results, `get_peer_snapshot` AND `get_company_info` per symbol together; for the top 3, `get_score_analysis` with `weeks` as int 26.
 
 ### Step 3 — Verify
 

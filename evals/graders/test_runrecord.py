@@ -39,7 +39,7 @@ def _stream(tool_names=(), *, is_error=False, cost=1.25, include_result=True):
         lines.append(json.dumps({
             "type": "assistant",
             "message": {"content": [
-                {"type": "tool_use", "id": f"t{i}", "name": name, "input": {}}
+                {"type": "tool_use", "id": f"t{i}", "name": name, "input": {"symbol": "AAPL.O", "market": "Japan"}}
             ]},
         }))
     lines.append(json.dumps({
@@ -70,7 +70,7 @@ def test_clean_run_is_ok_and_aggregatable():
     rec = from_stream_json(_stream([_p("get_company_info")]), "r1")
     assert rec.status == STATUS_OK
     assert rec.aggregatable()
-    assert rec.parallax_tokens == 1
+    assert rec.parallax_tokens == 0.05
     assert rec.degraded_paths == []
 
 
@@ -90,18 +90,13 @@ def test_tool_calls_parallax_counts_parallax_work_not_harness_tools():
     assert rec.tool_calls_total == 3
 
 
-def test_tool_calls_parallax_counts_unpriced_endpoints_too():
-    """Work performed is not the same question as work billed.
-
-    A pair-finder run is mostly KNOWN_UNPRICED calls. Counting only the priced
-    tables would report it as having made zero Parallax calls, leaving nothing
-    on the record that states how much Parallax work it actually did.
-    """
+def test_tool_calls_parallax_counts_all_priced_endpoints():
+    """Formerly unpriced holdings reads now have the published fractional price."""
     rec = from_stream_json(
         _stream([_p("etf_holdings"), _p("etf_holdings"), _p("etf_search")]), "r3b"
     )
     assert rec.tool_calls_parallax == {"etf_holdings": 2, "etf_search": 1}
-    assert rec.parallax_tokens == 1, "only etf_search is priced"
+    assert rec.parallax_tokens == 0.2, "holdings .1 each; ETF search free"
 
 
 # --- degrade rules: what must and must not leave AGGREGATABLE -------------
@@ -111,18 +106,16 @@ def test_unknown_endpoint_degrades_as_a_stale_table_signal():
     assert rec.status == STATUS_DEGRADED
     assert not rec.aggregatable()
     assert rec.degraded_paths == ["unknown_endpoint:brand_new_tool"]
+    assert rec.parallax_credit_upper_bound is None
 
 
-def test_known_unpriced_endpoint_stays_aggregatable():
-    """The carve-out that keeps pair-finder runs usable.
-
-    These can never be cleared by a table edit, so degrading on them would
-    exclude an entire workflow from aggregation permanently.
-    """
+def test_former_unpriced_endpoints_are_now_priced_and_aggregatable():
+    """Published prices resolve the former unpriced endpoint category."""
     rec = from_stream_json(_stream([_p("etf_holdings"), _p("check_job_status")]), "r5")
     assert rec.status == STATUS_OK
     assert rec.aggregatable()
-    assert rec.unpriced_endpoints == ["check_job_status", "etf_holdings"]
+    assert rec.unpriced_endpoints == []
+    assert rec.parallax_tokens == 0.1
     assert rec.degraded_paths == []
 
 
@@ -132,6 +125,7 @@ def test_ambiguous_endpoint_degrades_and_is_recorded():
     assert rec.status == STATUS_DEGRADED
     assert not rec.aggregatable()
     assert rec.ambiguous_endpoints == ["mcp__research_desk__get_company_info"]
+    assert rec.parallax_credit_upper_bound is None
     assert rec.parallax_tokens == 0, "must not bill a call we cannot attribute"
 
 
@@ -221,3 +215,48 @@ def test_to_json_roundtrips_every_field():
     for key in ("status", "parallax_tokens", "unknown_endpoints",
                 "unpriced_endpoints", "ambiguous_endpoints", "anthropic_cost_usd"):
         assert key in parsed
+
+
+def test_fractional_fields_and_conditional_ceiling_survive_json():
+    rec = from_stream_json(_stream([_p("get_company_info"), _p("macro_analyst")]), "fractional")
+    encoded = json.loads(rec.to_json())
+    assert encoded["parallax_tokens"] == 5.05
+    assert encoded["parallax_credit_upper_bound"] == 50.05
+    assert encoded["parallax_cost_usd"] == 1.01
+    assert encoded["parallax_usd_per_credit"] == .2
+    assert "2026-10-19" in encoded["parallax_estimate_basis"]
+    assert any("Planning estimate" in item for item in encoded["parallax_estimate_assumptions"])
+
+
+def test_invalid_pricing_input_degrades_record_instead_of_claiming_free_call():
+    raw = _stream([_p("quick_portfolio_scores")])
+    rec = from_stream_json(raw, "invalid")
+    assert rec.status == STATUS_DEGRADED
+    assert not rec.aggregatable()
+    assert rec.unpriced_endpoints == ["quick_portfolio_scores"]
+    assert rec.unpriced_inputs
+    assert rec.parallax_credit_upper_bound is None
+    assert json.loads(rec.to_json())["parallax_credit_upper_bound"] is None
+    assert rec.tool_calls_parallax == {"quick_portfolio_scores": 1}
+
+
+def test_tool_error_is_counted_without_fabricating_actual_deductions():
+    raw = _stream([_p("get_company_info")])
+    raw += "\n" + json.dumps({"type": "user", "message": {"content": [
+        {"type": "tool_result", "tool_use_id": "t0", "is_error": True, "content": "HTTP 500"}
+    ]}})
+    rec = from_stream_json(raw, "error")
+    assert rec.tool_errors == 1
+    # Input-only estimate deliberately remains an all-success plan. A tool error
+    # does not reveal whether other internal requests succeeded or a job billed.
+    assert rec.parallax_tokens == .05
+    assert any("inputs do not establish billed outcomes" in line for line in rec.parallax_estimate_assumptions)
+
+
+def test_saved_record_is_not_repriced_implicitly():
+    old = {"run_id": "historical", "parallax_tokens": 11, "parallax_cost_usd": 2.2}
+    restored = runrecord.RunRecord(**old)
+    assert json.loads(restored.to_json())["parallax_tokens"] == 11
+    assert restored.parallax_estimate_basis == "unspecified (legacy record)"
+    assert restored.parallax_credit_upper_bound is None
+    assert restored.parallax_usd_per_credit is None

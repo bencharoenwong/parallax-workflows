@@ -18,7 +18,7 @@ description: "Quick stock evaluation: company overview, Parallax factor scores, 
 
 ## Gotchas
 
-- Expected Parallax spend: ~29 tokens (`_parallax/token-costs.md`), which already includes the two macro markets; each market is 5 of the 29.
+- Expected Parallax spend: 10.55 + 5M credits, where M is the number of covered tactical macro markets (0–2): 20.55 with two markets. Identity 0.05, snapshot/history 0.1 each, financial summary 0.05, four outlook aspects 0.25 total, technicals/news 5 each; methodology and country discovery are free. Excludes resolution/recovery; current discovered prices win (`_parallax/token-costs.md`).
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §2 identity cross-check, §3 parallel execution, §4 fallbacks, §14 host primitives, §15 translation.
 - JIT-load `_parallax/house-view/loader.md` FIRST; if an active view is present follow §2 (validation), §7.1/§7.2/§7.3 (single-stock conflict surfacing), §6 (audit). Do NOT apply tilts — single-stock skills surface conflicts only; peer suggestions are flagged, never filtered. Route every §7 token through `render_view_conflict()` per `_parallax/house-view/render_helpers.md`; never hand-construct the string.
 - Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report) — load happens in Step 0, rendering in Step 5.
@@ -81,7 +81,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 
 ### Step 3 — Verify
 
-- Identity cross-check per conventions §2: `get_peer_snapshot.target_company` against `get_company_info.name` after normalization; `get_score_analysis` `data[0].symbol` against the requested RIC. On divergence, warn and treat `get_company_info` as the source of truth; never present mismatched scores as the intended security.
+- Identity cross-check per conventions §2: `get_peer_snapshot.target_company` against `get_company_info.data.name` after normalization; `get_score_analysis` `data[0].symbol` against the requested RIC. On divergence, warn and treat `get_company_info` as the source of truth; never present mismatched scores as the intended security.
 - Outlook coverage per conventions §4 "Stock outlook coverage": 0–1 of the four aspects returned → the Dividends and Analyst View sections carry the §4 "materially incomplete" flag.
 - Every failed or empty call: retry classification per §0.1, then the §4 display-section rule. This skill renders no gate (no pass/fail verdict on the name), so §4.0 does not apply.
 
@@ -122,9 +122,9 @@ Present as a friendly, structured report. When an active house view is loaded, J
     - *If view active:* check §7.3 tension condition (`total_score >= 7.0 AND view.tilts.sectors[stock_sector] <= -1`). If true, render the tension banner via `render_view_conflict(kind="score_tension", ...)` directly below the scores table.
   - **House View Note** (only if view active and stock conflicts with view) — render via `render_view_conflict(kind="blanket", ...)` per loader.md §7.1. This appears HERE — immediately after The Scores — so the reader sees the view lens before reading the rest. Not at the bottom of the output.
   - **Financial Health** (green/yellow/red traffic light metaphor)
-- **Technicals** — lens header (the price-action read, kept distinct from Fundamentals). From `get_technical_analysis`: a qualitative bullish/bearish/mixed trend read (the tool returns LLM-authored prose — `executive_summary` and `technical_analysis.trend_analysis` — not a machine trend enum; no `STRONG_POSITIVE`/`STRONG_NEGATIVE` field exists), momentum, and support/resistance levels. State a one-line directional read for the lens. The Technicals read cites price/trend/momentum only — it does not borrow factor scores or financials as evidence. *Fallback:* if `get_technical_analysis` is unavailable or times out, render the lens from the Momentum factor proxy (`get_score_analysis` momentum sub-trend) and prefix it `Technical analysis unavailable — Momentum factor proxy:`. The lens always produces a read; it never silently disappears.
+- **Technicals** — lens header (the price-action read, kept distinct from Fundamentals). From `get_technical_analysis`: a qualitative bullish/bearish/mixed trend read (the tool returns LLM-authored prose — `executive_summary` and `technical_analysis.trend_analysis` — not a machine trend enum; no `STRONG_POSITIVE`/`STRONG_NEGATIVE` field exists), momentum, and support/resistance levels. State a one-line directional read for the lens. The Technicals read cites price/trend/momentum only — it does not borrow factor scores or financials as evidence. *Fallback:* if `get_technical_analysis` is unavailable or times out, render the lens from the Momentum factor proxy (`get_score_analysis` momentum sub-trend) and prefix it `Technical analysis unavailable — Momentum factor proxy:`. If verified Momentum history is also unavailable, keep the section as `Technical stance unavailable — technical analysis and Momentum history unavailable`; do not infer a direction. The section never silently disappears.
 - **Macro Context** (2-3 sentences on the relevant economic environment — skip if no covered markets)
-- **Dividends** (yield, consistency, recent changes — or "Not a dividend payer" if none)
+- **Dividends** (yield, consistency, recent changes — or "Not a dividend payer" only when a successful dividend response establishes none; a failed or missing response is unavailable)
 - **Risk vs Peers** (risk/return profile relative to peer group)
   - *If view active AND `get_peer_snapshot.suggestion` returned a peer:* check §7.2 condition (peer's sector tilt ≤ -1 in view, or peer ticker on excludes). If true, render the inline token via `render_view_conflict(kind="peer_suggest", ...)` immediately under the Risk vs Peers section. Flag, do not filter — the peer stays in the table.
 - **Recent News** (bullets)
@@ -144,7 +144,7 @@ If active view: use the view-aware disclaimer per loader.md §5. Otherwise: rend
 ## Failure modes
 
 - Ticker unresolved after conventions §1 (two suffix attempts): stop and ask for the RIC; fund/OEIC pattern → the §1 fallback message, no raw error.
-- `get_technical_analysis` timeout: Technicals lens renders from the Momentum factor proxy with the documented prefix; the lens never disappears.
+- `get_technical_analysis` timeout: Technicals lens renders from the Momentum factor proxy with the documented prefix; if verified Momentum history is also missing, retain the section with the explicit unavailable reason and no directional read.
 - 0–1 `get_stock_outlook` aspects: Dividends and Analyst View flagged materially incomplete (conventions §4).
 - News or macro pending: placeholder per conventions §5 / §6; output is not blocked.
 - House-view banner states `malformed` / `expired` / `critical`: the banner renders verbatim (conventions §0.3 item 4).

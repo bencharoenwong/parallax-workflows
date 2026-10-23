@@ -5,8 +5,9 @@
 #
 # Usage:
 #   ./evals/baseline/run_baseline.sh [--skill NAME] [--dry-run] [-n N] [--model M]
-# Cost: N * (#tasks) * ~24 Parallax tokens + N*(#tasks)*4 judge calls.
-# Default N=3, 4 tasks -> 12 rollouts (~288 tokens). Hard cap below.
+# Cost: Parallax credits depend on each task and its conditional tool plan.
+# See skills/_parallax/token-costs.md; model/judge charges are separate.
+# Default N=3, 4 tasks -> 12 rollouts. Hard cap below.
 
 set -euo pipefail
 
@@ -64,7 +65,7 @@ if [ "$TOTAL" -gt "$MAX_ROLLOUTS" ]; then
   exit 1
 fi
 
-echo "[baseline] skill=$SKILL command=$CMD tasks=$N_TASKS n=$N total_rollouts=$TOTAL est_tokens=$(( TOTAL * 24 )) judge_model=$MODEL" >&2
+echo "[baseline] skill=$SKILL command=$CMD tasks=$N_TASKS n=$N total_rollouts=$TOTAL est_credits=task-dependent price_reference=skills/_parallax/token-costs.md judge_model=$MODEL" >&2
 
 # Perimeter guard before any work. Runs in --dry-run too (it is an offline string
 # check, not a model call), so a bad --model aborts before listing the plan. It

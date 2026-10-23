@@ -75,6 +75,59 @@ def test_loader_json_onboarded_prints_visual_keys_and_safe_source(home: Path) ->
     assert "voice" not in out
 
 
+@pytest.mark.parametrize("render", [
+    None, {}, {"audience_default": None},
+    {"audience_default": "client_safe"}, {"audience_default": "internal_analyst"},
+    {"audience_default": "https://secret.example/token"},
+    {"audience_default": ""}, {"audience_default": []},
+    {"audience_default": {"instruction": "private config text"}},
+    {"audience_default": False}, "private config text", [],
+])
+def test_loader_json_preserves_audience_notices_without_schema(
+    home: Path, loader_module, monkeypatch, render: Any,
+) -> None:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("audience_cli_test", RM_CONSUMER)
+    consumer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(consumer)
+    cfg = _config()
+    cfg["render"] = render
+    _onboard(home, cfg)
+    monkeypatch.setattr(loader_module, "_CONFIG_PATH",
+                        home / ".parallax" / "client-branding" / "config.yaml")
+    monkeypatch.setattr(loader_module, "_get_schema", lambda: None)
+    raw = loader_module.load_visual_branding()
+    summary = loader_module.visual_branding_summary()
+    assert summary["error"] == "schema_unavailable"
+    assert summary["white_label_active"] is True
+    assert summary["colors"]["primary"] == "#1A2B3C"
+    # The summary must preserve both the resolved mode and the exact notice,
+    # including explicit flags that override a bad configured default.
+    for flag in (None, "client_safe", "internal_analyst", "unrecognized"):
+        assert consumer.resolve_audience(summary, flag) == consumer.resolve_audience(raw, flag)
+    shown = json.dumps(summary)
+    assert "private config text" not in shown
+    assert "secret.example" not in shown
+
+
+@pytest.mark.parametrize("default,shown", [
+    ("private audience text", "unrecognized"), ({"private audience text": []}, False),
+])
+def test_loader_cli_without_schema_preserves_bad_default_category(
+    home: Path, default: Any, shown: Any,
+) -> None:
+    _onboard(home, _config(render={"audience_default": default}))
+    # An installation missing schema.yaml exercises the real best-effort CLI.
+    isolated = home / "loader.py"
+    isolated.write_bytes(LOADER.read_bytes())
+    out = _run(home, isolated, "--json")
+    assert out["error"] == "schema_unavailable"
+    assert out["white_label_active"] is True
+    assert out["render"] == {"audience_default": shown}
+    assert "private audience text" not in json.dumps(out)
+
+
 def test_loader_json_never_prints_the_raw_source(home: Path) -> None:
     _onboard(home, _config())
     proc = subprocess.run([sys.executable, str(LOADER), "--json"],
@@ -88,6 +141,41 @@ def test_loader_json_not_onboarded_is_inactive(home: Path) -> None:
     assert out["error"] == "config_not_found"
     assert out["white_label_active"] is False
     assert out["source_reference"] == ""
+
+
+@pytest.mark.parametrize("remaining", ["none", "name", "color", "font", "logo"])
+def test_loader_cli_requires_renderable_branding_without_schema(
+    home: Path, remaining: str,
+) -> None:
+    cfg = _config(render={"audience_default": "client_safe"})
+    cfg["metadata"]["client_name"] = "[]<>*_`#!|\\"
+    cfg["branding"] = {
+        "colors": {"primary": "invalid color"},
+        "fonts": {"body": "<script>invalid font</script>"},
+        "logos": {"primary": "", "favicon": ""},
+    }
+    if remaining == "name":
+        cfg["metadata"]["client_name"] = "Acme Capital"
+    elif remaining == "color":
+        cfg["branding"]["colors"]["accent"] = "#FF6600"
+    elif remaining == "font":
+        cfg["branding"]["fonts"]["header"] = "Inter"
+    elif remaining == "logo":
+        logo = home / "logo.png"
+        logo.write_bytes(b"\x89PNG\r\n\x1a\n")
+        cfg["branding"]["logos"]["primary"] = str(logo)
+    _onboard(home, cfg)
+    isolated = home / "loader.py"
+    isolated.write_bytes(LOADER.read_bytes())
+    out = _run(home, isolated, "--json")
+    assert out["error"] == "schema_unavailable"
+    assert out["white_label_active"] is (remaining != "none")
+    assert out["render"] == {"audience_default": "client_safe"}
+    assert out["source_reference"] == "https://acme.example.com"
+    if remaining == "none":
+        assert out["client_name"] == ""
+        assert out["colors"] == out["fonts"] == {}
+        assert not any(out["logos"].values())
 
 
 def test_loader_requires_the_json_flag(home: Path) -> None:
@@ -323,7 +411,14 @@ def test_client_name_cannot_autolink_or_strike(home: Path, name: str) -> None:
     ("s3://bkt/k?X-Amz-Signature=TOPSECRET", "s3://bkt"),
     ("HTTPS://h.example/x?sig=TOPSECRET", "https://h.example"),
     ("deck.pdf?sig=TOPSECRET", "deck.pdf"),
+    ("deck.pdf?sig=prefix/TOPSECRET", "deck.pdf"),
+    ("deck.pdf#prefix/TOPSECRET", "deck.pdf"),
+    ("//user:TOPSECRET@h.example", "//h.example"),
     ("https://h.example\\@evil.example/x", ""),
+    ("https:user:TOPSECRET@h.example", ""),
+    ("/private/client#1/deck.pdf", "deck.pdf"),
+    ("/private/client?1/deck.pdf", "deck.pdf"),
+    ("x" * 257, ""),
 ])
 def test_source_reference_strips_tokens_in_every_scheme(home: Path, ref: str, shown: str) -> None:
     cfg = _config()

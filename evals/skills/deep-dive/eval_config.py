@@ -40,6 +40,12 @@ def _c_disclaimer_present_deep_dive(t, spec):
     return Check("disclaimer_present_deep_dive", ok, "standard or view-aware disclaimer present")
 
 
+def _c_assessment_single_job(t, spec):
+    """One invocation must not start duplicate asynchronous assessment work."""
+    count = sum(call.name.endswith("get_assessment") for call in t.tool_calls)
+    return Check("assessment_single_job", count <= 1, f"assessment jobs={count}; maximum 1")
+
+
 SPEC = EvalSpec(
     name="deep-dive",
     command="/parallax-deep-dive",
@@ -74,6 +80,7 @@ SPEC = EvalSpec(
     check_ids=[
         "sections_present",
         "technical_fallback_explicit",
+        "assessment_single_job",
         "provenance_present",
         "ai_disclosure_present",
         "disclaimer_present_deep_dive",
@@ -84,6 +91,7 @@ SPEC = EvalSpec(
     orchestrator_max_lines=220,
     extra_checks={
         "technical_fallback_explicit": _c_technical_fallback_explicit,
+        "assessment_single_job": _c_assessment_single_job,
         "disclaimer_present_deep_dive": _c_disclaimer_present_deep_dive,
     },
 )

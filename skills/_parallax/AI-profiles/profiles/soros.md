@@ -30,6 +30,7 @@ tool_sequence_single_ticker:
   - macro_analyst:component=tactical
   - get_telemetry
   - get_company_info
+  - get_peer_snapshot
   - build_stock_universe
 required_factors_present: []
 thresholds:
@@ -42,7 +43,7 @@ thresholds:
 owner: parallax-workflows
 last_legal_review: PENDING
 last_anchor_test: 2026-04-07
-anchor_test_notes: "Workflow tools verified: list_macro_countries returns 12 covered markets (US, JP, UK, DE, FR, CN, IN, KR, SG, MY, CA, Global) ✓; macro_analyst(United States, tactical) returns substantive bond-overweight/equity-caution thesis dated 2026-03-26 (PCE upgraded to 2.7%, easing cycle narrative dead, Hormuz/Iran as invalidation) ✓; build_stock_universe is async ~15-40s and tends to time out in single-call tests (see Greenblatt anchor test); get_telemetry returned 'Admin org not configured' in this MCP session — Channel B of dual-channel logic unavailable in current environment, graceful fallback per dispatcher kicks in (single-ticker mode falls back to industry-exposure-only). Both basket and single-ticker modes are mechanically operable in production with sufficient timeout budget; the documented fallbacks handle the two environmental limitations correctly."
+anchor_test_notes: "Workflow tools verified: list_macro_countries returns 12 covered markets (US, JP, UK, DE, FR, CN, IN, KR, SG, MY, CA, Global) ✓; macro_analyst(United States, tactical) returns substantive bond-overweight/equity-caution thesis dated 2026-03-26 (PCE upgraded to 2.7%, easing cycle narrative dead, Hormuz/Iran as invalidation) ✓; build_stock_universe is async ~15-40s and tends to time out in single-call tests (see Greenblatt anchor test); get_telemetry returned 'Admin org not configured' in this MCP session — Channel B of dual-channel logic unavailable in current environment, graceful fallback per dispatcher kicks in (single-ticker mode retains industry-only observations but final fit is skipped). These historical tool observations are not a fresh-session or production validation; the current dispatcher evidence-state contract governs failures."
 ---
 
 # Soros-style profile
@@ -57,14 +58,14 @@ Unlike other v1 profiles, Soros operates top-down in two distinct modes:
 
 **Basket / screening mode (no ticker):** Run `list_macro_countries` → `macro_analyst(tactical)` on 3-5 markets in parallel → `get_telemetry` for cross-market regime divergence signals → identify 1-3 regime themes where macro and telemetry agree on direction → `build_stock_universe` for each theme → rank top names per theme. Output: ranked trade-idea list with regime thesis.
 
-**Single-ticker mode (one ticker):** Run the same macro workflow, then check the input ticker against TWO independent exposure channels:
+**Single-ticker mode (one ticker):** Run the same macro workflow, then check the input ticker against two related exposure channels:
 - **Channel A — Industry exposure (two sub-paths, either sufficient to flag):**
-  - **A1 — Universe membership:** does the ticker appear in any theme's `build_stock_universe` result? (Requires the universe build to succeed.)
-  - **A2 — Sector/industry classification match:** does the ticker's sector/industry from `get_company_info` match a theme's target industry? (Does NOT require the universe build.)
-  - Channel A is flagged if EITHER A1 OR A2 matches. A2 is evaluated independently so a `build_stock_universe` timeout does not collapse Channel A.
+  - **A1 — Sample membership:** does the ticker appear in a valid returned theme sample? Successful checked absence is `NOT_FLAGGED` for that sample only; timeout/missing result is `UNAVAILABLE`, not negative membership.
+  - **A2 — Sector/industry classification match:** does the ticker's verified sector/industry from `get_company_info` match a theme's target industry? Missing classification is `UNAVAILABLE`. (Does NOT require the universe build.)
+  - Channel A is `FLAGGED` if either evaluable path flags; `NOT_FLAGGED` only when both paths are evaluable and negative; otherwise `UNAVAILABLE`. Report A1/A2 separately. A2 can establish classification exposure, never sample membership.
 - **Channel B — Telemetry basket theme:** does the ticker fall into any of the regime baskets surfaced by `get_telemetry`? If telemetry is unavailable (e.g., "Admin org not configured" in current env), Channel B is `UNAVAILABLE` (not `NOT_FLAGGED`).
 
-Combined verdict: both channels flagged → `match`; one channel only → `partial_match`; neither → `no_match`. **Verdict `match` is never reached when Channel B is `UNAVAILABLE`** — maximum single-channel verdict is `partial_match`.
+Fetch the target `get_peer_snapshot` unconditionally in single-ticker mode, independently of universe inclusion, and verify it against `get_company_info.data.name` per conventions. Missing snapshot/identity stops the profile. With both required A/B channels evaluable: both flagged → `match`; one → `partial_match`; neither → `no_match`. Any unavailable required channel gives `skipped`, retaining verified observations. These paths are not independent statistical confirmations.
 
 ## What this profile does NOT capture
 
@@ -78,7 +79,7 @@ Combined verdict: both channels flagged → `match`; one channel only → `parti
 
 **Basket mode:** A ranked list of trade ideas organized by regime theme. Each idea includes the macro thesis, the directional view, and why the named ticker is exposed. Closest to what macro traders actually produce.
 
-**Single-ticker mode:** Dual-channel verdict. The user learns (1) what regime themes are currently prominent, (2) whether the ticker is industry-exposed (channel A), (3) whether the ticker fits a telemetry basket (channel B), (4) the combined verdict. A `match` requires BOTH channels — a genuine thematic exposure, not incidental sector membership. A `partial_match` means one channel flagged it. A `no_match` means the top-down lens has no current view on the ticker — informative, not negative.
+**Single-ticker mode:** Dual-channel verdict. The user learns (1) what regime themes are currently prominent, (2) whether the ticker is industry-exposed (channel A), (3) whether the ticker fits a telemetry basket (channel B), (4) the combined verdict. A `match` means both documented exposure checks flagged; it does not prove causal exposure or independent corroboration. A `partial_match` means one channel flagged it. A `no_match` means both evaluated channels were not flagged; unavailable evidence instead gives `skipped`.
 
 ## Anchor test plan
 

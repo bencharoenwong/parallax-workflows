@@ -148,8 +148,8 @@ jobs:
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/_parallax/client-policy/tests -q
       # -m "not npx" matches run-gate-tests.sh's offline default: one test in
-      # this root shells out to `npx -y`, which can download and execute a
-      # package. That is opt-in network behavior, not something CI should run.
+      # this root uses a separately configured external CLI. Keep that
+      # opt-in integration outside the default CI dependency set.
       - name: White-label extraction and validation gates
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/_parallax/white-label/tests -q -m "not npx"
@@ -181,6 +181,9 @@ jobs:
       - name: Weekly-themes gates
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/parallax-weekly-themes/ -q
+      - name: Pair arithmetic gates
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        run: python -m pytest skills/parallax-pair-finder/ -q
       # The translate suites keep their tests beside the validator they
       # exercise, under references/ rather than tests/. run-gate-tests.sh
       # discovers them by test-file glob, so the root is named here rather

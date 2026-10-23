@@ -13,6 +13,8 @@ description: "Stress-test the active CIO house view against fresh Parallax macro
 
 ## Gotchas
 
+- Expected Parallax spend: **0.05 + Σ macro credits** after internal checks: telemetry 0.05, free coverage, one omitted-component overview per selected covered market (5 normally/up to 50 if reassembled). For K markets: **5K + 0.05 normally / up to 50K + 0.05 credits**; top-12 is 60.05 normally/up to 600.05. A hard internal stop or cancellation before fetch spends 0. Keep the existing over-12 operator choice; this estimate is not authorization to widen scope (`_parallax/token-costs.md`).
+
 - This skill is read-only against the active house view. It never modifies the view directly.
 - The --edit handoff to /parallax-load-house-view is a separate confirmation gate.
 - JIT-load `_parallax/house-view/stress-test-design.md` for the 6 stress-test principles.

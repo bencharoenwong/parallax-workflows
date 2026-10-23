@@ -1,18 +1,9 @@
-"""One measured run -> one RunRecord.
+"""One captured run -> one RunRecord, preserving model usage separately.
 
-Extends ``transcript.py``, which extracts prose and tool calls but discards the
-stream's ``result`` event -- where every timing and cost metric lives.
-
-Two rules this module exists to enforce:
-
-1. **Two meters, never merged.** ``anthropic_cost_usd`` is CG's bill.
-   ``parallax_tokens`` is the client's, and is DERIVED from counted calls, not
-   metered. Reporting the first as "cost per artifact" understates the buyer's
-   invoice by roughly an order of magnitude.
-
-2. **Nothing is silently dropped.** A run that failed on infrastructure is
-   classified, retained, and excluded from aggregation -- never averaged in and
-   never deleted.
+``parallax_tokens`` is a legacy key measured in Parallax credits: an input-only
+all-success planning estimate, never an observed account deduction. Conditional
+ceilings and assumptions travel with it. Existing serialized records retain their
+original values; callers must explicitly parse a trace to create a new estimate.
 """
 from __future__ import annotations
 
@@ -59,8 +50,13 @@ class RunRecord:
     cache_creation: int = 0
     anthropic_cost_usd: float = 0.0
 
-    # --- meter 2: Parallax (the client's bill), DERIVED not metered ---
-    parallax_tokens: int = 0
+    # --- Parallax planning estimate: legacy tokens key has credit units ---
+    parallax_tokens: float = 0.0
+    parallax_credit_upper_bound: float | None = None
+    parallax_estimate_basis: str = "unspecified (legacy record)"
+    parallax_estimate_assumptions: list[str] = field(default_factory=list)
+    parallax_usd_per_credit: float | None = None
+    unpriced_inputs: list[str] = field(default_factory=list)
     parallax_cost_usd: float = 0.0
     unknown_endpoints: list[str] = field(default_factory=list)
     unpriced_endpoints: list[str] = field(default_factory=list)
@@ -155,12 +151,7 @@ def from_stream_json(
         calls = []
 
     rec.tool_calls_total = len(calls)
-    # Counted over KNOWN_ENDPOINTS, not just the priced tables: a KNOWN_UNPRICED
-    # call under a Parallax namespace is definitively Parallax work performed,
-    # and ``unpriced_endpoints`` records only its name. Filtering it out here
-    # would drop a pair-finder run's etf_holdings calls from the count, with
-    # nothing in the record stating how much work it actually did. Cost stays
-    # derived from the priced tables alone.
+    # Count known Parallax work independently of pricing-input completeness.
     counts: dict[str, int] = {}
     for call in calls:
         if not token_model.is_parallax_mcp(call.name):
@@ -172,6 +163,11 @@ def from_stream_json(
 
     est = token_model.estimate(calls)
     rec.parallax_tokens = est.tokens
+    rec.parallax_estimate_basis = token_model.PRICE_BASIS
+    rec.parallax_credit_upper_bound = est.upper_bound_tokens
+    rec.parallax_estimate_assumptions = list(est.assumptions)
+    rec.parallax_usd_per_credit = usd_per_token
+    rec.unpriced_inputs = list(est.unpriced_inputs)
     rec.parallax_cost_usd = round(est.usd(usd_per_token), 4)
     rec.unknown_endpoints = list(est.unknown_endpoints)
     rec.unpriced_endpoints = list(est.unpriced_endpoints)
@@ -201,23 +197,17 @@ def from_stream_json(
             "unknown_endpoint:" + ",".join(rec.unknown_endpoints)
         )
 
-    # An ambiguous call is a known endpoint name under an unrecognised MCP
-    # namespace: it may be a Parallax connector mounted off-brand, or another
-    # server's colliding tool. Either way ``parallax_tokens`` is now of unknown
-    # accuracy, so the run must not be pooled into an aggregate that reads as a
-    # measured client bill. Unlike KNOWN_UNPRICED this IS resolvable -- naming
-    # the namespace in PARALLAX_MCP_ALIASES clears it permanently.
+    # Unattributed calls cannot form a complete planning aggregate.
     if rec.ambiguous_endpoints and rec.status == STATUS_OK:
         rec.status = STATUS_DEGRADED
         rec.degraded_paths.append(
             "ambiguous_endpoint:" + ",".join(rec.ambiguous_endpoints)
         )
 
-    # A KNOWN_UNPRICED endpoint is deliberately absent from the table, not a
-    # sign the table is stale -- no table edit can clear it, so degrading here
-    # would permanently exclude every run of a workflow that calls one
-    # (pair-finder) from AGGREGATABLE. It stays STATUS_OK; ``unpriced_endpoints``
-    # on the record states what the derived total omits.
+    if rec.unpriced_endpoints:
+        if rec.status == STATUS_OK:
+            rec.status = STATUS_DEGRADED
+        rec.degraded_paths.append("unpriced_input:" + ",".join(rec.unpriced_endpoints))
 
     return rec
 

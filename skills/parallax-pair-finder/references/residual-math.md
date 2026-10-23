@@ -1,6 +1,6 @@
 # Residual Math Reference — pair-finder
 
-JIT-loaded by `skills/parallax-pair-finder/SKILL.md`. All formulas described here are executed inline by the model; no Python module exists.
+JIT-loaded by `skills/parallax-pair-finder/SKILL.md`. Price-derived formulas are executed by `pair_math.py` through the CLI in SKILL Step 4. Never calculate beta/history in model prose. Factor-net is a descriptive subtraction of verified scores; it is not hedge exposure.
 
 ## 1. Factor net (long − short)
 
@@ -20,12 +20,12 @@ From each leg's `sector`, `industry`, `market` fields (returned by `export_peer_
 
 | Comparison | Residual |
 |---|---|
-| `sector_long == sector_short` | sector_residual = 0 (sector-neutral) |
+| `sector_long == sector_short` | same reported sector; economic neutrality not established |
 | `sector_long != sector_short` | sector_residual = "cross-sector: long `<long_sector>` / short `<short_sector>`" |
-| `industry_long == industry_short` | industry_residual = 0 (industry-neutral) |
+| `industry_long == industry_short` | same reported industry; economic neutrality not established |
 | `industry_long != industry_short` | industry_residual = "cross-industry: long `<long_industry>` / short `<short_industry>`" (only render if sector is also non-neutral; otherwise sub-information) |
-| `market_long == market_short` | domicile_residual = 0 (currency-neutral) |
-| `market_long != market_short` | domicile_residual = "cross-currency: long `<long_market>` / short `<short_market>`" |
+| `market_long == market_short` | same verified domicile; currency neutrality not established |
+| `market_long != market_short` | different verified domiciles; currencies separately sourced, never inferred: long `<long_market>` / short `<short_market>` |
 
 ## 3. Beta computation (180d daily returns)
 
@@ -37,10 +37,10 @@ returns_B = [(P_B[t] / P_B[t-1]) - 1 for t in 1..N]
 ```
 
 **Field paths (different per Parallax endpoint):**
-- Equity legs (long, short) come from `export_price_series` → `.data[t].close`
+- Equity legs (long, short) come from `export_price_series` → `.data[t].price` (observed); legacy `.close` is accepted only when unambiguous
 - Benchmark ETFs come from `etf_daily_price` → response is a **list directly** (not nested under `.data`); each row has `.close`
 
-Both endpoints return chronologically-sorted daily bars. Align by `date` if the equity and ETF series have different start/end days (markets close on different holidays).
+Both endpoints return chronologically-sorted daily bars. Align by both start and end dates of consecutive return intervals; do not match a two-day equity return to a one-day ETF return just because their end dates agree. Need at least 89 common return intervals after the individual 90-price leg threshold; otherwise dollar-neutral only. Reject duplicate/impossible dates, nonpositive/nonfinite prices and conflicting aliases.
 
 Beta:
 
@@ -52,7 +52,7 @@ var_B = sum((returns_B[t] - mean_B)^2 for t in 1..N) / N
 beta_L = cov / var_B
 ```
 
-Round to 2 decimal places for output.
+Do not divide when benchmark return variance is zero/nonfinite. Compute with full precision in the helper; round only rendered output.
 
 **Insufficient-history rule:** if a leg has fewer than 90 daily observations, do NOT compute beta — flag as "insufficient history for beta" and skip beta-neutral sizing for that pair.
 
@@ -88,7 +88,7 @@ dollar_neutral = 1.00  # $1 short per $1 long
 beta_neutral   = beta_long / beta_short  # $X short per $1 long
 ```
 
-If `beta_short` is near zero (<0.1 absolute value): skip beta-neutral as numerically unstable; flag in output.
+If `beta_short` is near zero (<0.1 absolute value), or the ratio is nonpositive/nonfinite, skip beta-neutral and state the reason. Opposite-sign betas cannot produce a positive short-dollar ratio for the requested long/short directions.
 
 ## 5. Realized pair stats (--with-history only, 365d window)
 
@@ -96,13 +96,13 @@ If `beta_short` is near zero (<0.1 absolute value): skip beta-neutral as numeric
 spread_returns[t] = returns_long[t] - hedge_ratio * returns_short[t]
 ```
 
-(Use beta-neutral hedge_ratio if available; else dollar-neutral.)
+(Use the feasible beta-neutral hedge_ratio if available; else dollar-neutral.) This is a daily-reset synthetic spread index per dollar long, not realized client-account returns. Raw local prices exclude dividends, borrow, fees and FX conversion. Daily-observation support is conservative: any common return interval longer than four calendar days makes daily history unavailable with the interval dates and reason. This can exclude legitimate longer exchange closures; it never silently annualizes monthly/weekly observations with sqrt(252). The four-day check is a frequency-validity guard, not a change to beta sample thresholds or the volatility formula. Require a contiguous chain of common return intervals before compounding spread wealth; a missing interior interval makes cumulative history unavailable rather than silently stitching disjoint segments. Report actual common dates and count; partial-month observations are included in the positive-month fraction.
 
 | Stat | Formula |
 |---|---|
 | Realized correlation | `corr(returns_long, returns_short)` over 365d |
 | Pair vol (annualized) | `stdev(spread_returns) * sqrt(252)` |
-| Max drawdown | min over t of: `cumret_t - max(cumret_0..t)` where `cumret_t = product(1 + spread_returns[0..t]) - 1` |
+| Max drawdown | min over t of: `wealth_t / running_peak_t - 1`, with initial wealth 1 included in the peak and `wealth_t = product(1 + spread_returns[0..t])`; nonpositive wealth makes history unavailable |
 | Hit rate | fraction of months where cumulative monthly spread return > 0 |
 
 ## 6. Score-comparability flag

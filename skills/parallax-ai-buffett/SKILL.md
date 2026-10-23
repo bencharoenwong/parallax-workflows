@@ -19,7 +19,9 @@ description: "Applies the Buffett-style factor profile (per Frazzini-Kabiller-Pe
 
 ## Gotchas
 
-- Expected Parallax spend: ~4 tokens (`_parallax/token-costs.md`).
+- Preserve the requested RIC(s), each observation’s source as-of date and unavailable fields. Generation time is not a substitute for a missing data date. Any handoff carries this provenance; a prior rendered profile is not a fresh or independent observation.
+
+- Expected Parallax spend: **0.30 credits** = company info 0.05 + snapshot 0.1 + summary financials 0.05 + score history 0.1; methodology explanations are free. Extra successful identity-resolution reads add 0.05 per symbol (`_parallax/token-costs.md`).
 - JIT-load `_parallax/parallax-conventions.md` (§0.0, §0.2 typed integers, §1, §2, §3, §4, §14), `_parallax/AI-profiles/profile-schema.md` (dispatcher contract + cross-validation gate), `_parallax/AI-profiles/output-template.md` (output structure + verbatim disclaimer), `_parallax/AI-profiles/profiles/buffett.md` (profile spec) — Step 0.
 - Cross-validation gate (spec §6.4) is NON-BYPASSABLE — refuse to render on name mismatch.
 - Disclaimer language is verbatim — do NOT paraphrase "not financial advice," "AI-inferred," or "consult a qualified financial advisor".
@@ -72,7 +74,7 @@ Rely on server defaults for `weeks`/`periods`, or pass a typed integer at the ca
 
 ### Step 3 — Verify
 
-**Cross-validation gate (MANDATORY per spec §6.4).** Cross-check `get_peer_snapshot.target_company` (top level; the response has no `name` field — each peer's name is `comparison[].company`) against `get_company_info.name`, normalized per conventions §2 step 2. On divergence refuse to render and emit exactly:
+**Cross-validation gate (MANDATORY per spec §6.4).** Cross-check `get_peer_snapshot.target_company` (top level; the response has no `name` field — each peer's name is `comparison[].company`) against `get_company_info.data.name`, normalized per conventions §2 step 2. On divergence refuse to render and emit exactly:
 
 ```
 Error: Symbol cross-validation failed for <ticker>.
@@ -85,7 +87,7 @@ Do not proceed on mismatch. Any tool that fails after the §0.1 retry: mark its 
 
 ### Step 4 — Compute
 
-Thresholds from `buffett.md` frontmatter (tuned 2026-04-06 from the anchor test): Quality ≥ 5; Value ≥ 4; Momentum ≤ 6; Defensive ≥ 7. Compare each `get_peer_snapshot` score, record pass/fail. For any score ≥ 7 or ≤ 3, `call-tool` `explain_methodology` for that factor (the pedagogy hook, spec §7 row 3). Verdict: 4 of 4 → `match`; 1–3 of 4 → `partial_match` (state the count); 0 of 4 → `no_match`. A verdict computed on fewer than 4 available factors is flagged "partial data — N of M factor criteria available" and can never be `match`.
+Thresholds from `buffett.md` frontmatter (tuned 2026-04-06 from the anchor test): Quality ≥ 5; Value ≥ 4; Momentum ≤ 6; Defensive ≥ 7. Compare each `get_peer_snapshot` score, record pass/fail. For any score ≥ 7 or ≤ 3, `call-tool` `explain_methodology` for that factor (the pedagogy hook, spec §7 row 3). Verdict: 4 of 4 → `match`; 1–3 of 4 → `partial_match` (state the count); 0 of 4 → `no_match`. All four required factor scores must be finite numbers on the documented scale. Missing/invalid factors are `UNAVAILABLE`, not failed criteria. If fewer than four are evaluable, final verdict is `skipped` with "partial data — N of 4 factor criteria available"; retain observed matches but do not emit match, partial_match or no_match from incomplete evidence.
 
 ### Step 5 — Compose (render through the output template)
 
@@ -96,9 +98,9 @@ Format the output per `_parallax/AI-profiles/output-template.md`. The template r
 2. Citation block (full BKP 2018 citation + DOI)
 3. Profile characterization statement (one sentence from the profile spec body)
 4. Data table: Factor | Target | Score | 52-wk trend | Match
-5. Verdict: "Profile fit: <match/partial/no> — N of 4 factor criteria met"
-6. **Synthesis (REQUIRED for every verdict, including `match`)** — 1-2 sentences naming which legs of the BKP-2018 Buffett profile the stock fits and which it misses, with the one-line takeaway. A `match` is not self-explanatory: state *why* (e.g. "cheap, high-quality, low-beta — the cluster BKP attribute Berkshire's alpha to"). Do not leave a `match` as a bare table.
-7. Methodology footer (workflow derivation, anchor-test date, legal-review date — renders only once completed, tool sequence, token cost)
+5. Verdict: "Profile fit: <match/partial/no/skipped> — N of 4 factor criteria met"
+6. **Synthesis (REQUIRED for every verdict, including `match`)** — 1-2 sentences naming which documented style criteria the stock fits and which it misses; distinguish the product-designed Momentum ceiling from BKP-documented exposures, with the one-line takeaway. A `match` is not self-explanatory: state *why* (e.g. "cheap, high-quality, low-beta — the cluster BKP attribute Berkshire's alpha to"). Do not leave a `match` as a bare table.
+7. Methodology footer (workflow derivation, anchor-test date, legal-review date — renders only once completed, tool sequence, credit cost)
 8. Standard disclaimer (VERBATIM — substitute `[Investor]` with `Warren Buffett` and nothing else)
 
 ### Step 6 — Render — Emit
@@ -124,14 +126,14 @@ Frazzini, Kabiller, Pedersen (2018) decompose Berkshire Hathaway's 1976-2017 ret
 
 Profile fit: match — 4 of 4 factor criteria met.
 
-**Synthesis:** KO fits all four legs of the BKP-2018 profile — high-quality (Quality 8), reasonably priced (Value 4), low-momentum (4.83), and strongly low-beta (Defensive 10) — the cheap-safe-quality cluster the paper attributes Berkshire's alpha to. It sits at the quality-and-safety end of that style rather than deep value.
+**Synthesis:** KO meets the documented cheap-safe-quality exposure proxies — Quality 8, Value 4, Defensive 10 — and the product-designed Momentum ceiling (4.83). The Momentum ceiling is an additional screen, not a BKP-documented exposure. It sits at the quality-and-safety end of that style rather than deep value.
 
 Verdict sensitivity: Value 4 is at the ≥ 4 boundary; the verdict drops from match to partial (3 of 4) if Value falls below 4. The next-nearest input, Momentum 4.83 against the ≤ 6 ceiling, has 1.17 points of headroom.
 
 Workflow derived from: Frazzini, Kabiller, Pedersen (2018), "Buffett's Alpha", FAJ 74(4):35-55.
 Last anchor-tested: 2026-04-06 (KO.N, AXP.N)
 Tool sequence: get_company_info, get_peer_snapshot, get_financials(summary), get_score_analysis(52w), explain_methodology
-Token cost: 4 tokens
+Parallax credit estimate: 0.30 credits
 
 ---
 This output is an AI-inferred interpretation of Warren Buffett's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by Warren Buffett or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.
@@ -158,12 +160,12 @@ Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 ## Failure modes
 
 
-Apply the graceful fallback patterns from `parallax-conventions.md §4`. If any required tool call fails after retry, mark the relevant section as "Data unavailable" and compute the verdict using available factors only. A verdict computed on <4 factors must be flagged as "partial data — N of M factor criteria available" and CANNOT be rendered as `match` even if all available factors pass. Consumers downstream (e.g., the /parallax-ai-consensus meta-skill) should treat such outputs as `partial_match` at best.
+Apply `parallax-conventions.md §4`. Missing required identity stops rendering. Missing required factor evidence gives criterion `UNAVAILABLE` and final `skipped`; consensus excludes it. Optional financial narrative or trend context can be unavailable without changing a verdict based on all four verified current scores. All-unknown evidence never means no_match.
 
 
 ## Done when
 
 - The reply begins at the analytical Header (or the white-label header when active) and contains only the rendered template plus the Output additions; no workflow narration.
 - The cross-validation gate passed, or the exact refusal message was emitted and nothing else rendered.
-- The verdict line, the citation, the methodology footer with tool sequence and token cost, the persona disclaimer verbatim, `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present.
+- The verdict line, the citation, the methodology footer with tool sequence and credit cost, the persona disclaimer verbatim, `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present.
 - Expected spend stated (Gotchas).

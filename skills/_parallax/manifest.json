@@ -151,7 +151,7 @@
     "parallax-explain-portfolio": {
       "plugin": true,
       "web": true,
-      "web_description": "Portfolio drawdown attribution: decompose 'why am I down X%?' into market/regime, factor/thematic, and stock-specific components, with conditional guidance. Holdings as [{symbol, weight}].",
+      "web_description": "Drawdown explanation from holdings [{symbol, weight}]: static-weight illustrations, observed price/score patterns and driver hypotheses. Not realized account returns or measured causal attribution.",
       "anchors_key": "explain-portfolio",
       "anchors": [
         "^\\s{0,3}(?:#{1,4}\\s*.*\\b|\\*\\*\\s*)(?:explain portfolio|(?:portfolio |performance |drawdown )?attribution|what happened|market & regime)\\b",
