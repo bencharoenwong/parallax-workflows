@@ -47,6 +47,48 @@ Thanks for the interest. A few notes on what fits and what doesn't.
 4. **If your change touches a skill or shared file in the plugin's general-release set**, rebuild the bundle (`python3 skills/_parallax/scripts/build_bundle.py plugin`) and commit the regenerated `plugin/` alongside your source edit — a gate test fails when the tracked bundle drifts from the sources. Never edit `plugin/` by hand.
 5. **Keep the diff focused.** One concern per PR. Refactors that bundle multiple unrelated changes get bounced.
 
+## Client names and client-first work
+
+This repo is public. Branches, commit messages and PR descriptions are public the
+moment they are pushed or opened, and cannot be recalled. No client, partner or
+fund name may appear in any of them, in any spelling.
+
+- **Build client-first work outside this repo.** A feature built for one client
+  lives in the private client-work repo until it is generalised. Real client
+  material (brand guides, letters, decks, logos, URLs) never becomes a fixture
+  here; fixtures are synthetic (`Acme`, `Example Fund`).
+- **Promote by copying, then scanning.** Before copying generalised files in, run
+  `python3 skills/_parallax/scripts/client_guard.py scan-path <dir>` on them.
+- **Install the blocking hook once per clone:**
+  `bash skills/_parallax/scripts/install_git_hooks.sh`. Its pre-push layer runs
+  `client_guard.py` over every commit being pushed (file contents and paths,
+  messages, the branch name) and refuses the push on a hit. The guard needs the
+  client-guard key in `~/.config/parallax/client-guard.key` or `CLIENT_GUARD_KEY`;
+  ask the maintainer. Without the key it blocks. Commits already on
+  `origin/main` are skipped only when the push goes straight to `origin` and
+  the hook could refresh `origin/main`; otherwise it scans the whole branch.
+  A push to any other remote with no client guard available is blocked.
+- **CI runs the same scan** on every PR (including its title and body) and every
+  branch and tag push, using the guard and registry from the PR base or `main`,
+  not from the change under test. It is a required check, so a hit cannot merge.
+  Changes to `.github/workflows/` need a careful review: the workflow file is
+  the one part a PR can still change for itself.
+- **Registering a new client** is a maintainer step:
+  `python3 skills/_parallax/scripts/client_guard.py add` with one name per line
+  on stdin, then commit `.client-guard/registry.json`. Register every form the
+  client is written in: legal name, short name, brand, domain. A long registered
+  form does not match a shorter one. The registry holds keyed hashes only.
+  Register the names before the first commit of any work for that client.
+- **Files the guard cannot read are blocked**: PDFs, legacy Office files,
+  images, fonts, compressed or nested archives, Git LFS pointers, any binary.
+  After reviewing such a file, a key holder runs
+  `python3 skills/_parallax/scripts/client_guard.py allow <path>` and commits
+  `.client-guard/allow-binary.txt`. Each entry is bound to that exact content.
+- Maintainer-only notes (`DECISIONS.md`, `LEARNINGS.md`, `LESSONS.md`,
+  `PLANS.md`, handoff notes, `notes/`, `docs/plans/`, `docs/analysis/`) and any
+  `clients/` or `client-work/` directory are refused by path, with or without the
+  key.
+
 ## Style
 
 - **Python:** type hints on function signatures, docstrings on public APIs, `pytest` for tests. Pure functions where possible. Modules under `_parallax/house-view/` that perform I/O by design: `audit_chain` (append-only log), `audit_export` (tarball), `chain_emit` (chain YAML write), `chain_prune` (file deletion CLI), `manifest_cache` (cache read/write). Everything else (`gap_detect`, `gap_suggest`, `manifest_verify`) is pure — keep it that way.

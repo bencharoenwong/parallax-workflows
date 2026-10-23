@@ -81,10 +81,82 @@ read -r -d '' LAYER <<'LAYER_EOF' || true
 #
 # Blocks on BOTH exit codes: 1 = a hit, 2 = the outgoing range could not be
 # determined. 2 must block: the scanner fails closed rather than reporting a
-# clean scan of nothing. Guarded on the script's presence so this hook stays
-# valid in a clone that does not ship it.
+# clean scan of nothing. A clone that does not ship the scanner skips it, unless
+# origin/main ships it: then a branch that deletes it is blocked.
+# Scan the objects git will actually send. With refs/replace/* in effect every
+# git read below (messages, file contents, the trusted guard blob) would see the
+# substitute while the push sends the original. core.useReplaceRefs=true in
+# config overrides this variable; git then sends the substitute too, so scan and
+# push still read the same objects. The caller's value is put back at the end of
+# the layer, so hook code after it is unaffected.
+_PARALLAX_NRO_SET="${GIT_NO_REPLACE_OBJECTS+set}"
+_PARALLAX_NRO="${GIT_NO_REPLACE_OBJECTS:-}"
+export GIT_NO_REPLACE_OBJECTS=1
 _PARALLAX_SCAN="$(git rev-parse --show-toplevel 2>/dev/null)/skills/_parallax/scripts/scan_commit_messages.py"
-if [ -f "$_PARALLAX_SCAN" ]; then
+# client_guard.py scans the same range for registered client names: contents of
+# every added or modified file in every pushed commit (not just the tip, since
+# intermediate commits are published too), file paths, messages and the remote
+# branch name. It needs the client-guard key and fails closed (exit 2) without it.
+# Called on every push, independent of the message scanner: a branch that
+# deletes one scanner must not switch off the other. _parallax_guard resolves the
+# guard from origin/main, then the checkout, and otherwise blocks or warns.
+_PARALLAX_GUARD="$(git rev-parse --show-toplevel 2>/dev/null)/skills/_parallax/scripts/client_guard.py"
+_PARALLAX_REGISTRY="$(git rev-parse --show-toplevel 2>/dev/null)/.client-guard/registry.json"
+# Prefer the guard committed on origin/main over the checked-out copy: an old
+# checkout (or a branch that edits the guard) must not decide what is scanned.
+# origin/main's registry and allowlist are merged in via CLIENT_GUARD_TRUSTED_REV.
+# Always the full ref name: git resolves a short `origin/main` to a local
+# branch or tag of that name first, which would let a local ref pose as main.
+_parallax_guard() {
+    _pg_top="$(git rev-parse --show-toplevel 2>/dev/null)"
+    _pg_rel="skills/_parallax/scripts/client_guard.py"
+    if git cat-file -e "refs/remotes/origin/main:$_pg_rel" 2>/dev/null \
+            && git cat-file -e "refs/remotes/origin/main:.client-guard/registry.json" 2>/dev/null; then
+        _pg_tmp="$(mktemp "${TMPDIR:-/tmp}/parallax-guard.XXXXXX")" || return 2
+        git show "refs/remotes/origin/main:$_pg_rel" > "$_pg_tmp" || { rm -f "$_pg_tmp"; return 2; }
+        CLIENT_GUARD_REPO_ROOT="$_pg_top" CLIENT_GUARD_TRUSTED_REV=refs/remotes/origin/main \
+            python3 "$_pg_tmp" scan-range "$@"
+        _pg_rc=$?
+        rm -f "$_pg_tmp"
+        return "$_pg_rc"
+    elif [ -f "$_PARALLAX_GUARD" ]; then
+        python3 "$_PARALLAX_GUARD" scan-range "$@"
+    elif [ -f "$_PARALLAX_REGISTRY" ]; then
+        printf '\n\033[31m[pre-push] BLOCKED: .client-guard/registry.json exists but client_guard.py is missing.\033[0m\n' >&2
+        return 2
+    elif [ "${_PARALLAX_ELSEWHERE:-0}" = 1 ]; then
+        # A push away from origin (often an old clone of private history) must
+        # not pass unscanned just because neither copy of the guard is there.
+        printf '\n\033[31m[pre-push] BLOCKED: pushing to a remote other than origin and no client guard was found.\033[0m\n' >&2
+        return 2
+    else
+        # Warn, not block: a repo or branch that predates the guard still pushes.
+        printf '\033[33m[pre-push] WARNING: no client guard was found; client names were NOT scanned.\033[0m\n' >&2
+    fi
+}
+# True when this push goes to the URL origin/main was FETCHED from. Only then
+# are commits on origin/main already public at the target. A clone whose origin
+# is a PRIVATE repo pushing to the public one would otherwise skip everything on
+# its origin/main -- exactly the history never published. A pushurl that
+# differs from the fetch URL makes $2 differ too, so it counts as elsewhere.
+# A local gate repo (no-mistakes) also counts as elsewhere: where it forwards
+# is recorded in the gate's own state, not in anything this hook can trust, so
+# a push through it scans the whole branch.
+# Invoked by hand (no URL): nothing is published, so the exclusion is kept.
+# Only a trailing slash is dropped. Stripping `.git` made a local `X` match an
+# origin at `X.git`, a different repository; a mismatch only scans more.
+_parallax_norm_url() { printf '%s' "${1%/}"; }
+_parallax_targets_origin() {
+    [ -n "${1:-}" ] || return 0
+    _pt_url="$(git remote get-url origin 2>/dev/null)"
+    [ -n "$_pt_url" ] || return 1
+    [ "$(_parallax_norm_url "$1")" = "$(_parallax_norm_url "$_pt_url")" ]
+}
+# Always runs; each scanner call checks for its own script. It used to need a
+# scanner, guard or registry in the checkout (or the guard on a not-yet-
+# refreshed origin/main), so an old checkout pushed elsewhere skipped the
+# refresh and the no-guard block entirely.
+{
     # Scan what is ACTUALLY being pushed. git supplies
     # "<local_ref> <local_sha> <remote_ref> <remote_sha>" per ref on stdin.
     # Without this the scanner defaults to origin/main..HEAD, which is the
@@ -103,18 +175,51 @@ if [ -f "$_PARALLAX_SCAN" ]; then
         exit 2
     fi
     cat > "$_PARALLAX_STDIN"
+    # Refresh origin/main first (best effort). A stale copy lacks names the
+    # maintainer registered since the last fetch, and lacks the guard itself in
+    # a clone that predates it. Failure (offline) is reported on every push and
+    # drops the origin/main exclusion below. A stalled transfer is bounded:
+    # HTTP aborts below 1 KB/s for 15 s; SSH gets a connect and keepalive
+    # timeout unless the user configured their own SSH program. An HTTP
+    # connect still uses curl's own connect timeout. No BatchMode: a
+    # passphrase key without an agent may prompt, as it did for the push.
+    _PARALLAX_FETCH_FAILED=""
+    if git remote get-url origin >/dev/null 2>&1; then
+        (
+            if [ -z "${GIT_SSH_COMMAND:-}" ] && [ -z "${GIT_SSH:-}" ] \
+                    && [ -z "${GIT_SSH_VARIANT:-}" ] \
+                    && [ -z "$(git config --get core.sshCommand 2>/dev/null)" ] \
+                    && [ -z "$(git config --get ssh.variant 2>/dev/null)" ]; then
+                export GIT_SSH_COMMAND="ssh -o ConnectTimeout=15 -o ServerAliveInterval=5 -o ServerAliveCountMax=3"
+            fi
+            GIT_TERMINAL_PROMPT=0 git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=15 \
+                fetch -q --no-tags origin "+refs/heads/main:refs/remotes/origin/main" \
+                </dev/null >/dev/null 2>&1
+        ) || _PARALLAX_FETCH_FAILED=1
+    fi
+    if [ -n "$_PARALLAX_FETCH_FAILED" ]; then
+        printf '\n\033[33m[pre-push] WARNING: could not refresh origin/main. Scanning the whole pushed history, since a stale origin/main proves nothing about the target; the guard may also lack recently registered names.\033[0m\n' >&2
+    fi
     # Commits already reachable from the PUBLISHED default branch are public
     # with or without this push. Without the exclusion below, merging main
     # into a branch put main's whole history back into "$_r_sha..$_l_sha",
     # and one old public message tripping a since-added rule blocked a push
     # that published nothing new. Remote-tracking refs only: a LOCAL main may
-    # hold unpushed commits that still need scanning.
+    # hold unpushed commits that still need scanning. Only when the push
+    # targets origin (see _parallax_targets_origin) AND the refresh succeeded:
+    # matching URLs do not prove matching history (a repo re-created at the
+    # same URL, a repointed origin). Otherwise nothing is excluded and a new
+    # branch is scanned whole.
     _PARALLAX_PUBLIC=""
-    for _pub in origin/main origin/master; do
-        if git rev-parse --verify --quiet "$_pub" >/dev/null 2>&1; then
-            _PARALLAX_PUBLIC="$_pub"; break
-        fi
-    done
+    _PARALLAX_ELSEWHERE=0
+    _parallax_targets_origin "${2:-}" || _PARALLAX_ELSEWHERE=1
+    if [ -z "$_PARALLAX_FETCH_FAILED" ] && [ "$_PARALLAX_ELSEWHERE" = 0 ]; then
+        for _pub in refs/remotes/origin/main refs/remotes/origin/master; do
+            if git rev-parse --verify --quiet "$_pub" >/dev/null 2>&1; then
+                _PARALLAX_PUBLIC="$_pub"; break
+            fi
+        done
+    fi
     _PARALLAX_SCAN_RC=0
     _PARALLAX_SAW_REF=0
     while read -r _l_ref _l_sha _r_ref _r_sha; do
@@ -124,32 +229,33 @@ if [ -f "$_PARALLAX_SCAN" ]; then
         case "$_r_sha" in
             ""|*[!0-9a-f]*|0000000000000000000000000000000000000000)
                 # New branch: the remote has no counterpart, so there is no
-                # "$_r_sha..$_l_sha" to scan. A BARE rev is NOT a range —
-                # `git log <sha>` walks every ancestor, so this scanned the
-                # whole published history, hit 60 old messages, and blocked the
-                # first push of every new branch with nothing fixable locally.
-                # Scan only what this branch adds over the default branch.
-                _PARALLAX_BASE=""
-                for _cand in origin/main origin/master main master; do
-                    if git rev-parse --verify --quiet "$_cand" >/dev/null 2>&1; then
-                        _PARALLAX_BASE="$(git merge-base "$_cand" "$_l_sha" 2>/dev/null)"
-                        [ -n "$_PARALLAX_BASE" ] && break
-                    fi
-                done
-                if [ -n "$_PARALLAX_BASE" ]; then
-                    _PARALLAX_RANGE="$_PARALLAX_BASE..$_l_sha"
-                else
-                    # No default branch to diff against (a fresh repo whose
-                    # first push IS the first branch). Scanning all of it is
-                    # correct there, and it is genuinely new work.
-                    _PARALLAX_RANGE="$_l_sha"
-                fi ;;
+                # "$_r_sha..$_l_sha" to scan. Scan the whole branch; the
+                # "^$_PARALLAX_PUBLIC" selector below removes what is already
+                # on the published main. A bare rev alone walked every ancestor
+                # and blocked new branches on 60 old public messages. A base
+                # chosen from other refs (local main, a stale origin/master)
+                # left commits that this push publishes unscanned, so there is
+                # no base: only the freshly fetched origin/main excludes.
+                _PARALLAX_RANGE="$_l_sha" ;;
             *) _PARALLAX_RANGE="$_r_sha..$_l_sha" ;;
         esac
-        if [ -n "$_PARALLAX_PUBLIC" ]; then
-            python3 "$_PARALLAX_SCAN" "$_PARALLAX_RANGE" "^$_PARALLAX_PUBLIC" || _PARALLAX_SCAN_RC=$?
+        if [ ! -f "$_PARALLAX_SCAN" ] && git cat-file -e \
+                "refs/remotes/origin/main:skills/_parallax/scripts/scan_commit_messages.py" 2>/dev/null; then
+            printf '\n\033[31m[pre-push] BLOCKED: scan_commit_messages.py is missing here but present on origin/main.\033[0m\n' >&2
+            _PARALLAX_SCAN_RC=2
+        elif [ -f "$_PARALLAX_SCAN" ]; then
+            if [ -n "$_PARALLAX_PUBLIC" ]; then
+                python3 "$_PARALLAX_SCAN" "$_PARALLAX_RANGE" "^$_PARALLAX_PUBLIC" || _PARALLAX_SCAN_RC=$?
+            else
+                python3 "$_PARALLAX_SCAN" "$_PARALLAX_RANGE" || _PARALLAX_SCAN_RC=$?
+            fi
         else
-            python3 "$_PARALLAX_SCAN" "$_PARALLAX_RANGE" || _PARALLAX_SCAN_RC=$?
+            printf '\033[33m[pre-push] WARNING: scan_commit_messages.py not found; commit messages were NOT scanned.\033[0m\n' >&2
+        fi
+        if [ -n "$_PARALLAX_PUBLIC" ]; then
+            _parallax_guard --ref "${_r_ref:-}" "$_PARALLAX_RANGE" "^$_PARALLAX_PUBLIC" || _PARALLAX_SCAN_RC=$?
+        else
+            _parallax_guard --ref "${_r_ref:-}" "$_PARALLAX_RANGE" || _PARALLAX_SCAN_RC=$?
         fi
     done < "$_PARALLAX_STDIN"
     # Record whether git supplied ANY ref lines before the file goes away.
@@ -174,17 +280,29 @@ if [ -f "$_PARALLAX_SCAN" ]; then
         else
             # No ref info at all (invoked by hand). Use the scanner's default
             # rather than skipping, so it cannot pass vacuously.
-            python3 "$_PARALLAX_SCAN"
-            _PARALLAX_SCAN_RC=$?
+            if [ -f "$_PARALLAX_SCAN" ]; then
+                python3 "$_PARALLAX_SCAN"
+                _PARALLAX_SCAN_RC=$?
+            fi
+            if [ -n "$_PARALLAX_PUBLIC" ]; then
+                _parallax_guard HEAD "^$_PARALLAX_PUBLIC" || _PARALLAX_SCAN_RC=$?
+            else
+                _parallax_guard HEAD || _PARALLAX_SCAN_RC=$?
+            fi
         fi
     fi
     if [ "$_PARALLAX_SCAN_RC" -ne 0 ]; then
-        printf '\n\033[31m[pre-push] BLOCKED: commit-message scan failed (exit %s).\033[0m\n' "$_PARALLAX_SCAN_RC" >&2
+        printf '\n\033[31m[pre-push] BLOCKED: commit-message or client-name scan failed (exit %s).\033[0m\n' "$_PARALLAX_SCAN_RC" >&2
         printf '           Rewrite the message locally before pushing; a pushed message\n' >&2
         printf '           cannot be unpublished. See CLAUDE.md, "Commit messages are public too".\n' >&2
         exit "$_PARALLAX_SCAN_RC"
     fi
-fi
+    if [ -n "$_PARALLAX_NRO_SET" ]; then
+        GIT_NO_REPLACE_OBJECTS="$_PARALLAX_NRO"
+    else
+        unset GIT_NO_REPLACE_OBJECTS
+    fi
+}
 # --- end parallax:commit-message-scan ----------------------------------------
 LAYER_EOF
 

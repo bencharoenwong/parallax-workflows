@@ -1,0 +1,88 @@
+name: client-guard
+
+permissions:
+  contents: read
+
+# Scans every pull request (title, body, branch name, each commit's message,
+# identity and changed files, and the full head tree), and every branch and tag
+# push, for registered client names, maintainer-only paths and files the guard
+# cannot read. See skills/_parallax/scripts/client_guard.py.
+#
+# A pushed branch and an opened PR are already public, so this job DETECTS rather
+# than prevents; the local pre-push layer (install_git_hooks.sh) is what blocks.
+# It is a required status check on main, so a pull request that trips it cannot
+# merge.
+#
+# The guard script and its registry are taken from a TRUSTED commit (the PR base,
+# or main), not from the change under test, so a PR cannot weaken the check that
+# judges it. A PR can still edit this workflow file; review changes to it.
+#
+# The key comes from the CLIENT_GUARD_KEY secret. Pull requests from forks get no
+# secrets, so this job fails closed for them.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+  push:
+    branches: ["**"]
+    tags: ["**"]
+  # Text that is public the moment it is posted. Detection only: delete or edit
+  # the item when this fails.
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created, edited]
+  pull_request_review:
+    types: [submitted, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+  release:
+    types: [published, edited]
+
+# Only PR runs may cancel each other: a push run scans the commits that push
+# added, and cancelling it would leave them unscanned.
+concurrency:
+  group: client-guard-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  client-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Scan for registered client names
+        env:
+          CLIENT_GUARD_KEY: ${{ secrets.CLIENT_GUARD_KEY }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          zero=0000000000000000000000000000000000000000
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            trusted="$PR_BASE"
+          elif [ "$REF" = "refs/heads/main" ] && [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != "$zero" ]; then
+            trusted="$PUSH_BEFORE"
+          else
+            trusted="$(git rev-parse --verify refs/remotes/origin/main)"
+          fi
+          guard="skills/_parallax/scripts/client_guard.py"
+          if ! git cat-file -e "$trusted^{commit}" 2>/dev/null; then
+            echo "::error::trusted commit $trusted is not available; refusing to run the copy under test"
+            exit 2
+          fi
+          if git cat-file -e "$trusted:$guard" 2>/dev/null \
+              && git cat-file -e "$trusted:.client-guard/registry.json" 2>/dev/null; then
+            git show "$trusted:$guard" > "$RUNNER_TEMP/client_guard.py"
+            export CLIENT_GUARD_TRUSTED_REV="$trusted"
+          else
+            echo "::notice::trusted commit has no guard yet; running the copy under test (first install only)"
+            cp "$guard" "$RUNNER_TEMP/client_guard.py"
+          fi
+          CLIENT_GUARD_REPO_ROOT="$GITHUB_WORKSPACE" python3 "$RUNNER_TEMP/client_guard.py" ci
