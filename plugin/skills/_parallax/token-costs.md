@@ -15,7 +15,7 @@ Never infer account identity or billing correctness from a health response.
 
 ## Tool credit costs
 
-All 35 tools are priced. Each row states its billing unit; batching symbols
+All 36 tools are priced. Each row states its billing unit; batching symbols
 reduces request overhead, not the number of billable symbols.
 
 | Tool | Credits | Basis |
@@ -35,6 +35,7 @@ reduces request overhead, not the number of billable symbols.
 | `export_price_series` | 0.05 per symbol | Equity prices; adjustment basis must be verified separately |
 | `etf_daily_price` | 0.05 per symbol | ETF price history |
 | `get_telemetry` | 0.05 | One global request, never one per market |
+| `explore_telemetry` | 0.05–0.2 | 0.05 per call; 0.1 for a stock lookup; a basket lookup adds 0.05 per basket opened; at most 0.2 |
 | `get_financials` | 0.05–0.1 per symbol | Per statement; `latest=true` doubles income, balance_sheet and cash_flow only |
 | `get_stock_outlook` | 0.05–0.1 | Targets/recommendations 0.05 per call; risk_return 0.1 per call; dividends 0.05 per symbol |
 | `get_peer_snapshot` | 0.1 | Per call |
@@ -90,7 +91,7 @@ Macro overview totals below show normal and conditional maximum prices separatel
 | `/parallax-halal-screen` | **0.25 per full screen** | Identity + balance + income + history; prohibited activity can stop at 0.05. Optional Palepu +5/name; portfolio redundancy +0.1/selected compliant holding; alternatives add universe and screening calls. |
 | `/parallax-should-i-buy` | **10.55–20.55** | Baseline 10.55 plus 5 per explicit tactical market, up to two. |
 | `/parallax-earnings-quality` | **20.3** | Identity, three financial statements, history, Palepu, news and assessment. |
-| `/parallax-credit-lens` | **5.5** | Identity 0.05 + four statements/snapshot 0.3 + Palepu/history/telemetry 5.15. |
+| `/parallax-credit-lens` | **5.5** | Identity 0.05 + four statements/snapshot/score history 0.4 + Palepu/telemetry 5.05. |
 | `/parallax-due-diligence` | **15.35 / 25.35** | Core financials, history, technicals, news and Palepu; confirmed full report +10. |
 | `/parallax-deep-dive` | **20.6–35.6** | Core 20.6 including assessment; up to three explicit tactical markets at 5 each. |
 | `/parallax-country-deep-dive` | **11.05 normally** | Default five names: universe5 + identity/snapshot0.75 + three histories0.3 + one overview5. Up to56.05 if that overview reassembles; each extra market adds5 normally/up to50. |

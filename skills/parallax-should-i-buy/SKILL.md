@@ -70,17 +70,25 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 | `get_peer_snapshot` | `symbol` | Factor scores + peer ranking |
 | `get_financials` | `symbol`, `statement="summary"` | Revenue/income narrative |
 | `get_score_analysis` | `symbol` | 52-week factor trend (server default) |
-| `get_technical_analysis` | `symbol` | Trend direction, momentum, support/resistance — feeds the Technicals lens. Async, may time out (fallback in Output Format) |
 | `get_stock_outlook` | `symbol`, `aspect="analyst_targets"` | Price targets |
 | `get_stock_outlook` | `symbol`, `aspect="recommendations"` | Buy/hold/sell |
 | `get_stock_outlook` | `symbol`, `aspect="risk_return"` | Risk/return vs peers |
 | `get_stock_outlook` | `symbol`, `aspect="dividends"`, `limit` as int 8 (non-default; default is 20 — conventions §0.2) | Dividend history |
+
+**Batch A2** — paid async calls. `call-tool` these together only after the Step 3 identity cross-check passes, never in the same turn as Batch A (conventions §3):
+
+| Tool | Parameters | Notes |
+|---|---|---|
+| `get_technical_analysis` | `symbol` | Trend direction, momentum, support/resistance — feeds the Technicals lens. Async, may time out (fallback in Output Format) |
 | `get_news_synthesis` | `symbol` | Async — never blocks output (§5) |
+
+If the Step 3 cross-check diverges, do not call Batch A2; render the Technicals lens and news section unavailable with the reason "identity cross-check diverged". A paid async job bills on success, so it never runs before the check.
 
 **Batch B** — after Step 1 (needs company info for market reasoning): `list_macro_countries`; identify relevant markets (home market + key revenue geographies) per conventions §6, cap at 2; `macro_analyst` with `component="tactical"` per relevant covered market. If no covered market is relevant, the macro section is skipped.
 
 ### Step 3 — Verify
 
+- Run this check as soon as Batch A and Step 1 return, then start Batch A2.
 - Identity cross-check per conventions §2: `get_peer_snapshot.target_company` against `get_company_info.data.name` after normalization; `get_score_analysis` `data[0].symbol` against the requested RIC. On divergence, warn and treat `get_company_info` as the source of truth; never present mismatched scores as the intended security.
 - Outlook coverage per conventions §4 "Stock outlook coverage": 0–1 of the four aspects returned → the Dividends and Analyst View sections carry the §4 "materially incomplete" flag.
 - Every failed or empty call: retry classification per §0.1, then the §4 display-section rule. This skill renders no gate (no pass/fail verdict on the name), so §4.0 does not apply.

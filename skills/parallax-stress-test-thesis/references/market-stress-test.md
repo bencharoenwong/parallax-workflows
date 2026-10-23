@@ -13,7 +13,7 @@ derive markets from the thesis's own macro claims (e.g., a thesis about "US rate
 
 Call `list_macro_countries` first if market coverage is in doubt — it returns the current list of
 covered markets plus "Global"; publicly-traded equities only (see Known Limitations below). The
-count drifts as Parallax adds coverage (17 markets as of 2026-10-05) — don't hardcode a number,
+count drifts as Parallax adds coverage — don't hardcode a number,
 read the live response. A macro or sector claim about an uncovered market is marked `out-of-scope`
 in the Assumption Map, not guessed.
 

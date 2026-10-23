@@ -58,17 +58,25 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 | `get_financials` | `symbol`, `statement="income"` | Revenue/margin trends (default 4 periods) |
 | `get_financials` | `symbol`, `statement="cash_flow"` | Cash conversion (default 4 periods) |
 | `get_financials` | `symbol`, `statement="ratios"` | Accrual ratios |
+
+**Batch A2** — paid async calls. `call-tool` these together only after the Step 3 identity cross-check passes, never in the same turn as Batch A (conventions §3):
+
+| Tool | Parameters | Notes |
+|---|---|---|
 | `get_financial_analysis` | `symbol` | Async ~2–5 min — Palepu forensic analysis |
 | `get_news_synthesis` | `symbol` | Async — accounting news, auditor changes |
 
+If the Step 3 cross-check diverges, do not call Batch A2; render the Palepu and news sections unavailable with the reason "identity cross-check diverged". A paid async job bills on success, so it never runs before the check.
+
 ### Step 3 — Verify
 
+- Run this check as soon as Batch A and Step 1 return, then start Batch A2.
 - Identity: `get_score_analysis` `data[0].symbol` against the requested RIC (conventions §2); `get_company_info.data.name` is the oracle for the narrative.
 - Failed or empty calls: §0.1 retry classification, then §4. The traffic light is a display classification of Parallax's own quality data, not a gate on the name; §4.0 does not apply, but a Risk Summary cannot be rendered without the Palepu result — state `pending` rather than inventing a color.
 
 ### Step 4 — Compute
 
-No deterministic helper. Then `call-tool` `get_assessment` (async, after Batch A) with a prompt on earnings-quality concerns, revenue recognition, accrual anomalies, cash-flow-vs-earnings divergence, and the operator's stated concern, feeding in every Batch A finding.
+No deterministic helper. Then `call-tool` `get_assessment` (async, after Batches A and A2; skip it and render the assessment unavailable when the Step 3 cross-check diverged) with a prompt on earnings-quality concerns, revenue recognition, accrual anomalies, cash-flow-vs-earnings divergence, and the operator's stated concern, feeding in every Batch A and A2 finding.
 
 ### Step 5 — Compose
 
