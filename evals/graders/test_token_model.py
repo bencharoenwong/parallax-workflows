@@ -245,6 +245,18 @@ def test_macro_omitted_overview_has_explicit_conditional_ceiling():
     assert estimate([call("macro_analyst", market="Japan", component="tactical")]).upper_bound_tokens == 5
 
 
+@pytest.mark.parametrize("kwargs,expected", [
+    ({"stock": "MSFT.O"}, (.1, .1)),
+    ({"basket": "semiconductor"}, (.05, .2)),
+    ({"market": "Japan"}, (.05, .05)),
+    ({}, (.05, .05)),
+])
+def test_explore_telemetry_is_priced_by_view(kwargs, expected):
+    est = estimate([call("explore_telemetry", **kwargs)])
+    assert est.unpriced_endpoints == ()
+    assert (est.total, est.upper_bound_tokens) == expected
+
+
 def test_performance_always_attempts_both_reads_in_all_success_plan():
     est = estimate([call("get_performance_history", symbol="AAPL.O")])
     assert (est.total, est.upper_bound_tokens) == (.2, .2)

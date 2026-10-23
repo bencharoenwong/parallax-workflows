@@ -66,7 +66,7 @@ get_peer_snapshot(symbol=<RIC>)                           # factor scores and pe
 get_score_analysis(symbol=<RIC>)                          # Quality score 52-week trajectory; also feeds the Step 3 identity check
 ```
 
-**Batch B — solvency and macro (5.05 credits, Palepu async).** `call-tool` both together only after the Step 3 identity check passes, never in the same turn as Batch A (conventions §3); `get_financial_analysis` never blocks the rest. On an identity divergence, skip Batch B and mark §3 and §3a unavailable with the reason "identity cross-check diverged":
+**Batch B — solvency and macro (5.05 credits, Palepu async).** `call-tool` both together only after the Step 3 identity check passes, never in the same turn as Batch A (conventions §3); `get_financial_analysis` never blocks the rest. On an identity divergence, skip Batch B and mark §3, §3a and §6 unavailable with the reason "identity cross-check diverged":
 
 ```
 get_financial_analysis(symbol=<RIC>)   # Palepu solvency AND liquidity read (async)
