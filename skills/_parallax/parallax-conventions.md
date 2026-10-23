@@ -73,7 +73,7 @@ Before reporting any Parallax workflow complete:
 
 1. **Capability integrity** — confirm every invoked callable came from this session's discovery result and every request conformed to that callable's live input schema. A remembered namespace or a previously valid payload is not evidence of current availability.
 2. **Data integrity** — confirm the MCP batch returned real data. Empty ≠ done. Retry only the affected call when §0.1 classifies the failure as transient; never replay a full expensive batch by default.
-3. **Field-request integrity** — after any `analyze_portfolio` call that supplies `fields=`, read `result._meta.invalid_fields`. A non-empty value is a deterministic caller mismatch, even if the envelope says `success: true`. Do not retry with guessed field names. Make a corrected call only when the live schema or response metadata explicitly identifies accepted values; otherwise use discovered fallback capabilities for the affected sections and record the coverage loss. `_parallax/response-schemas.md` is historical shape guidance only.
+3. **Field-request integrity** — for any `analyze_portfolio` call that supplies `fields=`, take every name from the `fields` enum in the live input schema. The MCP validates `fields` against that enum, so an unknown name fails the call with a schema error before any job starts. On a schema error, do not retry with guessed field names. After a call succeeds, read `result._meta.invalid_fields`: it is normally null, and a non-empty value means the deployed worker rejected a name the schema accepts. Treat that as coverage loss for those blocks and do not retry. Make a corrected call only with names the live schema lists; otherwise use discovered fallback capabilities for the affected sections and record the coverage loss. `_parallax/response-schemas.md` is historical shape guidance only.
 4. **House-view integrity** — when a house view is active, confirm the `view_status` `banner` string actually appears in the rendered output (verify its presence — don't assume it rendered). Per loader.md §2 "Load-time validation" item 6, the **hard-block** states `malformed` / `expired` (tilts do NOT apply) and the **soft** state `critical` (tilts apply; expiry imminent) all surface their banner verbatim — never swallow one to make a workflow look clean.
 
 Integrity failures are flagged explicitly in the output, not omitted. This is the Parallax-domain instance of the completion-claim discipline in `CLAUDE.verification.md` ("a passing metric is necessary, not sufficient"; verify, don't eyeball).
@@ -152,14 +152,17 @@ Field names above were confirmed against live tool responses on 2026-08-11. Two 
 Default execution mode is **parallel where dependencies allow**. Claude Code supports concurrent MCP tool calls within a single response turn.
 
 **Batch your calls:**
-- **Independent calls** fire simultaneously: `get_company_info`, `get_peer_snapshot`, `get_financials`, `get_score_analysis`, `get_stock_outlook` (all aspects), `get_news_synthesis`, `check_portfolio_redundancy`, `quick_portfolio_scores`
+- **Independent calls** fire simultaneously: `get_company_info`, `get_peer_snapshot`, `get_financials`, `get_score_analysis`, `get_stock_outlook` (all aspects), `check_portfolio_redundancy`, `quick_portfolio_scores`
+- **Identity first, paid async after:** run the identity reads (`get_company_info`, `get_peer_snapshot`, and `get_score_analysis` where §2 uses it) and the §2 cross-check before any paid async tool (`get_news_synthesis`, `get_technical_analysis`, `get_financial_analysis`, `get_assessment`, `get_stock_report`). Fire the paid async tools only for symbols that pass §2. A paid async job bills on success, so a call fired before the check bills even when the check then fails.
 - **Dependent calls** wait for prior results: `get_assessment` (needs all findings), `macro_analyst` (needs `list_macro_countries` result + company info for market reasoning), `build_stock_universe` (needs analysis of what to replace)
 
 **Example single-stock batch:**
 ```
-Batch A (parallel): get_company_info + get_peer_snapshot + get_financials + get_score_analysis + get_stock_outlook (×4 aspects) + get_news_synthesis
-Batch B (after A):  list_macro_countries → macro_analyst per relevant market
-Batch C (after B):  get_assessment (synthesis prompt with all data)
+Batch A (parallel):   get_company_info + get_peer_snapshot + get_financials + get_score_analysis + get_stock_outlook (×4 aspects)
+§2 check (after A):   identity cross-check; stop paid calls for a mismatched symbol
+Batch A2 (after §2):  get_news_synthesis (and other paid async tools the skill uses)
+Batch B (after §2):   list_macro_countries → macro_analyst per relevant market
+Batch C (after B):    get_assessment (synthesis prompt with all data)
 ```
 
 ---
@@ -214,7 +217,18 @@ Absence is not a pass. A reader who cannot distinguish "screened and cleared" fr
 Note: "fast-response" refers to latency, not credit cost. Read the full live cost clause and `token-costs.md` for billing units. `macro_analyst` costs 5 credits for an explicit component; an omitted-component overview normally costs 5 but can reach 50 on reassembly. Batch symbols still bill per symbol. Preserve fractional balances and use decimal-safe totals.
 
 ### Async tools
-`build_stock_universe`, `get_news_synthesis` (~30-90s), `get_assessment` (~30-90s), `get_technical_analysis`, `get_financial_analysis` (~2-5min), `get_stock_report` (~1-2min)
+The server names eight async tools. Each one polls internally up to the listed limit and returns the result inline; call `check_job_status` only when a tool returned a `job_id` without a result (a "still running" reply), and never re-call the tool itself.
+
+| Tool | Typical wait | Server poll limit |
+|---|---|---|
+| `build_stock_universe` | ~15-40s | 120s |
+| `get_news_synthesis` | ~30-90s, instant if cached | 150s |
+| `get_technical_analysis` | ~15-30s | 120s |
+| `get_financial_analysis` | ~2-5min | 300s |
+| `get_assessment` | ~3min | 300s |
+| `analyze_portfolio` | ~1-3min | 180s |
+| `get_stock_report` | ~1-2min | 300s |
+| `get_etf_report` | ~1-2min | 300s |
 
 → Do not retry immediately. If they fail or time out, note **"Analysis pending — service temporarily unavailable"** and continue.
 
@@ -248,7 +262,7 @@ If any tool returns successfully but with no output content (not an error, just 
 
 `get_news_synthesis` takes 30-90s and should never block output assembly.
 
-- Fire it in parallel with other data calls.
+- Fire it after the §2 identity check passes, in parallel with the remaining data calls (§3).
 - Begin assembling output from instant-response tools immediately.
 - Insert news section when it resolves.
 - If still pending when output is ready, include `"news": "pending"` placeholder.
@@ -259,7 +273,7 @@ If any tool returns successfully but with no output content (not an error, just 
 
 When analyzing a single stock or portfolio, determine relevant macro markets:
 
-1. **Home market** — Derive from RIC suffix (`.O`/`.N` → US, `.T` → Japan, `.HK` → China/HK, etc.)
+1. **Home market** — Derive from RIC suffix (`.O`/`.N` → United States, `.T` → Japan, `.HK` → China, etc.; see the fallback mapping below)
 2. **Revenue geographies** — If `get_company_info` mentions major revenue from other regions, include those.
 3. **Commodity exposures** — Energy/materials companies: add commodity-relevant markets.
 4. **Supply chain** — Known dependencies (e.g., semiconductors → Taiwan, China).
@@ -272,7 +286,7 @@ When analyzing a single stock or portfolio, determine relevant macro markets:
 
 If no covered markets are relevant, return `"macro": "unavailable"` — don't force irrelevant context.
 
-**Macro fallback from RIC suffixes:** If `list_macro_countries` fails, derive home market(s) from RIC suffixes: `.O`/`.N`/`.K` = United States, `.T` = Japan, `.HK` = Hong Kong, `.L` = United Kingdom, `.SI` = Singapore, `.DE` = Germany. Use the exchange suffix table in Section 1.
+**Macro fallback from RIC suffixes:** If `list_macro_countries` fails, derive home market(s) from RIC suffixes (every Section 1 suffix, plus `.K` and `.SI`): `.O`/`.N`/`.K` = United States, `.L` = United Kingdom, `.DE` = Germany, `.PA` = France, `.T` = Japan, `.HK` = China (there is no separate Hong Kong macro market), `.TW` = Taiwan, `.AX` = Australia, `.KS` = South Korea, `.SI` = Singapore. `.OL` (Norway) has no macro market; return `"macro": "unavailable"` for it. Each name above is a `list_macro_countries` market name; pass it to `macro_analyst` exactly as written.
 
 ---
 
@@ -291,6 +305,7 @@ External integrators and skill authors frequently ask for capabilities that have
 | Rolling metrics (Sharpe, vol, beta, correlation) | `analyze_portfolio` → `rolling_metrics` field | Three windows: `window_30d` / `window_60d` / `window_90d`, each with daily timeseries. See `response-schemas.md`. |
 | Concentration / effective N / HHI | `analyze_portfolio` → `concentration_metrics` field | `effective_positions` is weight-based (1/HHI on weights). Risk-weighted Effective N is not currently exposed. |
 | Score time series (per symbol) | `get_score_analysis` with `weeks` parameter | Returns weeks-windowed factor history. Default 52 weeks. **Portfolio-level score history is not currently exposed** — must aggregate per-holding client-side. |
+| Score trend in plain language (per symbol) | `get_score_summary` (0.1 credits, instant) | Current score, 13-week trend, 52-week high/low and range position per factor. Use `get_score_analysis` for the week-by-week series. |
 | Sector/market overlap, redundancy | `check_portfolio_redundancy` | Pairwise overlap + clustering at the portfolio level. |
 | Client SAA / policy drift and tilt-vs-mandate diagnostic | `/parallax-client-review` with `policy=` | Strategic-allocation drift, band status, and tactical-alignment diagnostics against a supplied client policy. Contract in `_parallax/client-policy/policy-loader.md`. Diagnostic only — no target-weight or trade math. |
 | Build/tilt a stock universe | `build_stock_universe` (V2: per-tilt parallel calls per §0) | Free-text query, sector-scoped. |
@@ -302,6 +317,7 @@ External integrators and skill authors frequently ask for capabilities that have
 | Multi-investor consensus across factor-profile lenses | `/parallax-ai-consensus` skill | Orchestrates Buffett / Klarman / Greenblatt / Soros / PTJ profile skills. **Skill-only by design** — multi-profile orchestration with judgment fusion does NOT translate to a REST contract without freezing the ensemble. |
 | Single-investor profile factor scoring | `/parallax-ai-buffett`, `-ai-soros`, `-ai-greenblatt`, `-ai-klarman`, `-ai-ptj` | Each is a standalone profile skill. Profiles ARE proprietary — see `_parallax/AI-profiles/`. |
 | Peer comparison table | `get_peer_snapshot` | Symbol → `target_company` (top-level) + peer rows (`comparison[].company`). |
+| Thematic baskets: what changed, which basket a stock sits in, basket members | `explore_telemetry` (0.05–0.2 credits, synchronous) | Searches the daily telemetry baskets. Use `get_telemetry` for the global regime read. |
 
 ### Symbol resolution & search
 
@@ -315,7 +331,9 @@ External integrators and skill authors frequently ask for capabilities that have
 
 | User-phrased need | Use this | Notes |
 |---|---|---|
-| Full Parallax research report (PDF-shaped) | `get_stock_report` (async, ~1-2min) | Use `check_job_status` to poll. |
+| Full Parallax research report (PDF-shaped) | `get_stock_report` (async, ~1-2min) | Call once; it waits up to 300s and returns the report inline. On a "still running" reply, call `check_job_status` with that `job_id`. Never re-call the tool. |
+| Full Parallax ETF research report | `get_etf_report` (async, ~1-2min, 10 credits) | ETF-only. Same calling rule as `get_stock_report`: call once, use the inline result, poll a returned `job_id` with `check_job_status`, never re-call. A name matching several ETFs returns candidates; confirm with the user first. |
+| Stock past performance (YTD, 12-month, calendar and monthly returns) | `get_performance_history` (up to 0.2 credits, instant) | Includes 1-year return and volatility ranked against peers. Use `export_price_series` for daily closes. |
 | Forensic earnings-quality screen | `/parallax-earnings-quality` skill | Accruals, revenue recognition, manipulation risk. |
 | Full Palepu-framework due diligence | `/parallax-due-diligence` skill | Financials + ratios + macro context + Parallax research report. |
 | Long/short pair construction | `/parallax-pair-finder` skill | Given one leg, suggests counter-leg from peers; given both, reports residual exposure. |

@@ -28,6 +28,10 @@ Credit prices updated from direct connector metadata on 2026-10-19; asset covera
 | `get_financials`, `get_stock_outlook`, `get_news_synthesis` | ✓ equity | unverified | Used in equity workflows; not validated for ETFs. |
 | `analyze_portfolio` | ✓ mixed-asset OK | ✓ mixed-asset OK | Holdings can be equity + ETF; tool aggregates correctly. |
 | `quick_portfolio_scores` | ✓ partial | unverified | Symbol-mapping quirks (see `parallax-conventions.md` §2). |
+| `get_performance_history` | ✓ supported (per server description) | unverified | Stock past performance: YTD, 12-month, calendar and monthly returns, 1-year return and volatility vs peers. Up to 0.2 credits. Not yet probed on an ETF. |
+| `get_score_summary` | ✓ supported (per server description) | unverified | Plain-language 52-week factor-score summary. 0.1 credits. Likely equity-only, like `get_score_analysis`. |
+| `get_etf_report` | n/a | ✓ supported (per server description) | ETF-only research report; async, 10 credits. Use `get_stock_report` for an equity. |
+| `explore_telemetry` | ✓ stock lookup | n/a | Searches the daily telemetry baskets; a stock lookup returns its basket and peers. 0.05–0.2 credits. Not a per-symbol data source for ETFs. |
 | `macro_analyst`, `list_macro_countries` | n/a | n/a | Market-level, not symbol-level. |
 
 ## Verified benchmark ETFs (single-symbol probes, 2026-05-02)
@@ -88,7 +92,7 @@ The lint enforces routing correctness (right tool for the asset class). It does 
 
 A request to add a `supported_asset_classes` field to each MCP tool's schema was considered and deferred 2026-05-03. Rationale:
 
-- `etf_profile` already serves as the asset-class oracle (see Known API quirks #2). Each successful probe costs 0.1 credits; classification behavior is solved client-side.
+- `etf_profile` already serves as the asset-class oracle (see Known API quirks #2). Each successful probe costs 0.1 credits (HTTP 4xx/5xx probes are free); classification behavior is solved client-side.
 - Coverage-lint enforces routing at build time, which is a stronger guarantee than runtime metadata (fails the merge, not the user).
 - An upstream metadata field would not address the deeper instruction-execution gap — a model can ignore schema metadata the same way it can ignore SKILL.md prose. The structural fix for that is a deterministic dispatch layer (client-side), not a server schema change.
 

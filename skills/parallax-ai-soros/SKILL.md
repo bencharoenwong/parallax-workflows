@@ -62,9 +62,11 @@ Mode: zero tickers → **basket mode**; exactly one → **single-ticker mode**; 
 
 **Macro workflow (both modes):** `call-tool` `list_macro_countries` and `get_telemetry` together; then `macro_analyst(component=tactical)` for each selected market together. Identify 1–3 regime themes where macro and telemetry agree on direction (e.g. "Fed cutting + dollar weakening → EM equities and commodities").
 
-**Basket mode:** per theme, `build_stock_universe` with a sector-scoped thematic query (timeout → retry ONCE narrower; then skip the theme); cap each theme's candidates at the top 20 by `composite_score`; `get_peer_snapshot` AND `get_company_info` for the top 3–5 per theme, all together. Deduplicate exact RICs across themes within this run; each surfaced name still runs the Step 3 identity gate.
+**Basket mode:** per theme, `build_stock_universe` with a sector-scoped thematic query (timeout → the bounded timeout rule below); cap each theme's candidates at the top 20 by `composite_score`; `get_peer_snapshot` AND `get_company_info` for the top 3–5 per theme, all together. Deduplicate exact RICs across themes within this run; each surfaced name still runs the Step 3 identity gate.
 
-**Single-ticker mode:** fetch `get_peer_snapshot` on the resolved target independently of universe inclusion; it is required for the identity gate even when only classification path A2 is available. Per theme, `build_stock_universe` with the theme's sector-scoped query (same retry rule). A search timeout never suppresses the target identity fetch.
+**Single-ticker mode:** fetch `get_peer_snapshot` on the resolved target independently of universe inclusion; it is required for the identity gate even when only classification path A2 is available. Per theme, `build_stock_universe` with the theme's sector-scoped query (same bounded timeout rule). A search timeout never suppresses the target identity fetch.
+
+**Bounded timeout rule for `build_stock_universe`** (the bounded exception conventions §4 "Async tools" allows; it is the only one this skill defines). The server polls 120 s, and a timed-out job keeps running and bills 5 credits if it succeeds. On a timeout with a `job_id`, `call-tool` `check_job_status` with that `job_id` once. Completed → use that result. Still pending or processing → skip the theme and record it as pending; do not launch another job. Failed (a failed job does not bill) → at most ONE replacement call with a narrower sector-scoped query; if that also times out or fails, skip the theme. A timeout with no `job_id` → skip the theme. Count every replacement call in the spend line.
 
 ### Step 3 — Verify
 

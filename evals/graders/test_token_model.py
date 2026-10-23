@@ -25,7 +25,7 @@ def call(name, **args):
     return ToolCall("mcp__parallax__" + name, args)
 
 
-def test_all_35_published_tools_and_decimal_prices_match():
+def test_all_36_published_tools_and_decimal_prices_match():
     """Read the single Tool | Credits | Basis table in both directions."""
     rows = {}
     for line in TOKEN_COSTS.read_text().splitlines():
@@ -36,7 +36,7 @@ def test_all_35_published_tools_and_decimal_prices_match():
         if match:
             assert match[1] not in rows, f"duplicate tool price: {match[1]}"
             rows[match[1]] = cells
-    assert len(KNOWN_ENDPOINTS) == 35
+    assert len(KNOWN_ENDPOINTS) == 36
     assert sum(value == 0 for value in FLAT_COST.values()) == 11
     assert set(rows) == KNOWN_ENDPOINTS
     for name, price in {**FLAT_COST, **PER_SYMBOL_COST, **PER_HOLDING_COST}.items():
@@ -243,6 +243,18 @@ def test_macro_omitted_overview_has_explicit_conditional_ceiling():
     assert est.total == 5
     assert est.upper_bound_tokens == 50
     assert estimate([call("macro_analyst", market="Japan", component="tactical")]).upper_bound_tokens == 5
+
+
+@pytest.mark.parametrize("kwargs,expected", [
+    ({"stock": "MSFT.O"}, (.1, .1)),
+    ({"basket": "semiconductor"}, (.05, .2)),
+    ({"market": "Japan"}, (.05, .05)),
+    ({}, (.05, .05)),
+])
+def test_explore_telemetry_is_priced_by_view(kwargs, expected):
+    est = estimate([call("explore_telemetry", **kwargs)])
+    assert est.unpriced_endpoints == ()
+    assert (est.total, est.upper_bound_tokens) == expected
 
 
 def test_performance_always_attempts_both_reads_in_all_success_plan():

@@ -310,8 +310,8 @@ class MakerOrchestrator:
                 markets = list(HARDCODED_COVERAGE)
 
         # Pin fan-out to markets with an aggregator weight (MARKET_TO_SCHEMA_KEY).
-        # list_macro_countries can — and as of 2026-10 does (17 markets incl.
-        # "Brazil") — return markets aggregator_weights.yaml has no weight for.
+        # list_macro_countries can, and does, return markets (e.g. "Brazil")
+        # that aggregator_weights.yaml has no weight for; read its live list.
         # Fanning out to those pays for macro_analyst calls that cross_country's
         # weights.get(k, 0.0) then zero-weights, i.e. paid-for signal silently
         # dropped. Filtering here (rather than widening the weight table, which

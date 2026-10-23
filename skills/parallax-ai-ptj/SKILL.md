@@ -57,11 +57,13 @@ Exactly one ticker; more → reject: "PTJ profile evaluates single stocks. Use /
 
 ### Step 2 — Fetch (parallel batches)
 
-**Batch A:** `call-tool` `list_macro_countries` and `get_company_info` together; from them pick the home market plus up to 2 exposure markets by sector (e.g. China or Taiwan for semiconductors, Saudi Arabia for energy), cap 3.
+**Batch A:** `call-tool` `list_macro_countries` and `get_company_info` together; from them pick the home market plus up to 2 exposure markets by sector (e.g. China or Taiwan for semiconductors, Canada or Brazil for energy; every pick must be a `list_macro_countries` market), cap 3.
 
-**Batch B (all together):** `get_technical_analysis` (LLM-authored prose narrative on trend/momentum/volatility/levels, read qualitatively — Channel T; the tool returns no machine trend enum, only `executive_summary` and `technical_analysis.trend_analysis` free text); `macro_analyst(market=<home>, component="tactical")` (Channel M); `get_score_analysis` (52-week factor trends incl. the Momentum sub-trend — Channel T sub-signal); `get_stock_outlook(aspect="analyst_targets")` (sell-side `current`/`high`/`low`/`mean`/`median` price targets, from which upside is computed — Channel V; `aspect="risk_return"` is a different endpoint returning trailing return/volatility, not an analyst target); `get_peer_snapshot` (`target_company` for the gate; Momentum factor score — Channel V).
+**Batch B (all together):** `get_score_analysis` (52-week factor trends incl. the Momentum sub-trend — Channel T sub-signal); `get_stock_outlook(aspect="analyst_targets")` (sell-side `current`/`high`/`low`/`mean`/`median` price targets, from which upside is computed — Channel V; `aspect="risk_return"` is a different endpoint returning trailing return/volatility, not an analyst target); `get_peer_snapshot` (`target_company` for the gate; Momentum factor score — Channel V).
 
-**Batch C (after B):** `macro_analyst(component="tactical")` for the exposure markets, together.
+**Batch B2 (after the Step 3 gate passes, all together):** `get_technical_analysis` (LLM-authored prose narrative on trend/momentum/volatility/levels, read qualitatively — Channel T; the tool returns no machine trend enum, only `executive_summary` and `technical_analysis.trend_analysis` free text); `macro_analyst(market=<home>, component="tactical")` (Channel M). These calls bill (5 credits each), so they never run in the same turn as `get_peer_snapshot` (conventions §3); a halted run makes neither call.
+
+**Batch C (after B2):** `macro_analyst(component="tactical")` for the exposure markets, together.
 
 ### Step 3 — Verify
 
@@ -117,7 +119,7 @@ Setup quality: <Grade A / B / C / D>
 
 Workflow derived from: Schwager (1989); Covel (2004).
 Last anchor-tested: 2026-04-07 (NVDA.O, JPM.N)
-Tool sequence: list_macro_countries, get_company_info, get_technical_analysis, macro_analyst × N (N ≤ 3), get_score_analysis, get_stock_outlook, get_peer_snapshot
+Tool sequence: list_macro_countries, get_company_info, get_score_analysis, get_stock_outlook, get_peer_snapshot, get_technical_analysis, macro_analyst × N (N ≤ 3)
 Parallax credit estimate: 20.30 credits (3 macro markets) / 10.30 credits (1 macro market)
 
 ---

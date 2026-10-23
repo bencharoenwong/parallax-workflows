@@ -62,20 +62,22 @@ Validate holdings: RIC format (plain tickers → conventions §1), weights ~1.0;
 
 Mover rule: consider verified equities only, with a dated latest completed-session quote; undated/stale/misaligned changepercent is not a mover trigger. Parse the `changepercent` of each holding whose `get_company_info` call succeeded as a float in percent units (`"-5.73"` = -5.73%); a missing or unparseable value makes the holding ineligible. Among holdings outside the top-N set, take the largest absolute move (ties → larger weight). If it is ≥ 3.0%, add that holding to the news set. Its Holding News paragraph states the move as the last session's change.
 
-**Batch A** — `call-tool` ALL rows in ONE turn; per-holding rows fan out N-wide inside the same turn so the 30–90 s news calls overlap everything else (a sequential loop is the largest latency leak in this skill):
+**Batch A** — `call-tool` ALL rows in ONE turn; per-holding rows fan out N-wide inside the same turn (a sequential loop is the largest latency leak in this skill):
 
 | Tool | Parameters | Notes |
 |---|---|---|
 | `get_telemetry` | fields: regime_tag, signals, commentary.headline, commentary.mechanism, divergences | Market regime |
 | `macro_analyst` | each covered relevant market inferred from the verified holdings (cap 3), or the explicitly requested market lens; no component | Macro summary with tactical inline |
 | `get_peer_snapshot` | per verified equity holding, all N in parallel | **Primary equity scoring source** (V2); ETFs and unknowns stay named/unscored; aggregated client-side per loader.md §3b |
-| `get_news_synthesis` | per verified equity news-set holding (top-N plus any mover), all in parallel | Async 30–90 s; never blocks output (§5) |
 | `check_portfolio_redundancy` | `holdings` | Overlap detection |
 
 `quick_portfolio_scores` is NOT in Batch A; it is the Step 3 V1 fallback only.
 
+**Batch A2** — paid async news. After the Step 3 cross-validation, `call-tool` `get_news_synthesis` once per news-set holding (top-N plus any mover) that passed cross-validation, all in ONE turn (async 30–90 s; never blocks output, §5). Never fire it in the same turn as `get_peer_snapshot` (conventions §3): a paid async job bills on success, so a holding that later fails the check would already have billed. A ⚠ MISMATCH or unverified holding gets no news call; its news is unavailable with the reason "identity cross-check failed".
+
 ### Step 3 — Verify
 
+- Run cross-validation as soon as Batch A returns, then start Batch A2.
 - Cross-validation per conventions §2 / loader.md §5 rule 3: `get_peer_snapshot.target_company` vs `get_company_info.data.name` (nested under the response's `data` object, not a top-level field); mismatches are ⚠ MISMATCH and excluded from aggregates.
 - A holding whose `get_company_info` call failed has no oracle: it is unverified, excluded from every aggregate, and listed in Ground-truth Integrity with status `unverified — company-info lookup failed`. If no holding has an oracle, skip the scoring ladder below and render Portfolio Factor Tilt as unavailable.
 - Scoring ladder, first tier whose precondition holds. V2 coverage = weight share of holdings with a non-empty snapshot that passed cross-validation. **V2** (coverage ≥ 50%) → aggregate per loader.md §3b, no V1 call. **V1** (coverage < 50%) → on verified equities only, coverage still against the original input book; `call-tool` `quick_portfolio_scores` once, cross-validate its `holdings_analyzed[].company_name` values against the cached per-holding `get_company_info` names (holdings without an oracle stay excluded), and re-derive each mismatched holding's score from its cached Batch A `get_peer_snapshot` `comparison[]` row (no new call): the `is_target: true` row when that snapshot passed cross-validation (the endpoint may drop the exchange suffix, e.g. `HPE` for `HPE.N`), otherwise scores unavailable; a snapshot that failed cross-validation is never a score source. **Split-and-merge** (V1 coverage also < 50%) → per `parallax-portfolio-checkup/references/health-flags.md` "Mixed-Exchange Fallback". The V1 and split-and-merge tiers re-score only holdings with an oracle; if those holdings carry < 50% of the weight, skip both tiers and render the V2 aggregate marked partial.
