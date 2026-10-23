@@ -12,7 +12,7 @@ grading is in `../graders/`.
 rollout/
 ├── run_rollout.sh          # one fresh session -> one stream.json (also used by should-i-buy)
 ├── run_corpus.sh           # batch: preflight, then one fresh session per planned run (+repeats)
-├── preflight_connector.sh  # HARD GATE: verify auth + connector before spending a token
+├── preflight_connector.sh  # HARD GATE: verify auth + connector before spending credits
 ├── parallax.mcp.json.template  # copy -> parallax.mcp.json, fill in, keep OUT of git
 └── README.md
 ```

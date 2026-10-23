@@ -13,6 +13,8 @@ description: "Ingest a CIO house view (PDF / text / URL / wizard) into the Paral
 
 ## Gotchas
 
+- Expected Parallax spend: **0 Parallax credits** in every local document/configuration mode. Source reading and local extraction are not Parallax MCP calls; consumer-side augmentation is a separate workflow with its own spend.
+
 - JIT-load _parallax/house-view/schema.yaml before extraction — it is the single source of truth for the YAML shape
 - JIT-load _parallax/house-view/loader.md to see what consumer skills will validate (helps you produce a valid view first time). Note: loader.md §3 (Multiplier mapping) is a normative replay dependency per reasoning chain spec — changes to multiplier values, factor ordering, or composite formula MUST coincide with a `skill_version` bump and break replay byte-identity for chains pinned to prior versions.
 - PDF input — `load-reference` the file directly, in page ranges for >10 pages (Step 2); do NOT push a PDF through a text extractor (we want figure context)

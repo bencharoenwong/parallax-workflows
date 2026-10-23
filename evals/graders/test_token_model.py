@@ -1,24 +1,19 @@
-"""Doc<->code consistency for the Parallax token price table.
-
-``token_model.py`` declares ``skills/_parallax/token-costs.md`` as its source of
-truth, but nothing tied the two together — a price change in either place could
-drift silently. These tests parse the published table and assert the grader
-agrees, and reproduce the documented per-workflow estimates through
-``estimate()`` so a stale table surfaces as a hard failure.
-"""
+"""Published decimal prices, request multiplicity and honest planning limits."""
 from __future__ import annotations
 
+import json
 import re
 import sys
+from dataclasses import asdict
+from decimal import Decimal
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+import pytest
 
+sys.path.insert(0, str(Path(__file__).parent))
 from token_model import (  # noqa: E402
-    FLAT_COST,
-    PER_HOLDING_COST,
-    USD_PER_TOKEN,
-    estimate,
+    CONDITIONAL_COST, FLAT_COST, KNOWN_ENDPOINTS, PER_HOLDING_COST,
+    PER_SYMBOL_COST, USD_PER_TOKEN, estimate,
 )
 from transcript import ToolCall  # noqa: E402
 
@@ -26,31 +21,51 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 TOKEN_COSTS = REPO_ROOT / "skills" / "_parallax" / "token-costs.md"
 
 
-def _table_names(doc: str, heading: str) -> set[str]:
-    """Backticked tool names in the table under a ``###`` heading."""
-    section = doc.split(heading, 1)[1].split("###", 1)[0]
-    return {
-        name
-        for line in section.splitlines()
-        if line.startswith("|")
-        for name in re.findall(r"`([a-z_]+)`", line.split("|")[1])
-    }
+def call(name, **args):
+    return ToolCall("mcp__parallax__" + name, args)
 
 
-def test_flat_cost_matches_published_table():
-    doc = TOKEN_COSTS.read_text()
-    for heading, cost in [
-        ("### 0 tokens (free)", 0),
-        ("### 1 token each", 1),
-        ("### 5 tokens each", 5),
-        ("### 10 tokens each", 10),
-    ]:
-        names = _table_names(doc, heading)
-        assert names, f"no tool names parsed under {heading!r}"
-        for name in names:
-            assert FLAT_COST.get(name) == cost, (
-                f"{name}: doc says {cost}, FLAT_COST says {FLAT_COST.get(name)}"
-            )
+def test_all_35_published_tools_and_decimal_prices_match():
+    """Read the single Tool | Credits | Basis table in both directions."""
+    rows = {}
+    for line in TOKEN_COSTS.read_text().splitlines():
+        if not line.startswith("| `"):
+            continue
+        cells = [part.strip() for part in line.strip("|").split("|")]
+        match = re.fullmatch(r"`([a-z_]+)`", cells[0])
+        if match:
+            assert match[1] not in rows, f"duplicate tool price: {match[1]}"
+            rows[match[1]] = cells
+    assert len(KNOWN_ENDPOINTS) == 35
+    assert sum(value == 0 for value in FLAT_COST.values()) == 11
+    assert set(rows) == KNOWN_ENDPOINTS
+    for name, price in {**FLAT_COST, **PER_SYMBOL_COST, **PER_HOLDING_COST}.items():
+        numbers = [Decimal(n) for n in re.findall(r"(?<![a-z_])\d+(?:\.\d+)?", rows[name][1])]
+        assert Decimal(str(price)) in numbers, (name, price, rows[name])
+    for name, (normal, upper) in CONDITIONAL_COST.items():
+        numbers = [Decimal(n) for n in re.findall(r"(?<![a-z_])\d+(?:\.\d+)?", rows[name][1])]
+        assert Decimal(str(upper)) in numbers, (name, rows[name])
+        assert Decimal(str(normal)) in numbers, (name, rows[name])
+        assert len(rows[name]) >= 3 and rows[name][2]
+
+
+def test_every_data_workflow_has_a_credit_estimate_row():
+    """A new skill or deleted profile row must not silently lose its estimate."""
+    rows = {}
+    for line in TOKEN_COSTS.read_text().splitlines():
+        match = re.match(r"^\| `/?(parallax-[a-z-]+)`", line)
+        if match:
+            cells = [part.strip() for part in line.strip("|").split("|")]
+            assert re.fullmatch(r"\*\*.+\*\*", cells[1]), line
+            rows[match[1]] = cells[1]
+    # The concierge only routes and makes free health/resolution calls; its
+    # downstream workflow is separately priced. Supplied-source translations
+    # also have no Parallax data plan.
+    expected = {
+        path.parent.name
+        for path in (REPO_ROOT / "skills").glob("parallax-*/SKILL.md")
+    } - {"parallax-concierge"}
+    assert set(rows) == expected
 
 
 def test_unlisted_harness_tool_is_ignored_not_degraded():
@@ -78,10 +93,10 @@ def test_alternate_parallax_connector_alias_is_billed():
     silently drop the other's calls from the client's derived bill.
     """
     est = estimate([
-        ToolCall(name="mcp__claude_ai_Parallax__get_company_info", input={}),
-        ToolCall(name="mcp__claude_ai_Parallax_2__get_company_info", input={}),
+        ToolCall(name="mcp__claude_ai_Parallax__get_company_info", input={"symbol": "AAPL.O"}),
+        ToolCall(name="mcp__claude_ai_Parallax_2__get_company_info", input={"symbol": "AAPL.O"}),
     ])
-    assert est.tokens == 2, "an aliased connector's calls must still be billed"
+    assert est.tokens == 0.1, "an aliased connector's calls must still be billed"
     assert est.unknown_endpoints == ()
 
 
@@ -94,8 +109,8 @@ def test_non_standard_alias_is_surfaced_not_guessed():
     dropping it reports ``tokens=0`` on a real run. It is reported instead.
     """
     est = estimate([
-        ToolCall(name="mcp__research_desk__get_company_info", input={}),
-        ToolCall(name="mcp__research_desk__get_stock_report", input={}),
+        ToolCall(name="mcp__research_desk__get_company_info", input={"symbol": "AAPL.O"}),
+        ToolCall(name="mcp__research_desk__get_stock_report", input={"symbol": "AAPL.O"}),
     ])
     assert est.tokens == 0, "must not bill a call we cannot attribute"
     assert est.ambiguous_endpoints == (
@@ -117,10 +132,10 @@ def test_declared_alias_resolves_ambiguity_and_bills():
     try:
         reloaded = importlib.reload(token_model)
         est = reloaded.estimate([
-            ToolCall(name="mcp__research_desk__get_company_info", input={}),
-            ToolCall(name="mcp__research_desk__get_stock_report", input={}),
+            ToolCall(name="mcp__research_desk__get_company_info", input={"symbol": "AAPL.O"}),
+            ToolCall(name="mcp__research_desk__get_stock_report", input={"symbol": "AAPL.O"}),
         ])
-        assert est.tokens == 11
+        assert est.tokens == 10.05
         assert est.ambiguous_endpoints == ()
     finally:
         if prior is None:
@@ -173,175 +188,163 @@ def test_foreign_server_colliding_name_is_never_billed():
     assert est.ambiguous_endpoints == ("mcp__claude_ai_HubSpot__submit_feedback",)
 
 
-def test_known_unpriced_is_not_a_stale_table_signal():
-    """A deliberately-unpriced endpoint must not read as an unknown one.
 
-    ``unknown_endpoints`` degrades a run because the price table is stale, a
-    condition someone can fix. The KNOWN_UNPRICED entries can never be fixed by a
-    table edit, so folding them in would permanently exclude pair-finder-class
-    runs from aggregation for a reason nobody can clear.
-    """
-    from token_model import KNOWN_UNPRICED  # noqa: PLC0415
+@pytest.mark.parametrize("tool", sorted(PER_SYMBOL_COST))
+def test_symbol_lists_multiply_even_in_one_request(tool):
+    est = estimate([call(tool, symbol="AAPL.O, MSFT.O, JPM.N")])
+    assert est.total == 0.15
+    assert est.upper_bound_tokens == 0.15
 
-    calls = [ToolCall(name=f"mcp__claude_ai_Parallax__{n}", input={})
-             for n in sorted(KNOWN_UNPRICED)]
-    calls.append(ToolCall(name="mcp__claude_ai_Parallax__brand_new_tool", input={}))
-    est = estimate(calls)
 
-    assert est.unpriced_endpoints == tuple(sorted(KNOWN_UNPRICED))
+def test_decimal_sums_and_usd_are_json_compatible():
+    est = estimate([call("get_company_info", symbol="AAPL.O")] * 6)
+    assert est.tokens == 0.3
+    assert est.usd() == 0.06
+    assert json.loads(json.dumps(asdict(est)))["tokens"] == 0.3
+    assert "Planning" in est.assumptions[0]
+
+
+@pytest.mark.parametrize("statement", ["income", "balance_sheet", "cash_flow"])
+def test_latest_comparisons_double_only_full_statements(statement):
+    est = estimate([call("get_financials", symbol="AAPL.O,MSFT.O", statement=statement, latest=True)])
+    assert est.total == 0.2
+    assert estimate([call("get_financials", symbol="AAPL.O", statement=statement)]).total == 0.05
+
+
+@pytest.mark.parametrize("statement", ["ratios", "summary"])
+def test_latest_does_not_double_ratios_or_summary(statement):
+    assert estimate([call("get_financials", symbol="AAPL.O,MSFT.O", statement=statement, latest=True)]).total == 0.1
+
+
+@pytest.mark.parametrize("aspect,expected", [("analyst_targets", .05), ("recommendations", .05), ("risk_return", .1), ("dividends", .15)])
+def test_outlook_per_call_aspects_and_per_symbol_dividends(aspect, expected):
+    assert estimate([call("get_stock_outlook", symbol="AAPL.O,MSFT.O,JPM.N", aspect=aspect)]).total == expected
+
+
+def holdings(n):
+    return [{"symbol": f"S{i}.O", "weight": 1 if i == 0 else 0} for i in range(n)]
+
+
+@pytest.mark.parametrize("tool,n,kwargs,expected", [
+    ("quick_portfolio_scores", 3, {}, .3),
+    ("quick_portfolio_scores", 70, {}, 5),
+    ("quick_portfolio_scores", 130, {"max_holdings": 100}, 10),
+    ("quick_portfolio_scores", 70, {"max_holdings": 7}, .7),
+    ("quick_portfolio_scores", 70, {"max_holdings": 7.0}, .7),
+    ("check_portfolio_redundancy", 3, {}, .3),
+    ("check_portfolio_redundancy", 130, {}, 10),
+])
+def test_holding_caps_and_surviving_zero_weights(tool, n, kwargs, expected):
+    assert estimate([call(tool, holdings=holdings(n), **kwargs)]).total == expected
+
+
+def test_macro_omitted_overview_has_explicit_conditional_ceiling():
+    est = estimate([call("macro_analyst", market="Japan")])
+    assert est.total == 5
+    assert est.upper_bound_tokens == 50
+    assert estimate([call("macro_analyst", market="Japan", component="tactical")]).upper_bound_tokens == 5
+
+
+def test_performance_always_attempts_both_reads_in_all_success_plan():
+    est = estimate([call("get_performance_history", symbol="AAPL.O")])
+    assert (est.total, est.upper_bound_tokens) == (.2, .2)
+
+
+def test_mixed_fractional_and_conditional_calls_sum_without_truncation():
+    est = estimate([call("macro_analyst", market="Japan"), call("get_performance_history", symbol="AAPL.O"), call("get_company_info", symbol="AAPL.O")])
+    assert est.total == 5.25
+    assert est.upper_bound_tokens == 50.25
+
+
+@pytest.mark.parametrize("tool,args", [
+    ("get_company_info", {}),
+    ("export_price_series", {"symbol": "AAPL.O,"}),
+    ("etf_daily_price", {"symbol": ["SPY"]}),
+    ("get_financials", {"symbol": "AAPL.O", "latest": "true"}),
+    ("get_financials", {"symbol": "AAPL.O", "statement": "invalid"}),
+    ("get_stock_outlook", {"symbol": "AAPL.O", "aspect": "invalid"}),
+    ("get_stock_outlook", {"symbol": "AAPL.O", "aspect": []}),
+    ("get_financials", {"symbol": "AAPL.O", "statement": []}),
+    ("macro_analyst", {"market": "Japan", "component": []}),
+    ("macro_analyst", {}),
+    ("macro_analyst", {"market": "Japan", "component": "overview"}),
+    ("macro_analyst", {"market": "Japan", "component": None}),
+    ("quick_portfolio_scores", {"holdings": holdings(2), "max_holdings": 101}),
+    ("quick_portfolio_scores", {"holdings": holdings(2), "max_holdings": 1.5}),
+    ("quick_portfolio_scores", {"holdings": holdings(2), "max_holdings": True}),
+    ("check_portfolio_redundancy", {"holdings": []}),
+    ("check_portfolio_redundancy", {"holdings": [{"symbol": "AAPL.O", "weight": -1}]}),
+    ("check_portfolio_redundancy", {"holdings": [{"symbol": "AAPL.O", "weight": float("nan")}]}),
+])
+def test_invalid_pricing_inputs_are_explicitly_unpriced(tool, args):
+    est = estimate([call(tool, **args)])
+    assert est.unpriced_endpoints == (tool,)
+    assert est.unpriced_inputs and est.total == 0
+    assert not est.unknown_endpoints
+
+
+def test_unknown_call_is_not_silently_free():
+    est = estimate([call("brand_new_tool")])
     assert est.unknown_endpoints == ("brand_new_tool",)
-    assert est.tokens == 0, "unpriced endpoints must not be costed at a guess"
 
 
-def test_known_unpriced_endpoints_are_absent_from_the_price_tables():
-    """If one of these ever gets measured it belongs in a cost table, and this
-    test should fail so the KNOWN_UNPRICED entry gets removed with it."""
-    from token_model import KNOWN_UNPRICED  # noqa: PLC0415
-
-    for name in KNOWN_UNPRICED:
-        assert name not in FLAT_COST, f"{name} is priced; drop it from KNOWN_UNPRICED"
-        assert name not in PER_HOLDING_COST, f"{name} is priced; drop it"
+def test_all_current_endpoints_including_former_unpriced_have_prices():
+    est = estimate([call("etf_holdings", symbol="SPY"), call("check_job_status", job_id="123e4567-e89b-42d3-a456-426614174000"), call("submit_feedback", description="Synthetic test feedback; no submission is sent."), call("get_score_summary", symbol="AAPL.O"), call("get_etf_report", symbol="SPY")])
+    assert est.total == 10.2
+    assert not est.unpriced_endpoints
+    assert not est.unknown_endpoints
 
 
-def test_per_holding_cost_matches_published_table():
-    """The fan-out table drifts as easily as the flat one, and was unpinned.
-
-    ``test_flat_cost_matches_published_table`` parses only the four flat
-    headings, so a mismatch under "1 token per holding (fan-out)" — the table
-    backing ``PER_HOLDING_COST`` — used to pass silently.
-    """
-    names = _table_names(TOKEN_COSTS.read_text(), "### 1 token per holding (fan-out)")
-    assert names, "no tool names parsed under the fan-out heading"
-    assert names == set(PER_HOLDING_COST), (
-        f"doc lists {sorted(names)}, PER_HOLDING_COST has "
-        f"{sorted(PER_HOLDING_COST)}"
-    )
-    for name in names:
-        assert PER_HOLDING_COST[name] == 1, (
-            f"{name}: doc says 1/holding, code says {PER_HOLDING_COST[name]}"
-        )
+@pytest.mark.parametrize("rate", [-1, float("nan"), float("inf"), True])
+def test_invalid_usd_rates_are_rejected(rate):
+    with pytest.raises(ValueError):
+        estimate([]).usd(rate)
 
 
-def test_overage_rate_matches_published_table():
-    """``USD_PER_TOKEN`` is the multiplier on every dollar figure quoted to a
-    client, and was the one constant with no tie-back to the doc at all."""
-    doc = TOKEN_COSTS.read_text()
-    assert f"${USD_PER_TOKEN:.2f}" in doc, (
-        f"USD_PER_TOKEN={USD_PER_TOKEN} not found as a rate in token-costs.md"
-    )
+def test_omitted_financial_statement_defaults_to_summary_even_with_latest():
+    est = estimate([call("get_financials", symbol="AAPL.O", latest=True)])
+    assert est.total == .05
+    assert est.upper_bound_tokens == .05
 
 
-def test_etf_endpoints_priced_and_no_unverified_section():
-    doc = TOKEN_COSTS.read_text()
-    assert FLAT_COST["etf_profile"] == 1
-    assert FLAT_COST["etf_daily_price"] == 1
-    assert "measured 2026-07-28" in doc  # provenance, not the harness
-    assert "## Unverified costs" not in doc
+def test_omitted_outlook_aspect_defaults_to_targets_per_call():
+    assert estimate([call("get_stock_outlook", symbol="AAPL.O,MSFT.O")]).total == .05
 
 
-def test_peer_comparison_documented_sequence_costs_eleven():
-    # token-costs.md: peer snapshot + peer comparison export + 3 score histories
-    # + 3 etf_profile probes + 3 price-series calls (export_price_series is billed
-    # 1 credit, corrected 2026-10-06) = 11.
-    calls = [
-        ToolCall("mcp__claude_ai_Parallax__get_peer_snapshot", {}),
-        ToolCall("mcp__claude_ai_Parallax__export_peer_comparison", {}),
-        *[ToolCall("mcp__claude_ai_Parallax__get_score_analysis", {})] * 3,
-        *[ToolCall("mcp__claude_ai_Parallax__etf_profile", {})] * 3,
-        *[ToolCall("mcp__claude_ai_Parallax__export_price_series", {})] * 3,
-    ]
-    est = estimate(calls)
-    assert est.unknown_endpoints == ()
-    assert est.total == 11
-
-
-def test_unrecognised_endpoint_is_flagged_not_free():
-    est = estimate([ToolCall("mcp__claude_ai_Parallax__brand_new_tool", {})])
+@pytest.mark.parametrize("tool", ["quick_portfolio_scores", "check_portfolio_redundancy"])
+def test_all_zero_holdings_stop_before_lookups_and_are_marked_invalid(tool):
+    est = estimate([call(tool, holdings=[{"symbol": "AAPL.O", "weight": 0}])])
+    assert est.unpriced_endpoints == (tool,)
+    assert "tool stops before any lookup" in est.unpriced_inputs[0]
     assert est.total == 0
-    assert est.unknown_endpoints == ("brand_new_tool",)
+    assert est.upper_bound_tokens is None
 
 
-def test_foreign_mcp_servers_are_skipped_not_flagged():
-    # Non-Parallax MCP tools consume no Parallax tokens and must not be
-    # reported as unknown endpoints (which would degrade the run).
-    est = estimate(
-        [
-            ToolCall("mcp__ide__getDiagnostics", {}),
-            ToolCall("mcp__plugin_github_github__get_me", {}),
-            ToolCall("mcp__claude_ai_Parallax__get_company_info", {}),
-        ]
-    )
-    assert est.total == 1
-    assert est.unknown_endpoints == ()
+@pytest.mark.parametrize("incomplete", [
+    call("unpublished_tool"),
+    call("get_company_info"),
+    ToolCall("mcp__unidentified_server__get_company_info", {"symbol": "AAPL.O"}),
+])
+def test_incomplete_estimate_retains_subtotal_but_has_no_full_ceiling(incomplete):
+    est = estimate([call("get_company_info", symbol="MSFT.O"), incomplete])
+    assert est.total == .05
+    assert est.upper_bound_tokens is None
+    assert est.unknown_endpoints or est.unpriced_endpoints or est.ambiguous_endpoints
+    assert json.loads(json.dumps(asdict(est)))["upper_bound_tokens"] is None
 
 
-# --- reverse direction (code -> doc) and the tables the forward tests skip ----
-
-_AI_HEADING = "### AI investor profile workflows"
-_UNPRICED_HEADING = "### Unpriced (live endpoints nobody has measured)"
-_FLAT_HEADINGS = {
-    0: "### 0 tokens (free)",
-    1: "### 1 token each",
-    5: "### 5 tokens each",
-    10: "### 10 tokens each",
-}
+@pytest.mark.parametrize("args", [
+    {"holdings": [{"symbol": "AAPL.O", "weight": 10**400}]},
+    {"holdings": holdings(2), "max_holdings": 10**400},
+])
+def test_enormous_json_integers_are_unpriced_without_float_overflow(args):
+    est = estimate([call("quick_portfolio_scores", **args)])
+    assert est.unpriced_endpoints == ("quick_portfolio_scores",)
+    assert est.upper_bound_tokens is None
 
 
-def _section(doc: str, heading: str) -> str:
-    assert heading in doc, f"heading {heading!r} missing from token-costs.md"
-    return doc.split(heading, 1)[1].split("\n###", 1)[0]
-
-
-def _workflow_rows(doc: str, heading: str) -> dict[str, str]:
-    """{row label incl. mode: bold cost} for a per-workflow table.
-
-    ``_table_names``'s ``[a-z_]+`` class cannot match hyphenated skill names,
-    so this parser keeps the whole first cell (name plus optional mode) as the
-    label and reads the bold cost cell verbatim.
-    """
-    rows: dict[str, str] = {}
-    for line in _section(doc, heading).splitlines():
-        if not line.startswith("| `"):
-            continue
-        cells = [c.strip() for c in line.strip("|").split("|")]
-        m = re.match(r"^`([a-z0-9_-]+)`(?:\s+\(([^)]+)\))?$", cells[0])
-        assert m, f"unparseable workflow row: {cells[0]!r}"
-        label = m.group(1) + (f" ({m.group(2)})" if m.group(2) else "")
-        cost = re.match(r"^\*\*(.+?)\*\*$", cells[1])
-        assert cost, f"cost cell is not bold in {label}: {cells[1]!r}"
-        rows[label] = cost.group(1)
-    return rows
-
-
-def test_every_flat_cost_key_is_published():
-    """Reverse of ``test_flat_cost_matches_published_table``: a name priced in
-    code but absent from the doc (``check_api_health`` was one) is drift too."""
-    doc = TOKEN_COSTS.read_text()
-    published = {
-        name: cost
-        for cost, heading in _FLAT_HEADINGS.items()
-        for name in _table_names(doc, heading)
-    }
-    for name, cost in FLAT_COST.items():
-        assert name in published, f"{name} is in FLAT_COST but not in token-costs.md"
-        assert published[name] == cost, f"{name}: code {cost}, doc {published[name]}"
-
-
-def test_known_unpriced_matches_published_table():
-    from token_model import KNOWN_UNPRICED  # noqa: PLC0415
-
-    names = _table_names(TOKEN_COSTS.read_text(), _UNPRICED_HEADING)
-    assert names == set(KNOWN_UNPRICED), (
-        f"doc lists {sorted(names)}, KNOWN_UNPRICED has {sorted(KNOWN_UNPRICED)}"
-    )
-
-
-def test_every_ai_profile_skill_has_a_priced_row():
-    """Every ai-* skill directory is priced under the AI heading, and every row
-    there carries a token figure in the ``~N`` / ``~N-M`` form the tests parse."""
-    rows = _workflow_rows(TOKEN_COSTS.read_text(), _AI_HEADING)
-    labels = {label.split(" ")[0] for label in rows}
-    for skill_dir in sorted((REPO_ROOT / "skills").glob("parallax-ai-*")):
-        assert skill_dir.name in labels, f"{skill_dir.name} has no row under {_AI_HEADING}"
-    for label, cost in rows.items():
-        assert re.fullmatch(r"~\d+(-\d+)?", cost), f"{label}: unpriced cost cell {cost!r}"
+@pytest.mark.parametrize("rate", [1e308, 10**400])
+def test_usd_overflow_is_rejected_before_nonfinite_json_output(rate):
+    est = estimate([call("get_stock_report", symbol="AAPL.O")])
+    with pytest.raises(ValueError, match="finite JSON number"):
+        est.usd(rate)

@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from transcript import Transcript  # noqa: E402
+from transcript import ToolCall, Transcript  # noqa: E402
 from tier1_structural import grade_tier1  # noqa: E402
 from eval_spec import load_spec  # noqa: E402
 
@@ -22,6 +22,34 @@ def test_deep_dive_spec_has_expected_sections():
     assert "Technical Stance" in SPEC.required_sections
     assert "Assessment" in SPEC.required_sections
     assert "House View Note" in SPEC.section_labels
+
+
+def test_duplicate_assessment_job_fails_even_with_stricter_prompt():
+    t = Transcript(
+        final_prose="## Assessment\nAnalysis pending — service temporarily unavailable",
+        tool_calls=[
+            ToolCall("mcp__host__get_assessment", {"prompt": "Assess the position"}),
+            ToolCall("mcp__host__get_assessment", {"prompt": "Return the three lists"}),
+        ],
+    )
+    assert _result_map(grade_tier1(t, SPEC))["assessment_single_job"] is False
+
+
+def test_single_pending_job_keeps_other_independent_analysis_allowed():
+    t = Transcript(
+        final_prose="## Assessment\nAnalysis pending — service temporarily unavailable",
+        tool_calls=[
+            ToolCall("mcp__host__get_assessment", {"prompt": "Assess the position"}),
+            ToolCall("mcp__host__get_news_synthesis", {"symbol": "AAPL.O"}),
+            ToolCall("mcp__host__get_technical_analysis", {"symbol": "AAPL.O"}),
+        ],
+    )
+    assert _result_map(grade_tier1(t, SPEC))["assessment_single_job"] is True
+
+
+def test_unavailable_assessment_capability_does_not_require_a_job():
+    t = Transcript(final_prose="## Assessment\nData unavailable — capability not connected")
+    assert _result_map(grade_tier1(t, SPEC))["assessment_single_job"] is True
 
 
 def test_technical_fallback_requires_proxy_label_when_unavailable():

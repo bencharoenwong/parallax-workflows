@@ -33,7 +33,9 @@ If more than 40 symbols cross the requested threshold, auto-raise the threshold 
 
 ## §4 Coverage
 
-Compute desk scan integrity before the no-calls path. If fewer than 80% of unique symbols price successfully, render SCAN DEGRADED, name up to 10 unpriced symbols, and do not render a call list or no-calls short form.
+Before any threshold, coverage or ranking computation, run `validate_price_moves` with the captured UTC as-of date (default current UTC). Only dated, finite moves from strictly positive closes are usable: two ordered ISO close dates, latest close no more than 4 calendar days old or future-dated, interval at most 7 calendar days. Missing/stale/invalid dates, raw undated numeric moves and unsupported price evidence are unpriced; retain their reasons. Longer holidays remain unpriced rather than silently extending the window.
+
+`scan_integrity` returns `session_intervals` and `session_basis`. Different recent market sessions are separately dated latest-session estimates, not one common overnight/account return; disclose the actual pairs even when coverage is adequate. Use only the validated map for subsequent arithmetic. Compute desk scan integrity before the no-calls path. If fewer than 80% of unique symbols price successfully, render SCAN DEGRADED, name up to 10 unpriced symbols, and do not render a call list or no-calls short form.
 
 For client-level coverage below 80%, keep the client in the ranking but flag `partial coverage` and name unpriced symbols. Missing prices are never treated as zero.
 

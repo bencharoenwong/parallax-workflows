@@ -32,6 +32,7 @@ _REPORT_HEADER = "# House View Judge Report"
 # call (drift_classify.classify_severity); the renderer only maps the
 # label to its banner glyph.
 _SEVERITY_BANNERS = {
+    "unverified": ("UNVERIFIED", "No evaluable comparison evidence"),
     "drift_minor": ("OK", "Minor drift detected"),
     "drift_moderate": ("WARN", "Moderate drift detected"),
     "drift_material": ("ALERT", "Material drift detected"),
@@ -87,6 +88,9 @@ def render_markdown_report(
     """
     judged_at = judged_at or datetime.datetime.now(datetime.timezone.utc)
     glyph, label = _SEVERITY_BANNERS.get(severity, ("?", severity))
+    if severity_details.get("assessment_status") == "partial":
+        glyph = "PARTIAL"
+        label += " — observed lower bound; incomplete evidence"
 
     lines: list[str] = [
         _REPORT_HEADER,
@@ -110,6 +114,15 @@ def render_markdown_report(
     ]
 
     # Severity explanation block.
+    if "evaluable_count" in severity_details:
+        evaluated = severity_details["evaluable_count"]
+        requested = severity_details.get("denominator", 0)
+        lines.append(f"- Evaluable coverage: **{evaluated} of {requested}** requested non-zero tilts.")
+        if severity_details.get("assessment_status") == "partial":
+            lines.append("- This classification uses the original full-view denominator and is a lower bound on observed drift, not a full-view alignment verdict.")
+            lines.append(f"- Divergence among evaluated cells: **{severity_details['evaluated_divergent_pct']:.1%}**.")
+        elif severity == "unverified":
+            lines.append("- No drift or alignment conclusion can be drawn from unavailable comparison data.")
     lines.append(
         f"- Divergent cells: **{severity_details.get('divergent_count', 0)}** "
         f"of **{severity_details.get('denominator', 0)}** non-zero tilts "
@@ -165,9 +178,9 @@ def render_markdown_report(
     lines.extend(["", "## Recommendations", ""])
     if not recommendations:
         lines.append(
-            "_No per-cell recommendations were emitted. View is materially "
-            "aligned with current Parallax signals, or severity tier is "
-            "below the recommendation threshold._"
+            "_No per-cell recommendations were emitted. This alone does not "
+            "establish alignment: evidence may be unavailable, recommendation "
+            "generation may be disabled, or the threshold may not be met._"
         )
     else:
         kept = sum(1 for r in recommendations if not r.get("declined"))

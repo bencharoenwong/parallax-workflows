@@ -13,6 +13,12 @@ out to, the same operator-agnostic-helper pattern as `render_gate.py` and
 `client-policy/reconcile.py` (see `_parallax/house-view/loader.md` §2 for the
 rationale: deterministic math lives in a helper, never reproduced in prose).
 
+Date contract: compare a single established snapshot. Dated history requires
+an explicit snapshot_date / --snapshot-date; absent date rows, mixed dated/undated
+rows, duplicate dated sectors and cross-date comparisons are rejected. Two legacy
+undated snapshots retain their caller-declared snapshot basis. The result date
+is disclosed; a date declaration never proves original-book completeness.
+
 Verdict:
   consistent        -- the redundancy sector breakdown covers the portfolio
                        and tracks analyze_portfolio's weights closely.
@@ -59,6 +65,8 @@ import os
 import stat
 import sys
 from dataclasses import asdict, dataclass
+from datetime import date
+import re
 from pathlib import Path
 from typing import Any
 
@@ -94,6 +102,7 @@ class CoverageResult:
     diverging_sectors: list[dict[str, Any]]
     absent_holdings: list[str]
     absent_holdings_basis: str
+    snapshot_date: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -104,6 +113,56 @@ def _normalize_sector(name: Any) -> str:
     if not isinstance(name, str):
         return ""
     return " ".join(name.strip().split()).casefold()
+
+
+def _iso_snapshot_date(value: Any) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        raise CoverageInputError("snapshot dates must be YYYY-MM-DD")
+    try:
+        date.fromisoformat(value)
+    except ValueError as exc:
+        raise CoverageInputError("snapshot date is not a valid calendar date") from exc
+    return value
+
+
+def _comparable_snapshots(
+    portfolio: Any, redundancy: Any, snapshot_date: str | None,
+) -> tuple[Any, Any, str | None]:
+    """Select one declared date, never aggregate sector history over time.
+
+    Two undated legacy payloads retain their existing snapshot interpretation.
+    Mixing dated and undated evidence requires an explicit caller declaration
+    of their common date; that declaration must have an established basis.
+    """
+    requested = _iso_snapshot_date(snapshot_date) if snapshot_date is not None else None
+    dates_by_side: list[set[str]] = []
+    for payload in (portfolio, redundancy):
+        rows = payload if isinstance(payload, list) else []
+        dated = [r for r in rows if isinstance(r, dict) and "date" in r]
+        if dated and len(dated) != len(rows):
+            raise CoverageInputError("dated and undated sector rows cannot be mixed")
+        dates_by_side.append({_iso_snapshot_date(r["date"]) for r in dated})
+    if requested is None:
+        if any(len(ds) > 1 for ds in dates_by_side):
+            raise CoverageInputError("multiple sector dates; select one explicit --snapshot-date")
+        if bool(dates_by_side[0]) != bool(dates_by_side[1]):
+            raise CoverageInputError("dated/undated comparison requires an established --snapshot-date")
+        if dates_by_side[0] != dates_by_side[1]:
+            raise CoverageInputError("sector snapshots have different dates")
+        requested = next(iter(dates_by_side[0]), None)
+    selected = []
+    for payload, dates in zip((portfolio, redundancy), dates_by_side):
+        if dates:
+            rows = [r for r in payload if r["date"] == requested]
+            if not rows:
+                raise CoverageInputError("requested snapshot date is absent from a sector payload")
+            names = [_normalize_sector(r.get("sector")) for r in rows]
+            if len(names) != len(set(names)):
+                raise CoverageInputError("duplicate sector rows at the selected snapshot date")
+            selected.append(rows)
+        else:
+            selected.append(payload)
+    return selected[0], selected[1], requested
 
 
 def _as_weight_map(sectors: Any) -> dict[str, float]:
@@ -272,18 +331,25 @@ def check_coverage(
     portfolio_sectors: Any,
     redundancy_sectors: Any,
     holdings: Any = None,
+    *, snapshot_date: str | None = None,
 ) -> CoverageResult:
     """Cross-check `check_portfolio_redundancy` sector coverage against
     `analyze_portfolio.sector_allocation`.
 
     portfolio_sectors / redundancy_sectors: the two tools' sector-weight
-    payloads (see `_as_weight_map` for accepted shapes). holdings: optional
+    payloads (see `_as_weight_map` for accepted shapes). Select a known common
+    snapshot_date for history or dated/undated inputs; date ambiguity raises
+    CoverageInputError rather than producing a false divergence/clean verdict.
+    Two undated legacy payloads are interpreted as caller-supplied snapshots.
+    This compares those snapshots, not the original book’s completeness. holdings: optional
     list of held symbols (plain strings, or `{"symbol": ..., "sector": ...}`
     objects -- the sector tag is what enables `sector_inference` basis
     against an aggregate-only redundancy payload); when given, enables
     `absent_holdings` detection. See the module docstring for the three
     `absent_holdings_basis` values.
     """
+    portfolio_sectors, redundancy_sectors, selected_date = _comparable_snapshots(
+        portfolio_sectors, redundancy_sectors, snapshot_date)
     portfolio_map = _as_weight_map(portfolio_sectors)
     redundancy_map = _as_weight_map(redundancy_sectors)
 
@@ -327,6 +393,7 @@ def check_coverage(
         diverging_sectors=diverging,
         absent_holdings=absent_holdings,
         absent_holdings_basis=absent_holdings_basis,
+        snapshot_date=selected_date,
     )
 
 
@@ -429,6 +496,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--redundancy-sectors", required=True,
                         help="check_portfolio_redundancy sector weights "
                              "payload, inline JSON or a file path.")
+    parser.add_argument("--snapshot-date", default=None,
+                        help="Established common ISO snapshot date; selects that date from dated sector series, never inferred.")
     parser.add_argument("--holdings", default=None,
                         help="Optional held-symbol list, inline JSON or a "
                              "file path; entries may be plain symbols or "
@@ -459,7 +528,11 @@ def main(argv: list[str] | None = None) -> int:
         }))
         return 2
 
-    result = check_coverage(portfolio_sectors, redundancy_sectors, holdings)
+    try:
+        result = check_coverage(portfolio_sectors, redundancy_sectors, holdings, snapshot_date=args.snapshot_date)
+    except CoverageInputError as exc:
+        print(json.dumps({"error": str(exc)}))
+        return 2
     print(json.dumps(result.to_dict(), indent=2, sort_keys=True))
     return 0
 

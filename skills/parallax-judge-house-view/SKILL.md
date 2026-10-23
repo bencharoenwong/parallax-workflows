@@ -24,7 +24,7 @@ description: "Read-only LLM-as-judge that compares the saved CIO house view agai
 - The judge does NOT use `gate_present.run_gate_loop` — there is no confirmation gate. It's a read-only report.
 - Maker shared modules (`cross_country`, `pillar_compose`, `pillar_formulas`) are imported lazily; if they are not importable (a partial or older deployment without `/parallax-make-house-view`'s modules), the orchestrator surfaces the gap in diagnostics and falls back to PARALLAX_SILENT for cells where the imputed view can't be computed.
 - Server-side `house_view_judge` MCP tool: not planned. The judge is client-side permanently — bank clients run this skill / CLI on their own side, for methodology transparency under model-validation review and zero cross-tenant blast radius. Do NOT resurrect the server-side framing without a new architectural decision.
-- Expected Parallax spend: ~282 tokens at the default market set (~14 markets × 4 components; `_parallax/token-costs.md`). Those 14 are the markets weighted in `maker.MARKET_TO_SCHEMA_KEY` / `aggregator_weights.yaml`. Judge-house-view's own Phase 1 fan-out is pinned to that static 14-market recipe (Step 2) — `list_macro_countries` is bound and called (Step 0), but its live result is not used to decide fan-out scope the way `maker.resolve_covered_markets()` filters it for the maker, so the newly-covered-market problem (Brazil; `list_macro_countries` returns 17 as of 2026-10-05, growing over time) that affects the maker's dynamic resolution does not apply here the same way. This budget stays accurate until the static 14-market recipe in Step 2 is deliberately widened. `--dry` skips the Phase 5 LLM step but NOT the macro fan-out — the full cost is still incurred.
+- Expected Parallax spend: **280.05 credits** for the pinned 14-market recipe: 14 × four explicit macro components × 5 + telemetry 0.05; coverage is free. Unlike the maker, live country coverage does not widen this static fan-out. `--dry` only suppresses the LLM recommendation and still incurs this MCP cost. `--mock-mcp` replaces live fan-out and costs 0 MCP credits. Explicit components never trigger overview reassembly; missing-view/chain failures stop before spend (`_parallax/token-costs.md`).
 - Every host interaction is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3). `judge.py` names its stages Phase 0–8; this file cites them as identifiers under the spine headings.
 - Auto-on-load triggers (portfolio-builder, rebalance, thematic-screen) suppress the run when `view_age_days < cadence.AUTO_ON_LOAD_MIN_AGE_DAYS` (30 days). Banner only at drift_material.
 
@@ -110,6 +110,8 @@ For each non-zero cell in the active view (enumerated via `stress.enumerate_dime
 
 Run `drift_classify.classify_severity(resolutions, view_age_days, denominator)`. Tiers:
 
+- Zero evaluable cells → `unverified`, never an OK/minor-drift conclusion. Report evaluated/total non-zero cells in both markdown and JSON. For partial coverage, the existing thresholds retain the full-view denominator and describe a lower bound on observed drift only; report the divergent share among evaluated cells separately. No recommendation does not establish alignment.
+
 - `drift_minor`: < 20% of non-zero cells in `DIVERGENT_*`
 - `drift_moderate`: 20-50%
 - `drift_material`: > 50%, OR any `DIVERGENT_*` on a pillar, OR sign-flip on `tilts.macro_regime.*`
@@ -193,6 +195,7 @@ The chain artifact lands in `~/.parallax/reasoning-chains/<YYYY-MM>/<run_id>.yam
 - View directory missing: the standard "no active view" message; no row. Chain broken: propagate the `audit_chain` error.
 - `unreachable_share > 30%`: the maker raises; the judge records it in `diagnostics` and every cell falls back to `PARALLAX_SILENT`.
 - Maker modules not importable: `PARALLAX_SILENT` for every cell and the gap noted in diagnostics.
+- Zero evaluable comparisons: report `unverified`; audit existing silent/uncovered counts and `applied=false`, without inventing aligned evidence or changing the audit schema. Recommendations remain empty.
 - Citation check fails on a recommendation: dropped and replaced with the decline placeholder; never bypassed.
 - Host lacks `run-shell`: the orchestrator cannot run; the skill declares itself unavailable on this host (conventions §14.3).
 

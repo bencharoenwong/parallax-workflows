@@ -1,9 +1,10 @@
-"""Ex-post house-view attribution — pure math layer.
+"""Retrospective hypothetical house-view diagnostic — pure math layer.
 
 Backs `/parallax-house-view-attribution`. Measures whether an active (or
-archived) house view added value over its effective window by reconstructing
-the tilted-vs-neutral portfolio decision and attributing the return
-difference to the view's tilt groups.
+archived) house view changes a hypothetical return comparison over a supplied
+window. This helper does not bind decision timestamps to return intervals or
+establish that a recommended portfolio was traded. Results are retrospective
+weight diagnostics, not realized view value-add.
 
 Reconstruction source is the REASONING-CHAIN archive, not the audit log:
 loader.md §6.3 forbids logging holdings arrays, so `consume` rows carry no
@@ -25,10 +26,10 @@ Definitions (pinned so the number is falsifiable):
 - **Per-tilt decomposition** = Shapley value over the tilt GROUPS
   (sectors / regions / themes) using the loader.md §3 multiplier table.
   Order-independent; sums exactly to the model-implied active return. The
-  gap between the chain's ACTUAL weights and the model-implied tilted
-  weights is reported separately as `selection_residual_bps` — universe
-  effects, redundancy trims, and excludes live there, never silently folded
-  into a tilt's contribution.
+  gap between the chain's recorded recommended weights and the model-implied
+  tilted weights is retained under the compatibility key
+  `selection_residual_bps`. This unexplained weight difference does not
+  identify selection, exclusion, execution or causal effects.
 
 Read-only vs the view (like the judge): no writes here; the SKILL.md appends
 the single `attribution` audit row and report bundle.
@@ -167,9 +168,37 @@ def segment_by_version(chains: list[dict[str, Any]]) -> list[Segment]:
 # --------------------------------------------------------------------------
 
 def reconstruct_tilted_weights(chain: dict[str, Any]) -> dict[str, float]:
-    """The chain's realized weights — what was actually built."""
+    """The chain's recorded recommendation, not evidence of executed holdings."""
     weights = ((chain.get("final_portfolio") or {}).get("weights")) or {}
-    return {str(k): float(v) for k, v in weights.items()}
+    validated = _validated_weights(weights, "recorded")
+    if not math.isclose(sum(validated.values()), 1.0, rel_tol=0, abs_tol=1e-3):
+        raise AttributionError("recorded weights must sum to 1 for a long-only diagnostic")
+    return validated
+
+
+def _finite_number(value: Any, label: str, *, minimum: float | None = None) -> float:
+    """Reject missing, boolean and nonfinite observations rather than emit NaN."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise AttributionError(f"{label} must be a finite number")
+    try:
+        number = float(value)
+    except OverflowError as exc:
+        raise AttributionError(f"{label} must be a finite number") from exc
+    if not math.isfinite(number) or (minimum is not None and number < minimum):
+        raise AttributionError(f"{label} must be finite and >= {minimum}")
+    return number
+
+
+def _validated_weights(weights: dict[str, float], label: str) -> dict[str, float]:
+    """Validate the supported long-only domain without renormalizing inputs."""
+    if not isinstance(weights, dict) or not weights:
+        raise AttributionError(f"{label} weights must be a nonempty mapping")
+    validated = {str(k): _finite_number(v, f"{label} weight {k!r}", minimum=0)
+                 for k, v in weights.items()}
+    total = sum(validated.values())
+    if not math.isfinite(total) or total <= 0:
+        raise AttributionError(f"{label} weights must have a finite positive total")
+    return validated
 
 
 def neutral_weights(chain: dict[str, Any]) -> tuple[dict[str, float], str]:
@@ -189,10 +218,14 @@ def neutral_weights(chain: dict[str, Any]) -> tuple[dict[str, float], str]:
     if isinstance(inline, dict):
         for h in holdings:
             v = inline.get(h)
-            if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0:
-                scores[h] = float(v)
+            if h in inline and v is not None:
+                score = _finite_number(v, f"base score {h!r}", minimum=0)
+                if score > 0:
+                    scores[h] = score
     if len(scores) == len(holdings):
         total = sum(scores.values())
+        if not math.isfinite(total):
+            raise AttributionError("base-score total must be finite")
         return {h: scores[h] / total for h in holdings}, "exact"
     eq = 1.0 / len(holdings)
     return {h: eq for h in holdings}, "approximate"
@@ -468,7 +501,7 @@ def active_return_bps(
     semantics); the caller reports the drop count.
 
     ``enforce_cap`` re-applies the exposure cap AFTER that renormalization, and
-    must be True for a MODEL-implied leg and False for a REALIZED one.
+    must be True for a model-implied leg and False for a recorded-weight leg.
 
     Renormalizing rescales every surviving ratio by ``nw_total / w_total``, so a
     holding dropped for missing return data can carry a survivor above the cap
@@ -481,11 +514,18 @@ def active_return_bps(
     -- exactly the distortion the cap exists to prevent, arriving through the
     coverage path instead of through the multiplier product.
 
-    It is NOT applied to the realized leg. ``tilted_actual`` is what the
-    portfolio actually held; clamping it would overwrite a measured fact and
-    silently move the residual. The cap constrains what the MODEL may imply,
-    never what the book did.
+    It is NOT applied to the recorded-weight leg. The compatibility name
+    ``tilted_actual`` refers to the chain's recommended weights, not evidence
+    of traded holdings. Clamping them would alter the recorded comparison
+    and silently move the residual. The cap constrains model-implied weights.
     """
+    weights = _validated_weights(weights, "comparison")
+    neutral_w = _validated_weights(neutral_w, "neutral")
+    if not isinstance(returns, dict):
+        raise AttributionError("returns must be a mapping")
+    # Simple price returns below -100% are outside the supported equity domain.
+    returns = {s: _finite_number(v, f"return {s!r}", minimum=-1)
+               for s, v in returns.items()}
     covered = [s for s in neutral_w if s in returns]
     if not covered:
         raise AttributionError("no holdings have return data")
@@ -551,10 +591,10 @@ def attribute_segment(
     returns: dict[str, float],
     holding_meta: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
-    """Attribute one chain: neutral vs model-implied tilts vs actual weights.
+    """Compare one recorded recommendation with neutral/model-implied weights.
 
     Returns the evidence block for this segment:
-    ``{active_return_bps (actual), model_active_bps, selection_residual_bps,
+    ``{active_return_bps (recorded-minus-neutral), model_active_bps, selection_residual_bps,
     per_tilt, counterfactual_quality, holdings_covered, holdings_dropped}``.
     """
     view = chain.get("view") or {}
@@ -577,6 +617,10 @@ def attribute_segment(
         "counterfactual_quality": quality,
         "holdings_covered": len(covered),
         "holdings_dropped": len(dropped),
+        # Report-only coverage fields; merge_segments keeps the audit payload
+        # compatible and must not promote these to new audit schema fields.
+        "_recorded_covered_weight": sum(tilted_actual[s] for s in covered),
+        "_neutral_covered_weight": sum(neutral[s] for s in covered),
         # Symbol lists for the merge step. They exist because counts cannot be
         # merged: the same holding appearing in three version segments was
         # counted three times.

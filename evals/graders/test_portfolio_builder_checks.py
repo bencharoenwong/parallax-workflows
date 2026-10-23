@@ -107,3 +107,18 @@ def test_holdings_allocated_red_when_section_absent_empty_universe():
     # Empty-universe degradation: no Selected Holdings table.
     no_sec = GOLDEN.replace("## Selected Holdings", "## (universe unavailable)")
     assert _results(no_sec)["holdings_allocated"] is False
+
+
+def test_no_verified_candidates_withholds_funded_allocation():
+    prose = "## Selected Holdings\nAllocation withheld — no verified eligible candidates.\n## Unverified Candidates\nAAA.X identity mismatch; no funded weight."
+    assert _results(prose)["holdings_allocated"] is True
+
+
+def test_withheld_allocation_cannot_contain_funded_weight():
+    prose = "## Selected Holdings\nAllocation withheld — no verified eligible candidates.\n| AAA.X | 8.0 | 25% |"
+    assert _results(prose)["holdings_allocated"] is False
+
+
+def test_empty_universe_can_finish_honestly_without_fabricated_names():
+    prose = "## Selected Holdings\nAllocation withheld — universe unavailable."
+    assert _results(prose)["holdings_allocated"] is True

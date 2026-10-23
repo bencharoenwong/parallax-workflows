@@ -20,7 +20,9 @@ description: "Applies George Soros's top-down reflexivity framework (per 'The Al
 
 ## Gotchas
 
-- Expected Parallax spend: ~25–30 tokens single-ticker, ~30–40 basket (`_parallax/token-costs.md`); `macro_analyst` is 5 per market, capped at 5 markets.
+- Preserve the requested RIC(s), each observation’s source as-of date and unavailable fields. Generation time is not a substitute for a missing data date. Any handoff carries this provenance; a prior rendered profile is not a fresh or independent observation.
+
+- Expected Parallax spend: Single ticker: **0.20 + 5M + 5T credits** (info 0.05, snapshot 0.1, telemetry 0.05). Basket: **0.05 + 5M + 5T + 0.15H**, H = distinct surfaced names with snapshot + identity checks (up to 15), M ≤ 5 selected tactical markets, T = 1–3 theme universe calls. At M=5: **30.20–40.20 single ticker**, or **30.50–42.30 basket** for 1–3 themes with 3–5 distinct surfaced names per theme. A successful narrower universe retry adds 5; failed async jobs are uncharged. Coverage/explanations are free; additional successful identity-resolution reads cost 0.05 per symbol. Explicit tactical calls do not trigger overview reassembly (`_parallax/token-costs.md`).
 - JIT-load `_parallax/parallax-conventions.md`, `_parallax/AI-profiles/profile-schema.md`, `_parallax/AI-profiles/output-template.md`, `_parallax/AI-profiles/profiles/soros.md` — Step 0.
 - Two modes — basket (no ticker) and single-ticker dual-channel — share the macro workflow. The dual-channel logic is load-bearing: a single-channel flag is `partial_match`, never `match`.
 - Channel B basket membership is best-effort name-matching against `divergences[*].name` (a theme name, matched against sector/industry) — `divergences[*]` has no `basket_name` field live, only `name`, `type`, `market`, `daily`, `mtd`, `basket_id`.
@@ -60,19 +62,19 @@ Mode: zero tickers → **basket mode**; exactly one → **single-ticker mode**; 
 
 **Macro workflow (both modes):** `call-tool` `list_macro_countries` and `get_telemetry` together; then `macro_analyst(component=tactical)` for each selected market together. Identify 1–3 regime themes where macro and telemetry agree on direction (e.g. "Fed cutting + dollar weakening → EM equities and commodities").
 
-**Basket mode:** per theme, `build_stock_universe` with a sector-scoped thematic query (timeout → retry ONCE narrower; then skip the theme); cap each theme's candidates at the top 20 by `composite_score`; `get_peer_snapshot` for the top 3–5 per theme, all together.
+**Basket mode:** per theme, `build_stock_universe` with a sector-scoped thematic query (timeout → retry ONCE narrower; then skip the theme); cap each theme's candidates at the top 20 by `composite_score`; `get_peer_snapshot` AND `get_company_info` for the top 3–5 per theme, all together. Deduplicate exact RICs across themes within this run; each surfaced name still runs the Step 3 identity gate.
 
-**Single-ticker mode:** per theme, `build_stock_universe` with the theme's sector-scoped query (same retry rule); `get_peer_snapshot` on the ticker when it surfaces during universe resolution.
+**Single-ticker mode:** fetch `get_peer_snapshot` on the resolved target independently of universe inclusion; it is required for the identity gate even when only classification path A2 is available. Per theme, `build_stock_universe` with the theme's sector-scoped query (same retry rule). A search timeout never suppresses the target identity fetch.
 
 ### Step 3 — Verify
 
-Cross-validation gate per `profile-schema.md §2 Step 2` for every ticker surfaced: `target_company` (top level; no `name` field — peers are `comparison[].company`) against `get_company_info.name`; refuse to render on mismatch. `list_macro_countries` failure → derive markets from RIC-suffix defaults (conventions §6) and note degradation; `macro_analyst` failing for some markets → proceed with ≥ 2 successes; `get_telemetry` failure → Channel B is `UNAVAILABLE` (not `NOT_FLAGGED`).
+Cross-validation gate per `profile-schema.md §2 Step 2` for every ticker surfaced: `target_company` (top level; no `name` field — peers are `comparison[].company`) against `get_company_info.data.name`; refuse to render on mismatch. `list_macro_countries` failure → derive markets from RIC-suffix defaults (conventions §6) and note degradation; `macro_analyst` failing for some markets → proceed with ≥ 2 successes; `get_telemetry` failure → Channel B is `UNAVAILABLE` (not `NOT_FLAGGED`).
 
 ### Step 4 — Compute
 
 **Basket mode:** rank names within each theme by momentum + macro sensitivity → `trade_ideas`.
 
-**Single-ticker mode — dual-channel exposure check.** **Channel A (industry), two independent sub-paths, either sufficient to FLAG:** A1 universe membership — the ticker appears in a theme's `build_stock_universe` result (timeout/empty → A1 `NOT_FLAGGED`, Channel A not yet resolved); A2 classification match — the ticker's sector/industry from `get_company_info` matches a theme's target sector (evaluable without the universe build). Channel A `FLAGGED` if A1 OR A2; `NOT_FLAGGED` only if both are negative. **Channel B (telemetry basket):** the ticker falls in a regime basket surfaced by `get_telemetry` → `FLAGGED` / `NOT_FLAGGED` / `UNAVAILABLE`. **Verdict:** both `FLAGGED` → `match`; exactly one `FLAGGED` (other `NOT_FLAGGED` or `UNAVAILABLE`) → `partial_match`; neither → `no_match`. `match` is NEVER reached when Channel B is `UNAVAILABLE`.
+**Single-ticker mode — dual-channel exposure check.** **Channel A (industry), two alternative sub-paths:** A1 is membership in the returned theme sample, not proof of membership in a complete universe. Timeout/missing result → A1 `UNAVAILABLE`; a successful valid sample without the target → `NOT_FLAGGED` for that sample. A2 compares verified target sector/industry with the theme; missing classification → `UNAVAILABLE`. Channel A is `FLAGGED` if either evaluable path flags; `NOT_FLAGGED` only if both are evaluable and negative; otherwise `UNAVAILABLE`. Disclose A1/A2 separately, including the classification-only fallback. **Channel B:** a verified telemetry basket match → `FLAGGED`; checked absence → `NOT_FLAGGED`; missing telemetry → `UNAVAILABLE`. If required A or B is unavailable, final verdict is `skipped`, with available observations retained; do not count unknown as a failed criterion. With both evaluable: both flagged → `match`, one flagged → `partial_match`, neither → `no_match`. These related evidence paths are not independent statistical confirmations.
 
 ### Step 5 — Compose (render through the output template)
 
@@ -105,7 +107,7 @@ Ranked exposure candidates (informational, per conventions §12 — not trade in
 Workflow derived from: Soros (1987); Drobny (2006).
 Last anchor-tested: 2026-04-07 (NVDA.O, TSLA.O)
 Tool sequence: list_macro_countries, macro_analyst × N, get_telemetry, build_stock_universe × N, get_peer_snapshot × M
-Token cost: ~25-40 tokens
+Parallax credit estimate: <actual credits; basket 0.05 + 5M + 5T + 0.15H; see Gotchas>
 
 ---
 This output is an AI-inferred interpretation of George Soros's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by George Soros or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.
@@ -127,22 +129,23 @@ Ticker exposure check (dual-channel):
   Channel A — Industry exposure
     <ticker>'s sector/industry: <sector>
     Industry appears in theme(s): <theme names or NONE>
-    Status: FLAGGED / NOT FLAGGED
+    Status: FLAGGED / NOT_FLAGGED / UNAVAILABLE
 
   Channel B — Telemetry basket theme
     Telemetry baskets surfaced: <list>
     <ticker> falls in basket(s): <basket names or NONE>
-    Status: FLAGGED / NOT FLAGGED
+    Status: FLAGGED / NOT_FLAGGED / UNAVAILABLE
 
-Profile fit: <match / partial_match / no_match>
+Profile fit: <match / partial_match / no_match / skipped>
   - match: both channels flagged (genuine thematic exposure)
   - partial_match: one channel flagged (industry OR basket, not both)
-  - no_match: neither channel flagged (Soros-style lens has no current view)
+  - no_match: both channels evaluated and neither flagged
+  - skipped: a required channel is unavailable; no negative conclusion
 
 Workflow derived from: Soros (1987); Drobny (2006).
 Last anchor-tested: 2026-04-07 (NVDA.O, TSLA.O)
 Tool sequence: list_macro_countries, macro_analyst × N, get_company_info, get_telemetry, get_peer_snapshot
-Token cost: ~25-30 tokens (single-ticker mode)
+Parallax credit estimate: <actual credits; single ticker 0.20 + 5M + 5T; see Gotchas>
 
 ---
 This output is an AI-inferred interpretation of George Soros's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by George Soros or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.
@@ -175,14 +178,14 @@ If `list_macro_countries` fails, derive covered markets from RIC suffix defaults
 
 If `macro_analyst` fails for a subset of markets, proceed with remaining markets as long as ≥2 succeeded.
 
-If `get_telemetry` fails (e.g., "Admin org not configured"), single-ticker mode cannot perform Channel B. Fall back to industry-exposure-only evaluation on Channel A. **In this fallback state, maximum verdict is `partial_match`** — a single-channel `FLAGGED` result can never be `match` because `match` requires BOTH channels. Note "Channel B: UNAVAILABLE (telemetry env)" in the output.
+If `get_telemetry` fails, show the industry-only Channel A observation and `Channel B: UNAVAILABLE`. Final verdict is `skipped` for incomplete required evidence; consensus must exclude it from its denominator. No full or negative fit claim is supported.
 
-If `build_stock_universe` returns no names or times out for any theme: for basket mode, report themes without rankings. For single-ticker mode, Channel A sub-path A1 (universe membership) is `NOT_FLAGGED`, but sub-path A2 (sector/industry classification match) must STILL be evaluated independently from `get_company_info` data. Channel A overall is `NOT_FLAGGED` only if A2 also fails to match. This is the critical non-regression: a `build_stock_universe` timeout does NOT automatically collapse Channel A to `NOT_FLAGGED`.
+If `build_stock_universe` times out, basket mode reports supported themes without rankings. Single-ticker A1 is `UNAVAILABLE`, while A2 is still evaluated from verified company metadata. A2 can flag industry exposure; it cannot establish universe membership. An unavailable target snapshot or failed identity check stops the profile even if A2 appears positive. A successful empty sample is a checked absence from that sample only.
 
 
 ## Done when
 
 - The reply begins at the analytical Header (or the white-label header when active) and contains only the rendered template plus the Output additions; no workflow narration.
 - The cross-validation gate passed, or the exact refusal message was emitted and nothing else rendered.
-- The verdict line, the citation, the methodology footer with tool sequence and token cost, the persona disclaimer verbatim, `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present.
+- The verdict line, the citation, the methodology footer with tool sequence and credit cost, the persona disclaimer verbatim, `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present.
 - Expected spend stated (Gotchas).

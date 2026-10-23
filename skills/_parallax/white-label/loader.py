@@ -999,13 +999,17 @@ def is_white_label_active(branding: dict[str, Any]) -> bool:
     return all(token in _ACTIVE_ERROR_TOKENS for token in error_class(err).split("; "))
 
 
+_MAX_SOURCE_REFERENCE_CHARS = 256
+
+
 def safe_source_reference(branding: dict[str, Any]) -> str:
     """Display-safe representation of branding["source"]["reference"] for
     embedding in end-client deliverables.
 
     URLs collapse to scheme+hostname; filesystem paths collapse to basename;
-    other strings pass through. Prevents leaking pre-signed URLs, internal
-    paths, or full-source URLs into the About This Report footer.
+    other strings pass through. Scheme references without an authority are
+    omitted, as are results over 256 characters. Prevents leaking pre-signed
+    URLs, internal paths, or full-source URLs into the About This Report footer.
     """
     ref = (branding.get("source") or {}).get("reference", "")
     if not isinstance(ref, str) or not ref:
@@ -1023,11 +1027,15 @@ def safe_source_reference(branding: dict[str, Any]) -> str:
             safe = safe_source_reference({"source": {"reference": part}})
             if safe and safe not in seen:
                 seen.append(safe)
-        return "; ".join(seen)
-    # A query string or fragment is where a pre-signed URL carries its token,
-    # in any scheme and in bare file names alike.
-    ref = re.split(r"[?#]", ref, maxsplit=1)[0].strip()
-    if "://" in ref:
+        result = "; ".join(seen)
+        return result if len(result) <= _MAX_SOURCE_REFERENCE_CHARS else ""
+    # A separator inside a bare filename's query/fragment is not a local
+    # directory. Remove that suffix before selecting any path basename.
+    suffix = re.search(r"[?#]", ref)
+    separator = re.search(r"[/\\]", ref)
+    if suffix and (separator is None or suffix.start() < separator.start()):
+        ref = ref[:suffix.start()].strip()
+    if "://" in ref or ref.startswith("//"):
         from urllib.parse import urlsplit
         if "\\" in ref:  # browsers read "\\" as "/", urlsplit does not: hosts would differ
             return ""
@@ -1036,14 +1044,25 @@ def safe_source_reference(branding: dict[str, Any]) -> str:
             host = parsed.hostname
         except ValueError:
             return ""
-        return f"{parsed.scheme.lower()}://{host}" if host and parsed.scheme else ""
+        prefix = f"{parsed.scheme.lower()}://" if parsed.scheme else "//"
+        result = prefix + host if host else ""
+        return result if len(result) <= _MAX_SOURCE_REFERENCE_CHARS else ""
+    # A missing authority delimiter must not turn URL credentials into an
+    # opaque label or a path basename. Windows drive paths are local files.
+    if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", ref) and not re.match(
+            r"^[A-Za-z]:[\\/]", ref):
+        return ""
     # Any path-like reference collapses to its basename. Matching only on a
     # leading "/" or "~" left RELATIVE paths ("client-collateral/acme-deck.pptx")
     # to pass through with their directory component intact, putting a raw
     # source path into an end-client deliverable.
     if "/" in ref or "\\" in ref:
-        return PurePath(ref.replace("\\", "/")).name
-    return ref
+        result = PurePath(ref.replace("\\", "/")).name
+    else:
+        # Bare filenames may carry URL query tokens. Explicit local paths
+        # retain literal # and ? characters in directories and basenames.
+        result = re.split(r"[?#]", ref, maxsplit=1)[0].strip()
+    return result if len(result) <= _MAX_SOURCE_REFERENCE_CHARS else ""
 
 
 # Error classes the loader can produce. The CLI prints only these tokens:
@@ -1136,9 +1155,10 @@ def visual_branding_summary() -> dict[str, Any]:
     with ``source`` replaced by its display-safe ``source_reference``,
     ``client_name`` made inert markdown text, ``error`` reduced to its class
     (:func:`error_class`), plus the ``white_label_active`` rendering flag.
-    Neither the raw source nor raw error detail leaves this function."""
+    The flag also requires a displayable client name or a nonempty visual
+    value after filtering. Neither raw source nor error detail leaves here."""
     branding = load_visual_branding()
-    return {
+    summary = {
         "client_name": _safe_display_name(branding.get("client_name"), _NAME_META),
         "colors": _named_values(branding.get("colors"), _HEX_COLOR.fullmatch),
         "fonts": {k: v for k, v in _named_values(
@@ -1148,8 +1168,14 @@ def visual_branding_summary() -> dict[str, Any]:
         "render": _render_defaults(branding.get("render")),
         "error": error_class(branding.get("error")),
         "source_reference": _safe_markdown_text(safe_source_reference(branding)),
-        "white_label_active": is_white_label_active(branding),
     }
+    summary["white_label_active"] = is_white_label_active(branding) and bool(
+        summary["client_name"] or any(
+            value for key in ("colors", "fonts", "logos")
+            for value in summary[key].values()
+        )
+    )
+    return summary
 
 
 # What the --json command passes through, and nothing else: config values
@@ -1182,11 +1208,22 @@ def _safe_logo_location(value: str) -> bool:
             and not any(unicodedata.category(ch) in _INVISIBLE_CATEGORIES for ch in value))
 
 
-def _render_defaults(value: Any) -> dict[str, str]:
-    """Only the one render default skills read (conventions §13.1)."""
-    if isinstance(value, dict) and value.get("audience_default") in _RENDER_AUDIENCES:
-        return {"audience_default": value["audience_default"]}
-    return {}
+def _render_defaults(value: Any) -> dict[str, Any]:
+    """Keep §13.1's absent/invalid/malformed distinction without raw text.
+
+    Fixed invalid values preserve the notice from ``resolve_audience``:
+    ``"unrecognized"`` for an unknown string, ``False`` for malformed data.
+    """
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        return {"audience_default": False}
+    audience = value.get("audience_default")
+    if audience is None:
+        return {}
+    if not isinstance(audience, str):
+        return {"audience_default": False}
+    return {"audience_default": audience if audience in _RENDER_AUDIENCES else "unrecognized"}
 
 
 def silence_warnings() -> None:

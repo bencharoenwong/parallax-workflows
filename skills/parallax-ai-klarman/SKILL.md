@@ -19,7 +19,9 @@ description: "Applies Seth Klarman's margin-of-safety framework (per 'Margin of 
 
 ## Gotchas
 
-- Expected Parallax spend: ~5–7 tokens (`_parallax/token-costs.md`): three statements + peer snapshot + company info.
+- Preserve the requested RIC(s), each observation’s source as-of date and unavailable fields. Generation time is not a substitute for a missing data date. Any handoff carries this provenance; a prior rendered profile is not a fresh or independent observation.
+
+- Expected Parallax spend: **0.30 credits** = info 0.05 + snapshot 0.1 + three financial statements × 0.05 (`latest=false`, the default). Choosing `latest=true` for both balance sheet and cash flow adds 0.10, but this workflow needs four comparable periods and does not request that mode. Extra successful identity-resolution reads add 0.05 per symbol (`_parallax/token-costs.md`).
 - JIT-load `_parallax/parallax-conventions.md`, `_parallax/AI-profiles/profile-schema.md`, `_parallax/AI-profiles/output-template.md`, `_parallax/AI-profiles/profiles/klarman.md` — Step 0.
 - Balance-sheet-first: `get_financials` balance_sheet AND cash_flow AND ratios, 4 periods each (one call returns 4 periods). Net cash from the balance sheet (cash − total debt), not from the ratios summary.
 - The "no position warranted" output IS valid output — not a failure. Value threshold is intentionally loose (≥ 4) per Lev-Srivastava 2022 — do not tighten without re-anchoring.
@@ -72,7 +74,7 @@ The `cash_flow` response has no `fcf`/`free_cash_flow` field. Derive it: `FCF = 
 
 ### Step 3 — Verify
 
-**Cross-validation gate (MANDATORY per spec §6.4).** `get_peer_snapshot.target_company` (no `name` field; peers are `comparison[].company`) against `get_company_info.name`; on mismatch refuse to render and emit:
+**Cross-validation gate (MANDATORY per spec §6.4).** `get_peer_snapshot.target_company` (no `name` field; peers are `comparison[].company`) against `get_company_info.data.name`; on mismatch refuse to render and emit:
 
 ```
 Error: Symbol cross-validation failed for <ticker>.
@@ -81,9 +83,11 @@ Error: Symbol cross-validation failed for <ticker>.
 Cannot render Klarman-style profile — possible wrong-company mapping (see parallax-conventions.md §2).
 ```
 
-Fewer than 4 periods: compute on what is available (minimum 2) and flag the coverage loss; Check 2 always runs on the absolute D/E threshold with the "Peer comparison unavailable" note (see Step 4); all four checks unavailable → `DATA_UNAVAILABLE`, never a false `no_match`.
+FCF stability requires four comparable periods for the unchanged 3-of-4/2-of-4 thresholds. Fewer periods → FCF criterion `UNAVAILABLE`; report the observed history without shrinking the denominator. Check 2 uses the disclosed absolute D/E fallback. Any required criterion or Value backup unavailable → final `skipped`, never a false no_match or a fit based on missing checks.
 
 ### Step 4 — Compute
+
+**Input domains before thresholds:** cash, debt, market cap, cash flows, ratios and backup Value must be finite numeric observations, not booleans. Net-cash ratio requires positive market cap. D/E requires positive equity; zero/negative equity makes that check `UNAVAILABLE`, never an automatic pass from a negative ratio. P/E comparisons require positive earnings and positive, comparable target/peer ratios. Use the documented P/B fallback only with positive book equity and available comparable target/peer P/B data; otherwise valuation is `UNAVAILABLE`. Do not infer missing peer metrics. Run the verdict rule only when all four checks and the Value backup are evaluable.
 
 The four checks: **1 Net cash** — (cash − total debt) / market cap: PASS ≥ 0, PARTIAL ≥ −0.2, FAIL < −0.2. **2 Debt vs peers** — no tool in this workflow's `tool_sequence` ever supplies a peer-median D/E: `get_financials(ratios)` is target-only (no peer field at all), and `get_peer_snapshot.comparison[]` carries factor scores and `pe_ratio`, not a debt field. So this check always runs on the absolute fallback, every run, not as an occasional degradation: D/E < 1.0 PASS, else FAIL, rendered with the note "Peer comparison unavailable." **3 FCF stability** — positive FCF periods of 4: PASS ≥ 3, PARTIAL 2, FAIL ≤ 1. **4 Valuation discount** — P/E vs peer median (P/B fallback on negative earnings): PASS ≤ × 0.85, PARTIAL ≤ × 1.0, FAIL above. **Backup** — Parallax Value ≥ 4; below 4 flag "⚠️ Parallax Value sub-score suggests valuation may not be attractive even if peer-relative metrics pass". Verdict with N = PASS count: N ≥ 3 and Value ≥ 4 → `match`; N ≥ 3 and Value < 4 → `partial_match` (flag "strong balance sheet but absolute Parallax Value below backup threshold — intangibles-era calibration caveat applies"); N = 2 → `partial_match`; N ≤ 1 → `no_match`; N = 0 and Value < 4 → append *"No position warranted on this ticker per margin-of-safety principles. Cash is a valid stance."*
 
@@ -106,7 +110,8 @@ Klarman's framework prioritizes survival over return: balance-sheet strength, do
 
 Parallax Value sub-score (backup check): <score> / 10
 
-Profile fit: <match / partial_match / no_match> — <count> of 4 checks passed.
+Profile fit: <match / partial_match / no_match / skipped> — <count> of 4 checks passed; <evaluated count> evaluable.
+Missing criterion: UNAVAILABLE — <reason>; incomplete required inputs yield skipped.
 
 Verdict sensitivity: the verdict-relevant input nearest its cutoff is <check or Value backup> (<actual> vs <target>); state the arithmetic crossing that would change the pass count or Value backup status, and state the verdict change only when that crossing changes the overall match / partial / no-match tier.
 
@@ -115,7 +120,7 @@ Verdict sensitivity: the verdict-relevant input nearest its cutoff is <check or 
 Workflow derived from: Klarman, S. (1991). Margin of Safety.
 Last anchor-tested: 2026-04-07 (BRKb.N, NVDA.O)
 Tool sequence: get_company_info, get_peer_snapshot, get_financials(balance_sheet/cash_flow/ratios, 4 periods)
-Token cost: ~5–7 tokens
+Parallax credit estimate: 0.30 credits (three default historical financial reads)
 
 ---
 This output is an AI-inferred interpretation of Seth Klarman's approach, derived solely from publicly available information — the cited source, Parallax factor data, and Parallax's public methodology. It is produced by the Parallax AI Investor Profiles framework. It is not financial advice, not personalized, not endorsed by Seth Klarman or his representatives, and not a recommendation to buy or sell any security. For illustrative and educational use only. Past characterization does not guarantee future relevance. Please consult a qualified financial advisor before making investment decisions.
@@ -144,12 +149,12 @@ Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 ## Failure modes
 
 
-If balance-sheet data is unavailable for 4 periods, compute the checks on whatever is available (minimum 2 periods) and flag the coverage loss. The debt-vs-peers check always runs on the absolute threshold with the note "Peer comparison unavailable — absolute thresholds applied" (see Step 4). If all four checks fail due to missing data, return `DATA_UNAVAILABLE` rather than a false `no_match`.
+If required data is missing or outside the supported ratio domain, mark its criterion UNAVAILABLE and final fit skipped; consensus excludes this profile. Four comparable FCF periods remain required; do not change the threshold denominator. Keep available checks and the "Peer comparison unavailable — absolute thresholds applied" note visible. Missing values are not failed checks or evidence that cash is the warranted investment stance.
 
 
 ## Done when
 
 - The reply begins at the analytical Header (or the white-label header when active) and contains only the rendered template plus the Output additions; no workflow narration.
 - The cross-validation gate passed, or the exact refusal message was emitted and nothing else rendered.
-- The verdict line, the citation, the methodology footer with tool sequence and token cost, the persona disclaimer verbatim, `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present.
+- The verdict line, the citation, the methodology footer with tool sequence and credit cost, the persona disclaimer verbatim, `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present.
 - Expected spend stated (Gotchas).

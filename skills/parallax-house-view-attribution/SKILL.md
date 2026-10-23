@@ -1,9 +1,11 @@
 ---
 name: parallax-house-view-attribution
-description: "Ex-post house-view performance attribution: did the active (or an archived) view add value over its effective window? Reconstructs the tilted-vs-neutral portfolio decision from the reasoning-chain archive, fetches realized returns via Parallax MCP tools, and decomposes the active return into per-tilt-group contributions (Shapley) plus a selection residual. Read-only against the view; emits a report bundle and one `attribution` audit row. NOT for forward-looking drift monitoring (use /parallax-judge-house-view), not for internal-consistency checks (use /parallax-stress-house-view), not for single-period LP letters (use /parallax-cio-letter-prep), not for drawdown decomposition of an arbitrary portfolio (use /parallax-explain-portfolio)."
+description: "Retrospective hypothetical house-view weight diagnostic: compare a recorded recommendation with neutral weights over a stated historical price-return window, then decompose the model-implied difference. Does not reconstruct executed holdings or establish realized view value-add. Read-only against the view; emits a local report bundle and one attribution audit row. NOT for forward-looking drift monitoring (use /parallax-judge-house-view), internal-consistency checks (use /parallax-stress-house-view), or an LP performance letter (use /parallax-cio-letter-prep)."
 ---
 
 # House View Attribution
+
+**Method boundary:** this source-only skill produces a retrospective hypothetical diagnostic. Reasoning chains record recommendations, not executed trades. The current helper does not bind decision timestamps to subsequent holding intervals. Never describe its numbers as realized portfolio performance, causal view value-add, prospective evidence, or a backtest. Legacy helper/audit keys such as `active_return_bps` and `realized_contribution_bps` remain for compatibility; render them with hypothetical labels.
 
 ## When not to use
 
@@ -18,18 +20,20 @@ description: "Ex-post house-view performance attribution: did the active (or an 
 - READ-ONLY against the view: never writes view.yaml / prose.md / provenance.yaml. Output is one report bundle + one `action="attribution"` audit row (`applied=false` ALWAYS) via `audit_chain.append_entry`.
 - JIT-load `_parallax/house-view/loader.md` §6 for the `attribution` action's conditional fields (`attributed_view_id`, `attributed_version_id`, `attribution_window`, `attribution_summary`, `report_hash`).
 - Reconstruction source is the reasoning-chain archive (`~/.parallax/reasoning-chains/`), NOT audit.jsonl — §6.3 forbids holdings arrays on audit rows, so consume rows carry no weights. If consumer runs emitted no chains in the window, coverage is honestly zero: report "N of M chains usable; cannot attribute" rather than inventing a portfolio.
-- "Neutral" is pinned as *same holdings, all loader.md §3 weight multipliers at 1.00×* (score-proportional when per-holding base scores are recoverable, else equal-weight tagged `approximate`). It is NOT a market benchmark — do not substitute one; that would make the number unfalsifiable against the view's actual decision surface.
+- "Neutral" is pinned as *same recorded names, all loader.md §3 weight multipliers at 1.00×* (score-proportional when per-holding base scores are recoverable, else equal-weight tagged `approximate`). `exact` describes recoverable score weights only, not an exact causal counterfactual. This same-name comparison cannot measure the return of excluded or unselected names.
 - `export_price_series` is trailing-365-days only (no start/end anchor). Windows starting >365 days ago: refuse with "window start > 365 days ago — export_price_series cannot reach it; attribute a sub-window or archive prices externally."
-- A single-window ex-post diff is directional evidence, NOT statistical validation. Render the §5.1a heuristic_phase0 calibration disclosure verbatim in the report and never claim significance. Promotion to `empirical_phase1` is a signed-manifest operator action (the manifest cites this run's `report_hash` as `backtest_ref`) — this skill never touches `calibration_status`.
-- Factor and style tilts affect composite re-ranking / universe filtering, not weight multipliers — their effect lands in `selection_residual_bps` by construction. Say so in the report; do not fold the residual into a tilt group.
-- Every host interaction is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3). `attribution.py` is the math layer (`run-shell`); never re-derive its reconstruction, counterfactual, or Shapley logic inline. Expected Parallax spend: `_parallax/token-costs.md`.
+- Render the §5.1a heuristic_phase0 calibration disclosure verbatim. This retrospective diagnostic is not statistical validation or a qualifying prospective backtest; never use it to claim empirical calibration. This skill never touches `calibration_status`.
+- `selection_residual_bps` is the unexplained recorded-vs-model weight difference on the same names. It does not identify causal selection, factor, style or exclusion effects. Keep it separate from the model's tilt-group decomposition.
+- Supported scope is a long-only equity recommendation with finite, nonnegative weights summing to 1. ETF/fund, short, leveraged or unclassified holdings are unsupported here: stop and name the unsupported leg before price calls. Verify asset class from discovered metadata; do not assume every RIC is an equity.
+- Returns are each equity's local-currency price returns, without dividends or FX. Mixed-currency comparisons are hypothetical local-return diagnostics, never a base-currency portfolio return. Report every holding's price currency and the known/unknown currency basis; do not invent conversion. If the user needs base-currency or total-return attribution, explain the missing capability.
+- Every host interaction is a host primitive from `parallax-conventions.md` §14 (bindings §14.2, fail-open §14.3). `attribution.py` is the math layer (`run-shell`); never re-derive its reconstruction, counterfactual, or Shapley logic inline. Expected Parallax spend: **0.10H + 0.1P + 5A credits**, H = distinct holdings requiring info (0.05) and historical prices (0.05), P = optional peer snapshots actually needed for documented metadata/score checks, A = comparable optional portfolio cross-check calls. With H=10/P=0/A=0: **1 credit**; one cross-check adds 5. Reuse verified same-run holding metadata when it satisfies the required asset/currency/date checks; count each actual successful read once. No usable chain or unsupported input stops before price calls (`_parallax/token-costs.md`).
 - The reference portfolio is whatever the chains recorded — do not let the caller cherry-pick a subset of chains without recording the exclusion in the report ("chains_used" vs chains found).
 
 ## Usage
 
 ```
-/parallax-house-view-attribution                       # attribute the active view over its effective window
-/parallax-house-view-attribution --view <view_id>      # attribute an archived view (from .archive/)
+/parallax-house-view-attribution                       # hypothetical diagnostic for the active view
+/parallax-house-view-attribution --view <view_id>      # hypothetical diagnostic for an archived view
 /parallax-house-view-attribution --window 2026-04-01 2026-06-30   # explicit sub-window
 ```
 
@@ -53,26 +57,28 @@ Report-producer shape: the spine headings below; `attribution.py` and its tests 
 
 **Chains.** `attribution.load_window_chains(view_id, window_start, window_end)`. Cross-check against `audit.jsonl` consume rows (count of `applied=true` consumes in-window vs chains found) and report the coverage fraction. Zero usable chains → halt with `InsufficientProvenance` message; append the audit row with `attribution_summary.segments = 0` and a `notes` explanation.
 
-**Segments.** `attribution.segment_by_version(chains)` — a view superseded mid-window is attributed per-segment and summed. Note each segment's version_id in the report.
+**Record selection.** List the available chains with their decision timestamps, version IDs and coverage. Ask for one record when the intended recommendation is ambiguous; do not silently pick the latest or average records. Run one record against the explicitly stated historical window. State whether its timestamp is before, within or after that window. Even a pre-window timestamp does not prove execution. Multi-record/version time segmentation is not implemented: do not sum overlapping full-window results or use `segment_by_version` as an effective-interval constructor.
 
 ### Step 2 — Fetch (parallel batches)
 
-For every holding across segments: `export_price_series` accepts only `days` (a lookback from today, capped at 365 — no start/end anchor), so fetch the last N calendar days covering the full window with one call per holding, then slice each segment's sub-window from that series locally; mark a segment unavailable when its window falls outside the lookback. Compute per-holding period returns from the sliced closes — the server applies no dividend adjustment, so these are price returns, NOT total-return. Each holding's own return is understated by its dividend yield over the segment. Measured active return equals true (total-return) active return minus `Σ aᵢ·dᵢ` (active weight times dividend yield, summed over holdings): because the active weights `aᵢ` (tilted minus neutral, per the Gotchas "Neutral" definition) sum to zero, this error can be positive or negative — measured active return reads LOW (understates the true tilt's value-add) when the tilt favors higher-yield names, and reads HIGH (overstates it) when the tilt favors lower-yield names. State this limitation, with its sign ambiguity, alongside the numbers rather than presenting them as total-return attribution. `analyze_portfolio` on the chain weights is the server-side cross-check when available — flag if local math diverges materially, mirroring the cio-letter-prep canonical-server rule. Classify each holding via `get_peer_snapshot` / `get_company_info` into schema keys (`sector`, `region`, `themes`) for `holding_meta`; unclassifiable holdings get multiplier 1.0 (their effect lands in the residual — never guess a sector).
+Use `get_company_info` per distinct holding for asset-class/currency/name metadata not already verified in this invocation; keep source as-of dates and stop on unsupported asset classes. Use `get_peer_snapshot` only if needed for a documented metadata/score check; do not fetch current scores as substitutes for recorded recommendation-time base scores.
+
+For each verified equity: `export_price_series` accepts only trailing `days` (capped at 365), not historical start/end parameters. Fetch enough history to retain the last actual close on or before window start, plus closes through window end. Require a valid start anchor and end coverage; do not silently shorten the window. Record actual price dates and currency. Split adjustment is not established: a known split without verified adjusted history makes the leg unavailable. Compute local price returns only; absent dividend/FX contributions can move the relative comparison in either direction. `analyze_portfolio` is a cross-check only when its dates, recorded weights, asset coverage, currency and return basis match; otherwise mark it non-comparable rather than declaring a reconciliation failure. Classify sector/region/themes using dated metadata; disclose when only current classification is available. Unclassifiable dimensions get multiplier 1.0, never a guessed sector.
 
 ### Step 3 — Verify
 
 - Coverage: chains found vs `applied=true` consume rows in-window (Step 1); report the fraction.
-- Holdings with no price data are dropped with weights renormalized (§3b partial-result semantics) and counted in `holdings_dropped`.
-- Server cross-check: when `analyze_portfolio` returned, flag a material divergence from the local math (cio-letter-prep canonical-server rule).
+- Missing price legs may be dropped only in an explicitly labeled covered-subset diagnostic. Report each dropped name and its original recorded and neutral weight, plus the original covered-weight fraction of BOTH legs before renormalization. Never present the subset number as a full-book result. Zero covered weight in either leg: halt. Preserve these details in the report; do not add holdings arrays or new fields to the audit schema.
+- Server cross-check: compare only on the same verified basis; otherwise report why it is non-comparable.
 - Never guess a sector: an unclassifiable holding keeps multiplier 1.0 and lands in the residual.
 
 ### Step 4 — Compute
 
-Per segment: `attribution.attribute_segment(chain, returns, holding_meta)` (uses the latest chain per segment as the decision record; note in the report when a segment had multiple chains and which was used — or attribute each chain and average, stating the choice). Then `attribution.merge_segments(...)` for the run-level summary: tilted-vs-neutral active bps, per-tilt-group Shapley contributions, selection residual, counterfactual quality.
+Run `attribution.attribute_segment(selected_chain, returns, holding_meta)` once. The helper rejects nonfinite/boolean observations and unsupported weights. Use `attribution.merge_segments([result])` only for the existing single-record audit summary shape. Render a hypothetical recorded-minus-neutral price-return difference, model-implied Shapley decomposition and unexplained weight residual. No time stitching or multi-record return aggregation is supported by this workflow.
 
 ### Step 5 — Compose
 
-Assemble `report.md` (evidence-shaped: window + segments table, per-tilt contribution table with group, bps, direction vs the tilt's intent; selection residual with its explanation; coverage/drops; counterfactual quality; the §5.1a calibration disclosure verbatim) and `report.json` (the `attribution_summary` object plus per-segment detail). The verdict sentence in Output Format leads the visible reply.
+Assemble `report.md` and `report.json`: hypothetical-method label, requested/actual price window, selected run ID and decision timestamp, recorded recommendation (not executed holdings), currency and price-only basis, covered weights of both legs, model tilt decomposition, unexplained residual and neutral-weight reconstruction quality. Preserve the §5.1a disclosure. Add report-only method/coverage metadata alongside the unchanged audit-summary object; no new audit fields.
 
 ### Step 6 — Render (bundle + audit)
 
@@ -97,8 +103,8 @@ Compute `report_hash = sha256(report.md bytes)`. Append ONE audit row per loader
 
 ## Output Format
 
-Lead with the verdict sentence: "Over [window], the view's tilts contributed [±N] bps vs neutral ([quality] counterfactual; [K] segments, [C] holdings covered, [D] dropped)." Then the per-tilt table, the residual line, coverage notes, and the report-bundle path as a `file://` URL.
+Lead with: "Retrospective hypothetical diagnostic over [window]: recorded recommendation minus neutral [±N] bps on local price returns, without dividends or FX. This does not measure realized view value-add." Then give decision timestamp, actual price dates/currencies, original covered weights of both legs, the model tilt table, unexplained weight residual, reconstruction quality and report-bundle path.
 
 **AI-interaction disclosure:** render `parallax-conventions.md §9.2` immediately above the disclaimer (this is an operator-facing analysis report — same reasoning as the judge's §9.2 treatment; no config-artifact exemption).
 
-Use the view-aware disclaimer per loader.md §5 rule 5 (the analyzed view is named even when expired), with one added sentence: *"Attribution is a single-window ex-post estimate under a heuristic multiplier model; it is not statistical validation of the view or the tilt calibration."*
+Use the view-aware disclaimer per loader.md §5 rule 5 (the analyzed view is named even when expired), with: *"This retrospective hypothetical weight comparison does not reconstruct executed holdings, establish causal or realized view value-add, or validate the view or tilt calibration."*

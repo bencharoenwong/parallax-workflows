@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# evals/rollout/preflight_connector.sh — HARD GATE before any live batch spends tokens.
+# evals/rollout/preflight_connector.sh — HARD GATE before any live batch spends credits.
 #
 # Verifies that a fresh `claude -p` session (1) authenticates and (2) actually loads the
 # Parallax connector, by asking it to run one trivial check_api_health probe. Exits 0 only when both

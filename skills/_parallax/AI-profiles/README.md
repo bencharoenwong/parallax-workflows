@@ -30,7 +30,7 @@ A profile can ship ONLY if:
 | `ptj` | **SHIPPED** | Schwager, *Market Wizards* (1989) | Tri-channel confluence: technical setup + macro-regime alignment + volatility risk/reward |
 | `parallax-ai-consensus` | **SHIPPED** | Meta-skill | Runs all 5 profiles in parallel; surfaces super-majority signal + factor-level agreement |
 
-## v1 token cost summary
+## Credit cost summary
 
 One source: `_parallax/token-costs.md` → "AI investor profile workflows" — the only copy; do not add a second table here.
 

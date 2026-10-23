@@ -8,7 +8,7 @@
 #   ./evals/rollout/run_rollout.sh AAPL en baseline claude-opus-4-8
 #
 # Output (gitignored): evals/results/should-i-buy_<label>_<id>_<UTC>.stream.json
-# Cost: ~24 Parallax tokens per run (single stock; see token-costs.md).
+# Cost: task-dependent Parallax credits; see skills/_parallax/token-costs.md.
 
 set -euo pipefail
 
@@ -17,6 +17,8 @@ LANG_ARG="${2:-en}"
 LABEL="${3:-$(git rev-parse --short HEAD 2>/dev/null || echo nogit)}"
 TARGET_MODEL="${4:-}"
 TIMEOUT_SECONDS="${ROLLOUT_TIMEOUT_SECONDS:-900}"
+# The idle timer and HTTP request deadline are separate. Async tools need both.
+export MCP_TOOL_TIMEOUT="${MCP_TOOL_TIMEOUT:-300000}"
 export CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT="${CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT:-0}"
 
 command -v claude >/dev/null || { echo "claude CLI not on PATH" >&2; exit 1; }
@@ -48,7 +50,7 @@ OUT="$RESULTS/${PREFIX}_${LABEL}_${SAFE_ID}_${TS}.stream.json"
 PROMPT="$CMD ${ARGS}"
 [ "$LANG_ARG" != "en" ] && PROMPT="$PROMPT $LANG_ARG"
 
-echo "[rollout] ~24 Parallax tokens — $PROMPT (label=$LABEL)" >&2
+echo "[rollout] task-dependent Parallax credits (see skills/_parallax/token-costs.md) — $PROMPT (label=$LABEL)" >&2
 
 python3 - "$OUT" "$PROMPT" "$TARGET_MODEL" "$TIMEOUT_SECONDS" <<'PY'
 import os

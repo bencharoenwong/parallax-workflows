@@ -76,9 +76,9 @@ def compute_altman_z(inputs: AltmanInputs) -> tuple[float, str, Flag]:
     # market cap is: a non-finite denominator silently fabricates a term rather
     # than failing. total_liabilities=inf drives X4 to 0.0 and yields a
     # confident GREEN; total_assets=inf zeroes X1, X2, X3 and X5 alike.
-    if not math.isfinite(inputs.total_assets) or inputs.total_assets == 0:
+    if not math.isfinite(inputs.total_assets) or inputs.total_assets <= 0:
         raise ValueError(
-            f"total_assets must be non-zero and finite (got {inputs.total_assets!r})"
+            f"total_assets must be positive and finite (got {inputs.total_assets!r})"
         )
 
     x1 = inputs.working_capital / inputs.total_assets
@@ -116,9 +116,9 @@ def compute_altman_z(inputs: AltmanInputs) -> tuple[float, str, Flag]:
             f"cannot have a zero, negative or non-finite market cap)"
         )
 
-    if not math.isfinite(inputs.total_liabilities) or inputs.total_liabilities == 0:
+    if not math.isfinite(inputs.total_liabilities) or inputs.total_liabilities <= 0:
         raise ValueError(
-            "total_liabilities must be non-zero and finite for X4 computation "
+            "total_liabilities must be positive and finite for X4 computation "
             f"(got {inputs.total_liabilities!r})"
         )
 

@@ -25,7 +25,7 @@ _LOADER_PATH = (
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers",
-        "npx: may download/execute `@google/design.md`; excluded from the offline gate",
+        "npx: opt-in external DESIGN.md linter integration; excluded from the offline gate",
     )
 
 
@@ -40,3 +40,17 @@ def loader_module() -> ModuleType:
     sys.modules["parallax_white_label_loader"] = mod
     spec.loader.exec_module(mod)  # type: ignore[union-attr]
     return mod
+
+
+@pytest.fixture
+def design_md_cli(tmp_path, monkeypatch) -> Path:
+    """Configure a synthetic local executable without installing a dependency."""
+    import hashlib
+
+    command = tmp_path / "tools" / "design-md"
+    command.parent.mkdir()
+    command.write_text("#!/bin/sh\nexit 0\n")
+    command.chmod(0o755)
+    monkeypatch.setenv("PARALLAX_DESIGN_MD_CLI", str(command))
+    monkeypatch.setenv("PARALLAX_DESIGN_MD_SHA256", hashlib.sha256(command.read_bytes()).hexdigest())
+    return command

@@ -336,15 +336,20 @@ Symbols use Reuters Instrument Code (RIC) format. `/parallax-should-i-buy` auto-
 
 Full exchange table in `skills/_parallax/parallax-conventions.md`.
 
-## Token Costs
+## Parallax Credit Costs
 
-Each Parallax API call consumes tokens. Quick reference:
+Parallax bills credits separately from model tokens. Data reads now cost fractional
+credits; research and synthesis jobs retain their stated prices. Planning examples:
 
-| Workflow type | Typical tokens | Example |
+| Workflow | Credits | Assumptions |
 |---|---|---|
-| Quick stock check | 2–29 | `/parallax-should-i-buy` ~29 |
-| Deep analysis | 31–46 | `/parallax-due-diligence` ~31 |
-| Portfolio (10 holdings) | 36–105 | `/parallax-portfolio-checkup` ~46 |
+| `/parallax-should-i-buy` | 10.55–20.55 | Up to two tactical macro markets |
+| `/parallax-due-diligence` | 15.35 / 25.35 | Core analysis / confirmed full report |
+| `/parallax-portfolio-checkup` | 7.5–17.5 | Ten holdings, one-to-three tactical markets |
+
+Optional branches, retries and house-view drift checks add their own costs.
+Read the connected tool's full cost clause, including per-symbol/per-holding units
+and conditional macro overview reassembly. These estimates are not billing receipts.
 
 Full breakdown in `skills/_parallax/token-costs.md`.
 
@@ -352,9 +357,9 @@ Full breakdown in `skills/_parallax/token-costs.md`.
 
 ```
 skills/
-├── _parallax/                  # Shared conventions, token costs, AI profile framework
+├── _parallax/                  # Shared conventions, credit costs, AI profile framework
 │   ├── parallax-conventions.md # RIC resolution, parallel execution, fallbacks
-│   ├── token-costs.md          # Per-tool and per-workflow token estimates
+│   ├── token-costs.md          # Per-tool and per-workflow credit estimates
 │   ├── render_gate.py          # Shared deterministic pre-render gate (+ test_render_gate.py)
 │   ├── AI-profiles/            # Schema, output template, and profile specs for AI-* skills
 │   └── scripts/                # Build/gate tooling: spec-validate, section-ref-lint, tracked-file scan, run-gate-tests

@@ -744,6 +744,32 @@ def test_safe_source_reference_tolerates_missing_source(
     assert loader_module.safe_source_reference({"source": {"reference": None}}) == ""
 
 
+@pytest.mark.parametrize("reference,expected", [
+    ("https:user:TOPSECRET@assets.example.test", ""),
+    ("s3:TOPSECRET@bucket/key.pdf", ""),
+    ("https:/user:TOPSECRET@assets.example.test/deck.pdf", ""),
+    ("/private/client#1/deck.pdf", "deck.pdf"),
+    ("/private/client?1/deck.pdf", "deck.pdf"),
+    ("./client/deck#final.pdf", "deck#final.pdf"),
+    ("clients\\client?1\\deck#final.pdf", "deck#final.pdf"),
+    ("C:\\private\\client?1\\deck.pdf", "deck.pdf"),
+    ("C:/private/client#1/deck.pdf", "deck.pdf"),
+    ("deck.pdf?sig=TOPSECRET", "deck.pdf"),
+    ("deck.pdf?sig=prefix/TOPSECRET", "deck.pdf"),
+    ("deck.pdf#prefix/TOPSECRET", "deck.pdf"),
+    ("//user:TOPSECRET@assets.example.test", "//assets.example.test"),
+    ("x" * 256, "x" * 256),
+    ("x" * 257, ""),
+    ("/private/" + "x" * 257, ""),
+    ("/private/" + "x" * 300 + "/deck.pdf", "deck.pdf"),
+    ("a" * 128 + "; " + "b" * 128, ""),
+])
+def test_safe_source_reference_edge_cases(
+    loader_module: ModuleType, reference: str, expected: str,
+) -> None:
+    assert loader_module.safe_source_reference({"source": {"reference": reference}}) == expected
+
+
 def test_visual_branding_propagates_logo_missing_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

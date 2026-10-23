@@ -1,5 +1,5 @@
 """Unit tests for the explain-portfolio eval spec's NEW/ADAPTED extra checks
-(clean_start, return_quantified, divergence_verdict, regime_context_grounded).
+(clean_start, return_quantified, return_method_stated, divergence_verdict, regime_context_grounded).
 Red/green before any live spend. Mirrors the other per-skill test files.
 """
 
@@ -31,13 +31,13 @@ def _results(prose: str, calls=None) -> dict:
 GOLDEN = """# Explain Portfolio — Drawdown Attribution
 
 ## What Happened
-Your book is down 4.1% over the past month, close to your stated ~4%.
+Current-weight period illustration — not realized account performance: -4.1% over the past month. Historical trades and cash flows are unknown, so your stated ~4% cannot be reconciled as an account return.
 
 ## Performance Attribution
 | Holding | Return | Contribution | Driver |
 |---|---|---|---|
-| NVDA.O | -9% | -2.3% | Factor |
-| AAPL.O | -3% | -0.9% | Market |
+| NVDA.O | -9% | -2.3% | Factor hypothesis, not measured |
+| AAPL.O | -3% | -0.9% | Market hypothesis, not measured |
 
 ## Market & Regime Context
 The tape is risk-off; a momentum-to-value rotation is underway per the regime tag.
@@ -46,16 +46,16 @@ The tape is risk-off; a momentum-to-value rotation is underway per the regime ta
 Heavy momentum tilt hurt as momentum de-rated across the book.
 
 ## Top Detractors
-NVDA: down on factor rotation, not company news; scores steady.
+NVDA: price declined while weekly scores stayed steady. Factor rotation and company developments are competing explanations; post-score news is unresolved.
 
 ## The Key Question: Noise or Signal?
-Portfolio-level read: Transient. Prices fell but factor scores held — quality 7.1, defensive 5.0 unchanged.
+Observed divergence: prices fell while scores held. Weekly score lag and unresolved news prevent a causal or transience conclusion.
 | Holding | Price | Scores | Class |
 |---|---|---|---|
-| NVDA.O | Down | Stable | Transient |
+| NVDA.O | Down | Stable | Observed divergence |
 
 ## What To Do
-Fundamentals are intact — stay the course unless your risk tolerance changed.
+Check post-score company developments and account trade history before drawing a causal conclusion. No trading action follows from score stability alone.
 
 ## About This Report
 Default Parallax branding.
@@ -114,7 +114,7 @@ def test_clean_start_green_on_drawdown_attribution_title():
 
 def test_return_quantified_red_without_a_percentage():
     vague = GOLDEN.replace(
-        "Your book is down 4.1% over the past month, close to your stated ~4%.",
+        "Current-weight period illustration — not realized account performance: -4.1% over the past month. Historical trades and cash flows are unknown, so your stated ~4% cannot be reconciled as an account return.",
         "Your book is down over the past month, broadly in line with what you mentioned.",
     )
     assert _results(vague)["return_quantified"] is False
@@ -126,8 +126,8 @@ def test_return_quantified_red_without_a_percentage():
 def test_divergence_verdict_red_when_body_has_no_classification():
     # Header 'Noise or Signal?' must NOT self-satisfy — only the body counts.
     silent = GOLDEN.replace(
-        "Portfolio-level read: Transient. Prices fell but factor scores held — quality 7.1, defensive 5.0 unchanged.\n"
-        "| Holding | Price | Scores | Class |\n|---|---|---|---|\n| NVDA.O | Down | Stable | Transient |",
+        "Observed divergence: prices fell while scores held. Weekly score lag and unresolved news prevent a causal or transience conclusion.\n"
+        "| Holding | Price | Scores | Class |\n|---|---|---|---|\n| NVDA.O | Down | Stable | Observed divergence |",
         "We looked at price and score moves across the book.",
     )
     assert _results(silent)["divergence_verdict"] is False
@@ -150,3 +150,24 @@ def test_regime_red_when_tool_called_but_section_empty():
 
 def test_regime_vacuous_pass_when_no_regime_tool():
     assert _results(GOLDEN, calls=[])["regime_context_grounded"] is True
+
+
+def test_legacy_causal_verdict_does_not_satisfy_observation_check():
+    old = GOLDEN.replace("Observed divergence", "Transient")
+    assert _results(old)["divergence_verdict"] is False
+
+
+def test_method_disclaimer_outside_return_section_is_insufficient():
+    missing = GOLDEN.replace("Current-weight period illustration — not realized account performance: ", "")
+    missing += "\nCurrent-weight period illustration — not realized account performance.\n"
+    assert _results(missing)["return_method_stated"] is False
+
+
+def test_verified_account_method_can_be_labeled_separately():
+    account = GOLDEN.replace("Current-weight period illustration — not realized account performance", "Verified account return")
+    assert _results(account)["return_method_stated"] is True
+
+
+def test_heading_noise_signal_tokens_do_not_satisfy_observation_check():
+    prose = "## The Key Question: Noise or Signal?\nTransient, fundamental, ambiguous, noise, signal, mixed."
+    assert _results(prose)["divergence_verdict"] is False

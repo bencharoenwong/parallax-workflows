@@ -15,7 +15,7 @@ secondary_anchor:
 direction: top_down
 asset_class: multi_asset
 factor_tilts: {}
-factor_tilts_notes: "PTJ-style is not characterized by Parallax factor loadings. It is characterized by technical trend identification, macroeconomic regime positioning, and volatility-based asymmetric sizing."
+factor_tilts_notes: "PTJ-style is not characterized by Parallax factor loadings. It is characterized by technical trend identification, macroeconomic regime context, and an analyst-upside/Momentum proxy; no volatility-based sizing is implemented."
 leverage_overlay: null
 output_shape: inferred_exposure_verdict
 tool_sequence:
@@ -28,12 +28,8 @@ tool_sequence:
   - get_peer_snapshot
 required_factors_present: []
 thresholds:
-  # get_technical_analysis is LLM-authored prose (trend_direction is
-  # "bullish"/"bearish"/null; the separate enrichment layer's trend_regime is
-  # "trending_up"/"trending_down"/"rangebound_or_transition"/"mixed") -- there
-  # is no POSITIVE/STRONG_POSITIVE enum anywhere in the pipeline. Confirmed
-  # live, 2026-10-05.
-  channel_t_technical: "get_technical_analysis reads as a bullish trend (trend_direction: bullish, or trend_regime: trending_up) AND get_score_analysis Momentum sub-trend positive"
+  # Interpret technical prose qualitatively; no machine trend enum is required.
+  channel_t_technical: "get_technical_analysis reads as a bullish trend (qualitative prose, not a required machine enum) AND get_score_analysis Momentum sub-trend positive"
   channel_t_partial: "exactly one of: a bullish technical read OR momentum sub-trend positive (not both); OR get_technical_analysis unavailable and Momentum score >= 6 with trend upward"
   channel_m_macro: "macro_analyst tactical view compatible with home market or sector tailwind"
   channel_m_partial: "macro view is neutral, or mixed across exposure markets (some favor, others do not)"
@@ -55,43 +51,26 @@ anchor_test_notes: "Validation pending against historical regime shifts (2008, 2
 
 ## What the anchor documents
 
-Paul Tudor Jones's philosophy, documented at length in Jack Schwager's 1989 *Market Wizards*, centers on three inseparable principles: **(1) strict technical trend-following via the 200-day moving average**, **(2) macroeconomic regime overlay to validate that trends are substantive rather than noise**, and **(3) aggressive risk/reward discipline enforcing a 5:1 payoff ratio**. Jones explicitly refuses to average losing trades and operates within a volatility-responsive position-sizing framework. Michael Covel's 2004 *Trend Following* provides historical evidence that this composite approach—technical momentum filtered through macro regime clarity—persists as a rewarding anomaly across 150+ years of financial data, surviving multiple market paradigm shifts.
+Paul Tudor Jones's philosophy, documented at length in Jack Schwager's 1989 *Market Wizards*, centers on three inseparable principles: **(1) strict technical trend-following via the 200-day moving average**, **(2) macroeconomic regime overlay to validate that trends are substantive rather than noise**, and **(3) aggressive risk/reward discipline enforcing a 5:1 payoff ratio**. Jones explicitly refuses to average losing trades and operates within a volatility-responsive position-sizing framework. Covel's 2004 *Trend Following* supplies context on trend-following; neither citation validates this product's analyst-upside/Momentum proxy.
 
 ## What this profile does
 
-PTJ-style operates in single-ticker mode only: the user provides one equity ticker, and the profile evaluates it across three independent **conviction channels**:
+Single equity ticker only; three related channels share inputs and provide a descriptive rubric, not independent conviction signals.
 
-- **Channel T — Technical setup:** Does the stock read as a bullish trend (via `get_technical_analysis`'s prose, or the enrichment layer's `trending_up` read — there is no POSITIVE/STRONG_POSITIVE enum on this endpoint) AND upward momentum in the score-analysis 52-week trend? This channel captures whether the asset's price action aligns with PTJ's primary signal source.
-- **Channel M — Macro regime:** Is the stock's home market's macroeconomic backdrop (from `macro_analyst`) currently favorable to risk-on positioning or sector-aligned to a tactical theme? This channel validates that the technical move is backed by fundamental macro momentum, not merely noise.
-- **Channel V — Volatility and asymmetry:** Does the analyst price target show meaningful upside (>= 15% to target, from `get_stock_outlook(aspect=analyst_targets)` as `(mean - current) / current` — `aspect=risk_return` is the same `get_stock_outlook` tool with a different aspect value and returns trailing return/volatility, not an analyst target) AND does the stock exhibit established momentum (factor score >= 5) that supports the volatility regime? This channel enforces the 5:1 risk-reward principle and ensures capital is deployed only during asymmetric windows.
+- **Channel T — Technical:** bullish technical prose AND upward Momentum sub-trend → `FLAGGED`. Exactly one positive without a conflicting bearish/down predicate → `PARTIAL`; clearly negative evidence → `NOT_FLAGGED`. If original positive/partial and bearish/down predicates overlap, use `UNAVAILABLE — ambiguous profile rules`, never invent precedence. Technical timeout permits the existing Momentum ≥ 6 AND upward-trend proxy, capped at `PARTIAL`; missing/nonqualifying proxy leaves T `UNAVAILABLE`. Label the proxy explicitly.
+- **Channel M — Macro:** risk-on/home-market compatibility or sector tailwind → `FLAGGED`; neutral/mixed → `PARTIAL`; risk-off without favorable exposure → `NOT_FLAGGED`. Missing macro evidence is `UNAVAILABLE`.
+- **Channel V — Analyst-upside/Momentum proxy:** the legacy volatility label does not measure volatility. Require finite analyst mean/current and Momentum, with current > 0; upside = (mean − current) / current. Preserve original predicates: `FLAGGED` upside ≥ 15% AND Momentum ≥ 5; `PARTIAL` upside 8–15% OR Momentum ≥ 5 with upside < 8%; `NOT_FLAGGED` upside < 8% OR Momentum < 5. Overlaps, including the 15% boundary, yield `UNAVAILABLE — ambiguous profile rules`. Do not retune thresholds or select a winner. Missing/invalid evidence is `UNAVAILABLE`.
 
-**Verdict logic:**
-- All 3 channels flagged → `match` (high-conviction tri-channel alignment)
-- Exactly 2 channels flagged → `partial_match` (two of three signals present; tactical entry possible)
-- 0-1 channels flagged → `no_match` (insufficient confluence; capital preservation)
+**Verdict:** any required channel unavailable → `skipped`, retaining verified observations. With all three evaluable: 3 FLAGGED → `match`, 2 → `partial_match`, 0–1 → `no_match`. PARTIAL channels do not count as FLAGGED. Omit conflicting legacy letter grades.
 
 ## What this profile does NOT capture
 
-- **Trade execution and entry timing.** PTJ's actual trades involve intraday order-book reading, microstructure optimization, and precise entry/exit mechanics. Profile identifies regime + trend confluence; it does not time the exact market open or specify stops.
-- **Position sizing and leverage.** PTJ runs concentrated, sized positions scaled by volatility. Profile is a tri-channel signal, not a position-sizing recommendation. Capital allocation is the user's responsibility.
-- **Stop-loss and trailing logic.** The 200-day moving average acts as a structural capital-preservation gate in live trading. Profile identifies setups; actual stop placement and trade management require discretion.
-- **Multi-asset FX and commodity positioning.** PTJ trades currencies, rates, and commodities alongside equities. Parallax is equity-centric; this profile cites macro context but does not recommend FX or rate trades.
-- **Conviction timing and regime-break anticipation.** Soros-style "reflexivity loop" timing—predicting when a narrative-fundamentals divergence resolves—is beyond the scope. Profile surfaces current signals but cannot predict resolution dates.
+Analyst upside does not measure downside distribution, realized/implied volatility, 5:1 risk/reward or payoff asymmetry. T and V share Momentum evidence. Macro commentary does not validate a causal trend explanation or distinguish noise from signal. This rubric does not implement execution, entry timing, stops, leverage, position sizing or multi-asset FX/rates trading. Those concepts may be discussed by the cited sources; they are not verified properties of this implementation.
 
 ## How to interpret the output
 
-A `match` verdict means the stock currently exhibits three independently validated signals: established technical momentum, favorable macro regime context, and compelling risk/reward asymmetry. This is a PTJ-style high-conviction setup.
-
-A `partial_match` verdict means two of the three channels align. This is sufficient for tactical positioning but carries higher regime-break risk; a missing macro validation or weak technical confirmation leaves room for whipsaws.
-
-A `no_match` verdict is informative, not negative. It means the top-down lens currently finds insufficient confluence. Capital preservation is the priority; wait for regime shift or improved technical setup.
-
-The **setup quality** rating (Grade A-D) provides an intuitive summary: Grade A (all channels) represents maximum alignment; Grade B/C represent degrading confluence; Grade D suggests the framework sees no actionable signal.
+A `match` reports three evaluable channels flagged under the documented rubric, not high conviction, an entry instruction, capital protection or an assurance of investment quality. A `partial_match` reports exactly two flagged channels with the remaining evaluated status shown. A `no_match` reports 0–1 flagged channels only when all required channels are evaluable; unknown evidence yields `skipped`, not a negative conclusion.
 
 ## Anchor test plan
 
-Test the profile against known regime shifts where PTJ-style (technical+macro confluence) should have performed well or should have avoided false trades:
-- **2008 GFC:** Expect matches during equity breakdown phases (technical negative, macro risk-off); expect no_match on false "value traps" (fundamental quality but no technical confirmation of continued selling).
-- **2020 COVID:** Expect matches during March recovery (technical bounce, macro emergency policy, volatility opportunities); expect partial_matches during whipsaws (mixed signals).
-- **2022 rate hike cycle:** Expect matches in defensive sectors (technicals + macro tightening alignment); expect no_match on "momentum traps" (positive sentiment but deteriorating macro backdrop).
-- **SVB crisis March 2023:** Expect reduced conviction (partial_match or no_match) during crowded-trade unwind to test whether macro filter prevents catching knives.
+Validation remains pending. Historical regime labels alone cannot establish the rubric's behavior or profitability; tests require timestamped inputs and the unchanged numerical predicates. Include explicit witnesses for technical proxy PARTIAL, missing channels and overlapping V predicates, preserving ambiguous cases as unavailable rather than fitting rules to desired historical trades.

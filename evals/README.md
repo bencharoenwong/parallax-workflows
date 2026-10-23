@@ -58,11 +58,16 @@ within normal variance for a single run. Median over 3+ runs filters most of it.
 - **Server load is the dominant noise term.** A 30s run today might be 10s
   tomorrow on the same code. Always measure pre/post under the same
   conditions, and treat single-run differences <5s as noise.
-- **Async tools are not bounded.** `get_news_synthesis`, `get_assessment`, and
-  `get_financial_analysis` can take 30-90s independently of the skill's
+- **Async tools can dominate latency.** `get_news_synthesis`, `get_assessment`, and
+  `get_financial_analysis` can take several minutes independently of the skill's
   parallelization quality. Skills that wait on these will dominate the
   wall-clock regardless of per-holding batching. Look at the output for
   `"news": "pending"` markers to identify async-bound runs.
+  The rollout and concierge runners default `MCP_TOOL_TIMEOUT` to `300000`
+  milliseconds and disable the separate idle timer. Explicit operator values
+  take precedence. The overall rollout/journey timeout still limits the process
+  group. These settings allow longer requests; they do not guarantee completion
+  or recover a job ID lost when a request times out.
 - **Holdings size matters.** Per-holding parallelization wins scale linearly
   with N. A 5-holding portfolio shows ~1/2 the absolute saving of a 10-holding
   one. Always benchmark the size you actually care about.
@@ -106,7 +111,7 @@ evals/
 │   ├── transcript.py       # stream-json → final-prose extraction
 │   ├── infra_failure.py    # shared "harness/connector broke" predicate (one owner)
 │   ├── runrecord.py        # one measured run → RunRecord (timing + both cost meters)
-│   ├── token_model.py      # Parallax token price table (derived from skills/_parallax/token-costs.md)
+│   ├── token_model.py      # Parallax credit planning model (published prices; legacy tokens keys retained)
 │   └── test_*.py           # pure-function unit tests (the only thing CI runs)
 ├── skills/              # per-skill eval specs (one eval_config.py each)
 │   ├── should-i-buy/       # reference baseline spec
@@ -132,7 +137,7 @@ evals/
 - `AI-buffett` — a different output family (plain-line labels, citation/verdict
   contract); declares its own required sections and skill-specific checks.
 - `client-review` — adviser-facing directive recommendations; includes suitability assessment and actionable recommendation checks.
-- `explain-portfolio` — reactive drawdown attribution; includes return verification and divergence verdict (Transient/Fundamental) checks.
+- `explain-portfolio` — drawdown explanation; checks return-illustration method labels and observed price/score patterns. Driver hypotheses do not establish measured causal attribution or whether a loss is temporary.
 - `morning-brief` — fund-manager daily regime/health brief; includes 800-word limit and macro-snapshot grounding checks.
 - `portfolio-builder` — constructive thesis-to-allocation; includes holdings-allocated check (weights + scores).
 - `rebalance` — prioritized trades + quantified targets; includes trade-recs-quantified check.
@@ -159,9 +164,9 @@ evals/
   runner uses the selected skill's slash command, task file, output prefix, and
   Tier-2 criteria.
 - `baseline/score_existing.py --skill NAME evals/results/<prefix>_baseline_*.stream.json`
-  — offline Tier-1 scoring for already-captured rollouts; no live token spend.
+  — offline Tier-1 scoring for already-captured rollouts; no live model calls or Parallax credit spend.
 
-Example dry-runs before spending tokens:
+Example dry-runs before spending credits:
 
 ```bash
 ./evals/baseline/run_baseline.sh --skill rebalance --dry-run -n 3
@@ -174,36 +179,58 @@ Example dry-runs before spending tokens:
 Live rollouts (`run_rollout.sh`, `run_baseline.sh` without `--dry-run`) cost Parallax
 tokens and are run manually.
 
-### Derived Parallax cost meter
+### Parallax credit planning estimates
 
-`RunRecord` reports Parallax token cost as **derived** — counted tool calls ×
-published unit price from `skills/_parallax/token-costs.md` — never metered.
-Attribution is by MCP namespace, not by tool name, because a tool name cannot
-prove which server served it:
+`RunRecord.parallax_tokens` retains its legacy key but reports **Parallax
+credits**, using the published prices in `skills/_parallax/token-costs.md`.
+Decimal arithmetic preserves fractional sums internally; JSON fields are numbers.
+This is an **all-success planning estimate**, not metered account deductions.
+Input-only traces cannot establish HTTP failures, async-job success, identifier
+resolution or which response-dependent requests actually ran. Failed HTTP reads
+and failed async jobs cost no credits, so observed charges may be lower.
 
-- Namespace contains `parallax`, or is listed in `PARALLAX_MCP_ALIASES` → billed.
-- No MCP namespace at all → harness-local (Read, Bash, …) → ignored.
-- A known endpoint name under an unrecognised namespace → **ambiguous**: billed
-  to nobody, listed in `ambiguous_endpoints`, and the run is degraded so it
-  cannot pool into an aggregate that reads as a measured client bill.
+`parallax_credit_upper_bound` covers known conditional requests: macro overview
+is normally 5 and up to 50 on reassembly; an explicit component is 5. Performance
+history always attempts both its calendar and risk/return reads: all-success
+planning cost is 0.2 (0.1 each). A failed read can lower the observed bill; no
+input selector skips the risk/return request. These are planning scenarios, not lower/upper bounds on an actual
+invoice; retries, missing calls and unpriced inputs are outside the totals.
 
-An ambiguous namespace is resolvable in **both** directions, and picking the
-wrong one corrupts the meter:
+Per-symbol reads multiply by comma-separated symbols, financial `latest=true`
+doubles only income/balance-sheet/cash-flow requests, and portfolio lookups use
+the selected holding count (quick scores default 50, maximum 100; redundancy
+maximum 100). Surviving zero-weight holdings in a mixed portfolio count; trimmed rows do not.
+An all-zero portfolio is rejected before lookups and marked as invalid input.
+Malformed pricing inputs enter `unpriced_inputs` and `unpriced_endpoints` and
+degrade the record; they are excluded from both totals, never silently free.
+When any call is unknown, ambiguous or unpriced, the reported total is only a
+known subtotal and `parallax_credit_upper_bound` is JSON `null`: there is no full
+run ceiling. The estimator validates pricing dimensions rather than every
+endpoint's schema.
 
-- The namespace *is* the connector, mounted under an alias with no "parallax" in
-  it (white-label, in particular) → add it to `PARALLAX_MCP_ALIASES`. Its calls
-  are billed from then on.
-- The namespace is a **different** MCP server whose tool name happens to collide
-  with a Parallax endpoint (`submit_feedback`, say) → add it to
-  `PARALLAX_MCP_FOREIGN_NAMESPACES`. Its calls are ignored, not billed.
+The record carries its dated basis, assumptions and illustrative USD multiplier.
+The default `$0.20` per credit is a **legacy illustrative assumption**, unverified
+for any current plan; pass an operator-verified rate before quoting USD.
+Saved historical records are not automatically repriced. Explicitly parsing an
+old trace creates a new current-price planning estimate and must not overwrite
+or be represented as its original observed bill. Model context-token usage and
+Anthropic USD usage remain separate fields.
 
-Both take comma-separated namespace segments. Declaring a foreign server a
-Parallax alias to silence the degrade would start billing the client for another
-server's calls, so use the variable that matches what the namespace actually is.
+Attribution uses the MCP namespace because a tool name does not identify its
+server:
 
-An endpoint under a recognised Parallax namespace that the price table does not
-know still lands in `unknown_endpoints` and degrades the run — the stale-table
-signal.
+- Namespace contains `parallax`, or is listed in `PARALLAX_MCP_ALIASES`: included.
+- No MCP namespace: harness-local and ignored.
+- A known endpoint under an unrecognised namespace: excluded and listed in
+  `ambiguous_endpoints`; the record is degraded.
+- A namespace in `PARALLAX_MCP_FOREIGN_NAMESPACES`: ignored. Both environment
+  variables take comma-separated namespace segments.
+
+Declare an alias only for an actual Parallax connector. A genuinely foreign
+server needs the foreign-namespace declaration. An unknown tool under a Parallax
+namespace enters `unknown_endpoints` and degrades the record as a stale-table
+signal. All 35 currently published endpoints are priced, including the free
+search, documentation, health, polling and feedback tools.
 
 ## Adding a new skill eval
 
@@ -390,6 +417,7 @@ assistant text (`.txt`), stderr, and the ground truth (`.trace.jsonl`,
 | `PARALLAX_E2E_CONNECTOR` | optional | `account` (default) or `plugin`. See below. |
 | `PARALLAX_E2E_ALLOWED_TOOLS` | optional | Overrides the Parallax tool patterns the connector mode picks (comma-separated). `--setting-sources project` drops user-level permissions, so the Parallax tools must be listed here or by the mode. The base permissions below are always allowed on top. |
 | `PARALLAX_E2E_TIMEOUT` | optional | Per-journey limit in seconds, default `600`. A timeout is a FAIL. |
+| `MCP_TOOL_TIMEOUT` | optional | MCP request deadline in milliseconds, default `300000`. Independent of the idle timer and overall journey limit. |
 | `PARALLAX_E2E_RESULTS_DIR` | optional | Where results land, default `evals/results/`. |
 | `PARALLAX_E2E_JOURNEYS` | optional | Journey file, default `evals/tasks/concierge/journeys.jsonl` (for a one-off calibration journey). |
 
@@ -461,7 +489,7 @@ What each journey checks:
 | `J3_integrator` | "Building on Parallax" role gets the integration pointer (the README "Forking and Customizing" link), not a skill run (`check_api_health` only, free). |
 | `J4_rm_support_schedule` | RM-support role with holdings runs `/parallax-morning-brief` (bills Parallax credits) and, because scheduling is currently unverified on every host, the concierge must not offer it; forbids the scheduling and delivery phrasing such an offer would use. |
 | `J5_returning` | A plain "Hi Parallax" (no "new here") gets the standard opener, including the "New here?" pointer, and no role label. It makes no Parallax call (free), so it uses `connector-optional`. |
-| `J6_uncovered_ticker` | An unknown ticker is reported as not covered or not resolved, not replaced by an invented symbol. Bills Parallax credits: the should-i-buy route resolves with `get_company_info` (1 credit per attempt). |
+| `J6_uncovered_ticker` | An unknown ticker is reported as not covered or not resolved, not replaced by an invented symbol. Bills Parallax credits: the should-i-buy route resolves with `get_company_info` (0.05 credits per symbol for a successful read; failed HTTP reads are free). |
 | `J7_direct_task_bypass` | "I'm new here. Should I buy AAPL?" runs `parallax:parallax-should-i-buy` directly (`"skill"` field; bills Parallax credits) and shows no role label. |
 | `J8_role_asked_not_guessed` | A bare "I'm new here" (no payload) gets asked the role question with the role labels offered, not guessed, and no skill runs yet (`check_api_health` only, free). |
 | `J9_client_review_policy` | A wealth advisor's client review with an inline `policy=` runs `parallax:parallax-client-review`, writes the policy to a `.parallax-policy/` draft, runs `adaptation.py` on it as documented, gates the report with `render_gate.py` (both `require_helpers`), and renders SAA Drift and Policy Data Quality. Bills Parallax credits. Before the 2026-10-16 rewrite of client-review's draft and helper steps as literal commands (see CHANGELOG), two live runs on 2026-10-13 failed: the model wrote the policy through a heredoc, ran `adaptation.py` through a shell variable, and put the report draft in `.parallax-policy/`. A live run on 2026-10-16 passed. |
