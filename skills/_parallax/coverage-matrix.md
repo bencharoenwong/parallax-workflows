@@ -88,7 +88,7 @@ The lint enforces routing correctness (right tool for the asset class). It does 
 
 A request to add a `supported_asset_classes` field to each MCP tool's schema was considered and deferred 2026-05-03. Rationale:
 
-- `etf_profile` already serves as the asset-class oracle (see Known API quirks #2). Each probe costs 1 token; classification behavior is solved client-side.
+- `etf_profile` already serves as the asset-class oracle (see Known API quirks #2). Each successful probe costs 0.1 credits; classification behavior is solved client-side.
 - Coverage-lint enforces routing at build time, which is a stronger guarantee than runtime metadata (fails the merge, not the user).
 - An upstream metadata field would not address the deeper instruction-execution gap — a model can ignore schema metadata the same way it can ignore SKILL.md prose. The structural fix for that is a deterministic dispatch layer (client-side), not a server schema change.
 
