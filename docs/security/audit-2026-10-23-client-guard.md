@@ -1,26 +1,65 @@
 # Security Audit — parallax-workflows
 
 AUDIT_DATE: 2026-10-23
-AUDIT_COMMIT: 020dc957e457e766d1d6c4be8d42119b169ed72a
+AUDIT_COMMIT: 8a4d5cb843891ad700cf9c1de00860857d618133
 PROJECT_TYPE: MCP
 THREAT_MODEL: absent
 
 ## Scope Note
 
-This is the second same-day revision of this audit. The audit covers commit
-`020dc95` on branch `feat/client-guard` (built on base `3cce236`, the initial
-public release) plus the further changes committed together with this audit
-file on the same branch. `git diff 3cce236 --stat` shows 13 files changed at
-the time of this revision. A reviewer found that the first pass of this file
-overstated several claims about the pre-push layer and the client guard;
-those were corrected in the prior same-day revision. Since that revision,
-`install_git_hooks.sh` changed again (new-branch range selection, a
-missing-scanner block, and a no-guard warning). Every claim about the
-pre-push layer and the client guard below was re-derived a second time,
-directly from the current working-tree `install_git_hooks.sh` and
-`client_guard.py`, not carried over from either prior pass. Sections
-unrelated to the pre-push layer and guard were re-checked where practical
-and are marked where they were not independently re-run.
+This is a post-rebase revision of this audit. `feat/client-guard` was
+rebased onto `origin/main` at `bda5bf4` (the merge of
+`fix/port-2026-10-20-fixes` into the public release). AUDIT_COMMIT above is
+the branch's current tip, `8a4d5cb`, built on that base. The branch
+previously carried one commit, `020dc95`, built on the pre-rebase base
+`3cce236` ("Initial public release"); `020dc95` was superseded by a
+same-day squash with a follow-up fix commit and then by this rebase, and is
+a pre-rebase local commit, not part of this branch's current,
+pushed-reachable history. Narrative mentions of `020dc95` below describe
+what the first-pass commit's code did, before the same-day fix commit was
+squashed in — they are history, not an independently checkable diff
+target.
+
+The rebase had one content conflict, in `CHANGELOG.md`: both sides added a
+Security bullet at the same place, and both bullets were kept. Two other
+files this commit also changes picked up `bda5bf4`'s own edits through a
+clean automatic merge: `CONTRIBUTING.md` (that base's DESIGN.md-lint
+wording) and `test_install_git_hooks.py` (that base's change to
+`test_a_usable_temp_dir_does_not_block_a_clean_scan`, which now checks only
+the hook's own temp files in `TMPDIR`). Neither is a change made by this
+branch. Every other file this commit adds or touches is content-identical
+to the pre-rebase squashed commit.
+
+This audit covers commit `8a4d5cb` plus the staged changes committed
+alongside it: `.client-guard/allow-binary.txt` (new) and the removal of
+the superseded `docs/security/audit-2026-10-22.md`. Every "unchanged
+since" and "diff against" claim below is now measured against `bda5bf4`,
+not `3cce236`; each was re-run this pass (see Verification). `git diff
+bda5bf4 --cached --stat` shows 13 files changed at the time of this
+revision. Line counts are not recorded here because this file is part of
+the diff they measure.
+
+**Cross-reference.** `docs/security/audit-latest.md` points at this file,
+so this is where coverage of the client guard lives; coverage of the rest
+of the rebase's new base lives in `origin/main`'s own
+`docs/security/audit-2026-10-23.md` (`AUDIT_COMMIT: 4d6debf`), which
+reviewed `fix/port-2026-10-20-fixes` through that commit, headlined by
+replacing a package-manager network-fetch-and-execute call in an optional
+lint integration with an operator-configured, checksum-verified local
+executable, plus narrowing a report-footer sanitizer and a coverage
+date-contract helper, and hardening an eval shell script's argument
+handling. That audit found 0 Critical findings and one pre-existing,
+documented, deliberately-unpinned test-dependency item carried forward
+from an earlier audit, not introduced by that work; its summary line reads
+`PASS_COUNT=4 FAIL_COUNT=0 NA_COUNT=8 CRITICAL_FAILS=0`. This revision
+treats those findings as current and does not re-derive them. Two commits
+landed on `fix/port-2026-10-20-fixes` after that audit's `4d6debf` and
+before the `bda5bf4` merge: the commit that added that audit file itself,
+and a four-line Python 3.9 compatibility fix to two unrelated skills'
+arithmetic/string-formatting (f-string quoting, a manual correlation
+computation) made during gate review. Neither is analyzed by that audit or
+by this one; both are read-confirmed as mechanical, with no
+security-relevant content, but not independently audited.
 
 ## Security-relevant change (re-verified this pass)
 
@@ -145,11 +184,11 @@ current working-tree file:
   `test_a_push_to_origin_with_no_guard_anywhere_warns`.
 
 **`client_guard.py` changes this revision are narrower than the pre-push
-layer's.** The working-tree diff against `020dc95` touches only two
+layer's.** Relative to the first-pass code, the change is narrow: only two
 functions, `_scan_tags` and `run_ci` (the tag-to-blob/tree fix described
-above); key handling, registry parsing, and the reporting paths are outside
-that diff and were not re-read this pass beyond confirming they are
-unchanged. Everything else in the prior revisions' description of
+above), differ; key handling, registry parsing, and the reporting paths are
+unchanged from the first pass, not re-read this pass beyond confirming
+that. Everything else in the prior revisions' description of
 `client_guard.py` still holds on that basis: HMAC-SHA256-keyed registry
 holding only digests (no plaintext match forms); key consumed in-process
 only, never passed to a subprocess argument list, never logged; CI secret
@@ -160,33 +199,78 @@ gate; and every reporting path prints a rule id and location only, with a
 location that itself contains a registered form replaced by a
 withheld-location placeholder in CI mode.
 
+**New this revision — the staged `.client-guard/allow-binary.txt`.**
+Holds one signed entry, `<sha> <mac>` per `parse_allowlist`'s format, for a
+single JPEG blob, `d0c4f1f5...`: the `docProps/thumbnail.jpeg` member of
+`skills/parallax-cio-letter-prep/fixtures/golden_pack_2026-04.docx` as that
+file existed at the root commit (`3cce236`, docx blob `48b065aa...`). HEAD's
+version of that path is a different blob (`3a8a71b1...`) with no thumbnail,
+so it needs no entry. The root-commit docx has 17 members: 16 XML/`.rels`
+parts and the thumbnail. A reviewer checked the thumbnail at the pixel
+level: 395x512, every pixel white, no comment segment, EXIF holding only
+resolution, pixel-dimension and offset tags, and a generic RGB ICC profile
+whose only text is its description and a vendor copyright string. Without the entry, that member hits
+`unscanned/opaque-file` (`.jpeg` is an opaque suffix) on any scan that
+walks the root commit; a reviewer confirmed this by scanning with an empty
+allowlist. The entry names the thumbnail, not the whole docx: `scan_bytes`
+checks the allowlist before archive descent, so a container-level entry
+would also have stopped scanning the 16 XML parts. With the thumbnail-only
+entry those parts stay under the guard, and the allowlist applies again to
+each member at depth 1. The MAC binds the entry to that sha; a reviewer
+confirmed the same MAC is rejected for another sha. `python3
+skills/_parallax/scripts/client_guard.py scan-range HEAD` (every commit in
+the branch history, including the root) exits 0 clean. Where full-history scans happen: the
+pre-push layer scans a whole branch when the push does not target origin's
+fetch URL (for example through the no-mistakes gate) or the refresh failed;
+in CI, every new-ref push run (and a force push whose old tip is gone)
+walks the root until the guard is on main, because until then no trusted
+revision is exported to exclude it. CI reads the allowlist from the pushed
+tree, so the entry must be committed before the branch is pushed. CI merges
+the allowlist from the checked-out change with the trusted revision's copy,
+so a pull request can add entries, but each needs a MAC from the key, and
+fork pull requests get no key and fail closed.
+
 ## Verification performed this pass
 
 - `python3 -m pytest -q skills/_parallax/scripts/test_client_guard.py
   skills/_parallax/scripts/test_install_git_hooks.py` — **193 passed**,
   run fresh against the current working tree, at the time of this revision
   (up from 186 in the prior same-day revision; both test files grew, so the
-  increase is not attributed to any single behavior above).
-- `git ls-files | wc -l` — **699** tracked files, at the time of this
-  revision (the new audit file itself is tracked and counted; unchanged
-  from the prior revision).
-- `git diff 3cce236 --stat | tail -1`, measured after this file was written
-  — **13 files changed, 2854 insertions(+), 55 deletions(-)**, at the time
-  of this revision (up from 2590/27 in the prior revision, reflecting the
-  further hook-script and test changes described above; includes this audit
-  file itself, which is why the count is only stable once the file stops
-  growing).
+  increase is not attributed to any single behavior above). Re-run this
+  pass against the rebased working tree (base `bda5bf4`); the count is
+  unchanged, consistent with these files being content-identical to the
+  pre-rebase squashed commit except the one test-assertion change noted in
+  the Scope Note above.
+- `git ls-files | wc -l` — **707** tracked files, at the time of this
+  revision (the new audit file itself is tracked and counted). Up from the
+  prior revision's 699 because the rebase moved the base: `git ls-tree -r
+  bda5bf4 --name-only | wc -l` is 701 against the old base's 693 (+8 files
+  merged in from `fix/port-2026-10-20-fixes`, audited in
+  `audit-2026-10-23.md`, not by this delta); commit `8a4d5cb` itself adds 6
+  tracked files on top of either base (the registry, the CI workflow, the
+  two `docs/security` audit files, `client_guard.py`,
+  `test_client_guard.py`); the staged allow-binary addition and the staged
+  removal of the superseded audit file net to zero.
+- `git diff bda5bf4 --cached --stat | tail -1`, measured after this file
+  was written — **13 files changed**, at the time of this revision (line
+  counts omitted: this file is part of the diff). This
+  is measured against the rebase's new base (`bda5bf4`) and includes the
+  staged allow-binary addition and the staged removal of the superseded
+  audit file alongside commit `8a4d5cb`'s own changes, so it is not
+  comparable to the prior revision's 2854/55 figure (measured against
+  `3cce236`, before the rebase); it includes this audit file itself, which
+  is why the count is only stable once the file stops growing.
 - `python3 skills/_parallax/scripts/scan_commit_messages.py` — re-run this
   pass: 1 outgoing commit in `origin/main..HEAD` scanned, clean.
 - `python3 skills/_parallax/scripts/scan_tracked_terms.py` — re-run this pass:
-  699 tracked files scanned, no restricted terms (consistent with the
+  707 tracked files scanned, no restricted terms (consistent with the
   `git ls-files` count above).
 - Secret-prefix / `password=` / `api_key=` / `secret=` grep across the repo's
   Python/shell/workflow files (excluding test/env/CI-secret-reference noise)
   — re-run this pass: 0 hits attributable to this delta. Private-key-block
   grep — re-run this pass: 2 hits, both pre-existing synthetic test fixtures
   in `white-label` test files, outside this diff and unchanged by `git diff
-  3cce236 --stat`. `find . -name ".env*"` — re-run this pass: 0 hits.
+  bda5bf4 --stat`. `find . -name ".env*"` — re-run this pass: 0 hits.
 - `.client-guard/registry.json` schema check — re-run this pass (direct
   Python read): keys are
   `version`, `algorithm`, `normalization`, `prefix_length`, `verifier`,
@@ -196,26 +280,38 @@ withheld-location placeholder in CI mode.
   plaintext name or other sensitive value present. Same generic,
   deliberate-tradeoff disclosure (counts and normalized lengths only) noted in
   the prior passes.
-- Diffed `CLAUDE.md`, `CONTRIBUTING.md`, `CHANGELOG.md` against `020dc95`
-  directly: all three changes are prose describing the narrowed `origin/main`
+- Diffed `CLAUDE.md`, `CONTRIBUTING.md`, `CHANGELOG.md` against `bda5bf4`
+  directly (3 files changed, 46 insertions(+), 1 deletion(-)): all three
+  changes are prose describing the narrowed `origin/main`
   exclusion, the tag-content fix above, the no-local-base rule for new
   branches, the missing-scanner block, and the no-guard warning; no internal
   identifier, partner name, or sensitive value introduced in any of the
   three.
-- Re-ran this pass: `git diff 3cce236 --stat -- skills/_parallax/render_gate.py
+- Re-ran this pass: `git diff bda5bf4 --stat -- skills/_parallax/render_gate.py
   skills/_parallax/scripts/release.py` — empty (no changes); both files
   confirmed present on disk. The client-policy input readers cited in prior
   passes were not independently re-read this pass beyond confirming they are
-  absent from `git diff 3cce236 --stat`.
+  absent from `git diff bda5bf4 --stat`.
 - Dual static skill-scanner sweep (Cisco `skill-scanner` + NVIDIA
   `skillspector --no-llm`, via the gate wrapper) against the scripts directory
   containing the delta — **not re-run this pass**; carried from the prior
   same-day revision, whose result was **0 CRITICAL**, 6 HIGH, all in the
   same category and file set earlier passes already assessed as benign
-  static false positives on this repo's own tooling/test suites. The scripts
-  directory's tracked file set is unchanged since that sweep (confirmed by
-  the unchanged `git ls-files | wc -l` count above), so the result is carried
-  rather than re-derived.
+  static false positives on this repo's own tooling/test suites. The four
+  client-guard files swept (`client_guard.py`, `install_git_hooks.sh`, and
+  their two test files) are the only `skills/_parallax/scripts/` files
+  commit `8a4d5cb` itself touches, and are content-identical to the
+  pre-rebase squashed commit for three of the four; the fourth,
+  `test_install_git_hooks.py`, differs only by the base's own test-assertion
+  edit merged in by the rebase (Scope Note above) — not a new
+  scanner-relevant category.
+  `git ls-files | wc -l`'s move from 699 to 707 is the rebase's new base and
+  this file's own addition, not a change to this scanned file set: the
+  other `skills/_parallax/scripts/` files that changed between the two
+  bases (`build_bundle.py`, `run-gate-tests.sh`, `test_build_bundle.py`,
+  `test_concierge_contract.py`) came in with `bda5bf4` from
+  `fix/port-2026-10-20-fixes` and were swept by `audit-2026-10-23.md`, not
+  by this file.
 - This report was re-checked against all three available restriction sources
   after this revision's text was finalized: the packaging script's built-in
   canary-term list (import + direct regex, hit count only ever inspected — 0
@@ -375,7 +471,7 @@ footprint; not re-derived from scratch):**
    cwd-anchored.** `skills/_parallax/render_gate.py` still accepts any parent
    directory whose basename matches the draft-directory name without
    checking it sits under the session's resolved working directory.
-   Untouched by `git diff 3cce236`.
+   Untouched by `git diff bda5bf4`.
 5. **(Medium, still open) Draft file mode unmeasured against the real host
    tool.** Not measured this pass either.
 6. **(Low, still open) Unbounded read for `index.json`/`SHA256SUMS` in
@@ -406,15 +502,16 @@ Not run this pass — Default Mode only, scoped to the diff described above.
   test files as evidence for this delta, same scope as the prior passes.
 - Did not independently re-derive the four still-open carried-forward backlog
   items (4-7 above) beyond confirming the files they cite are present,
-  unchanged, and outside this diff's `git diff 3cce236 --stat` footprint.
+  unchanged, and outside this diff's `git diff bda5bf4 --stat` footprint.
 - Did not re-run `pip-audit` or a dependency scan — no `requirements.txt`
   changed in this diff.
 - Did not execute a live GitHub Actions run of `client-guard.yml`; it was
-  committed in `020dc95` and is unchanged since (absent from
-  `git status --short`), so the prior direct read of it was not re-examined
-  this pass.
+  first added in the pre-rebase first-pass commit, is unchanged since
+  (confirmed content-identical in commit `8a4d5cb` and absent from
+  `git status --short`), so the prior direct read of it was not
+  re-examined this pass.
 - Did not independently re-read the three client-policy `_read_input_file`
-  readers this pass; relied on their absence from `git diff 3cce236 --stat`
+  readers this pass; relied on their absence from `git diff bda5bf4 --stat`
   to confirm they are unchanged.
 - Did not re-verify sections of the prior passes unrelated to the pre-push
   layer and the client guard beyond the spot-checks recorded above (registry
