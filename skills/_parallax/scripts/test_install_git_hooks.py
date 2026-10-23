@@ -54,7 +54,22 @@ def clone(tmp_path: Path) -> Path:
     (work / "f.txt").write_text("x")
     _run(["git", "add", "-A"], work)
     _run(["git", "commit", "-qm", "init"], work)
+    # A reachable origin whose main holds the first commit, as in a real clone:
+    # the layer refreshes origin/main and excludes it only when that succeeds
+    # and the push targets origin.
+    origin = tmp_path / "origin.git"
+    _run(["git", "init", "-q", "--bare", str(origin)], tmp_path)
+    _run(["git", "remote", "add", "origin", str(origin)], work)
+    _run(["git", "push", "-q", "origin", "HEAD:refs/heads/main"], work,
+         env={"GIT_CONFIG_GLOBAL": "/dev/null"})
+    _run(["git", "fetch", "-q", "origin"], work)
     return work
+
+
+def _origin(hook: Path) -> str:
+    """The clone's origin URL: what git passes as $2 on a push to origin."""
+    work = Path(hook).parents[2]
+    return _run(["git", "remote", "get-url", "origin"], work).stdout.strip()
 
 
 def _install(work: Path, env=None):
@@ -75,7 +90,7 @@ def _hook_blocks(work: Path) -> bool:
     hook = work / ".git/hooks/pre-push"
     if not hook.exists():
         return False
-    r = subprocess.run(["bash", str(hook), "origin", "http://example.invalid"],
+    r = subprocess.run(["bash", str(hook), "origin", _origin(hook)],
                        cwd=work, capture_output=True, text=True, input="")
     return r.returncode != 0
 
@@ -257,7 +272,7 @@ def test_the_layer_scans_the_pushed_ref_not_the_checked_out_branch(clone: Path) 
     hook = clone / ".git/hooks/pre-push"
     ref_line = "refs/heads/feature aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa " \
                "refs/heads/feature bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"
-    r = subprocess.run(["bash", str(hook), "origin", "http://example.invalid"],
+    r = subprocess.run(["bash", str(hook), "origin", _origin(hook)],
                        cwd=clone, capture_output=True, text=True, input=ref_line)
     assert r.returncode != 0, "hook ignored the pushed ref and scanned the default range"
 
@@ -278,7 +293,7 @@ def test_a_deletion_push_does_not_scan_a_bogus_range(clone: Path) -> None:
     hook = clone / ".git/hooks/pre-push"
     ref_line = ("(delete) 0000000000000000000000000000000000000000 "
                 "refs/heads/gone bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
-    r = subprocess.run(["bash", str(hook), "origin", "http://example.invalid"],
+    r = subprocess.run(["bash", str(hook), "origin", _origin(hook)],
                        cwd=clone, capture_output=True, text=True, input=ref_line)
     assert r.returncode == 0, r.stderr
 
@@ -309,7 +324,7 @@ def test_stdin_is_passed_through_to_the_rest_of_the_hook(clone: Path) -> None:
             "refs/heads/f bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"
             "refs/heads/g cccccccccccccccccccccccccccccccccccccccc "
             "refs/heads/g dddddddddddddddddddddddddddddddddddddddd\n")
-    r = subprocess.run(["bash", str(hook), "origin", "http://example.invalid"],
+    r = subprocess.run(["bash", str(hook), "origin", _origin(hook)],
                        cwd=clone, capture_output=True, text=True, input=refs)
     assert r.returncode == 0, r.stderr
     assert out.read_text().strip() == "2", (
@@ -357,22 +372,22 @@ def test_a_deletion_only_push_scans_nothing_not_the_current_branch(clone: Path) 
     hook = clone / ".git/hooks/pre-push"
     ref_line = ("(delete) 0000000000000000000000000000000000000000 "
                 "refs/heads/gone bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
-    r = subprocess.run(["bash", str(hook), "origin", "http://example.invalid"],
+    r = subprocess.run(["bash", str(hook), "origin", _origin(hook)],
                        cwd=clone, capture_output=True, text=True, input=ref_line)
     assert r.returncode == 0, "fell back to the default range on a deletion-only push"
 
 
 def test_a_new_branch_scans_only_what_it_adds_over_the_default_branch(clone: Path) -> None:
-    """A bare sha is NOT a range: `git log <sha>` walks every ancestor, so the
-    first push of a new branch scanned the whole published history. On the real
-    repo that produced 60 hits against already-published commits and blocked the
-    push with nothing fixable locally."""
+    """A bare sha alone walks every ancestor, so the first push of a new branch
+    scanned the whole published history. On the real repo that produced 60 hits
+    against already-published commits and blocked the push with nothing
+    fixable locally. The tip plus `^refs/remotes/origin/main` scans only what
+    the branch adds."""
     scanned = clone / "range.txt"
     (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text(
         "import sys, pathlib\n"
-        f"pathlib.Path({str(scanned)!r}).write_text(sys.argv[1] if len(sys.argv) > 1 else 'DEFAULT')\n"
+        f"pathlib.Path({str(scanned)!r}).write_text(' '.join(sys.argv[1:]) or 'DEFAULT')\n"
         "sys.exit(0)\n")
-    _run(["git", "update-ref", "refs/remotes/origin/main", "HEAD"], clone)
     _run(["git", "checkout", "-q", "-b", "feature"], clone)
     (clone / "new.txt").write_text("x")
     _run(["git", "add", "-A"], clone)
@@ -384,11 +399,9 @@ def test_a_new_branch_scans_only_what_it_adds_over_the_default_branch(clone: Pat
     hook = clone / ".git/hooks/pre-push"
     ref_line = (f"refs/heads/feature {head} refs/heads/feature "
                 "0000000000000000000000000000000000000000\n")
-    subprocess.run(["bash", str(hook), "origin", "http://example.invalid"],
+    subprocess.run(["bash", str(hook), "origin", _origin(hook)],
                    cwd=clone, capture_output=True, text=True, input=ref_line)
-    rng = scanned.read_text()
-    assert ".." in rng, f"scanned a bare rev, not a range: {rng}"
-    assert rng.endswith(head), rng
+    assert scanned.read_text().split() == [head, "^refs/remotes/origin/main"]
 
 
 # --- fail closed when the scan cannot RUN, not only when it finds a hit ------
@@ -424,7 +437,7 @@ def _run_hook(work: Path, refs: str, env=None):
     hook = work / ".git/hooks/pre-push"
     assert hook.exists(), "no pre-push hook was installed"
     assert MARKER in hook.read_text(), "the layer is not in the installed hook"
-    return subprocess.run(["bash", str(hook), "origin", "http://example.invalid"],
+    return subprocess.run(["bash", str(hook), "origin", _origin(hook)],
                           cwd=work, capture_output=True, text=True, input=refs,
                           env={**os.environ, **(env or {})})
 
@@ -515,7 +528,7 @@ def test_the_layer_excludes_commits_reachable_from_origin_main(clone: Path) -> N
     selector is present, so a hook without it blocks and a hook with it passes."""
     (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text(
         "import sys\n"
-        "sys.exit(0 if '^origin/main' in sys.argv[1:] else 1)\n"
+        "sys.exit(0 if '^refs/remotes/origin/main' in sys.argv[1:] else 1)\n"
     )
     _run(["git", "update-ref", "refs/remotes/origin/main", "HEAD"], clone)
     _write_hook(clone, "#!/usr/bin/env bash\nexit 0\n")
@@ -524,7 +537,7 @@ def test_the_layer_excludes_commits_reachable_from_origin_main(clone: Path) -> N
     hook = clone / ".git/hooks/pre-push"
     ref_line = ("refs/heads/feature aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa "
                 "refs/heads/feature bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
-    r = subprocess.run(["bash", str(hook), "origin", "http://example.invalid"],
+    r = subprocess.run(["bash", str(hook), "origin", _origin(hook)],
                        cwd=clone, input=ref_line, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
 
@@ -537,6 +550,8 @@ def test_no_exclusion_selector_without_a_remote_tracking_ref(clone: Path) -> Non
         "import sys\n"
         "sys.exit(1 if any(a.startswith('^') for a in sys.argv[1:]) else 0)\n"
     )
+    (clone / "skills/_parallax/scripts/client_guard.py").write_text("import sys\nsys.exit(0)\n")
+    _run(["git", "remote", "remove", "origin"], clone)
     _write_hook(clone, "#!/usr/bin/env bash\nexit 0\n")
     assert _install(clone).returncode == 0
 
@@ -604,3 +619,328 @@ def test_a_backup_is_taken_even_when_the_environment_exports_backup(
     assert r.returncode == 0, r.stderr
     backups = list((clone / ".git/hooks").glob("pre-push.bak.*"))
     assert backups, "env-inherited BACKUP suppressed the backup"
+
+
+# --- client_guard.py rides in the same layer -----------------------------------
+
+
+def _with_guard(work: Path, guard_exit: int) -> Path:
+    """A passing message scanner plus a guard stub that records its argv.
+
+    The message scanner must PASS here: with the default failing stub the hook
+    blocks before anyone can tell whether the guard ran at all.
+    """
+    scripts = work / "skills/_parallax/scripts"
+    (scripts / "scan_commit_messages.py").write_text("import sys\nsys.exit(0)\n")
+    log = work / "guard-argv.txt"
+    (scripts / "client_guard.py").write_text(
+        "import sys\n"
+        f"open({str(log)!r}, 'a').write(' '.join(sys.argv[1:]) + '\\n')\n"
+        f"sys.exit({guard_exit})\n")
+    return log
+
+
+def test_a_guard_hit_blocks_the_push_even_when_messages_are_clean(clone: Path) -> None:
+    head = _run(["git", "rev-parse", "HEAD"], clone).stdout.strip()
+    _with_guard(clone, 1)
+    _install(clone)
+    r = _run_hook(clone, f"refs/heads/feature {head} refs/heads/feature {'0' * 40}\n")
+    assert r.returncode == 1
+    assert "client-name scan" in r.stderr
+
+
+def test_a_guard_that_cannot_run_blocks_the_push(clone: Path) -> None:
+    """Exit 2 is the guard's no-key / bad-registry code. It must block."""
+    head = _run(["git", "rev-parse", "HEAD"], clone).stdout.strip()
+    _with_guard(clone, 2)
+    _install(clone)
+    r = _run_hook(clone, f"refs/heads/feature {head} refs/heads/feature {'0' * 40}\n")
+    assert r.returncode == 2
+
+
+def test_the_guard_gets_the_pushed_range_and_the_remote_ref_name(clone: Path) -> None:
+    head = _run(["git", "rev-parse", "HEAD"], clone).stdout.strip()
+    log = _with_guard(clone, 0)
+    _install(clone)
+    r = _run_hook(clone, f"refs/heads/local {head} refs/heads/feat/remote-name {'0' * 40}\n")
+    assert r.returncode == 0, r.stderr
+    argv = log.read_text().split()
+    assert argv[:3] == ["scan-range", "--ref", "refs/heads/feat/remote-name"]
+    assert argv[3].endswith(head)  # the range this branch adds, ending at the pushed sha
+
+
+def test_the_guard_runs_when_the_message_scanner_is_gone(clone: Path) -> None:
+    """A branch that deletes scan_commit_messages.py must not switch off the guard."""
+    head = _run(["git", "rev-parse", "HEAD"], clone).stdout.strip()
+    _with_guard(clone, 1)
+    _install(clone)
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").unlink()
+    r = _run_hook(clone, f"refs/heads/feature {head} refs/heads/feature {'0' * 40}\n")
+    assert r.returncode == 1
+
+
+def test_a_registry_without_the_guard_blocks(clone: Path) -> None:
+    head = _run(["git", "rev-parse", "HEAD"], clone).stdout.strip()
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text("import sys\nsys.exit(0)\n")
+    (clone / ".client-guard").mkdir()
+    (clone / ".client-guard/registry.json").write_text("{}")
+    _install(clone)
+    r = _run_hook(clone, f"refs/heads/feature {head} refs/heads/feature {'0' * 40}\n")
+    assert r.returncode == 2
+    assert "client_guard.py is missing" in r.stderr
+
+
+def test_the_guard_does_not_base_a_new_branch_on_local_main(clone: Path) -> None:
+    """Without origin/main, a new branch is scanned whole: local main may hold
+    unpushed commits that the push publishes as ancestors."""
+    head = _run(["git", "rev-parse", "HEAD"], clone).stdout.strip()
+    log = _with_guard(clone, 0)
+    _install(clone)
+    r = _run_hook(clone, f"refs/heads/feature {head} refs/heads/feature {'0' * 40}\n")
+    assert r.returncode == 0, r.stderr
+    assert log.read_text().split()[3] == head
+
+
+def test_the_guard_on_origin_main_wins_over_the_checked_out_copy(clone: Path) -> None:
+    """An old checkout, or a branch that edits the guard, must not decide what is
+    scanned once origin/main carries the guard."""
+    scripts = clone / "skills/_parallax/scripts"
+    (scripts / "scan_commit_messages.py").write_text("import sys\nsys.exit(0)\n")
+    (scripts / "client_guard.py").write_text("import sys\nsys.exit(1)\n")  # trusted: blocks
+    (clone / ".client-guard").mkdir()
+    (clone / ".client-guard/registry.json").write_text("{}")
+    _run(["git", "add", "-A"], clone)
+    _run(["git", "commit", "-qm", "trusted guard"], clone)
+    _run(["git", "push", "-q", "origin", "HEAD:refs/heads/main"], clone,
+         env={"GIT_CONFIG_GLOBAL": "/dev/null"})
+    (scripts / "client_guard.py").write_text("import sys\nsys.exit(0)\n")  # local: weakened
+    _install(clone)
+    head = _run(["git", "rev-parse", "HEAD"], clone).stdout.strip()
+    r = _run_hook(clone, f"refs/heads/feature {head} refs/heads/feature {'0' * 40}\n")
+    assert r.returncode == 1
+
+
+def test_the_hook_refreshes_origin_main_before_scanning(clone: Path, tmp_path: Path) -> None:
+    """A guard that reached origin/main after this clone last fetched must still run."""
+    remote = tmp_path / "remote.git"
+    _run(["git", "init", "-q", "--bare", str(remote)], clone)
+    _run(["git", "remote", "set-url", "origin", str(remote)], clone)
+    scripts = clone / "skills/_parallax/scripts"
+    (scripts / "scan_commit_messages.py").write_text("import sys\nsys.exit(0)\n")
+    _run(["git", "add", "-A"], clone)
+    _run(["git", "commit", "-qm", "base"], clone)
+    r = _run(["git", "push", "-q", "origin", "HEAD:refs/heads/main"], clone,
+             env={"GIT_CONFIG_GLOBAL": "/dev/null"})
+    assert r.returncode == 0, r.stderr
+    other = tmp_path / "other"
+    _run(["git", "clone", "-q", "-b", "main", str(remote), str(other)], tmp_path)
+    _run(["git", "config", "user.email", "t@example.invalid"], other)
+    _run(["git", "config", "user.name", "t"], other)
+    (other / "skills/_parallax/scripts/client_guard.py").write_text("import sys\nsys.exit(1)\n")
+    (other / ".client-guard").mkdir()
+    (other / ".client-guard/registry.json").write_text("{}")
+    _run(["git", "add", "-A"], other)
+    _run(["git", "commit", "-qm", "guard"], other)
+    _run(["git", "push", "-q", "origin", "HEAD:refs/heads/main"], other,
+         env={"GIT_CONFIG_GLOBAL": "/dev/null"})
+    _install(clone)
+    head = _run(["git", "rev-parse", "HEAD"], clone).stdout.strip()
+    r = _run_hook(clone, f"refs/heads/feature {head} refs/heads/feature {'0' * 40}\n")
+    assert r.returncode == 1
+
+
+# --- the exclusion applies only when the push lands on origin ---------------
+
+# Blocks on ANY exclusion selector, whatever ref name it uses.
+_EXCLUDE_STUB = "import sys\nsys.exit(1 if any(a.startswith('^') for a in sys.argv[1:]) else 0)\n"
+_FEATURE_LINE = ("refs/heads/feature aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa "
+                 "refs/heads/feature bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
+
+
+def _hook_to(clone: Path, url: str):
+    return subprocess.run(["bash", str(clone / ".git/hooks/pre-push"), "other", url],
+                          cwd=clone, input=_FEATURE_LINE, capture_output=True, text=True)
+
+
+def _pass_guard(clone: Path) -> None:
+    (clone / "skills/_parallax/scripts/client_guard.py").write_text("import sys\nsys.exit(0)\n")
+
+
+def test_no_exclusion_when_pushing_somewhere_other_than_origin(clone: Path) -> None:
+    """A clone whose origin is a PRIVATE repo, pushing to the public one, must not
+    skip its origin/main: that history was never published at the target."""
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text(_EXCLUDE_STUB)
+    _pass_guard(clone)
+    assert _install(clone).returncode == 0
+    origin = _origin(clone / ".git/hooks/pre-push")
+    r = _hook_to(clone, "http://example.invalid/public.git")
+    assert r.returncode == 0, "excluded ^origin/main on a push to another remote"
+    # The origin URL spelled with a trailing slash: the exclusion is kept.
+    r = _hook_to(clone, origin + "/")
+    assert r.returncode == 1, "dropped the exclusion on a push to origin itself"
+
+
+def test_a_pushurl_elsewhere_is_not_origin(clone: Path) -> None:
+    """origin/main comes from the FETCH url. A pushurl naming another repo (a
+    triangular setup) must not inherit the exclusion."""
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text(_EXCLUDE_STUB)
+    _pass_guard(clone)
+    _run(["git", "remote", "set-url", "--push", "origin", "http://example.invalid/public.git"],
+         clone)
+    assert _install(clone).returncode == 0
+    r = _hook_to(clone, "http://example.invalid/public.git")
+    assert r.returncode == 0, "a push to the pushurl excluded the fetch url's origin/main"
+
+
+def test_a_gate_repo_never_gets_the_exclusion(clone: Path, tmp_path: Path) -> None:
+    """Where a no-mistakes gate forwards is in the gate's own state, not in its
+    bare repo's remote.origin.url, so even a matching value proves nothing."""
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text(_EXCLUDE_STUB)
+    _pass_guard(clone)
+    gate = tmp_path / "gate.git"
+    _run(["git", "init", "-q", "--bare", str(gate)], tmp_path)
+    _run(["git", "--git-dir", str(gate), "config", "remote.origin.url",
+          _origin(clone / ".git/hooks/pre-push")], tmp_path)
+    assert _install(clone).returncode == 0
+    assert _hook_to(clone, str(gate)).returncode == 0, "a gate push excluded origin/main"
+
+
+def test_a_local_ref_named_origin_main_does_not_pose_as_main(clone: Path) -> None:
+    """git resolves a short `origin/main` to a local branch of that name first."""
+    seen = clone / "args.txt"
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text(
+        "import sys, pathlib\n"
+        f"pathlib.Path({str(seen)!r}).write_text(' '.join(sys.argv[1:]))\n")
+    _pass_guard(clone)
+    _run(["git", "branch", "origin/main"], clone)
+    assert _install(clone).returncode == 0
+    _hook_to(clone, _origin(clone / ".git/hooks/pre-push"))
+    args = seen.read_text().split()
+    assert "^refs/remotes/origin/main" in args, args
+    assert "^origin/main" not in args, args
+
+
+def test_a_failed_fetch_warns_and_drops_the_exclusion(clone: Path, tmp_path: Path) -> None:
+    """A stale origin/main proves nothing about the target (a repo re-created at
+    the same URL, a repointed origin), so a failed refresh must warn even when a
+    guard exists, and must scan without the exclusion."""
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text(_EXCLUDE_STUB)
+    _pass_guard(clone)
+    missing = str(tmp_path / "missing.git")
+    _run(["git", "remote", "set-url", "origin", missing], clone)
+    assert _install(clone).returncode == 0
+    r = _hook_to(clone, missing)
+    assert r.returncode == 0, "excluded a stale origin/main after a failed fetch"
+    assert "could not refresh origin/main" in r.stderr
+
+
+def test_a_push_elsewhere_without_any_guard_blocks(clone: Path) -> None:
+    """An old clone of private history has no guard in its tree or its
+    origin/main, and may predate the scanner too; pushing it anywhere but origin
+    must not skip the name scan."""
+    assert _install(clone).returncode == 0
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").unlink()
+    r = _hook_to(clone, "http://example.invalid/public.git")
+    assert r.returncode == 2, r.stderr
+    assert "no client guard was found" in r.stderr
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text("import sys\nsys.exit(0)\n")
+    assert _hook_to(clone, _origin(clone / ".git/hooks/pre-push")).returncode == 0
+
+
+def test_unrelated_history_is_scanned_whole_not_from_a_local_base(clone: Path, tmp_path: Path) -> None:
+    """When the pushed branch shares no history with the fetched origin/main (a
+    re-created public repo), a base taken from local main left commits this push
+    publishes out of the message scan."""
+    seen = clone / "args.txt"
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text(
+        "import sys, pathlib\n"
+        f"pathlib.Path({str(seen)!r}).write_text(' '.join(sys.argv[1:]))\n")
+    _pass_guard(clone)
+    # origin/main becomes an unrelated root; local main keeps the old history.
+    other = tmp_path / "fresh"
+    _run(["git", "init", "-q", "-b", "main", str(other)], tmp_path)
+    _run(["git", "-c", "user.email=t@example.invalid", "-c", "user.name=t",
+          "commit", "-q", "--allow-empty", "-m", "new root"], other)
+    _run(["git", "push", "-q", "--force", _origin(clone / ".git/hooks/pre-push"),
+          "main:main"], other, env={"GIT_CONFIG_GLOBAL": "/dev/null"})
+    _run(["git", "checkout", "-q", "-b", "feature"], clone)
+    _run(["git", "commit", "-q", "--allow-empty", "-m", "on old history"], clone)
+    head = _run(["git", "rev-parse", "HEAD"], clone).stdout.strip()
+    assert _install(clone).returncode == 0
+    _run_hook(clone, f"refs/heads/feature {head} refs/heads/feature {'0' * 40}\n")
+    args = seen.read_text().split()
+    assert args[0] == head and not any(".." in a for a in args), args
+
+
+def test_a_branch_that_deletes_the_message_scanner_is_blocked(clone: Path) -> None:
+    """origin/main ships the scanner; a branch without it must not push unscanned."""
+    _pass_guard(clone)
+    assert _install(clone).returncode == 0
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").unlink()
+    r = _run_hook(clone, _FEATURE_LINE)
+    assert r.returncode == 2, r.stderr
+    assert "scan_commit_messages.py is missing" in r.stderr
+
+
+def test_a_push_to_origin_with_no_guard_anywhere_warns(clone: Path) -> None:
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text("import sys\nsys.exit(0)\n")
+    assert _install(clone).returncode == 0
+    r = _run_hook(clone, _FEATURE_LINE)
+    assert r.returncode == 0, r.stderr
+    assert "no client guard was found" in r.stderr
+
+
+def test_replace_refs_do_not_hide_what_the_push_sends(clone: Path) -> None:
+    """git push sends the original objects; with refs/replace/* in effect the
+    scanners read the substitute, so a "fixed" message passed and the original
+    was published."""
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text(
+        "import subprocess, sys\n"
+        "out = subprocess.run(['git', 'log', '--format=%B', *sys.argv[1:]],\n"
+        "                     capture_output=True, text=True).stdout\n"
+        "sys.exit(1 if 'FORBIDDEN' in out else 0)\n")
+    _pass_guard(clone)
+    _run(["git", "checkout", "-q", "-b", "feature"], clone)
+    _run(["git", "commit", "-q", "--allow-empty", "-m", "FORBIDDEN word"], clone)
+    bad = _run(["git", "rev-parse", "HEAD"], clone).stdout.strip()
+    tree = _run(["git", "rev-parse", "HEAD^{tree}"], clone).stdout.strip()
+    parent = _run(["git", "rev-parse", "HEAD~1"], clone).stdout.strip()
+    clean = subprocess.run(["git", "commit-tree", tree, "-p", parent, "-m", "clean"], cwd=clone,
+                           capture_output=True, text=True, check=True).stdout.strip()
+    _run(["git", "replace", bad, clean], clone)
+    assert _install(clone).returncode == 0
+    r = _run_hook(clone, f"refs/heads/feature {bad} refs/heads/feature {'0' * 40}\n")
+    assert r.returncode == 1, r.stderr
+
+
+def test_the_layer_puts_the_callers_replace_setting_back(clone: Path) -> None:
+    seen = clone / "env.txt"
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text("import sys\nsys.exit(0)\n")
+    _pass_guard(clone)
+    _write_hook(clone, "#!/usr/bin/env bash\n"
+                f"printf '%s' \"${{GIT_NO_REPLACE_OBJECTS-unset}}\" > {seen}\nexit 0\n")
+    assert _install(clone).returncode == 0
+    assert _run_hook(clone, _FEATURE_LINE).returncode == 0
+    assert seen.read_text() == "unset"
+
+
+def test_a_dot_git_suffix_does_not_make_another_repo_origin(clone: Path) -> None:
+    """origin is <dir>/origin.git; <dir>/origin is a different repository."""
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").write_text(_EXCLUDE_STUB)
+    _pass_guard(clone)
+    assert _install(clone).returncode == 0
+    origin = _origin(clone / ".git/hooks/pre-push")
+    assert origin.endswith(".git")
+    r = _hook_to(clone, origin[: -len(".git")])
+    assert r.returncode == 0, "a sibling path without .git got the origin/main exclusion"
+
+
+def test_a_missing_message_scanner_warns_when_origin_main_cannot_say(clone: Path) -> None:
+    _pass_guard(clone)
+    _run(["git", "remote", "remove", "origin"], clone)
+    _run(["git", "update-ref", "-d", "refs/remotes/origin/main"], clone)
+    assert _install(clone).returncode == 0
+    (clone / "skills/_parallax/scripts/scan_commit_messages.py").unlink()
+    r = _hook_to(clone, "http://example.invalid/x.git")
+    assert r.returncode == 0, r.stderr
+    assert "commit messages were NOT scanned" in r.stderr
