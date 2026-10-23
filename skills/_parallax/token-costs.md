@@ -15,7 +15,7 @@ Never infer account identity or billing correctness from a health response.
 
 ## Tool credit costs
 
-All 35 tools are priced. Each row states its billing unit; batching symbols
+All 36 tools are priced. Each row states its billing unit; batching symbols
 reduces request overhead, not the number of billable symbols.
 
 | Tool | Credits | Basis |
@@ -35,6 +35,7 @@ reduces request overhead, not the number of billable symbols.
 | `export_price_series` | 0.05 per symbol | Equity prices; adjustment basis must be verified separately |
 | `etf_daily_price` | 0.05 per symbol | ETF price history |
 | `get_telemetry` | 0.05 | One global request, never one per market |
+| `explore_telemetry` | 0.05–0.2 | 0.05 per call; 0.1 for a stock lookup; a basket lookup adds 0.05 per basket opened; at most 0.2 |
 | `get_financials` | 0.05–0.1 per symbol | Per statement; `latest=true` doubles income, balance_sheet and cash_flow only |
 | `get_stock_outlook` | 0.05–0.1 | Targets/recommendations 0.05 per call; risk_return 0.1 per call; dividends 0.05 per symbol |
 | `get_peer_snapshot` | 0.1 | Per call |

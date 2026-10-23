@@ -61,15 +61,23 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 | `get_financials` | `symbol`, `statement="balance_sheet"` | Balance sheet (default 4 periods) |
 | `get_financials` | `symbol`, `statement="cash_flow"` | Cash flow (default 4 periods) |
 | `get_financials` | `symbol`, `statement="ratios"` | Key ratios (default 4 periods) |
-| `get_technical_analysis` | `symbol` | Trend, momentum, support/resistance |
 | `get_score_analysis` | `symbol` | 52-week factor score trajectory (server default) |
+
+**Batch A2** — paid async calls. `call-tool` these together only after the Step 3 identity cross-check passes, never in the same turn as Batch A (conventions §3):
+
+| Tool | Parameters | Notes |
+|---|---|---|
+| `get_technical_analysis` | `symbol` | Trend, momentum, support/resistance |
 | `get_news_synthesis` | `symbol` | Async — never blocks output |
 | `get_financial_analysis` | `symbol` | Async ~2–5 min — Palepu framework |
 
-**Batch B** — after Batch A: `ask-operator` to confirm the paid call, then `call-tool` `get_stock_report` (async ~1–2 min) for the full research report with PDF/HTML links. If `ask-operator` is unavailable on this host, apply conventions §14.3: render the question, stop, and treat the report section as not requested.
+If the Step 3 cross-check diverges, do not call Batch A2; render the technical, news and Palepu sections unavailable with the reason "identity cross-check diverged". A paid async job bills on success, so it never runs before the check.
+
+**Batch B** — after the Step 3 cross-check passes (skip it on divergence): `ask-operator` to confirm the paid call, then `call-tool` `get_stock_report` (async ~1–2 min) for the full research report with PDF/HTML links. If `ask-operator` is unavailable on this host, apply conventions §14.3: render the question, stop, and treat the report section as not requested.
 
 ### Step 3 — Verify
 
+- Run this check as soon as Batch A and Step 1 return, then start Batch A2.
 - Identity cross-check per conventions §2: `get_score_analysis` `data[0].symbol` against the requested RIC; company name from `get_company_info` is the oracle for every narrative section.
 - Failed or empty calls: §0.1 retry classification, then §4 display-section rule. No gate is rendered, so §4.0 does not apply.
 

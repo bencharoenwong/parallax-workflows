@@ -21,7 +21,7 @@ description: "Deep dive on a single position: company profile, peer comparison, 
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §2 identity cross-check, §3 parallel execution, §4 fallbacks, §14 host primitives, §15 translation.
 - JIT-load `_parallax/house-view/loader.md` FIRST; if an active view is present follow §2 (validation), §7.1/§7.2/§7.3 (single-stock conflict surfacing), §6 (audit). Do NOT apply tilts. The `get_assessment` prompt carries the active view (basis_statement + relevant tilts) so the assessment addresses alignment in prose — that is this skill's primary alignment surface; the §7 inline flags are additive. Route every §7 token through `render_view_conflict()` per `_parallax/house-view/render_helpers.md`.
 - Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
-- `get_assessment` is async (30–90 s) and LLM-backed; its section carries its own contextual AI disclosure in addition to `parallax-conventions.md §9.2`.
+- `get_assessment` is async (~3 min; the server polls up to 300 s) and LLM-backed; its section carries its own contextual AI disclosure in addition to `parallax-conventions.md §9.2`.
 - Technical Stance always renders as a section: on `get_technical_analysis` failure use a verified Momentum factor proxy with the documented prefix; absent verified history, state the stance is unavailable without inventing a direction.
 - A `lang=` value other than `en` makes Step 7 mandatory (conventions §15).
 
@@ -66,17 +66,25 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 | `get_financials` | `symbol`, `statement="summary"` | Revenue/income narrative |
 | `get_financials` | `symbol`, `statement="ratios"`, `periods` as int 1 (latest period only, non-default — conventions §0.2) | Key ratios: margins, ROE, P/E |
 | `get_score_analysis` | `symbol` | 52-week factor trend (server default) |
-| `get_technical_analysis` | `symbol` | Trend, momentum, support/resistance |
 | `get_stock_outlook` | `symbol`, `aspect="analyst_targets"` | Price targets |
 | `get_stock_outlook` | `symbol`, `aspect="recommendations"` | Buy/hold/sell |
 | `get_stock_outlook` | `symbol`, `aspect="risk_return"` | Risk/return vs peers |
 | `get_stock_outlook` | `symbol`, `aspect="dividends"`, `limit` as int 8 (non-default; default is 20 — conventions §0.2) | Dividend history |
+
+**Batch A2** — paid async calls. `call-tool` these together only after the Step 3 identity cross-check passes, never in the same turn as Batch A (conventions §3):
+
+| Tool | Parameters | Notes |
+|---|---|---|
+| `get_technical_analysis` | `symbol` | Trend, momentum, support/resistance |
 | `get_news_synthesis` | `symbol` | Async — never blocks output (§5) |
+
+If the Step 3 cross-check diverges, do not call Batch A2; render the Technical Stance and news sections unavailable with the reason "identity cross-check diverged". A paid async job bills on success, so it never runs before the check.
 
 **Batch B** — after Step 1: `list_macro_countries`; relevant markets per conventions §6 (home + revenue geographies + commodity/supply chain), cap at 3; `macro_analyst` with `component="tactical"` per covered market.
 
 ### Step 3 — Verify
 
+- Run this check as soon as Batch A and Step 1 return, then start Batch A2.
 - Identity cross-check per conventions §2 (`get_peer_snapshot.target_company` vs `get_company_info.data.name` after normalization; `get_score_analysis` `data[0].symbol` vs the requested RIC). On divergence, warn and treat `get_company_info` as truth.
 - Outlook coverage per conventions §4; failed or empty calls per §0.1 retry classification then §4. No gate is rendered, so §4.0 does not apply.
 
@@ -84,7 +92,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 
 No deterministic helper. The computed conditions are the house-view flags (§7.3 tension: `total_score ≥ 7` AND sector tilt ≤ −1; §7.2 peer-suggest conflict) evaluated exactly as `loader.md` states.
 
-Then `call-tool` `get_assessment` (async, after Batches A and B) with a prompt carrying **all** findings — factor scores, score trends, key ratios, technical stance, macro context, dividend profile, risk/return vs peers, the user's question if any — AND the active view when present (basis_statement + tilts on this stock's sector/region/themes).
+Then `call-tool` `get_assessment` (async, after Batches A, A2 and B; skip it and render the assessment unavailable when the Step 3 cross-check diverged) with a prompt carrying **all** findings — factor scores, score trends, key ratios, technical stance, macro context, dividend profile, risk/return vs peers, the user's question if any — AND the active view when present (basis_statement + tilts on this stock's sector/region/themes).
 
 **When a view is active a usable completed assessment MUST end with three bullet lists**, not a free-form alignment paragraph: (1) tilts that support this position, one line each; (2) tilts that contradict it, one line each; (3) active tilts NOT incorporated, with the reason in one clause each. This decomposition is mandatory (MAS FEAT P13/14, SR 11-7 traceability — the assessor's influence on a CIO decision must be auditable from the prose). A completed response without the lists is unavailable for this section: state `Assessment unavailable — required house-view decomposition missing`. Do not invent the lists or launch another assessment job. Timeout/pending handling is separate, per Failure modes.
 

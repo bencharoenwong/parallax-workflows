@@ -37,9 +37,9 @@ PER_HOLDING_COST: dict[str, float] = {
 }
 CONDITIONAL_COST: dict[str, tuple[float, float]] = {
     "get_financials": (0.05, 0.1), "get_stock_outlook": (0.05, 0.1),
-    "macro_analyst": (5, 50),
+    "macro_analyst": (5, 50), "explore_telemetry": (0.05, 0.2),
 }
-# Compatibility export: all 35 endpoints now have published prices. Invalid
+# Compatibility export: all 36 endpoints now have published prices. Invalid
 # multiplicative inputs still enter an estimate's unpriced_endpoints.
 KNOWN_UNPRICED: frozenset[str] = frozenset()
 KNOWN_ENDPOINTS = frozenset(FLAT_COST) | frozenset(PER_SYMBOL_COST) | frozenset(PER_HOLDING_COST) | frozenset(CONDITIONAL_COST)

@@ -25,7 +25,7 @@ def call(name, **args):
     return ToolCall("mcp__parallax__" + name, args)
 
 
-def test_all_35_published_tools_and_decimal_prices_match():
+def test_all_36_published_tools_and_decimal_prices_match():
     """Read the single Tool | Credits | Basis table in both directions."""
     rows = {}
     for line in TOKEN_COSTS.read_text().splitlines():
@@ -36,7 +36,7 @@ def test_all_35_published_tools_and_decimal_prices_match():
         if match:
             assert match[1] not in rows, f"duplicate tool price: {match[1]}"
             rows[match[1]] = cells
-    assert len(KNOWN_ENDPOINTS) == 35
+    assert len(KNOWN_ENDPOINTS) == 36
     assert sum(value == 0 for value in FLAT_COST.values()) == 11
     assert set(rows) == KNOWN_ENDPOINTS
     for name, price in {**FLAT_COST, **PER_SYMBOL_COST, **PER_HOLDING_COST}.items():

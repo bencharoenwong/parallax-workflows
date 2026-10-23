@@ -12,7 +12,7 @@ JIT-load when you need to know what's inside an `analyze_portfolio` response fie
 
 ## `analyze_portfolio` top-level keys
 
-The keys returned by the 2026-05-07 probe call. This records what that one call returned; it is not a list of keys every response carries. Which blocks come back is decided by `fields=`, per the passthrough note below.
+The keys returned by the 2026-05-07 probe call. This records what that one call returned; it is not a list of keys every response carries. Which blocks come back is decided by `fields=`, per the enum note below.
 
 ```
 [
@@ -29,15 +29,15 @@ The keys returned by the 2026-05-07 probe call. This records what that one call 
 ]
 ```
 
-(Further block names that call did not return, requestable via `fields=`: `portfolio_input`, `portfolio_summary`, `turnover_analysis`, `performance_metrics`, `transactions`, `market_allocation`, `sector_allocation`, `currency_allocation`, `sector_contribution`, `market_contribution`, `time_period_returns`, `monthly_returns`, `annual_returns`, `benchmark_prices`, `daily_summary`.)
+(Further block names that call did not return, requestable via `fields=`: `portfolio_input`, `portfolio_summary`, `performance_metrics`, `transactions`, `market_allocation`, `sector_allocation`, `currency_allocation`, `sector_contribution`, `market_contribution`, `time_period_returns`, `monthly_returns`, `annual_returns`, `daily_summary`. For benchmark values use `daily_summary`; its rows carry `benchmark_value_base`.)
 
-> **`fields=` is a direct passthrough, not a validated enum.** The array is handed to the API as-is. An unknown field name is not rejected: the block is simply absent and the call still reports `success: true`.
+> **`fields=` is a validated enum.** The MCP input schema lists the accepted names. An unknown name fails the call with a schema error before any job starts, so it never bills. Take names from the live schema's enum only.
 >
 > **What you may actually pass in `fields=`:** the extras enumerated on the line above, plus the analytics blocks in the top-level key list (`company_contribution`, `concentration_metrics`, `drawdown_analysis`, `latest_holdings`, `portfolio_scores`, `rolling_metrics`). **`company_info`, `data_quality` and `portfolio_parameters` are ordinary requestable names too** — confirmed against live responses, where a call naming all three returned all three with `_meta.invalid_fields` null, and a call omitting them returned none of them. They are not automatic, so a workflow needing `data_quality.missing_rics` must name it explicitly. `_meta` is the one key you never request: it appears only when `fields=` is supplied, and is absent when `fields=` is omitted. Never infer a name from a section heading, or from what you want the block to be called. Ground truth for any single call is its own `_meta.fields_requested` / `fields_returned` pair.
 >
-> **The response tells you which names were wrong — read it.** Every response to a call that supplies `fields=` carries `result._meta` with three keys: `fields_requested`, `fields_returned`, and `invalid_fields`. A bad name appears in `invalid_fields`, so the failure is only silent if you ignore `_meta`. `invalid_fields` may be `null` rather than `[]` when nothing was rejected. Verified live 2026-08-11: requesting `["portfolio_summary","factor_exposures","performance","risk","concentration"]` returned `success: true`, `fields_returned: ["portfolio_summary"]`, and `invalid_fields: ["factor_exposures","performance","risk","concentration"]`.
+> **`result._meta` records what was requested and returned.** Every response to a call that supplies `fields=` carries `result._meta` with three keys: `fields_requested`, `fields_returned`, and `invalid_fields`. Through the MCP, `invalid_fields` is normally `null`, because the enum check rejects unknown names before the request reaches the API. A non-empty value means the deployed worker rejected a name the schema accepts. Compare `fields_requested` with `fields_returned` to see whether a requested block came back.
 >
-> **Runtime rule:** the `invalid_fields` check is owned by `parallax-conventions.md` §0.3 "Validation before reporting done", item 2 — follow it there.
+> **Runtime rule:** the field-request check is owned by `parallax-conventions.md` §0.3 "Validation before reporting done", item 3 — follow it there.
 
 ---
 
