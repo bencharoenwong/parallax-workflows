@@ -229,6 +229,12 @@ def _price(name: str, args: dict) -> tuple[Decimal, Decimal]:
         if not isinstance(component, str) or component not in {"macro_indicators", "tactical", "fixed_income", "currency", "sectors", "sector_positioning", "liquidity", "news", "factors"}:
             raise ValueError("unsupported macro component")
         return pair(5)
+    if name == "explore_telemetry":
+        if args.get("stock") is not None:
+            return pair("0.1")
+        if args.get("basket") is not None:
+            return pair("0.05", "0.2")
+        return pair("0.05")
     raise ValueError("no published price")
 
 
