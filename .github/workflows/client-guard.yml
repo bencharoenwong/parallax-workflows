@@ -13,9 +13,11 @@ permissions:
 # It is a required status check on main, so a pull request that trips it cannot
 # merge.
 #
-# The guard script and its registry are taken from a TRUSTED commit (the PR base,
-# or main), not from the change under test, so a PR cannot weaken the check that
-# judges it. A PR can still edit this workflow file; review changes to it.
+# The guard script is taken from a TRUSTED commit (the PR base, or main), not
+# from the change under test, so a PR cannot weaken the check that judges it.
+# The registry and allowlist from the change are merged with the trusted copies:
+# a PR can add registered names, and can add allowlist entries only with a MAC
+# from the key. A PR can still edit this workflow file; review changes to it.
 #
 # The key comes from the CLIENT_GUARD_KEY secret. Pull requests from forks get no
 # secrets, so this job fails closed for them.
