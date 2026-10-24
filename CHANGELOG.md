@@ -249,7 +249,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 ## 2026-09-05
 
 ### Fixed
-- **`main` was red: `parallax-rebalance/SKILL.md` had grown to 282 lines across PR #111 and the eval's `orchestrator_length` check (`orchestrator_max_lines=250`) failed on the merge commit.** The Batch C2 policy-reconciliation block (~95 lines) now lives in `skills/parallax-rebalance/references/policy-reconciliation.md`, JIT-loaded only when `policy=` is supplied; the orchestrator keeps a one-line stub with the gate-shaped routing summary and is 191 lines. The three in-file pointers into the moved block (coefficient rule, step-1 exclusion, `position_cap` rule) now name the reference file explicitly. Plugin bundle regenerated.
+- **`main` was red: `parallax-rebalance/SKILL.md` had grown to 282 lines and the eval's `orchestrator_length` check (`orchestrator_max_lines=250`) failed on the merge commit.** The Batch C2 policy-reconciliation block (~95 lines) now lives in `skills/parallax-rebalance/references/policy-reconciliation.md`, JIT-loaded only when `policy=` is supplied; the orchestrator keeps a one-line stub with the gate-shaped routing summary and is 191 lines. The three in-file pointers into the moved block (coefficient rule, step-1 exclusion, `position_cap` rule) now name the reference file explicitly. Plugin bundle regenerated.
 
 ## 2026-09-04
 
@@ -435,7 +435,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 ## 2026-06-11
 
 ### Added
-- **`docs/security/audit-2026-06-11.md`** — refreshed security audit covering the PRs #44/#45/#46 merge range, including the public-repo information-disclosure perimeter check (`CRITICAL_FAILS=0`); `audit-latest.md` symlink repointed. Consumed by the pre-push security gate.
+- **Security audit refresh** — covering that release's merge range, including the public-repo information-disclosure perimeter check (`CRITICAL_FAILS=0`); `audit-latest.md` symlink repointed. Consumed by the pre-push security gate.
 
 ### Changed
 - **country-deep-dive vs macro-outlook boundary rewritten as allocation-vs-regime** — country-deep-dive answers "what should I buy in [country/region]?" (view-tilted Top Opportunities per loader.md §3); macro-outlook answers "what is the regime in [market]?" (optional equity census deliberately untilted, §7.4 alignment-note only). Both descriptions and "When not to use" sections cross-route on this boundary; the false "NOT for US-centric analysis" clause is gone; both skills carry a do-not-harmonize note so the deliberate house-view divergence survives future consistency passes.
@@ -481,24 +481,24 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 ### Added
 - **`build-skills.sh --normalize`** — folds client-convention frontmatter (`user-invocable`, `argument-hint`, `negative-triggers`) into agentskills.io spec-clean form via the new idempotent `_parallax/scripts/spec-normalize.py` (negative-trigger items move into a `## When not to use` body section; nothing silently dropped; spec-clean files left byte-identical; 7 tests). The build flag loop also gains `--no-lint`, and spec-validate failures now print an actionable hint pointing at `--normalize`.
-- **agentskills.io spec validator in the build** (PR #35) — new `_parallax/scripts/spec-validate.py` checks every skill's frontmatter against the spec (allowed keys, name format and directory match, description/compatibility length, metadata shape); wired into `build-skills.sh` ahead of coverage-lint and fails the build on any violation.
+- **agentskills.io spec validator in the build** — new `_parallax/scripts/spec-validate.py` checks every skill's frontmatter against the spec (allowed keys, name format and directory match, description/compatibility length, metadata shape); wired into `build-skills.sh` ahead of coverage-lint and fails the build on any violation.
 
 ### Changed
-- **Skill directories renamed to match frontmatter names** (PR #35) — the spec requires the skill name to equal its parent directory name; repo dirs were short aliases (`AI-buffett`, `should-i-buy`) registered under prefixed symlinks. Now the directory IS the skill name (`parallax-ai-buffett`, `parallax-should-i-buy`), so a clone of this repo is a valid skills collection as-is. `install.sh` and `check-registration.sh` drop the prefixing logic; build lint, eval configs, cross-skill references, and docs updated to the new paths.
+- **Skill directories renamed to match frontmatter names** — the spec requires the skill name to equal its parent directory name; repo dirs were short aliases (`AI-buffett`, `should-i-buy`) registered under prefixed symlinks. Now the directory IS the skill name (`parallax-ai-buffett`, `parallax-should-i-buy`), so a clone of this repo is a valid skills collection as-is. `install.sh` and `check-registration.sh` drop the prefixing logic; build lint, eval configs, cross-skill references, and docs updated to the new paths.
 
 ### Fixed
-- **Frontmatter YAML repaired across 10 skills** (PR #35) — frontmatter now carries only spec keys; house-convention `negative-triggers`/`gotchas` content moved verbatim into `## When not to use` / `## Gotchas` body sections. Previously the YAML was unparseable in 10 skills (markdown prose inside YAML lists) and body fragments surfaced as live skill descriptions. `coverage-lint.sh` now forbids the old top-level keys and requires the body sections.
+- **Frontmatter YAML repaired across 10 skills** — frontmatter now carries only spec keys; house-convention `negative-triggers`/`gotchas` content moved verbatim into `## When not to use` / `## Gotchas` body sections. Previously the YAML was unparseable in 10 skills (markdown prose inside YAML lists) and body fragments surfaced as live skill descriptions. `coverage-lint.sh` now forbids the old top-level keys and requires the body sections.
 
 ---
 
 ## 2026-06-04
 
 ### Added
-- **Two build guards that make registration drift visible** (PR #33): a JIT-load directive lint in `build-skills.sh` (hard-fails on dangling `references/` paths; resolves both local and cross-skill forms) and `check-registration.sh` (flags registered skills that have drifted from a symlink into a diverging copy).
+- **Two build guards that make registration drift visible**: a JIT-load directive lint in `build-skills.sh` (hard-fails on dangling `references/` paths; resolves both local and cross-skill forms) and `check-registration.sh` (flags registered skills that have drifted from a symlink into a diverging copy).
 
 ### Fixed
-- **AI-profile slug casing normalized to lowercase `parallax-ai-*`** across the 6 AI-* skills, concierge routing, thematic-screen, and shared references (PR #33) — frontmatter names now match the registered/invocable slugs; previously 6 concierge routes dispatched to nothing. README follow-up in PR #34: lowercase slugs in the AI-profile table, missing `parallax-ai-ptj` row added, consensus meta-skill corrected to "all 5 profiles".
-- **Stale citations and count drift batch** (PR #33): conventions §0.1→§0.2 references, due-diligence `applied_reason` citation, client-review + peer-comparison cross-skill paths, scenario-analysis step→phase wording, AI-consensus profile count 4→5, morning-brief now surfaces the 5th health flag (macro misalignment), translate-thai validator catches no-space doubled-word forms it previously missed, credit-lens reference renderer marked test-only.
+- **AI-profile slug casing normalized to lowercase `parallax-ai-*`** across the 6 AI-* skills, concierge routing, thematic-screen, and shared references — frontmatter names now match the registered/invocable slugs; previously 6 concierge routes dispatched to nothing. README follow-up: lowercase slugs in the AI-profile table, missing `parallax-ai-ptj` row added, consensus meta-skill corrected to "all 5 profiles".
+- **Stale citations and count drift batch**: conventions §0.1→§0.2 references, due-diligence `applied_reason` citation, client-review + peer-comparison cross-skill paths, scenario-analysis step→phase wording, AI-consensus profile count 4→5, morning-brief now surfaces the 5th health flag (macro misalignment), translate-thai validator catches no-space doubled-word forms it previously missed, credit-lens reference renderer marked test-only.
 
 ---
 
