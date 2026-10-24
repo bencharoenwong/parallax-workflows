@@ -29,7 +29,7 @@ Thanks for the interest. A few notes on what fits and what doesn't.
                -r skills/_parallax/client-policy/requirements.txt \
                -r skills/_parallax/white-label/requirements-test.txt \
                pytest pillow
-   bash skills/_parallax/scripts/run-gate-tests.sh   # all roots, ~3,700 tests
+   bash skills/_parallax/scripts/run-gate-tests.sh   # all roots, ~4,300 tests
    ```
    It runs one `pytest` process per top-level test root, because three skills ship
    a `tests/conftest.py` that collide in a single invocation. The run is offline by
