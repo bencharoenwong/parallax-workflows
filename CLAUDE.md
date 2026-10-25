@@ -48,7 +48,7 @@ skills/
 ├── parallax-morning-brief/      # Fund manager daily brief
 ├── parallax-ai-buffett/         # Buffett-style factor profile
 ├── parallax-ai-consensus/       # Multi-profile meta-skill
-└── ... (16 more)
+└── ... (35 more)
 ```
 
 `plugin/` and `.claude-plugin/marketplace.json` are the **generated** Claude Code plugin bundle — never hand-edit them. Edit the sources under `skills/` and rerun `python3 skills/_parallax/scripts/build_bundle.py plugin` (a gate test fails when the tracked bundle is stale). See the `build_bundle.py` docstring for the build gates.
