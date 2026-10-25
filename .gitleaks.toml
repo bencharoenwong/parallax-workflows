@@ -2,7 +2,7 @@
 #
 # This repo intentionally ships test-only fixture keys for round-trip signing
 # tests. The fixtures are documented as test-only in
-# `skills/_parallax/house-view/tests/fixtures/trusted_keys.json` (use: "test-only")
+# `skills/_parallax/house-view/signing/trusted_keys.json` (use: "test-only")
 # and have no production trust binding (kid is fixture-scoped).
 #
 # Production deployments configure their own kids via the manifest signing flow
