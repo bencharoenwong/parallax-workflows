@@ -86,8 +86,9 @@ cover that exact content only. Maintainer notes and client-work directories are
 refused by path, regardless of the key. See the script for the complete path rules.
 
 The CI scanner merges trusted and proposed registries and refuses registry
-removals. To correct a mistaken registration, a key holder must review the
-removal locally and obtain owner approval for an admin bypass where required.
+removals that the change makes since its fork point from `main`. To correct a
+mistaken registration, a key holder must review the removal locally and obtain
+owner approval for an admin bypass where required.
 
 ### Local push checks
 
