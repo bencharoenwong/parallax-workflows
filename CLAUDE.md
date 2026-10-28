@@ -56,8 +56,9 @@ Shared conventions live in `skills/_parallax/parallax-conventions.md`.
 
 - Use RIC symbols. `parallax-should-i-buy` can resolve plain tickers.
 - Batch independent MCP calls as the conventions specify.
-- Discover connected tools and use their exact names and schemas. Report missing
-  capabilities as unavailable; a configured alias does not prove a working connector.
+- Discover connected tools and use their exact names and schemas.
+  Do not require a fixed server alias. Report missing capabilities as
+  unavailable; a configured alias does not prove a working connector.
 - Cross-check company identity after scoring. The conventions define each field;
   `get_score_analysis` requires checking `data[0].symbol` against the requested RIC.
 - Mark failed analysis sections unavailable. Decision gates fail closed to
