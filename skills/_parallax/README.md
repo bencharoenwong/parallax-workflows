@@ -21,7 +21,7 @@ Start with `parallax-conventions.md` (runtime rules) and `skill-structure-conven
 
 ## Interpreter
 
-CI runs Python 3.13 (`.github/workflows/evals.yml`). The local commit gate's pytest binary is pinned to Python 3.11. `scripts/build_bundle.py` declares 3.9 or newer. Every helper a SKILL.md shells out to is invoked as bare `python3`, so keep helpers compatible with 3.11 through 3.13 and stdlib-only unless the helper's directory ships a `requirements.txt` (`house-view/`, `white-label/`, `client-policy/`).
+CI runs Python 3.13 (`.github/workflows/evals.yml`). The local gate uses `python3 -m pytest` from the active environment. Keep helpers compatible with Python 3.11 through 3.13. Helpers should use the standard library unless their directory declares dependencies in `requirements.txt` (`house-view/`, `white-label/`, `client-policy/`).
 
 ## Environment switches
 

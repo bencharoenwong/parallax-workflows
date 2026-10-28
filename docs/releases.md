@@ -18,7 +18,6 @@ Set `PARALLAX_ROOT` to the checkout's absolute path:
 ```bash
 export PARALLAX_ROOT="$HOME/parallax-workflows"
 python3 "$PARALLAX_ROOT/skills/_parallax/scripts/release.py" prepare YYYY.M.D
-python3 "$PARALLAX_ROOT/skills/_parallax/scripts/distribution_docs.py"
 ```
 
 Replace `YYYY.M.D` with the release date, and use a later date for each
@@ -30,9 +29,10 @@ and does not create a new release. Once published, use a later version for
 changes instead of replacing the existing tag or assets. The version literal
 in `build_bundle.py` is the sole source. `prepare` updates it, renames the
 CHANGELOG `## Unreleased` heading to the version, or adds a version heading
-when none exists, and regenerates both plugin manifests. Review those changes
-before committing through the repository's normal process. The command does
-not commit, tag, push or publish.
+when none exists. It also refreshes the generated README catalog and rebuilds
+the plugin and marketplace manifests. Review those changes before committing
+through the repository's normal process. The command does not commit, tag,
+push or publish.
 
 ## Check and build
 

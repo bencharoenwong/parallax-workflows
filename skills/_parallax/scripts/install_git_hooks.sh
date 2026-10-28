@@ -293,8 +293,9 @@ _parallax_targets_origin() {
     fi
     if [ "$_PARALLAX_SCAN_RC" -ne 0 ]; then
         printf '\n\033[31m[pre-push] BLOCKED: commit-message or client-name scan failed (exit %s).\033[0m\n' "$_PARALLAX_SCAN_RC" >&2
-        printf '           Rewrite the message locally before pushing; a pushed message\n' >&2
-        printf '           cannot be unpublished. See CLAUDE.md, "Commit messages are public too".\n' >&2
+        printf '           Fix it locally before pushing (rewrite the message, rename or remove the\n' >&2
+        printf '           file, or move client work out); a push cannot be unpublished. See\n' >&2
+        printf '           CLAUDE.md, "Commit messages are public too", and CONTRIBUTING.md.\n' >&2
         exit "$_PARALLAX_SCAN_RC"
     fi
     if [ -n "$_PARALLAX_NRO_SET" ]; then

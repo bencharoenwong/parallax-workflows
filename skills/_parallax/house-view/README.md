@@ -25,7 +25,9 @@ This directory holds the canonical schema, the loader contract, the conflict-ren
 
 ### Python modules
 
-Every module below is pure functions with no MCP coupling and imports cleanly into any harness — with one exception: `view_commit.py` is the module that actually touches the filesystem. It is the sanctioned writer of `view.yaml`, `prose.md`, and `provenance.yaml` for every writer: `parallax-load-house-view`'s commit paths and `parallax-make-house-view`'s `maker.py`, which commits through `commit_view_locked` inside its own `view_transaction`. Each artifact is staged as a `0600` `.tmp` sibling, fsynced and renamed, the view directory is fsynced after the renames, and the audit row is checked against the bytes before it is appended. `audit.jsonl` is never staged, renamed, or removed by anything, `view_commit.py` included — only appended, via `audit_chain.append_entry`. `commit_view` is impure top to bottom (it acquires the view transaction itself); `commit_view_locked` is impure but requires the caller to already hold a `TransactionToken` from `view_transaction`, because `view_transaction` is not re-entrant and a nested acquire deadlocks rather than erroring.
+The modules have no MCP coupling. Some provide pure functions; others read, write, export, or prune local files. The table below identifies their interfaces and side effects.
+
+`view_commit.py` is the sanctioned writer of `view.yaml`, `prose.md`, and `provenance.yaml`. Both writer skills use it. It stages files at `0600`, fsyncs and renames them, and checks the audit row against their bytes. It appends to `audit.jsonl` through `audit_chain.append_entry`; it never stages, renames, or removes that log. `commit_view` acquires `view_transaction`. A caller that already holds the transaction must use `commit_view_locked` with its live `TransactionToken`; nested acquisition is not supported.
 
 | Module | Public API | Purpose |
 |---|---|---|
