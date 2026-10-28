@@ -250,7 +250,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 ## 2026-09-05
 
 ### Fixed
-- **`main` was red: `parallax-rebalance/SKILL.md` had grown to 282 lines across PR #111 and the eval's `orchestrator_length` check (`orchestrator_max_lines=250`) failed on the merge commit.** The Batch C2 policy-reconciliation block (~95 lines) now lives in `skills/parallax-rebalance/references/policy-reconciliation.md`, JIT-loaded only when `policy=` is supplied; the orchestrator keeps a one-line stub with the gate-shaped routing summary and is 191 lines. The three in-file pointers into the moved block (coefficient rule, step-1 exclusion, `position_cap` rule) now name the reference file explicitly. Plugin bundle regenerated.
+- **`main` was red: `parallax-rebalance/SKILL.md` had grown to 282 lines and the eval's `orchestrator_length` check (`orchestrator_max_lines=250`) failed on the merge commit.** The Batch C2 policy-reconciliation block (~95 lines) now lives in `skills/parallax-rebalance/references/policy-reconciliation.md`, JIT-loaded only when `policy=` is supplied; the orchestrator keeps a one-line stub with the gate-shaped routing summary and is 191 lines. The three in-file pointers into the moved block (coefficient rule, step-1 exclusion, `position_cap` rule) now name the reference file explicitly. Plugin bundle regenerated.
 
 ## 2026-09-04
 
@@ -325,7 +325,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 - **A PR-time anchor-drift gate for the render gate** — `test_render_gate.py` now checks each registered skill's documented Output Format start label against its `SKILL_ANCHORS` entry, and matches anchor keys to the `--skill` key each `SKILL.md` actually wires, in both directions. A renamed rendered section, an unregistered key, or a key no skill wires fails the suite instead of surfacing as a silent fail-open at runtime. The suite also runs in GitHub Actions (`.github/workflows/evals.yml`), so an external pull request is checked without a local gate run, and `CONTRIBUTING.md` records the same-change rule: rename a gated skill's title or first rendered section and its `SKILL_ANCHORS` entry plus the test's start example move with it.
 
 ### Security
-- **`docs/security/audit-2026-08-15.md`** — refreshed checklist audit covering the fixture-generator and identity-gate delta (`CRITICAL_FAILS=0`); `audit-latest.md` symlink repointed. Consumed by the pre-push security gate.
+- **Security audit refresh** — checklist audit covering the fixture-generator and identity-gate delta (`CRITICAL_FAILS=0`); `audit-latest.md` symlink repointed. Consumed by the pre-push security gate.
 
 ## 2026-08-13
 
@@ -406,7 +406,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 - **Translation validators** — `translate-chinese-finance` and `translate-thai-finance` each gain a deterministic pass/fail `validate-translation.py` check with a `--waive` escape hatch and a test suite.
 - **Fund/OEIC resolution fallback (`parallax-conventions.md §1`)** — when symbol resolution fails after the standard attempts and the identifier looks like a fund, OEIC, or investment trust, skills now state that coverage is listed equities and ETFs only and continue processing remaining symbols, instead of surfacing a raw resolution error. Skills that JIT-load §1 inherit the fallback with no per-skill edit.
 - **Localization boundary (`parallax-white-label-stock-report/references/field-map.md`)** — documents which branded-report field paths are prose-vs-data for a future localized-report project, and records that a localized branded report (renderer i18n, CJK/Thai font stacks, translated compliance-approved disclosures) is out of scope until specified as its own project.
-- **`docs/security/audit-2026-07-15.md`** — pre-launch security audit covering this branch's diff (`CRITICAL_FAILS=0`); `audit-latest.md` symlink repointed. Consumed by the pre-push security gate.
+- **Security audit refresh** — pre-launch security audit covering this branch's diff (`CRITICAL_FAILS=0`); `audit-latest.md` symlink repointed. Consumed by the pre-push security gate.
 
 ### Changed
 - **Report footer section renamed `Provenance` → `About This Report`** across consumer skills, the §9.2 AI-interaction banner text, eval graders, eval configs, and fixtures. The house-view provenance machinery and the eval grader id `provenance_present` are deliberately unchanged, and graders accept either the new or the legacy label so pre-rename baselines stay gradable.
@@ -436,7 +436,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 ## 2026-06-11
 
 ### Added
-- **`docs/security/audit-2026-06-11.md`** — refreshed security audit covering the PRs #44/#45/#46 merge range, including the public-repo information-disclosure perimeter check (`CRITICAL_FAILS=0`); `audit-latest.md` symlink repointed. Consumed by the pre-push security gate.
+- **Security audit refresh** — covering that release's merge range, including the public-repo information-disclosure perimeter check (`CRITICAL_FAILS=0`); `audit-latest.md` symlink repointed. Consumed by the pre-push security gate.
 
 ### Changed
 - **country-deep-dive vs macro-outlook boundary rewritten as allocation-vs-regime** — country-deep-dive answers "what should I buy in [country/region]?" (view-tilted Top Opportunities per loader.md §3); macro-outlook answers "what is the regime in [market]?" (optional equity census deliberately untilted, §7.4 alignment-note only). Both descriptions and "When not to use" sections cross-route on this boundary; the false "NOT for US-centric analysis" clause is gone; both skills carry a do-not-harmonize note so the deliberate house-view divergence survives future consistency passes.
@@ -482,24 +482,24 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 ### Added
 - **`build-skills.sh --normalize`** — folds client-convention frontmatter (`user-invocable`, `argument-hint`, `negative-triggers`) into agentskills.io spec-clean form via the new idempotent `_parallax/scripts/spec-normalize.py` (negative-trigger items move into a `## When not to use` body section; nothing silently dropped; spec-clean files left byte-identical; 7 tests). The build flag loop also gains `--no-lint`, and spec-validate failures now print an actionable hint pointing at `--normalize`.
-- **agentskills.io spec validator in the build** (PR #35) — new `_parallax/scripts/spec-validate.py` checks every skill's frontmatter against the spec (allowed keys, name format and directory match, description/compatibility length, metadata shape); wired into `build-skills.sh` ahead of coverage-lint and fails the build on any violation.
+- **agentskills.io spec validator in the build** — new `_parallax/scripts/spec-validate.py` checks every skill's frontmatter against the spec (allowed keys, name format and directory match, description/compatibility length, metadata shape); wired into `build-skills.sh` ahead of coverage-lint and fails the build on any violation.
 
 ### Changed
-- **Skill directories renamed to match frontmatter names** (PR #35) — the spec requires the skill name to equal its parent directory name; repo dirs were short aliases (`AI-buffett`, `should-i-buy`) registered under prefixed symlinks. Now the directory IS the skill name (`parallax-ai-buffett`, `parallax-should-i-buy`), so a clone of this repo is a valid skills collection as-is. `install.sh` and `check-registration.sh` drop the prefixing logic; build lint, eval configs, cross-skill references, and docs updated to the new paths.
+- **Skill directories renamed to match frontmatter names** — the spec requires the skill name to equal its parent directory name; repo dirs were short aliases (`AI-buffett`, `should-i-buy`) registered under prefixed symlinks. Now the directory IS the skill name (`parallax-ai-buffett`, `parallax-should-i-buy`), so a clone of this repo is a valid skills collection as-is. `install.sh` and `check-registration.sh` drop the prefixing logic; build lint, eval configs, cross-skill references, and docs updated to the new paths.
 
 ### Fixed
-- **Frontmatter YAML repaired across 10 skills** (PR #35) — frontmatter now carries only spec keys; house-convention `negative-triggers`/`gotchas` content moved verbatim into `## When not to use` / `## Gotchas` body sections. Previously the YAML was unparseable in 10 skills (markdown prose inside YAML lists) and body fragments surfaced as live skill descriptions. `coverage-lint.sh` now forbids the old top-level keys and requires the body sections.
+- **Frontmatter YAML repaired across 10 skills** — frontmatter now carries only spec keys; house-convention `negative-triggers`/`gotchas` content moved verbatim into `## When not to use` / `## Gotchas` body sections. Previously the YAML was unparseable in 10 skills (markdown prose inside YAML lists) and body fragments surfaced as live skill descriptions. `coverage-lint.sh` now forbids the old top-level keys and requires the body sections.
 
 ---
 
 ## 2026-06-04
 
 ### Added
-- **Two build guards that make registration drift visible** (PR #33): a JIT-load directive lint in `build-skills.sh` (hard-fails on dangling `references/` paths; resolves both local and cross-skill forms) and `check-registration.sh` (flags registered skills that have drifted from a symlink into a diverging copy).
+- **Two build guards that make registration drift visible**: a JIT-load directive lint in `build-skills.sh` (hard-fails on dangling `references/` paths; resolves both local and cross-skill forms) and `check-registration.sh` (flags registered skills that have drifted from a symlink into a diverging copy).
 
 ### Fixed
-- **AI-profile slug casing normalized to lowercase `parallax-ai-*`** across the 6 AI-* skills, concierge routing, thematic-screen, and shared references (PR #33) — frontmatter names now match the registered/invocable slugs; previously 6 concierge routes dispatched to nothing. README follow-up in PR #34: lowercase slugs in the AI-profile table, missing `parallax-ai-ptj` row added, consensus meta-skill corrected to "all 5 profiles".
-- **Stale citations and count drift batch** (PR #33): conventions §0.1→§0.2 references, due-diligence `applied_reason` citation, client-review + peer-comparison cross-skill paths, scenario-analysis step→phase wording, AI-consensus profile count 4→5, morning-brief now surfaces the 5th health flag (macro misalignment), translate-thai validator catches no-space doubled-word forms it previously missed, credit-lens reference renderer marked test-only.
+- **AI-profile slug casing normalized to lowercase `parallax-ai-*`** across the 6 AI-* skills, concierge routing, thematic-screen, and shared references — frontmatter names now match the registered/invocable slugs; previously 6 concierge routes dispatched to nothing. README follow-up: lowercase slugs in the AI-profile table, missing `parallax-ai-ptj` row added, consensus meta-skill corrected to "all 5 profiles".
+- **Stale citations and count drift batch**: conventions §0.1→§0.2 references, due-diligence `applied_reason` citation, client-review + peer-comparison cross-skill paths, scenario-analysis step→phase wording, AI-consensus profile count 4→5, morning-brief now surfaces the 5th health flag (macro misalignment), translate-thai validator catches no-space doubled-word forms it previously missed, credit-lens reference renderer marked test-only.
 
 ---
 
@@ -507,7 +507,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 ### Added
 - **v2 eval substrate under `evals/`** — a two-tier quality-eval harness (deterministic Tier-1 structural checks + pinned-Anthropic Tier-2 rubric judge) on a spec-driven, skill-agnostic grading engine. New `evals/graders/` (engine + CI-safe pure-function tests), `evals/skills/<skill>/eval_config.py` (per-skill `EvalSpec`), `evals/tasks/<skill>/core.jsonl` (task inputs), and `evals/fixtures/<skill>/` (golden + broken stream-json transcripts for offline tests). Skills covered: `should-i-buy` (reference baseline), `AI-buffett` (different output family), and `portfolio-checkup` (DRAFT spec only, never run). CI runs only `cd evals && python3 -m pytest graders -q` — never a live rollout. `evals/README.md` and `CONTRIBUTING.md` updated. Design doc is local-only (`notes/`, gitignored).
-- **`docs/security/audit-2026-06-01.md`** — refreshed pre-launch security audit covering the eval substrate (`CRITICAL_FAILS=0`); `audit-latest.md` symlink repointed. Consumed by the pre-push security gate.
+- **Security audit refresh** — pre-launch security audit covering the eval substrate (`CRITICAL_FAILS=0`); `audit-latest.md` symlink repointed. Consumed by the pre-push security gate.
 
 ### Changed
 - **`/parallax-should-i-buy` two-lens upgrade** — output now splits into a **Fundamentals** lens (Scores + House View Note + Financial Health) and a distinct **Technicals** lens fed by a new parallel `get_technical_analysis` call (trend direction, momentum, support/resistance). The Technicals read cites price/trend/momentum only; on tool timeout it falls back to the Momentum-factor proxy and never silently disappears. Bottom Line now states each lens's directional read and names any Fundamentals↔Technicals divergence instead of blending it. Token budget rises ~24 → ~29 (`+5` for technicals); see `skills/_parallax/token-costs.md`.
@@ -522,7 +522,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 ### Added
 - **§9.2 AI-interaction disclosure** wired into 10 previously-unwired analysis skills (`watchlist-monitor`, `score-explainer`, `earnings-quality`, `AI-buffett`, `AI-soros`, `AI-klarman`, `AI-greenblatt`, `AI-consensus`, `credit-lens`, `halal-screen`) plus `AI-ptj`. All 11 now reference `parallax-conventions.md §9.2` immediately above the standard disclaimer.
-- **`docs/security/audit-2026-05-25.md`** — pre-launch security audit baseline (machine-greppable SUMMARY line) consumed by the pre-push security gate.
+- **Security audit baseline** — pre-launch security audit (machine-greppable SUMMARY line) consumed by the pre-push security gate.
 - **`/parallax-judge-house-view --mock-mcp <path>`** — new orthogonal flag documented in README and `skills/judge-house-view/SKILL.md`; replaces live MCP fan-out with a canned JSON payload (CI / testing). Combinable with `--dry`.
 - **`/parallax-thematic-screen` trade-idea generation** — Phase A now fires `list_macro_countries` + `macro_analyst` (× up to 3 inferred markets, `component="tactical"`) + `get_telemetry` alongside universe build. New "Macro Context" output section renders per-market tactical takeaways and a basket-level Regime Signal sub-line; Top Picks gain a "Macro Tag" column (`with-regime` / `against-regime` / `orthogonal`) computed from `get_company_info.country` against `macro_context`. Top Picks rank stays composite-driven — Macro Tag is a read-only annotation, never a filter or sort. New `--no-macro` flag reverts to the prior universe-only path. Telemetry failure is safe-skip (no `--no-telemetry` flag exposed). AI-soros gains a negative-trigger entry pointing regime-first/reflexivity invocations there instead. Token budget shifts from ~14 to ~19 (default) / ~14 (`--no-macro`); see `skills/_parallax/token-costs.md`.
 - **`skills/_parallax/parallax-conventions.md §3.1` — Concurrent Annotation Pattern** — new convention codifying the rank-vs-annotation separation: annotation steps that derive from data already known at rank time MUST run concurrently with downstream rank-consumers and MUST NOT change rank order, alter membership, or be used as a filter predicate by downstream consumers. Reference implementation is `thematic-screen` Phase C1.5.
