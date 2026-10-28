@@ -1707,3 +1707,75 @@ def test_scan_dir_keeps_an_allowlisted_oversized_file_clean(registry, tmp_path, 
     cg.scan_dir(s, d)
     assert s.hits == []
     assert cg._file_blob_sha(big) == cg.git_blob_sha(big.read_bytes())
+
+
+# --- historical binary approval and optional registry reads -------------------
+
+_HISTORICAL_MEMBER_SHA = "d0c4f1f553fedc9e469c7c5253fbed0b10e7476e"
+
+
+def test_historical_member_approval_is_preserved():
+    source_root = Path(__file__).resolve().parents[3]
+    lines = (source_root / cg.ALLOW_REL).read_text().splitlines()
+    matches = [line for line in lines if line.strip() and line.split()[0] == _HISTORICAL_MEMBER_SHA]
+    assert len(matches) == 1
+    assert cg._ALLOW_LINE.fullmatch(matches[0])
+
+
+def test_historical_fixture_member_needs_its_preserved_approval(scanner):
+    source_root = Path(__file__).resolve().parents[3]
+    historical = "3cce23644c32f3c431fa3dd730c84017af4e4e12"
+    available = subprocess.run(
+        ["git", "-C", str(source_root), "cat-file", "-e", historical + "^{commit}"],
+        capture_output=True)
+    if available.returncode:
+        pytest.skip("historical fixture unavailable in this shallow checkout")
+    fixture = "skills/parallax-cio-letter-prep/fixtures/golden_pack_2026-04.docx"
+    content = subprocess.run(
+        ["git", "-C", str(source_root), "show", historical + ":" + fixture],
+        capture_output=True, check=True).stdout
+    with zipfile.ZipFile(io.BytesIO(content)) as archive:
+        members = [archive.read(name) for name in archive.namelist()]
+    member = next(data for data in members if cg.git_blob_sha(data) == _HISTORICAL_MEMBER_SHA)
+    scanner.scan_bytes(member, "historical.jpeg", "historical fixture member")
+    assert scanner.hits == [("unscanned/opaque-file", "historical fixture member")]
+    scanner.hits.clear()
+    source_lines = (source_root / cg.ALLOW_REL).read_text().splitlines()
+    scanner.allowed = frozenset(line.split()[0] for line in source_lines if line.strip())
+    scanner.scan_bytes(member, "historical.jpeg", "historical fixture member")
+    assert scanner.hits == []
+
+
+def _remove_loose_object(repo: Path, sha: str) -> None:
+    location = Path(_git(repo, "rev-parse", "--git-path", f"objects/{sha[:2]}/{sha[2:]}"))
+    if not location.is_absolute():
+        location = repo / location
+    assert location.is_file(), "the test repository must hold this object loose"
+    location.unlink()
+
+
+def test_optional_registry_confirmed_absent_is_none(repo):
+    assert cg.Registry.at_rev(_git(repo, "rev-parse", "HEAD"), optional=True) is None
+
+
+@pytest.mark.parametrize("object_kind", ["blob", "tree"])
+def test_optional_registry_unreadable_object_fails_closed(repo, registry, object_kind):
+    rev = _commit(repo, cg.REGISTRY_REL, registry.read_text(), "registry")
+    selector = f"{rev}:{cg.REGISTRY_REL}" if object_kind == "blob" else f"{rev}^{{tree}}"
+    _remove_loose_object(repo, _git(repo, "rev-parse", selector))
+    with pytest.raises(cg.GuardError, match="registry.*(unreadable|tree)"):
+        cg.Registry.at_rev(rev, optional=True)
+
+
+def test_unreadable_fork_registry_cannot_skip_removal_check(repo, registry, tmp_path,
+                                                            monkeypatch):
+    base_text = _fork_with_newer_main_registration(repo, registry, tmp_path, monkeypatch)
+    fork = _git(repo, "rev-parse", "HEAD")
+    shrunk = json.loads(base_text)
+    shrunk["digests"] = shrunk["digests"][:1]
+    shrunk["prefixes"] = shrunk["prefixes"][:1]
+    change = _commit(repo, cg.REGISTRY_REL, json.dumps(shrunk), "registry change")
+    monkeypatch.setenv(cg.CHANGE_ENV, change)
+    _remove_loose_object(repo, _git(repo, "rev-parse", f"{fork}:{cg.REGISTRY_REL}"))
+    with pytest.raises(cg.GuardError, match="registry unreadable"):
+        cg.build_scanner(KEY)

@@ -464,11 +464,15 @@ class Registry:
         or unsigned entry still raises either way."""
         if not _object_exists(rev):
             raise GuardError(f"revision {rev[:12]} is not available")
+        if optional:
+            entry = _git("ls-tree", "-z", rev, "--", REGISTRY_REL)
+            if entry.returncode != 0:
+                raise GuardError(f"cannot read registry tree at {rev[:12]}")
+            if not entry.stdout:
+                return None  # the readable tree confirms that the path is absent
         res = _git("show", f"{rev}:{REGISTRY_REL}")
         if res.returncode != 0:
-            if optional:
-                return None
-            raise GuardError(f"registry not found at {rev[:12]}")
+            raise GuardError(f"registry unreadable at {rev[:12]}")
         return cls.parse(res.stdout, f"{rev[:12]}:{REGISTRY_REL}")
 
     def verify(self, key: bytes) -> None:
