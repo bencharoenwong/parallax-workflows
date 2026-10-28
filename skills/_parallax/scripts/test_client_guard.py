@@ -1399,6 +1399,63 @@ def test_change_rev_missing_registry_file_is_rejected_when_trusted_exists(
         cg.build_scanner(KEY)
 
 
+def _fork_with_newer_main_registration(repo, registry, tmp_path, monkeypatch):
+    (repo / ".client-guard").mkdir(exist_ok=True)
+    base_text = registry.read_text()
+    fork = _commit(repo, cg.REGISTRY_REL, base_text, "registry")
+    cg.add_names(KEY, ["Globex Corp"], registry)
+    trusted_rev = _commit(repo, cg.REGISTRY_REL, registry.read_text(), "register on main")
+    _git(repo, "checkout", "-q", "-b", "older-pr", fork)
+    monkeypatch.setenv(cg.TRUSTED_ENV, trusted_rev)
+    monkeypatch.setattr(cg, "REGISTRY_PATH", tmp_path / "nowhere.json")
+    return base_text
+
+
+def test_change_rev_branched_before_newer_registration_is_accepted_and_scans_it(
+        repo, registry, tmp_path, monkeypatch):
+    _fork_with_newer_main_registration(repo, registry, tmp_path, monkeypatch)
+    change_rev = _commit(repo, "notes.md", "unrelated edit\n", "older pr work")
+    monkeypatch.setenv(cg.CHANGE_ENV, change_rev)
+    scanner = cg.build_scanner(KEY)
+    assert scanner.text_hits("partner: Globex Corp")
+    assert scanner.text_hits("partner: Acme Widgets")
+
+
+def test_change_rev_removal_after_fork_is_still_rejected(repo, registry, tmp_path,
+                                                         monkeypatch):
+    base_text = _fork_with_newer_main_registration(repo, registry, tmp_path, monkeypatch)
+    shrunk = json.loads(base_text)
+    shrunk["digests"] = shrunk["digests"][:1]
+    shrunk["prefixes"] = shrunk["prefixes"][:1]
+    change_rev = _commit(repo, cg.REGISTRY_REL, json.dumps(shrunk), "shrink on older pr")
+    monkeypatch.setenv(cg.CHANGE_ENV, change_rev)
+    with pytest.raises(cg.GuardError, match="removes registered names"):
+        cg.build_scanner(KEY)
+
+
+def test_change_rev_deleting_fork_point_registry_is_rejected(repo, registry, tmp_path,
+                                                             monkeypatch):
+    _fork_with_newer_main_registration(repo, registry, tmp_path, monkeypatch)
+    (repo / cg.REGISTRY_REL).unlink()
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "delete registry on older pr")
+    monkeypatch.setenv(cg.CHANGE_ENV, _git(repo, "rev-parse", "HEAD"))
+    with pytest.raises(cg.GuardError, match="deletes the registry"):
+        cg.build_scanner(KEY)
+
+
+def test_change_rev_without_common_ancestor_is_rejected(repo, registry, tmp_path,
+                                                        monkeypatch):
+    trusted_rev = _commit_registry(repo, registry, monkeypatch)
+    monkeypatch.setenv(cg.TRUSTED_ENV, trusted_rev)
+    monkeypatch.setattr(cg, "REGISTRY_PATH", tmp_path / "nowhere.json")
+    _git(repo, "checkout", "-q", "--orphan", "unrelated")
+    change_rev = _commit(repo, cg.REGISTRY_REL, registry.read_text(), "unrelated history")
+    monkeypatch.setenv(cg.CHANGE_ENV, change_rev)
+    with pytest.raises(cg.GuardError, match="no common ancestor"):
+        cg.build_scanner(KEY)
+
+
 # --- boundary offsets on the folded text, not the raw character index ------------
 
 def test_folded_boundary_offsets_survive_casefold_expansion(registry):

@@ -37,10 +37,13 @@ CHANGED COPY. ``pull_request_target`` CI checks out the trusted base as the
 workspace and never the PR head, so the working copy never holds the PR's own
 registry/allowlist edits. With ``CLIENT_GUARD_CHANGE_REV`` set to the PR tip,
 those two files are read as git objects at that revision and merged in too. A
-file simply absent there is skipped -- except the registry when a trusted
-copy exists: deleting it outright is a shrink to nothing and fails closed
-exactly like dropping some of its entries, since either way removal needs a
-key holder. A malformed or unsigned file still fails closed either way.
+file simply absent there is skipped -- except the registry when the change's
+fork point (its merge base with the trusted revision) has one: deleting it
+outright is a shrink to nothing and fails closed exactly like dropping some of
+its entries, since either way removal needs a key holder. Removal is judged
+against the fork point, so a PR branched before a newer registration is not
+blamed for lacking it; the full trusted copy is still merged into the scan. A
+missing fork point, or a malformed or unsigned file, fails closed.
 
 MATCHING. Text is NFKC-normalised, stripped of invisible characters, casefolded,
 and common Cyrillic/Greek look-alikes are mapped to Latin. Letters and digits
@@ -456,9 +459,9 @@ class Registry:
         from a malformed one: the trusted-revision caller treats an absent
         registry as an error (a push with no trusted base is not trustworthy),
         while the change-revision caller treats a ``None`` result as nothing
-        to merge when no trusted registry exists, or as a shrink to nothing
-        (rejected by its own caller) when one does -- a malformed or unsigned
-        entry still raises either way."""
+        to merge when the change's fork point has no registry, or as a shrink
+        to nothing (rejected by its own caller) when it has one -- a malformed
+        or unsigned entry still raises either way."""
         if not _object_exists(rev):
             raise GuardError(f"revision {rev[:12]} is not available")
         res = _git("show", f"{rev}:{REGISTRY_REL}")
@@ -1363,8 +1366,9 @@ def build_scanner(key: bytes, withhold: bool = False) -> Scanner:
     PR's own registry/allowlist edits must be read as git objects at its tip
     instead). Every registry found must verify against the key; a file simply
     absent at the change revision is skipped, not an error -- except the
-    registry itself when a trusted copy exists: deleting it outright is a
-    shrink to nothing and is rejected the same way a partial shrink is."""
+    registry itself when the change's fork point from the trusted revision has
+    one: deleting it outright is a shrink to nothing and is rejected the same
+    way a partial shrink is."""
     trusted = os.environ.get(TRUSTED_ENV, "").strip()
     change = os.environ.get(CHANGE_ENV, "").strip()
     registries, allowed = [], set()
@@ -1380,11 +1384,18 @@ def build_scanner(key: bytes, withhold: bool = False) -> Scanner:
         if res.returncode == 0:
             allowed |= parse_allowlist(key, res.stdout, f"{trusted[:12]}:{ALLOW_REL}")
     change_registry: Registry | None = None
+    base_registry: Registry | None = None
     if change:
         change_registry = Registry.at_rev(change, optional=True)
+        if trusted_registry is not None:
+            res = _git("merge-base", trusted, change)
+            if res.returncode != 0 or not res.stdout.strip():
+                raise GuardError(f"no common ancestor of {trusted[:12]} and {change[:12]}; "
+                                 "cannot check the change for registry removals")
+            base_registry = Registry.at_rev(res.stdout.strip(), optional=True)
         if change_registry is not None:
             registries.append(change_registry)
-        elif trusted_registry is not None:
+        elif base_registry is not None:
             # The PR's own tip has no registry file at all. Treating that as
             # "nothing to merge" (the ordinary optional-file case) would let
             # a PR delete the registry outright to dodge the shrink check
@@ -1402,11 +1413,13 @@ def build_scanner(key: bytes, withhold: bool = False) -> Scanner:
     # A pull_request_target run reads the PR's own registry edits only via
     # CLIENT_GUARD_CHANGE_REV (see the docstring above); the PR that edits it
     # can otherwise drop an entry from the copy it is itself judged by. The
-    # change copy must be a superset of the trusted one, or a removal there
-    # silently widens what that same PR is allowed to publish.
-    if trusted_registry is not None and change_registry is not None:
-        if not (trusted_registry.digests <= change_registry.digests
-                and trusted_registry.prefixes <= change_registry.prefixes):
+    # change copy must be a superset of the one at its fork point, or a
+    # removal there silently widens what that same PR is allowed to publish.
+    # Names registered on the trusted side after the fork are not the PR's
+    # removal, and stay in the scan through the trusted copy merged above.
+    if base_registry is not None and change_registry is not None:
+        if not (base_registry.digests <= change_registry.digests
+                and base_registry.prefixes <= change_registry.prefixes):
             raise GuardError("the change removes registered names; removal needs a key holder "
                              "(see CONTRIBUTING.md)")
     merged = registries[0]

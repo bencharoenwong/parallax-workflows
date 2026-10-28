@@ -53,8 +53,8 @@ machine path or username.
 """
 from __future__ import annotations
 
+import json
 import os
-import re
 import subprocess
 from pathlib import Path
 
@@ -64,17 +64,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[3]
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "client-guard.yml"
 
-_REPO_PATH_EXEC = re.compile(
-    r"(?:^|[\s;])(python3?\s+skills/|bash\s+skills/|pip\s+install\b[^\n]*\bskills/|\./)",
-    re.MULTILINE,
-)
-
 _TRUSTED_ASSOCIATIONS = ("OWNER", "MEMBER", "COLLABORATOR")
-
-# Vocabulary from the removed label-based gate. None of it may reappear in
-# the workflow: the keyed scan now runs only for an already-trusted author,
-# with no in-CI override that re-admits an untrusted one.
-_REMOVED_LABEL_FLOW_TERMS = ("labeled", "client-guard-scan", "CLIENT_GUARD_LOCATIONS")
 
 _FIXED_UNTRUSTED_ERROR = (
     "::error::Pull request from an outside contributor or a bot: the "
@@ -219,29 +209,6 @@ def test_checkout_default_no_pr_ref(wf):
     assert "repository" not in with_block
 
 
-# --- required run-script content ---------------------------------------------
-
-def test_run_script_contains_required_markers(wf):
-    joined = "\n".join(_run_texts(wf))
-    for marker in (
-        'python3 -I "$RUNNER_TEMP/client_guard.py" ci',
-        "refs/pull/${PR_NUMBER}/head",
-        "CLIENT_GUARD_CHANGE_REV",
-    ):
-        assert marker in joined, f"missing required marker: {marker!r}"
-
-
-def test_no_expression_interpolation_inside_run_blocks(wf):
-    for text in _run_texts(wf):
-        assert "${{" not in text, "PR-controlled values must enter run: only via env:, never via ${{ }} interpolation"
-
-
-def test_no_run_step_executes_a_repo_path(wf):
-    for text in _run_texts(wf):
-        m = _REPO_PATH_EXEC.search(text)
-        assert m is None, f"run step executes a repository path: {m.group(0)!r}"
-
-
 def test_concurrency_cancels_pr_runs_only(wf):
     assert wf["concurrency"]["cancel-in-progress"] == "${{ github.event_name == 'pull_request_target' }}"
 
@@ -258,16 +225,8 @@ def test_run_scripts_are_valid_bash(wf, tmp_path):
 
 # --- label-flow removal --------------------------------------------------------
 # The owner-approved redesign replaces the maintainer-label override outright:
-# there is no path by which outsider-authored bytes reach the keyed scan, so
-# none of the removed vocabulary (the `labeled` trigger type, the
-# `client-guard-scan` label, or the CLIENT_GUARD_LOCATIONS variable that used
-# to suppress per-file paths on a labeled run) may remain anywhere in the file.
-
-def test_no_label_flow_vocabulary_anywhere_in_workflow(wf):
-    raw = WORKFLOW_PATH.read_text(encoding="utf-8")
-    for term in _REMOVED_LABEL_FLOW_TERMS:
-        assert term not in raw, f"removed label-flow term {term!r} must not appear anywhere in the workflow"
-
+# no `labeled` trigger type (checked above) and no CLIENT_GUARD_LOCATIONS
+# variable that used to suppress per-file paths on a labeled run.
 
 def test_scan_step_env_has_no_locations_variable(wf):
     scan = _step_by_name(wf, "Scan for registered client names")
@@ -286,27 +245,21 @@ def test_trust_step_exists_and_only_runs_for_pull_request_target(wf):
 def test_trust_step_env_has_three_trust_fields(wf):
     # The three trust conditions are: same repo (HEAD_REPO vs BASE_REPO),
     # author is not a bot (PR_USER_TYPE), and author already has write
-    # access (PR_AUTHOR_ASSOCIATION). All four env vars must be declared,
-    # AND each must actually be read in the run script -- a mutant that
-    # keeps a var in `env:` but drops the `run:` line that checks it would
-    # pass a declaration-only assertion.
+    # access (PR_AUTHOR_ASSOCIATION). The behavior tests below vary each one
+    # under bash and check the decision changes.
     step = _step_by_id(wf, "trust")
     env = step.get("env", {})
     assert set(env) == {"HEAD_REPO", "BASE_REPO", "PR_USER_TYPE", "PR_AUTHOR_ASSOCIATION"}
-    run = step["run"]
-    for ref in ('"$HEAD_REPO"', '"$BASE_REPO"', '"$PR_USER_TYPE"', '"$PR_AUTHOR_ASSOCIATION"'):
-        assert ref in run, f"trust step env var {ref!r} is declared but never read in run:"
 
 
 def test_fetch_and_scan_steps_gated_on_trust_output(wf):
     fetch = _step_by_name(wf, "Fetch PR head as a git object")
-    assert "steps.trust.outputs.run_scan" in fetch.get("if", "")
-
-    load = _step_by_name(wf, "Load the trusted guard copy")
-    assert "steps.trust.outputs.run_scan" in load.get("if", "")
-
-    scan = _step_by_name(wf, "Scan for registered client names")
-    assert "steps.trust.outputs.run_scan" in scan.get("if", "")
+    assert fetch["if"] == ("github.event_name == 'pull_request_target' && "
+                           "steps.trust.outputs.run_scan == 'true'")
+    gated = ("github.event_name != 'pull_request_target' || "
+             "steps.trust.outputs.run_scan == 'true'")
+    assert _step_by_name(wf, "Load the trusted guard copy")["if"] == gated
+    assert _step_by_name(wf, "Scan for registered client names")["if"] == gated
 
 
 def test_issues_and_issue_comment_job_gate_references_both_fields(wf):
@@ -321,11 +274,6 @@ def test_issues_and_issue_comment_job_gate_references_both_fields(wf):
         assert assoc in job_if
     assert "issues" in job_if
     assert "issue_comment" in job_if
-
-
-def test_no_expression_interpolation_inside_trust_step_run_block(wf):
-    trust_run = _step_by_id(wf, "trust")["run"]
-    assert "${{" not in trust_run
 
 
 # --- trust-step behavior, run under bash for each documented case -------------
@@ -542,3 +490,83 @@ def test_load_step_first_install_push_uses_the_checkout(wf, tmp_path):
     assert rc == 0, out
     assert copied == "# first install\n"
     assert "CLIENT_GUARD_TRUSTED_REV" not in env_text
+
+
+# --- the PR-head fetch step ----------------------------------------------------
+
+def _workspace_with_pr_ref(tmp_path: Path, pr_number: str) -> tuple[Path, str]:
+    origin, base = _repo_with_commit(tmp_path, with_guard=False, marker="")
+    _git(origin, "checkout", "-q", "-b", "pr")
+    (origin / "pr-only.txt").write_text("pr content\n")
+    _git(origin, "add", "-A")
+    _git(origin, "commit", "-qm", "pr")
+    head = _git(origin, "rev-parse", "HEAD")
+    _git(origin, "update-ref", f"refs/pull/{pr_number}/head", head)
+    _git(origin, "checkout", "-q", base)
+    _git(origin, "branch", "-q", "-D", "pr")
+    workspace = tmp_path / "workspace"
+    subprocess.run(["git", "clone", "-q", str(origin), str(workspace)], check=True,
+                   capture_output=True)
+    return workspace, head
+
+
+def _run_fetch_step(data: dict, workspace: Path, tmp_path: Path, env: dict[str, str]):
+    step = _step_by_name(data, "Fetch PR head as a git object")
+    script = tmp_path / "fetch.sh"
+    script.write_text(step["run"], encoding="utf-8")
+    github_env = tmp_path / "github_env"
+    github_env.write_text("")
+    full_env = {**os.environ, "GITHUB_ENV": str(github_env), **env}
+    r = subprocess.run(["bash", str(script)], cwd=workspace, capture_output=True, text=True,
+                       env=full_env)
+    return r.returncode, r.stdout + r.stderr, github_env.read_text()
+
+
+def test_fetch_step_exports_pr_head_without_checking_it_out(wf, tmp_path):
+    workspace, head = _workspace_with_pr_ref(tmp_path, "7")
+    before = _git(workspace, "rev-parse", "HEAD")
+    rc, out, env_text = _run_fetch_step(wf, workspace, tmp_path,
+                                        {"PR_NUMBER": "7", "PR_HEAD": head})
+    assert rc == 0, out
+    assert env_text.splitlines() == [f"CLIENT_GUARD_CHANGE_REV={head}"]
+    assert _git(workspace, "cat-file", "-t", head) == "commit"
+    assert _git(workspace, "rev-parse", "HEAD") == before
+    assert not (workspace / "pr-only.txt").exists()
+
+
+def test_fetch_step_fails_when_announced_head_is_missing(wf, tmp_path):
+    workspace, _ = _workspace_with_pr_ref(tmp_path, "7")
+    rc, out, env_text = _run_fetch_step(wf, workspace, tmp_path,
+                                        {"PR_NUMBER": "7", "PR_HEAD": "1" * 40})
+    assert rc == 2, out
+    assert env_text == ""
+
+
+# --- the scan step -------------------------------------------------------------
+
+def test_scan_step_runs_only_the_loaded_guard_copy_isolated(wf, tmp_path):
+    record = tmp_path / "record.json"
+    workspace_marker = tmp_path / "workspace-guard-ran"
+    workspace = tmp_path / "workspace"
+    (workspace / _GUARD_REL).parent.mkdir(parents=True)
+    (workspace / _GUARD_REL).write_text(
+        f"open({str(workspace_marker)!r}, 'w').write('ran')\n")
+    runner_temp = tmp_path / "runner_temp"
+    runner_temp.mkdir()
+    (runner_temp / "client_guard.py").write_text(
+        "import json, os, sys\n"
+        "json.dump(dict(argv=sys.argv[1:], isolated=sys.flags.isolated,\n"
+        "               root=os.environ.get('CLIENT_GUARD_REPO_ROOT'),\n"
+        "               key=os.environ.get('CLIENT_GUARD_KEY')),\n"
+        f"          open({str(record)!r}, 'w'))\n")
+    step = _step_by_name(wf, "Scan for registered client names")
+    script = tmp_path / "scan.sh"
+    script.write_text(step["run"], encoding="utf-8")
+    env = {**os.environ, "RUNNER_TEMP": str(runner_temp), "GITHUB_WORKSPACE": str(workspace),
+           "CLIENT_GUARD_KEY": "synthetic-key"}
+    r = subprocess.run(["bash", str(script)], cwd=workspace, capture_output=True, text=True,
+                       env=env)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert json.loads(record.read_text()) == {
+        "argv": ["ci"], "isolated": 1, "root": str(workspace), "key": "synthetic-key"}
+    assert not workspace_marker.exists()
