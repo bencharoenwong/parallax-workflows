@@ -3,72 +3,94 @@
 **Project Type:** MCP
 **Security Gate:** required
 
-This repo contains Claude Code skills for Parallax equity research. Each skill in `skills/` orchestrates Parallax MCP tools via structured workflows.
+This repository contains Parallax equity-research skills. The markers above
+select MCP review scope: all 12 SEC-XX items in the security audit.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before modifying the repository.
 
-> The `**Project Type:**` and `**Security Gate:**` markers above are read by the maintainer's pre-push hook to set this repo's review scope. MCP scope = all 12 SEC-XX items evaluated by `security-auditor`.
+## Public repository boundaries
 
-## ⚠️ THIS IS A PUBLIC REPOSITORY
+This repository is public. Keep these categories out of files, paths, commit
+messages, branches, PR text and every other public surface:
 
-`github.com/bencharoenwong/parallax-workflows` is **public**. Nothing here — in tracked **files OR commit messages** — may leak proprietary or sensitive material. Before committing anything, confirm it contains none of:
+- Proprietary methods, including scoring composition, routing, private parameter
+  bounds, valuation integration and internal frameworks.
+- Internal database, schema, table and service identifiers. Public MCP tool names
+  are permitted.
+- Client, partner and fund names, in every spelling, and firm-specific operations.
+  The public Parallax product name is permitted.
+- Private development artifacts, including research results, evaluation findings,
+  internal audit detail, planning notes and handoffs.
 
-- **Proprietary methodology internals** — scoring/ensemble composition, regional routing, non-public parameter bounds, valuation-integration details, or named internal frameworks.
-- **Internal data-source / schema names** — database, warehouse, or table identifiers; internal service names. (Public Parallax MCP tool names like `get_peer_snapshot` are fine — only internal stores are sensitive.)
-- **Firm-specific / client-specific material** — hedge-fund operations, client names, white-label partners. (The "Parallax" product name itself is public.)
-- **Artifacts from the private development repo** — eval-harness metrics and findings, research results, internal security-audit detail, planning/decision/handoff notes. These live ONLY in the separate **private** repo and must be sanitized out before any change is ported here.
+Develop private work in the separate private repository. Promote only reviewed,
+generalised, self-contained changes. Write functional commit messages describing
+behavior. Never name material removed or withheld; that description also publishes it.
 
-**Commit messages are public too.** Keep them functional (describe what the code does, e.g. a security fix). Do not describe what was scrubbed, redacted, or held back — naming the redaction is itself the leak. Development happens in the private repo; only sanitized, self-contained changes land here.
+Register every client form before its first client-work commit. Scan generalised
+files before promotion. Follow the authoritative
+[client-name guide](CONTRIBUTING.md#client-names-and-client-first-work) for
+registration, promotion, hooks, CI trust, manual review and rollout.
 
-**No client, partner or fund name, in any spelling, in any file, path, commit message, branch name or PR text.** Client-first work is built in the private client-work repo and promoted only after `client_guard.py scan-path`. Register every new client with `client_guard.py add` before its first commit. The pre-push layer and the required `client-guard` CI check enforce this; see CONTRIBUTING.md, "Client names and client-first work".
+Before every push, install or refresh the blocking hook with
+`bash skills/_parallax/scripts/install_git_hooks.sh` and run
+`python3 skills/_parallax/scripts/scan_commit_messages.py` from the repository root.
+The hook checks actual pushed refs; the standalone scanner defaults to outgoing
+commits. Guard-key errors and scan failures block guarded pushes. Read the
+[local push checks](CONTRIBUTING.md#local-push-checks) for exclusions, legacy-clone
+warnings and installer refusals. Verify repository protection separately; a
+workflow file alone establishes no required check.
 
-**Run the commit-message scan before every push** — `python3 skills/_parallax/scripts/scan_commit_messages.py`. It checks the outgoing range (`origin/main..HEAD`, falling back to `main..HEAD`) for the vocabulary above and for restricted terms, and prints matched SHAs and rule ids only, never the matched text. **Install it as a blocking pre-push hook** — `bash skills/_parallax/scripts/install_git_hooks.sh`. Idempotent; backs up any hook it touches and **prepends** the layer after the shebang, so it is the first executable statement and cannot be stranded behind an `exit` or `exec` further down. Re-running it refreshes an outdated installed layer in place rather than reporting "already installed" forever, and refuses (rather than stripping blind) when the installed copy has no end marker to strip to. It refuses rather than guesses on a symlinked hook, a non-shell hook, or a hooks directory outside the repo (`PARALLAX_HOOKS_FORCE=1` to override). The layer scans the range git actually reports on stdin, so it is correct when you push a branch you are not on, and, when the push goes to `origin`'s fetch URL, excludes commits already published on `origin/main`/`origin/master` so merging the default branch into yours doesn't re-trip an old message against a since-added rule. A push to any other URL excludes nothing, because a clone whose `origin` is private has never published its `origin/main`. That includes a `pushurl` that differs from the fetch URL and a push through the no-mistakes gate, whose forwarding target the hook cannot verify; such a push scans the whole branch, and is blocked outright when no client guard can be found. It refreshes `origin/main` first, with network timeouts. When that fetch fails it warns and drops the exclusion, because a stale `origin/main` proves nothing about the target. Running the scanner by hand still works and is the fallback in a clone without the hook installed; CI cannot do this job because a shallow checkout has no usable base-ref range.
+## Security-audit documents
 
-**Security-audit docs are public too — describe checks generically.** Files under `docs/security/` are tracked and public. When an audit records a canary or grep check, describe the canary set generically (e.g. "internal warehouse/schema identifiers, partner names, framework code-names") — NEVER reproduce the literal terms, even inside a "found none" evidence line: naming a term to prove its absence still publishes it. Before committing any audit artifact, grep it for the canary set. The `security-auditor` agent must follow this too.
+`docs/security/` is public too. Describe checks by category and location; never
+quote restricted terms, including in absence claims. Scan every audit before
+committing it. This requirement also applies to security-auditor output.
 
-`docs/security/audit-latest.md` is a **symlink** to the current dated audit, not a file. Write the new `audit-YYYY-MM-DD.md` first and repoint the link — a plain redirect (`cat >`, `>`, `tee`) onto `audit-latest.md` follows it and silently overwrites the previous dated audit. After any audit write, `git status` should show exactly one new dated file plus a modified symlink.
+`docs/security/audit-latest.md` is a symlink. Write a new dated audit first, then
+repoint the symlink. Redirecting onto the symlink overwrites its previous target.
+After an audit write, status should show one new dated file and a modified symlink.
 
-## For Claude Code
+## Running skills
 
-When a user invokes `/parallax-<workflow>`, read the corresponding `skills/parallax-<workflow>/SKILL.md` (directory name matches the skill name) and follow it exactly. All skills share conventions in `skills/_parallax/parallax-conventions.md`.
+For `/parallax-<workflow>`, read `skills/parallax-<workflow>/SKILL.md` and follow it.
+Shared conventions live in `skills/_parallax/parallax-conventions.md`.
 
-## Conventions
+- Use RIC symbols. `parallax-should-i-buy` can resolve plain tickers.
+- Batch independent MCP calls as the conventions specify.
+- Discover connected tools and use their exact names and schemas. Report missing
+  capabilities as unavailable; a configured alias does not prove a working connector.
+- Cross-check company identity after scoring. The conventions define each field;
+  `get_score_analysis` requires checking `data[0].symbol` against the requested RIC.
+- Mark failed analysis sections unavailable. Decision gates fail closed to
+  `UNVERIFIED`; see conventions §4.0.
 
-- Symbols use RIC format (AAPL.O, JPM.N). `/parallax-should-i-buy` auto-resolves plain tickers.
-- Independent MCP tool calls should fire in parallel (batch pattern in conventions).
-- Cross-validate company identity after any scoring call — the field differs per tool (conventions §2 is canonical; `get_score_analysis` has none, so check `data[0].symbol` matches the requested RIC).
-- Handle tool failures gracefully — mark sections as "unavailable" rather than erroring out. Gates (pass/fail verdicts) are the exception: they fail closed to `UNVERIFIED` rather than defaulting to "unavailable and continue" — see `parallax-conventions.md` §4.0.
+## Repository layout and generated files
 
-## Structure
+`skills/` contains workflow sources and shared `_parallax/` helpers. `evals/`
+contains evaluation infrastructure. `plugin/` and `.claude-plugin/marketplace.json`
+are generated; never edit them directly. Edit sources and rebuild with
+`python3 skills/_parallax/scripts/build_bundle.py plugin`. Follow distribution
+and release instructions in [AGENTS.md](AGENTS.md) and
+[docs/releases.md](docs/releases.md).
 
-```
-skills/
-├── _parallax/                   # Shared: conventions, token costs, AI profile framework
-├── parallax-should-i-buy/       # Quick stock eval (accepts plain tickers)
-├── parallax-deep-dive/          # Full analysis + AI assessment
-├── parallax-due-diligence/      # Financials + Palepu + Parallax research report
-├── parallax-client-review/      # RM meeting prep with talk tracks
-├── parallax-portfolio-checkup/  # Individual investor health check
-├── parallax-morning-brief/      # Fund manager daily brief
-├── parallax-ai-buffett/         # Buffett-style factor profile
-├── parallax-ai-consensus/       # Multi-profile meta-skill
-└── ... (16 more)
-```
+## Git and the no-mistakes gate
 
-`plugin/` and `.claude-plugin/marketplace.json` are the **generated** Claude Code plugin bundle — never hand-edit them. Edit the sources under `skills/` and rerun `python3 skills/_parallax/scripts/build_bundle.py plugin` (a gate test fails when the tracked bundle is stale). See the `build_bundle.py` docstring for the build gates.
+Commit, push, tag and publish only when the user requests the action. Publishing
+also requires explicit owner approval. From the repository root, push branches
+through the `no-mistakes` remote when it exists:
 
-## Prerequisites
-
-The Parallax MCP server must be connected and discoverable in the current runtime. Do not require a fixed server alias or synthesize tool names from one: use live capability discovery, then call the exact names and input schemas it exposes. If no Parallax capability is discovered, report the connector as unavailable in this session; a stale configured alias is not proof of health.
-
-## Gated push (no-mistakes)
-
-This repo is initialized with the `no-mistakes` gate. Push branches via:
-
-```
+```bash
 git push no-mistakes <branch> -o no-mistakes.skip=ci
 ```
 
-The `-o no-mistakes.skip=ci` flag is required for this repo — the only workflow (`.github/workflows/evals.yml`) runs on `pull_request` and pushes to `main`, so a feature-branch push registers no checks and the `ci` step would otherwise idle for 4h waiting for checks that never register.
+Keep `-o no-mistakes.skip=ci` for feature-branch pushes. This checkout's workflows
+do not run on feature-branch pushes, so the gate would wait for nonexistent
+checks. The option skips the gate's CI wait; inspect PR checks after opening.
 
-The gate runs review / test / document / lint in an isolated worktree, forwards to `origin`, and opens a PR. The `document` step has auto-fix enabled and may add a commit; everything else reports findings only.
+The gate runs review, tests, documentation and lint in an isolated worktree,
+forwards to `origin`, and opens a PR. Its documentation step can add a commit
+that bypasses this clone's pre-push hook. Review final changes and commit
+messages before merging; local scans do not certify gate-added changes.
 
-Attach to an active run with `no-mistakes` (TUI). Bypass with `git push origin <branch>` only when intentional, and state the reason in the same response. See global CLAUDE.md §"Gated push via no-mistakes" for the full convention, the safety rule on hooks not firing inside the gate, and the data-perimeter constraint on `no-mistakes init`.
+Attach with `no-mistakes`. Bypass through `origin` only intentionally and explain
+why in the same response. Follow the host's Git and data-perimeter rules before
+initializing or using an external gate agent.

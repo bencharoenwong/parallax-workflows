@@ -6,6 +6,13 @@ that the code looks faster on paper. The skill SKILL.md is cached at session
 start (per `CONTRIBUTING.md`), so the only honest way to test SKILL.md edits
 is a fresh `claude -p` session — that's what this harness wraps.
 
+Set `PARALLAX_ROOT` to the checkout's absolute path and run the commands below
+from that directory:
+
+```bash
+cd "$PARALLAX_ROOT"
+```
+
 ## Layout
 
 ```
@@ -74,14 +81,10 @@ within normal variance for a single run. Median over 3+ runs filters most of it.
 
 ## Saving and sharing observations
 
-`evals/results/` is gitignored. If you want to commit a notable finding (a
-significant regression, a confirmed improvement), copy the relevant `.time`
-file under `notes/archive/` (also gitignored — local-only) with a short
-description, or paste the key numbers into the PR description if it
-informs a strategic call.
-
-Don't commit raw results to the public repo — they leak server-load info and
-specific portfolio examples. The harness is public; the data isn't.
+`evals/results/` is gitignored. Keep captured transcripts, benchmark findings,
+and portfolio inputs in a private workspace outside this public repository.
+Public pull requests should describe the code change and validation method.
+Do not include private measurements or captured responses in their descriptions.
 
 ## Adding new test portfolios
 
@@ -177,7 +180,7 @@ Example dry-runs before spending credits:
 `cd evals && python3 -m pytest graders -q`
 
 Live rollouts (`run_rollout.sh`, `run_baseline.sh` without `--dry-run`) cost Parallax
-tokens and are run manually.
+credits and are run manually.
 
 ### Parallax credit planning estimates
 
