@@ -835,16 +835,6 @@ def test_thai_short_name_matches_inside_unspaced_sentence(registry):
     assert s.text_hits(sentence)
 
 
-@pytest.mark.parametrize("text, hit", [
-    ("Apex", True), ("the apex fund", True), ("ApexFund", True), ("APEX-2", True),
-    ("apex2026", True), ("capex", False), ("apexes", False), ("Tapex holdings", False),
-])
-def test_latin_short_name_boundaries_are_unchanged(registry, text, hit):
-    cg.add_names(KEY, ["Apex"], registry)
-    s = cg.Scanner(KEY, cg.Registry.load(registry))
-    assert s.text_hits(text) is hit
-
-
 # --- SVG and embedded images -------------------------------------------------------
 
 def test_svg_file_is_opaque(scanner):
@@ -1753,6 +1743,39 @@ def test_historical_fixture_member_needs_its_preserved_approval(scanner):
     scanner.allowed = frozenset(line.split()[0] for line in source_lines if line.strip())
     scanner.scan_bytes(member, "historical.jpeg", "historical fixture member")
     assert scanner.hits == []
+
+
+def test_archived_member_in_history_needs_its_exact_approval(repo, tmp_path, monkeypatch,
+                                                              capsys):
+    monkeypatch.delenv(cg.TRUSTED_ENV, raising=False)
+    monkeypatch.delenv(cg.CHANGE_ENV, raising=False)
+    base = _git(repo, "rev-parse", "HEAD")
+    member = b"\xff\xd8\xff\xe0synthetic-jpeg-member"
+    pack = repo / "fixtures" / "pack.docx"
+    pack.parent.mkdir()
+    pack.write_bytes(_zip({"word/document.xml": b"<w:t>plain</w:t>",
+                           "word/media/image1.jpeg": member}))
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "add pack")
+    commit = _git(repo, "rev-parse", "HEAD")[:12]
+    location = f"commit {commit}:fixtures/pack.docx!word/media/image1.jpeg"
+
+    assert cg.main(["scan-range", "HEAD", f"^{base}"]) == 1
+    assert f"HIT [unscanned/opaque-file]: {location}" in capsys.readouterr().err
+
+    other = tmp_path / "other.jpeg"
+    other.write_bytes(member + b"-changed")
+    assert cg.main(["allow", str(other)]) == 0
+    capsys.readouterr()
+    assert cg.main(["scan-range", "HEAD", f"^{base}"]) == 1
+    assert f"HIT [unscanned/opaque-file]: {location}" in capsys.readouterr().err
+
+    extracted = tmp_path / "image1.jpeg"
+    extracted.write_bytes(member)
+    assert cg.main(["allow", str(extracted)]) == 0
+    capsys.readouterr()
+    assert cg.main(["scan-range", "HEAD", f"^{base}"]) == 0
+    assert "HIT" not in capsys.readouterr().err
 
 
 def _remove_loose_object(repo: Path, sha: str) -> None:

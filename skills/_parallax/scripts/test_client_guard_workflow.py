@@ -55,6 +55,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -262,18 +263,174 @@ def test_fetch_and_scan_steps_gated_on_trust_output(wf):
     assert _step_by_name(wf, "Scan for registered client names")["if"] == gated
 
 
-def test_issues_and_issue_comment_job_gate_references_both_fields(wf):
-    job_if = wf["jobs"]["client-guard"]["if"]
-    assert "github.event.issue.author_association" in job_if
-    assert "github.event.comment.author_association" in job_if
-    # Bots relay third-party text; the issue gate must exclude them as the
-    # PR trust step does.
-    assert "github.event.issue.user.type != 'Bot'" in job_if
-    assert "github.event.comment.user.type != 'Bot'" in job_if
-    for assoc in _TRUSTED_ASSOCIATIONS:
-        assert assoc in job_if
-    assert "issues" in job_if
-    assert "issue_comment" in job_if
+_EXPR_TOKEN = re.compile(
+    r"\s*(?:(?P<str>'(?:[^']|'')*')|(?P<op>==|!=|&&|\|\||[!(),])|(?P<name>[A-Za-z_][\w.-]*))")
+
+
+def _tokenize_expression(text: str) -> list[tuple[str, str]]:
+    tokens, pos, text = [], 0, text.strip()
+    while pos < len(text):
+        m = _EXPR_TOKEN.match(text, pos)
+        if not m or m.end() == pos:
+            raise AssertionError(f"unsupported expression syntax at {text[pos:pos + 20]!r}")
+        kind = m.lastgroup
+        value = m.group(kind)
+        tokens.append((kind, value[1:-1].replace("''", "'") if kind == "str" else value))
+        pos = m.end()
+    return tokens
+
+
+def _evaluate_expression(text: str, context: dict):
+    """Evaluate the subset of the GitHub Actions expression language the
+    job-level `if:` uses: string literals, dotted context lookups, ``!``,
+    ``==``/``!=`` (case-insensitive for strings, as GitHub compares them),
+    ``&&``, ``||``, parentheses, ``fromJSON`` and ``contains``. Any other
+    syntax raises, so an edit outside this subset fails the tests."""
+    tokens = _tokenize_expression(text)
+    pos = 0
+
+    def peek():
+        return tokens[pos] if pos < len(tokens) else (None, None)
+
+    def take(value=None):
+        nonlocal pos
+        tok = peek()
+        if tok[0] is None or (value is not None and tok[1] != value):
+            raise AssertionError(f"expected {value!r}, found {tok[1]!r}")
+        pos += 1
+        return tok
+
+    def lookup(path):
+        node = context
+        for part in path.split("."):
+            node = node.get(part) if isinstance(node, dict) else None
+        return node
+
+    def equal(a, b):
+        if isinstance(a, str) and isinstance(b, str):
+            return a.casefold() == b.casefold()
+        return a == b
+
+    def primary():
+        kind, value = peek()
+        if kind == "str":
+            take()
+            return value
+        if (kind, value) == ("op", "("):
+            take("(")
+            result = disjunction()
+            take(")")
+            return result
+        if (kind, value) == ("op", "!"):
+            take("!")
+            return not primary()
+        if kind == "name":
+            take()
+            if peek() == ("op", "("):
+                take("(")
+                args = [disjunction()]
+                while peek() == ("op", ","):
+                    take(",")
+                    args.append(disjunction())
+                take(")")
+                if value == "fromJSON" and len(args) == 1:
+                    return json.loads(args[0])
+                if value == "contains" and len(args) == 2:
+                    haystack, needle = args
+                    if isinstance(haystack, list):
+                        return any(equal(item, needle) for item in haystack)
+                    return isinstance(needle, str) and needle.casefold() in str(haystack).casefold()
+                raise AssertionError(f"unsupported function {value}/{len(args)}")
+            return lookup(value)
+        raise AssertionError(f"unexpected token {value!r}")
+
+    def comparison():
+        left = primary()
+        while peek() in (("op", "=="), ("op", "!=")):
+            op = take()[1]
+            right = primary()
+            left = equal(left, right) if op == "==" else not equal(left, right)
+        return left
+
+    def conjunction():
+        left = comparison()
+        while peek() == ("op", "&&"):
+            take()
+            right = comparison()
+            left = left and right
+        return left
+
+    def disjunction():
+        left = conjunction()
+        while peek() == ("op", "||"):
+            take()
+            right = conjunction()
+            left = left or right
+        return left
+
+    result = disjunction()
+    if pos != len(tokens):
+        raise AssertionError(f"trailing tokens in expression: {tokens[pos:]}")
+    return bool(result)
+
+
+_ASSOCIATIONS = ("OWNER", "MEMBER", "COLLABORATOR", "CONTRIBUTOR",
+                 "FIRST_TIME_CONTRIBUTOR", "FIRST_TIMER", "NONE")
+
+
+def _job_runs(wf: dict, event_name: str, event: dict) -> bool:
+    return _evaluate_expression(wf["jobs"]["client-guard"]["if"],
+                                {"github": {"event_name": event_name, "event": event}})
+
+
+def _author(user_type: str, association: str) -> dict:
+    return {"user": {"type": user_type}, "author_association": association}
+
+
+@pytest.mark.parametrize("user_type", ["User", "Bot"])
+@pytest.mark.parametrize("association", _ASSOCIATIONS)
+def test_issues_job_gate_runs_only_for_human_maintainer_authors(wf, user_type, association):
+    expected = user_type != "Bot" and association in _TRUSTED_ASSOCIATIONS
+    assert _job_runs(wf, "issues", {"issue": _author(user_type, association)}) is expected
+
+
+@pytest.mark.parametrize("user_type", ["User", "Bot"])
+@pytest.mark.parametrize("association", _ASSOCIATIONS)
+@pytest.mark.parametrize("issue_author", [("User", "OWNER"), ("Bot", "NONE")])
+def test_issue_comment_job_gate_judges_the_comment_author(wf, user_type, association,
+                                                           issue_author):
+    expected = user_type != "Bot" and association in _TRUSTED_ASSOCIATIONS
+    event = {"issue": _author(*issue_author), "comment": _author(user_type, association)}
+    assert _job_runs(wf, "issue_comment", event) is expected
+
+
+@pytest.mark.parametrize("event_name", ["pull_request_target", "push"])
+@pytest.mark.parametrize("payload", [
+    {},
+    {"issue": _author("Bot", "NONE"), "comment": _author("Bot", "NONE")},
+])
+def test_job_gate_leaves_other_events_to_the_in_job_trust_step(wf, event_name, payload):
+    assert _job_runs(wf, event_name, payload) is True
+
+
+@pytest.mark.parametrize("expression, context, expected", [
+    ("a.b == 'Bot'", {"a": {"b": "bot"}}, True),
+    ("a.b != 'Bot'", {"a": {"b": "User"}}, True),
+    ("!(a.b == 'x')", {"a": {"b": "x"}}, False),
+    ("contains(fromJSON('[\"X\",\"Y\"]'), a.b)", {"a": {"b": "y"}}, True),
+    ("contains(fromJSON('[\"X\"]'), a.missing)", {"a": {}}, False),
+    ("'a' == 'b' || 'c' == 'c' && 'd' == 'e'", {}, False),
+    ("'a' == 'a' || 'c' == 'c' && 'd' == 'e'", {}, True),
+])
+def test_expression_evaluator_follows_github_semantics(expression, context, expected):
+    assert _evaluate_expression(expression, context) is expected
+
+
+def test_expression_evaluator_rejects_unsupported_syntax():
+    with pytest.raises(AssertionError):
+        _evaluate_expression("startsWith(a, 'x')", {"a": "x"})
+    with pytest.raises(AssertionError):
+        _evaluate_expression("a.b > 1", {"a": {"b": 2}})
 
 
 # --- trust-step behavior, run under bash for each documented case -------------
