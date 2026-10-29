@@ -4,15 +4,13 @@
 <!-- verified: 2026-09-05 -->
 <!-- overrides: none -->
 
-A protocol for runtime-validating that Claude actually loads referenced files when SKILL.md directs it to. Established 2026-05-06 per council deliberation (notes/2026-05-06-1023-council-white-label-restructure.md). Pairs with `skill-structure-conventions.md` — the convention that establishes WHEN to split; this file establishes how to verify the split holds.
+A protocol for validating that a skill loads its references when instructed. Use it with [skill-structure-conventions.md](skill-structure-conventions.md), which defines when to split an orchestrator.
 
 JIT-load this file before any SKILL.md restructure, and after any change that adds or modifies a `→ Load references/<file>.md` directive.
 
 ## Why this exists
 
-The council deliberation surfaced a load-bearing assumption that no individual advisor caught: **JIT-load directives are instructions to a model, not guarantees**. Reviewers A and B independently flagged this:
-
-> "JIT-loading is a directive to a model, not a guarantee. Every response treats 'move to references/, load on demand' as if Claude reliably follows load directives. In practice, fresh Claude often skims SKILL.md and proceeds without loading the referenced file — especially under time pressure or when the directive is buried."
+JIT-load directives instruct a model to read a reference. A tool-use transcript must establish whether the model followed that instruction.
 
 The downside risk is real and asymmetric: a 150-line orchestrator with six "→ load references/X.md when Y" directives may produce *worse* outcomes than a 969-line monolith if Claude skips loads and operates on incomplete context. Tokens saved at session start are recouped only if the loads actually happen when needed.
 
@@ -70,7 +68,7 @@ List every `→ Load references/<file>.md` directive in SKILL.md. For each, note
 - Trigger condition (e.g., "when error X occurs", "before Step 3", "always")
 - Expected behavior (e.g., "model reads file before composing voice block")
 
-Save to `notes/YYYY-MM-DD-jit-audit-<skill>.md` as the audit baseline.
+Save the baseline as `YYYY-MM-DD-jit-audit-<skill>.md` in a private workspace outside this public checkout.
 
 ### Step 1 — Pick representative invocations
 
@@ -132,7 +130,7 @@ If a directive is being skipped, common fixes ordered by leverage:
 
 ## Audit report format
 
-Save to `notes/YYYY-MM-DD-jit-audit-<skill>.md`. Structure:
+Use the same private baseline file for the completed report. Structure:
 
 ```markdown
 # JIT-Load Audit — <skill>
@@ -175,9 +173,3 @@ This audit is not exhaustive:
 - Level 2 (behavioral compliance) requires inspecting a fresh-session tool-use transcript — straightforward on Claude Code and on Codex CLI's own call log (`parallax-conventions.md` §14.2); it may be unavailable on claude.ai's uploaded-skill runtime. Where it is unavailable, run Level 1 only and record the gap in the audit baseline.
 
 For high-stakes restructures (skills that affect compliance, money, or client-facing output), run the audit at least three times across different operators and session states. Cross-validate.
-
-## Provenance
-
-- Council session: `notes/2026-05-06-1023-council-white-label-restructure.md`
-- Reviewer A & B independent flag: "JIT-load is a directive to a model, not a guarantee"
-- Companion file: `skill-structure-conventions.md`

@@ -91,12 +91,11 @@ Connect `https://mcp.chicago.global/api/mcp` under **Customize → Connectors**,
 Until a release is published, GitHub Releases may have no downloadable packages. To build the upload packages from a clone instead:
 
 ```bash
-git clone https://github.com/bencharoenwong/parallax-workflows.git
-cd parallax-workflows
-python3 skills/_parallax/scripts/build_bundle.py web
+git clone https://github.com/bencharoenwong/parallax-workflows.git "$HOME/parallax-workflows"
+python3 "$HOME/parallax-workflows/skills/_parallax/scripts/build_bundle.py" web
 ```
 
-The build ends with a leak-scan gate that expects a maintainer-local extra term list and fails closed without it; on a fresh clone, set `PARALLAX_ALLOW_PARTIAL_SCAN=1` to build with the built-in scan terms only. Upload the zips from `~/Downloads/claude-web-skills/`. Maintainers building a release should follow [Building a release](docs/releases.md).
+The build ends with a leak-scan gate that expects a maintainer-local extra term list and fails closed without it; on a fresh clone, set `PARALLAX_ALLOW_PARTIAL_SCAN=1` to build with the built-in scan terms only. Upload the `.skill` files from `~/Downloads/claude-web-skills/`. Maintainers building a release should follow [Building a release](docs/releases.md).
 
 ### Integration
 
@@ -165,29 +164,28 @@ The plugin is the account-wide path. Skill upload packages are independent fallb
 
 ## Forking and Customizing
 
-Every workflow is a `SKILL.md` file — a structured prompt the model orchestrates. To customize:
+Each workflow has a `SKILL.md` entry point. Start with the full clone from [Integration](#integration), then copy a workflow:
 
 ```bash
-# Develop against the repo directly. install.sh copies each skill, but if
-# ~/.claude/skills/<name> is already a symlink into this repo it is left in
-# place, so edits in the repo propagate live without re-installing.
-git clone https://github.com/bencharoenwong/parallax-workflows.git
-cd parallax-workflows
-./install.sh
-
-# Fork a workflow
-cp -r skills/parallax-should-i-buy skills/my-should-i-buy
-$EDITOR skills/my-should-i-buy/SKILL.md   # change behavior, output format, MCP tool sequence
-./install.sh                              # picks up the new skill on next Claude Code restart
+export PARALLAX_ROOT="$HOME/parallax-workflows"
+cp -r "$PARALLAX_ROOT/skills/parallax-should-i-buy" "$PARALLAX_ROOT/skills/my-should-i-buy"
+$EDITOR "$PARALLAX_ROOT/skills/my-should-i-buy/SKILL.md"
+bash "$PARALLAX_ROOT/install.sh"
 ```
 
+Set `EDITOR` to your editor before running the example.
+In the copied entry point, change the frontmatter `name` to `my-should-i-buy`.
+Restart Claude Code to load the copied skill.
+The installer preserves existing skill symlinks into the clone; edits through those links are available without copying again.
+
 A few common customizations:
+
 - **Different output format.** Edit the "Output Format" section of `SKILL.md`. The model follows it verbatim.
 - **Different tool sequence.** Add or remove Parallax tool calls (by logical name, e.g. `get_company_info`) in the workflow steps. The connector namespace differs per host and install, so skills resolve it at runtime (`skills/_parallax/parallax-conventions.md` §0.1).
 - **Different scoring backend.** The schema and loader under `skills/_parallax/house-view/` are scoring-engine-agnostic; the SKILL.md files are the layer that's coupled to Parallax MCP. Replace those calls with your own data source and the rest keeps working.
 - **Different storage path.** House-view artifacts default to `~/.parallax/active-house-view/`. The path is referenced in `SKILL.md` and the Python helpers under `_parallax/house-view/`.
 
-The Python modules (`audit_chain`, `chain_emit`, `manifest_verify`, `gap_detect`, `gap_suggest`) are pure functions with no MCP coupling — they import cleanly into any harness.
+The Python helpers have no MCP coupling. Some are pure functions; audit and reasoning-chain helpers write local files. See the [module reference](skills/_parallax/house-view/README.md) for their interfaces and side effects.
 
 ## Audit & Compliance
 
@@ -315,11 +313,20 @@ A family of standalone skills that apply famous investors' workflow shapes (not 
 | `/parallax-ai-consensus <ticker or basket>` | Runs all 5 profiles in parallel; surfaces super-majority + factor-level agreement | Meta-skill |
 
 **Framing and legal posture:**
+
 - All profiles framed in third person ("Buffett-style," never "Buffett says")
 - Each output cites its academic/book source and includes a mandatory non-advice disclaimer
 - AI-inferred from publicly available information only — no proprietary endpoints
 - Not financial advice, not personalized, not endorsed by any named investor
 - See `skills/_parallax/AI-profiles/README.md` for inclusion criteria, v2 candidates, and design rationale
+
+### Finance translation
+
+Chinese (`zh-CN`, `zh-TW`, `zh-HK`) and Thai (`th`) translation skills ship in the plugin. The Vietnamese (`vi-VN`) and Saudi Arabic (`ar-SA`) source skills remain outside the general-release plugin pending native review.
+
+Translation entry instructions load only the relevant references. JSON and saved-prose deliverables run a source-fidelity validator; a passing style check alone cannot approve fidelity. Meaning and uncertainty still require source review.
+
+Standalone `.skill` packages include the same validator helper and can be built with `skills/build-skills.sh`. A no-argument run builds the Chinese and Thai packages; the held `vi-VN` and `ar-SA` packages build only when named, with a warning, and are not for distribution. Each package passes the same leak-scan gate as the web build, so a fresh clone needs `PARALLAX_ALLOW_PARTIAL_SCAN=1`. `SKILL_BUILD_OUT_DIR` optionally selects an output directory instead of Downloads.
 
 ### Symbol Format
 
@@ -355,59 +362,18 @@ Full breakdown in `skills/_parallax/token-costs.md`.
 
 ## What's Inside
 
-```
-skills/
-├── _parallax/                  # Shared conventions, credit costs, AI profile framework
-│   ├── parallax-conventions.md # RIC resolution, parallel execution, fallbacks
-│   ├── token-costs.md          # Per-tool and per-workflow credit estimates
-│   ├── render_gate.py          # Shared deterministic pre-render gate (+ test_render_gate.py)
-│   ├── AI-profiles/            # Schema, output template, and profile specs for AI-* skills
-│   └── scripts/                # Build/gate tooling: spec-validate, section-ref-lint, tracked-file scan, run-gate-tests
-├── parallax-should-i-buy/               # Quick stock evaluation
-│   └── SKILL.md
-├── parallax-deep-dive/                  # Full single-stock analysis
-│   └── SKILL.md
-├── parallax-client-review/              # RIA client meeting prep
-│   ├── SKILL.md
-│   └── references/
-│       └── recommendation-matrix.md
-├── parallax-portfolio-checkup/          # Individual investor health check
-│   ├── SKILL.md
-│   └── references/
-│       └── health-flags.md
-├── parallax-desk-call-list/             # Desk-wide RM morning call list
-│   ├── SKILL.md, desk_call_list_logic.py
-│   └── references/
-├── parallax-ai-buffett/                 # Buffett-style factor profile dispatcher
-│   └── SKILL.md
-├── parallax-ai-consensus/               # Multi-profile super-majority meta-skill
-│   └── SKILL.md
-├── parallax-load-house-view/            # Ingest CIO PDF → structured house view (writer)
-│   └── SKILL.md
-├── parallax-make-house-view/            # Synthesize draft house view from MCP signals (writer)
-│   ├── SKILL.md
-│   ├── maker.py, pillar_compose.py, pillar_formulas.py,
-│   ├── cross_country.py, prose_synth.py, shadow_diff.py
-│   └── tests/
-├── parallax-judge-house-view/           # Read-only drift monitor + per-cell recommendations
-│   ├── SKILL.md
-│   ├── judge.py, drift_classify.py, recommendation.py,
-│   ├── render_judge.py, cadence.py
-│   └── tests/
-└── ... (33 more workflows)
-```
+| Location | Purpose |
+|---|---|
+| [skills/](skills/) | Workflow entry points and their local helpers; see the [distribution catalog](#distribution-catalog) for availability. |
+| [Shared conventions](skills/_parallax/parallax-conventions.md) | Symbol resolution, tool discovery, fallbacks, and host capability bindings in §14. |
+| [Skill structure](skills/_parallax/skill-structure-conventions.md) | Workflow steps, shared-file authority headers, and completion criteria. |
+| [House-view core](skills/_parallax/house-view/README.md) | Schema, loader, audit log, reasoning chains, and module interfaces. |
+| [White-label integration](skills/_parallax/white-label/integration-pattern.md) | Shared contract for report branding and fallback behavior. |
+| [AI profiles](skills/_parallax/AI-profiles/README.md) | Profile schemas, sources, and inclusion criteria. |
+| [Build scripts](skills/_parallax/scripts/) | Packaging, release verification, and offline gates. |
+| [plugin/](plugin/) and [marketplace metadata](.claude-plugin/marketplace.json) | Generated plugin files. Edit sources under `skills/`; rebuild with `build_bundle.py plugin`. |
 
-Each `SKILL.md` is a self-contained instruction set. Claude reads it when you invoke the command, then orchestrates the Parallax MCP tools accordingly. Some workflows also invoke adjacent deterministic Python helpers for local validation, arithmetic, or rendering.
-
-**Where things live:**
-- `skills/<workflow>/SKILL.md` — the user-invocable workflows
-- `plugin/` and `.claude-plugin/marketplace.json` — the generated Claude Code plugin bundle (general-release set). Never hand-edit: edit the sources under `skills/` and rerun `python3 skills/_parallax/scripts/build_bundle.py plugin`; a gate test fails when the tracked bundle drifts from the sources.
-- `skills/_parallax/parallax-conventions.md`, `token-costs.md`, `AI-profiles/` — genuinely shared across many skills (RIC resolution, parallel-call patterns, AI profile framework)
-- `skills/_parallax/parallax-conventions.md` §14 — host primitives and the per-host binding table (Claude Code, Codex CLI, claude.ai). Skills name primitives, not host tools; §14.3 says what a skill does when a host lacks one. `skills/_parallax/skill-structure-conventions.md` — how a SKILL.md is shaped: the canonical step spine, the authority header for shared files, and the `## Failure modes` / `## Done when` sections.
-- `skills/_parallax/house-view/` — house-view subsystem. Three skills participate: `/parallax-load-house-view` (writer, bank CIO ingestion — schema, audit chain, signed reasoning chains, calibration manifest verifier), `/parallax-make-house-view` (writer, MCP-driven synthesis — routes through the same gate, persists with `generator_synthesis` provenance), and `/parallax-judge-house-view` (read-only consumer, drift monitor — emits `judge` audit rows and a per-cell recommendation bundle). Also consumed by the portfolio and single-stock skills that surface view conflicts (`parallax-portfolio-builder`, `parallax-rebalance`, `parallax-client-review`, `parallax-morning-brief`, `parallax-explain-portfolio`, `parallax-thematic-screen`, `parallax-country-deep-dive`, `parallax-macro-outlook`, `parallax-deep-dive`, `parallax-should-i-buy`). `loader.md`, `render_helpers.md`, `gate_present.py` (shared Step 5 confirmation gate), `provenance_classes.py` (canonical 6-class registry), `aggregator_weights.yaml` (cross-country weighting for the maker), `MCP_FIELD_INVENTORY.md` (Phase A0 capability map), and `auto-on-load-judge-pattern.md` (consumer drift-gate protocol — auto-fires `/parallax-judge-house-view --dry --json` for `parallax-portfolio-builder` / `parallax-rebalance` / `parallax-thematic-screen` when the active view is at least 30 days old) are the shared interface; `gap_detect` / `gap_suggest` are loaded by `portfolio-builder --augment-silent` only.
-- `skills/_parallax/white-label/` — white-label branding subsystem. Authored by `/parallax-white-label-onboard`; consumed by 16 visual-rendering skills (Tier 1 + Tier 2). `integration-pattern.md` (§1–§9) is the shared consumer-side contract — header rendering, About This Report line, color substitution, logo placement, fallback behavior — JIT-loaded by every consumer via the `<!-- white-label: integration-pattern.md -->` sentinel. `loader.load_visual_branding()` is the visual-consumer entry point (7-key subset; voice-exclusion guardrail), paired with `loader.is_white_label_active(branding)` (single source of truth for the rendering flag, per `integration-pattern.md` §2/§4/§8) and `loader.safe_source_reference(branding)` (display-safe About This Report source ref, per §7). The drift gate at `tests/test_integration_pattern_referenced.py` enforces sentinel ↔ load-directive pairing.
-
-**Reference templates.** The newer skills (`parallax-credit-lens`, `parallax-load-house-view`, `parallax-white-label-onboard`) carry typed dataclasses, comprehensive test suites, and explicit reference modules. If you're authoring or upgrading a skill, model on those.
+For workflow templates, see [Contributing](CONTRIBUTING.md#reference-templates).
 
 ## Known Limitations
 
@@ -431,11 +397,3 @@ MIT — see [LICENSE](LICENSE).
 ## Disclaimer
 
 These workflows are analytical tools that automate data retrieval and presentation from the Parallax platform. They do not constitute financial advice, investment recommendations, or solicitations to buy or sell securities. All outputs are informational only and should be independently verified and reviewed by qualified professionals before any investment decisions. Chicago Global Capital Pte Ltd assumes no liability for decisions made based on these outputs.
-
-### Finance translation
-
-Chinese (`zh-CN`, `zh-TW`, `zh-HK`) and Thai (`th`) translation skills ship in the plugin. The Vietnamese (`vi-VN`) and Saudi Arabic (`ar-SA`) source skills remain outside the general-release plugin pending native review.
-
-Translation entry instructions load only the relevant references. JSON and saved-prose deliverables run a source-fidelity validator; a passing style check alone cannot approve fidelity. Meaning and uncertainty still require source review.
-
-Standalone `.skill` packages include the same validator helper and can be built with `skills/build-skills.sh`. A no-argument run builds the Chinese and Thai packages; the held `vi-VN` and `ar-SA` packages build only when named, with a warning, and are not for distribution. Each package passes the same leak-scan gate as the web build, so a fresh clone needs `PARALLAX_ALLOW_PARTIAL_SCAN=1`. `SKILL_BUILD_OUT_DIR` optionally selects an output directory instead of Downloads.
