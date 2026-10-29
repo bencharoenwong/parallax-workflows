@@ -80,15 +80,16 @@ also requires explicit owner approval. From the repository root, push branches
 through the `no-mistakes` remote when it exists:
 
 ```bash
-git push no-mistakes <branch> -o no-mistakes.skip=ci
+no-mistakes axi run --intent "<task>" --no-publish-intent --skip=pr,ci
 ```
 
-Keep `-o no-mistakes.skip=ci` for feature-branch pushes. This checkout's workflows
-do not run on feature-branch pushes, so the gate would wait for nonexistent
-checks. The option skips the gate's CI wait; inspect PR checks after opening.
+This validates and pushes through the configured gate without publishing raw
+validation transcripts. Write and scan the public PR title and body before
+opening the PR, then inspect its GitHub checks. The gate's CI wait is skipped
+because this checkout's workflows do not run on feature-branch pushes.
 
 The gate runs review, tests, documentation and lint in an isolated worktree,
-forwards to `origin`, and opens a PR. Its documentation step can add a commit
+and forwards to `origin`. Its documentation step can add a commit
 that bypasses this clone's pre-push hook. Review final changes and commit
 messages before merging; local scans do not certify gate-added changes.
 

@@ -133,8 +133,9 @@ The repository gate configuration disables the generated Intent section of PR
 descriptions. To also withhold intent from PR drafting, pass
 `--no-publish-intent` when starting the run. Installed gate versions may still
 append raw validation transcripts. For a public-safe description, start the run
-with `--skip=pr,ci`, complete the gated push, then open a concise PR by hand,
-scan its text, and check GitHub CI on that PR. Generated text is not a privacy
+with `--skip=pr,ci`, complete the gated push, then write and scan the public
+title and body before opening a concise PR by hand. Check GitHub CI on that PR.
+Generated text is not a privacy
 filter.
 
 ### CI trust and coverage
