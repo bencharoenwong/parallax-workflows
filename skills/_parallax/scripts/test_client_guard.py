@@ -734,29 +734,32 @@ def test_a_group_readable_key_file_is_refused(tmp_path, monkeypatch):
 # git objects, since the working copy stays pinned to the trusted base) ------------
 
 def test_change_rev_registry_is_matched(repo, registry, tmp_path, monkeypatch):
-    (repo / ".client-guard").mkdir(exist_ok=True)
+    trusted_rev = _commit_registry(repo, registry, monkeypatch)
+    cg.add_names(KEY, ["Globex Corp"], registry)
     (repo / cg.REGISTRY_REL).write_text(registry.read_text())
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", "registry")
     change_rev = _git(repo, "rev-parse", "HEAD")
     monkeypatch.setattr(cg, "REGISTRY_PATH", tmp_path / "nowhere.json")  # no working-copy registry
+    monkeypatch.setenv(cg.TRUSTED_ENV, trusted_rev)
     monkeypatch.setenv(cg.CHANGE_ENV, change_rev)
     scanner = cg.build_scanner(KEY)
     assert scanner.text_hits("Acme Widgets")
+    assert scanner.text_hits("Globex Corp")
 
 
 def test_change_rev_allowlist_is_honored(repo, registry, tmp_path, monkeypatch):
+    trusted_rev = _commit_registry(repo, registry, monkeypatch)
     png = tmp_path / "logo.png"
     png.write_bytes(b"\x89PNG\r\n\x1a\nreviewed")
     cg.allow_files(KEY, [str(png)])
-    (repo / ".client-guard").mkdir(exist_ok=True)
-    (repo / cg.REGISTRY_REL).write_text(registry.read_text())
     (repo / cg.ALLOW_REL).write_text(cg.ALLOW_PATH.read_text())
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", "allow")
     change_rev = _git(repo, "rev-parse", "HEAD")
     monkeypatch.setattr(cg, "REGISTRY_PATH", tmp_path / "nowhere.json")
     monkeypatch.setattr(cg, "ALLOW_PATH", tmp_path / "nowhere-allow.txt")
+    monkeypatch.setenv(cg.TRUSTED_ENV, trusted_rev)
     monkeypatch.setenv(cg.CHANGE_ENV, change_rev)
     scanner = cg.build_scanner(KEY)
     assert cg.git_blob_sha(png.read_bytes()) in scanner.allowed
@@ -765,6 +768,7 @@ def test_change_rev_allowlist_is_honored(repo, registry, tmp_path, monkeypatch):
 
 
 def test_change_rev_allowlist_unsigned_line_fails_closed(repo, registry, tmp_path, monkeypatch):
+    trusted_rev = _commit_registry(repo, registry, monkeypatch)
     bad = f"{cg.git_blob_sha(b'x')} {'0' * 32}\n"  # not signed by this key
     (repo / ".client-guard").mkdir(exist_ok=True)
     (repo / cg.REGISTRY_REL).write_text(registry.read_text())
@@ -774,6 +778,7 @@ def test_change_rev_allowlist_unsigned_line_fails_closed(repo, registry, tmp_pat
     change_rev = _git(repo, "rev-parse", "HEAD")
     monkeypatch.setattr(cg, "REGISTRY_PATH", tmp_path / "nowhere.json")
     monkeypatch.setattr(cg, "ALLOW_PATH", tmp_path / "nowhere-allow.txt")
+    monkeypatch.setenv(cg.TRUSTED_ENV, trusted_rev)
     monkeypatch.setenv(cg.CHANGE_ENV, change_rev)
     with pytest.raises(cg.GuardError):
         cg.build_scanner(KEY)
@@ -781,8 +786,10 @@ def test_change_rev_allowlist_unsigned_line_fails_closed(repo, registry, tmp_pat
 
 def test_change_rev_with_files_absent_there_is_fine(repo, registry, monkeypatch):
     base = _git(repo, "rev-parse", "HEAD")  # neither file is committed at this rev
+    trusted_rev = _commit_registry(repo, registry, monkeypatch)
+    monkeypatch.setenv(cg.TRUSTED_ENV, trusted_rev)
     monkeypatch.setenv(cg.CHANGE_ENV, base)
-    scanner = cg.build_scanner(KEY)  # the working-copy registry still supplies a source
+    scanner = cg.build_scanner(KEY)  # the trusted revision supplies the newer registry
     assert isinstance(scanner, cg.Scanner)
 
 
@@ -1581,6 +1588,8 @@ def test_symmetric_range_is_rejected_clearly(repo, scanner):
 
 
 def test_change_rev_that_is_not_available_names_the_cause(repo, registry, monkeypatch):
+    trusted_rev = _commit_registry(repo, registry, monkeypatch)
+    monkeypatch.setenv(cg.TRUSTED_ENV, trusted_rev)
     monkeypatch.setenv(cg.CHANGE_ENV, "f" * 40)
     with pytest.raises(cg.GuardError, match="not available"):
         cg.build_scanner(KEY)
@@ -1779,3 +1788,66 @@ def test_unreadable_fork_registry_cannot_skip_removal_check(repo, registry, tmp_
     _remove_loose_object(repo, _git(repo, "rev-parse", f"{fork}:{cg.REGISTRY_REL}"))
     with pytest.raises(cg.GuardError, match="registry unreadable"):
         cg.build_scanner(KEY)
+
+
+# --- ordinary path separators, archive paths and registry configuration -------
+
+@pytest.mark.parametrize("text", [
+    r"Acme\Widgets", r"C:\Acme\Widgets\sample.md", r"Acme\\Widgets",
+])
+def test_windows_separator_names_match(scanner, text):
+    scanner.scan_text(text, "example")
+    assert scanner.hits == [("client/name", "example")]
+
+
+def test_windows_separator_name_in_path_matches(scanner):
+    scanner.scan_path(r"Acme\Widgets\sample.md")
+    assert any(rule == "client/name-in-path" for rule, _ in scanner.hits)
+
+
+@pytest.mark.parametrize("member, rule", [
+    ("notes/sample.md", "path/internal-doc"),
+    (r"notes\sample.md", "path/internal-doc"),
+    ("clients/sample.md", "path/client-work"),
+    (r"clients\sample.md", "path/client-work"),
+    ("HANDOFF.md", "path/internal-doc"),
+])
+def test_archive_private_member_paths_are_blocked(scanner, member, rule):
+    scanner.scan_bytes(_zip_bytes({member: b"example\n"}), "bundle.zip", "bundle.zip")
+    assert (rule, f"bundle.zip!{member}") in scanner.hits
+
+
+@pytest.mark.parametrize("prefix_length", [3, 5, "4", 4.0, None, True])
+def test_registry_incompatible_explicit_prefix_length_is_rejected(registry, prefix_length):
+    data = json.loads(registry.read_text())
+    data["prefix_length"] = prefix_length
+    with pytest.raises(cg.GuardError, match="prefix_length"):
+        cg.Registry.parse(json.dumps(data), "registry")
+
+
+def test_legacy_registry_missing_prefix_length_keeps_v2_default(registry):
+    data = json.loads(registry.read_text())
+    del data["prefix_length"]
+    parsed = cg.Registry.parse(json.dumps(data), "legacy registry")
+    parsed.verify(KEY)
+    assert cg.Scanner(KEY, parsed).text_hits("Acme Widgets")
+
+
+def test_change_revision_requires_trusted_baseline(repo, registry, monkeypatch):
+    change = _commit_registry(repo, registry, monkeypatch)
+    monkeypatch.delenv(cg.TRUSTED_ENV, raising=False)
+    monkeypatch.setenv(cg.CHANGE_ENV, change)
+    with pytest.raises(cg.GuardError, match="requires.*trusted"):
+        cg.build_scanner(KEY)
+
+
+def test_change_only_env_cannot_accept_registry_removal(repo, registry, monkeypatch):
+    base = _commit_registry(repo, registry, monkeypatch)
+    norm = cg.normalize_name(NAMES[0])
+    cg.Registry(frozenset({cg._mac(KEY, "name", norm)}),
+                frozenset({cg._mac(KEY, "prefix", norm[:cg.PREFIX_LEN])}),
+                (len(norm),), cg._mac(KEY, "check", cg.KEY_CHECK_INPUT)).save(cg.REGISTRY_PATH)
+    change = _commit(repo, "sample.md", NAMES[1] + "\n", "registry change")
+    monkeypatch.delenv(cg.TRUSTED_ENV, raising=False)
+    monkeypatch.setenv(cg.CHANGE_ENV, change)
+    assert cg.main(["scan-range", change, f"^{base}"]) == 2
