@@ -33,7 +33,8 @@ TRUSTED COPY. With ``CLIENT_GUARD_TRUSTED_REV`` set (the pre-push hook sets it t
 committed at that revision are merged with the working copy, so a change cannot
 weaken the check that judges it by deleting entries.
 
-CHANGED COPY. ``pull_request_target`` CI checks out the trusted base as the
+CHANGED COPY. A change revision requires a trusted revision.
+``pull_request_target`` CI checks out the trusted base as the
 workspace and never the PR head, so the working copy never holds the PR's own
 registry/allowlist edits. With ``CLIENT_GUARD_CHANGE_REV`` set to the PR tip,
 those two files are read as git objects at that revision and merged in too. A
@@ -48,8 +49,8 @@ missing fork point, or a malformed or unsigned file, fails closed.
 MATCHING. Text is NFKC-normalised, stripped of invisible characters, casefolded,
 and common Cyrillic/Greek look-alikes are mapped to Latin. Letters and digits
 separated by up to eight of `` ._+-&'"`~:/|*`` (and curly quotes, dashes, bullets,
-middle dots), by ``%20``, or by up to two line breaks with an optional comment
-prefix (``#``, ``//``, ``*``, ``>``, ``--``, ``;``) form one run; separators are
+middle dots), by backslashes, by ``%20``, or by up to two line breaks with an
+optional comment prefix (``#``, ``//``, ``*``, ``>``, ``--``, ``;``) form one run; separators are
 dropped. So "Acme & Widgets", "ACME-WIDGETS", "acme.widgets.com", "acme/widgets"
 and a name wrapped across a comment block all reduce to ``acmewidgets``. A comma,
 bracket or parenthesis ends a run. Names of eight characters or fewer must start
@@ -59,7 +60,8 @@ longer names match anywhere. Each text is also scanned with HTML/XML entities,
 ``\\uXXXX`` escapes and ``%XX`` decoded, and with markup tags removed (so a name
 split across Word runs is caught).
 
-WHAT IS SCANNED. File contents (UTF-8, UTF-16, UTF-32), file paths, members and
+WHAT IS SCANNED. Private path rules apply to archive members as well as files.
+File contents (UTF-8, UTF-16, UTF-32), file paths, members and
 comments of zip containers (.docx/.xlsx/.pptx/.zip), commit messages and
 author/committer identities (both the raw commit object and, so a non-UTF-8
 ``encoding`` header is honoured, ``git log``'s re-encoded view), merge commits
@@ -196,7 +198,7 @@ _NL = r"(?:\r\n|\r|\n|\u0085|\u000b|\u000c)[ \t]*(?:(?:#|//|\*|>|--|;)[ \t]*)?"
 # here, and excluding them from _TOKEN/_RUN's word-character class below,
 # makes them act as a separator instead of a silently-stripped no-op.
 _SEP_CHARS = (" \\t\\u00a0._+\\-&'\"`~:/|*\\u2018\\u2019\\u201c\\u201d\\u00b7"
-              "\\u2022\\u2212\\u2010-\\u2015\\u2028\\u2029" + _HANGUL_FILLERS)
+              "\\u2022\\u2212\\u2010-\\u2015\\u2028\\u2029" + r"\\" + _HANGUL_FILLERS)
 _SEP = rf"(?:[{_SEP_CHARS}]{{1,8}}(?:{_NL}){{0,2}}|(?:{_NL}){{1,2}}|%20)"
 # [^\W_<fillers>]: a "word" character that is not underscore and not one of
 # the filler letters above, which must end a token so _SEP gets a chance to
@@ -433,6 +435,11 @@ class Registry:
             raise GuardError(f"registry has unexpected fields: {where}")
         if data.get("version") != 2 or data.get("algorithm") != "hmac-sha256":
             raise GuardError(f"registry has an unsupported version or algorithm: {where}")
+        # Older v2 readers used the fixed prefilter width even if this field
+        # was absent. Preserve that default, but never accept another width.
+        prefix_length = data.get("prefix_length", PREFIX_LEN)
+        if type(prefix_length) is not int or prefix_length != PREFIX_LEN:
+            raise GuardError(f"registry has an incompatible prefix_length: {where}")
         digests, prefixes = data.get("digests") or [], data.get("prefixes") or []
         lengths, check = data.get("lengths") or [], data.get("verifier") or ""
         if not digests or not prefixes or not lengths or not check:
@@ -866,8 +873,7 @@ class Scanner:
                                    f"{where} (archive comment)", context or where)
                 for m in members:
                     inner = f"{where}!{m.filename}"
-                    if self.text_hits(m.filename):
-                        self.report("client/name-in-path", inner, context or where)
+                    self.scan_path(m.filename, inner, context or where)
                     if m.comment:
                         self.scan_text(m.comment.decode("utf-8", "replace"), inner,
                                        context or where)
@@ -1368,13 +1374,16 @@ def build_scanner(key: bytes, withhold: bool = False) -> Scanner:
     the change revision when that is set too (CI under ``pull_request_target``
     checks out the trusted base as the workspace and never the PR head, so the
     PR's own registry/allowlist edits must be read as git objects at its tip
-    instead). Every registry found must verify against the key; a file simply
-    absent at the change revision is skipped, not an error -- except the
+    instead). A change revision requires a trusted revision. Every registry
+    found must verify against the key; a file simply absent at the change
+    revision is skipped, not an error -- except the
     registry itself when the change's fork point from the trusted revision has
     one: deleting it outright is a shrink to nothing and is rejected the same
     way a partial shrink is."""
     trusted = os.environ.get(TRUSTED_ENV, "").strip()
     change = os.environ.get(CHANGE_ENV, "").strip()
+    if change and not trusted:
+        raise GuardError("change revision requires a trusted revision")
     registries, allowed = [], set()
     if REGISTRY_PATH.exists():
         registries.append(Registry.load())

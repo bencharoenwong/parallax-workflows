@@ -83,7 +83,8 @@ After reviewing exact bytes, a key holder can run
 `python3 skills/_parallax/scripts/client_guard.py allow <path>` and include
 `.client-guard/allow-binary.txt` in the next authorized commit. Allowlist entries
 cover that exact content only. Maintainer notes and client-work directories are
-refused by path, regardless of the key. See the script for the complete path rules.
+refused by path, including member paths inside supported archives, regardless
+of the key. See the script for the complete path rules.
 
 The CI scanner merges trusted and proposed registries and refuses registry
 removals that the change makes since its fork point from `main`. To correct a
@@ -139,6 +140,8 @@ The workflow uses `pull_request_target` for PRs targeting `main`. Its workflow
 comes from the default branch; PR content is fetched as Git objects and is never
 checked out or executed. The guard comes from the trusted base revision. Proposed
 registry and allowlist edits are read through `CLIENT_GUARD_CHANGE_REV`.
+Supplying that change revision requires `CLIENT_GUARD_TRUSTED_REV` as well;
+incomplete trust configuration fails before scanning.
 
 All three conditions must hold before a PR reaches the keyed scan:
 
