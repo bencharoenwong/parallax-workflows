@@ -8,6 +8,11 @@ agent: claude
 # Do not copy this setting to a private repo.
 perimeter: public-authorized
 
+# Keep operator intent and raw validation transcripts out of public PR text.
+pr:
+  publish_intent: false
+  appendix: minimal
+
 # Deterministic test command: runs the full skill/eval suite, one pytest process
 # per top-level test root so the tests/conftest.py files do not collide.
 # See the script header for details.

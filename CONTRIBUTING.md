@@ -129,6 +129,9 @@ The message scanner runs from the checkout, so edits to its rules need review.
 A commit added inside the `no-mistakes` gate bypasses this clone's hook. Review
 the gate's final diff and commit messages before merge. Hooks can be bypassed;
 they do not replace maintainer review or server-side protection.
+The repository gate configuration omits operator intent and raw validation
+transcripts from generated public PR descriptions. Review the final description
+before publishing; a shorter generated body is not a privacy filter.
 
 ### CI trust and coverage
 
