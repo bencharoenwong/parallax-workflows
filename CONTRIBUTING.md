@@ -129,6 +129,14 @@ The message scanner runs from the checkout, so edits to its rules need review.
 A commit added inside the `no-mistakes` gate bypasses this clone's hook. Review
 the gate's final diff and commit messages before merge. Hooks can be bypassed;
 they do not replace maintainer review or server-side protection.
+The repository gate configuration disables the generated Intent section of PR
+descriptions. To also withhold intent from PR drafting, pass
+`--no-publish-intent` when starting the run. Installed gate versions may still
+append raw validation transcripts. For a public-safe description, start the run
+with `--skip=pr,ci`, complete the gated push, then write and scan the public
+title and body before opening a concise PR by hand. Check GitHub CI on that PR.
+Generated text is not a privacy
+filter.
 
 ### CI trust and coverage
 

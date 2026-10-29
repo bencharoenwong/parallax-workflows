@@ -90,9 +90,9 @@ infra problem (inconclusive — fix the harness and re-run).
 
 Structural CI already runs via `.github/workflows/evals.yml`: the offline grader suite plus
 doc-lint scripts run on pull requests and pushes to `main`, with no secrets and no live
-Parallax / MCP calls. It does **not** run on feature-branch pushes, so the `no-mistakes`
-push guidance in the root `CLAUDE.md` still uses `-o no-mistakes.skip=ci`; otherwise the
-gate waits for checks that never register on that push.
+Parallax / MCP calls. It does **not** run on feature-branch pushes, so the gated push
+guidance in the root `CLAUDE.md` skips the gate's CI wait; otherwise the gate waits for
+checks that never register on that push. Verify the actual PR checks separately.
 
 Live evals remain deliberately out of CI. To wire them in, add a job that exports the
 contract env (API key + `MCP_CONFIG` + `ALLOWED_TOOLS` from CI secrets), then calls
