@@ -53,6 +53,7 @@ machine path or username.
 """
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
@@ -267,6 +268,9 @@ _EXPR_TOKEN = re.compile(
     r"\s*(?:(?P<str>'(?:[^']|'')*')|(?P<op>==|!=|&&|\|\||[!(),])|(?P<name>[A-Za-z_][\w.-]*))")
 
 
+_EXPR_LITERALS = {"true": True, "false": False, "null": None}
+
+
 def _tokenize_expression(text: str) -> list[tuple[str, str]]:
     tokens, pos, text = [], 0, text.strip()
     while pos < len(text):
@@ -284,7 +288,8 @@ def _evaluate_expression(text: str, context: dict):
     """Evaluate the subset of the GitHub Actions expression language the
     job-level `if:` uses: string literals, dotted context lookups, ``!``,
     ``==``/``!=`` (case-insensitive for strings, as GitHub compares them),
-    ``&&``, ``||``, parentheses, ``fromJSON`` and ``contains``. Any other
+    ``&&``, ``||``, parentheses, ``true``/``false``/``null``, ``fromJSON`` and
+    ``contains``. Any other
     syntax raises, so an edit outside this subset fails the tests."""
     tokens = _tokenize_expression(text)
     pos = 0
@@ -341,6 +346,10 @@ def _evaluate_expression(text: str, context: dict):
                         return any(equal(item, needle) for item in haystack)
                     return isinstance(needle, str) and needle.casefold() in str(haystack).casefold()
                 raise AssertionError(f"unsupported function {value}/{len(args)}")
+            if value in _EXPR_LITERALS:
+                return _EXPR_LITERALS[value]
+            if value.split(".")[0] not in context:
+                raise AssertionError(f"unknown name {value!r}")
             return lookup(value)
         raise AssertionError(f"unexpected token {value!r}")
 
@@ -421,6 +430,10 @@ def test_job_gate_leaves_other_events_to_the_in_job_trust_step(wf, event_name, p
     ("contains(fromJSON('[\"X\"]'), a.missing)", {"a": {}}, False),
     ("'a' == 'b' || 'c' == 'c' && 'd' == 'e'", {}, False),
     ("'a' == 'a' || 'c' == 'c' && 'd' == 'e'", {}, True),
+    ("false || true", {}, True),
+    ("true && false", {}, False),
+    ("!false", {}, True),
+    ("a.missing == null", {"a": {}}, True),
 ])
 def test_expression_evaluator_follows_github_semantics(expression, context, expected):
     assert _evaluate_expression(expression, context) is expected
@@ -431,6 +444,18 @@ def test_expression_evaluator_rejects_unsupported_syntax():
         _evaluate_expression("startsWith(a, 'x')", {"a": "x"})
     with pytest.raises(AssertionError):
         _evaluate_expression("a.b > 1", {"a": {"b": 2}})
+    with pytest.raises(AssertionError):
+        _evaluate_expression("TRUE || yes", {})
+
+
+@pytest.mark.parametrize("suffix", [" || true", " || !false"])
+def test_job_gate_truth_table_detects_an_always_true_mutation(wf, suffix):
+    mutated = copy.deepcopy(wf)
+    mutated["jobs"]["client-guard"]["if"] += suffix
+    assert _job_runs(mutated, "issues", {"issue": _author("Bot", "NONE")}) is True
+    event = {"issue": _author("User", "OWNER"), "comment": _author("User", "NONE")}
+    assert _job_runs(mutated, "issue_comment", event) is True
+    assert _job_runs(wf, "issues", {"issue": _author("Bot", "NONE")}) is False
 
 
 # --- trust-step behavior, run under bash for each documented case -------------
