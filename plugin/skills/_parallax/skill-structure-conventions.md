@@ -4,7 +4,7 @@
 <!-- verified: 2026-09-07 -->
 <!-- overrides: none -->
 
-Conventions for how `skills/<name>/SKILL.md` should be organized as the file grows. Established 2026-05-06 per council deliberation (notes/2026-05-06-1023-council-white-label-restructure.md). Pairs with `jit-load-compliance-audit.md` — the audit protocol that gates any structural restructure.
+Conventions for organizing `skills/<name>/SKILL.md` as it grows. Use them with [jit-load-compliance-audit.md](jit-load-compliance-audit.md), which verifies that reference-loading instructions work.
 
 JIT-load this file before drafting a new skill, before committing any change that adds ≥100 lines to an existing SKILL.md, and during periodic skill-evolve passes.
 
@@ -103,7 +103,7 @@ The directive must:
 2. State the trigger condition (when to load).
 3. Be present at the call site (not buried in the README).
 
-**Two path shapes, two bases.** `references/<file>.md` resolves relative to the skill's own directory. The shared `_parallax/<file>.md` prefix (used by 30+ Parallax skills for conventions, house-view, white-label) resolves relative to the *skills root* — `_parallax/` is a sibling of every skill directory, reachable at `~/.claude/skills/_parallax/` (a symlink to `parallax-workflows/skills/_parallax/`). If a bare `_parallax/...` path does not resolve from the current working directory (e.g. CWD is a project repo, not the skills root), fall back to the absolute `~/.claude/skills/_parallax/<file>.md` rather than hunting or paraphrasing from memory.
+**Two path shapes, two bases.** `references/<file>.md` resolves from the skill's own directory. Shared `_parallax/<file>.md` references resolve from the installed skills root, where `_parallax/` is a sibling of the workflow directories. In this checkout, that root is `skills/`. Use the host's installed skill location when running an installed copy. Plugin and upload builders rewrite references for their package layout. Resolve the actual installed path instead of assuming a fixed home-directory location.
 
 ## Build-time check
 
@@ -204,18 +204,11 @@ Forward-only, same scope statement as "Host portability". `## Output additions` 
 
 ## Canonical source & path resolution
 
-`parallax-workflows/` is the single source of truth for every `parallax-*` skill and for the shared `_parallax/` conventions, house-view modules, schemas, and white-label loaders. `~/.claude/skills/` consumes them as symlinks into this repo — but symlink coverage is **partial**: `_parallax`, `parallax-should-i-buy`, and most consumer skills are symlinked, while a few (e.g. `parallax-template`, `parallax-deck-prep`) are `~/.claude`-native real directories. Treat that split as a hazard, not a convenience.
+The sources under this repository's `skills/` directory are canonical. Installed copies and generated packages consume those sources.
 
-1. **Resolve before you read or edit.** Before a should-i-buy / two-lens / house-view workflow JIT-loads any `_parallax/...` path, resolve it to the canonical `parallax-workflows/skills/_parallax/` file. Do not assume the installed skill directory contains it — `ls -l` / `readlink` the path when unsure (a directory symlink resolves its children through canonical; a native fork does not).
-2. **Never edit a forked or divergent copy of canonical content.** Shared `_parallax/...` conventions and every symlinked skill are edited in `parallax-workflows` — in `~/.claude` the entry *is* the symlink, not a separate file. A `~/.claude`-native real directory (e.g. `parallax-template`, `parallax-deck-prep`) is canonical for its *own* SKILL.md, but must never host edits to shared behavior, and must never be `cp -R`'d into a second divergent copy. A change written to a fork drifts silently from canonical and is invisible to every other consumer.
-3. **Verify the unit you graded is the unit that runs.** When auditing or editing a registered skill, first confirm whether `~/.claude/skills/<name>` is a symlink (edit canonical) or a native dir (edit in place, and flag whether it should be migrated to canonical). `cp -R` of a dir-symlink re-links to the same target — use `cp -RL` for a true throwaway copy. (Mirrors the "measure the deployed unit; check the directory symlink" rule in `CLAUDE.verification.md`.)
-
-## Provenance
-
-- Council session: `notes/2026-05-06-1023-council-white-label-restructure.md`
-- Companion file: `jit-load-compliance-audit.md`
-- Host portability, Canonical step spine, Authority header, and Failure modes / Done when sections added 2026-09-04 per the agent-ergonomics design pass (internal design note, local-only).
-- Description / Trigger Completeness rule added 2026-05-25 per tech-debt closeout audit covering AI-soros basket-mode invisibility and portfolio-builder --augment-silent undiscoverability.
+1. **Resolve before reading.** Locate references using the installed layout and confirm symlink targets when present.
+2. **Edit the source.** Change shared behavior under `skills/_parallax/`, then rebuild or reinstall the affected distribution. Do not edit a generated package or an independently copied shared module.
+3. **Verify the installed copy.** Confirm that the version tested is the version invoked. The Claude Code installer symlinks `_parallax/`, copies workflow directories, and preserves workflow symlinks already pointing into the checkout. Other hosts use their own installation rules.
 
 ## Spec compliance (agentskills.io)
 

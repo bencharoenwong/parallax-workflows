@@ -1,0 +1,226 @@
+name: client-guard
+
+permissions:
+  contents: read
+
+# Trust model. This workflow file always runs from `main`: `pull_request_target`
+# runs the version committed on the base repo's default branch, never a PR's
+# edited copy, so editing this file in a PR has no effect on the run that
+# judges that PR. The CLIENT_GUARD_KEY secret lives in the "client-guard"
+# environment below, which the maintainer scopes to a main-only deployment
+# branch policy, so only a run of this trusted workflow ever sees it.
+#
+# PR content is scanned without ever checking it out or running it. The job
+# keeps the default checkout (the base/default branch) and fetches the PR
+# head as a git object instead, reading it with `git show`/`git cat-file`.
+#
+# The guard script and registry are taken from a TRUSTED revision (the PR
+# base, or main), never from the change under test, so a PR cannot weaken the
+# check that judges it. See skills/_parallax/scripts/client_guard.py.
+#
+# INVARIANT: no outsider-authored bytes ever reach a keyed scan in CI. The
+# keyed scan prints the path of each matching file. Any run of it against
+# content an outsider controls turns the scan into an oracle: a registered
+# client name can be tested for membership one candidate per push, and a
+# reviewer-confirmed issue showed that hit counts alone decode entries from
+# the private list. There is no safe amount of outsider content to feed it,
+# keyed or not, so the gate below is on the AUTHOR of the run, never on the
+# content, and no in-CI override (label, re-run, or otherwise) re-admits an
+# outsider's bytes to this scan.
+#
+# OUTSIDE-PR GATE (the "Decide trust for this run" step). A `pull_request_target`
+# run is TRUSTED, and the scan runs, only when ALL THREE hold:
+#   1. `github.event.pull_request.head.repo.full_name == github.repository`
+#      -- the PR's head branch lives in THIS repository, never a fork.
+#   2. `github.event.pull_request.user.type` is not `"Bot"`.
+#   3. `github.event.pull_request.author_association` is one of OWNER,
+#      MEMBER, COLLABORATOR.
+#
+# Why (1) is necessary but not sufficient. A fork's head repo never equals
+# this repo, so (1) alone already excludes every outside-fork PR. Per GitHub
+# Docs ("Creating a pull request"): "To open a pull request in a public
+# repository, you must have write access to the head or the source branch
+# or, for organization-owned repositories, you must be a member of the
+# organization that owns the repository" -- so opening a same-repository PR
+# on this personal-account repo already needed write access, and (1) alone
+# used to stand in for "the author already has the access this gate exists
+# to require". That equivalence breaks for Dependabot and other bot-opened
+# PRs: Dependabot opens its PRs from a branch IN this repository (so (1)
+# passes) using its own GitHub App access, not a reviewed human
+# collaborator's, and the `pull_request_target` runs it triggers DO receive
+# secrets -- GitHub withholds them only when Dependabot created the BASE ref,
+# never when Dependabot merely opened the PR against it. Those PR bodies
+# carry upstream release notes written by third parties, and the scan step
+# below reads the PR title and body under the key, so a same-repo-only gate
+# would reopen exactly the oracle this redesign closes. Checks (2) and (3)
+# are both kept as a second, independent guard: (2) excludes the bot account
+# by type directly; (3) separately requires an author_association already on
+# the human OWNER/MEMBER/COLLABORATOR list, so neither check alone deciding
+# trust is load-bearing on the other being well-formed. An untrusted run
+# prints one fixed, content-independent `::error::` -- it names no
+# repository, user, or PR detail, so it cannot vary with what the PR
+# contains -- fails the job, and exits before the fetch, guard-load, or scan
+# steps ever run. This is a red required check BY DESIGN for every
+# outside-fork PR and every bot-opened PR (Dependabot included), not a
+# failure: a maintainer reviews the diff, scans it locally with the key (see
+# CONTRIBUTING.md), and merges with an admin bypass of the required check.
+# Trusted runs (same-repo human-authored PR, push to main, or a maintainer's
+# own issue/comment) may have the scan print the path of each matching file,
+# since those authors already have the repo access that output would
+# otherwise leak.
+#
+# issues / issue_comment. These trigger a run using the PUSH-time trusted
+# guard (no PR to scan), reading the issue/comment text. The job-level `if:`
+# below runs this job for those two events only when the text's own author
+# is not a bot and has `author_association` OWNER, MEMBER or COLLABORATOR.
+# That is two of the PR path's three checks (an issue has no head branch),
+# for the same reason: an outsider's or a bot's text would otherwise leak
+# the same per-post bit. Per GitHub's docs ("Permission levels for a personal account
+# repository"), a collaborator on a personal repository already has push
+# (write) access, so OWNER/MEMBER/COLLABORATOR here is the same "already has
+# push access" bar as the PR trust check, not a looser one. If this
+# repository ever moves to an organization, read and triage roles appear
+# that do NOT imply push access, and this job-level `if:` must be revisited
+# before that migration ships.
+#
+# NOT scanned here: pull request review and review-comment text, release
+# text, and pushes to any branch or tag other than main -- the local pre-push
+# hook (install_git_hooks.sh) is the blocker for those. The PR that first adds
+# this workflow gets no pull_request_target run (there is no workflow on main
+# yet); the local hook and the next PR's base-tree scan still cover it.
+# `[skip ci]` in a push commit message to main skips that push's run only; it
+# never skips the PR run that gated the merge.
+#
+# REQUIRED-CHECK PINNING. A PR can still add a second job named `client-guard`
+# to this very file's own future edits once merged, or (before that) ship a
+# same-named job in a workflow of its own; a required check keyed only by job
+# name would then be satisfiable by that forged job instead of this one. The
+# required check must be pinned to THIS workflow file -- a branch-protection
+# ruleset with "require workflows" pointing at
+# `.github/workflows/client-guard.yml`, or a CODEOWNERS entry on
+# `.github/workflows/` with an active rule requiring code-owner approval.
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, edited, synchronize, reopened]
+  push:
+    branches: [main]
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created, edited]
+
+# Only PR runs may cancel each other: a push run scans the commits that push
+# added, and cancelling it would leave them unscanned.
+concurrency:
+  group: client-guard-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request_target' }}
+
+jobs:
+  client-guard:
+    runs-on: ubuntu-latest
+    # issues / issue_comment: run only when the text's own author is a
+    # maintainer. All other events (pull_request_target, push) are gated
+    # inside the job instead, by the "Decide trust for this run" step.
+    if: >-
+      github.event_name != 'issues' && github.event_name != 'issue_comment' ||
+      (github.event_name == 'issues' &&
+       github.event.issue.user.type != 'Bot' &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association)) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.comment.user.type != 'Bot' &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
+    environment: client-guard
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Decide trust for this run
+        id: trust
+        if: github.event_name == 'pull_request_target'
+        env:
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+          PR_USER_TYPE: ${{ github.event.pull_request.user.type }}
+          PR_AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
+        run: |
+          set -euo pipefail
+          trusted=true
+          if [ "$HEAD_REPO" != "$BASE_REPO" ]; then
+            trusted=false
+          fi
+          if [ "$PR_USER_TYPE" = "Bot" ]; then
+            trusted=false
+          fi
+          case "$PR_AUTHOR_ASSOCIATION" in
+            OWNER|MEMBER|COLLABORATOR) ;;
+            *) trusted=false ;;
+          esac
+          if [ "$trusted" = "true" ]; then
+            echo "run_scan=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "::error::Pull request from an outside contributor or a bot: the client-name scan does not run in CI. A maintainer scans it locally and merges; see CONTRIBUTING.md."
+          echo "run_scan=false" >> "$GITHUB_OUTPUT"
+          exit 1
+      - name: Fetch PR head as a git object
+        if: github.event_name == 'pull_request_target' && steps.trust.outputs.run_scan == 'true'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/pull/${PR_NUMBER}/head:refs/remotes/pr/head"
+          if ! git cat-file -e "${PR_HEAD}^{commit}" 2>/dev/null; then
+            echo "::error::PR #${PR_NUMBER} head ${PR_HEAD} not found after fetch"
+            exit 2
+          fi
+          echo "CLIENT_GUARD_CHANGE_REV=${PR_HEAD}" >> "$GITHUB_ENV"
+      - name: Load the trusted guard copy
+        if: github.event_name != 'pull_request_target' || steps.trust.outputs.run_scan == 'true'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          zero=0000000000000000000000000000000000000000
+          guard="skills/_parallax/scripts/client_guard.py"
+          registry=".client-guard/registry.json"
+          if [ "$EVENT_NAME" = "pull_request_target" ]; then
+            trusted="$PR_BASE"
+          elif [ "$EVENT_NAME" = "push" ] && [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != "$zero" ]; then
+            trusted="$PUSH_BEFORE"
+          else
+            # push to main with no prior sha (first push), or issues/issue_comment:
+            # the default checkout above is already the trusted copy.
+            trusted="$(git rev-parse --verify HEAD)"
+          fi
+          if ! git cat-file -e "$trusted^{commit}" 2>/dev/null; then
+            echo "::error::trusted commit $trusted is not available; refusing to run the copy under test"
+            exit 2
+          fi
+          if git cat-file -e "$trusted:$guard" 2>/dev/null \
+              && git cat-file -e "$trusted:$registry" 2>/dev/null; then
+            git show "$trusted:$guard" > "$RUNNER_TEMP/client_guard.py"
+            echo "CLIENT_GUARD_TRUSTED_REV=$trusted" >> "$GITHUB_ENV"
+          elif [ "$EVENT_NAME" = "push" ]; then
+            echo "::notice::trusted commit has no guard yet; running the copy under test (first install only)"
+            cp "$guard" "$RUNNER_TEMP/client_guard.py"
+          else
+            echo "::error::trusted commit has no guard yet; refusing to run the copy under test"
+            exit 2
+          fi
+      - name: Scan for registered client names
+        if: github.event_name != 'pull_request_target' || steps.trust.outputs.run_scan == 'true'
+        env:
+          CLIENT_GUARD_KEY: ${{ secrets.CLIENT_GUARD_KEY }}
+        run: |
+          set -euo pipefail
+          CLIENT_GUARD_REPO_ROOT="$GITHUB_WORKSPACE" python3 -I "$RUNNER_TEMP/client_guard.py" ci
