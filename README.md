@@ -56,7 +56,7 @@ You can run the framework's validation, regression tests, and schema tooling wit
 
 ## Prerequisites
 
-These workflows require an active Parallax subscription from [Chicago Global Capital](https://chicago.global). API credentials and MCP connection details are provided to clients upon onboarding. If you are not yet a client, contact us at [chicago.global](https://chicago.global) to get started.
+These workflows require an active Parallax subscription from [Parallax Intelligence, Inc.](https://parallax.chicago.global). API credentials and MCP connection details are provided to clients upon onboarding. If you are not yet a client, contact us at [chicago.global](https://chicago.global) to get started.
 
 ## Setup
 
@@ -407,4 +407,4 @@ MIT — see [LICENSE](LICENSE).
 
 ## Disclaimer
 
-These workflows are analytical tools that automate data retrieval and presentation from the Parallax platform. They do not constitute financial advice, investment recommendations, or solicitations to buy or sell securities. All outputs are informational only and should be independently verified and reviewed by qualified professionals before any investment decisions. Chicago Global Capital Pte Ltd assumes no liability for decisions made based on these outputs.
+These workflows are analytical tools that automate data retrieval and presentation from the Parallax platform. They do not constitute financial advice, investment recommendations, or solicitations to buy or sell securities. All outputs are informational only and should be independently verified and reviewed by qualified professionals before any investment decisions. Parallax Intelligence, Inc. and its affiliates assume no liability for decisions made based on these outputs.

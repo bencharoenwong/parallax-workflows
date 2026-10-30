@@ -91,7 +91,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
    <!-- host-note -->
    Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
    <!-- /host-note -->
-   - **No Parallax capability discovered** → hard-stop: tell the operator a Parallax account (Chicago Global Capital) and the connector are required. Do not proceed.
+   - **No Parallax capability discovered** → hard-stop: tell the operator a Parallax account (Parallax Intelligence) and the connector are required. Do not proceed.
    - **Discovered, but the probe (or the first data call) returns an auth/entitlement error** → hard-stop with that specific explanation. Do not proceed.
    - A slow or timed-out probe alone is not a hard stop; proceed per conventions §4.
 3. Parse args: thesis text or path/URL; `client_profile`; `--house-view-audit`; `--json`; `compare=`; `role=`; depth; single-layer scope.
