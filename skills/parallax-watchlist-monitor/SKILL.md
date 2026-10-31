@@ -43,7 +43,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
    <!-- host-note -->
    Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
    <!-- /host-note -->
-3. Parse args: nonempty symbol list; optional `weeks=N` integer 1–200 (default 8). Reject invalid windows and clarify a weighted holdings payload instead of discarding weights.
+3. Parse args: nonempty symbol list; optional `weeks=N` integer 1–200 (default 8); optional `price_check=true|false` (default false). Reject invalid windows and clarify a weighted holdings payload instead of discarding weights.
 4. `load-reference` `_parallax/white-label/integration-pattern.md`; run §2 and record `white_label_active` + `client_name`.
 
 ### Step 1 — Resolve inputs
@@ -52,7 +52,7 @@ Symbols in RIC form (plain tickers → conventions §1); fund/OEIC identifiers g
 
 ### Step 2 — Fetch (parallel batches)
 
-**Batch A — score and price scan.** `call-tool` `get_score_analysis` for every symbol together, `weeks` as int N (non-default; server default 52). Only when the user passed `price_check=true`: in the same batch, call `export_price_series` for every equity (`etf_daily_price` for ETFs, per `_parallax/coverage-matrix.md`), covering at least the score window.
+**Batch A — score and price scan.** `call-tool` `get_score_analysis` for every symbol together, `weeks` as int N (non-default; server default 52). Only when the user passed `price_check=true`: in the same batch, call `export_price_series` with `format="json"` for every equity (`etf_daily_price` for ETFs, per `_parallax/coverage-matrix.md`), covering at least the score window.
 
 **Batch B — flagged drill-down.** After Step 3 identifies movers, `call-tool` in ONE batch for flagged symbols only: `get_news_synthesis`, `get_technical_analysis`, `get_stock_outlook` with `aspect="recommendations"`. News and technicals are async; never phase them serially; on timeout apply conventions §4 (no re-wait).
 
@@ -60,11 +60,11 @@ Symbols in RIC form (plain tickers → conventions §1); fund/OEIC identifiers g
 
 - Identity: each `get_score_analysis` `data[0].symbol` against the RIC sent (conventions §2).
 - Movers: absolute total score change > 1 point, or any single factor changing by an absolute > 2 points over the window. A symbol with no score history is reported as `no data`, never as stable. Change requires at least two verified dated observations with comparable score fields; otherwise report `insufficient history` and do not rank or mark stable. State the actual first/last dates and observation count; a shorter available window is not the full requested lookback. Missing factor endpoints remain unavailable; they do not become zero change.
-- Price movers, only with `price_check=true`: per conventions §16.2 steps 1-3, a material move or volume surge since the last score date flags the symbol even when no score changed. Record the score date, the return since it and the volume ratio. A symbol can be both a score mover and a price mover.
+- Price movers, only with `price_check=true`: per conventions §16.2 steps 1-3, a material move or volume surge since the last score date flags the symbol even when no score changed. Record the score date, the return since it and the volume ratio where §16.2 step 2 makes it available. A symbol can be both a score mover and a price mover.
 
 ### Step 4 — Compute
 
-No deterministic helper; score changes are differences of the tool's own figures. Rank by magnitude of change, largest first.
+No deterministic helper; score changes are differences of the tool's own figures. Rank score movers by absolute score change, largest first. With `price_check=true`, list price-only movers after all score movers, ranked by absolute return since the ranking date, largest first.
 
 ### Step 5 — Compose
 
@@ -86,7 +86,7 @@ The entire final message is that command's stdout. The stderr `[render-gate] WAR
 
 - **Watchlist Summary** (table: all symbols, current total score with its ranking date, score change, alert flag; with `price_check=true`, also the move since the ranking date)
 - **Verdict sensitivity** (one line, per `parallax-conventions.md` §11 by reference): the 1-2 symbols nearest the alert boundary (the >1-point total / >2-point single-factor cutoffs in Workflow step 2) and the arithmetic that would flip Alert ↔ Stable.
-- **Alerts** (ranked by magnitude of change):
+- **Alerts** (ranked per Step 4: score movers by absolute score change, then price-only movers by absolute return since the ranking date):
   - **Symbol** — score change, which factors moved, brief catalyst. With `price_check=true`, add the move since the ranking date; for a price mover, add factor directions per conventions §16.3 without new numbers.
 - **Stable Names** (one-liner each — "no material changes")
 - **Recommended Actions** (which names warrant a deeper look via /parallax-deep-dive)
@@ -117,6 +117,6 @@ Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 ## Done when
 
 - Watchlist Summary lists every input symbol with a score, a change, and an alert flag (or `no data`); first line is the Branding Header or `## Watchlist Summary`.
-- Alerts are ordered by magnitude; each flagged name has news, technicals and consensus or a pending note.
+- Alerts are ordered per Step 4; each flagged name has news, technicals and consensus or a pending note.
 - The render gate ran and the reply is its stdout (or the §14.3 note is present in About This Report).
 - `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present; expected spend stated (Gotchas).

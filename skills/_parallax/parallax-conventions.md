@@ -681,8 +681,8 @@ Use the scores, check what happened since the score date, and adjust the reading
 **Cost rule.** These steps add no tool calls. Use only the tools the consuming skill already calls within its stated spend. If the skill fetched no price series, do steps 1 and 6 and state that the move since the ranking date was not checked. A skill that calls a price series or news only for this section must say so in its own spend line.
 
 1. **Date the score.** Take the score date from the last row of `get_score_analysis`. When a score tool returns an as-of date, use that field instead. State the date in the output as "the ranking dated <date>".
-2. **Measure the move since the score date.** If the skill already fetched `export_price_series` (or `etf_daily_price` for ETFs), use it from the score date to the latest close. Report the return and the volume against the stock's recent average.
-3. **Decide whether the move is material.** Compare the move with the stock's own recent weekly moves from the same price series. A move well outside its usual weekly range, or a volume surge, is material. Do not apply a fixed universal cutoff.
+2. **Measure the move since the score date.** If the skill already fetched `export_price_series` (or `etf_daily_price` for ETFs), use it from the score date to the latest close. Report the return. Report volume against the stock's recent average only when the rows carry `volume`: `export_price_series` returns it with `format="json"` only, and `etf_daily_price` never does. Otherwise state that volume is unavailable.
+3. **Decide whether the move is material.** Compare the move with the stock's own recent weekly moves from the same price series. A move well outside its usual weekly range, or a volume surge where volume is available, is material. Do not apply a fixed universal cutoff.
 4. **If material, check the cause.** Use `get_news_synthesis` and `get_technical_analysis` results the skill already fetched. For intraday prices, a host may use a raw market-data source per the server routing guidance, and web search last.
 5. **Read each factor in the direction the evidence points (§16.3).**
 6. **Report Overall unchanged** as the latest ranking. It ranks stocks over weeks to months and is not a timing signal.
@@ -701,7 +701,7 @@ Use the scores, check what happened since the score date, and adjust the reading
 
 - **End of scale.** A factor at 0 or 10 cannot move further in that direction. Say so; do not infer a more extreme reading. For how extreme the stock is, quote reported figures from `get_financials`.
 - **Disagreement.** When Tactical and Overall point in opposite directions, report both. Do not average them.
-- **Wording.** Write "since the ranking dated <date>: <return>, volume <ratio> of average". Give the ranking date and the move since.
+- **Wording.** Write "since the ranking dated <date>: <return>, volume <ratio> of average", or "volume unavailable" in place of the ratio when step 2 has no volume. Give the ranking date and the move since.
 - **Advice boundary.** §11 and §12 apply. No direction word maps to an action or a label.
 
 ### §16.5 Consumer reference pattern
