@@ -52,7 +52,7 @@ Symbols in RIC form (plain tickers → conventions §1); fund/OEIC identifiers g
 
 ### Step 2 — Fetch (parallel batches)
 
-**Batch A — score and price scan.** `call-tool` `get_score_analysis` for every symbol together, `weeks` as int N (non-default; server default 52). Only when the user passed `price_check=true`: in the same batch, call `export_price_series` with `format="json"` for every equity (`etf_daily_price` for ETFs, per `_parallax/coverage-matrix.md`), covering at least the score window.
+**Batch A — score and price scan.** `call-tool` `get_score_analysis` for every symbol together, `weeks` as int N (non-default; server default 52). Only when the user passed `price_check=true`: in the same batch, call `export_price_series` with `format="json"` for every symbol, covering at least the score window. Use price rows only for symbols that returned verified score history; mark price movement unavailable for the rest.
 
 **Batch B — flagged drill-down.** After Step 3 identifies movers, `call-tool` in ONE batch for flagged symbols only: `get_news_synthesis`, `get_technical_analysis`, `get_stock_outlook` with `aspect="recommendations"`. News and technicals are async; never phase them serially; on timeout apply conventions §4 (no re-wait).
 
