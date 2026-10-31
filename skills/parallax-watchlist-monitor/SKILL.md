@@ -16,8 +16,8 @@ description: "Monitor a watchlist of tickers: flag score changes, news alerts, t
 
 ## Gotchas
 
-- Expected Parallax spend: `0.1N + 10.05F` credits, where N is scanned symbols and F is flagged names: score history 0.1 per symbol; news 5 + technicals 5 + recommendations 0.05 per flagged name. Ten symbols with four flags cost 41.2; with no flags, 1. Excludes resolution/recovery; current discovered prices win (`_parallax/token-costs.md`).
-- JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.2 typed integer params, §1 coverage fallback, §3 parallel execution, §4 fallbacks, §11 sensitivity, §14 host primitives.
+- Expected Parallax spend: `0.1N + 10.05F` credits, where N is scanned symbols and F is flagged names: score history 0.1 per symbol; news 5 + technicals 5 + recommendations 0.05 per flagged name. Ten symbols with four flags cost 41.2; with no flags, 1. With `price_check=true`, add 0.05 per symbol for the price series. Excludes resolution/recovery; current discovered prices win (`_parallax/token-costs.md`).
+- JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.2 typed integer params, §1 coverage fallback, §3 parallel execution, §4 fallbacks, §11 sensitivity, §14 host primitives, §16 scores against live prices.
 - Surveillance skill: breadth over depth. `weeks` 4–8 is enough to detect recent change and must be a typed integer (conventions §0.2). Only flagged names get the drill-down.
 - Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
 - Not a house-view consumer: no loader step, no audit row.
@@ -29,6 +29,7 @@ Surveillance scan across a list of tickers — flag what's changed, what needs a
 ```
 /parallax-watchlist-monitor AAPL.O MSFT.O GOOGL.O AMZN.O META.O NVDA.O TSLA.O
 /parallax-watchlist-monitor AAPL.O JPM.N XOM.N JNJ.N weeks=8
+/parallax-watchlist-monitor AAPL.O MSFT.O NVDA.O price_check=true
 ```
 
 ## Workflow
@@ -51,7 +52,7 @@ Symbols in RIC form (plain tickers → conventions §1); fund/OEIC identifiers g
 
 ### Step 2 — Fetch (parallel batches)
 
-**Batch A — score scan.** `call-tool` `get_score_analysis` for every symbol together, `weeks` as int N (non-default; server default 52).
+**Batch A — score and price scan.** `call-tool` `get_score_analysis` for every symbol together, `weeks` as int N (non-default; server default 52). Only when the user passed `price_check=true`: in the same batch, call `export_price_series` for every equity (`etf_daily_price` for ETFs, per `_parallax/coverage-matrix.md`), covering at least the score window.
 
 **Batch B — flagged drill-down.** After Step 3 identifies movers, `call-tool` in ONE batch for flagged symbols only: `get_news_synthesis`, `get_technical_analysis`, `get_stock_outlook` with `aspect="recommendations"`. News and technicals are async; never phase them serially; on timeout apply conventions §4 (no re-wait).
 
@@ -59,6 +60,7 @@ Symbols in RIC form (plain tickers → conventions §1); fund/OEIC identifiers g
 
 - Identity: each `get_score_analysis` `data[0].symbol` against the RIC sent (conventions §2).
 - Movers: absolute total score change > 1 point, or any single factor changing by an absolute > 2 points over the window. A symbol with no score history is reported as `no data`, never as stable. Change requires at least two verified dated observations with comparable score fields; otherwise report `insufficient history` and do not rank or mark stable. State the actual first/last dates and observation count; a shorter available window is not the full requested lookback. Missing factor endpoints remain unavailable; they do not become zero change.
+- Price movers, only with `price_check=true`: per conventions §16.2 steps 1-3, a material move or volume surge since the last score date flags the symbol even when no score changed. Record the score date, the return since it and the volume ratio. A symbol can be both a score mover and a price mover.
 
 ### Step 4 — Compute
 
@@ -82,10 +84,10 @@ The entire final message is that command's stdout. The stderr `[render-gate] WAR
 
 ## Output Format
 
-- **Watchlist Summary** (table: all symbols, current total score, score change, alert flag)
+- **Watchlist Summary** (table: all symbols, current total score with its ranking date, score change, alert flag; with `price_check=true`, also the move since the ranking date)
 - **Verdict sensitivity** (one line, per `parallax-conventions.md` §11 by reference): the 1-2 symbols nearest the alert boundary (the >1-point total / >2-point single-factor cutoffs in Workflow step 2) and the arithmetic that would flip Alert ↔ Stable.
 - **Alerts** (ranked by magnitude of change):
-  - **Symbol** — score change, which factors moved, brief catalyst
+  - **Symbol** — score change, which factors moved, brief catalyst. With `price_check=true`, add the move since the ranking date; for a price mover, add factor directions per conventions §16.3 without new numbers.
 - **Stable Names** (one-liner each — "no material changes")
 - **Recommended Actions** (which names warrant a deeper look via /parallax-deep-dive)
 - **About This Report** (always present, even when branding is default):

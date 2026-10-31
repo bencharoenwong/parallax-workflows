@@ -19,7 +19,7 @@ description: "Quick stock evaluation: company overview, Parallax factor scores, 
 ## Gotchas
 
 - Expected Parallax spend: 10.55 + 5M credits, where M is the number of covered tactical macro markets (0–2): 20.55 with two markets. Identity 0.05, snapshot/history 0.1 each, financial summary 0.05, four outlook aspects 0.25 total, technicals/news 5 each; methodology and country discovery are free. Excludes resolution/recovery; current discovered prices win (`_parallax/token-costs.md`).
-- JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §2 identity cross-check, §3 parallel execution, §4 fallbacks, §14 host primitives, §15 translation.
+- JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §2 identity cross-check, §3 parallel execution, §4 fallbacks, §14 host primitives, §15 translation, §16 scores against live prices (date every score; use only data this skill already fetches).
 - JIT-load `_parallax/house-view/loader.md` FIRST; if an active view is present follow §2 (validation), §7.1/§7.2/§7.3 (single-stock conflict surfacing), §6 (audit). Do NOT apply tilts — single-stock skills surface conflicts only; peer suggestions are flagged, never filtered. Route every §7 token through `render_view_conflict()` per `_parallax/house-view/render_helpers.md`; never hand-construct the string.
 - Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report) — load happens in Step 0, rendering in Step 5.
 - `get_stock_outlook` has 4 aspects — analyst_targets, recommendations, risk_return, dividends; coverage rule per conventions §4 "Stock outlook coverage".

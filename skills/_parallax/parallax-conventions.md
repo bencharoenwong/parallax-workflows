@@ -667,3 +667,43 @@ The translation skill validates against the original gated prose. Preserve secti
 
 Record which disclaimer the English report rendered (view-aware per `house-view/loader.md` §5 when a view is active, otherwise §9.1). If the translated output lacks it: first re-translate only the disclaimer text with the same routing block and append it; if that also fails, append the English disclaimer that was actually rendered (never the standard wording unconditionally). Where the skill appends an audit row, record the event in that row's `notes` field per loader.md §6.2; add no custom key and no user-visible footer. A skill with no audit surface records nothing and does not invent one.
 
+
+## 16. Scores Against Live Prices
+
+Factor scores are a weekly cross-sectional ranking. Prices are daily. A score can be more than a week old when a skill reads it, and the price may have moved a lot since. This section is the single source for reading scores against recent price action. Consumer skills reference it by section number.
+
+### §16.1 Principle
+
+Use the scores, check what happened since the score date, and adjust the reading. Never adjust the number. A skill may say that recent data confirms, strengthens, weakens or reverses a factor reading. It must not produce a new score, such as an "adjusted" or "effective" factor or Overall value. Every score figure in the output is one Parallax returned, shown with its date.
+
+### §16.2 Steps
+
+**Cost rule.** These steps add no tool calls. Use only the tools the consuming skill already calls within its stated spend. If the skill fetched no price series, do steps 1 and 6 and state that the move since the ranking date was not checked. A skill that calls a price series or news only for this section must say so in its own spend line.
+
+1. **Date the score.** Take the score date from the last row of `get_score_analysis`. When a score tool returns an as-of date, use that field instead. State the date in the output as "the ranking dated <date>".
+2. **Measure the move since the score date.** If the skill already fetched `export_price_series` (or `etf_daily_price` for ETFs), use it from the score date to the latest close. Report the return and the volume against the stock's recent average.
+3. **Decide whether the move is material.** Compare the move with the stock's own recent weekly moves from the same price series. A move well outside its usual weekly range, or a volume surge, is material. Do not apply a fixed universal cutoff.
+4. **If material, check the cause.** Use `get_news_synthesis` and `get_technical_analysis` results the skill already fetched. For intraday prices, a host may use a raw market-data source per the server routing guidance, and web search last.
+5. **Read each factor in the direction the evidence points (§16.3).**
+6. **Report Overall unchanged** as the latest ranking. It ranks stocks over weeks to months and is not a timing signal.
+
+### §16.3 Per-factor direction after a price move
+
+| Factor | Effect of a move since the score date |
+|---|---|
+| Value | Built on price ratios against peers, so it moves mechanically. A rise makes the stock more expensive and weakens the reading; a fall strengthens it. Check whether peers moved too. New earnings also change the inputs. |
+| Momentum | Moves with the price, slowly. A week or two is a small part of a 6- to 12-month window. |
+| Quality | Not affected by price. Changes only with new filings. |
+| Defensive | A large move in either direction raises realized volatility and weakens the reading. |
+| Tactical | The short-horizon factor. Volume surges, news and technical breaks are in its scope, so recent data can confirm or reverse the weekly reading. Read Tactical first after a material move. |
+
+### §16.4 Rules
+
+- **End of scale.** A factor at 0 or 10 cannot move further in that direction. Say so; do not infer a more extreme reading. For how extreme the stock is, quote reported figures from `get_financials`.
+- **Disagreement.** When Tactical and Overall point in opposite directions, report both. Do not average them.
+- **Wording.** Write "since the ranking dated <date>: <return>, volume <ratio> of average". Give the ranking date and the move since.
+- **Advice boundary.** §11 and §12 apply. No direction word maps to an action or a label.
+
+### §16.5 Consumer reference pattern
+
+> JIT-load `_parallax/parallax-conventions.md` §16 before reading any score: date it, measure the move since, and report factor directions without new numbers.
