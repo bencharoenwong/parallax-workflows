@@ -110,6 +110,8 @@ Use `pair_math.py` for all price-derived beta/history values (never inline model
 python3 "<skill-dir>/pair_math.py" --input "<run-dir>/pair-input.json"
 ```
 
+`<run-dir>` is a fresh temporary directory for this run, such as the host's scratch directory. Never use the skill directory or the user's working tree.
+
 Append `--no-beta` and/or `--history` only for the corresponding requested modes. Exit 2 means malformed/insufficient benchmark evidence: follow the benchmark gate or name the invalid input; no ratio. Successful JSON may still have `beta_neutral_ratio: null` with a per-pair reason; preserve that state and emit dollar-neutral-only evidence. The helper aligns both endpoints of dated return intervals, requires at least 89 common intervals, rejects zero benchmark variance, near-zero short beta and nonpositive/nonfinite ratios. Use its actual dates/counts. History with disjoint common intervals or any interval longer than four calendar days is unavailable with the reason; do not annualize sparse observations as daily. This conservative frequency check can exclude longer legitimate exchange closures. History is a raw-price daily-reset synthetic spread index per dollar long, not realized client P&L; it excludes dividends, borrow, fees and FX conversion.
 
 Per `references/residual-math.md`: net factor scores (long − short per pillar), sector and domicile residuals, beta per leg over the 180-day window against the benchmark, beta-neutral ratio = `β_long / β_short`, dollar-neutral 1:1; macro residual as the qualitative difference of the legs' tactical stances; synthetic historical stats under `--with-history`. Price-derived numbers come only from helper output; factor differences follow the documented subtraction of verified scores. Sector and domicile labels do not establish currency or economic neutrality: report each leg's verified listing currency separately and mark absent currency unknown.
@@ -177,7 +179,7 @@ For each candidate, render:
 
 - *Liquidity caveat: hedge ratios assume executable liquidity. Average daily volume, short borrow, and float are not validated by Parallax — verify externally before sizing.*
 - *Score comparability flag* (suggestion mode: always "same_universe — single peer-comparison call"; evaluate mode: render the flag from Step A.5).
-- Standard Parallax informational-not-investment-advice disclaimer (see `_parallax/parallax-conventions.md` §9.1).
+- The disclaimer in `## Disclaimer` below. It is this skill's own wording and replaces the generic §9.1 text, per the bespoke-disclaimer carve-out in `_parallax/parallax-conventions.md` §9.1.
 
 ### Evaluate mode (Mode 3)
 
@@ -215,7 +217,7 @@ One line stating branding state per integration-pattern.md §7 markdown column (
 - No beta-neutral ratio rendered unless the benchmark series passed the gate; every degraded pair says why.
 - Score-comparability flag and liquidity caveat present; when a view is active, the `view_status` banner appears verbatim and the audit entry is appended once.
 - The render gate ran and the reply is its stdout (or the §14.3 note is present in About This Report).
-- `parallax-conventions.md §9.2` disclosure and the §9.1-family disclaimer are present; expected spend stated (Gotchas).
+- `parallax-conventions.md §9.2` disclosure and the §9.1-family disclaimer are present; expected spend stated in About This Report, computed per Gotchas.
 
 ## Disclaimer
 

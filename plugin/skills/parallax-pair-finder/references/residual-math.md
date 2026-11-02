@@ -23,7 +23,7 @@ From each leg's `sector`, `industry`, `market` fields (returned by `export_peer_
 | `sector_long == sector_short` | same reported sector; economic neutrality not established |
 | `sector_long != sector_short` | sector_residual = "cross-sector: long `<long_sector>` / short `<short_sector>`" |
 | `industry_long == industry_short` | same reported industry; economic neutrality not established |
-| `industry_long != industry_short` | industry_residual = "cross-industry: long `<long_industry>` / short `<short_industry>`" (only render if sector is also non-neutral; otherwise sub-information) |
+| `industry_long != industry_short` | industry_residual = "cross-industry: long `<long_industry>` / short `<short_industry>`" (render as a residual only if sector is also non-neutral; otherwise render it as one plain sentence under the sector residual, marked secondary) |
 | `market_long == market_short` | same verified domicile; currency neutrality not established |
 | `market_long != market_short` | different verified domiciles; currencies separately sourced, never inferred: long `<long_market>` / short `<short_market>` |
 
