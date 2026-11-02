@@ -26,12 +26,12 @@ If `get_company_info` returns empty: apply RIC resolution per `_parallax/paralla
 
 #### Step A.5 — In-process candidate selection (no MCP calls)
 
-From the `export_peer_comparison.data` array, exclude the row where `is_target == true` (that's the primary leg). For the remaining peers, require finite target and candidate total scores and the same reported sector as the primary; if sector is absent, exclude with a named unavailable reason rather than infer it. Resolve chosen identities and obtain `get_company_info` per chosen candidate to validate `company_name`, sector, market and listing currency before rendering a score or residual. A mismatch excludes that scored candidate with a visible note; no automatic identity substitution. Preserve any thin-set count. Then:
+From the `export_peer_comparison.data` array, exclude the row where `is_target == true` (that's the primary leg). For the remaining peers, require finite target and candidate total scores and the same reported sector as the primary; if sector is absent, exclude with a named unavailable reason rather than infer it. Resolve chosen identities and obtain `get_company_info` per chosen candidate to validate `name`, sector, market and listing currency before rendering a score or residual. A mismatch excludes that scored candidate with a visible note; no automatic identity substitution. Preserve any thin-set count. Then:
 
 - **`long` side given** → user wants a SHORT candidate. Sort peers ascending by `total` score. Take the bottom N (default 3). These are the lowest-scoring peers — the v1 mode-B candidates.
 - **`short` side given** → user wants a LONG candidate. Sort peers descending by `total` score. Take the top N.
 
-Record each candidate's: ric, company_name, sector, industry, market, all 5 factor scores, total, market cap, recommendation, ytd return.
+Record each candidate's: symbol, company, sector, industry, market, all 5 factor scores, total, market cap, recommendation, ytd return.
 
 #### Batch C — Beta computation (parallel, unless --no-beta; NOT gated by --with-history)
 
@@ -147,7 +147,7 @@ Fire all in parallel:
 
 Inspect the long's peer-comparison `data` array:
 
-- **If `short_ric` IS in the peer set and its row identity matches its separately verified company-info identity** (`peer.ric == short_ric` for some peer) → use the long's and short's scores directly from the peer-comparison response. Both scores are from the same response; net subtraction is a descriptive difference of scores, not a return hedge or guarantee of economic comparability. Set `score_comparability_flag = "same_universe"`.
+- **If `short_ric` IS in the peer set and its row identity matches its separately verified company-info identity** (some peer's `symbol` matches `short_ric` under the same two-tier rule as the company-info rows above: exact match first, else a unique base-ticker match after stripping the exchange suffix; the peer rows also drop the suffix for some listings, e.g. `MSI` for `MSI.N`) → use the long's and short's scores directly from the peer-comparison response. Both scores are from the same response; net subtraction is a descriptive difference of scores, not a return hedge or guarantee of economic comparability. Set `score_comparability_flag = "same_universe"`.
 - **If `short_ric` is NOT in the peer set** (cross-sector or distant peer) → fire one fallback call: `get_peer_snapshot(short_ric)` to retrieve the short's own target scores; verify `target_company` against the short company-info identity and select its matching target row. Missing/mismatched scores stay unavailable, never zero. The long export target must likewise match the long company-info identity. Set `score_comparability_flag = "cross_universe — best-effort comparable"`. The output MUST surface this flag prominently. Per spec: "Evaluate mode accepts cross-sector pairs but flags them."
 
 #### Batch B — Beta computation (parallel, unless --no-beta)
