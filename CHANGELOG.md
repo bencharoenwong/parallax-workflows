@@ -4,7 +4,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 > This file is the **shipping summary**: what landed and when.
 
-## Unreleased
+## 2026.11.2
 
 ### Credit pricing
 
