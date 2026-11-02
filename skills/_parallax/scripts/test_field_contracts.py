@@ -97,11 +97,34 @@ def test_company_info_rejects_a_field_outside_the_contract():
 
 # get_financials -----------------------------------------------------------
 
+def check_financials_periods(payload):
+    """Validate the schema plus the period-label values the schema cannot express."""
+    validate(payload, GET_FINANCIALS_SCHEMA, "get_financials")
+    for i, row in enumerate(payload["data"]):
+        assert is_iso_date(row["period_end"]), (
+            f"data[{i}].period_end: not an ISO date: {row['period_end']!r}"
+        )
+        assert row["frequency"] is None or row["frequency"] in FINANCIALS_FREQUENCIES, (
+            f"data[{i}].frequency: unexpected value {row['frequency']!r}"
+        )
+
+
 def test_financials_rows_carry_period_labels():
-    validate(FINANCIALS, GET_FINANCIALS_SCHEMA, "get_financials")
-    for row in FINANCIALS["data"]:
-        assert is_iso_date(row["period_end"])
-        assert row["frequency"] is None or row["frequency"] in FINANCIALS_FREQUENCIES
+    check_financials_periods(FINANCIALS)
+
+
+def test_financials_rejects_an_unknown_frequency_value():
+    bad = copy.deepcopy(FINANCIALS)
+    bad["data"][0]["frequency"] = "monthly"
+    with pytest.raises(AssertionError, match=r"data\[0\]\.frequency: unexpected value 'monthly'"):
+        check_financials_periods(bad)
+
+
+def test_financials_rejects_a_non_iso_period_end():
+    bad = copy.deepcopy(FINANCIALS)
+    bad["data"][1]["period_end"] = "09/28/2024"
+    with pytest.raises(AssertionError, match=r"data\[1\]\.period_end: not an ISO date"):
+        check_financials_periods(bad)
 
 
 def test_financials_row_without_period_end_fails():
@@ -141,5 +164,7 @@ def test_peer_row_rejects_names_outside_the_allowlist(field):
 
 
 def test_peer_recommendation_is_optional():
-    validate(PEERS, EXPORT_PEER_COMPARISON_JSON_SCHEMA, "")
-    assert "recommendation" not in PEERS["data"][1]
+    payload = copy.deepcopy(PEERS)
+    assert "recommendation" in payload["data"][0]
+    del payload["data"][0]["recommendation"]
+    validate(payload, EXPORT_PEER_COMPARISON_JSON_SCHEMA, "")
