@@ -153,7 +153,7 @@ Array indexed by integer rank. Each entry:
 
 | Field | Type | Notes |
 |---|---|---|
-| `ric` | string | Reuters code |
+| `ric` | string | RIC (exchange-qualified symbol) |
 | `name` | string | Company name |
 | `total_pl` | float | Cumulative P&L attributed to holding |
 | `avg_weight` | float | Mean portfolio weight over period |
