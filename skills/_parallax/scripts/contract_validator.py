@@ -68,6 +68,15 @@ The two markers are deliberately not combinable. A field is either
 caller-selected (``OPTIONAL``) or always returned with a null sentinel
 (``NULLABLE``); a spec that is both pins nothing.
 
+Closed objects — unknown keys
+-----------------------------
+
+A dict spec ignores keys it does not list, unless it carries the ``CLOSED``
+marker as a key (``{CLOSED: True, "field": str, ...}``). A closed object
+rejects every key the spec does not list. Close an object when its key set is
+the contract: a renamed field then fails as an unknown key in the fixture or
+payload that still carries the old name, instead of passing unnoticed.
+
 When a skill begins reading a new field, update the schema in
 ``contract_schemas.py`` AND the mock in ``mcp_mocks/`` in the same PR.
 """
@@ -88,6 +97,10 @@ OPTIONAL = "optional"
 
 
 NULLABLE = "nullable"
+
+
+# Dict-spec key that makes the object reject keys the spec does not list.
+CLOSED = "__closed__"
 
 
 # --------------------------------------------------------------------------
@@ -158,7 +171,12 @@ def validate(value: Any, spec: Any, path: str) -> None:
         assert isinstance(value, dict), (
             f"{path}: expected dict, got {type(value).__name__}"
         )
+        if spec.get(CLOSED):
+            unknown = sorted(set(value) - (set(spec) - {CLOSED}))
+            assert not unknown, f"{path}: unknown field(s) {unknown}"
         for field, field_spec in spec.items():
+            if field == CLOSED:
+                continue
             child_path = f"{path}.{field}" if path else field
             optional = _is_optional_spec(field_spec)
             if field not in value:
