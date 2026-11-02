@@ -35,8 +35,8 @@ the real captures rather than chosen for tidiness:
 No legitimate non-integer value in the captured payload exceeded 9 significant
 figures. The three fields that carry unrounded machine floats -- ``changepercent``
 (15-19 figures), ``change`` (2-17, reaching 17 when a subtraction leaves float
-dust) and ``mktcap`` (14-16 figures), all under ``company_info`` -- sit far above
-that line. DO NOT TIGHTEN IT. 6 was the first guess and it false-positives on
+dust) and ``market_cap`` (14-16 figures), all under ``company_info`` -- sit far
+above that line. DO NOT TIGHTEN IT. 6 was the first guess and it false-positives on
 ordinary authored content: an authored weight of ``0.349378`` is six figures and
 six decimals, and a 4-decimal budget fails it.
 
