@@ -171,6 +171,11 @@ def test_normalize_treats_legal_form_punctuation_as_the_same_company():
     assert normalize_company_name("APPLE  INC.") == normalize_company_name("Apple Inc")
 
 
+def test_normalize_folds_a_missing_name_to_empty_and_never_matches():
+    assert normalize_company_name(None) == ""
+    assert normalize_company_name(None) != normalize_company_name("SAP SE")
+
+
 def test_normalize_strips_repeatedly_until_stable():
     # One strip exposes the next: dropping "ltd" leaves a trailing comma.
     assert normalize_company_name("Samsung Electronics Co., Ltd.") == (
