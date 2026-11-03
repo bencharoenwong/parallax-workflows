@@ -178,7 +178,7 @@ For each candidate, render:
 #### 4. Mandatory disclaimers (bottom)
 
 - *Liquidity caveat: hedge ratios assume executable liquidity. Average daily volume, short borrow, and float are not validated by Parallax — verify externally before sizing.*
-- *Score comparability flag* (suggestion mode: "same_universe — single peer-comparison call", except "cross_universe" when the Unflagged own row rule in Step A.5 applies; evaluate mode: render the flag from Step A.5).
+- *Score comparability flag* (suggestion mode: "same_universe — single peer-comparison call", except "cross_universe — best-effort comparable" when the Unflagged own row rule in Step A.5 applies or when the export failed and the `get_peer_snapshot` fallback supplied the peer set; evaluate mode: render the flag from Step A.5).
 - The disclaimer in `## Disclaimer` below. It is this skill's own wording and replaces the generic §9.1 text, per the bespoke-disclaimer carve-out in `_parallax/parallax-conventions.md` §9.1.
 
 ### Evaluate mode (Mode 3)

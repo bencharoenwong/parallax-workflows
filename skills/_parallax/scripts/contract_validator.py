@@ -262,7 +262,7 @@ _CORPORATE_FORMS = (
 )
 
 
-def normalize_company_name(name: str) -> str:
+def normalize_company_name(name: "str | None") -> str:
     """Fold a company name to the form the identity check compares.
 
     Executable statement of `parallax-conventions.md` §2 step 2, which is the
@@ -273,8 +273,11 @@ def normalize_company_name(name: str) -> str:
     trailing corporate-form token until the string stops changing. Stripping
     is token-wise, never substring, so "Maytag" keeps its "ag"; the candidate
     token is matched with its own periods and commas removed, so "S.A." folds
-    the same way "SA" does.
+    the same way "SA" does. A missing name (``None``, as some peer rows carry)
+    folds to the empty string, which never equals a real name.
     """
+    if name is None:
+        return ""
     folded = " ".join(name.casefold().split())
     while True:
         stripped = folded.rstrip(" .,")
