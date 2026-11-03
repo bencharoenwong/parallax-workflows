@@ -23,7 +23,7 @@ From each leg's `sector`, `industry`, `market` fields (returned by `export_peer_
 | `sector_long == sector_short` | same reported sector; economic neutrality not established |
 | `sector_long != sector_short` | sector_residual = "cross-sector: long `<long_sector>` / short `<short_sector>`" |
 | `industry_long == industry_short` | same reported industry; economic neutrality not established |
-| `industry_long != industry_short` | industry_residual = "cross-industry: long `<long_industry>` / short `<short_industry>`" (only render if sector is also non-neutral; otherwise sub-information) |
+| `industry_long != industry_short` | industry_residual = "cross-industry: long `<long_industry>` / short `<short_industry>`" (render as a residual only if sector is also non-neutral; otherwise render it as one plain sentence under the sector residual, marked secondary) |
 | `market_long == market_short` | same verified domicile; currency neutrality not established |
 | `market_long != market_short` | different verified domiciles; currencies separately sourced, never inferred: long `<long_market>` / short `<short_market>` |
 
@@ -109,7 +109,7 @@ spread_returns[t] = returns_long[t] - hedge_ratio * returns_short[t]
 
 | Condition | Flag value |
 |---|---|
-| Both legs' scores from same `export_peer_comparison` call (suggestion mode always; evaluate mode if `short_ric in long_peer_set`) | `same_universe` (output: "Scores cross-sectionally comparable.") |
-| Scores from separate calls (evaluate mode, cross-sector) | `cross_universe` (output: "⚠ Scores from separate Parallax universes — net factor differences are best-effort comparable, not strictly comparable. Treat with caution.") |
+| Both legs' scores from same `export_peer_comparison` call (suggestion mode, unless the Unflagged own row rule applies; evaluate mode if `short_ric in long_peer_set` and the long's own row is the `is_target` row) | `same_universe` (output: "Scores cross-sectionally comparable.") |
+| Scores from separate calls (evaluate mode, cross-sector; or either mode when the Unflagged own row rule in modes.md Step A.5 takes a leg's scores from `get_company_info`, or when the export failed and the `get_peer_snapshot` fallback supplied the peers) | `cross_universe` (output: "⚠ Scores from separate Parallax universes — net factor differences are best-effort comparable, not strictly comparable. Treat with caution.") |
 
-ALWAYS render this flag in evaluate-mode output. In suggestion mode it can be suppressed (always same_universe) or rendered as a small footnote.
+ALWAYS render this flag in evaluate-mode output. In suggestion mode it can be suppressed when same_universe or rendered as a small footnote; render it when the Unflagged own row rule makes it cross_universe.

@@ -1160,7 +1160,7 @@ def _build_get_company_info(paths: dict[str, Any]) -> dict:
     # either way; the hard rounding is kept so the underlying number stays
     # honestly synthetic even if a future edit changes the emitted type.)
     shares = round(subject["value_units"][-1] * 2_600_000 / SUBUNIT, -8)
-    mktcap = int(q(shares * close, -6))
+    market_cap = int(q(shares * close, -6))
     prev_close = subject["price_units"][-2] / SUBUNIT
     change = q(close - prev_close, 2)
     changepercent = q(change / prev_close * 100.0, 2)
@@ -1191,7 +1191,8 @@ def _build_get_company_info(paths: dict[str, Any]) -> dict:
             "change": str(change),
             "changepercent": str(changepercent),
             "volume": str(subject["vol_bp"] * 1000),
-            "mktcap": str(mktcap),
+            "market_cap": str(market_cap),
+            "shares_outstanding": str(int(shares)),
             "value": str(scores["value"]),
             "quality": str(scores["quality"]),
             "momentum": str(scores["momentum"]),
@@ -1214,6 +1215,20 @@ def _build_get_company_info(paths: dict[str, Any]) -> dict:
                 "Ask what a factor measures or why a score changed; the "
                 "methodology lookup costs nothing extra on this call."
             ),
+            "cadence": (
+                "Scores are a weekly ranking; prices update daily. Every "
+                "factor is as of the ranking date and does not reflect later "
+                "price moves."
+            ),
+        },
+        "field_notes": {
+            "close": "latest close; no price date is returned.",
+            "market_cap": (
+                "market cap in the currency given by `currency`, for this "
+                "listing line only; for multi-class issuers it is not the "
+                "company total."
+            ),
+            "shares_outstanding": "share count for this listing line.",
         },
     }
 

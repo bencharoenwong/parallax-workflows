@@ -10,19 +10,26 @@
     "exchange": "NASDAQ",
     "industry": "Semiconductors & Semiconductor Equipment",
     "market": "United States",
-    "mktcap": "1274200000000",
+    "market_cap": "1274200000000",
     "momentum": "5",
     "name": "Axiom Compute Corp",
     "quality": "6",
     "recommendation": "HOLD",
     "ric": "AXCM.O",
     "sector": "Information Technology",
+    "shares_outstanding": "9200000000",
     "tactical": "4",
     "total": "5.5",
     "value": "5",
     "volume": "74000"
   },
+  "field_notes": {
+    "close": "latest close; no price date is returned.",
+    "market_cap": "market cap in the currency given by `currency`, for this listing line only; for multi-class issuers it is not the company total.",
+    "shares_outstanding": "share count for this listing line."
+  },
   "score_scale": {
+    "cadence": "Scores are a weekly ranking; prices update daily. Every factor is as of the ranking date and does not reflect later price moves.",
     "more": "Ask what a factor measures or why a score changed; the methodology lookup costs nothing extra on this call.",
     "range": "0-10. Each per-stock score is a percentile rank against other covered stocks, not an absolute measure.",
     "weighting": "The overall score's factor weights shift across market regimes, so one factor can dominate `total` in a way a plain average would not."

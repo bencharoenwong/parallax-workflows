@@ -24,6 +24,7 @@ import pytest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from contract_validator import (  # noqa: E402
+    CLOSED,
     NULLABLE,
     NUM,
     OPTIONAL,
@@ -138,6 +139,29 @@ def test_validator_rejects_wrong_type_for_nullable_field():
         validate({"foo": "oops"}, {"foo": ([str], NULLABLE)}, "root")
 
 
+def test_open_object_ignores_unlisted_keys():
+    validate({"a": "x", "extra": 1}, {"a": str}, "root")
+
+
+def test_closed_object_rejects_an_unlisted_key():
+    with pytest.raises(AssertionError, match=r"root: unknown field\(s\) \['extra'\]"):
+        validate({"a": "x", "extra": 1}, {CLOSED: True, "a": str}, "root")
+
+
+def test_closed_object_accepts_listed_and_absent_optional_keys():
+    validate({"a": "x"}, {CLOSED: True, "a": str, "b": (str, OPTIONAL)}, "root")
+
+
+def test_closed_marker_is_not_a_required_field():
+    validate({}, {CLOSED: True, "b": (str, OPTIONAL)}, "root")
+
+
+def test_closed_object_inside_a_list_reports_the_element_path():
+    spec = {"rows": [{CLOSED: True, "a": str}]}
+    with pytest.raises(AssertionError, match=r"rows\[1\]: unknown field"):
+        validate({"rows": [{"a": "x"}, {"a": "y", "b": 2}]}, spec, "")
+
+
 def test_normalize_treats_legal_form_punctuation_as_the_same_company():
     """The pair that made the identity gate flag on its own reference capture."""
     assert normalize_company_name("Apple Inc") == normalize_company_name("Apple Inc.")
@@ -145,6 +169,11 @@ def test_normalize_treats_legal_form_punctuation_as_the_same_company():
         "Microsoft Corporation"
     )
     assert normalize_company_name("APPLE  INC.") == normalize_company_name("Apple Inc")
+
+
+def test_normalize_folds_a_missing_name_to_empty_and_never_matches():
+    assert normalize_company_name(None) == ""
+    assert normalize_company_name(None) != normalize_company_name("SAP SE")
 
 
 def test_normalize_strips_repeatedly_until_stable():

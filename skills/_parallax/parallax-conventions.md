@@ -82,7 +82,7 @@ Integrity failures are flagged explicitly in the output, not omitted. This is th
 
 ## 1. RIC Resolution
 
-Parallax tools require Reuters Instrument Codes (RICs). When the user provides a plain ticker:
+Parallax tools require RICs: exchange-qualified symbols such as AAPL.O or 7203.T. When the user provides a plain ticker:
 
 1. Call `get_company_info` with the plain ticker first — it often resolves automatically.
 2. If empty result, retry with the most likely exchange suffix from this table:
