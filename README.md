@@ -330,7 +330,7 @@ Standalone `.skill` packages include the same validator helper and can be built 
 
 ### Symbol Format
 
-Symbols use Reuters Instrument Code (RIC) format. `/parallax-should-i-buy` auto-resolves plain tickers (AAPL); other workflows require RIC format (AAPL.O).
+Symbols use RIC format: exchange-qualified symbols such as AAPL.O or 7203.T. `/parallax-should-i-buy` auto-resolves plain tickers (AAPL); other workflows require RIC format.
 
 | Exchange | Suffix | Example |
 |---|---|---|

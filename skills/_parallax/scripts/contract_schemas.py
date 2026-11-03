@@ -6,7 +6,7 @@ read, marked required/optional with expected types. Schema DSL documented in
 
 from __future__ import annotations
 
-from contract_validator import NULLABLE, NUM, OPTIONAL
+from contract_validator import CLOSED, NULLABLE, NUM, OPTIONAL
 
 # Several blocks carry JSON null in a numeric or string slot, and null is NOT
 # the same as absent -- see the OPTIONAL semantics note in
@@ -315,7 +315,10 @@ EXPORT_PRICE_SERIES_SCHEMA = {
 GET_COMPANY_INFO_SCHEMA = {
     "success": bool,
     "symbol": str,
+    # Closed: the key set is the contract, so a renamed field fails here as an
+    # unknown key instead of passing unnoticed.
     "data": {
+        CLOSED: True,
         "ric": (str, OPTIONAL),
         "name": str,
         "sector": str,
@@ -329,7 +332,11 @@ GET_COMPANY_INFO_SCHEMA = {
         "change": (str, OPTIONAL),
         "changepercent": (str, OPTIONAL),
         "volume": (str, OPTIONAL),
-        "mktcap": (str, OPTIONAL),
+        "exchangecode": (str, OPTIONAL),
+        # Listing-line market cap in ``currency``; not the company total for a
+        # multi-class issuer. ``field_notes.market_cap`` says so in-band.
+        "market_cap": (str, OPTIONAL),
+        "shares_outstanding": (str, OPTIONAL),
         "value": (str, OPTIONAL),
         "quality": (str, OPTIONAL),
         "momentum": (str, OPTIONAL),
@@ -338,14 +345,86 @@ GET_COMPANY_INFO_SCHEMA = {
         "total": (str, OPTIONAL),
         "recommendation": (str, OPTIONAL),
     },
+    "field_notes": (
+        {
+            "close": (str, OPTIONAL),
+            "market_cap": (str, OPTIONAL),
+            "shares_outstanding": (str, OPTIONAL),
+        },
+        OPTIONAL,
+    ),
     "score_scale": (
         {
             "range": (str, OPTIONAL),
             "weighting": (str, OPTIONAL),
             "more": (str, OPTIONAL),
+            "cadence": (str, OPTIONAL),
         },
         OPTIONAL,
     ),
+}
+
+
+# Statement rows from get_financials (income, balance_sheet, cash_flow,
+# ratios; not the "summary" narrative). Line items vary by statement and
+# issuer, so the row is open; the period labels are the contract. Every row
+# carries ``period_end`` (ISO date) and ``frequency``: "annual" or
+# "quarterly", ratios always "annual", null when the period type is not
+# recognized. Consumers key period alignment on these two fields.
+GET_FINANCIALS_SCHEMA = {
+    "success": bool,
+    "symbol": str,
+    "statement": str,
+    "latest": (bool, OPTIONAL),
+    "data": [
+        {
+            "period_end": str,
+            "frequency": (str, NULLABLE),
+            "currency": (str, OPTIONAL),
+        }
+    ],
+    "basis": (str, OPTIONAL),
+    "_note": (str, OPTIONAL),
+}
+
+FINANCIALS_FREQUENCIES = ("annual", "quarterly")
+
+
+# export_peer_comparison with format="json": one shaped row per peer, the same
+# fields as the list and csv formats. Closed, because the row is an allowlist.
+# Values the source lacks are null, never absent; ``recommendation`` appears
+# only for organizations with recommendation access.
+EXPORT_PEER_COMPARISON_JSON_SCHEMA = {
+    "success": bool,
+    "symbol": str,
+    "format": str,
+    "data": [
+        {
+            CLOSED: True,
+            "symbol": str,
+            "company": (str, NULLABLE),
+            "market": (str, NULLABLE),
+            "sector": (str, NULLABLE),
+            "industry": (str, NULLABLE),
+            "total": (NUM, NULLABLE),
+            "quality": (NUM, NULLABLE),
+            "value": (NUM, NULLABLE),
+            "momentum": (NUM, NULLABLE),
+            "defensive": (NUM, NULLABLE),
+            "tactical": (NUM, NULLABLE),
+            "pe_ratio": (NUM, NULLABLE),
+            "ev_ebitda": (NUM, NULLABLE),
+            "roe": (NUM, NULLABLE),
+            "ytd_return": (NUM, NULLABLE),
+            "mtd_return": (NUM, NULLABLE),
+            "debt_to_equity": (NUM, NULLABLE),
+            "market_cap_b": (NUM, NULLABLE),
+            "is_target": bool,
+            "recommendation": (str, OPTIONAL),
+        }
+    ],
+    "pe_basis": (str, OPTIONAL),
+    "score_scale": (dict, OPTIONAL),
 }
 
 

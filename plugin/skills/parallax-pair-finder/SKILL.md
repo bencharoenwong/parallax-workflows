@@ -19,7 +19,7 @@ description: "Long/short equity pair builder: given one leg, suggest top-3 count
 - Expected Parallax spend: suggestion mode with L selected equity legs costs `0.1 + 0.1L + 0.05 + 5M` credits in the canonical-benchmark beta path; evaluate costs `0.35 + 5M`, plus 0.1 if the short needs its own snapshot. M = distinct covered leg markets. Three candidates (L=4), one market: 5.55; evaluate: 5.35–5.45. History adds 0.05 per leg; `--no-beta` removes the 0.05-per-leg beta price reads and 0.05 benchmark read and skips benchmark discovery. ETF search is free; profiles cost 0.1 each, benchmark retry prices 0.05 each. Excludes resolution/recovery; current discovered prices win (`_parallax/token-costs.md`).
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §3 parallel execution, §4/§4.0 fallbacks, §14 host primitives. JIT-load `references/residual-math.md` for factor-net, beta and hedge-ratio formulas; `references/modes.md` for the per-mode batch tables.
 - JIT-load `_parallax/coverage-matrix.md`: equities price via `export_price_series`, the benchmark ETF via `etf_daily_price` — separate endpoints; `etf_daily_price` returns `[]` for a multi-symbol call if any symbol is uncovered, so always one call per benchmark.
-- Suggestion mode uses a single `export_peer_comparison` call so factor scores are cross-sectionally comparable; evaluate mode MUST flag score comparability when the short is not in the long's peer set.
+- Suggestion mode uses a single `export_peer_comparison` call so factor scores are cross-sectionally comparable, except under the Unflagged own row rule in `references/modes.md` Step A.5; evaluate mode MUST flag score comparability when the short is not in the long's peer set.
 - v1 scope: domicile/listing-currency only (no revenue geography), dollar- and beta-neutral ratios only (no share counts), within-sector suggestions only; evaluate mode accepts cross-sector pairs but flags them.
 - **Output gate (HARD HALT):** in beta-enabled mode, no hedge ratios when the benchmark series is null or has < 60 observations; never substitute pair-relative regression beta with a caveat — that pattern is banned for primary deliverables (Step 3). Explicit `--no-beta` skips this benchmark requirement and permits only the dollar-neutral 1:1 convention; beta exposure remains unassessed.
 - Liquidity disclaimer is mandatory in every output: ADV / borrow / float are not validated by Parallax.
@@ -110,6 +110,8 @@ Use `pair_math.py` for all price-derived beta/history values (never inline model
 python3 "<skill-dir>/pair_math.py" --input "<run-dir>/pair-input.json"
 ```
 
+`<run-dir>` is a fresh temporary directory for this run, such as the host's scratch directory. Never use the skill directory or the user's working tree.
+
 Append `--no-beta` and/or `--history` only for the corresponding requested modes. Exit 2 means malformed/insufficient benchmark evidence: follow the benchmark gate or name the invalid input; no ratio. Successful JSON may still have `beta_neutral_ratio: null` with a per-pair reason; preserve that state and emit dollar-neutral-only evidence. The helper aligns both endpoints of dated return intervals, requires at least 89 common intervals, rejects zero benchmark variance, near-zero short beta and nonpositive/nonfinite ratios. Use its actual dates/counts. History with disjoint common intervals or any interval longer than four calendar days is unavailable with the reason; do not annualize sparse observations as daily. This conservative frequency check can exclude longer legitimate exchange closures. History is a raw-price daily-reset synthetic spread index per dollar long, not realized client P&L; it excludes dividends, borrow, fees and FX conversion.
 
 Per `references/residual-math.md`: net factor scores (long − short per pillar), sector and domicile residuals, beta per leg over the 180-day window against the benchmark, beta-neutral ratio = `β_long / β_short`, dollar-neutral 1:1; macro residual as the qualitative difference of the legs' tactical stances; synthetic historical stats under `--with-history`. Price-derived numbers come only from helper output; factor differences follow the documented subtraction of verified scores. Sector and domicile labels do not establish currency or economic neutrality: report each leg's verified listing currency separately and mark absent currency unknown.
@@ -176,8 +178,8 @@ For each candidate, render:
 #### 4. Mandatory disclaimers (bottom)
 
 - *Liquidity caveat: hedge ratios assume executable liquidity. Average daily volume, short borrow, and float are not validated by Parallax — verify externally before sizing.*
-- *Score comparability flag* (suggestion mode: always "same_universe — single peer-comparison call"; evaluate mode: render the flag from Step A.5).
-- Standard Parallax informational-not-investment-advice disclaimer (see `_parallax/parallax-conventions.md` §9.1).
+- *Score comparability flag* (suggestion mode: "same_universe — single peer-comparison call", except "cross_universe — best-effort comparable" when the Unflagged own row rule in Step A.5 applies or when the export failed and the `get_peer_snapshot` fallback supplied the peer set; evaluate mode: render the flag from Step A.5).
+- The disclaimer in `## Disclaimer` below. It is this skill's own wording and replaces the generic §9.1 text, per the bespoke-disclaimer carve-out in `_parallax/parallax-conventions.md` §9.1.
 
 ### Evaluate mode (Mode 3)
 
@@ -215,7 +217,7 @@ One line stating branding state per integration-pattern.md §7 markdown column (
 - No beta-neutral ratio rendered unless the benchmark series passed the gate; every degraded pair says why.
 - Score-comparability flag and liquidity caveat present; when a view is active, the `view_status` banner appears verbatim and the audit entry is appended once.
 - The render gate ran and the reply is its stdout (or the §14.3 note is present in About This Report).
-- `parallax-conventions.md §9.2` disclosure and the §9.1-family disclaimer are present; expected spend stated (Gotchas).
+- `parallax-conventions.md §9.2` disclosure and the §9.1-family disclaimer are present; expected spend stated in About This Report, computed per Gotchas.
 
 ## Disclaimer
 
