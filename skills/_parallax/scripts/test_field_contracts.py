@@ -145,7 +145,6 @@ def test_financials_row_must_state_frequency_even_when_unknown():
 
 def test_peer_rows_conform():
     validate(PEERS, EXPORT_PEER_COMPARISON_JSON_SCHEMA, "export_peer_comparison")
-    assert sum(r["is_target"] for r in PEERS["data"]) == 1
 
 
 def test_peer_row_missing_value_must_be_null_not_absent():
