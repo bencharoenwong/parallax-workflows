@@ -147,6 +147,15 @@ def test_peer_rows_conform():
     validate(PEERS, EXPORT_PEER_COMPARISON_JSON_SCHEMA, "export_peer_comparison")
 
 
+@pytest.mark.parametrize("targets", [0, 2])
+def test_peer_rows_conform_with_zero_or_several_flagged_rows(targets):
+    # Live peer sets can carry no flagged row, so the contract must not require one.
+    rows = copy.deepcopy(PEERS)
+    for i, row in enumerate(rows["data"]):
+        row["is_target"] = i < targets
+    validate(rows, EXPORT_PEER_COMPARISON_JSON_SCHEMA, "")
+
+
 def test_peer_row_missing_value_must_be_null_not_absent():
     bad = copy.deepcopy(PEERS)
     del bad["data"][1]["roe"]
