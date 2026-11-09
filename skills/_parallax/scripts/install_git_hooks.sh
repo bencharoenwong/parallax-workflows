@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Install the blocking commit-message scan into this clone's pre-push hook.
+# Install the blocking scans into this clone's hooks: the commit-message and
+# client-name scan in pre-push, and a staged-index client-name scan in pre-commit,
+# pre-merge-commit and pre-applypatch.
 #
 # WHY THIS EXISTS. `scan_commit_messages.py` guards a PUBLIC repo whose commit
 # messages are public with it. Running it by hand failed once: a push ran in a
@@ -57,7 +59,6 @@ _resolve() {
 }
 HOOKS_DIR="$(_resolve "$HOOKS_DIR")"
 ROOT_REAL="$(_resolve "$ROOT")"
-HOOK="$HOOKS_DIR/pre-push"
 
 # A hooksPath outside this repo is shared by every clone that points at it.
 # Editing it is a global change wearing the costume of a per-repo install.
@@ -68,6 +69,19 @@ case "$HOOKS_DIR" in
         printf 'It is shared by every clone configured to use it, so this is a GLOBAL edit.\n' >&2
         printf 'Re-run with PARALLAX_HOOKS_FORCE=1 if that is what you intend.\n\n' >&2
         [ "${PARALLAX_HOOKS_FORCE:-0}" = "1" ] || exit 3
+        ;;
+esac
+
+# A RELATIVE core.hooksPath resolves against each work tree's root. In a linked
+# worktree `.git` is a file, so `.git/hooks` names nothing and git runs NO hooks
+# there, silently: not these layers and not any global hook the setting shadows.
+_PARALLAX_HP="$(git config --get core.hooksPath 2>/dev/null)"
+case "$_PARALLAX_HP" in
+    ""|/*|"~"*) ;;
+    *)
+        printf '\n\033[33mWARNING: core.hooksPath is relative (%s).\033[0m\n' "$_PARALLAX_HP" >&2
+        printf 'Linked worktrees of this clone run no hooks at all. Make it absolute:\n' >&2
+        printf '  git config core.hooksPath "%s"\n\n' "$HOOKS_DIR" >&2
         ;;
 esac
 
@@ -308,26 +322,97 @@ _parallax_targets_origin() {
 # --- end parallax:commit-message-scan ----------------------------------------
 LAYER_EOF
 
+PC_MARKER="parallax:staged-scan"
+
+read -r -d '' PC_LAYER <<'PC_LAYER_EOF' || true
+# --- parallax:staged-scan (BLOCKING) -------------------------------------------
+# Installed into pre-commit, pre-merge-commit and pre-applypatch: the hooks that
+# run before git records a new commit from the index (commit, merge, am).
+# Scans what that commit will record, before it exists. Lessons from internal
+# use reach this public repo through symlinked skills; a registered name caught
+# here never enters a local commit that a later push could publish.
+# Runs `client_guard.py scan-index`: every staged path and blob that differs
+# from HEAD, with the same rules as the pre-push scan (type changes, gitlinks,
+# paths under skipped directories, raw blobs with no smudge filter or replace
+# refs). Prefers the guard on origin/main once that copy has scan-index, so a
+# branch that edits the guard does not decide what is scanned. Exit 2 (no key,
+# bad registry) blocks. A guard that predates scan-index warns and does not
+# block. `--no-verify`, cherry-pick and rebase skip this layer; the pre-push
+# layer still scans every pushed commit.
+_PARALLAX_SS_TOP="$(git rev-parse --show-toplevel 2>/dev/null)"
+_PARALLAX_SS_REL="skills/_parallax/scripts/client_guard.py"
+_PARALLAX_SS_HOOK="$(basename "$0")"
+_PARALLAX_SS_RC=0
+_PARALLAX_SS_GUARD=""
+_PARALLAX_SS_NRO_SET="${GIT_NO_REPLACE_OBJECTS+set}"
+_PARALLAX_SS_NRO="${GIT_NO_REPLACE_OBJECTS:-}"
+export GIT_NO_REPLACE_OBJECTS=1
+trap 'rm -f "$_PARALLAX_SS_GUARD"' EXIT INT TERM
+if git cat-file -e "refs/remotes/origin/main:$_PARALLAX_SS_REL" 2>/dev/null \
+        && git cat-file -e "refs/remotes/origin/main:.client-guard/registry.json" 2>/dev/null \
+        && git show "refs/remotes/origin/main:$_PARALLAX_SS_REL" 2>/dev/null | grep -q '"scan-index"'; then
+    _PARALLAX_SS_GUARD="$(mktemp "${TMPDIR:-/tmp}/parallax-guard.XXXXXX" 2>/dev/null)"
+    if [ -n "$_PARALLAX_SS_GUARD" ] \
+            && git show "refs/remotes/origin/main:$_PARALLAX_SS_REL" > "$_PARALLAX_SS_GUARD"; then
+        CLIENT_GUARD_REPO_ROOT="$_PARALLAX_SS_TOP" CLIENT_GUARD_TRUSTED_REV=refs/remotes/origin/main \
+            python3 "$_PARALLAX_SS_GUARD" scan-index || _PARALLAX_SS_RC=$?
+    else
+        _PARALLAX_SS_RC=2
+    fi
+elif [ -f "$_PARALLAX_SS_TOP/$_PARALLAX_SS_REL" ] \
+        && grep -q '"scan-index"' "$_PARALLAX_SS_TOP/$_PARALLAX_SS_REL"; then
+    python3 "$_PARALLAX_SS_TOP/$_PARALLAX_SS_REL" scan-index || _PARALLAX_SS_RC=$?
+elif [ -f "$_PARALLAX_SS_TOP/.client-guard/registry.json" ] \
+        && [ ! -f "$_PARALLAX_SS_TOP/$_PARALLAX_SS_REL" ]; then
+    printf '\n\033[31m[%s] BLOCKED: .client-guard/registry.json exists but client_guard.py is missing.\033[0m\n' "$_PARALLAX_SS_HOOK" >&2
+    _PARALLAX_SS_RC=2
+else
+    printf '\033[33m[%s] WARNING: no client guard with scan-index here; staged files were NOT scanned (pre-push still scans).\033[0m\n' "$_PARALLAX_SS_HOOK" >&2
+fi
+[ -n "$_PARALLAX_SS_GUARD" ] && rm -f "$_PARALLAX_SS_GUARD"
+trap - EXIT INT TERM
+if [ -n "$_PARALLAX_SS_NRO_SET" ]; then
+    GIT_NO_REPLACE_OBJECTS="$_PARALLAX_SS_NRO"
+else
+    unset GIT_NO_REPLACE_OBJECTS
+fi
+if [ "$_PARALLAX_SS_RC" -ne 0 ]; then
+    printf '\n\033[31m[%s] BLOCKED: staged-content client-name scan failed (exit %s).\033[0m\n' "$_PARALLAX_SS_HOOK" "$_PARALLAX_SS_RC" >&2
+    printf '           Remove the name or path from the staged files, or move client and\n' >&2
+    printf '           internal work to the private repository. See CONTRIBUTING.md.\n' >&2
+    exit "$_PARALLAX_SS_RC"
+fi
+unset _PARALLAX_SS_TOP _PARALLAX_SS_REL _PARALLAX_SS_HOOK _PARALLAX_SS_RC _PARALLAX_SS_GUARD \
+    _PARALLAX_SS_NRO_SET _PARALLAX_SS_NRO
+# --- end parallax:staged-scan ---------------------------------------------------
+PC_LAYER_EOF
+
 # Match the marker only as an installed layer, never as a passing mention in a
 # comment someone wrote. The first version's bare grep let a TODO note make the
 # installer report "already installed" while nothing was installed — which also
 # blocked it from ever repairing a broken install.
 already_installed() {
-    [ -f "$1" ] && grep -q "^# --- ${MARKER} (BLOCKING)" "$1" 2>/dev/null
+    [ -f "$1" ] && grep -q "^# --- ${2} (BLOCKING)" "$1" 2>/dev/null
 }
 
 # The installed copy of the layer -- marker line through end marker -- for
 # comparison against the current LAYER text.
 installed_layer() {
-    sed -n "/^# --- ${MARKER} (BLOCKING)/,/^# --- end ${MARKER} /p" "$1"
+    sed -n "/^# --- ${2} (BLOCKING)/,/^# --- end ${2} /p" "$1"
 }
 
+# Install one layer into one hook. Arguments: hook name, marker, layer text.
+# Fatal refusals exit the whole installer; an up-to-date layer returns 0.
+install_layer() {
+HOOK="$HOOKS_DIR/$1"
+MARKER="$2"
+LAYER="$3"
 _PARALLAX_REFRESH=0
 BACKUP=""
-if already_installed "$HOOK"; then
-    if [ "$(installed_layer "$HOOK")" = "$(printf '%s' "$LAYER")" ]; then
+if already_installed "$HOOK" "$MARKER"; then
+    if [ "$(installed_layer "$HOOK" "$MARKER")" = "$(printf '%s' "$LAYER")" ]; then
         echo "  ✓ already installed in $HOOK"
-        exit 0
+        return 0
     fi
     # An OLDER layer is installed. Without this path a fixed layer never
     # reaches a clone that installed before the fix: the marker grep reported
@@ -366,7 +451,7 @@ if ! mkdir -p "$HOOKS_DIR" 2>/dev/null; then
 fi
 
 if [ "$_PARALLAX_REFRESH" = 1 ]; then
-    if ! installed_layer "$HOOK" | tail -1 | grep -q "^# --- end ${MARKER} "; then
+    if ! installed_layer "$HOOK" "$MARKER" | tail -1 | grep -q "^# --- end ${MARKER} "; then
         printf '\033[31mFATAL:\033[0m the installed layer in %s has no end marker.\n' "$HOOK" >&2
         printf 'Stripping it would delete everything after the start marker, including any\n' >&2
         printf 'other gates below it. Repair or remove the layer by hand, then re-run.\n' >&2
@@ -419,4 +504,10 @@ if [ -n "$MARK_LINE" ] && [ -n "$TERM_LINE" ] && [ "$MARK_LINE" -gt "$TERM_LINE"
 fi
 
 echo "  ✓ installed into $HOOK"
+}
+
+install_layer pre-push "$MARKER" "$LAYER"
+install_layer pre-commit "$PC_MARKER" "$PC_LAYER"
+install_layer pre-merge-commit "$PC_MARKER" "$PC_LAYER"
+install_layer pre-applypatch "$PC_MARKER" "$PC_LAYER"
 echo "  verify with: git push --dry-run <remote> <branch>"

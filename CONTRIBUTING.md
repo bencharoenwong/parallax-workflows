@@ -63,6 +63,11 @@ Build client-first work in the private client-work repository. Use synthetic
 fixtures here; real brand guides, letters, logos, URLs and client materials stay
 private. Register every written form before the first client-work commit:
 legal name, short name, brand and domain. A long form does not cover a short one.
+The registry also holds internal identifiers and the names of private
+workflows, so the same checks keep them out of public files. Register only
+distinctive terms: a short term that is also an ordinary word or phrase blocks
+legitimate text. In a maintainer clone with the key, white-label onboarding
+offers to register a new client's name forms after it saves the branding.
 
 A key holder runs `python3 skills/_parallax/scripts/client_guard.py add`, with
 one name per stdin line, then includes `.client-guard/registry.json` in the next
@@ -93,8 +98,10 @@ owner approval for an admin bypass where required.
 
 ### Local push checks
 
-Install or refresh the hook in each clone:
-`bash skills/_parallax/scripts/install_git_hooks.sh`. Also run
+Install or refresh the hooks in each clone:
+`bash skills/_parallax/scripts/install_git_hooks.sh`. It installs a pre-push
+layer and a staged-index layer in pre-commit, pre-merge-commit and
+pre-applypatch. Also run
 `python3 skills/_parallax/scripts/scan_commit_messages.py` before every push.
 The standalone scanner defaults to `origin/main..HEAD`, then `main..HEAD`, and
 fails when neither base exists. It prints commit identifiers and categories,
@@ -107,6 +114,16 @@ and merges that revision's registry with the checkout's registry. A missing or
 wrong key, unreadable content, or scanner failure blocks the guarded push.
 Keep the key in `~/.config/parallax/client-guard.key` or `CLIENT_GUARD_KEY`;
 obtain it from the maintainer and keep it outside the repository.
+
+The staged-index layer runs `client_guard.py scan-index` before git records a
+commit, a merge or an applied patch. It scans every staged path and blob that
+differs from HEAD, with the same rules as the pre-push scan. A hit, a missing
+key or a guard failure blocks it. This
+matters most when skills are symlinked into a working setup and edited during
+use: a restricted term is stopped before it reaches a local commit.
+`--no-verify`, cherry-pick and rebase skip this layer; the pre-push layer
+still scans every pushed commit. In a clone whose `core.hooksPath` is relative,
+linked worktrees run no hooks; the installer warns and prints the absolute fix.
 
 The hook refreshes `origin/main` with transport timeouts. It excludes already
 published default-branch commits only when that fetch succeeds and the push URL
