@@ -1,6 +1,6 @@
 ---
 name: parallax-thematic-screen
-description: "Thematic stock screen and idea analysis: build a stock universe from a theme, score top picks, layer optional macro context and regime signals, compare peers, and check financials via Parallax MCP tools. Triggers: 'screen for [theme]', 'trade ideas around X', 'thematic ideas for Y', 'stocks in Z theme', 'new ideas in [sector]'. NOT for single stock analysis (use /parallax-should-i-buy), not for portfolio review (use /parallax-client-review), not for a country or region screen (use /parallax-country-deep-dive), not for allocation-ready construction (use /parallax-portfolio-builder)."
+description: "Thematic stock screen and idea analysis: build a stock universe from a theme, score top picks, layer optional macro context and regime signals, compare peers, and check financials via Parallax MCP tools. Triggers: 'screen for [theme]', 'trade ideas around X', 'thematic ideas for Y', 'stocks in Z theme', 'new ideas in [sector]', 'which stocks does this theme work against', 'names this thesis hurts'. NOT for single stock analysis (use /parallax-should-i-buy), not for portfolio review (use /parallax-client-review), not for a country or region screen (use /parallax-country-deep-dive), not for allocation-ready construction (use /parallax-portfolio-builder)."
 ---
 
 <!-- white-label: integration-pattern.md -->
