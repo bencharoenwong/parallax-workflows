@@ -175,7 +175,7 @@ When a skill produces a ranked output (e.g., Top Picks) and also needs to attach
 
 **Rule:** annotation steps MUST NOT block subsequent steps that consume rank order, including annotations that wait on a fetch issued after rank is established. In thematic-screen the pattern is:
 - C1 establishes rank (composite scoring + ground-truth check)
-- C1.5 annotates with macro_tag — starts when the 3b macro fetch returns; 3b, C2 and C3 issue together, and C1.5 never gates C2 or C3
+- C1.5 annotates with macro_tag — starts once rank is set and the 3b macro fetch has returned (3b issues in Batch A for user-named markets, otherwise with C2 and C3); C1.5 never gates C2 or C3
 - C2 calls `export_peer_comparison` on the highest-scored trusted row
 - C3 calls `get_financials` on top-3 trusted picks
 
