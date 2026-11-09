@@ -579,7 +579,8 @@ def test_an_outdated_installed_layer_is_refreshed(clone: Path) -> None:
 
     r = _install(clone)
     assert r.returncode == 0, r.stderr
-    assert "already installed" not in r.stdout
+    assert not any("already installed" in ln and ln.rstrip().endswith("pre-push")
+               for ln in r.stdout.splitlines())
     refreshed = hook.read_text()
     assert "OLDER LAYER TEXT" not in refreshed, "outdated layer survived"
     assert refreshed.count(MARKER) == 1, "layer duplicated instead of replaced"
@@ -944,3 +945,192 @@ def test_a_missing_message_scanner_warns_when_origin_main_cannot_say(clone: Path
     r = _hook_to(clone, "http://example.invalid/x.git")
     assert r.returncode == 0, r.stderr
     assert "commit messages were NOT scanned" in r.stderr
+
+
+# --- staged-index scan: pre-commit, pre-merge-commit, pre-applypatch ----------
+# These run the REAL client_guard.py with a test key and one registered test
+# name, because the bypasses this layer must close (type changes, skipped
+# directories, gitlinks) live in the guard's own scan rules, which a stub hides.
+
+PC_MARKER = "# --- parallax:staged-scan (BLOCKING)"
+GUARD = REPO / "skills/_parallax/scripts/client_guard.py"
+TEST_KEY = {"CLIENT_GUARD_KEY": "test-key-not-a-secret"}
+HIT = "Zebulon Quartermain"
+
+
+@pytest.fixture()
+def guarded(clone: Path) -> Path:
+    scripts = clone / "skills/_parallax/scripts"
+    shutil.copy(GUARD, scripts / "client_guard.py")
+    r = subprocess.run(["python3", str(scripts / "client_guard.py"), "add"], cwd=clone,
+                       input=HIT + "\n", capture_output=True, text=True,
+                       env={**os.environ, **TEST_KEY, "CLIENT_GUARD_REPO_ROOT": str(clone)})
+    assert r.returncode == 0, r.stderr
+    _run(["git", "add", "-A"], clone)
+    _run(["git", "commit", "-qm", "guard"], clone)
+    assert _install(clone).returncode == 0
+    return clone
+
+
+def _hook(work: Path, name: str = "pre-commit", env=None) -> subprocess.CompletedProcess:
+    return subprocess.run(["bash", str(work / ".git/hooks" / name)], cwd=work,
+                          capture_output=True, text=True,
+                          env={**os.environ, **TEST_KEY, **(env or {})})
+
+
+def _git_k(work: Path, *args: str) -> subprocess.CompletedProcess:
+    return _run(["git", *args], work, env=TEST_KEY)
+
+
+def test_installer_adds_the_staged_layer_to_three_hooks_once(clone: Path) -> None:
+    assert _install(clone).returncode == 0
+    assert _install(clone).returncode == 0
+    for name in ("pre-commit", "pre-merge-commit", "pre-applypatch"):
+        assert (clone / ".git/hooks" / name).read_text().count(PC_MARKER) == 1, name
+    assert (clone / ".git/hooks/pre-push").read_text().count(MARKER) == 1
+
+
+def test_staged_hit_blocks(guarded: Path) -> None:
+    (guarded / "note.md").write_text(f"mentions {HIT} here")
+    _run(["git", "add", "note.md"], guarded)
+    r = _hook(guarded)
+    assert r.returncode == 1, r.stderr
+    assert "[pre-commit] BLOCKED" in r.stderr
+
+
+def test_clean_staged_content_passes(guarded: Path) -> None:
+    (guarded / "note.md").write_text("ordinary text")
+    _run(["git", "add", "note.md"], guarded)
+    assert _hook(guarded).returncode == 0
+
+
+def test_nothing_staged_passes(guarded: Path) -> None:
+    assert _hook(guarded).returncode == 0
+
+
+def test_hit_in_a_path_blocks(guarded: Path) -> None:
+    d = guarded / "skills" / HIT.replace(" ", "-")
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text("ordinary text")
+    _run(["git", "add", "skills"], guarded)
+    assert _hook(guarded).returncode == 1
+
+
+def test_the_staged_blob_is_scanned_not_the_working_copy(guarded: Path) -> None:
+    note = guarded / "note.md"
+    note.write_text(f"mentions {HIT} here")
+    _run(["git", "add", "note.md"], guarded)
+    note.write_text("clean now, but not staged")
+    assert _hook(guarded).returncode == 1
+    _run(["git", "add", "note.md"], guarded)
+    note.write_text(f"{HIT} only in the working copy")
+    assert _hook(guarded).returncode == 0
+
+
+def test_a_typechange_from_symlink_to_file_blocks(guarded: Path) -> None:
+    """A symlinked skill replaced by a real copy is a T change."""
+    (guarded / "target.md").write_text("ordinary text")
+    (guarded / "link.md").symlink_to("target.md")
+    _run(["git", "add", "-A"], guarded)
+    _git_k(guarded, "commit", "-qm", "link", "--no-verify")
+    (guarded / "link.md").unlink()
+    (guarded / "link.md").write_text(f"real copy naming {HIT}")
+    _run(["git", "add", "link.md"], guarded)
+    assert _hook(guarded).returncode == 1
+
+
+def test_a_hit_under_a_skipped_directory_blocks(guarded: Path) -> None:
+    d = guarded / "sub/node_modules"
+    d.mkdir(parents=True)
+    (d / "x.md").write_text(f"{HIT}")
+    _run(["git", "add", "-f", "sub"], guarded)
+    assert _hook(guarded).returncode == 1
+
+
+def test_a_gitlink_path_blocks(guarded: Path) -> None:
+    head = _run(["git", "rev-parse", "HEAD"], guarded).stdout.strip()
+    _run(["git", "update-index", "--add", "--cacheinfo",
+          f"160000,{head},{HIT.replace(' ', '-')}-sub"], guarded)
+    assert _hook(guarded).returncode == 1
+
+
+def test_a_missing_key_blocks(guarded: Path) -> None:
+    (guarded / "note.md").write_text("ordinary text")
+    _run(["git", "add", "note.md"], guarded)
+    env = {k: v for k, v in os.environ.items() if k != "CLIENT_GUARD_KEY"}
+    env["HOME"] = str(guarded / "no-home")
+    r = subprocess.run(["bash", str(guarded / ".git/hooks/pre-commit")], cwd=guarded,
+                       capture_output=True, text=True, env=env)
+    assert r.returncode == 2, r.stderr
+
+
+def test_a_merge_bringing_in_a_hit_blocks(guarded: Path) -> None:
+    _run(["git", "checkout", "-qb", "side"], guarded)
+    (guarded / "note.md").write_text(f"{HIT}")
+    _run(["git", "add", "note.md"], guarded)
+    _git_k(guarded, "commit", "-qm", "side", "--no-verify")
+    _run(["git", "checkout", "-q", "-"], guarded)
+    (guarded / "other.md").write_text("x")
+    _run(["git", "add", "other.md"], guarded)
+    _git_k(guarded, "commit", "-qm", "main", "--no-verify")
+    r = _git_k(guarded, "merge", "--no-ff", "-q", "-m", "merge", "side")
+    assert r.returncode != 0, "merge recorded a hit"
+
+
+def test_git_am_of_a_hit_blocks(guarded: Path, tmp_path: Path) -> None:
+    _run(["git", "checkout", "-qb", "side"], guarded)
+    (guarded / "note.md").write_text(f"{HIT}")
+    _run(["git", "add", "note.md"], guarded)
+    _git_k(guarded, "commit", "-qm", "side", "--no-verify")
+    patch = _run(["git", "format-patch", "-1", "-o", str(tmp_path)], guarded).stdout.strip()
+    _run(["git", "checkout", "-q", "-"], guarded)
+    before = _run(["git", "rev-parse", "HEAD"], guarded).stdout.strip()
+    _git_k(guarded, "am", "-q", patch)
+    after = _run(["git", "rev-parse", "HEAD"], guarded).stdout.strip()
+    assert before == after, "git am recorded a hit"
+
+
+def test_a_guard_without_scan_index_warns_and_passes(clone: Path) -> None:
+    (clone / "skills/_parallax/scripts/client_guard.py").write_text("import sys\nsys.exit(1)\n")
+    assert _install(clone).returncode == 0
+    (clone / "note.md").write_text("ordinary text")
+    _run(["git", "add", "note.md"], clone)
+    r = _hook(clone)
+    assert r.returncode == 0
+    assert "NOT scanned" in r.stderr
+
+
+def test_a_registry_without_the_guard_blocks_commits(clone: Path) -> None:
+    assert _install(clone).returncode == 0
+    (clone / ".client-guard").mkdir()
+    (clone / ".client-guard/registry.json").write_text("{}")
+    (clone / "note.md").write_text("ordinary text")
+    _run(["git", "add", "note.md"], clone)
+    r = _hook(clone)
+    assert r.returncode == 2
+    assert "client_guard.py is missing" in r.stderr
+
+
+def test_the_guard_on_origin_main_is_preferred(guarded: Path) -> None:
+    """A branch that weakens its local guard must not decide what is scanned."""
+    scripts = guarded / "skills/_parallax/scripts"
+    (scripts / "client_guard.py").write_text('import sys  # "scan-index"\nsys.exit(1)\n')
+    _run(["git", "add", "-A"], guarded)
+    _git_k(guarded, "commit", "-qm", "trusted", "--no-verify")
+    _run(["git", "push", "-q", "--no-verify", "origin", "HEAD:refs/heads/main"], guarded,
+         env={"GIT_CONFIG_GLOBAL": "/dev/null"})
+    _run(["git", "fetch", "-q", "origin"], guarded)
+    (scripts / "client_guard.py").write_text('import sys  # "scan-index"\nsys.exit(0)\n')
+    (guarded / "note.md").write_text("ordinary text")
+    _run(["git", "add", "note.md"], guarded)
+    assert _hook(guarded).returncode == 1
+
+
+def test_a_relative_hooks_path_is_warned_about(clone: Path) -> None:
+    """The fixture pins a relative core.hooksPath. Linked worktrees then run no
+    hooks at all, so the installer must say so and give the absolute fix."""
+    r = _install(clone)
+    assert r.returncode == 0
+    assert "core.hooksPath is relative" in r.stderr
+    _run(["git", "config", "core.hooksPath", str(clone / ".git/hooks")], clone)
+    assert "core.hooksPath is relative" not in _install(clone).stderr
