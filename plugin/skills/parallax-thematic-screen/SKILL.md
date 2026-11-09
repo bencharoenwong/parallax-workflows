@@ -59,7 +59,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 
 ### Step 1 — Resolve inputs
 
-Apply the macro-self-confirming test to the theme (Gotchas). Infer up to 3 relevant markets from the theme for Batch A step 3b (geo-agnostic themes → one relevant covered market, default United States unless the request supplies a different scope).
+Apply the macro-self-confirming test to the theme (Gotchas). Record `user_markets`: the markets the request names explicitly, up to 3. Do not infer markets from the theme words; step 3b derives them from the universe when `user_markets` is empty.
 
 **Thesis tests and universe query.** `build_stock_universe` ranks names by how well their descriptions match the query text; it does not test the thesis. Before Batch A:
 1. Write 2–4 tests the thesis must pass. Each test is about the companies' business (revenue source, input, customer, cost exposure), never about this run's output. State each so that data could prove it false.
@@ -72,15 +72,15 @@ Apply the macro-self-confirming test to the theme (Gotchas). Infer up to 3 relev
 
 ### Step 2 — Fetch (parallel batches)
 
-**Batch A — setup.** `call-tool` steps 1, 2 and 3a together; 3b fires when 3a returns:
+**Batch A — setup.** `call-tool` steps 1, 2 and 3a together; 3b fires in the Batch C turn:
 1. **Universe** — start from `universe_query` (Step 1). With a view and `PARALLAX_LOADER_V2=1`, follow loader.md §3 "Application (V2)": parallel per-sector calls built from `universe_query`, merge, dedupe; V1: prepend tilt context to `universe_query` and call `build_stock_universe` once. Record every query string sent. Filter against `tilts.excludes`. **Failure/timeout/pending:** retain any job identifier/status; do not launch a replacement universe job or silently narrow the theme. Set `universe = []`, `universe_status = "pending"` (or the specific failure), continue and disclose it under Universe Built. A replacement with changed scope needs an explicit new user request; never call `check_portfolio_redundancy` as a placeholder.
 1b. **Against universe** (only when `against_query` is set) — `build_stock_universe(query=against_query)` in the same turn as step 1. No tilt context, no V2 split. Failure/pending → `against_universe = []` with its status; disclose it in the section; never retry with a changed query.
 2. **Telemetry** — `get_telemetry` (basket-level; failure → `telemetry = None`).
-3. **Macro** (skip with `--no-macro`) — 3a `list_macro_countries`; 3b `macro_analyst(market=<m>, component="tactical")` per inferred market whose name matches the 3a list verbatim ("United States", not "US"); unmatched inferences are dropped silently; none left, or all unavailable → `macro_context = None`. Cap 3.
+3. **Macro** (skip with `--no-macro`) — 3a `list_macro_countries`; 3b `macro_analyst(market=<m>, component="tactical")` per selected market whose name matches the 3a list verbatim ("United States", not "US"). Select markets this way: use `user_markets` when present; otherwise count `get_company_info.data.market` across the trusted Batch B candidates, normalize each to its 3a name, and take the most frequent, up to 3 (ties → the market of the higher-ranked candidate first). Unmatched names are dropped silently; none left, or all unavailable → `macro_context = None`. Cap 3.
 
 **Batch B — scoring (C1).** For the top N candidates, `call-tool` `get_peer_snapshot` AND `get_company_info` per candidate together. Record `returned_name` (`target_company`) and `expected_name` (`get_company_info.data.name` — nested under the response's `data` object, not a top-level field). When `against_universe` is non-empty, run the same pair in the same turn for each of its top N names not already in the main top N; an against-name already in the main top N reuses that name's main C1 result. Against-names get no C2 or C3 calls.
 
-**Batch C — after Step 4 establishes rank, in one turn:** **C2** `export_peer_comparison` (`format="json"`) for the highest-scored TRUSTED row; **C3** `get_financials` (`statement="summary"`) for the top 3 trusted picks. C1.5 annotation runs concurrently with these and never gates them.
+**Batch C — after Step 4 establishes rank, in one turn:** **C2** `export_peer_comparison` (`format="json"`) for the highest-scored TRUSTED row; **C3** `get_financials` (`statement="summary"`) for the top 3 trusted picks; **3b** macro for the selected markets (Batch A step 3). C1.5 starts when 3b returns. C1.5 annotation runs concurrently with these and never gates them.
 
 ### Step 3 — Verify
 
