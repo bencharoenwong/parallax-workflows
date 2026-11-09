@@ -59,7 +59,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 
 ### Step 1 — Resolve inputs
 
-Apply the macro-self-confirming test to the theme (Gotchas). Record `user_markets`: the markets the request names explicitly, up to 3. Do not infer markets from the theme words; step 3b derives them from the universe when `user_markets` is empty.
+Apply the macro-self-confirming test to the theme (Gotchas). Record `user_markets`: the markets the request names explicitly, up to 3. A country or market named inside the theme string counts as named ("India infrastructure" → India; "Japanese robotics" → Japan). Do not guess markets the request does not name, such as a geography a sector implies (semiconductors → Taiwan); step 3b derives them from the universe when `user_markets` is empty.
 
 **Thesis tests and universe query.** `build_stock_universe` ranks names by how well their descriptions match the query text; it does not test the thesis. Before Batch A:
 1. Write 2–4 tests the thesis must pass. Each test is about the companies' business (revenue source, input, customer, cost exposure), never about this run's output. State each so that data could prove it false.
