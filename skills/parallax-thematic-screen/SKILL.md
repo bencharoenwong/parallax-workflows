@@ -85,7 +85,7 @@ Apply the macro-self-confirming test to the theme (Gotchas). Infer up to 3 relev
 
 ### Step 3 — Verify
 
-- **Divergence assertion** (loader.md §5 rule 4, universal): if the query named N ≥ 2 sectors/themes and `max_sector_share / total > 0.6`, warn "universe collapsed to single sector despite multi-sector request" (V2: use it to verify merge quality).
+- **Divergence assertion** (loader.md §5 rule 4, universal): if the user's theme or the house-view tilts named N ≥ 2 sectors/themes and `max_sector_share / total > 0.6`, warn "universe collapsed to single sector despite multi-sector request" (V2: use it to verify merge quality). Count N from the user's theme and the tilts only; the products a Step 1 rewrite lists in `universe_query` never count, so a single-theme request rewritten into 2–4 products gets no warning.
 - **Freeform excludes** — with a view and non-empty `tilts.excludes_freeform`, drop candidates matching any pattern against `get_company_info.data.name`/`.data.description`/`.data.sector` (loader.md §3).
 - **Ground-truth check** (loader.md §5 rule 3, universal): any row where `returned_name ≠ expected_name` after normalization per conventions §2 step 2 is UNTRUSTED — ⚠ MISMATCH, not ranked. Apply the same check to against-names.
 
