@@ -339,6 +339,16 @@ On failure the call raises `PersistenceError`; report it cleanly and treat the s
 
 > Full code: see `references/workflow-code.md` § Step 6d — Persist the disposition.
 
+#### Step 6e — Register the client in the repository guard (maintainer clones only)
+
+Runs after a `confirmed` or `edited` save, and only when all three hold: the canonical `_parallax` directory (conventions §0.0 item 1) sits in a repository whose root has `skills/_parallax/scripts/client_guard.py` and `.client-guard/registry.json`; and the guard key is present (`~/.config/parallax/client-guard.key` or `CLIENT_GUARD_KEY`). Otherwise skip this step and record the reason for the post-save summary. Installed plugin copies always skip.
+
+1. `ask-operator` with every written form of the client's name: legal name, short name, brand name, and the domain host from `source.reference` when the source is a URL. The operator confirms or edits the list. A long form does not cover a shorter one, so keep each form.
+2. `run-shell` from the repository root: `python3 skills/_parallax/scripts/client_guard.py add`, one form per stdin line. Its output may print matching locations; keep that output in the session and never write it to a file.
+3. Report the result: the count of new and already-present forms. If `add` refuses a form, report the refusal and stop; never force or retry it. The registry change stays uncommitted for a key holder to include in the next authorized commit (CONTRIBUTING, "Client names and client-first work").
+
+Never write a name form into any repository file, commit message, branch name or PR text.
+
 ## Modes
 
 | Flag | Behavior |
@@ -386,6 +396,7 @@ Branding saved.
   fonts:       <count of non-empty font slots> configured
   voice:       <enabled: yes|no — corpus N words from M docs, register: ...>
   warnings:    <count of warn/fail checks> (see validation above)
+  guard:       <registered N new, M already present | skipped: <reason>>
 
 Active in:
   visual:  client-review, due-diligence, deep-dive
@@ -410,6 +421,7 @@ For `--status`: `references/status-format.md`. For other modes, the requested su
 - Logo download fails: warn, keep the URL reference only, continue.
 - Voice corpus < 500 words: `voice.enabled = False`, surface the gap; never populate voice from a thin corpus.
 - `config.yaml` corrupted: warn and offer to overwrite; never crash.
+- Step 6e guard registration refused or failed: report it; the branding save stays applied. Registration is never retried with altered forms.
 
 Edge-case handling (corrupted config, logo-download failure, empty color extraction, font-not-on-system, WCAG fail, unwritable directory, mid-way staging failure, >10-page PDF) and the full Success Criteria checklist (config/assets/audit assertions, voice-extracted vs not, multi-source) are catalogued in `references/edge-cases.md`. Consult it when a failure mode fires or before declaring a run successful.
 
@@ -418,6 +430,7 @@ Edge-case handling (corrupted config, logo-download failure, empty color extract
 - The operator answered the Step 5 gate through `ask-operator`; every extraction attempt, including aborted ones, appended its audit entry through `persist_disposition`.
 - On confirm: `config.yaml` and `DESIGN.md` written `0600` from the same draft, logos downloaded to `assets/` (`0700`), the audit entry appended; the post-save summary rendered.
 - Multi-source mismatches were resolved by the operator, never by confidence or recency.
+- In a maintainer clone with the guard key, the client's confirmed name forms were registered (Step 6e), or the refusal was reported; elsewhere the summary states why the step was skipped.
 
 ## See also
 

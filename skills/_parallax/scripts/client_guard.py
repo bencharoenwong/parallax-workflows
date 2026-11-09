@@ -114,6 +114,7 @@ Usage:
   client_guard.py allow PATH...           allowlist the current content of files
   client_guard.py scan-tree [REV]         every file in REV (default HEAD)
   client_guard.py scan-range [--ref R] REV...   commits/tags in a git-log range
+  client_guard.py scan-index              staged changes vs HEAD (commit hooks)
   client_guard.py scan-text [--label L]   text on stdin (e.g. a PR body)
   client_guard.py scan-path DIR           a directory on disk, before promotion
   client_guard.py ci                      GitHub Actions entry point
@@ -1136,6 +1137,51 @@ def scan_range(scanner: Scanner, revs: list[str], ref: str | None = None) -> int
     return len(commits)
 
 
+def scan_index(scanner: Scanner) -> int:
+    """Scan what the next commit will record: every staged path and blob that
+    differs from HEAD (from the empty tree before the first commit). Built for
+    the pre-commit, pre-merge-commit and pre-applypatch hooks.
+
+    Same rules as scan_range, so the two cannot drift apart: type changes count
+    (a symlinked skill replaced by a real copy is a T change), every path is
+    scanned including gitlinks and paths under skipped directories, and blobs
+    are read raw through cat-file -- no smudge filter or encoding conversion,
+    and no replace refs, so the scan reads exactly the objects the commit
+    stores."""
+    os.environ["GIT_NO_REPLACE_OBJECTS"] = "1"
+    base = "HEAD"
+    if not _object_exists("HEAD"):
+        empty = _git("hash-object", "-t", "tree", "/dev/null")
+        if empty.returncode != 0:
+            raise GuardError("cannot compute the empty tree")
+        base = empty.stdout.strip()
+    diff = _git("diff-index", "--cached", "-r", "-z", "--no-renames",
+                "--diff-filter=AMRCT", base)
+    if diff.returncode != 0:
+        raise GuardError("cannot diff the index")
+    ctx = "staged index"
+    fields = diff.stdout.split("\0")
+    changed: list[tuple[str, str]] = []
+    for i in range(0, len(fields) - 1, 2):
+        meta, path = fields[i], fields[i + 1]
+        parts = meta.split()
+        if len(parts) < 4:
+            continue
+        scanner.scan_path(path, f"index:{path}", ctx)
+        # 160000 is a gitlink (submodule commit), not content in this repo.
+        if parts[1] != "160000" and parts[3] != ZERO_SHA:
+            changed.append((parts[3], path))
+    blobs = _cat_blobs(sorted({sha for sha, _ in changed}))
+    for blob_sha, path in changed:
+        where = f"index:{path}"
+        data = blobs[blob_sha]
+        if data is None:
+            _report_oversized(scanner, blob_sha, where, ctx)
+        else:
+            scanner.scan_bytes(data, path, where, ctx)
+    return len(changed)
+
+
 def scan_dir(scanner: Scanner, root: Path) -> None:
     if not root.is_dir():
         raise GuardError(f"not a directory: {root}")
@@ -1473,6 +1519,8 @@ def main(argv: list[str]) -> int:
             if not args:
                 raise GuardError("scan-range needs at least one revision")
             what = f"{scan_range(scanner, args, ref=ref)} commit(s)"
+        elif cmd == "scan-index":
+            what = f"staged index ({scan_index(scanner)} blob(s))"
         elif cmd == "scan-text":
             label = args[1] if args[:1] == ["--label"] and len(args) > 1 else "stdin"
             scanner.scan_text(sys.stdin.read(), label)
