@@ -337,8 +337,9 @@ read -r -d '' PC_LAYER <<'PC_LAYER_EOF' || true
 # refs). Prefers the guard on origin/main once that copy has scan-index, so a
 # branch that edits the guard does not decide what is scanned. Exit 2 (no key,
 # bad registry) blocks. A guard that predates scan-index warns and does not
-# block. `--no-verify`, cherry-pick and rebase skip this layer; the pre-push
-# layer still scans every pushed commit.
+# block. Commands that record history without running commit hooks
+# (`--no-verify`, fast-forward merges, cherry-pick, revert, rebase) skip this
+# layer; the pre-push layer still scans every pushed commit.
 _PARALLAX_SS_TOP="$(git rev-parse --show-toplevel 2>/dev/null)"
 _PARALLAX_SS_REL="skills/_parallax/scripts/client_guard.py"
 _PARALLAX_SS_HOOK="$(basename "$0")"

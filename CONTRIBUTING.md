@@ -121,8 +121,9 @@ differs from HEAD, with the same rules as the pre-push scan. A hit, a missing
 key or a guard failure blocks it. This
 matters most when skills are symlinked into a working setup and edited during
 use: a restricted term is stopped before it reaches a local commit.
-`--no-verify`, cherry-pick and rebase skip this layer; the pre-push layer
-still scans every pushed commit. In a clone whose `core.hooksPath` is relative,
+Commands that record history without running commit hooks (`--no-verify`,
+fast-forward merges, cherry-pick, revert, rebase) skip this layer; the pre-push
+layer still scans every pushed commit. In a clone whose `core.hooksPath` is relative,
 linked worktrees run no hooks; the installer warns and prints the absolute fix.
 
 The hook refreshes `origin/main` with transport timeouts. It excludes already
