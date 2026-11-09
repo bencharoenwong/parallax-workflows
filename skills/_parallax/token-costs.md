@@ -106,7 +106,7 @@ Macro overview totals below show normal and conditional maximum prices separatel
 
 | Workflow | Credits | Baseline and conditional calls |
 |---|---|---|
-| `/parallax-thematic-screen` | **11.05 / 6.05 no-macro** | Default five picks: universe5 + identity/snapshot0.75 + three summaries0.15 + telemetry0.05 + export0.1 + one tactical market5. Three markets21.05. Each candidate changes paired cost by0.15. `--against` adds one universe5 + identity/snapshot0.75: 16.8 at one market. |
+| `/parallax-thematic-screen` | **11.05 / 6.05 no-macro** | Default five picks: universe5 + identity/snapshot0.75 + three summaries0.15 + telemetry0.05 + export0.1 + one tactical market5. Three markets21.05. Each candidate changes paired cost by0.15. `--against` adds one universe5 + identity/snapshot up to0.75 (names already in the main top N reuse their reads): up to16.8 at one market. |
 | `/parallax-portfolio-builder` | **12–12.3** | Ten candidates: universe5 + identity/snapshot1.5 + final redundancy0.1H for H=5–8 + validation5. H=10 costs12.5. |
 | `/parallax-portfolio-checkup` | **7.5–17.5** | Ten holdings, identity/snapshot1.5, redundancy1, one-to-three tactical markets5 each. With no macro markets,2.5. Scoring/redundancy fallbacks add actual selected holding requests. |
 | `/parallax-morning-brief` | **22.55–32.55 normally** | Ten holdings, three top-name news jobs, one-to-three macro overviews. Each overview costs5 normally/up to50; mover news and scoring fallbacks add calls. |
