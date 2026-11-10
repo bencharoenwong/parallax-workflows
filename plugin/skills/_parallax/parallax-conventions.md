@@ -19,6 +19,25 @@ Feature flags gate architectural changes in these skills. Read each flag via the
 
 ---
 
+## Cash holdings
+
+Represent literal cash as `CASH.<ISO currency>`, for example `CASH.USD` or
+`CASH.THB`. Use the cash holding's currency, which can differ from the portfolio
+reporting currency. Preserve that denomination when the reporting currency changes.
+
+Use an explicit currency in generated holdings and upload files. Never generate
+bare `CASH`. When a user supplies bare cash without an established portfolio
+currency, request that currency before analysis. Never substitute a Treasury-bill
+ETF or money-market fund for literal cash; those are securities.
+
+Cash has no factor score. When quick scoring accepts cash, preserve its input
+weight and report scored-security coverage. Do not assign cash a zero factor
+score. For a tool restricted to security overlap, omit literal cash and label
+the result as the invested-security sleeve. Follow the discovered tool schema
+for supported holdings and currency fields.
+
+---
+
 ## 0.0 Pre-flight (before any data gathering)
 
 Run this once at the top of any should-i-buy / two-lens / house-view / portfolio workflow, **before the first data call** — not as a mid-run recovery:
