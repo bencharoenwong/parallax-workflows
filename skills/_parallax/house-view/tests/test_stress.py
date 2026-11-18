@@ -24,6 +24,9 @@ import render  # noqa: E402
 
 # --- Fixtures ---
 
+# Within the 180-day stale-config window, relative to today so it never ages out.
+_FRESH_REVIEW = (datetime.date.today() - datetime.timedelta(days=10)).isoformat()
+
 
 @pytest.fixture
 def temp_house_view_dir(tmp_path: Path) -> Path:
@@ -60,11 +63,11 @@ def sample_view_data():
 @pytest.fixture
 def sample_rules_path(tmp_path: Path):
     """Creates a sample internal_rules.yaml file."""
-    rules_content = """
+    rules_content = f"""
     - id: "rates_cutting_momentum_pos"
       description: "Rates cutting is historically unfavorable for high-momentum stocks."
       class: "hard_stop"
-      last_reviewed: "2026-05-14"
+      last_reviewed: "{_FRESH_REVIEW}"
       confidence: 0.9
       pattern:
         when:
@@ -218,11 +221,11 @@ def test_rule_growth_slowing_cyclicals_triggers(mock_view, sample_rules_path):
     """(ID: rule-004) ★★ triggers as Taste, not Hard"""
     rules_content = (
         sample_rules_path.read_text()
-        + """
+        + f"""
     - id: "growth_slowing_cyclicals_overweight"
       description: "Slowing growth favors defensive sectors over cyclicals."
       class: "taste"
-      last_reviewed: "2026-05-14"
+      last_reviewed: "{_FRESH_REVIEW}"
       confidence: 0.7
       pattern:
         when:
@@ -246,11 +249,11 @@ def test_rule_excludes_energy_em_commodity_triggers(mock_view, sample_rules_path
     """(ID: rule-005) ★★ triggers as Taste"""
     rules_content = (
         sample_rules_path.read_text()
-        + """
+        + f"""
     - id: "excludes_energy_em_commodity_overweight"
       description: "Excluding energy while overweighting commodity-exporting EM regions."
       class: "taste"
-      last_reviewed: "2026-05-14"
+      last_reviewed: "{_FRESH_REVIEW}"
       confidence: 0.6
       pattern:
         when:
@@ -274,11 +277,11 @@ def test_rule_pillar_omega_riskoff_riskon_triggers(mock_view, sample_rules_path)
     """(ID: rule-006) ★★★ triggers as Hard stop"""
     rules_content = (
         sample_rules_path.read_text()
-        + """
+        + f"""
     - id: "pillar_omega_risk_on"
       description: "A negative econometrics phase contradicts a risk-on appetite."
       class: "hard_stop"
-      last_reviewed: "2026-05-14"
+      last_reviewed: "{_FRESH_REVIEW}"
       confidence: 0.85
       pattern:
         when:
