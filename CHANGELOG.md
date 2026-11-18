@@ -6,6 +6,9 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 ## 2026.11.2
 
+### Repository
+- The history of `main` was rewritten on 2026-11-18. Every commit ID changed; the current files did not. A full clone made before that date fails on `git pull`; see [Integration](README.md#integration) for the update commands. Plugin installations update normally.
+
 ### Credit pricing
 
 - Synchronize skill and workflow estimates with fractional data-read credits. State per-symbol and per-holding units, conditional macro overview costs, free resolution/polling, and successful-request assumptions. Keep historical ledgers unchanged.
