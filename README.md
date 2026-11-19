@@ -108,6 +108,17 @@ git clone https://github.com/bencharoenwong/parallax-workflows.git "$HOME/parall
 bash "$HOME/parallax-workflows/install.sh"
 ```
 
+If `git pull` fails in an older full clone, update it with the commands below. They discard all uncommitted edits in the clone and any local commits on `main`, and `install.sh` overwrites the installed copies in `~/.claude/skills`. Copy out any edited workflows first.
+
+```bash
+git -C "$HOME/parallax-workflows" fetch origin &&
+  git -C "$HOME/parallax-workflows" switch main &&
+  git -C "$HOME/parallax-workflows" reset --hard origin/main &&
+  bash "$HOME/parallax-workflows/install.sh"
+```
+
+Plugin installations need no action: `/plugin marketplace update parallax-workflows` replaces the old copy.
+
 The full clone includes operator and development workflows outside the released plugin. `install.sh` copies skills to `~/.claude/skills` and links the shared files. It is not a cross-host installer. Restart Claude Code after installation. The full clone does not bundle the connector: add it with `claude mcp add -s user --transport http parallax https://mcp.chicago.global/api/mcp` (user scope, so every project sees it), then run `/mcp` to sign in.
 
 ## Distribution catalog
