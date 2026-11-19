@@ -108,13 +108,13 @@ git clone https://github.com/bencharoenwong/parallax-workflows.git "$HOME/parall
 bash "$HOME/parallax-workflows/install.sh"
 ```
 
-The history of `main` was rewritten on 2026-11-18. In a full clone made before that date, `git pull` can stop with an error such as "refusing to merge unrelated histories", "Need to specify how to reconcile divergent branches" or "Not possible to fast-forward". Do not run `git pull --allow-unrelated-histories`. Update the clone with the commands below. The reset discards uncommitted edits and local commits on `main`, and `install.sh` overwrites the installed copies in `~/.claude/skills`. Copy out any edited workflows from both places first.
+An older full clone can fail on `git pull` with an error such as "refusing to merge unrelated histories", "Need to specify how to reconcile divergent branches" or "Not possible to fast-forward". Do not run `git pull --allow-unrelated-histories`. Update the clone with the commands below. They discard all uncommitted edits in the clone and any local commits on `main`. `install.sh` also overwrites the installed copies in `~/.claude/skills`, so copy out any edited workflows from both places first.
 
 ```bash
-git -C "$HOME/parallax-workflows" fetch origin
-git -C "$HOME/parallax-workflows" switch main
-git -C "$HOME/parallax-workflows" reset --hard origin/main
-bash "$HOME/parallax-workflows/install.sh"
+git -C "$HOME/parallax-workflows" fetch origin &&
+  git -C "$HOME/parallax-workflows" switch main &&
+  git -C "$HOME/parallax-workflows" reset --hard origin/main &&
+  bash "$HOME/parallax-workflows/install.sh"
 ```
 
 Plugin installations need no action: `/plugin marketplace update parallax-workflows` replaces the old copy.
