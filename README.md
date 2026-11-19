@@ -108,7 +108,7 @@ git clone https://github.com/bencharoenwong/parallax-workflows.git "$HOME/parall
 bash "$HOME/parallax-workflows/install.sh"
 ```
 
-The history of `main` was rewritten on 2026-11-18. In a full clone made before that date, `git pull` stops with "refusing to merge unrelated histories". Update it with the commands below. The reset discards local changes in the clone, so copy out any edited workflows first.
+The history of `main` was rewritten on 2026-11-18. In a full clone made before that date, `git pull` can stop with an error such as "refusing to merge unrelated histories", "Need to specify how to reconcile divergent branches" or "Not possible to fast-forward". Do not run `git pull --allow-unrelated-histories`. Update the clone with the commands below. The reset discards uncommitted edits and local commits on the checked-out branch, and `install.sh` overwrites the installed copies in `~/.claude/skills`. Copy out any edited workflows from both places first.
 
 ```bash
 git -C "$HOME/parallax-workflows" fetch origin

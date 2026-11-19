@@ -194,7 +194,7 @@ def test_rule_pass_no_contradiction(mock_view: stress.View, sample_rules_path: P
 
 
 def test_rule_triggers_rates_momentum(mock_view: stress.View, sample_rules_path: Path):
-    """(ID: rule-002) ★★★ triggers + downgrades on stale config"""
+    """(ID: rule-002) ★★★ triggers; a freshly reviewed rule is not downgraded"""
     mock_view.data["tilts"]["macro_regime"]["rates"] = "cutting"
     mock_view.data["tilts"]["factors"]["momentum"] = 2
     results = stress.evaluate_internal_rules(mock_view, sample_rules_path)
