@@ -108,7 +108,7 @@ git clone https://github.com/bencharoenwong/parallax-workflows.git "$HOME/parall
 bash "$HOME/parallax-workflows/install.sh"
 ```
 
-An older full clone can fail on `git pull` with an error such as "refusing to merge unrelated histories", "Need to specify how to reconcile divergent branches" or "Not possible to fast-forward". Do not run `git pull --allow-unrelated-histories`. Update the clone with the commands below. They discard all uncommitted edits in the clone and any local commits on `main`. `install.sh` also overwrites the installed copies in `~/.claude/skills`, so copy out any edited workflows from both places first.
+If `git pull` fails in an older full clone, do not run `git pull --allow-unrelated-histories`. Update the clone with the commands below. They stop without changes if `git switch` refuses because of local edits. Otherwise they discard all uncommitted edits in the clone and any local commits on `main`, and `install.sh` overwrites the installed copies in `~/.claude/skills`. Copy out any edited workflows first.
 
 ```bash
 git -C "$HOME/parallax-workflows" fetch origin &&
