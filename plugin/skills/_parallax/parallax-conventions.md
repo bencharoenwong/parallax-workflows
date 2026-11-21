@@ -30,6 +30,10 @@ bare `CASH`. When a user supplies bare cash without an established portfolio
 currency, request that currency before analysis. Never substitute a Treasury-bill
 ETF or money-market fund for literal cash; those are securities.
 
+A `CASH.<currency>` line is never a security. Skip it in RIC resolution (§1),
+in `get_company_info` identity reads, and in every single-stock tool. It enters
+only a tool whose schema accepts cash holdings.
+
 Cash has no factor score. When quick scoring accepts cash, preserve its input
 weight and report scored-security coverage. Do not assign cash a zero factor
 score. For a tool restricted to security overlap, omit literal cash and label
