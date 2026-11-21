@@ -19,6 +19,30 @@ Feature flags gate architectural changes in these skills. Read each flag via the
 
 ---
 
+## Cash holdings
+
+Represent literal cash as `CASH.<ISO currency>`, for example `CASH.USD` or
+`CASH.THB`. Use the cash holding's currency, which can differ from the portfolio
+reporting currency. Preserve that denomination when the reporting currency changes.
+
+Use an explicit currency in generated holdings and upload files. Never generate
+bare `CASH`. When a user supplies bare cash without an established portfolio
+currency, request that currency before analysis. Never substitute a Treasury-bill
+ETF or money-market fund for literal cash; those are securities.
+
+A `CASH.<currency>` line is never a security. Skip it in RIC resolution (§1),
+in `get_company_info` identity reads, and in every single-stock tool. It enters
+only a tool whose schema accepts cash holdings.
+
+Cash has no factor score. When quick scoring accepts cash, preserve its input
+weight and report scored-security coverage over non-cash weight, with cash
+weight stated separately. Do not assign cash a zero factor score. For a tool
+restricted to security overlap, omit literal cash and label the result as the
+invested-security sleeve. Follow the discovered tool schema for supported
+holdings and currency fields.
+
+---
+
 ## 0.0 Pre-flight (before any data gathering)
 
 Run this once at the top of any should-i-buy / two-lens / house-view / portfolio workflow, **before the first data call** — not as a mid-run recovery:
@@ -82,7 +106,7 @@ Integrity failures are flagged explicitly in the output, not omitted. This is th
 
 ## 1. RIC Resolution
 
-Parallax tools require RICs: exchange-qualified symbols such as AAPL.O or 7203.T. When the user provides a plain ticker:
+Parallax tools require RICs: exchange-qualified symbols such as AAPL.O or 7203.T. A `CASH.<currency>` line is not a RIC and is never resolved; see the Cash holdings section above. When the user provides a plain ticker:
 
 1. Call `get_company_info` with the plain ticker first — it often resolves automatically.
 2. If empty result, retry with the most likely exchange suffix from this table:
@@ -240,6 +264,8 @@ A pending, failed or timed-out job does not authorize a replacement call. A comp
 - **0-1 aspects return data** → Flag: "Insight card may be materially incomplete for this security."
 
 ### Portfolio scoring coverage
+Every coverage percentage in this section is computed over non-cash weight only. Remove `CASH.<currency>` lines from the denominator before the 50% test, and state cash weight separately in the report. When non-cash weight is zero, skip scoring and state that the book holds no securities.
+
 If `quick_portfolio_scores` (Legacy/V1) covers **<50% of holdings by weight**, execute mixed-exchange fallback:
 1. Split holdings by exchange suffix.
 2. Score each exchange group separately.
