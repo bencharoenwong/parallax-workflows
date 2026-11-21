@@ -97,6 +97,7 @@ def test_branding_header_survives_per_skill_noun():
         "rebalance": "**Acme Capital** rebalance",
         "portfolio-builder": "**Acme Capital** portfolio construction",
         "explain-portfolio": "**Acme Capital** portfolio attribution",
+        "event-review": "**Acme Capital** event review",
         "should-i-buy": "**Acme Capital** stock review",
         "score-explainer": "**Acme Capital** score explainer",
     }
@@ -172,6 +173,7 @@ FIRST_SECTION = {
     "client-review": "## Portfolio Summary",
     "morning-brief": "## Market Regime & Signals",
     "explain-portfolio": "## What Happened",
+    "event-review": "## The Event",
     "rebalance": "## Current Portfolio Assessment",
     "watchlist-monitor": "## Watchlist Summary",
     "portfolio-builder": "## Investment Thesis",
@@ -227,6 +229,7 @@ def test_title_form_anchors_each_skill():
         "client-review": "# Client Portfolio Review — Conservative Retiree",
         "morning-brief": "# Fund Manager Morning Brief — 2026-06-14",
         "explain-portfolio": "# Drawdown Attribution",
+        "event-review": "# Event Review — October AI selloff",
         "rebalance": "# Portfolio Rebalance",
         "watchlist-monitor": "# Watchlist Scan — 7 names",
         "portfolio-builder": "# Portfolio Builder — US Tech",

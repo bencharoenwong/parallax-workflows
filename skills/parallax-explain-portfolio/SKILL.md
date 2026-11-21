@@ -12,6 +12,7 @@ description: "Reactive portfolio performance attribution: describe a drawdown us
 - Proactive portfolio health check → use /parallax-portfolio-checkup
 - Scheduled client meeting prep → use /parallax-client-review
 - Hypothetical scenario / news event → use /parallax-scenario-analysis
+- Low-cost review of how a book did over a named past event, with fund look-through → use /parallax-event-review
 - Rebalancing trade recommendations → use /parallax-rebalance
 - Single stock analysis → use /parallax-should-i-buy
 
