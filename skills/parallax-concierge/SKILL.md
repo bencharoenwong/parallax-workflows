@@ -94,12 +94,13 @@ Route based on their answer (this table is internal routing — don't show it to
 User picks Portfolio → ask only for missing task/input details:
 
 > "What's on your mind — a general check-up, a specific concern ('why am I down'),
-> meeting prep, or a rebalance?"
+> a recent market event, meeting prep, or a rebalance?"
 
 | If they say… | Run |
 |---|---|
 | Check-up / health | `/parallax-portfolio-checkup` |
 | Why am I down / what's dragging | `/parallax-explain-portfolio` |
+| After a headline or market event / how did the book do | `/parallax-event-review` |
 | Client meeting / RM prep | `/parallax-client-review` |
 | Morning brief / daily | `/parallax-morning-brief` |
 | Desk / multiple clients / who do I call | `/parallax-desk-call-list` |

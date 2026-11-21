@@ -167,6 +167,10 @@ SKILL_ANCHORS: dict[str, list[str]] = {
         r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:scenario summary|scenario analysis)\b",
         _branding("scenario analysis"),
     ],
+    "event-review": [
+        r"^\s{0,3}(?:#{1,4}\s*|\*\*\s*)(?:event review\b|the event\s*(?:\*\*)?\s*$)",
+        _branding("event review"),
+    ],
     "pair-finder": [
         r"^\s{0,3}(?:#{1,4}\s*.*\b|\*\*\s*)(?:verdict|top pair|pair finder)",
         r"^\s{0,3}(?:[-*]\s*)?\*\*\s*pair\s*(?::\*\*|\*\*\s*:)",

@@ -14,6 +14,7 @@ description: "RIA/wealth advisor client portfolio review: full analysis, redunda
 - Retail investor health check → use /parallax-portfolio-checkup
 - Trade recommendations with target weights → use /parallax-rebalance
 - "Why am I down?" attribution → use /parallax-explain-portfolio
+- Review of how a book did over a named past market event → use /parallax-event-review
 
 ## Gotchas
 

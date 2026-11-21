@@ -97,6 +97,7 @@ def test_branding_header_survives_per_skill_noun():
         "rebalance": "**Acme Capital** rebalance",
         "portfolio-builder": "**Acme Capital** portfolio construction",
         "explain-portfolio": "**Acme Capital** portfolio attribution",
+        "event-review": "**Acme Capital** event review",
         "should-i-buy": "**Acme Capital** stock review",
         "score-explainer": "**Acme Capital** score explainer",
     }
@@ -172,6 +173,7 @@ FIRST_SECTION = {
     "client-review": "## Portfolio Summary",
     "morning-brief": "## Market Regime & Signals",
     "explain-portfolio": "## What Happened",
+    "event-review": "## The Event",
     "rebalance": "## Current Portfolio Assessment",
     "watchlist-monitor": "## Watchlist Summary",
     "portfolio-builder": "## Investment Thesis",
@@ -222,11 +224,24 @@ def test_pair_finder_evaluate_mode_anchors_on_pair_line(hdr):
     assert out.lstrip().startswith(hdr), out[:70]
 
 
+@pytest.mark.parametrize("hdr", ["## The Event", "**The Event**", "### the event  "])
+def test_event_review_skips_scaffold_line_starting_the_event(hdr):
+    draft = (
+        SCAFFOLD
+        + "**The event window is 2026-09-30 to 2026-10-30, confirmed with the operator**\n\n"
+        + hdr
+        + "\nbody\n"
+    )
+    out = gate(draft, "event-review")
+    assert out.lstrip().startswith(hdr.rstrip()), out[:70]
+
+
 def test_title_form_anchors_each_skill():
     titles = {
         "client-review": "# Client Portfolio Review — Conservative Retiree",
         "morning-brief": "# Fund Manager Morning Brief — 2026-06-14",
         "explain-portfolio": "# Drawdown Attribution",
+        "event-review": "# Event Review — October AI selloff",
         "rebalance": "# Portfolio Rebalance",
         "watchlist-monitor": "# Watchlist Scan — 7 names",
         "portfolio-builder": "# Portfolio Builder — US Tech",

@@ -148,6 +148,16 @@
         "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+earnings quality review\\b"
       ]
     },
+    "parallax-event-review": {
+      "plugin": true,
+      "web": true,
+      "web_description": "Review a book after a past market event: holdings [{symbol, weight}] plus headline and window. Static-weight illustration, fund look-through, factor profile. Not a forward scenario.",
+      "anchors_key": "event-review",
+      "anchors": [
+        "^\\s{0,3}(?:#{1,4}\\s*|\\*\\*\\s*)(?:event review\\b|the event\\s*(?:\\*\\*)?\\s*$)",
+        "^\\s{0,3}(?:#{1,4}\\s+)?>?\\s*\\*\\*[^*]+\\*\\*\\s+event review\\b"
+      ]
+    },
     "parallax-explain-portfolio": {
       "plugin": true,
       "web": true,

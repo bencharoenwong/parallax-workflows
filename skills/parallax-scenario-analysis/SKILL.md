@@ -15,6 +15,7 @@ description: "React to a news event or scenario: assess portfolio exposure, macr
 - Stress-testing the active house view for contradictions → use /parallax-stress-house-view
 - Single stock analysis → use /parallax-deep-dive
 - Portfolio rebalancing without a trigger event → use /parallax-rebalance
+- How a book did over an event that already happened → use /parallax-event-review
 
 ## Gotchas
 
