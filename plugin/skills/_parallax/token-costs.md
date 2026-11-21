@@ -97,7 +97,7 @@ Macro overview totals below show normal and conditional maximum prices separatel
 | `/parallax-country-deep-dive` | **11.05 normally** | Default five names: universe5 + identity/snapshot0.75 + three histories0.3 + one overview5. Up to56.05 if that overview reassembles; each extra market adds5 normally/up to50. |
 | `/parallax-macro-outlook` | **5.05 normally / 11.1 with equities** | Coverage free, telemetry0.05, overview5 normally/up to50. Optional equities add universe5 + five identity/snapshot pairs0.75 + three histories0.3=6.05. |
 | `/parallax-pair-finder` | **5.55 suggestion / 5.35–5.45 evaluate** | One explicit tactical market and a canonical benchmark. Suggestion four legs: identity/export/beta prices/benchmark0.55 + macro5. Evaluate two legs0.35 + macro5; short snapshot can add0.1. Other-market benchmark discovery adds up to0.3 profile credits; history, fallback and no-beta modes change price reads. |
-| `/parallax-watchlist-monitor` | **41.2** | `0.1N + 10.05F`, for N=10 watched names and F=4 flagged names; no flags costs1. |
+| `/parallax-watchlist-monitor` | **41.2** | `0.1N + 10.05F`, for N=10 watched names and F=4 score movers; no movers costs1. `price_check=true` adds0.1P for successful ETF profile probes and0.05 per verified equity price series; price-only moves add no drill-down. |
 | `/parallax-white-label-stock-report` | **0 / 10** | Supplied report/local valid response0; successful new report10; repeated successful POST adds10. |
 | `/parallax-weekly-themes` | **0.05** | One global telemetry request; ranking and clustering use that response. No automatic macro, equity or research fan-out. |
 
