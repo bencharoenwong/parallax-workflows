@@ -96,7 +96,7 @@ Only when `lang=` is present and not `en`. Translate per `parallax-conventions.m
 
 - **The Question** (restate clearly)
 - **The Answer** (lead with the plain-language explanation — 2-3 sentences max)
-- **Score Breakdown** (table if applicable: factor scores with interpretation; under `audience=client_safe`, factor rows carry the §13.3 gloss)
+- **Score Breakdown** (table if applicable: factor scores with interpretation; under `audience=client_safe`, factor rows carry the §13.3 gloss). Per conventions §16, the table carries the ranking date and the line "Scores do not reflect price moves after this date"; the move since the ranking date appears only when this skill already fetched a daily price series, otherwise say once that it was not checked.
 - **What's Driving It** (specific data points, peer comparison, methodology context)
 - **What Would Change It** (concrete conditions that would improve/worsen the score; under `audience=client_safe`, keep this grandfathered §11 wording but express conditions without published-cutoff arithmetic)
 - **Methodology Reference** (brief citation of the scoring methodology for credibility)

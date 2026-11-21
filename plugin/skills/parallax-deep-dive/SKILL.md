@@ -124,7 +124,7 @@ Only when `lang=` is present and not `en`. Translate per `parallax-conventions.m
 - **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view active): `**<client_name>** deep dive`. Logo handling per integration-pattern.md §5: empty path → text line only; URL → embed `![<client_name>](<url>)`; absolute local path (starts with `/` or `~`) → skip embed and append `Logo on file: <basename>` to About This Report.
 - **Company Overview** (3 sentences)
 - **Macro Environment** (regime context for relevant markets, factor implications)
-- **Factor Profile** (table: each factor score with peer rank + 52-week trend direction)
+- **Factor Profile** (table: each factor score with peer rank + 52-week trend direction). Per conventions §16, the table carries the ranking date and the line "Scores do not reflect price moves after this date"; the move since the ranking date appears only when this skill already fetched a daily price series, otherwise say once that it was not checked.
   - *If view active:* check §7.3 tension condition (`total_score >= 7.0 AND view.tilts.sectors[stock_sector] <= -1`). If true, render banner via `render_view_conflict(kind="score_tension", ...)` directly below the factor table.
 - **House View Note** (only if view active and stock conflicts with view) — render via `render_view_conflict(kind="blanket", ...)` per loader.md §7.1. Rendered HERE — immediately after Factor Profile — so the view lens appears before the rest of the analysis. Not at the bottom.
 - **Financial Highlights** (key ratios, trends)
