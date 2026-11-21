@@ -16,7 +16,7 @@ description: "Monitor a watchlist of tickers: flag score changes, news alerts, t
 
 ## Gotchas
 
-- Expected Parallax spend: `0.1N + 10.05F` credits, where N is scanned symbols and F is score movers (price-only moves add no drill-down): score history 0.1 per symbol; news 5 + technicals 5 + recommendations 0.05 per score mover. Ten symbols with four score movers cost 41.2; with none, 1. With `price_check=true`, add 0.05 per symbol for the price series. Excludes resolution/recovery; current discovered prices win (`_parallax/token-costs.md`).
+- Expected Parallax spend: `0.1N + 10.05F` credits, where N is scanned symbols and F is score movers (price-only moves add no drill-down): score history 0.1 per symbol; news 5 + technicals 5 + recommendations 0.05 per score mover. Ten symbols with four score movers cost 41.2; with none, 1. With `price_check=true`, add 0.1 per symbol for the `etf_profile` asset-class probe (HTTP 4xx/5xx probes cost zero) and 0.05 per verified equity for the price series. Excludes resolution/recovery; current discovered prices win (`_parallax/token-costs.md`).
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §0.2 typed integer params, §1 coverage fallback, §3 parallel execution, §4 fallbacks, §11 sensitivity, §14 host primitives, §16 scores against live prices.
 - Surveillance skill: breadth over depth. `weeks` 4–8 is enough to detect recent change and must be a typed integer (conventions §0.2). Only score movers get the drill-down.
 - Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
@@ -52,7 +52,9 @@ Symbols in RIC form (plain tickers → conventions §1); fund/OEIC identifiers g
 
 ### Step 2 — Fetch (parallel batches)
 
-**Batch A — score and price scan.** `call-tool` `get_score_analysis` for every symbol together, `weeks` as int N (non-default; server default 52). Only when the user passed `price_check=true`: in the same batch, call `export_price_series` with `format="json"` for every symbol, covering at least the score window. Use price rows only for symbols that returned verified score history; mark price movement unavailable for the rest.
+**Batch A — score scan and asset-class pre-classification.** `call-tool` `get_score_analysis` for every symbol together, `weeks` as int N (non-default; server default 52). Only when the user passed `price_check=true`: in the same batch, `call-tool` `etf_profile(<plain_ticker>)` for every symbol, per `_parallax/coverage-matrix.md` § "Required pattern for skills". A validated ETF profile establishes ETF. The explicit not-found-in-ETF-universe response plus independently verified listed-equity identity establishes equity. Transport, auth, schema or other errors leave the asset class unknown; never classify a generic failure as equity.
+
+**Batch A2 — price series.** Only with `price_check=true`, after Batch A returns: `call-tool` `export_price_series(symbol=<ric>, days=<N>, format="json")` for each verified equity that returned verified score history, with `days` covering at least the score window. ETF, unknown and no-score-history symbols get no price call; mark their price movement unavailable and state the reason (ETF, asset class unverified, or no verified score history).
 
 **Batch B — score-mover drill-down.** After Step 3 identifies score movers, `call-tool` in ONE batch for score movers only: `get_news_synthesis`, `get_technical_analysis`, `get_stock_outlook` with `aspect="recommendations"`. Price-only movers get no drill-down. News and technicals are async; never phase them serially; on timeout apply conventions §4 (no re-wait).
 
@@ -60,7 +62,7 @@ Symbols in RIC form (plain tickers → conventions §1); fund/OEIC identifiers g
 
 - Identity: each `get_score_analysis` `data[0].symbol` against the RIC sent (conventions §2).
 - Movers: absolute total score change > 1 point, or any single factor changing by an absolute > 2 points over the window. A symbol with no score history is reported as `no data`, never as stable. Change requires at least two verified dated observations with comparable score fields; otherwise report `insufficient history` and do not rank or mark stable. State the actual first/last dates and observation count; a shorter available window is not the full requested lookback. Missing factor endpoints remain unavailable; they do not become zero change.
-- Price moves, only with `price_check=true`: per conventions §16.2, record each symbol's ranking date and price change since it. A symbol whose absolute price change since the ranking date is at least `price_move` percent is listed under **Price moves since ranking**. This list is reported, not flagged: it adds no drill-down and no alert.
+- Price moves, only with `price_check=true`: per conventions §16.2, record each verified equity's ranking date and price change since it; every other symbol shows `unavailable` with its Batch A2 reason. A symbol whose absolute price change since the ranking date is at least `price_move` percent is listed under **Price moves since ranking**. This list is reported, not flagged: it adds no drill-down and no alert.
 
 ### Step 4 — Compute
 
@@ -119,5 +121,6 @@ Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 
 - Watchlist Summary lists every input symbol with a score, a change, and an alert flag (or `no data`); first line is the Branding Header or `## Watchlist Summary`.
 - Alerts are ordered per Step 4; each flagged name has news, technicals and consensus or a pending note.
+- With `price_check=true`, every symbol shows a ranking date and a move since it or `unavailable`, and the Price moves since ranking section is present (possibly empty).
 - The render gate ran and the reply is its stdout (or the §14.3 note is present in About This Report).
 - `parallax-conventions.md §9.2` disclosure and the §9.1 disclaimer are present; expected spend stated (Gotchas).

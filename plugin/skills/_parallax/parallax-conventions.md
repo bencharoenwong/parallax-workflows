@@ -674,8 +674,8 @@ Every factor, Tactical included, is as of the ranking date. No score reflects a 
 
 **Cost rule.** These steps add no tool calls. Use only data the consuming skill already fetches within its stated spend.
 
-1. **Date the score.** Take the ranking date from the latest `get_score_analysis` row (rows run oldest first). If the skill did not fetch score history, say once in the report that the ranking date was not retrieved. Do not assume a date.
-2. **Report the move since the ranking date**, only if the skill already fetched a daily price series that covers that date: the close-to-close price change from the close on or before the ranking date to the latest close. Label it a price change; it is not adjusted for splits or other corporate actions unless the series states so (`_parallax/token-costs.md`). If not, say once in the report that the move since the ranking date was not checked.
+1. **Date the score.** Take the ranking date from the `get_score_analysis` row with the latest `date` value. If the skill did not fetch score history, say once in the report that the ranking date was not retrieved. Do not assume a date.
+2. **Report the move since the ranking date**, only if the skill already fetched a daily price series that covers that date: the change between the `data[].price` value dated on or before the ranking date and the latest `data[].price` value. Label it a reported price change with close and adjustment basis unverified unless the series states them; it is not adjusted for splits or other corporate actions unless the series states so (`_parallax/token-costs.md`). If not, say once in the report that the move since the ranking date was not checked.
 3. **State that the scores do not reflect that move.**
 
 ### §16.3 Rules
