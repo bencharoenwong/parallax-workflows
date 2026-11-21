@@ -1485,7 +1485,7 @@ def build_plugin() -> None:
             "name": "parallax",
             "description": description,
             "version": PLUGIN_VERSION,
-            "author": {"name": "Chicago Global", "url": "https://chicago.global"},
+            "author": {"name": "Parallax Intelligence, Inc.", "url": "https://chicago.global"},
             "homepage": "https://parallax.chicago.global",
             "repository": "https://github.com/bencharoenwong/parallax-workflows",
             "license": "MIT",
@@ -1507,8 +1507,8 @@ def build_plugin() -> None:
     MARKETPLACE_FILE.parent.mkdir(exist_ok=True)
     MARKETPLACE_FILE.write_text(json.dumps({
         "name": "parallax-workflows",
-        "description": "Claude Code workflows for Parallax equity research by Chicago Global.",
-        "owner": {"name": "Chicago Global", "url": "https://chicago.global"},
+        "description": "Claude Code workflows for Parallax equity research by Parallax Intelligence, Inc.",
+        "owner": {"name": "Parallax Intelligence, Inc.", "url": "https://chicago.global"},
         "plugins": [{
             "name": "parallax",
             "source": "./plugin",
