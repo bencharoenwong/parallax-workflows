@@ -106,7 +106,7 @@ Integrity failures are flagged explicitly in the output, not omitted. This is th
 
 ## 1. RIC Resolution
 
-Parallax tools require RICs: exchange-qualified symbols such as AAPL.O or 7203.T. When the user provides a plain ticker:
+Parallax tools require RICs: exchange-qualified symbols such as AAPL.O or 7203.T. A `CASH.<currency>` line is not a RIC and is never resolved; see the Cash holdings section above. When the user provides a plain ticker:
 
 1. Call `get_company_info` with the plain ticker first — it often resolves automatically.
 2. If empty result, retry with the most likely exchange suffix from this table:
@@ -264,7 +264,7 @@ A pending, failed or timed-out job does not authorize a replacement call. A comp
 - **0-1 aspects return data** → Flag: "Insight card may be materially incomplete for this security."
 
 ### Portfolio scoring coverage
-Every coverage percentage in this section is computed over non-cash weight only. Remove `CASH.<currency>` lines from the denominator before the 50% test, and state cash weight separately in the report.
+Every coverage percentage in this section is computed over non-cash weight only. Remove `CASH.<currency>` lines from the denominator before the 50% test, and state cash weight separately in the report. When non-cash weight is zero, skip scoring and state that the book holds no securities.
 
 If `quick_portfolio_scores` (Legacy/V1) covers **<50% of holdings by weight**, execute mixed-exchange fallback:
 1. Split holdings by exchange suffix.
