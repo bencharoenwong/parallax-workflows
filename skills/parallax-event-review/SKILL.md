@@ -45,7 +45,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 ### Step 0 — Pre-flight
 
 1. Resolve every `_parallax/...` path named in this file to the canonical copy (conventions §0.0 item 1).
-2. `discover-tools`: bind every logical tool named in Step 2 to the exact callable and schema exposed now. Read the portfolio-analysis schema for its portfolio, benchmark, date and fields parameters.
+2. `discover-tools`: bind every logical tool named in Step 1 and Step 2 (`search_stocks`, `search_etfs` and the Step 2 table) to the exact callable and schema exposed now. Read the portfolio-analysis schema for its portfolio, benchmark, date and fields parameters.
    <!-- host-note -->
    Claude Code: `ToolSearch` with query `"+Parallax"` before the first Parallax call.
    <!-- /host-note -->
@@ -55,7 +55,7 @@ Every host interaction below is a host primitive from `parallax-conventions.md` 
 
 ### Step 1 — Resolve inputs
 
-Validate holdings: weights sum to about 1.0. Resolve each symbol per conventions §1 with the stock search; resolve fund lines with the fund search, which the stock search does not cover. Record each line as equity, fund or unsupported. Check every fund's asset class: a bond fund is not an equity fund. A bond fund or multi-asset fund that the analysis covers stays in the analysis for its return; it gets no factor score, and its look-through counts only the event-linked holdings the response returns. Exclude a line only when the analysis does not cover it: rescale the rest, and name the exclusion and its original weight. Never substitute a proxy without operator confirmation.
+Validate holdings: weights sum to about 1.0. Resolve each symbol per conventions §1, using `search_stocks` for a plain ticker; resolve fund lines with `search_etfs`, which `search_stocks` does not cover. Record each line as equity, fund or unsupported. Check every fund's asset class: a bond fund is not an equity fund. A bond fund or multi-asset fund that the analysis covers stays in the analysis for its return; it gets no factor score, and its look-through counts only the event-linked holdings the response returns. Exclude a line only when the analysis does not cover it: rescale the rest, and name the exclusion and its original weight. Never substitute a proxy without operator confirmation.
 
 ### Step 2 — Fetch (parallel batches)
 
@@ -74,7 +74,7 @@ Call each tool once. Never split the window into shorter runs, and never rerun t
 
 ### Step 3 — Verify
 
-- Ground-truth check per conventions §2 and loader.md §5 rule 3: compare the company name each scoring tool returned with the `get_company_info` name of record. A mismatch renders ⚠ MISMATCH, and that holding's scores stay out of Factor Profile. No score is re-derived for it: a response that failed the name check is never a score source (conventions §2). A holding whose `get_company_info` call fails or returns empty, or that has no returned name to compare, is UNCHECKED: its scores stay in Factor Profile with its identity stated as unconfirmed, never treated as a pass. List every ⚠ MISMATCH and UNCHECKED holding in Ground-truth Integrity.
+- Ground-truth check per conventions §2 and loader.md §5 rule 3: compare the company name each scoring tool returned with the `get_company_info` name of record. A mismatch renders ⚠ MISMATCH, and that holding's scores stay out of any aggregate row. Mismatch recovery follows conventions §2 and loader.md §5 rule 3 by path. On the V2 path, re-derive that holding's scores from its own cached `get_peer_snapshot` `comparison[]` row (the `is_target: true` row, no new call) when that snapshot passed cross-validation, and render them marked `re-derived`; a snapshot that failed cross-validation is never a score source. On the V1 path this skill holds no snapshot, so the holding renders `scores unavailable`. A holding whose `get_company_info` call fails or returns empty, or that has no returned name to compare, is UNCHECKED: its scores stay in Factor Profile with its identity stated as unconfirmed, never treated as a pass. List every ⚠ MISMATCH and UNCHECKED holding in Ground-truth Integrity.
 - Compare the RICs the analysis returned with the RICs sent; name every remap.
 - Per conventions §2, compare each equity line's `company_contribution[].name`, matched by `ric`, with its `get_company_info` name of record after normalizing both. A mismatch marks that row ⚠ MISMATCH in Contribution: its return is not attributed to the intended company, and the portfolio figures state that they include the line as returned. An equity line with no contribution row, no returned name or no oracle name is UNCHECKED. List both in Ground-truth Integrity.
 - Check that `get_score_analysis` `data[0].symbol` equals the RIC sent. If it differs or is missing, state the ranking date as unconfirmed.
@@ -110,7 +110,7 @@ The entire final message is that command's stdout. The stderr `[render-gate] WAR
 - **The Period in Numbers** — portfolio return, benchmark return (name the benchmark symbol), largest drawdown with date, event exposure estimate; the static-weight illustration label next to the portfolio return.
 - **Contribution** — table of every line: return and contribution in percentage points of the book, sorted; excluded lines and remaps noted under it.
 - **Event Look-through** — direct event-linked holdings, then per fund: each event-linked holding, its share of the fund and its share of the book, the covered share of the fund, and the total as a floor where coverage is partial.
-- **Factor Profile** — equities only, scores as returned, the ranking date and "no score reflects price moves after that date", with the percentile reading for factor scores only. Funds are listed as unscored; ⚠ MISMATCH holdings are named with no scores; UNCHECKED holdings show their scores marked `identity unconfirmed`.
+- **Factor Profile** — equities only, scores as returned, the ranking date and "no score reflects price moves after that date", with the percentile reading for factor scores only. Funds are listed as unscored; ⚠ MISMATCH holdings are named with their re-derived scores marked `re-derived` on the V2 path, or `scores unavailable` on the V1 path; UNCHECKED holdings show their scores marked `identity unconfirmed`.
 - **Ground-truth Integrity** (render only if any holding is ⚠ MISMATCH or UNCHECKED) — table: `input_ticker`, `returned_name`, `expected_name`, status (⚠ MISMATCH / UNCHECKED), per loader.md §5 rule 3. Write `unavailable` in any name column the tools did not return.
 - **Review Questions** — two or three neutral questions.
 - **Options to Discuss** — three or four, per Step 5.
