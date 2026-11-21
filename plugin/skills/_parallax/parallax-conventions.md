@@ -35,10 +35,11 @@ in `get_company_info` identity reads, and in every single-stock tool. It enters
 only a tool whose schema accepts cash holdings.
 
 Cash has no factor score. When quick scoring accepts cash, preserve its input
-weight and report scored-security coverage. Do not assign cash a zero factor
-score. For a tool restricted to security overlap, omit literal cash and label
-the result as the invested-security sleeve. Follow the discovered tool schema
-for supported holdings and currency fields.
+weight and report scored-security coverage over non-cash weight, with cash
+weight stated separately. Do not assign cash a zero factor score. For a tool
+restricted to security overlap, omit literal cash and label the result as the
+invested-security sleeve. Follow the discovered tool schema for supported
+holdings and currency fields.
 
 ---
 
@@ -263,6 +264,8 @@ A pending, failed or timed-out job does not authorize a replacement call. A comp
 - **0-1 aspects return data** → Flag: "Insight card may be materially incomplete for this security."
 
 ### Portfolio scoring coverage
+Every coverage percentage in this section is computed over non-cash weight only. Remove `CASH.<currency>` lines from the denominator before the 50% test, and state cash weight separately in the report.
+
 If `quick_portfolio_scores` (Legacy/V1) covers **<50% of holdings by weight**, execute mixed-exchange fallback:
 1. Split holdings by exchange suffix.
 2. Score each exchange group separately.
