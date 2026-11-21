@@ -5,6 +5,7 @@ Tests for the House View Stress Test skill.
 import datetime
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -214,6 +215,48 @@ def test_rule_downgrades_on_stale_config(
     triggered_result = next(r for r in results if r.rule_id == "stale_rule")
     assert triggered_result.triggered
     assert triggered_result.downgraded_from_stale_config
+
+
+@pytest.mark.parametrize("age_days, downgraded", [(180, False), (181, True)])
+def test_rule_stale_boundary_is_180_days(
+    mock_view: stress.View, tmp_path: Path, monkeypatch, age_days: int, downgraded: bool
+):
+    """(ID: rule-003b) a hard stop reviewed exactly 180 days ago stays hard; 181 days downgrades"""
+    # Freeze stress.py's "today" so a midnight rollover cannot shift the boundary.
+    frozen_today = datetime.date(2026, 6, 1)
+
+    class _FrozenDate(datetime.date):
+        @classmethod
+        def today(cls):
+            return frozen_today
+
+    monkeypatch.setattr(
+        stress,
+        "datetime",
+        SimpleNamespace(
+            date=_FrozenDate,
+            datetime=datetime.datetime,
+            timedelta=datetime.timedelta,
+            timezone=datetime.timezone,
+        ),
+    )
+    reviewed = (frozen_today - datetime.timedelta(days=age_days)).isoformat()
+    rules_path = tmp_path / "internal_rules.yaml"
+    rules_path.write_text(f"""
+    - id: "boundary_rule"
+      description: "A hard stop at the stale boundary."
+      class: "hard_stop"
+      last_reviewed: "{reviewed}"
+      confidence: 0.9
+      pattern:
+        when:
+          tilts.macro_regime.growth: "recessionary"
+    """)
+    mock_view.data["tilts"]["macro_regime"]["growth"] = "recessionary"
+    results = stress.evaluate_internal_rules(mock_view, rules_path)
+    result = next(r for r in results if r.rule_id == "boundary_rule")
+    assert result.triggered
+    assert result.downgraded_from_stale_config is downgraded
 
 
 # Adding more rule tests to meet the count
