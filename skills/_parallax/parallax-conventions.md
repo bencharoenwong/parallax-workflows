@@ -693,3 +693,28 @@ The translation skill validates against the original gated prose. Preserve secti
 
 Record which disclaimer the English report rendered (view-aware per `house-view/loader.md` §5 when a view is active, otherwise §9.1). If the translated output lacks it: first re-translate only the disclaimer text with the same routing block and append it; if that also fails, append the English disclaimer that was actually rendered (never the standard wording unconditionally). Where the skill appends an audit row, record the event in that row's `notes` field per loader.md §6.2; add no custom key and no user-visible footer. A skill with no audit surface records nothing and does not invent one.
 
+
+## 16. Scores Against Live Prices
+
+Factor scores are a weekly cross-sectional ranking, dated to the ranking week. Prices are daily. This section is the single source for reporting scores next to recent price action. Consumer skills reference it by section number.
+
+### §16.1 Principle
+
+Every factor, Tactical included, is as of the ranking date. No score reflects a price move after that date. Report the ranking date and, where the skill already has the data, the move since. In response to a move since the ranking date, do not produce a new or adjusted score, in figures or in words: do not say which way a factor would move, or that a factor is now higher or lower. Score figures in the output are ones Parallax returned, or differences between them. §11 sensitivity lines are unaffected.
+
+### §16.2 Steps
+
+**Cost rule.** These steps add no tool calls. Use only data the consuming skill already fetches within its stated spend.
+
+1. **Date the score.** Take the ranking date from the `get_score_analysis` row with the latest `date` value. If the skill did not fetch score history, say once in the report that the ranking date was not retrieved. Do not assume a date.
+2. **Report the move since the ranking date**, only if the skill already fetched a daily price series that covers that date: the change between the `data[].price` value dated on or before the ranking date and the latest `data[].price` value. Label it a reported price change with close and adjustment basis unverified unless the series states them; it is not adjusted for splits or other corporate actions unless the series states so (`_parallax/token-costs.md`). If not, say once in the report that the move since the ranking date was not checked.
+3. **State that the scores do not reflect that move.**
+
+### §16.3 Rules
+
+- **Wording.** Write "since the ranking dated <date>: <price change>".
+- **Advice boundary.** §11 and §12 apply. A reported move is a fact, not a signal.
+
+### §16.4 Consumer reference pattern
+
+> JIT-load `_parallax/parallax-conventions.md` §16 before reporting scores: give the ranking date, the move since when already fetched, and no adjusted scores.

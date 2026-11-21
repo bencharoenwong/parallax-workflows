@@ -18,7 +18,7 @@ description: "Deep dive on a single position: company profile, peer comparison, 
 ## Gotchas
 
 - Expected Parallax spend: 20.6 + 5M credits, where M is the number of covered tactical macro markets (0–3): 35.6 with three markets. Identity 0.05, snapshot/history 0.1 each, summary/ratios 0.05 each, four outlook aspects 0.25 total, technicals/news 5 each, assessment 10. Excludes resolution/recovery; current discovered prices win (`_parallax/token-costs.md`).
-- JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §2 identity cross-check, §3 parallel execution, §4 fallbacks, §14 host primitives, §15 translation.
+- JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §2 identity cross-check, §3 parallel execution, §4 fallbacks, §14 host primitives, §15 translation, §16 scores against live prices (date every score; use only data this skill already fetches).
 - JIT-load `_parallax/house-view/loader.md` FIRST; if an active view is present follow §2 (validation), §7.1/§7.2/§7.3 (single-stock conflict surfacing), §6 (audit). Do NOT apply tilts. The `get_assessment` prompt carries the active view (basis_statement + relevant tilts) so the assessment addresses alignment in prose — that is this skill's primary alignment surface; the §7 inline flags are additive. Route every §7 token through `render_view_conflict()` per `_parallax/house-view/render_helpers.md`.
 - Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
 - `get_assessment` is async (~3 min; the server polls up to 300 s) and LLM-backed; its section carries its own contextual AI disclosure in addition to `parallax-conventions.md §9.2`.
@@ -124,7 +124,7 @@ Only when `lang=` is present and not `en`. Translate per `parallax-conventions.m
 - **Branding Header** (only if `white_label_active` AND `client_name != ""`) — single line immediately below the House View Preamble (or at the very top if no view active): `**<client_name>** deep dive`. Logo handling per integration-pattern.md §5: empty path → text line only; URL → embed `![<client_name>](<url>)`; absolute local path (starts with `/` or `~`) → skip embed and append `Logo on file: <basename>` to About This Report.
 - **Company Overview** (3 sentences)
 - **Macro Environment** (regime context for relevant markets, factor implications)
-- **Factor Profile** (table: each factor score with peer rank + 52-week trend direction)
+- **Factor Profile** (table: each factor score with peer rank + 52-week trend direction). Per conventions §16, the table carries the ranking date and the line "Scores do not reflect price moves after this date", or, if score history was not retrieved, says once that the ranking date was not retrieved; the move since the ranking date appears only when this skill already fetched a daily price series, otherwise say once that it was not checked.
   - *If view active:* check §7.3 tension condition (`total_score >= 7.0 AND view.tilts.sectors[stock_sector] <= -1`). If true, render banner via `render_view_conflict(kind="score_tension", ...)` directly below the factor table.
 - **House View Note** (only if view active and stock conflicts with view) — render via `render_view_conflict(kind="blanket", ...)` per loader.md §7.1. Rendered HERE — immediately after Factor Profile — so the view lens appears before the rest of the analysis. Not at the bottom.
 - **Financial Highlights** (key ratios, trends)
