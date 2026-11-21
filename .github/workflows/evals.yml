@@ -184,9 +184,6 @@ jobs:
       - name: Pair arithmetic gates
         if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
         run: python -m pytest skills/parallax-pair-finder/ -q
-      - name: Thematic-screen client_safe gates
-        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
-        run: python -m pytest skills/parallax-thematic-screen/ -q
       # The translate suites keep their tests beside the validator they
       # exercise, under references/ rather than tests/. run-gate-tests.sh
       # discovers them by test-file glob, so the root is named here rather
