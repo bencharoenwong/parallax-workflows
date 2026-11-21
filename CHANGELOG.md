@@ -8,7 +8,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 
 ### Entity attribution
 
-- `LICENSE` now names Chicago Global, Inc. as the copyright holder, the entity that holds the assigned IP, in place of Chicago Global Capital Pte Ltd. The README's subscription and liability-disclaimer text now names Parallax Intelligence, Inc., the entity that provides the Parallax platform, API, MCP, plugins and workflows. The generated plugin manifest's `author`/`owner` fields and the stress-test-thesis skill's account prompt follow the same change. Chicago Global Capital Pte Ltd remains named where it acts as a regulated entity: the white-label research disclosures and research-author-of-record wording are unchanged.
+- `LICENSE` now names Chicago Global, Inc. as the copyright holder, in place of Chicago Global Capital Pte Ltd. The README's subscription and liability-disclaimer text now names Parallax Intelligence, Inc., the entity that provides the Parallax platform, API, MCP, plugins and workflows. The generated plugin manifest's `author`/`owner` fields and the stress-test-thesis skill's account prompt follow the same change. Chicago Global Capital Pte Ltd remains named where it acts as a regulated entity: the white-label research disclosures and research-author-of-record wording are unchanged.
 
 ### Credit pricing
 

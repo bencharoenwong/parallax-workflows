@@ -1507,7 +1507,7 @@ def build_plugin() -> None:
     MARKETPLACE_FILE.parent.mkdir(exist_ok=True)
     MARKETPLACE_FILE.write_text(json.dumps({
         "name": "parallax-workflows",
-        "description": "Claude Code workflows for Parallax equity research by Chicago Global.",
+        "description": "Claude Code workflows for Parallax equity research by Parallax Intelligence, Inc.",
         "owner": {"name": "Parallax Intelligence, Inc.", "url": "https://chicago.global"},
         "plugins": [{
             "name": "parallax",
