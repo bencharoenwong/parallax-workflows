@@ -224,6 +224,18 @@ def test_pair_finder_evaluate_mode_anchors_on_pair_line(hdr):
     assert out.lstrip().startswith(hdr), out[:70]
 
 
+@pytest.mark.parametrize("hdr", ["## The Event", "**The Event**", "### the event  "])
+def test_event_review_skips_scaffold_line_starting_the_event(hdr):
+    draft = (
+        SCAFFOLD
+        + "**The event window is 2026-09-30 to 2026-10-30, confirmed with the operator**\n\n"
+        + hdr
+        + "\nbody\n"
+    )
+    out = gate(draft, "event-review")
+    assert out.lstrip().startswith(hdr.rstrip()), out[:70]
+
+
 def test_title_form_anchors_each_skill():
     titles = {
         "client-review": "# Client Portfolio Review — Conservative Retiree",

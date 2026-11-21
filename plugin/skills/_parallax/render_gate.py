@@ -168,7 +168,7 @@ SKILL_ANCHORS: dict[str, list[str]] = {
         _branding("scenario analysis"),
     ],
     "event-review": [
-        r"^\s{0,3}(?:#{1,4}\s*|\*\*\s*)(?:event review|the event)\b",
+        r"^\s{0,3}(?:#{1,4}\s*|\*\*\s*)(?:event review\b|the event\s*(?:\*\*)?\s*$)",
         _branding("event review"),
     ],
     "pair-finder": [
