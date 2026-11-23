@@ -13,8 +13,9 @@ Usage:
     python3 render_stock_report.py <report.json> [--branding <config.yaml>]
             [--out <out.html>] [--pdf] [--client-name <name>]
 
-- <report.json> is the full get_stock_report response ({success,symbol,report,...})
-  or a bare report object; both are accepted.
+- <report.json> is a full get_stock_report response ({success,symbol,report,...}),
+  a completed check_job_status response ({status,result,report,...}), or a bare
+  report object; all are accepted.
 - --branding defaults to ~/.parallax/client-branding/config.yaml. If it is
   missing or invalid the report still renders with the default Parallax palette.
 - --pdf renders <out>.pdf via headless Chrome if Chrome is installed.
@@ -774,19 +775,19 @@ def render_html(response, branding):
             "refusing to render regulated research with no disclosures."
         )
 
-    # Guard: a get_stock_report response always carries its content under a
-    # "report" key. A raw check_job_status payload does not (its completed
-    # result is {success, symbol, lang, pdf_url, html_url, json_url}, with no
-    # inlined content) and would otherwise fall through silently to a hollow
-    # report with "-" in every field. Refuse rather than render that.
+    # Guard: a get_stock_report or completed check_job_status response carries
+    # its content under a "report" key. When the content could not be inlined,
+    # "report" holds only a note, and an older job payload had no "report" at
+    # all. Either would fall through silently to a hollow report with "-" in
+    # every field. Refuse rather than render that.
     _rep_check = response.get("report", response) if isinstance(response, dict) else {}
     if not isinstance(_rep_check, dict) or not _rep_check.get("company"):
         raise ValueError(
             "Input has no report content (no 'report' key, or report.company is "
-            "missing); refusing to render. This usually means a check_job_status "
-            "result was saved and rendered directly instead of a get_stock_report "
-            "response. See SKILL.md Failure modes for fetching result.json_url and "
-            "wrapping it under a 'report' key first."
+            "missing); refusing to render. This usually means the report content "
+            "could not be inlined, or a job payload with no 'report' was saved. "
+            "See SKILL.md Failure modes, 'Note-only report'. Make no paid call without "
+            "the operator's consent."
         )
 
     # Note: in --full-white-label mode this renderer removes the static Parallax
@@ -943,7 +944,10 @@ def main(argv=None):
                   "render in the default co-brand mode.", file=sys.stderr)
             return 2
 
-    symbol = (response.get("symbol") if isinstance(response, dict) else None) or "report"
+    # A check_job_status response carries the symbol under "result".
+    job_result = response.get("result") if isinstance(response, dict) else None
+    symbol = ((response.get("symbol") if isinstance(response, dict) else None)
+              or (job_result.get("symbol") if isinstance(job_result, dict) else None) or "report")
     out = args.out or f"{symbol.replace('.', '_')}-white-label.html"
     html_doc = render_html(response, branding)
     Path(out).write_text(html_doc)

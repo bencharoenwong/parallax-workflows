@@ -222,8 +222,8 @@ def test_full_white_label_with_credit_keeps_powered_by():
     assert "Chicago Global" not in html                     # no CG entity trace anywhere
 
 
-def test_refuses_check_job_status_shaped_payload():
-    # A raw check_job_status result has no "report" key; must refuse, not render a hollow report.
+def test_refuses_job_payload_without_report():
+    # A job payload with no "report" key (older server); must refuse, not render a hollow report.
     import pytest
     job_status_payload = {
         "status": "completed",
@@ -233,13 +233,39 @@ def test_refuses_check_job_status_shaped_payload():
             "lang": "en",
             "pdf_url": "https://example.com/acme.pdf",
             "html_url": "https://example.com/acme.html",
-            "json_url": "https://example.com/acme.json",
         },
         "success": True,
         "job_id": "11111111-1111-1111-1111-111111111111",
     }
     with pytest.raises(ValueError, match="report"):
         r.render_html(job_status_payload, CLIENT_BRANDING)
+
+
+def test_refuses_job_payload_with_note_only_report():
+    # Content too large to inline: "report" holds only a note.
+    import pytest
+    payload = {"status": "completed", "success": True, "report": {"note": "Report content too large to inline."}}
+    with pytest.raises(ValueError, match="report"):
+        r.render_html(payload, CLIENT_BRANDING)
+
+
+def test_job_payload_default_output_name_uses_result_symbol(tmp_path, monkeypatch):
+    # Without --out, a saved check_job_status response is named after result.symbol.
+    import json
+    payload = {"status": "completed", "success": True, "result": {"symbol": "ACME.O"}, "report": REPORT}
+    src = tmp_path / "job.json"
+    src.write_text(json.dumps(payload))
+    monkeypatch.chdir(tmp_path)
+    assert r.main([str(src), "--branding", "/nonexistent.yaml"]) == 0
+    assert (tmp_path / "ACME_O-white-label.html").exists()
+
+
+def test_completed_job_payload_with_report_renders():
+    # A completed check_job_status response carries the report under "report".
+    payload = {"status": "completed", "success": True, "job_id": "11111111-1111-1111-1111-111111111111",
+               "result": {"symbol": "ACME.O", "pdf_url": "https://example.com/acme.pdf"}, "report": REPORT}
+    html = r.render_html(payload, CLIENT_BRANDING)
+    assert 'id="sec-cover"' in html
 
 
 def test_bare_report_dict_still_renders():
