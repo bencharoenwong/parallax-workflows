@@ -241,7 +241,7 @@ Absence is not a pass. A reader who cannot distinguish "screened and cleared" fr
 Note: "fast-response" refers to latency, not credit cost. Read the full live cost clause and `token-costs.md` for billing units. `macro_analyst` costs 5 credits for an explicit component; an omitted-component overview normally costs 5 but can reach 50 on reassembly. Batch symbols still bill per symbol. Preserve fractional balances and use decimal-safe totals.
 
 ### Async tools
-The server names eight async tools. Each call waits up to 45 seconds. A job that finishes in that time returns inline. A longer job returns its `job_id` with `status: "running"` and a "still running" reply: call `check_job_status` with that `job_id` (0 credits; it waits about 30 seconds per call while the job runs), and never re-call the tool itself, because a second call can start and bill a new job.
+The server names eight async tools. Each call waits up to 45 seconds. A job that finishes in that time returns inline. A longer job returns its `job_id` with `status: "running"` and a "still running" reply: call `check_job_status` with that `job_id` (0 credits; it waits up to 45 seconds per call; while the job is still running it returns after about 30 seconds), and never re-call the tool itself, because a second call can start and bill a new job.
 
 **Check budget.** Spend up to 9 `check_job_status` calls per job. With the first 45-second wait, this covers about 5 minutes in total, the same as the old server wait. Space the checks: do other work between them where the workflow has other work, rather than calling back to back. A `running` reply is not a timeout and not a failure. Identify each reply by its fields, never by its error text:
 
