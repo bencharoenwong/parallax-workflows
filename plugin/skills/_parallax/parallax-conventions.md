@@ -241,18 +241,18 @@ Absence is not a pass. A reader who cannot distinguish "screened and cleared" fr
 Note: "fast-response" refers to latency, not credit cost. Read the full live cost clause and `token-costs.md` for billing units. `macro_analyst` costs 5 credits for an explicit component; an omitted-component overview normally costs 5 but can reach 50 on reassembly. Batch symbols still bill per symbol. Preserve fractional balances and use decimal-safe totals.
 
 ### Async tools
-The server names eight async tools. Each one polls internally up to the listed limit and returns the result inline; call `check_job_status` only when a tool returned a `job_id` without a result (a "still running" reply), and never re-call the tool itself.
+The server names eight async tools. Each call waits up to 45 seconds. A job that finishes in that time returns inline. A longer job returns its `job_id` with `status: "running"` and a "still running" reply: call `check_job_status` with that `job_id` (0 credits; it also waits up to 45 seconds per call), and never re-call the tool itself, because a second call can start and bill a new job.
 
-| Tool | Typical wait | Server poll limit |
-|---|---|---|
-| `build_stock_universe` | ~15-40s | 120s |
-| `get_news_synthesis` | ~30-90s, instant if cached | 150s |
-| `get_technical_analysis` | ~15-30s | 120s |
-| `get_financial_analysis` | ~2-5min | 300s |
-| `get_assessment` | ~3min | 300s |
-| `analyze_portfolio` | ~1-3min | 180s |
-| `get_stock_report` | ~1-2min | 300s |
-| `get_etf_report` | ~1-2min | 300s |
+| Tool | Typical job time |
+|---|---|
+| `build_stock_universe` | ~15-40s |
+| `get_news_synthesis` | ~30-90s, instant if cached |
+| `get_technical_analysis` | ~15-30s |
+| `get_financial_analysis` | ~2-5min |
+| `get_assessment` | ~3min |
+| `analyze_portfolio` | ~1-3min |
+| `get_stock_report` | ~1-2min |
+| `get_etf_report` | ~1-2min |
 
 → Do not retry immediately. If they fail or time out, note **"Analysis pending — service temporarily unavailable"** and continue.
 
@@ -356,7 +356,7 @@ External integrators and skill authors frequently ask for capabilities that have
 
 | User-phrased need | Use this | Notes |
 |---|---|---|
-| Full Parallax research report (PDF-shaped) | `get_stock_report` (async, ~1-2min) | Call once; it waits up to 300s and returns the report inline. On a "still running" reply, call `check_job_status` with that `job_id`. Never re-call the tool. |
+| Full Parallax research report (PDF-shaped) | `get_stock_report` (async, ~1-2min) | Call once; it waits up to 45s and returns the report inline if it is done. On a "still running" reply, call `check_job_status` with that `job_id`. Never re-call the tool. |
 | Full Parallax ETF research report | `get_etf_report` (async, ~1-2min, 10 credits) | ETF-only. Same calling rule as `get_stock_report`: call once, use the inline result, poll a returned `job_id` with `check_job_status`, never re-call. A name matching several ETFs returns candidates; confirm with the user first. |
 | Stock past performance (YTD, 12-month, calendar and monthly returns) | `get_performance_history` (up to 0.2 credits, instant) | Includes 1-year return and volatility ranked against peers. Use `export_price_series` for daily closes. |
 | Forensic earnings-quality screen | `/parallax-earnings-quality` skill | Accruals, revenue recognition, manipulation risk. |

@@ -21,7 +21,7 @@ description: "Deep dive on a single position: company profile, peer comparison, 
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §2 identity cross-check, §3 parallel execution, §4 fallbacks, §14 host primitives, §15 translation, §16 scores against live prices (date every score; use only data this skill already fetches).
 - JIT-load `_parallax/house-view/loader.md` FIRST; if an active view is present follow §2 (validation), §7.1/§7.2/§7.3 (single-stock conflict surfacing), §6 (audit). Do NOT apply tilts. The `get_assessment` prompt carries the active view (basis_statement + relevant tilts) so the assessment addresses alignment in prose — that is this skill's primary alignment surface; the §7 inline flags are additive. Route every §7 token through `render_view_conflict()` per `_parallax/house-view/render_helpers.md`.
 - Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
-- `get_assessment` is async (~3 min; the server polls up to 300 s) and LLM-backed; its section carries its own contextual AI disclosure in addition to `parallax-conventions.md §9.2`.
+- `get_assessment` is async (~3 min; each call waits up to 45 s, then returns a `job_id` for `check_job_status`) and LLM-backed; its section carries its own contextual AI disclosure in addition to `parallax-conventions.md §9.2`.
 - Technical Stance always renders as a section: on `get_technical_analysis` failure use a verified Momentum factor proxy with the documented prefix; absent verified history, state the stance is unavailable without inventing a direction.
 - A `lang=` value other than `en` makes Step 7 mandatory (conventions §15).
 
