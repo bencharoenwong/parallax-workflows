@@ -21,7 +21,7 @@ description: "Deep dive on a single position: company profile, peer comparison, 
 - JIT-load `_parallax/parallax-conventions.md` for §0.0 pre-flight, §1 RIC resolution, §2 identity cross-check, §3 parallel execution, §4 fallbacks, §14 host primitives, §15 translation, §16 scores against live prices (date every score; use only data this skill already fetches).
 - JIT-load `_parallax/house-view/loader.md` FIRST; if an active view is present follow §2 (validation), §7.1/§7.2/§7.3 (single-stock conflict surfacing), §6 (audit). Do NOT apply tilts. The `get_assessment` prompt carries the active view (basis_statement + relevant tilts) so the assessment addresses alignment in prose — that is this skill's primary alignment surface; the §7 inline flags are additive. Route every §7 token through `render_view_conflict()` per `_parallax/house-view/render_helpers.md`.
 - Apply `_parallax/white-label/integration-pattern.md` §2 (load), §5 (Branding Header), §7 (About This Report).
-- `get_assessment` is async (~3 min; the server polls up to 300 s) and LLM-backed; its section carries its own contextual AI disclosure in addition to `parallax-conventions.md §9.2`.
+- `get_assessment` is async (~3 min; the call waits up to 45 s, then returns a `job_id` with `status: "running"`; follow the conventions §4 check budget with `check_job_status`) and LLM-backed; its section carries its own contextual AI disclosure in addition to `parallax-conventions.md §9.2`.
 - Technical Stance always renders as a section: on `get_technical_analysis` failure use a verified Momentum factor proxy with the documented prefix; absent verified history, state the stance is unavailable without inventing a direction.
 - A `lang=` value other than `en` makes Step 7 mandatory (conventions §15).
 
@@ -147,7 +147,7 @@ If active view: use the view-aware disclaimer per loader.md §5. Otherwise: rend
 ## Failure modes
 
 - `get_technical_analysis` unavailable: Technical Stance renders from the Momentum factor proxy with the prefix `Technical analysis unavailable — Momentum factor proxy:`. If verified Momentum history is also missing, render `Technical stance unavailable — technical analysis and Momentum history unavailable` with no directional read.
-- `get_assessment` failure, timeout or pending: render `Analysis pending — service temporarily unavailable` in Assessment and continue (conventions §4 async rule). At most one assessment job per invocation; no replacement or automatic repair call.
+- `get_assessment` failed or terminal reply: render `Analysis unavailable — <short reason>` in Assessment. Still running after the conventions §4 check budget: render `Analysis pending — ask me to check job <job_id> later today.` Then continue (conventions §4 async rule). At most one assessment job per invocation; no replacement or automatic repair call.
 - Completed `get_assessment` response missing the three-list decomposition under an active view: render `Assessment unavailable — required house-view decomposition missing`. Keep other verified sections; never substitute model prose for the assessor's decomposition.
 - News or macro pending: placeholders per conventions §5 / §6; output is not blocked.
 - House-view banner states `malformed` / `expired` / `critical`: the banner renders verbatim (conventions §0.3 item 4).

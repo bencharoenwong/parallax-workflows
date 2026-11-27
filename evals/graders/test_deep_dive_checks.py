@@ -26,7 +26,7 @@ def test_deep_dive_spec_has_expected_sections():
 
 def test_duplicate_assessment_job_fails_even_with_stricter_prompt():
     t = Transcript(
-        final_prose="## Assessment\nAnalysis pending — service temporarily unavailable",
+        final_prose="## Assessment\nAnalysis pending — ask me to check job <job_id> later today.",
         tool_calls=[
             ToolCall("mcp__host__get_assessment", {"prompt": "Assess the position"}),
             ToolCall("mcp__host__get_assessment", {"prompt": "Return the three lists"}),
@@ -37,7 +37,7 @@ def test_duplicate_assessment_job_fails_even_with_stricter_prompt():
 
 def test_single_pending_job_keeps_other_independent_analysis_allowed():
     t = Transcript(
-        final_prose="## Assessment\nAnalysis pending — service temporarily unavailable",
+        final_prose="## Assessment\nAnalysis pending — ask me to check job <job_id> later today.",
         tool_calls=[
             ToolCall("mcp__host__get_assessment", {"prompt": "Assess the position"}),
             ToolCall("mcp__host__get_news_synthesis", {"symbol": "AAPL.O"}),

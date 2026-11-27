@@ -130,7 +130,7 @@ If active view: end with the view-aware disclaimer per loader.md §5 rule 5. Oth
 ## Failure modes
 
 - A holding with no price from either endpoint: the Step 3 halt banner; the attribution proceeds on the remaining weight and says so.
-- News pending for a top detractor: `Analysis pending — service temporarily unavailable` inside Top Detractors and that holding's divergence row marked provisional-pending-news; retain the observational pattern and name the missing evidence; news absence never proves a temporary loss.
+- News pending for a top detractor (job still running after the conventions §4 9-check budget): `Analysis pending — ask me to check job <job_id> later today.` inside Top Detractors; a failed news job renders `Analysis unavailable — <short reason>` instead. Either way, mark the holding's divergence row provisional-pending-news; retain the observational pattern and name the missing evidence; news absence never proves a temporary loss.
 - `quick_portfolio_scores` failure or <50% coverage of non-cash weight (conventions §4 "Portfolio scoring coverage"): no retry; `get_score_analysis` is the factor source.
 - Telemetry or macro unavailable: Market & Regime Context renders the §4 note; the layer-1 attribution is stated as unavailable, layers 2–3 still render.
 - House-view banner states `malformed` / `expired` / `critical`: the banner renders verbatim (conventions §0.3 item 4).
