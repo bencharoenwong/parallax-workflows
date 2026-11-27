@@ -15,6 +15,7 @@ All notable changes to `parallax-workflows`. Dates in YYYY-MM-DD.
 - Synchronize skill and workflow estimates with fractional data-read credits. State per-symbol and per-holding units, conditional macro overview costs, free resolution/polling, and successful-request assumptions. Keep historical ledgers unchanged.
 - Use decimal-safe evaluation estimates with dated price assumptions, conditional bounds and explicit incomplete-input markers. Model token usage remains separate from Parallax credits.
 - Reuse validated matching snapshots in portfolio explanations and client reviews; preserve identity, observation-date and coverage checks.
+- Async tools wait up to 45 s per call; a longer job returns a `job_id` with `status: "running"`. Skills follow a budget of 9 `check_job_status` calls per job, about 5 minutes in total, then render the job as pending with its `job_id`. Skills never re-call the original tool.
 - Async jobs bill once, on completion. An identical same-organization request within about 15 minutes reuses the job for five report and analysis tools; `force=true` bills. Assessment, portfolio analysis and the universe builder bill on every call, and a report built from the server cache still bills.
 
 ### Security

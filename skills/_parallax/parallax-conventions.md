@@ -241,7 +241,17 @@ Absence is not a pass. A reader who cannot distinguish "screened and cleared" fr
 Note: "fast-response" refers to latency, not credit cost. Read the full live cost clause and `token-costs.md` for billing units. `macro_analyst` costs 5 credits for an explicit component; an omitted-component overview normally costs 5 but can reach 50 on reassembly. Batch symbols still bill per symbol. Preserve fractional balances and use decimal-safe totals.
 
 ### Async tools
-The server names eight async tools. Each call waits up to 45 seconds. A job that finishes in that time returns inline. A longer job returns its `job_id` with `status: "running"` and a "still running" reply: call `check_job_status` with that `job_id` (0 credits; it also waits up to 45 seconds per call), and never re-call the tool itself, because a second call can start and bill a new job.
+The server names eight async tools. Each call waits up to 45 seconds. A job that finishes in that time returns inline. A longer job returns its `job_id` with `status: "running"` and a "still running" reply: call `check_job_status` with that `job_id` (0 credits; it waits about 30 seconds per call while the job runs), and never re-call the tool itself, because a second call can start and bill a new job.
+
+**Check budget.** Spend up to 9 `check_job_status` calls per job. With the first 45-second wait, this covers about 5 minutes in total, the same as the old server wait. Space the checks: do other work between them where the workflow has other work, rather than calling back to back. A `running` reply is not a timeout and not a failure. Identify each reply by its fields, never by its error text:
+
+1. Tool reply with `success: false`, a `job_id` and `status: "running"`: the job is still running. This is the one exception to any rule that a `success: false` reply ends the section. Call `check_job_status` with that `job_id`.
+2. `check_job_status` reply with `success: true`, `status` of `pending`, `queued`, `running` or `processing`, and a `next_step`: not done. It counts as one check.
+3. `check_job_status` reply with `success: false`, a `job_id` and no `status`, whose error says the job status could not be read: it counts as one check. Call again.
+4. `status: "completed"` with a `result`: done. Use the result.
+5. `status: "failed"`, a completed job with no result, or a job not found or expired: terminal. The section is unavailable.
+
+A job still running after the budget renders as pending, per the rule below the table. The server keeps a job for 24 hours after its last update, so a later `check_job_status` call with the same `job_id` can still pick it up.
 
 | Tool | Typical job time |
 |---|---|
@@ -254,7 +264,7 @@ The server names eight async tools. Each call waits up to 45 seconds. A job that
 | `get_stock_report` | ~1-2min |
 | `get_etf_report` | ~1-2min |
 
-→ Do not retry immediately. If they fail or time out, note **"Analysis pending — service temporarily unavailable"** and continue.
+→ Do not re-call the tool. A failed job or a terminal reply renders **"Analysis unavailable — <short reason>"**. A job still running after the 9-check budget renders **"Analysis pending — ask me to check job <job_id> later today."** Then continue.
 
 A pending, failed or timed-out job does not authorize a replacement call. A completed response that fails a required output contract is a validation failure, not a transport timeout: mark the affected analysis unavailable with the validation reason and continue with verified sections. Do not launch a repair job unless the workflow explicitly defines a bounded exception to this rule; deep-dive defines no such exception.
 
@@ -358,8 +368,8 @@ External integrators and skill authors frequently ask for capabilities that have
 
 | User-phrased need | Use this | Notes |
 |---|---|---|
-| Full Parallax research report (PDF-shaped) | `get_stock_report` (async, ~1-2min) | Call once; it waits up to 45s and returns the report inline if it is done. On a "still running" reply, call `check_job_status` with that `job_id`. Never re-call the tool. |
-| Full Parallax ETF research report | `get_etf_report` (async, ~1-2min, 10 credits) | ETF-only. Same calling rule as `get_stock_report`: call once, use the inline result, poll a returned `job_id` with `check_job_status`, never re-call. A name matching several ETFs returns candidates; confirm with the user first. |
+| Full Parallax research report (PDF-shaped) | `get_stock_report` (async, ~1-2min) | Call once; it waits up to 45s and returns the report inline if it is done. On a `status: "running"` reply, follow the §4 check budget with that `job_id`. Never re-call the tool. |
+| Full Parallax ETF research report | `get_etf_report` (async, ~1-2min, 10 credits) | ETF-only. Same calling rule as `get_stock_report`: call once, use the inline result, follow the §4 check budget for a returned `job_id`, never re-call. A name matching several ETFs returns candidates; confirm with the user first. |
 | Stock past performance (YTD, 12-month, calendar and monthly returns) | `get_performance_history` (up to 0.2 credits, instant) | Includes 1-year return and volatility ranked against peers. Use `export_price_series` for daily closes. |
 | Forensic earnings-quality screen | `/parallax-earnings-quality` skill | Accruals, revenue recognition, manipulation risk. |
 | Full Palepu-framework due diligence | `/parallax-due-diligence` skill | Financials + ratios + macro context + Parallax research report. |
@@ -435,7 +445,7 @@ The gate (`_parallax/render_gate.py`) is a pure-stdlib Python script. It determi
 - **Common anchors:** House View Preamble banner, Branding Header logo, and Ground-truth Integrity table.
 - **Skill anchors:** The specific skill's title, first rendered section, or Branding Header text.
 
-**Degraded-state notes** (e.g. `Analysis pending — service temporarily unavailable` or `Rolling metrics could not be computed`) found in the stripped preamble are **hoisted** to a status line at the bottom of the report, ensuring no tool-failure visibility is lost.
+**Degraded-state notes** (e.g. `Analysis pending — ask me to check job <job_id> later today.`, `Analysis unavailable — <short reason>` or `Rolling metrics could not be computed`) found in the stripped preamble are **hoisted** to a status line at the bottom of the report, ensuring no tool-failure visibility is lost.
 
 ### 10.3 Usage in SKILL.md
 

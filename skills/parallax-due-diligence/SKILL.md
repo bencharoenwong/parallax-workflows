@@ -132,7 +132,7 @@ If active view: use the view-aware disclaimer per loader.md §5 rule 5. Otherwis
 
 ## Failure modes
 
-- `get_financial_analysis` pending after the async window: the Palepu Framework section renders `Analysis pending — service temporarily unavailable` (conventions §4); the rest of the report stands.
+- `get_financial_analysis` still running after the conventions §4 check budget: the Palepu Framework section renders `Analysis pending — ask me to check job <job_id> later today.` A failed or terminal reply renders `Analysis unavailable — <short reason>` (conventions §4). The rest of the report stands.
 - `get_stock_report` declined, pending or failed: the Parallax Research Report section states which, with no link; never fabricate a link.
 - `get_technical_analysis` unavailable: Technical Stance renders from the Momentum factor proxy with the documented prefix.
 - House-view banner states `malformed` / `expired` / `critical`: the banner renders verbatim (conventions §0.3 item 4).

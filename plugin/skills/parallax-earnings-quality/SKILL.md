@@ -113,7 +113,7 @@ Render the standard disclaimer verbatim from `parallax-conventions.md` §9.1.
 
 ## Failure modes
 
-- `get_financial_analysis` pending after the async window: Forensic Findings and the Risk Summary color render `Analysis pending — service temporarily unavailable`; Quality Score Trend and News Context still render.
+- `get_financial_analysis` still running after the conventions §4 check budget: Forensic Findings and the Risk Summary color render `Analysis pending — ask me to check job <job_id> later today.` A failed or terminal reply renders `Analysis unavailable — <short reason>`. Quality Score Trend and News Context still render.
 - `get_assessment` timeout: AI Assessment renders the §4 async placeholder; Red Flags are still listed from the Palepu and ratio data.
 - Host lacks a primitive: conventions §14.3, per primitive.
 
